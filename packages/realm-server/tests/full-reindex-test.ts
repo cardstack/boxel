@@ -189,6 +189,30 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('skips a realm whose owner is on another homeserver', async function (assert) {
+    const foreignRealmURL = 'http://example.com/foreign/';
+    const pairedRealmURL = 'http://example.com/paired/';
+
+    await insertPermissions(dbAdapter, new URL(foreignRealmURL), {
+      '@owner:other.example': ['read', 'realm-owner'],
+    });
+    await insertPermissions(dbAdapter, new URL(pairedRealmURL), {
+      '@owner:localhost': ['read', 'realm-owner'],
+    });
+
+    let reindex = buildFullReindexTask();
+    await reindex({ realmUrls: [foreignRealmURL, pairedRealmURL] });
+
+    let jobs = (await dbAdapter.execute('select * from jobs')) as {
+      args: { realmURL: string; realmUsername: string };
+    }[];
+    assert.deepEqual(
+      jobs.map((job) => [job.args.realmURL, job.args.realmUsername]),
+      [[pairedRealmURL, 'owner']],
+      'only the realm owned on the paired homeserver is reindexed, not one that would run as @owner:localhost in its place',
+    );
+  });
+
   test('a sweep that announces nothing enqueues passes that announce nothing', async function (assert) {
     const sourceRealmURL = 'http://example.com/source/';
     await insertPermissions(dbAdapter, new URL(sourceRealmURL), {

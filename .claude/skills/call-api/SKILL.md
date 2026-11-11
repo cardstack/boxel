@@ -195,8 +195,8 @@ refusal also writes a key-use line.
    and no probe is due; see the `user-keys` skill, _Rejected grants_ and
    _Rejected keys_).
    Every invocation off the network is interactive, and is served only by a
-   binding its owner approved for interactive use; a pipeline
-   (`Realm.handlePipeline`) is served by any active binding. An interactive
+   binding its owner approved for interactive use; an automation
+   (`Realm.handleAutomation`) is served by any active binding. An interactive
    call also counts against the key's limits (see the `key-limits` skill). The `binding-not-approved` detail names
    each slot with whose key fills it (`the credential slot "weather" for the
 invoking user's own key`, `… for the realm's key`, from `describeSlots`),
@@ -376,8 +376,8 @@ the operation's destination. A key saved through `enter-key` alone has no
 grant, so readiness stays `needs-connect`. The approve page offers first,
 and starts on, letting the operations run on the schedule and when a card is
 opened, which is what a card calling from its template needs; the user can
-narrow it to scheduled pipelines only. It starts on pipelines only when every
-request it asks about was last approved for pipelines only, and when
+narrow it to automations only. It starts on automations only when every
+request it asks about was last approved for automations only, and when
 `boxel keys approve` opened it without `--interactive`.
 A call that a fix makes ready needs no reload: readiness is asked again when
 the user comes back from the window. Swapping a key into a stopped share is

@@ -7,8 +7,8 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   archiveRealm,
   fetchAllRealmsWithOwners,
-  fetchArchivedRealmsForOwner,
-  fetchRealmOwnerUsername,
+  fetchArchivedRealmsForAdministrator,
+  fetchRealmOwnerUserId,
   fetchUserPermissions,
   insertPermissions,
   isRealmArchived,
@@ -381,19 +381,19 @@ module(basename(import.meta.filename), function () {
 
       await insertPublishedRealm({ sourceRealmURL, publishedRealmURL });
 
-      let owners = await fetchAllRealmsWithOwners(dbAdapter);
+      let owners = await fetchAllRealmsWithOwners(dbAdapter, 'localhost');
       let ownerByRealm = new Map(
-        owners.map((owner) => [owner.realm_url, owner.owner_username]),
+        owners.map((owner) => [owner.realm_url, owner.owner_user_id]),
       );
 
       assert.strictEqual(
         ownerByRealm.get(sourceRealmURL),
-        'owner',
+        '@owner:localhost',
         'returns source realm owner',
       );
       assert.strictEqual(
         ownerByRealm.get(publishedRealmURL),
-        'owner',
+        '@owner:localhost',
         'falls back to source realm owner for published realms',
       );
     });
@@ -409,15 +409,52 @@ module(basename(import.meta.filename), function () {
         ownerUsername: publishedOwner,
       });
 
-      let owners = await fetchAllRealmsWithOwners(dbAdapter);
+      let owners = await fetchAllRealmsWithOwners(dbAdapter, 'localhost');
       let ownerByRealm = new Map(
-        owners.map((owner) => [owner.realm_url, owner.owner_username]),
+        owners.map((owner) => [owner.realm_url, owner.owner_user_id]),
       );
 
       assert.strictEqual(
         ownerByRealm.get(publishedRealmURL),
-        'realm/published-only',
+        '@realm/published-only:localhost',
         'uses published realm owner when source owner is missing',
+      );
+    });
+
+    test('an owner on another homeserver is named by their full id', async function (assert) {
+      const realmURL = 'http://example.com/visited/';
+      const visitor = '@visitor:other.example';
+
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        [visitor]: ['read', 'realm-owner'],
+      });
+
+      let listed = new Map(
+        (await fetchAllRealmsWithOwners(dbAdapter, 'localhost')).map(
+          (owner) => [owner.realm_url, owner.owner_user_id],
+        ),
+      );
+      assert.strictEqual(listed.get(realmURL), visitor, 'listed');
+      assert.strictEqual(
+        await fetchRealmOwnerUserId(dbAdapter, realmURL, 'localhost'),
+        visitor,
+        'alone',
+      );
+    });
+
+    test("a `realm/` account on another homeserver is not a realm's own account", async function (assert) {
+      const realmURL = 'http://example.com/shared-name/';
+      const foreignBot = '@realm/elsewhere:other.example';
+
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        '@realm/shared-name:localhost': ['read', 'realm-owner'],
+        [foreignBot]: ['read', 'realm-owner'],
+      });
+
+      assert.strictEqual(
+        await fetchRealmOwnerUserId(dbAdapter, realmURL, 'localhost'),
+        foreignBot,
+        "the realm's own account on the paired homeserver yields to any other owner",
       );
     });
 
@@ -428,7 +465,7 @@ module(basename(import.meta.filename), function () {
       const publishedOnlyRealmURL = 'http://example.com/published-only/';
 
       await insertPermissions(dbAdapter, new URL(ownedRealmURL), {
-        '@realm/owned': ['read', 'realm-owner'],
+        '@realm/owned:localhost': ['read', 'realm-owner'],
         '@owner:localhost': ['read', 'realm-owner'],
       });
       await insertPermissions(dbAdapter, new URL(sourceRealmURL), {
@@ -442,29 +479,36 @@ module(basename(import.meta.filename), function () {
       });
 
       let listed = new Map(
-        (await fetchAllRealmsWithOwners(dbAdapter)).map((owner) => [
-          owner.realm_url,
-          owner.owner_username,
-        ]),
+        (await fetchAllRealmsWithOwners(dbAdapter, 'localhost')).map(
+          (owner) => [owner.realm_url, owner.owner_user_id],
+        ),
       );
       for (let [realmURL, expected, why] of [
-        [ownedRealmURL, 'owner', 'its human owner, not its bot'],
-        [publishedRealmURL, 'owner', "a published realm's source owner"],
+        [ownedRealmURL, '@owner:localhost', 'its human owner, not its bot'],
+        [
+          publishedRealmURL,
+          '@owner:localhost',
+          "a published realm's source owner",
+        ],
         [
           publishedOnlyRealmURL,
-          'realm/published-only',
+          '@realm/published-only:localhost',
           'the owner its registry row records',
         ],
       ]) {
         assert.strictEqual(listed.get(realmURL), expected, `listed: ${why}`);
         assert.strictEqual(
-          await fetchRealmOwnerUsername(dbAdapter, realmURL),
+          await fetchRealmOwnerUserId(dbAdapter, realmURL, 'localhost'),
           expected,
           `alone: ${why}`,
         );
       }
       assert.strictEqual(
-        await fetchRealmOwnerUsername(dbAdapter, 'http://example.com/nobody/'),
+        await fetchRealmOwnerUserId(
+          dbAdapter,
+          'http://example.com/nobody/',
+          'localhost',
+        ),
         undefined,
         'and a realm neither names an owner for has none',
       );
@@ -523,48 +567,65 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test("fetchArchivedRealmsForOwner returns only the owner's archived realms", async function (assert) {
-      const owner = '@owner:localhost';
-      const otherOwner = '@other:localhost';
+    test('fetchArchivedRealmsForAdministrator returns only the archived realms the user administers', async function (assert) {
+      const admin = '@admin:localhost';
+      const other = '@other:localhost';
 
       const archivedOwned = 'http://example.com/owned-archived/';
+      const archivedShared = 'http://example.com/shared-archived/';
       const activeOwned = 'http://example.com/owned-active/';
-      const archivedOtherOwner = 'http://example.com/other-archived/';
+      const archivedOther = 'http://example.com/other-archived/';
       const archivedReadOnly = 'http://example.com/read-only-archived/';
+      const archivedPublicWrite = 'http://example.com/public-write-archived/';
 
       await insertPermissions(dbAdapter, new URL(archivedOwned), {
-        [owner]: ['read', 'write', 'realm-owner'],
+        [admin]: ['read', 'write', 'realm-owner'],
+      });
+      // A realm shared with the user as an administrator: direct write, owned
+      // by someone else.
+      await insertPermissions(dbAdapter, new URL(archivedShared), {
+        [admin]: ['read', 'write'],
+        [other]: ['read', 'write', 'realm-owner'],
       });
       await insertPermissions(dbAdapter, new URL(activeOwned), {
-        [owner]: ['read', 'write', 'realm-owner'],
+        [admin]: ['read', 'write', 'realm-owner'],
       });
-      await insertPermissions(dbAdapter, new URL(archivedOtherOwner), {
-        [otherOwner]: ['read', 'write', 'realm-owner'],
+      await insertPermissions(dbAdapter, new URL(archivedOther), {
+        [other]: ['read', 'write', 'realm-owner'],
       });
-      // owner can read this realm but is not its owner
       await insertPermissions(dbAdapter, new URL(archivedReadOnly), {
-        [owner]: ['read'],
-        [otherOwner]: ['read', 'write', 'realm-owner'],
+        [admin]: ['read'],
+        [other]: ['read', 'write', 'realm-owner'],
+      });
+      // A public write row names no one, so it makes no one an administrator.
+      await insertPermissions(dbAdapter, new URL(archivedPublicWrite), {
+        '*': ['read', 'write'],
+        [other]: ['read', 'write', 'realm-owner'],
       });
 
       await archiveRealm(dbAdapter, new URL(archivedOwned));
-      await archiveRealm(dbAdapter, new URL(archivedOtherOwner));
+      await archiveRealm(dbAdapter, new URL(archivedShared));
+      await archiveRealm(dbAdapter, new URL(archivedOther));
       await archiveRealm(dbAdapter, new URL(archivedReadOnly));
+      await archiveRealm(dbAdapter, new URL(archivedPublicWrite));
 
-      let archived = await fetchArchivedRealmsForOwner(dbAdapter, owner);
+      let archived = await fetchArchivedRealmsForAdministrator(
+        dbAdapter,
+        admin,
+      );
 
       assert.deepEqual(
-        archived.map((r) => r.url),
-        [archivedOwned],
-        'returns only realms that are both archived and owned by the user',
+        archived.map((r) => r.url).sort(),
+        [archivedOwned, archivedShared].sort(),
+        'returns the archived realms whose own row grants the user write',
       );
       assert.ok(
-        archived[0]?.archivedAt,
+        archived.every((r) => r.archivedAt),
         'each archived realm carries its archived_at timestamp',
       );
     });
 
-    test('fetchArchivedRealmsForOwner excludes archived published snapshots', async function (assert) {
+    test('fetchArchivedRealmsForAdministrator excludes archived published snapshots', async function (assert) {
       const owner = '@owner:localhost';
       const sourceRealmURL = 'http://example.com/source/';
       const publishedRealmURL = 'http://example.com/published/';
@@ -572,7 +633,6 @@ module(basename(import.meta.filename), function () {
       await insertPermissions(dbAdapter, new URL(sourceRealmURL), {
         [owner]: ['read', 'write', 'realm-owner'],
       });
-      // Publishing grants the owner realm-owner on the published URL too.
       await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL,
         publishedRealmId: uuidv4(),
@@ -580,15 +640,20 @@ module(basename(import.meta.filename), function () {
         sourceRealmURL,
         lastPublishedAt: Date.now(),
       });
+      // A write row on the published URL, so only its registry kind keeps
+      // it out of the list.
       await insertPermissions(dbAdapter, new URL(publishedRealmURL), {
-        [owner]: ['read', 'realm-owner'],
+        [owner]: ['read', 'write', 'realm-owner'],
         '*': ['read'],
       });
 
       await archiveRealm(dbAdapter, new URL(sourceRealmURL));
       await archiveRealm(dbAdapter, new URL(publishedRealmURL));
 
-      let archived = await fetchArchivedRealmsForOwner(dbAdapter, owner);
+      let archived = await fetchArchivedRealmsForAdministrator(
+        dbAdapter,
+        owner,
+      );
 
       assert.deepEqual(
         archived.map((r) => r.url),

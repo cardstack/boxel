@@ -34,7 +34,14 @@ import { DEFAULT_PROBE_INTERVAL_MS } from './key-grant-rejection.ts';
 // `credential-rejected` until its next probe is due, and then as the call
 // would treat it: sent, as that probe. A rejected key, such as a
 // service-account key Google refused, reads as `credential-rejected` whether
-// or not its probe is due: what brings it back is its owner replacing it.
+// or not its probe is due: what brings it back is its owner replacing it. So
+// does an OAuth connection its vendor refused, or one whose access-only token
+// has expired: its owner signs in again. A connection whose client is broken,
+// deleted, unshared or suspended, or a broken `client_credentials` client,
+// reads as `needs-admin` instead: the key is fine, and only an administrator
+// of the client it mints through can bring it back. An automation's admission
+// (`automationAdmission`) refuses the same slots, since it checks them with
+// the same `checkSlots`.
 //
 // Slots that would be filled are then asked about the limits of the share or
 // key filling them, without counting anything: `over-budget` when a budget is
@@ -198,6 +205,7 @@ async function userKeyReadiness(
     case 'anonymous-use-not-approved':
       return 'needs-sign-in';
     case 'credential-rejected':
+      return mintingReadiness(check);
     case 'key-rejected':
       return 'credential-rejected';
     case 'share-suspended':
@@ -208,6 +216,16 @@ async function userKeyReadiness(
         ? 'needs-approval'
         : 'needs-connect';
   }
+}
+
+// A slot refused `credential-rejected`: a key the vendor rejected, or one that
+// can't mint a token. One whose OAuth client needs its administrator
+// (`reason: 'needs-admin'`) reads as `needs-admin`, since replacing or
+// reconnecting the key itself can't fix it.
+function mintingReadiness(
+  check: Extract<SlotCheck, { refused: 'credential-rejected' }>,
+): KeyReadiness {
+  return check.reason === 'needs-admin' ? 'needs-admin' : 'credential-rejected';
 }
 
 // Whether the key a row reads (its `kind` and `api_hosts`) is one the approve
@@ -291,8 +309,11 @@ async function shareReadiness(
     case 'credential-rejected':
     case 'key-rejected':
       // Every caller is refused `credential-rejected` at the call, so telling
-      // them here gives away nothing more about the share.
-      return 'credential-rejected';
+      // them here gives away nothing more about the share. A broken client
+      // is its administrator's to fix, as any share that falls short is.
+      return check.refused === 'credential-rejected'
+        ? mintingReadiness(check)
+        : 'credential-rejected';
     case 'share-suspended':
       return 'needs-admin';
     case 'binding-not-approved':

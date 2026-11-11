@@ -67,9 +67,9 @@ permission belongs to its owner, so without it every write in a run comes from
 one identity and the question in [Two writers on one
 realm](#two-writers-on-one-realm-and-the-fairness-reading) has no way to be
 asked. Granting is not a `boxel realm` subcommand, but the realm answers
-`PATCH /_permissions` to its owner, which is what the setup script calls.
-`realm-owner` can neither be granted nor modified there, so this hands out
-access and never the realm.
+`PATCH /_permissions` to its administrators (its direct writers), which is what
+the setup script calls. A write grant makes its grantee an administrator too.
+The realm owner, the user the realm is indexed as, doesn't change.
 
 ## Choosing a path: which document the searches ask for
 
@@ -625,16 +625,22 @@ when you need its absolute number.
 which is the thing being measured — not an artifact to correct for. Hold the
 reader count fixed when comparing two runs.
 
-The driver is dependency-free — global `fetch` and `node:` built-ins only — so
-getting it into the region is a copy, not a build:
+The driver imports a few modules from `@cardstack/runtime-common`, such as the
+prefix-realm network, and the box in the region has no checkout and no
+`node_modules`. So bundle it first. The bundle is one file that needs only
+global `fetch` and `node:` built-ins:
 
 ```sh
+pnpm --dir packages/realm-server load-harness:bundle   # writes load-harness/dist/run-load.mjs
 zip -r harness.zip load-harness
 # upload harness.zip and the credential file to CloudShell in the right region
 unzip -o harness.zip && cd load-harness
-node -v   # needs a Node that runs .ts directly: 24.x, or 22.18+
-NODE_NO_WARNINGS=1 node run-load.ts --csv ../accounts.csv --realm … --workload …
+node -v   # needs Node 22 or later
+NODE_NO_WARNINGS=1 node dist/run-load.mjs --csv ../accounts.csv --realm … --workload …
 ```
+
+Bundle again after you change the harness. In a checkout, `node run-load.ts`
+still runs the source directly.
 
 Any box in the region works — an EC2 instance, a CloudShell session, an ECS
 task. What matters is that it is not on the far side of a home connection.
@@ -802,6 +808,7 @@ purpose; doing that to production is an outage for real users.
 
 - `setup-realm.ts` — create the realm, push contents, wait for the index, grant the other accounts
 - `run-load.ts` — the driver
+- `dist/run-load.mjs` — the driver bundled for a box with no checkout (`pnpm load-harness:bundle`; not committed)
 - `workload.experiments.json` — the standard workload, for comparable numbers
 - `workload.example.json` — the shape of a workload file
 - `lib/derive-workload.ts` — ranking a realm's `_types` into a workload

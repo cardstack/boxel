@@ -24,13 +24,13 @@ import {
 } from './realm-api.ts';
 import {
   expectedChangedSeeds,
-  pipelineApprovalTargets,
+  automationApprovalTargets,
   promptCardIds,
   seededCardSeeds,
   prepopulate,
   type EvaluationBundle,
 } from './eval-card.ts';
-import { seedPipelineApprovals } from './key-seed.ts';
+import { seedAutomationApprovals } from './key-seed.ts';
 import { captureWorkspace } from './workspace-snapshot.ts';
 
 // One Playwright test per model. Each test: fresh workspace, new room, pick the
@@ -1303,10 +1303,10 @@ async function runModel(
           );
         }
       }
-      if (evaluation.pipelineApprovals?.length) {
-        setStep('approve operations for pipelines only');
-        await seedPipelineApprovals(
-          pipelineApprovalTargets(evaluation, realmUrl),
+      if (evaluation.automationApprovals?.length) {
+        setStep('approve operations for automations only');
+        await seedAutomationApprovals(
+          automationApprovalTargets(evaluation, realmUrl),
           {
             user: credentials.userId,
             owner: client,

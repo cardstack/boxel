@@ -16,6 +16,8 @@ import { mkdir, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
+
 import { logger } from './logger.ts';
 
 const log = logger('screenshot-execution');
@@ -95,7 +97,12 @@ export async function captureHtmlScreenshot(
   }
 
   let { chromium } = await import('@playwright/test');
-  let browser = await chromium.launch();
+  // The HTML is agent-written, so it may load script the agent was steered
+  // into adding. The sandbox is off only on Linux, for the reasons
+  // `chromeSandboxEnabled` gives.
+  let browser = await chromium.launch({
+    chromiumSandbox: chromeSandboxEnabled(),
+  });
   try {
     let page = await browser.newPage({ viewport: { width, height } });
     await page.goto(pathToFileURL(resolvedHtml).href, { waitUntil: 'load' });

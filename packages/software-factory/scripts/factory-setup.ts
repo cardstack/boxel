@@ -22,6 +22,7 @@ import {
   hostTestHarnessExists,
   isNodeVersionOk,
   packageRoot,
+  playwrightHeadlessShellDirName,
   playwrightHeadlessShellPresent,
   repoRoot,
 } from '../src/preflight.ts';
@@ -91,7 +92,10 @@ function main(): void {
     log.info('✓ host dist/tests/index.html present — skipping');
   }
 
-  if (force || !playwrightHeadlessShellPresent()) {
+  if (
+    force ||
+    !playwrightHeadlessShellPresent(playwrightHeadlessShellDirName())
+  ) {
     // Run from this package (its node_modules has @playwright/test).
     run(
       'Install Playwright Chromium (headless shell)',

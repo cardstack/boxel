@@ -23,14 +23,20 @@ imports and consumers by hand, because nothing derives them.
 ### 1.1. Erasable TypeScript, no build
 
 The package's modules, scripts and tests MUST be TypeScript in `.ts` files.
-The package's `tsconfig.json` MUST set `erasableSyntaxOnly`,
-`verbatimModuleSyntax`, `module: nodenext` and `allowImportingTsExtensions`,
-as `packages/secure-origin/tsconfig.json` does, so that the Node version
-`.mise.toml` pins runs every file directly: Node strips only the syntax the
-first flag allows, loads only the imports the second marks as values, and
-resolves only the `.ts` specifiers the last two require. The package MUST NOT
-have a build step: its service starts with `node main.ts`, its scripts and
-tests run the same way, and its container image copies the sources.
+The package's `tsconfig.json` MUST set `module: nodenext` and
+`allowImportingTsExtensions`, as `packages/realm-server/tsconfig.json` does,
+so that the Node version `.mise.toml` pins resolves the `.ts` specifiers
+every file uses, and `isolatedModules`, which rejects a type-only re-export
+that doesn't say `export type`. The package's files MUST use only the syntax
+Node strips: no enum, namespace, parameter property, `import =` or decorator,
+and `import type` for every import that names only types. The root ESLint
+configuration enforces that on every file in the package, with the
+erasable-syntax selectors of `no-restricted-syntax`, the
+`@typescript-eslint/parameter-properties` rule, and the
+`consistent-type-imports` and `no-import-type-side-effects` rules, and the
+package's lint MUST run it. The package MUST NOT have a build step: its
+service starts with `node main.ts`, its scripts and tests run the same way,
+and its container image copies the sources.
 
 ### 1.2. Dependencies
 
@@ -62,13 +68,25 @@ change, and a review MUST check that it did.
 
 ## 2. Rationale
 
-The realm server runs its TypeScript the same way, with `node main.ts`, but
-without `erasableSyntaxOnly`. Node strips types; it does not compile. An
-enum, a parameter property or a namespace in a file it loads fails at run
-time, which for a service means at deploy time. The flag moves that failure
-to the type-check, where the lint step finds it on every PR. The secure
-origin's pages already follow this rule (ADR 019 §1.10), so the convention is
-established and the package can copy its configuration.
+The realm server runs its TypeScript the same way, with `node main.ts`. Node
+strips types; it does not compile. An enum, a parameter property or a
+namespace in a file it loads fails at run time, which for a service means at
+deploy time, and so does an import that names only a type without `import
+type`, which Node keeps as a value import of a binding the module never
+exports. The ESLint rules move both failures to the lint step, which finds
+them on every PR, and the realm server's own files are held to the same
+rules by the same configuration. TypeScript's `erasableSyntaxOnly` and
+`verbatimModuleSyntax` flags would catch the same two failures in the
+type-check, and the secure origin's pages set them (ADR 019 §1.10). They
+apply to every file in the type-check program, though, and this package's
+program reaches `packages/base`, `packages/boxel-ui` and `packages/pretui`
+through `@cardstack/runtime-common`. `verbatimModuleSyntax` rejects every
+ECMAScript import in a package whose `package.json` has no `"type":
+"module"`, which is every file in `packages/base` and `packages/boxel-ui`,
+and `erasableSyntaxOnly` rejects the parameter properties Pret UI compiles
+with Babel. The secure origin's program reads Pret UI's and boxel-ui's
+source as well, and its type-check keeps the flags by discarding every
+diagnostic outside the package's own files.
 
 No build step keeps the image and the local service the same artifact: the
 Dockerfile copies the sources and runs them unbuilt, as the worker image runs
@@ -99,6 +117,18 @@ whose transitive dependencies the package carries without loading them.
 - **Erasable TypeScript run by Node, type-checked in lint (chosen).** The
   same code runs in tests, locally and in the image, with the one failure mode
   of unbuilt TypeScript caught before it ships.
+- **`erasableSyntaxOnly` and `verbatimModuleSyntax` in `tsconfig.json`.** The
+  type-check would catch what the ESLint rules catch, but the flags cover the
+  whole program, and the program includes packages that don't conform and
+  that Babel compiles anyway. Making them conform, by marking `packages/base`
+  and `packages/boxel-ui` as ES modules in their manifests and removing Pret
+  UI's parameter properties, is a change to how three other packages build
+  for the sake of one package's type-check.
+- **The flags, with the type-check's output filtered to the package's own
+  files, as the secure origin does.** The type-check would catch the two
+  failures in the package's files, but behind a script that discards what
+  the flags report about every other package, where the ESLint rules
+  already hold every package to the same syntax with nothing to discard.
 - **Compiled TypeScript with a build step.** Allows every TypeScript feature,
   at the cost of a build in the image, in local start and in CI, and of two
   artifacts (sources and output) that can disagree.
@@ -115,8 +145,13 @@ whose transitive dependencies the package carries without loading them.
 
 ## 4. Sources
 
-- ADR 019 §1.10, the same rule for `packages/secure-origin`.
-- `packages/secure-origin/tsconfig.json`, the configuration to copy.
+- ADR 019 §1.10, the same rule for `packages/secure-origin`, and
+  `packages/secure-origin/build/type-check.ts`, which keeps its flags by
+  discarding other packages' diagnostics.
+- `packages/realm-server/tsconfig.json`, the module configuration to copy,
+  and `eslint/erasable-syntax-selectors.cjs` with the
+  `@typescript-eslint/parameter-properties` rule in `.eslintrc.js`, the
+  syntax the lint rejects.
 - `packages/realm-server/package.json` (`start`), the realm server's unbuilt
   `node main.ts`.
 - `.github/workflows/ci.yaml` (`change-check`), the hand-kept filters and the

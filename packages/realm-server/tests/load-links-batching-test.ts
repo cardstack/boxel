@@ -1,7 +1,11 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { rri } from '@cardstack/runtime-common';
+import {
+  isAbsoluteIdentifier,
+  RealmPaths,
+  rri,
+} from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   LooseSingleCardDocument,
@@ -15,6 +19,24 @@ import {
 const testRealm = new URL('http://127.0.0.1:4451/test/');
 const NUM_SOURCES = 50;
 const NUM_TARGETS = 5;
+const testRealmPaths = new RealmPaths(testRealm);
+
+// Whether a query parameter names one of the fixture's link targets.
+function namesALinkTarget(realm: Realm, value: unknown): boolean {
+  if (typeof value !== 'string' || !isAbsoluteIdentifier(value)) {
+    return false;
+  }
+  let url: URL;
+  try {
+    url = realm.virtualNetwork.toURL(value);
+  } catch {
+    return false;
+  }
+  return (
+    testRealmPaths.inRealm(url) &&
+    testRealmPaths.local(url).startsWith('target-')
+  );
+}
 
 let testDbAdapter: DBAdapter;
 
@@ -146,9 +168,8 @@ module(basename(import.meta.filename), function () {
       // query the first time after indexing has cleared the realm-info cache.
       // That query resolves no link, and neither would any other lookup the
       // search path grows; counting by shape alone would fail on all of them.
-      let targetPrefix = `${testRealm.href}target-`;
       let looksUpALinkTarget = (bind: unknown[]) =>
-        bind.some((v) => typeof v === 'string' && v.startsWith(targetPrefix));
+        bind.some((v) => namesALinkTarget(realm, v));
 
       try {
         dbExecute.execute = async (sql, opts) => {
@@ -222,7 +243,6 @@ module(basename(import.meta.filename), function () {
       let dbExecute = testDbAdapter as {
         execute: typeof testDbAdapter.execute;
       };
-      let targetPrefix = `${testRealm.href}target-`;
       let linkTargetSelects: string[] = [];
 
       try {
@@ -233,9 +253,7 @@ module(basename(import.meta.filename), function () {
             /FROM boxel_index\b/.test(normalized) &&
             /\bi\.url\s+IN\s*\(/.test(normalized) &&
             bind.some((v) => v === 'instance') &&
-            bind.some(
-              (v) => typeof v === 'string' && v.startsWith(targetPrefix),
-            )
+            bind.some((v) => namesALinkTarget(realm, v))
           ) {
             linkTargetSelects.push(normalized.split(' FROM ')[0]);
           }
@@ -311,7 +329,7 @@ module(basename(import.meta.filename), function () {
     // the index row does not follow, so it is written here directly rather
     // than captured, and read back through the side-loading path.
     test('a side-loaded target still carries the declared-capture manifest joined into its meta', async function (assert) {
-      let targetURL = `${testRealm.href}target-0.json`;
+      let targetURL = testRealmPaths.fileURL('target-0.json').href;
       let manifest = {
         hero: {
           specHash: 'spec-1',
@@ -469,7 +487,7 @@ module(basename(import.meta.filename), function () {
 
       for (let resource of included) {
         let reference = await realm.realmIndexQueryEngine.instance(
-          new URL(resource.id!),
+          realm.virtualNetwork.toURL(resource.id!),
         );
         assert.strictEqual(
           reference?.type,

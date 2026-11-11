@@ -16,6 +16,7 @@ import {
 } from '../../lib/profile-manager.ts';
 import {
   deriveOwnerUserId,
+  resolveMatrixServerName,
   deriveRealmServerUrl,
 } from '../../lib/seed-auth.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
@@ -52,13 +53,19 @@ export interface PublishOptions {
    * no-op to suppress it.
    */
   onProgress?: (progress: PublishProgress) => void;
-  /** Seed-mode admin auth — mints an owner-scoped realm-server token. */
+  /** Seed-mode admin auth — mints a realm-server token for `asUser`. */
   realmSecretSeed?: string;
   /**
-   * Owner Matrix id for the seed-minted server token. Defaults to the owner
-   * derived from the source realm URL (`@<owner>:<domain>`).
+   * Matrix id for the seed-minted server token, a user who administers the
+   * source realm. Defaults to the user the source realm URL's path names, on
+   * the paired Matrix server (`@<user>:<matrix server name>`).
    */
   asUser?: string;
+  /**
+   * The name of the Matrix server paired with the realm server, for seed
+   * mode. Read from `MATRIX_SERVER_NAME` when absent.
+   */
+  matrixServerName?: string;
 }
 
 export interface PublishRealmResult {
@@ -88,13 +95,18 @@ export async function publishRealm(
   let normalizedSource = ensureTrailingSlash(sourceRealmURL);
   let normalizedPublished = ensureTrailingSlash(publishedRealmURL);
 
-  // Seed mode mints an owner-scoped realm-server token; the owner defaults to
-  // the one derived from the source realm URL. `pm` stays defined for the
+  // Seed mode mints a realm-server token for `asUser`, who defaults to the
+  // user derived from the source realm URL. `pm` stays defined for the
   // profile path (and threads into the conflict-retry unpublish below).
   let realmServerURL = deriveRealmServerUrl(normalizedSource);
   let asUser =
     options.asUser ??
-    (options.realmSecretSeed ? deriveOwnerUserId(normalizedSource) : undefined);
+    (options.realmSecretSeed
+      ? deriveOwnerUserId(
+          normalizedSource,
+          resolveMatrixServerName(options.matrixServerName),
+        )
+      : undefined);
   let pm = options.realmSecretSeed
     ? undefined
     : (options.profileManager ?? getProfileManager());
@@ -103,6 +115,7 @@ export async function publishRealm(
         realmSecretSeed: options.realmSecretSeed,
         realmServerURL,
         asUser: asUser!,
+        matrixServerName: options.matrixServerName,
       })
     : buildCliRealmClient(pm!);
 
@@ -143,6 +156,7 @@ export async function publishRealm(
         realmSecretSeed: options.realmSecretSeed,
         realmServerURL,
         asUser,
+        matrixServerName: options.matrixServerName,
       });
       if (!unpublishResult.unpublished && !unpublishResult.notFound) {
         throw new Error(
@@ -243,11 +257,11 @@ export function registerPublishCommand(realm: Command): void {
     )
     .option(
       '--realm-secret-seed',
-      'Administrative auth: prompt for a realm secret seed and mint an owner-scoped JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+      'Administrative auth: prompt for a realm secret seed and mint a JWT for --as-user locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED; names the paired Matrix server from MATRIX_SERVER_NAME)',
     )
     .option(
       '--as-user <matrix-id>',
-      'Owner Matrix id to authorize as in seed mode (defaults to the owner derived from the source realm URL)',
+      'Matrix id of a source-realm administrator to authorize as in seed mode (defaults to the user derived from the source realm URL)',
     )
     .option('--json', 'Output the result as JSON')
     .action(

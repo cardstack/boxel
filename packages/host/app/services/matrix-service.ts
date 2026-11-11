@@ -2566,8 +2566,7 @@ export default class MatrixService extends Service {
           // conversation at full input price. Skills route card edits
           // through patch-fields and run-realm-code; the executor
           // still honors patchCardInstance calls (old rooms carry them in
-          // history), and the programmatic SendAiAssistantMessage tool
-          // still injects it for callers that require a forced patch call.
+          // history).
           tools: [],
           debug: context?.debug,
           functions: [],

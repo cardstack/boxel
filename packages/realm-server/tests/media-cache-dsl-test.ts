@@ -20,6 +20,7 @@ import type {
   CaptureRequestPerfEvent,
   VirtualNetwork as VirtualNetworkType,
 } from '@cardstack/runtime-common';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   ANONYMOUS_RENDER,
   Deferred,
@@ -57,7 +58,6 @@ import {
 import Koa from 'koa';
 import Router from '@koa/router';
 import supertest from 'supertest';
-import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 import { enqueueCaptureJob } from '@cardstack/runtime-common/jobs/capture';
 import handleCapture from '../handlers/handle-capture.ts';
@@ -1150,8 +1150,7 @@ module(basename(import.meta.filename), function () {
     // The realm-server's POST /_capture surface wired to this
     // suite's real queue and MediaCache store, so cross-surface tests can
     // prove one capture satisfies both the POST response and its GET
-    // `_capture/` URL. The matrix stub is never consulted: the realm's
-    // permissions have no `users` grant.
+    // `_capture/` URL.
     function postCapture(attributes: Record<string, unknown>) {
       let app = new Koa();
       let router = new Router();
@@ -1161,11 +1160,7 @@ module(basename(import.meta.filename), function () {
         handleCapture({
           dbAdapter,
           queue: publisher,
-          matrixClient: {
-            async getProfile() {
-              return null;
-            },
-          } as unknown as MatrixClient,
+          matrixClient: { serverName: 'localhost' } as unknown as MatrixClient,
           mediaCacheAdapter: adapter,
           captureSyncWaitMs: SYNC_WAIT_MS,
         } as unknown as CreateRoutesArgs),

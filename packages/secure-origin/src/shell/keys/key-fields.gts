@@ -4,12 +4,18 @@
 // using it is approved. An OAuth app's fields go between the two, its client
 // secret being the value. A service account's value is its key file, entered
 // in its own fields, so for one only the name is drawn here.
+//
+// A name beside a masked value is a login form's shape, on the origin where
+// the Boxel login is saved, so each field carries the hints 1Password,
+// LastPass, Dashlane and Bitwarden read to leave a field alone. A browser's
+// own password manager reads none of them.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { Field } from '@cardstack/pretui/components/field';
 import KeyRound from '@cardstack/boxel-icons/key-round';
 import Tag from '@cardstack/boxel-icons/tag';
 import { Input } from '@cardstack/pretui/components/input';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { focusWhen } from '@cardstack/pretui/focus';
 
 interface Signature {
@@ -45,6 +51,7 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
         @value={{@name}}
         @onInput={{@onName}}
         name='key-name'
+        {{ignoredByPasswordManagers}}
         data-test-key-name
         {{focusWhen true}}
       />
@@ -69,6 +76,7 @@ const KeyFields: TemplateOnlyComponent<Signature> = <template>
         @onInput={{@onValue}}
         name='key-value'
         spellcheck='false'
+        {{ignoredByPasswordManagers}}
         data-test-key-value
         {{focusWhen (if @onName false true)}}
       />

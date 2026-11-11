@@ -46,9 +46,9 @@ class Held extends Component<{ Args: { seize?: (self: Held) => void } }> {
       {{grab c}}
       <div style='width:{{this.width}}px'>
         <div
-          data-box
           style='width:100%;height:40px;background:#0af'
           {{motion id='box'}}
+          data-test-box
         ></div>
       </div>
       <c.Move @of={{c.all}} @duration={{0.4}} @ease='linear' />
@@ -65,7 +65,7 @@ class Held extends Component<{ Args: { seize?: (self: Held) => void } }> {
  * box away from that. Absolute pixels would only be measuring the fixture.
  */
 const fill = () => {
-  const box = document.querySelector<HTMLElement>('[data-box]')!;
+  const box = document.querySelector<HTMLElement>('[data-test-box]')!;
   const frame = box.parentElement!;
   return (
     box.getBoundingClientRect().width / frame.getBoundingClientRect().width

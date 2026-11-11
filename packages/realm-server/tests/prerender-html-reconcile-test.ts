@@ -602,6 +602,34 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('skips a realm whose owner is on another homeserver', async function (assert) {
+    const realmURL = 'http://example.com/foreign/';
+    await seedOwner(realmURL, '@owner:other.example');
+    await seedRealmGeneration(realmURL, 5);
+    await seedIndexRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 5,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}mango.json`,
+      realmURL,
+      generation: 4,
+    });
+
+    let result = await runReconcile();
+    assert.deepEqual(
+      result,
+      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
+      'the realm is not repaired',
+    );
+    assert.strictEqual(
+      (await prerenderHtmlJobs(realmURL)).length,
+      0,
+      'no repair job is enqueued to run as @owner:localhost in its place',
+    );
+  });
+
   // A realm configured to render no HTML has every row permanently unrendered,
   // which reads here exactly like residue worth repairing. Without the
   // exclusion this sweep re-enqueues, at whole-realm size, the very render the

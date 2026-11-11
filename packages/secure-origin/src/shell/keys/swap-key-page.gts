@@ -95,7 +95,12 @@ class SwapKey extends Component<{ Args: { api: KeysWindowAPI } }> {
         <strong>{{this.done.key}}</strong>, and works again.
       </DonePage>
     {{else if this.choosing}}
-      <form novalidate {{on 'submit' this.save}} data-test-swap-key-form>
+      <form
+        novalidate
+        data-form-type='other'
+        {{on 'submit' this.save}}
+        data-test-swap-key-form
+      >
         <EditPage @heading={{this.title}} data-test-swap-key>
           <:intro>This shared key stopped working. Share one of your own keys in
             its place: every request in the workspace that uses this shared key

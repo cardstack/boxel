@@ -321,6 +321,8 @@ describe('ingest-card graph with seed auth (prefix map from the realm origin)', 
   beforeAll(async () => {
     clearPrefixRealmNetworkCache();
     vi.stubEnv('REALM_SERVER_URL', OTHER_SERVER);
+    // Seed auth names the user it mints a token for on this Matrix server.
+    vi.stubEnv('MATRIX_SERVER_NAME', 'example.test');
     let realm = makeFakeAuthenticator(fetchedUrls);
     vi.stubGlobal('fetch', (async (
       input: string | URL | Request,

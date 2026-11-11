@@ -114,23 +114,25 @@ JSON.stringify(userPermissions.sort())` → `PermissionMismatch`.
 `userPermissions` on that last line is the **effective** set, never the raw
 per-username row: `effectiveRealmPermissions` unions the realm's `users` grant,
 its `*` grant, and the user's own row. The `users` grant counts only for a user
-of the paired homeserver, named by `matrixServerName` (ADR 004 §1.4), whose
-matrix account exists. It is the single derivation —
+of the paired homeserver, named by `matrixServerName` (ADR 004 §1.4), who holds
+a Boxel account: a row in the realm server's `users` table, written on their
+first sign-in and when their sessions are revoked. It is the single derivation —
 `RealmPermissionChecker.for` and `fetchEffectiveRealmPermissions` both call it,
-the latter resolving the `users` grant from a homeserver URL and the configured
-server name for callers that hold no matrix client. **Every mint site must
-produce that same union.** Minting the bare row is the standing bug in
-this area: on a realm with a shared grant it yields a token that can never match,
-and the failure is a flat `PermissionMismatch` 401 with nothing pointing at the
-minter. `fetchUserPermissions` is _not_ a substitute — its wildcard arm drops the
-`*` grant for any realm the user has a row in, and it ignores `users` rows
-entirely — so the realms it enumerates for a multi-realm bundle still carry
-row-only claims.
+each reading the `users` table through `accountCheck`, so it needs only the
+database and the configured server name and never asks the homeserver (whose
+profile endpoint ADR 011 §1.6 closes to users who share no room with the
+subject). **Every mint site must produce that same union.** Minting the bare row
+is the standing bug in this area: on a realm with a shared grant it yields a
+token that can never match, and the failure is a flat `PermissionMismatch` 401
+with nothing pointing at the minter. `fetchUserPermissions` is _not_ a
+substitute — its wildcard arm drops the `*` grant for any realm the user has a
+row in, and it ignores `users` rows entirely — so the realms it enumerates for a
+multi-realm bundle still carry row-only claims.
 
 **Direct writers** are the opposite question: not "may this request write?" but
 "is this person a writer of the realm in their own name?", asked before a realm
 takes something on that a person answers for (sharing a key into it, scheduling
-a pipeline they pay for). `isDirectWriter` / `fetchDirectWriters` in
+an automation they pay for). `isDirectWriter` / `fetchDirectWriters` in
 `db-queries/realm-permission-queries.ts` answer it from the user's own row
 alone. Wildcard rows (`*`, `users`) are excluded because they grant write to
 everyone they match without naming anyone, so no one is accountable through

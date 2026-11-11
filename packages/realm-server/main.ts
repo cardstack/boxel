@@ -2,6 +2,7 @@ import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
+import { readOAuthProviderConfig } from './lib/oauth-provider/config.ts';
 import { writeSync } from 'node:fs';
 import {
   CardDocumentCache,
@@ -141,6 +142,16 @@ if (!GRAFANA_SECRET) {
   process.exit(-1);
 }
 
+// The Grafana whose signing keys verify operator actions proxied through it.
+// Local and test runs work without it, so its absence is a warning, not a
+// startup failure.
+const GRAFANA_URL = process.env.GRAFANA_URL || undefined;
+if (!GRAFANA_URL) {
+  console.warn(
+    `GRAFANA_URL is not set: operator actions proxied through Grafana will be refused`,
+  );
+}
+
 const MATRIX_URL = process.env.MATRIX_URL;
 if (!MATRIX_URL) {
   console.error(
@@ -165,6 +176,12 @@ const MATRIX_REGISTRATION_SHARED_SECRET =
 // nothing, so the pull-model feature stays inert until the secret is
 // provisioned (and rotated, CS-11567) alongside ai-bot.
 const AI_BOT_DELEGATION_SECRET = process.env.AI_BOT_DELEGATION_SECRET;
+
+// Shared secret the homeserver's invite module presents when it asks
+// `/_invite-check` whether one user may invite another (ADR 011 §1.6). The
+// module reads the same value from its config in homeserver.yaml. Optional:
+// when unset the endpoint responds 503, which the module treats as a denial.
+const MATRIX_INVITE_CHECK_SECRET = process.env.MATRIX_INVITE_CHECK_SECRET;
 
 // Synapse admin credentials. Optional: only consumed by operator-action
 // endpoints that need to admin-impersonate a target user to read or write
@@ -467,6 +484,13 @@ const secureOriginURL =
     : isEnvironmentMode()
       ? `${serviceURL(secureServiceName)}/secure`
       : `https://localhost:${secureListenerPort}/secure`);
+
+// Boxel's OAuth provider, on only where BOXEL_OAUTH_PROVIDER_ENABLED=true.
+// Read before anything starts, so a missing or malformed configuration stops
+// the server at boot instead of at the first OAuth request.
+const oauthProvider = readOAuthProviderConfig(process.env, {
+  secureOriginURL,
+});
 
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
@@ -963,7 +987,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
+    grafanaURL: GRAFANA_URL,
     aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
+    matrixInviteCheckSecret: MATRIX_INVITE_CHECK_SECRET,
     dbAdapter,
     queue,
     searchCache,
@@ -988,6 +1014,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
     ...(googleSignIn ? { googleSignIn } : {}),
+    ...(oauthProvider ? { oauthProvider } : {}),
   });
 
   const secureHttpServer =
