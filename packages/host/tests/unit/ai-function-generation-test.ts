@@ -210,8 +210,43 @@ module('Unit | ai-function-generation-test', function (hooks) {
     );
     assert.deepEqual(
       Object.keys(query.properties).sort(),
-      ['collapse', 'facets', 'filter', 'let', 'page', 'sort', 'timeZone'],
+      [
+        'collapse',
+        'facets',
+        'filter',
+        'let',
+        'page',
+        'sort',
+        'timeZone',
+        'type',
+      ],
       'the query members the search tools carry are declared (re-ranking is a sort entry)',
+    );
+    assert.true(
+      /not as an 'on' on the top filter node/.test(
+        query.properties.type.description,
+      ),
+      'the type description steers a query to type, not a top-node on',
+    );
+    assert.true(
+      /mixed-spelling/.test(query.properties.type.description),
+      'the type description names the refusal a top-node on meets',
+    );
+    assert.true(
+      /top-level 'type'/.test(
+        query.properties.filter.properties.on.description,
+      ),
+      'the filter on description points at the top-level type',
+    );
+    assert.false(
+      /in UTC/.test(query.properties.filter.properties.range.description),
+      "a relative date's rounding is not described as UTC",
+    );
+    assert.true(
+      /query's time zone/.test(
+        query.properties.filter.properties.range.description,
+      ),
+      "a relative date's rounding is described as the query's zone",
     );
     assert.true(
       query.properties.facets.description.includes('needs-declaration'),
@@ -238,6 +273,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       'page.total takes the three total modes',
     );
     for (let [where, ref] of [
+      ['type', query.properties.type],
       ['filter.type', query.properties.filter.properties.type],
       ['filter.on', query.properties.filter.properties.on],
       ['sort.on', query.properties.sort.items.properties.on],

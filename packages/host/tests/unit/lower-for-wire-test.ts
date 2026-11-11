@@ -107,6 +107,20 @@ module('Unit | lower-for-wire', function () {
     });
   });
 
+  test('a top-level type in the shorthand spelling anchors the filter and facets', function (assert) {
+    // the AI query schema offers `type` as "<module>#<Name>" or { module, name }
+    let wired = wire({
+      type: '@cardstack/catalog/catalog-app/listing/listing#Listing',
+      filter: { eq: { name: 'Pasta' } },
+      facets: [{ by: 'name' }],
+    });
+    assert.deepEqual(wired.filter as unknown, {
+      'item.on': listing,
+      every: [{ eq: { 'item.name': 'Pasta' } }],
+    });
+    assert.deepEqual(wired.facets as unknown, [{ by: 'item.name' }]);
+  });
+
   test('a top-level type with no filter is a type filter', function (assert) {
     let wired = wire({ type: listing });
     assert.deepEqual(wired.filter as unknown, { 'item.on': listing });

@@ -140,7 +140,7 @@ export const QUERY_GRAMMAR = {
         validator: 'assertTimeZone',
         refusals: ['invalid-value'],
         description:
-          "An IANA time zone, such as 'America/New_York', whose calendar decides where 'today', 'this week' and a day, week, month or year bucket start: relative dates (now/d, now-1w/w), facet intervals and TODAY(). Stored values keep their meaning. Absent: the realm's default zone, else UTC. Name it for a question about a person's or a place's day.",
+          "An IANA time zone, such as 'America/New_York', whose calendar decides where 'today', 'this week' and a day, week, month or year bucket start: relative dates (now/d, now-1w/w), facet intervals and TODAY(). Stored values keep their meaning. Absent: the caller's zone, else the realm's default zone, else UTC. Name it for a question about a person's or a place's day.",
       },
       { name: 'asData', spelling: 'older' },
       {
@@ -155,6 +155,8 @@ export const QUERY_GRAMMAR = {
         form: 'lowered',
         validator: 'assertCardType',
         refusals: ['invalid-type'],
+        description:
+          "The card type of every match (subtypes included), whose fields the filter's, sort's and facets' paths name unless a nested node gives its own 'on'. Name the query's type here, not as an 'on' on the top filter node: a top-node 'on' is the older spelling and is refused (mixed-spelling) beside any newer member (facets, collapse, let, timeZone, page.total, near, typos, prefix, pattern, regex, linkedFrom, within, scope, fields, exists, missing, an expression sort). Example: { type: '@cardstack/catalog/product#Product', filter: { eq: { brand: 'Acme' } }, facets: [{ by: 'brand' }] }.",
       },
       { name: 'select', spelling: 'newer', form: 'entry' },
       {
@@ -234,7 +236,7 @@ export const QUERY_GRAMMAR = {
         validator: 'assertRangeFilter',
         refusals: ['invalid-value', 'missing-member', 'unknown-key'],
         description:
-          "Field paths to bounds, any of gt, gte, lt, lte: { price: { gte: 10, lt: 50 } }. A bound is a number or a string, never null. A date bound may be relative: 'now', 'now-30d', 'now-1M/d' (units s, m, h, d, w, M, y; '/unit' rounds down in UTC).",
+          "Field paths to bounds, any of gt, gte, lt, lte: { price: { gte: 10, lt: 50 } }. A bound is a number or a string, never null. A date bound may be relative: 'now', 'now-30d', 'now-1M/d' (units s, m, h, d, w, M, y; '/unit' rounds down on the query's time zone calendar: its timeZone, else the caller's, else the realm's default, else UTC).",
       },
       {
         name: 'contains',
@@ -330,7 +332,7 @@ export const QUERY_GRAMMAR = {
         validator: 'assertCardType',
         refusals: ['invalid-type'],
         description:
-          "The card type whose fields this filter's paths name. Nested filters do not inherit it; give each one its own 'on'.",
+          "The card type whose fields this filter's paths name. Nested filters do not inherit it; give each one its own 'on'. Name the whole query's type with the top-level 'type' instead of an 'on' on the top filter node: beside a newer member (facets, near, typos, an expression sort, …) a top-node 'on' is refused (mixed-spelling).",
       },
       {
         name: 'type',

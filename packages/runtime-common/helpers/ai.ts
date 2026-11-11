@@ -201,11 +201,11 @@ export async function basicMappings(loader: Loader) {
     additionalProperties: true,
   });
   // The query the assistant's search tools take (docs/search.md). The tools
-  // validate it with `assertQuery` and send it as an entry wire query
-  // (`searchEntryWireQueryFromQuery`), so this describes the spelling that
-  // path carries: a type anchor `on` in each clause and the engine's signal
-  // sort keys. A top-level `type`, `{ blend }`, `{ expression }`,
-  // `{ relevance }`, `exists`/`missing` and `select` do not survive it yet.
+  // validate it with `assertQuery`, lower a newer-spelling query to the older
+  // one (`lowerForWire`) and send it as an entry wire query
+  // (`searchEntryWireQueryFromQuery`). A query that uses a newer member names
+  // its type with the top-level `type`, never an `on` on its top filter node
+  // (refused, `mixed-spelling`), so the schema offers `type` beside them.
   // A type reference, in either spelling: the "<module>#<Name>" shorthand
   // or the code ref { module, name } (type-reference.ts).
   const queryCodeRef = (description: string): AnyOfSchema => ({
@@ -236,6 +236,7 @@ export async function basicMappings(loader: Loader) {
     type: 'object',
     description: grammarDescription('query'),
     properties: {
+      type: queryCodeRef(grammarDescription('query', 'type')),
       filter: {
         type: 'object',
         description: grammarDescription('query', 'filter'),

@@ -596,8 +596,9 @@ interface QueryCommon {
   // The IANA zone (`America/New_York`) whose calendar the query's dates are
   // reckoned in: relative dates and their rounding, facet `interval`
   // buckets, TODAY() and an expression's date parts. Stored values keep
-  // their meaning (time-zone.ts). Absent: the realm's default zone, else
-  // UTC. A `let` binding's query inherits it unless it names its own.
+  // their meaning (time-zone.ts). Absent: the caller's zone, else the
+  // realm's default zone, else UTC. A `let` binding's query inherits it
+  // unless it names its own.
   timeZone?: string;
   page?: {
     number?: number; // page.number is 0-based
