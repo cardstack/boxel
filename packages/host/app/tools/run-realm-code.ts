@@ -552,6 +552,53 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   ask: false,
 };
 
+// Calls that need read access to the run's workspace. Where the realm admits
+// the user only through its policy, a call that reads what a grant can reach
+// (a card, a file's bytes, a search) goes to the realm, which serves what the
+// policy grants. No grant reaches a directory listing. A Record over every
+// method, so a new method does not type-check until it is listed here.
+const REQUIRES_READ: Record<RealmRunnerCallMethod, boolean> = {
+  'fs.readText': false,
+  'fs.exists': false,
+  'fs.list': true,
+  'fs.replace': false,
+  'fs.writeText': false,
+  'fs.copy': false,
+  'fs.writeBytes': false,
+  'fs.download': false,
+  'cards.search': false,
+  'cards.get': false,
+  'cards.update': false,
+  'operations.invoke': false,
+  'operations.invokeBatchOperation': false,
+  'operations.capabilities': false,
+  'entries.search': false,
+  'fs.delete': false,
+  capture: false,
+  'images.generate': false,
+  'workspaces.create': false,
+  'workspaces.delete': false,
+  'room.enableSkills': false,
+  'room.disableSkills': false,
+  'room.setModel': false,
+  'room.credits': false,
+  'ui.switchSubmode': false,
+  'ui.openFile': false,
+  'ui.previewFormat': false,
+  'ui.openWorkspace': false,
+  'index.invalidate': false,
+  'index.reindex': false,
+  'index.fullReindex': false,
+  'index.cancelJob': false,
+  'web.search': false,
+  'web.read': false,
+  resolve: false,
+  transform: false,
+  activity: false,
+  plan: false,
+  ask: false,
+};
+
 // Runs one search in the run's realm and answers with the entry document.
 type SearchCards = (
   query: SearchEntryWireQuery,
@@ -738,6 +785,7 @@ class RealmFsSession {
     private namedCalls: Set<ClickRequiredCall>,
     private index: IndexActions,
     private mayWrite: boolean,
+    private mayRead: boolean,
     // The most bytes a card file may hold, as the realm enforces it.
     private cardSizeLimitBytes: number,
     readonly room: RoomActions,
@@ -787,16 +835,38 @@ class RealmFsSession {
         this.refused += 1;
         throw new Error('The run has ended; this realm call was not made');
       }
-      // The realm refuses the write anyway; this says why before any work.
-      if (REQUIRES_WRITE[method] && !this.mayWrite) {
-        throw new Error(
-          `You can only read this workspace; realm.${method} was not run`,
-        );
+      let refusal = this.refusalFor(method);
+      if (refusal) {
+        throw new Error(refusal);
       }
       return this.dispatch(method, args);
     });
     this.queue = result.catch(() => undefined);
     return result;
+  }
+
+  // Why a call needs access the user's permissions don't give, or undefined
+  // for one they cover. The realm refuses such a call anyway; this says why
+  // before any work. A user who can neither read nor write runs here only
+  // where the realm's policy judges them, and a change it grants reaches the
+  // realm as an operation: the write calls send bytes or whole documents,
+  // which only the realm's own write permission admits.
+  private refusalFor(method: RealmRunnerCallMethod): string | undefined {
+    if (REQUIRES_WRITE[method] && !this.mayWrite) {
+      return this.mayRead
+        ? `You can only read this workspace; realm.${method} was not run`
+        : `You can't write this workspace directly; realm.${method} was ` +
+            `not run. A change the realm's policy grants runs as an ` +
+            `operation, with realm.operations.invoke`;
+    }
+    if (REQUIRES_READ[method] && !this.mayRead) {
+      return (
+        `You can't read this workspace directly; realm.${method} was not ` +
+        `run. Read the cards and files the realm's policy grants with ` +
+        `realm.cards.get, realm.cards.search or realm.fs.readText`
+      );
+    }
+    return undefined;
   }
 
   close() {
@@ -3032,7 +3102,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     "never edit a card's data to make the workspace index it. In a workspace " +
     'the user can only read, reads work and each write is refused, except ' +
     'realm.operations, which the realm allows when its policy grants the ' +
-    'operation. To learn whether the realm would allow the user an ' +
+    'operation. In one the realm admits the user to only through its ' +
+    'policy, it serves only the cards and files the policy grants, answers ' +
+    'any other as not found, and lists no folder. To learn whether the realm would allow the user an ' +
     'operation now, without running it, ask with ' +
     'realm.operations.capabilities([{ path, operation }, { type: { module, ' +
     'name }, operation }]) (a type for a create; module is a URL, a prefix ' +
@@ -3162,11 +3234,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     // Read and write are separate grants, and either one is enough to run:
     // in a workspace the user can only read, each write is refused on its
     // own. In one the user can only write, the realm refuses each read,
-    // including the read that a write to a file makes first.
-    if (
-      !realmURL ||
-      !(this.realm.canRead(realmURL) || this.realm.canWrite(realmURL))
-    ) {
+    // including the read that a write to a file makes first. A user the realm
+    // admits only through its policy runs too, and the realm decides each
+    // call: it serves what the policy grants and refuses the rest.
+    if (!realmURL || !this.mayRunIn(realmURL)) {
       throw new Error(`The current user cannot read or write ${realmInput}`);
     }
     let rootURL = this.realmRootURL(realmURL);
@@ -3264,6 +3335,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
           cancelJob: () => this.realm.cancelIndexingJob(realmURL),
         },
         this.realm.canWrite(realmURL),
+        this.realm.canRead(realmURL),
         this.environmentService.cardSizeLimitBytes,
         new RoomActions({
           checkSkill: (id) => this.checkSkill(id),
@@ -4251,6 +4323,18 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // realmOf matches an identifier only in the form the realm is keyed by, and
   // the input may name the realm by its prefix or by its URL, so a miss is
   // retried with the identifier resolved to its URL.
+  // Whether the user may run a script in the realm: they can read or write
+  // it, or its policy judges them. A realm answers its info to a caller its
+  // permissions don't let read only when its policy judges them, so info the
+  // host holds for a user who can't read the realm says the policy does.
+  private mayRunIn(realm: RealmIdentifier): boolean {
+    return (
+      this.realm.canRead(realm) ||
+      this.realm.canWrite(realm) ||
+      this.realm.isInfoLoaded(realm)
+    );
+  }
+
   private realmOfInput(
     realmId: RealmResourceIdentifier,
   ): RealmIdentifier | undefined {

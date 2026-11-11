@@ -644,6 +644,143 @@ module('Integration | a realm that checks permissions', function (hooks) {
     );
   });
 
+  // The host asks the school for its info during setup's renders, which the
+  // school answers as its own requests, without asking who sent them. Signing
+  // in afresh has the school decide whether to answer: one whose policy
+  // judges the user does.
+  async function signInToSchoolAfresh() {
+    let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
+    await realmService.reauthenticate(SCHOOL);
+  }
+
+  async function runInSchool(code: string) {
+    let toolService = getService('tool-service');
+    let result = await new RunRealmCodeTool(toolService.toolContext).execute({
+      realm: SCHOOL,
+      roomId: '!room:example.com',
+      code,
+    });
+    return JSON.parse(result.scriptResult!);
+  }
+
+  test('a Realm Runner script runs for a user the realm admits only through its policy, and asks it which operations it allows', async function (assert) {
+    await setupSchool({ enforcePermissions: true });
+    await signInToSchoolAfresh();
+    let realmService = getService('realm');
+    assert.deepEqual(
+      [realmService.canRead(SCHOOL), realmService.canWrite(SCHOOL)],
+      [false, false],
+      'the school’s permissions give the test user neither read nor write',
+    );
+
+    let [teaches, colleagues] = await runInSchool(
+      `return await realm.operations.capabilities([
+  { path: 'classrooms/room-204', operation: 'rename' },
+  { path: 'classrooms/room-205', operation: 'rename' },
+]);`,
+    );
+    assert.deepEqual(
+      teaches,
+      { path: 'classrooms/room-204.json', operation: 'rename', allowed: true },
+      'the realm allows renaming a classroom the user teaches',
+    );
+    assert.deepEqual(
+      colleagues,
+      { path: 'classrooms/room-205.json', operation: 'rename', allowed: false },
+      'and refuses renaming a colleague’s',
+    );
+  });
+
+  test('a Realm Runner script runs an operation the policy grants a user the realm admits only through it, and the realm refuses one it does not', async function (assert) {
+    let adapter = await setupSchool({ enforcePermissions: true });
+    await signInToSchoolAfresh();
+
+    let { renamed, refused } = await runInSchool(
+      `let renamed = await realm.operations.invoke('classrooms/room-204', 'rename', { title: 'Renamed' });
+let refused;
+try {
+  await realm.operations.invoke('classrooms/room-205', 'rename', { title: 'Renamed' });
+} catch (e) {
+  refused = e.message;
+}
+return { renamed: renamed.id, refused };`,
+    );
+    assert.strictEqual(
+      renamed,
+      ROOM_204,
+      'the rename the policy grants runs, and answers the classroom it wrote',
+    );
+    assert.strictEqual(
+      await storedTitle(adapter, 'classrooms/room-204.json'),
+      'Renamed',
+      'and lands',
+    );
+    assert.true(
+      /no such target/.test(refused),
+      `the realm refuses the rename it does not grant: ${refused}`,
+    );
+    assert.strictEqual(
+      await storedTitle(adapter, 'classrooms/room-205.json'),
+      'Room 205',
+      'and nothing was written',
+    );
+  });
+
+  test('a Realm Runner script run by a user the realm admits only through its policy reads what the policy grants, and is refused a write and a folder listing before the realm is asked', async function (assert) {
+    let adapter = await setupSchool({ enforcePermissions: true });
+    await signInToSchoolAfresh();
+
+    let { title, refused } = await runInSchool(
+      `let card = await realm.cards.get('classrooms/room-204');
+let refused = [];
+try { await realm.fs.writeText('notes.txt', 'hello'); } catch (e) { refused.push(e.message); }
+try { await realm.fs.list('classrooms/'); } catch (e) { refused.push(e.message); }
+return { title: card.attributes.title, refused };`,
+    );
+    assert.strictEqual(
+      title,
+      'Room 204',
+      'the classroom the policy grants reads',
+    );
+    assert.deepEqual(
+      refused,
+      [
+        "You can't write this workspace directly; realm.fs.writeText was not run. A change the realm's policy grants runs as an operation, with realm.operations.invoke",
+        "You can't read this workspace directly; realm.fs.list was not run. Read the cards and files the realm's policy grants with realm.cards.get, realm.cards.search or realm.fs.readText",
+      ],
+      'the write and the listing are refused, each saying what does run',
+    );
+    assert.strictEqual(
+      await adapter.openFile('notes.txt'),
+      undefined,
+      'nothing was written',
+    );
+  });
+
+  test('a Realm Runner script does not run for a user a realm without a policy does not let read', async function (assert) {
+    await setupSchool({ enforcePermissions: true, policy: null });
+    let realmService = getService('realm');
+    realmService.removeRealm(SCHOOL);
+    await assert.rejects(
+      realmService.reauthenticate(SCHOOL),
+      /Failed to fetch realm info/,
+      'the school refused the user its info',
+    );
+
+    let toolService = getService('tool-service');
+    await assert.rejects(
+      new RunRealmCodeTool(toolService.toolContext).execute({
+        realm: SCHOOL,
+        roomId: '!room:example.com',
+        code: `return 'ran';`,
+      }),
+      (error: Error) =>
+        error.message === `The current user cannot read or write ${SCHOOL}`,
+      'the run is refused before it starts',
+    );
+  });
+
   test('a realm set up alone serves its policy card to its owner', async function (assert) {
     // No realm is set up before this one, so the matrix boot asks this realm
     // for the default system card, which lives at its URL. Answering for the
