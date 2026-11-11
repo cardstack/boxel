@@ -1,8 +1,9 @@
 // Grouping: which consecutive change events of one realm fold into one
 // revision. The module is pure. The recorder hands it the open group and the
 // next event, and it answers whether the group closes before the event, after
-// it, or not at all. It never reads the clock: the recorder passes the time
-// in, so the tests drive it with times of their own.
+// it, or not at all, and which group the event joined or opened. It never
+// reads the clock: the recorder passes the time in, so the tests drive it
+// with times of their own.
 //
 // A group is one writer's run of events. Its events share the author,
 // channel, agent, room and push ID, and on the `ai-assistant` and `mcp`
@@ -100,9 +101,13 @@ export interface OpenGroup {
 // * `closeBefore`: the open group closes, and the event opens the next one;
 // * `closeAfter`: the group the event joined, or opened, closes after it;
 // * both: the open group closes, and the event is a revision of its own.
+//
+// `group` is the group the event joined or opened. The recorder keeps it as
+// the open group, unless `closeAfter` closes it.
 export interface Decision {
   closeBefore?: CloseReason;
   closeAfter?: CloseReason;
+  group: OpenGroup;
 }
 
 export interface Deadline {
@@ -138,18 +143,15 @@ export function decide(
   event: ChangeEvent,
   limits: GroupingLimits,
 ): Decision {
-  let decision: Decision = {};
   let closeBefore = group ? closesBefore(group, event, limits) : undefined;
-  if (closeBefore) {
-    decision.closeBefore = closeBefore;
-  }
   let joined =
     group && !closeBefore ? extendGroup(group, event) : openGroup(event);
   let closeAfter = closesAfter(joined, event, limits);
-  if (closeAfter) {
-    decision.closeAfter = closeAfter;
-  }
-  return decision;
+  return {
+    ...(closeBefore ? { closeBefore } : {}),
+    ...(closeAfter ? { closeAfter } : {}),
+    group: joined,
+  };
 }
 
 // When time closes the group, and why. A recorder with no later event in
