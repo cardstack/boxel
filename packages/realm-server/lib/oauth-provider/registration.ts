@@ -155,13 +155,16 @@ export function registrationHandler({
   scopes,
   rateLimitStore,
   newClientLimit,
+  alert = new NewClientAlert(newClientLimit),
 }: {
   hosts: BoxelHosts;
   scopes: readonly string[];
   rateLimitStore: RateLimitStore;
   newClientLimit: NewClientLimit;
+  // Shared with client ID metadata documents, which count against the same
+  // limit, so the two warn at most once a minute between them.
+  alert?: NewClientAlert;
 }) {
-  let alert = new NewClientAlert(newClientLimit);
   return async function handleRegistration(ctxt: Koa.Context, next: Koa.Next) {
     let address = ctxt.req.headers[CLIENT_IP_HEADER];
     let admitted = await takeNewClient(

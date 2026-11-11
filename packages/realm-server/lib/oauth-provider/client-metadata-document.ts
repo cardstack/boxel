@@ -1,0 +1,333 @@
+// Clients identified by a client ID metadata document (ADR 021 §1.4): the
+// client ID is an `https://` URL, and the client's metadata is the JSON
+// document served there. The library downloads the document when a request
+// names the client and keeps it in its in-memory cache (at most 100 per
+// process, for the document's `Cache-Control` max-age within the bounds
+// below). It is never stored: a restart, or the max-age running out, means
+// the next request that names the client downloads it again.
+//
+// Boxel's part, in the order a request meets it:
+//
+// 1. `allowFetch`, before a download: a client ID on one of Boxel's own hosts
+//    is refused, and a client ID this process hasn't accepted before counts
+//    against the new-client limit DCR uses. A cache hit never gets here.
+// 2. `fetch`, the download: through the outbound guard, so a client ID can't
+//    reach a private address, with no redirect followed and at most
+//    `MAX_DOCUMENT_BYTES` read.
+// 3. `validate`, as the library builds the client from the document: the
+//    rules a registration meets, and the same rewrite, so a document client
+//    holds only what a registered one may. Its application type comes from
+//    its redirect URIs, so a document listing loopback redirects is native
+//    without declaring it, as Claude Code's doesn't.
+// 4. `allowClient`, each time the client is used, cached or not: notes the
+//    client ID as accepted, and logs a cache hit.
+//
+// Boxel's own checks before the library look a client up too (the start of a
+// flow, the error page), outside the library's handling of a request. Every
+// provider route runs inside `inMetadataDocumentRequest` (`serve.ts`), so the
+// hooks know the caller's address on either path, and a client ID refused once
+// in a request is refused again at once: a request Boxel's check falls through
+// on reaches the library, which looks the client up a second time.
+//
+// Pages name a document client by its client ID's registrable domain
+// (`app-name.ts`), never by what the document says.
+
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { errors, type KoaContextWithOIDC } from 'oidc-provider';
+import {
+  CLIENT_IP_HEADER,
+  logger,
+  type RateLimitStore,
+} from '@cardstack/runtime-common';
+import {
+  OutboundRefusedError,
+  OutboundResponseTooLargeError,
+  OutboundTimeoutError,
+  outboundFetch,
+} from '../outbound/client.ts';
+import type { NewClientAlert } from './new-client-limit.ts';
+import { takeNewClient, type NewClientLimit } from './new-client-limit.ts';
+import { isOnBoxelHost, type BoxelHosts } from './redirect-uris.ts';
+import { checkRegistration } from './registration.ts';
+
+const log = logger('boxel:oauth-provider');
+
+// The library's own limit, set so an upgrade can't change it. A document is
+// a few hundred bytes.
+export const MAX_DOCUMENT_BYTES = 5 * 1024;
+
+// How long, in seconds, a downloaded document is kept: the document's
+// `Cache-Control` max-age, held within these bounds. The library's defaults.
+export const DOCUMENT_CACHE_SECONDS = Object.freeze({ min: 30, max: 86400 });
+
+// The client IDs a process remembers having accepted, so a document it
+// downloads again (after its max-age, or a restart) isn't counted as a new
+// client. Bounded, oldest forgotten first; a forgotten one is counted again.
+const KNOWN_CLIENT_IDS = 1000;
+
+// The library runs `extraClientMetadata.validator` once for each property
+// listed, as it builds any client, so one property is listed to run Boxel's
+// checks. Registration drops it, as it drops every field it doesn't allow,
+// and the checks delete it from a document, so no client ever holds it.
+export const CHECKS_PROPERTY = 'boxel_checks';
+
+// Whether a client ID names a metadata document rather than a registered
+// client, as the library decides it: any letter case of the scheme. The
+// library also checks the rest of the URL's form before it downloads.
+export function isMetadataDocumentClientId(id: unknown): id is string {
+  return typeof id === 'string' && /^https:\/\//i.test(id);
+}
+
+interface MetadataDocumentRequest {
+  // The `CLIENT_IP_HEADER` value.
+  address: string | undefined;
+  // The client IDs refused or failed in this request.
+  refused: Set<string>;
+}
+
+const currentRequest = new AsyncLocalStorage<MetadataDocumentRequest>();
+
+// Runs one request to the provider's routes, so the hooks below know who is
+// asking whichever path looks a client up.
+export function inMetadataDocumentRequest<T>(
+  address: string | undefined,
+  handle: () => Promise<T>,
+): Promise<T> {
+  return currentRequest.run({ address, refused: new Set() }, handle);
+}
+
+function refuseForThisRequest(clientId: string) {
+  currentRequest.getStore()?.refused.add(clientId);
+}
+
+export interface ClientMetadataDocuments {
+  allowFetch: (
+    ctx: KoaContextWithOIDC | undefined,
+    clientId: string,
+  ) => Promise<boolean>;
+  allowClient: (
+    ctx: KoaContextWithOIDC | undefined,
+    client: { clientId: string },
+  ) => Promise<boolean>;
+  fetch: (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => Promise<Response>;
+  validate: (
+    ctx: KoaContextWithOIDC | undefined,
+    key: string,
+    value: unknown,
+    metadata: Record<string, unknown>,
+  ) => void;
+}
+
+export function clientMetadataDocuments({
+  hosts,
+  scopes,
+  rateLimitStore,
+  newClientLimit,
+  alert,
+  testOnlyDocumentOrigins,
+}: {
+  hosts: BoxelHosts;
+  scopes: readonly string[];
+  rateLimitStore: RateLimitStore;
+  newClientLimit: NewClientLimit;
+  alert: NewClientAlert;
+  // Tests only: each `https://` origin named here is downloaded from the
+  // plain HTTP origin it maps to, a stub on loopback, still through the
+  // outbound guard. Nothing in production sets it.
+  testOnlyDocumentOrigins?: ReadonlyMap<string, string>;
+}): ClientMetadataDocuments {
+  let known = new BoundedSet(KNOWN_CLIENT_IDS);
+  // The client IDs downloaded and not yet used, so `allowClient` can tell a
+  // download from a cache hit. Bounded, since a download that fails after it
+  // is read (a document the library refuses) is never used.
+  let downloading = new BoundedSet(KNOWN_CLIENT_IDS);
+
+  async function allowFetch(
+    ctx: KoaContextWithOIDC | undefined,
+    clientId: string,
+  ): Promise<boolean> {
+    let request = currentRequest.getStore();
+    if (request?.refused.has(clientId)) {
+      return false;
+    }
+    let url = URL.parse(clientId);
+    if (!url) {
+      return false;
+    }
+    if (isOnBoxelHost(url, hosts)) {
+      refuseForThisRequest(clientId);
+      note('refused', url, 'boxel-host');
+      return false;
+    }
+    if (!known.has(clientId)) {
+      let header = ctx?.req.headers[CLIENT_IP_HEADER];
+      let address = typeof header === 'string' ? header : request?.address;
+      let outcome = await takeNewClient(
+        rateLimitStore,
+        address,
+        newClientLimit,
+      );
+      alert.note(outcome);
+      if (!outcome.admitted) {
+        refuseForThisRequest(clientId);
+        note('refused', url, outcome.reason);
+        return false;
+      }
+    }
+    downloading.add(clientId);
+    return true;
+  }
+
+  async function allowClient(
+    _ctx: KoaContextWithOIDC | undefined,
+    client: { clientId: string },
+  ): Promise<boolean> {
+    let { clientId } = client;
+    if (downloading.delete(clientId)) {
+      known.add(clientId);
+    } else {
+      let url = URL.parse(clientId);
+      if (url) {
+        note('cache-hit', url);
+      }
+    }
+    return true;
+  }
+
+  async function fetchDocument(
+    input: string | URL | Request,
+    init: RequestInit = {},
+  ): Promise<Response> {
+    let clientId = input instanceof Request ? input.url : String(input);
+    let url = new URL(clientId);
+    let mapped = testOnlyDocumentOrigins?.get(url.origin);
+    let target = mapped ? `${mapped}${url.pathname}${url.search}` : clientId;
+    let response: Response;
+    try {
+      response = await outboundFetch({
+        url: target,
+        method: 'GET',
+        headers: { accept: 'application/json' },
+        signal: init.signal ?? undefined,
+        sizePath: 'call-api',
+        responseSizeCap: MAX_DOCUMENT_BYTES,
+        destinationSetBy: 'user',
+        noRedirects: true,
+      });
+    } catch (error) {
+      downloading.delete(clientId);
+      refuseForThisRequest(clientId);
+      note('failed', url, failureReason(error));
+      throw error;
+    }
+    if (response.status !== 200) {
+      downloading.delete(clientId);
+      refuseForThisRequest(clientId);
+      note('failed', url, `status-${response.status}`);
+    } else {
+      note('downloaded', url);
+    }
+    return response;
+  }
+
+  function validate(
+    _ctx: KoaContextWithOIDC | undefined,
+    _key: string,
+    _value: unknown,
+    metadata: Record<string, unknown>,
+  ): void {
+    // A registered client met these checks when it registered, and is
+    // stored as they left it.
+    if (!isMetadataDocumentClientId(metadata.client_id)) {
+      return;
+    }
+    let check = checkRegistration({ ...metadata }, { hosts, scopes });
+    if (!check.allowed) {
+      downloading.delete(metadata.client_id);
+      refuseForThisRequest(metadata.client_id);
+      let url = URL.parse(metadata.client_id);
+      if (url) {
+        note('refused', url, check.error);
+      }
+      throw new errors.InvalidClientMetadata(check.description);
+    }
+    // Only what a registration may set is kept, as Boxel rewrote it. Every
+    // other field is deleted, and the library fills in its default for any
+    // field it has one for.
+    for (let field of Object.keys(metadata)) {
+      if (field !== 'client_id' && !(field in check.registration)) {
+        delete metadata[field];
+      }
+    }
+    Object.assign(metadata, check.registration);
+  }
+
+  return {
+    allowFetch,
+    allowClient,
+    fetch: fetchDocument,
+    validate,
+  };
+}
+
+// One line per download, refusal, failure and cache hit, naming only the
+// client ID's host: its path is the client's own, and logs need no more.
+function note(
+  outcome: 'downloaded' | 'refused' | 'failed' | 'cache-hit',
+  url: URL,
+  reason?: string,
+) {
+  log.info(
+    `client metadata document: outcome=${outcome}${
+      reason ? ` reason=${reason}` : ''
+    } host=${url.host}`,
+  );
+}
+
+function failureReason(error: unknown): string {
+  if (error instanceof OutboundRefusedError) {
+    return `guard-${error.reason}`;
+  }
+  if (error instanceof OutboundTimeoutError) {
+    return 'timeout';
+  }
+  if (error instanceof OutboundResponseTooLargeError) {
+    return 'too-large';
+  }
+  if (error instanceof Error && error.name === 'TimeoutError') {
+    return 'timeout';
+  }
+  return 'error';
+}
+
+// A set that forgets its oldest member once it holds `limit`.
+class BoundedSet {
+  #members = new Set<string>();
+  #limit: number;
+
+  constructor(limit: number) {
+    this.#limit = limit;
+  }
+
+  has(member: string): boolean {
+    return this.#members.has(member);
+  }
+
+  add(member: string): void {
+    this.#members.delete(member);
+    this.#members.add(member);
+    if (this.#members.size > this.#limit) {
+      let oldest = this.#members.values().next().value;
+      if (oldest !== undefined) {
+        this.#members.delete(oldest);
+      }
+    }
+  }
+
+  delete(member: string): boolean {
+    return this.#members.delete(member);
+  }
+}

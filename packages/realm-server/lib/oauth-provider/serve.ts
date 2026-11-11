@@ -1,12 +1,14 @@
 import type { IncomingMessage } from 'http';
 import type Koa from 'koa';
 import type Router from '@koa/router';
+import { CLIENT_IP_HEADER } from '@cardstack/runtime-common';
 import { fullRequestURL } from '../../middleware/index.ts';
 import {
   OAUTH_AUTHORIZATION_PATH,
   OAUTH_ERROR_PATH,
   OAUTH_INTERACTION_PATH,
 } from './authorization.ts';
+import { inMetadataDocumentRequest } from './client-metadata-document.ts';
 import { OAUTH_CONSENT_PATH } from './consent.ts';
 import {
   OAUTH_DISCOVERY_PATH,
@@ -62,7 +64,14 @@ export function registerOAuthProviderRoutes(
       if (fullRequestURL(ctxt).host !== issuerHost) {
         return next();
       }
-      await handle(ctxt);
+      // Boxel's checks and the library may each look up a client identified
+      // by a metadata document, and either may download it: both need the
+      // caller's address to count the download against.
+      let address = ctxt.req.headers[CLIENT_IP_HEADER];
+      await inMetadataDocumentRequest(
+        typeof address === 'string' ? address : undefined,
+        () => handle(ctxt),
+      );
     };
   let boxelOnly =
     (handle: Koa.Middleware) =>

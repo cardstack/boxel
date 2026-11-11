@@ -1,4 +1,3 @@
-import { randomBytes } from 'crypto';
 import type Koa from 'koa';
 import * as Sentry from '@sentry/node';
 import Provider, { errors, interactionPolicy } from 'oidc-provider';
@@ -14,7 +13,7 @@ import {
   type RateLimitStore,
 } from '@cardstack/runtime-common';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
-import { oauthProviderAdapter } from './adapter.ts';
+import { newDynamicClientId, oauthProviderAdapter } from './adapter.ts';
 import type { CallerLimit } from './caller-limit.ts';
 import {
   authorizationHandler,
@@ -34,7 +33,15 @@ import {
 } from './consent.ts';
 import type { OAuthProviderConfig } from './config.ts';
 import {
+  CHECKS_PROPERTY,
+  clientMetadataDocuments,
+  DOCUMENT_CACHE_SECONDS,
+  MAX_DOCUMENT_BYTES,
+  type ClientMetadataDocuments,
+} from './client-metadata-document.ts';
+import {
   DEFAULT_NEW_CLIENT_LIMIT,
+  NewClientAlert,
   type NewClientLimit,
 } from './new-client-limit.ts';
 import { boxelHosts } from './redirect-uris.ts';
@@ -66,6 +73,9 @@ export const OAUTH_REGISTRATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/reg`;
 // copied: the library lists `refresh_token` as soon as a client may register
 // for it, before the token endpoint serves a refresh.
 //
+// `client_id_metadata_document_supported` is copied: the library sets it
+// once client ID metadata documents are on.
+//
 // `token_endpoint_auth_methods_supported` is listed, before the token
 // endpoint is, because a client that finds it missing assumes
 // `client_secret_basic` (RFC 8414 §2) and registers asking for a secret,
@@ -76,6 +86,7 @@ const DISCOVERY_FIELDS = [
   'response_types_supported',
   'code_challenge_methods_supported',
   'token_endpoint_auth_methods_supported',
+  'client_id_metadata_document_supported',
 ] as const;
 const GRANT_TYPES_SERVED = ['authorization_code'];
 
@@ -126,6 +137,7 @@ export function startOAuthProvider({
   authorizationLimit = DEFAULT_AUTHORIZATION_LIMIT,
   rateLimitStore = new DBRateLimitStore(dbAdapter),
   testOnlyResources,
+  testOnlyDocumentOrigins,
 }: {
   serverURL: URL;
   config: OAuthProviderConfig;
@@ -137,6 +149,8 @@ export function startOAuthProvider({
   authorizationLimit?: CallerLimit;
   rateLimitStore?: RateLimitStore;
   testOnlyResources?: readonly OAuthResourceDefinition[];
+  // See `clientMetadataDocuments`.
+  testOnlyDocumentOrigins?: ReadonlyMap<string, string>;
 }): OAuthProviderService {
   if (!secureOriginURL) {
     throw new OAuthProviderConfigError(
@@ -152,6 +166,15 @@ export function startOAuthProvider({
   }
   let issuer = oauthIssuer(serverURL);
   let registry = buildRegistry(issuer, testOnlyResources);
+  let hosts = boxelHosts({
+    serverURL,
+    secureOriginURL,
+    appOrigins,
+    publishedDomains,
+  });
+  let scopes = registryScopes(registry);
+  // One alert for both ways a client arrives, since they share the limit.
+  let alert = new NewClientAlert(newClientLimit);
   let provider = createOAuthProvider({
     issuer,
     config,
@@ -161,6 +184,14 @@ export function startOAuthProvider({
         `${issuer}${OAUTH_AUTHORIZATION_PATH}/${id}`,
     }),
     renderError: renderLibraryError({ dbAdapter, secureOriginURL }),
+    metadataDocuments: clientMetadataDocuments({
+      hosts,
+      scopes,
+      rateLimitStore,
+      newClientLimit,
+      alert,
+      testOnlyDocumentOrigins,
+    }),
   });
   // Boxel's own apps, listed in code. None is listed yet.
   let preRegistered: ReadonlySet<string> = new Set();
@@ -203,15 +234,11 @@ export function startOAuthProvider({
       };
     },
     handleRegistration: registrationHandler({
-      hosts: boxelHosts({
-        serverURL,
-        secureOriginURL,
-        appOrigins,
-        publishedDomains,
-      }),
-      scopes: registryScopes(registry),
+      hosts,
+      scopes,
       rateLimitStore,
       newClientLimit,
+      alert,
     }),
   };
 }
@@ -222,12 +249,16 @@ export function createOAuthProvider({
   registry,
   adapter,
   renderError,
+  metadataDocuments,
 }: {
   issuer: string;
   config: OAuthProviderConfig;
   registry: readonly OAuthResource[];
   adapter: AdapterFactory;
   renderError?: Configuration['renderError'];
+  // Boxel's handling of client ID metadata documents. Without it, a client
+  // ID that is a URL is unknown, as any other unregistered ID is.
+  metadataDocuments?: ClientMetadataDocuments;
 }): Provider {
   let scopes = registryScopes(registry);
   let configuration: Configuration = {
@@ -270,6 +301,34 @@ export function createOAuthProvider({
       policy: alwaysPromptingPolicy(),
     },
     ...(renderError ? { renderError } : {}),
+    // The only fetch the provider makes: every feature that would fetch
+    // another URL is off, and registration drops each field that would name
+    // one. Without Boxel's handling there is nothing to fetch.
+    ...(metadataDocuments
+      ? {
+          fetch: metadataDocuments.fetch,
+          fetchResponseBodyLimits: {
+            'client_id metadata document': MAX_DOCUMENT_BYTES,
+          },
+          // Run for every client the library builds: Boxel's checks apply
+          // only to one identified by a metadata document.
+          extraClientMetadata: {
+            properties: [CHECKS_PROPERTY],
+            validator: (
+              ctx: KoaContextWithOIDC | undefined,
+              key: string,
+              value: unknown,
+              metadata: object,
+            ) =>
+              metadataDocuments.validate(
+                ctx,
+                key,
+                value,
+                metadata as Record<string, unknown>,
+              ),
+          },
+        }
+      : {}),
     routes: {
       authorization: OAUTH_AUTHORIZATION_PATH,
       backchannel_authentication: `${OAUTH_PROVIDER_PATH_PREFIX}/backchannel`,
@@ -331,7 +390,7 @@ export function createOAuthProvider({
         // A registration can't be read, changed or deleted afterwards, so
         // there is no token to do it with. On by default.
         issueRegistrationAccessToken: false,
-        idFactory: () => randomBytes(24).toString('base64url'),
+        idFactory: newDynamicClientId,
         // No client is ever issued a secret. Should the library ask for one
         // all the same, the registration is refused rather than a secret
         // stored.
@@ -339,8 +398,19 @@ export function createOAuthProvider({
           throw new Error('the OAuth provider issues no client secrets');
         },
       },
+      // A client identified by the URL of a document describing it, which
+      // the library downloads through Boxel's `fetch` and keeps in memory
+      // (`client-metadata-document.ts`). On only with Boxel's handling.
+      clientIdMetadataDocument: metadataDocuments
+        ? {
+            enabled: true,
+            ack: 'draft-02',
+            allowFetch: metadataDocuments.allowFetch,
+            allowClient: metadataDocuments.allowClient,
+            cacheDuration: { ...DOCUMENT_CACHE_SECONDS },
+          }
+        : { enabled: false },
       // Off: nothing serves them.
-      clientIdMetadataDocument: { enabled: false },
       deviceFlow: { enabled: false },
       revocation: { enabled: false },
       // No ID tokens or OpenID claims: the provider is not an OpenID provider.

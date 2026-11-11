@@ -2,8 +2,8 @@
 // requires no sign-in (ADR 021 §1.4). Dynamic registration and client ID
 // metadata document downloads share it, since each makes a new client: every
 // registration attempt counts, and every document downloaded for a client ID
-// not yet cached. A refused attempt counts too, so the registration checks
-// can't be probed for free.
+// the process hasn't accepted before (`client-metadata-document.ts`). A refused
+// attempt counts too, so the checks can't be probed for free.
 //
 // It is a caller limit (`caller-limit.ts`): per address, per network and
 // overall. The overall bucket is a ceiling on how many clients can be stored,
