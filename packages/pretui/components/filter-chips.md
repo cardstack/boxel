@@ -58,6 +58,6 @@ Per-option `hue` feeding **Chip**'s Law-2 derivation (`--pretui-chip-mix`, `--pr
 
 Because the selected chip and the unselected ones differ by fill strength within the same hue, a theme that raises `--pretui-chip-mix` narrows that gap — the selected state can become hard to pick out in a row of tinted chips. Check the selected chip against its unselected neighbors, not against the page.
 
-Per-instance knob: `--pretui-filterchip-h` (chip height, `1.625rem` by default), read after `--pretui-row-h` (the height LayoutControl's `@controlHeight` sets), which wins; the corner is half of it, so a taller chip stays a pill.
+Per-instance knob: `--pretui-filterchip-h` (chip height, `1.625rem` by default), read after `--pretui-row-h` (the height LayoutControl's `@controlHeight` sets), which wins, on a touch screen too (where a chip is otherwise at least `2.125rem`); the corner is half of it, so a taller chip stays a pill.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

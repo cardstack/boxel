@@ -49,7 +49,7 @@ Gaps, in order:
 
 ## Theming
 
-Input's field style: a `--field` face with `--foreground` text, an `--input` edge, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus. The magnifier is the kit's own 14px `--muted-foreground` glyph, not BoxelInput's search variant, so hover, invalid and placeholder match Input.
+Input's field style: a `--field` face with `--foreground` text, an `--input` edge, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`, or the row height a LayoutControl's `@controlHeight` sets, `--pretui-row-h`, which wins) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus. The magnifier is the kit's own 14px `--muted-foreground` glyph, not BoxelInput's search variant, so hover, invalid and placeholder match Input.
 
 It wears Input's field dress (`internal/field-dress`), so its hover, invalid, disabled, read-only and focus states are Input's too; see **Input**'s Theming.
 

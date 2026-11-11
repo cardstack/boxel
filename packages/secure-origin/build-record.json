@@ -679,7 +679,7 @@
       ]
     },
     "shared.css": {
-      "bytes": 18040,
+      "bytes": 18060,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -699,11 +699,11 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "internal/2d68bd1d08.css"
+          "module": "internal/86ee7a4370.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "internal/86ee7a4370.css"
+          "module": "internal/d55f58c5fe.css"
         }
       ]
     },
@@ -827,7 +827,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "internal/field-dress.gts",
-          "sha256": "19a8a9cf6fab91720d34b682b3613a282675bb16c965daeb9171a66a205297dd",
+          "sha256": "3f2057a229c9adc3ad63b1e81ae3cc53c72fc88b7be9fe6690e3baa1fe0b361a",
           "size": 741
         },
         {
@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 133919,
+      "bytes": 133939,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -1762,10 +1762,6 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "components/78049cf645.css"
-        },
-        {
-          "package": "@cardstack/pretui@0.0.0",
           "module": "components/7c21381fd5.css"
         },
         {
@@ -1779,6 +1775,10 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/b2e0c6c378.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
+          "module": "components/b640b40f8a.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -2280,7 +2280,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/input-group.gts",
-          "sha256": "26229ef3f19c46adc36b01694dd02c5e63197c23a73475105193a8bef3d5e133",
+          "sha256": "eb40ed2673102ed8ecb2f5df0b4d88ebf73f50c8717aa528d0211d5fdc360951",
           "size": 3866
         },
         {

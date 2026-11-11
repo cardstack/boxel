@@ -262,7 +262,7 @@ class LayoutControlUsage extends Component {
         />
         <Args.String
           @name='controlHeight'
-          @description='Any CSS length; sets --pretui-row-h and --control-height on the bar. SegmentedControl, FilterChips, Select, Button and IconButton size themselves from --pretui-row-h and share that height; SearchInput keeps its own for now.'
+          @description='Any CSS length; sets --pretui-row-h and --control-height on the bar. SegmentedControl, FilterChips, Select, Button, IconButton, Input, SearchInput and InputGroup size themselves from --pretui-row-h and share that height.'
         />
         <Args.Yield
           @description='Yields { Slot, overflow: { active, folded } }. Slot takes @id, @priority (0 most important), @forms ({ name, minWidth in rem }[], richest first, ending in menu to allow folding), @label, @menuItems (native ⋯ items while folded) and @pinned (never folds), and yields the chosen form name.'
@@ -283,7 +283,7 @@ class LayoutControlUsage extends Component {
         <Css.Basic
           @name='pretui-row-h'
           @type='length'
-          @description='The height a control that reads it takes: SegmentedControl, FilterChips, Select, Button and IconButton. Set by @controlHeight.'
+          @description='The height a control that reads it takes: SegmentedControl, FilterChips, Select, Button, IconButton, Input, SearchInput and InputGroup. Set by @controlHeight.'
         />
       </:cssVars>
     </FreestyleUsage>

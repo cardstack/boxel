@@ -310,9 +310,11 @@ export class FilterChips extends Component<FilterChipsSignature> {
           background: var(--inset, var(--boxel-100));
           color: var(--muted-foreground);
         }
+        /* a chip in a sized LayoutControl row keeps the row's height on touch
+           too, like SegmentedControl */
         @media (any-pointer: coarse) {
           .pretui-filterchip {
-            min-height: 2.125rem;
+            min-height: var(--pretui-row-h, 2.125rem);
           }
         }
       }
