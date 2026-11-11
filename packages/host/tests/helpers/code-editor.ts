@@ -9,19 +9,21 @@ import { EditorView } from '@codemirror/view';
 
 export const CODE_EDITOR_SELECTOR = '[data-test-pretui-code-editor]';
 
-function contentSelector(selector: string) {
-  return `${selector} .cm-content`;
+// The editable content element, found by the `aria-multiline` the component
+// sets on it rather than by CodeMirror's own class names.
+export function codeEditorContentSelector(selector = CODE_EDITOR_SELECTOR) {
+  return `${selector} [aria-multiline='true']`;
 }
 
 export async function waitForCodeEditor(
   selector = CODE_EDITOR_SELECTOR,
   options?: { timeout?: number },
 ): Promise<void> {
-  await waitFor(contentSelector(selector), options);
+  await waitFor(codeEditorContentSelector(selector), options);
 }
 
 export function codeEditorView(selector = CODE_EDITOR_SELECTOR): EditorView {
-  let content = document.querySelector(contentSelector(selector));
+  let content = document.querySelector(codeEditorContentSelector(selector));
   let view = content ? EditorView.findFromDOM(content as HTMLElement) : null;
   if (!view) {
     throw new Error(`no CodeMirror view in ${selector}`);

@@ -423,10 +423,10 @@ export class TimeInput extends Component<TimeInputSignature> {
   handleGroupClick = (ev: Event) => {
     if (this.args.disabled) return;
     let target = ev.target as HTMLElement;
-    if (target.closest('.pretui-time-seg, .pretui-time-native')) return;
+    if (target.closest('[data-segment], [data-time-native]')) return;
     let segments = [
       ...(ev.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-        '.pretui-time-seg',
+        '[data-segment]',
       ),
     ];
     (segments.find((s) => s.dataset['empty'] === 'true') ?? segments[0])?.focus();
@@ -510,6 +510,7 @@ export class TimeInput extends Component<TimeInputSignature> {
         aria-label={{this.label}}
         {{nameFromGroup this.label}}
         {{on 'change' this.handleNativeChange}}
+        data-time-native
         data-test-pretui-time-native
       />
     </div>
