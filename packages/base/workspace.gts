@@ -13,7 +13,6 @@ import { TrackedArray, TrackedObject, TrackedSet } from 'tracked-built-ins';
 import {
   BoxelInput,
   Button,
-  FilterList,
   IconButton,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
@@ -72,7 +71,14 @@ import {
   type CodeRef,
 } from '@cardstack/runtime-common';
 
-import { ResizeHandle } from './components/resize-handle';
+import { IconButton as PretIconButton } from './components/icon-button';
+import {
+  Sidebar,
+  SidebarGroup,
+  SidebarItem,
+  SidebarTrigger,
+} from './components/sidebar';
+import { Tooltip as PretTooltip } from './components/tooltip';
 import { rawArrayValues } from './watched-array';
 import CardsGridLayout, {
   VIEW_OPTIONS,
@@ -115,26 +121,15 @@ import { now as clockNow, nowDate } from './helpers/clock';
 // @ts-ignore
 const here: string = (import.meta as any).url;
 
-// Below this width the Library pane starts with its filter rail closed.
-const LIBRARY_NARROW_WIDTH_REM = 40;
+// Below this Library pane width in px (40rem at the default root size) the
+// filter rail folds away on its own, and at or above it the rail opens again.
+const LIBRARY_NARROW_WIDTH = 640;
 
-// The Library rail's width and how far it can be dragged. The rail opens at
-// the default, which double-clicking its edge restores. The max also stays
-// this far inside the Library pane, so a narrow pane keeps the rail's edge in
-// view to drag back, but never drops below the min.
-const RAIL_DEFAULT_WIDTH = '13.375rem';
-const RAIL_MIN_WIDTH_REM = 11;
-const RAIL_MAX_WIDTH_REM = 26;
-const RAIL_PANE_MARGIN_REM = 3;
-const RAIL_MIN_WIDTH = `${RAIL_MIN_WIDTH_REM}rem`;
-const RAIL_MAX_WIDTH = `${RAIL_MAX_WIDTH_REM}rem`;
-
-function remToPx(rem: number): number {
-  let rootSize = parseFloat(
-    getComputedStyle(document.documentElement).fontSize,
-  );
-  return rem * (Number.isFinite(rootSize) ? rootSize : 16);
-}
+// The Library rail's width and how far its edge can be dragged. The rail opens
+// at RAIL_WIDTH, which Enter on its focused edge restores.
+const RAIL_WIDTH = '13.375rem';
+const RAIL_MIN_WIDTH = '11rem';
+const RAIL_MAX_WIDTH = '26rem';
 
 const [, StripView, GridView] = VIEW_OPTIONS;
 
@@ -147,12 +142,17 @@ const SEGMENTS: { id: Segment; label: string; icon: typeof HouseIcon }[] = [
   { id: 'activity', label: 'Activity', icon: ActivityIcon },
 ];
 
-// A rail row is a stock FilterOption plus the count shown right-aligned in
-// the sidebar; library-group counts are computed live via `countFor`.
+// A rail row is a stock FilterOption plus the count shown at the row's end;
+// the library-group counts are getters over the live totals.
 type RailOption = Omit<FilterOption, 'icon'> & {
   count?: number;
   icon?: string | typeof SearchIcon;
 };
+
+// A card type's icon is its own SVG markup; a boxel-icon component has none.
+function railIconHtml(option: RailOption): SafeString | undefined {
+  return typeof option.icon === 'string' ? htmlSafe(option.icon) : undefined;
+}
 
 // Job cards carry setup progress (ProcessCard contract fields).
 type JobCard = CardDef & {
@@ -479,9 +479,7 @@ class TypeChip extends GlimmerComponent<{
   Args: { option: RailOption; count: number; onSelect: () => void };
 }> {
   private get iconHtml(): SafeString | undefined {
-    return typeof this.args.option.icon === 'string'
-      ? htmlSafe(this.args.option.icon)
-      : undefined;
+    return railIconHtml(this.args.option);
   }
 
   <template>
@@ -539,6 +537,101 @@ class TypeChip extends GlimmerComponent<{
         font-weight: 500;
         font-variant-numeric: tabular-nums;
         color: var(--muted-foreground);
+      }
+    </style>
+  </template>
+}
+
+// One Library rail row: the option's icon (a boxel-icon, or a card type's own
+// SVG markup), its name and its count. With `onAdd`, the row ends in a "New …"
+// button that creates an instance of its type.
+class RailItem extends GlimmerComponent<{
+  Args: {
+    option: RailOption;
+    active: boolean;
+    onSelect: () => void;
+    onAdd?: () => void;
+  };
+}> {
+  private get icon(): typeof SearchIcon | undefined {
+    let { icon } = this.args.option;
+    return typeof icon === 'string' ? undefined : icon;
+  }
+
+  private get iconHtml(): SafeString | undefined {
+    return railIconHtml(this.args.option);
+  }
+
+  private get addLabel(): string {
+    return `New ${this.args.option.displayName}`;
+  }
+
+  <template>
+    {{#if @onAdd}}
+      <SidebarItem
+        @label={{@option.displayName}}
+        @badge={{@option.count}}
+        @active={{@active}}
+        @onClick={{@onSelect}}
+        @icon={{this.icon}}
+        class='rail-row'
+        data-test-library-filter={{@option.displayName}}
+      >
+        <:icon><span class='rail-icon'>{{this.iconHtml}}</span></:icon>
+        <:action>
+          <PretIconButton
+            @icon={{PlusIcon}}
+            @label={{this.addLabel}}
+            @tooltip={{this.addLabel}}
+            @tooltipSide='right'
+            @appearance='plain'
+            @size='xs'
+            class='rail-add'
+            {{on 'click' @onAdd}}
+            data-test-rail-add={{@option.displayName}}
+          />
+        </:action>
+      </SidebarItem>
+    {{else}}
+      <SidebarItem
+        @label={{@option.displayName}}
+        @badge={{@option.count}}
+        @active={{@active}}
+        @onClick={{@onSelect}}
+        @icon={{this.icon}}
+        class='rail-row'
+        data-test-library-filter={{@option.displayName}}
+      >
+        <:icon><span class='rail-icon'>{{this.iconHtml}}</span></:icon>
+      </SidebarItem>
+    {{/if}}
+    <style scoped>
+      /* a card type's own SVG markup carries its own size; fill the icon box
+         the way SidebarItem sizes an icon component */
+      .rail-icon {
+        display: grid;
+        inline-size: 100%;
+        block-size: 100%;
+      }
+      .rail-icon :deep(svg) {
+        display: block;
+        inline-size: 100%;
+        block-size: 100%;
+      }
+      /* every name in full ink at the group's weight: the selected surface
+         alone marks the active filter */
+      .rail-row {
+        color: var(--foreground);
+        font-weight: inherit;
+      }
+      /* quiet ink at rest, full ink when pointed at or focused; always at full
+         opacity so it clears the non-text contrast floor */
+      .rail-add {
+        color: var(--subtle-foreground);
+      }
+      .rail-add:hover,
+      .rail-add:focus-visible {
+        color: var(--foreground);
       }
     </style>
   </template>
@@ -1010,142 +1103,125 @@ class Isolated extends Component<typeof Workspace> {
           </div>
         </div>
       {{else if (eq this.segment 'library')}}
-        <div
+        <Sidebar
           class='library'
-          style={{this.railWidthStyle}}
-          {{this.watchLibraryWidth}}
+          @label='Library filters'
+          @collapsible='offcanvas'
+          @bordered={{true}}
+          @scroll='content'
+          @shortcut={{false}}
+          @resizable={{true}}
+          @width={{RAIL_WIDTH}}
+          @minWidth={{RAIL_MIN_WIDTH}}
+          @maxWidth={{RAIL_MAX_WIDTH}}
+          @mobileBreakpoint={{0}}
+          @railBreakpoint={{LIBRARY_NARROW_WIDTH}}
           data-test-library
         >
-          {{! Stays mounted so it can slide shut; inert while closed keeps its
-            controls out of the tab order and the accessibility tree. }}
-          <div
-            class={{cn
-              'rail-slot'
-              open=this.isRailOpen
-              animates=this.railAnimates
-            }}
-            inert={{if this.isRailOpen false true}}
-            data-test-library-rail-slot
-          >
-            <div class='rail-panel'>
-              <nav
-                id={{this.railId}}
-                class='rail scroll-container'
-                aria-label='Library filters'
-                data-test-library-rail
+          <:nav>
+            <SidebarGroup
+              @label='Library'
+              class='rail-group'
+              data-test-rail-group
+            >
+              {{#each this.libraryFilters key='id' as |option|}}
+                <RailItem
+                  @option={{option}}
+                  @active={{eq option this.activeFilter}}
+                  @onSelect={{this.selectFilter option}}
+                />
+              {{/each}}
+            </SidebarGroup>
+            {{#if this.cardTypeFilters.length}}
+              <SidebarGroup
+                @label='Card types'
+                class='rail-group'
+                data-test-rail-group
               >
-                <div class='rail-group' data-test-rail-group>
-                  <h3 class='rail-label kicker'>Library</h3>
-                  <FilterList
-                    @filters={{this.libraryFilters}}
-                    @activeFilter={{this.activeFilter}}
-                    @onChanged={{this.onChangeFilter}}
-                    class='rail-list'
+                {{#each this.cardTypeFilters key='id' as |option|}}
+                  <RailItem
+                    @option={{option}}
+                    @active={{eq option this.activeFilter}}
+                    @onSelect={{this.selectFilter option}}
+                    @onAdd={{if @canEdit (this.createOfType option)}}
                   />
-                </div>
-                {{#if this.cardTypeFilters.length}}
-                  <div class='rail-group' data-test-rail-group>
-                    <h3 class='rail-label kicker'>Card types</h3>
-                    <FilterList
-                      @filters={{this.cardTypeFilters}}
-                      @activeFilter={{this.activeFilter}}
-                      @onChanged={{this.onChangeFilter}}
-                      class='rail-list'
-                    >
-                      <:action as |option|>
-                        {{#if @canEdit}}
-                          <Tooltip @placement='right'>
-                            <:trigger>
-                              <IconButton
-                                @icon={{PlusIcon}}
-                                @variant='text-only'
-                                @size='small'
-                                @width='12'
-                                @height='12'
-                                class='rail-add'
-                                aria-label='New {{option.displayName}}'
-                                {{on 'click' (this.createOfType option)}}
-                              />
-                            </:trigger>
-                            <:content>New {{option.displayName}}</:content>
-                          </Tooltip>
-                        {{/if}}
-                      </:action>
-                    </FilterList>
-                  </div>
-                {{/if}}
-                {{#if this.fileTypeFilters.length}}
-                  <div class='rail-group' data-test-rail-group>
-                    <h3 class='rail-label kicker'>File types</h3>
-                    <FilterList
-                      @filters={{this.fileTypeFilters}}
-                      @activeFilter={{this.activeFilter}}
-                      @onChanged={{this.onChangeFilter}}
-                      class='rail-list'
-                    />
-                  </div>
-                {{/if}}
-              </nav>
-              <ResizeHandle
-                class='rail-resize'
-                @size={{this.railWidth}}
-                @min={{RAIL_MIN_WIDTH}}
-                @max={{this.railMaxWidth}}
-                @defaultSize={{RAIL_DEFAULT_WIDTH}}
-                @onSizeChange={{this.resizeRail}}
-                @label='Resize sidebar'
-                @controls={{this.railId}}
-                data-test-rail-resize-handle
-              />
-            </div>
-          </div>
-          <CardsGridLayout
-            class='library-grid'
-            @format='fitted'
-            @displaySidebar={{false}}
-            @isContentInert={{this.isGridCovered}}
-            @context={{@context}}
-            @query={{this.query}}
-            @realms={{this.realms}}
-            @isLive={{true}}
-            @filterOptions={{this.filterOptions}}
-            @sortOptions={{this.sortOptions}}
-            @viewOptions={{this.viewOptions}}
-            @activeViewId={{this.activeViewId}}
-            @activeFilter={{this.activeFilter}}
-            @activeSort={{this.activeSort}}
-            @onChangeFilter={{this.onChangeFilter}}
-            @onChangeView={{this.onChangeView}}
-            @onChangeSort={{this.onChangeSort}}
-            @page={{this.currentLibraryPage}}
-            @onPageChange={{this.onChangeLibraryPage}}
-          >
-            <:contentHeaderStart>
-              <Tooltip @placement='bottom'>
-                <:trigger>
-                  <IconButton
-                    @icon={{if
-                      this.isRailOpen
-                      PanelLeftCloseIcon
-                      PanelLeftOpenIcon
-                    }}
-                    @variant='text-only'
-                    @size='small'
-                    @width='16'
-                    @height='16'
+                {{/each}}
+              </SidebarGroup>
+            {{/if}}
+            {{#if this.fileTypeFilters.length}}
+              <SidebarGroup
+                @label='File types'
+                class='rail-group'
+                data-test-rail-group
+              >
+                {{#each this.fileTypeFilters key='id' as |option|}}
+                  <RailItem
+                    @option={{option}}
+                    @active={{eq option this.activeFilter}}
+                    @onSelect={{this.selectFilter option}}
+                  />
+                {{/each}}
+              </SidebarGroup>
+            {{/if}}
+          </:nav>
+          <:default as |rail|>
+            <CardsGridLayout
+              class='library-grid'
+              @format='fitted'
+              @displaySidebar={{false}}
+              @context={{@context}}
+              @query={{this.query}}
+              @realms={{this.realms}}
+              @isLive={{true}}
+              @filterOptions={{this.filterOptions}}
+              @sortOptions={{this.sortOptions}}
+              @viewOptions={{this.viewOptions}}
+              @activeViewId={{this.activeViewId}}
+              @activeFilter={{this.activeFilter}}
+              @activeSort={{this.activeSort}}
+              @onChangeFilter={{this.onChangeFilter}}
+              @onChangeView={{this.onChangeView}}
+              @onChangeSort={{this.onChangeSort}}
+              @page={{this.currentLibraryPage}}
+              @onPageChange={{this.onChangeLibraryPage}}
+            >
+              <:contentHeaderStart>
+                {{! The tip is the trigger's own name, so it names rather than
+                  describes it. }}
+                <PretTooltip
+                  @content={{if
+                    rail.open
+                    'Collapse Library filters'
+                    'Expand Library filters'
+                  }}
+                  @side='bottom'
+                  @labels={{true}}
+                >
+                  <SidebarTrigger
+                    @open={{rail.open}}
+                    @onToggle={{rail.toggle}}
+                    @controls={{rail.controls}}
+                    @label='Library filters'
                     class='rail-toggle'
-                    aria-label={{this.railToggleLabel}}
-                    aria-expanded={{if this.isRailOpen 'true' 'false'}}
-                    aria-controls={{this.railId}}
-                    {{on 'click' this.toggleRail}}
                     data-test-rail-toggle
-                  />
-                </:trigger>
-                <:content>{{this.railToggleLabel}}</:content>
-              </Tooltip>
-            </:contentHeaderStart>
-          </CardsGridLayout>
-        </div>
+                  >
+                    {{#if rail.open}}
+                      <PanelLeftCloseIcon
+                        class='rail-toggle-icon'
+                        aria-hidden='true'
+                      />
+                    {{else}}
+                      <PanelLeftOpenIcon
+                        class='rail-toggle-icon'
+                        aria-hidden='true'
+                      />
+                    {{/if}}
+                  </SidebarTrigger>
+                </PretTooltip>
+              </:contentHeaderStart>
+            </CardsGridLayout>
+          </:default>
+        </Sidebar>
       {{else}}
         <div class='activity-pane' data-test-activity>
           {{! Collapsing dock: the full panel scrolls away with the log;
@@ -1394,9 +1470,7 @@ class Isolated extends Component<typeof Workspace> {
         --grid-chip-border: color-mix(in oklch, var(--border) 50%, transparent);
         /* looser leading for the welcome prose; no line-height token runs past 1.4 */
         --grid-prose-leading: 1.6;
-        /* fixed geometry the layout is built around; the rail's width,
-           --grid-rail-width, is set on the Library pane from
-           RAIL_DEFAULT_WIDTH or the dragged width */
+        /* fixed geometry the layout is built around */
         --grid-search-width: 10.625rem;
         --grid-search-results-size: 20rem;
         --grid-frame-height: 3.375rem;
@@ -1413,8 +1487,6 @@ class Isolated extends Component<typeof Workspace> {
            deliberate exceptions) */
         --grid-quick: 0.12s;
         --grid-soft: 0.18s;
-        --grid-slide: 0.26s;
-        --grid-ease-out: cubic-bezier(0.2, 0, 0, 1);
         /* the chrome and the stage tighten to the card's width, not the
            viewport's: the card can share the screen with a neighbor stack */
         container-type: inline-size;
@@ -1684,139 +1756,52 @@ class Isolated extends Component<typeof Workspace> {
         align-content: start;
         gap: var(--boxel-sp-xl);
       }
+      /* Sidebar lays out the filter rail beside the grid, which scrolls on
+         its own in the content pane; the rail takes the card's muted tier.
+         The shell sets Pret UI's type for app chrome; the grid keeps the
+         card's own. */
       .library {
+        --pretui-sidebar-bg: var(--muted);
         flex-grow: 1;
         min-height: 0;
-        display: flex;
+        font-size: inherit;
+        letter-spacing: inherit;
       }
-
-      /* ── Facet rail ────────────────────────────────────────── */
-      /* The slot's width animates and pushes the grid; the panel keeps its
-         full width and is pinned to the slot's end edge, so it slides out
-         rather than being squeezed. */
-      .rail-slot {
-        /* the resize handle's strip, which the rail sets aside beside it,
-           and how far its hit area reaches past the rail's edge over the
-           grid's gutter: together a 1.5rem (24px) target */
-        --_rail-resize-size: 0.5rem;
-        --_rail-resize-outset: calc(1.5rem - var(--_rail-resize-size));
-        flex-shrink: 0;
-        display: flex;
-        justify-content: flex-end;
-        width: 0;
-        min-width: 0;
-        overflow: hidden;
-      }
-      /* only a toggle slides it; the first width reading and resizes across
-         the breakpoint snap, so a narrow card doesn't open the Library with
-         the rail sliding shut */
-      .rail-slot.animates {
-        transition: width var(--grid-slide) var(--grid-ease-out);
-      }
-      /* Open, the slot clips with clip-path rather than overflow, so the
-         handle's hit area can reach past its end edge; its start edge still
-         clips the panel as it slides in. It sits above the grid, whose
-         gutter that hit area covers. */
-      .rail-slot.open {
-        position: relative;
-        z-index: 1;
-        width: var(--grid-rail-width);
-        overflow: visible;
-        clip-path: inset(0 calc(-1 * var(--_rail-resize-outset)) 0 0);
-      }
-      .rail-slot.open:dir(rtl) {
-        clip-path: inset(0 0 0 calc(-1 * var(--_rail-resize-outset)));
-      }
-      .rail-panel {
-        position: relative;
-        flex-shrink: 0;
-        width: var(--grid-rail-width);
-        display: flex;
-        flex-direction: column;
-        background-color: var(--muted);
-        border-inline-end: 1px solid var(--border);
-      }
-      /* on the panel's inner edge */
-      .rail-resize {
-        --pretui-resize-handle-size: var(--_rail-resize-size);
-        --pretui-resize-handle-outset: var(--_rail-resize-outset);
-        position: absolute;
-        inset-block: 0;
-        inset-inline-end: 0;
-      }
-      /* a finger gets a wider strip */
-      @media (any-pointer: coarse) {
-        .rail-slot {
-          --_rail-resize-size: 1rem;
-        }
-      }
-      .rail {
-        flex-grow: 1;
-        min-height: 0;
-        overflow-y: auto;
-        overflow-x: hidden;
-        /* top matches the grid header's padding */
-        padding: var(--boxel-cards-grid-layout-padding, var(--boxel-sp-lg))
-          var(--boxel-sp-xs) var(--boxel-sp-lg);
-        /* the resize handle's strip comes out of the end padding, so the
-           rail's scrollbar and the rows' ends sit beside the handle rather
-           than under it; a coarse pointer's strip is wider than the
-           padding, so there the rows give up the difference */
-        margin-inline-end: var(--_rail-resize-size);
-        padding-inline-end: max(
-          0px,
-          calc(var(--boxel-sp-xs) - var(--_rail-resize-size))
-        );
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-      }
+      /* The selected row follows the card's neutral tier, and the names keep
+         the rail's readable size. Each heading's line is as tall as the grid
+         header's first row (the toggle and the sort button are
+         --boxel-button-sm), with no padding above or below it. */
       .rail-group {
-        display: grid;
-        gap: 1px;
+        --pretui-selected: var(--selected);
+        --pretui-primary-ink: var(--foreground);
+        --pretui-sbrail-head-pad: 0 var(--space-2, 0.375rem);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 500;
+        line-height: var(--boxel-button-sm);
       }
-      .rail-label {
-        padding: 0 var(--boxel-sp-xs) var(--boxel-sp-2xs);
-        color: var(--muted-foreground);
-      }
-      /* as tall as the grid header's first row (the toggle and the sort button
-         are --boxel-button-sm), so the Library heading sits level with the
-         toggle */
-      .rail-group:first-child .rail-label {
-        min-height: var(--boxel-button-sm);
-        display: flex;
-        align-items: center;
-        padding-block: 0;
-      }
-      /* FilterList paints its own rows; the selected and hover surfaces follow
-         the card's neutral tier through the component's knobs */
-      .rail-list {
-        --boxel-filter-hover-background: var(--hover);
-        --boxel-filter-hover-foreground: var(--foreground);
-        --boxel-filter-selected-background: var(--selected);
-        --boxel-filter-selected-foreground: var(--foreground);
-        --boxel-filter-selected-hover-background: var(--selected);
-        --boxel-filter-selected-hover-foreground: var(--foreground);
-        min-width: 0;
-      }
-      /* quiet ink at rest, full ink when pointed at or focused; always at full
-         opacity so it clears the non-text contrast floor */
-      .rail-add {
-        --boxel-icon-button-color: var(--subtle-foreground);
-        flex-shrink: 0;
-        margin-inline-end: var(--boxel-sp-4xs);
-      }
-      .rail-add:hover,
-      .rail-add:focus-visible {
-        --boxel-icon-button-color: var(--foreground);
+      /* starts at the grid header's padding, less the rail's own inset, so
+         the Library heading sits level with the toggle */
+      .rail-group:first-child {
+        margin-block-start: calc(
+          var(--boxel-cards-grid-layout-padding, var(--boxel-sp-lg)) -
+            var(--space-3, 0.5rem)
+        );
       }
       .rail-toggle {
-        --boxel-icon-button-background: var(--muted);
+        inline-size: var(--boxel-button-xs);
+        block-size: var(--boxel-button-xs);
         flex-shrink: 0;
+        border-radius: var(--boxel-border-radius-xs);
+        background-color: var(--muted);
         border: 1px solid var(--grid-chip-border);
+        color: var(--foreground);
       }
       .rail-toggle:hover {
         border-color: currentColor;
+      }
+      .rail-toggle-icon {
+        width: 1rem;
+        height: 1rem;
       }
       .zone {
         display: grid;
@@ -2559,15 +2544,8 @@ class Isolated extends Component<typeof Workspace> {
         .card-grid .dock-mini {
           padding-inline: var(--boxel-sp);
         }
-        /* the rail pushes the grid aside instead of narrowing it, so nothing
-           in the grid reflows while the rail slides; clip rather than hidden,
-           so focus can't scroll the covered part into view */
         .library {
           --boxel-cards-grid-layout-padding: var(--boxel-sp);
-          overflow: clip;
-        }
-        .library-grid {
-          flex-shrink: 0;
         }
         /* the percentage already reports progress; the bar is the first thing
            to give up its width */
@@ -2607,8 +2585,7 @@ class Isolated extends Component<typeof Workspace> {
           animation: none;
         }
         .card-grid .dock-mini,
-        .dock-mini-fill,
-        .rail-slot.animates {
+        .dock-mini-fill {
           transition: none;
         }
       }
@@ -2642,81 +2619,6 @@ class Isolated extends Component<typeof Workspace> {
     this.activeFilter = this.filterOptions[0];
     registerDestructor(this, () => this.teardownRealmSubscription());
   }
-
-  // The Library rail opens by default and closes by default once the pane is
-  // narrower than LIBRARY_NARROW_WIDTH_REM; a toggle overrides the width until
-  // the card re-renders. The width is read in JS rather than a container query
-  // so the toggle's aria-expanded always matches what is on screen.
-  @tracked private railPreference: boolean | undefined;
-  @tracked private isLibraryNarrow = false;
-  private railId = `${guidFor(this)}-rail`;
-
-  private get isRailOpen(): boolean {
-    return this.railPreference ?? !this.isLibraryNarrow;
-  }
-
-  @tracked private railAnimates = false;
-
-  // Under the breakpoint the open rail pushes part of the grid out of view.
-  private get isGridCovered(): boolean {
-    return this.isLibraryNarrow && this.isRailOpen;
-  }
-
-  private get railToggleLabel(): string {
-    return this.isRailOpen ? 'Hide Sidebar' : 'Show Sidebar';
-  }
-
-  @action private toggleRail() {
-    this.railAnimates = true;
-    this.railPreference = !this.isRailOpen;
-  }
-
-  // Dragged width in px; unset leaves the rail at RAIL_DEFAULT_WIDTH. Like the
-  // toggle, it lasts until the card re-renders.
-  @tracked private railWidth: number | undefined;
-  // In px, from the Library pane's width; unset until the pane is measured.
-  @tracked private measuredRailMaxWidth: number | undefined;
-
-  private get railMaxWidth(): number | string {
-    return this.measuredRailMaxWidth ?? RAIL_MAX_WIDTH;
-  }
-
-  // The rail's only width. Clamped to the max too, so a narrow pane keeps
-  // the rail's edge in view, whether it was dragged or is at the default.
-  private get railWidthStyle(): SafeString {
-    let width =
-      this.railWidth === undefined ? RAIL_DEFAULT_WIDTH : `${this.railWidth}px`;
-    if (this.measuredRailMaxWidth !== undefined) {
-      width = `min(${width}, ${this.measuredRailMaxWidth}px)`;
-    }
-    return htmlSafe(`--grid-rail-width: ${width}`);
-  }
-
-  // A resize follows the pointer directly; only a toggle slides the rail.
-  @action private resizeRail(width: number) {
-    this.railAnimates = false;
-    this.railWidth = width;
-  }
-
-  watchLibraryWidth = modifier((element: Element) => {
-    if (typeof ResizeObserver === 'undefined') {
-      return;
-    }
-    let observer = new ResizeObserver(([entry]) => {
-      let width = entry.contentRect.width;
-      let rem = remToPx(1);
-      let railMax = Math.max(
-        RAIL_MIN_WIDTH_REM * rem,
-        Math.min(RAIL_MAX_WIDTH_REM * rem, width - RAIL_PANE_MARGIN_REM * rem),
-      );
-      if (railMax !== this.measuredRailMaxWidth) {
-        this.measuredRailMaxWidth = railMax;
-      }
-      this.isLibraryNarrow = width < LIBRARY_NARROW_WIDTH_REM * rem;
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  });
 
   setSegment = (segment: Segment) => () => {
     this.segment = segment;
@@ -3300,10 +3202,6 @@ class Isolated extends Component<typeof Workspace> {
     this.segment = 'library';
   };
 
-  iconHtml = (option: RailOption): SafeString | undefined => {
-    return typeof option.icon === 'string' ? htmlSafe(option.icon) : undefined;
-  };
-
   @action private createNew() {
     this.createCard.perform();
   }
@@ -3422,9 +3320,9 @@ class Isolated extends Component<typeof Workspace> {
     }
   }; //
 
-  // The four library-group rows keep stable identities (@cached, no tracked
-  // count on the object — counts render via `countFor`), so the selected row
-  // survives count refreshes. Entry points carries prebuilt components (the
+  // The four library-group rows keep stable identities (@cached, and each
+  // count a getter over the live totals rather than a field), so the selected
+  // row survives count refreshes. Entry points carries prebuilt components (the
   // already-loaded links) instead of a query.
   @cached
   private get everythingFilter(): RailOption {
