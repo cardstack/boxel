@@ -33,15 +33,6 @@ export const KNOWN: Known[] = [
   },
   {
     about:
-      'number and big-integer comparisons follow SQLite\'s type order, in which any text is greater than any number: a big integer is stored as text, so `range: { g: { gt: 9 } }` matches `-5` and `eq: { g: 10 }` misses `"10"`, and a number written as a string compares with a number field as text, so `range: { d: { gt: "0.50" } }` matches nothing and `eq: { d: "2.00" }` misses `2`',
-    evaluators: ['sqlite'],
-    file: 'values',
-    cases:
-      /^(not )?(eq d "|in d strings$|range d gt "|range d between strings$|range ds gt "|eq g$|in g$|range g gt 9$|range g gt "9"$)|^not of a big integer and a list$/,
-    kind: 'answers',
-  },
-  {
-    about:
       'a date-time bound with seconds, `Z` or an offset (`2000-01-01T00:00:00Z`, `…T05:30+05:30`), and a date-time bound on a date field, is compared as text with the stored `yyyy-MM-ddTHH:mm` instead of as the instant it names',
     evaluators: ['matcher', 'postgres', 'sqlite'],
     file: 'values',
@@ -51,7 +42,7 @@ export const KNOWN: Known[] = [
   {
     about:
       'a number written as a string compares as text with a list of numbers (`eq: { ds: "0.50" }` misses `[0.5]`), where on a single number field Postgres compares it as a number',
-    evaluators: ['matcher', 'postgres', 'sqlite'],
+    evaluators: ['matcher', 'postgres'],
     file: 'values',
     cases: /^(not )?eq ds "0\.50"$/,
     kind: 'answers',

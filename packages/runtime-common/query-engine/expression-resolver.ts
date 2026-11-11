@@ -382,7 +382,23 @@ export abstract class ExpressionResolver extends IndexRows {
               ...exp,
               ')::numeric END)',
             ],
-            sqlite: ['search_doc', ...exp],
+            // SQLite orders any text above any number, and a big integer is
+            // stored as text: a JSON number is read as it is, and text that
+            // reads as a number (no character outside a number's, at least
+            // one digit) as the number it spells.
+            sqlite: [
+              '(CASE WHEN typeof(search_doc',
+              ...exp,
+              ") IN ('integer', 'real') THEN search_doc",
+              ...exp,
+              ' WHEN (search_doc',
+              ...exp,
+              ") NOT GLOB '*[^0-9.eE+-]*' AND (search_doc",
+              ...exp,
+              ") GLOB '*[0-9]*' THEN CAST(search_doc",
+              ...exp,
+              ' AS NUMERIC) END)',
+            ],
           }),
         ];
       } else if (readsSpill && errorHint !== 'filter' && path === 'cardTitle') {
@@ -520,6 +536,17 @@ export abstract class ExpressionResolver extends IndexRows {
           throw new Error(
             `Do not know how to handle field value: ${stringify(value)}`,
           );
+        }
+        if (
+          !this.dialect.isPostgres &&
+          (field.serializerName === 'number' ||
+            field.serializerName === 'big-integer') &&
+          queryValue != null
+        ) {
+          // On SQLite a number written as a string, or a big integer, would
+          // stay text and order above every number: read it as a number, as
+          // Postgres' `::numeric` does.
+          return ['CAST(', param(queryValue), 'AS NUMERIC)'];
         }
         return [param(queryValue)];
       },
