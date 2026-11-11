@@ -1381,7 +1381,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           text-transform: uppercase;
           color: var(--muted-foreground);
           background: var(--inset, var(--boxel-100));
-          box-shadow: inset 0 -1px 0 var(--line-strong, var(--boxel-400));
+          box-shadow: inset 0 -1px 0 var(--border-strong);
           white-space: nowrap;
           vertical-align: middle;
         }
@@ -1501,13 +1501,13 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
         .pretui-dt-table td[data-pin='start'],
         .pretui-dt-table th[data-pin='start'] {
           box-shadow:
-            inset -1px 0 0 var(--line-strong, var(--boxel-400)),
+            inset -1px 0 0 var(--border-strong),
             inset 0 -1px 0 var(--border);
         }
         .pretui-dt-table td[data-pin='end'],
         .pretui-dt-table th[data-pin='end'] {
           box-shadow:
-            inset 1px 0 0 var(--line-strong, var(--boxel-400)),
+            inset 1px 0 0 var(--border-strong),
             inset 0 -1px 0 var(--border);
         }
         .pretui-dt[data-sticky] .pretui-dt-table th[data-pin] {
