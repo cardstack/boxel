@@ -621,7 +621,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
     let schema = generateJsonSchemaForCardType(RouteCard, cardApi, mappings);
 
     assert.deepEqual(
-      schema.attributes.properties.where,
+      (schema.attributes as ObjectSchema).properties.where,
       { type: 'object', properties: {}, additionalProperties: true },
       'where resolves to the JsonField mapping',
     );
