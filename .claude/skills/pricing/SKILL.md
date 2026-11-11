@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, or when changing `packages/realm-server/lib/pricing.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -160,6 +160,89 @@ parameter and task wiring in the infra repo before the release that reads it
 reaches an environment, since a process without it fails its check. Name it
 for the resource and unit it prices, not a provider's product (ADR 029 §1.2).
 
+## The estimate shown at switch-on
+
+Switching an automation on shows what it is likely to cost a month and asks
+for a monthly cap. `estimateAutomationCost`
+(`packages/realm-server/lib/automation-estimate.ts`) builds it from the
+automation's triggers, its caps and the current prices, and records the
+pricing version it used.
+
+**The per-run ceiling.** `runCostCeiling` prices the most one run's compute,
+network and AI can cost under its caps, each part in credits:
+
+```
+compute = seconds cap × prerenderTabUsdPerSecond × PRICING_MARGIN × 1000
+network = response-bytes cap / 2^30 × PRICING_USD_PER_DOWNLOADED_GB × PRICING_MARGIN × 1000
+AI      = the run's AI spending cap, already in credits, no margin
+```
+
+A GB is 2^30 bytes (`BYTES_PER_GB` in `pricing.ts`), the unit AWS bills
+transfer and storage in. Every per-GB quantity in this skill, `downloaded_gb`
+and the GB-months included, is in that unit, and code that meters bytes into
+GB divides by `BYTES_PER_GB` rather than its own constant, or the estimate and
+the charge disagree by about 7%. Two charges the payer also pays are outside the
+estimate, and the result lists them in `uncountedChargeKinds`: run indexing,
+covered below, and storage, which depends on what the realm keeps rather than
+on any one run.
+
+**Indexing is outside the ceiling** (ADR 029 §1.5). The index and prerender
+time a run's writes cause includes re-indexing every card that links to what
+the run wrote, so it depends on the realm's links and templates, not on
+anything the author sets. The `writes` cap limits files written, not that
+time, and the caps have no indexing cap: choosing one would mean guessing at
+the index's internals. So `runCostCeiling` prices compute, network and AI
+only, and the minimum balance built on it doesn't cover indexing either. The
+`run_indexing` charge is priced as measured when the index pass completes,
+and `spendCredits` draws only what the balance holds then, so a large pass
+can go partly unpaid. The pass completes after its run ends, so it can also
+draw down the balance a later run was admitted against.
+
+A partial charge records all the usage it priced, so its unpaid part is that
+usage at its pricing version less the credits it drew. The prices for a
+pricing version are only in the `pricing check passed … pricing version
+<hash>` line each process logs at startup (see the `tail-logs` skill), so
+this works only as far back as those logs are kept. Credits are whole
+numbers, so allow for the charge's rounding to a whole credit.
+
+```sql
+-- A run's indexing: credits drawn beside the usage they priced.
+SELECT l.charge_id, l.pricing_version, -SUM(l.credit_amount) AS credits,
+       (SELECT json_object_agg(unit, quantity) FROM credit_charge_usage u
+        WHERE u.charge_id = l.charge_id) AS usage
+FROM credits_ledger l
+WHERE l.run_id = '<run id>' AND l.charge_kind = 'run_indexing'
+GROUP BY l.charge_id, l.pricing_version;
+```
+
+A balance that held nothing at all records no charge and no usage
+(`nothing-to-charge`), so that run shows no `run_indexing` row.
+
+**The runs counted in a month.** The ceiling is multiplied by:
+
+- each cron trigger's runs in an average month (`cronRunsPerMonth`). A
+  trigger that fires at least 28 times in the coming average month (1461/48
+  days) counts that month's runs. A rarer one counts its runs over the coming
+  four years, over 48, so a monthly trigger counts 1, a yearly one 1/12 and
+  one on February 29 1/48;
+- for a bounded cron trigger (`until`, `count` or both), no more than the
+  runs it has left (the schedule library's `remainingRuns`), so "hourly, 24
+  times" counts 24 and "hourly until next year" counts a month of hours;
+- one run for each `once` trigger that hasn't fired.
+
+Two triggers that fire at the same instant each count, since each starts a
+run. Webhook triggers aren't counted, because nothing predicts deliveries;
+the result lists their labels in `webhookTriggers` for the screen to say so.
+A trigger with an invalid expression or time zone never runs and counts
+nothing. The total is rounded up to whole credits.
+
+**Recent Preview cost** is passed in and returned beside the estimate, never
+added to it, since Preview is charged to whoever clicks, not the payer.
+
+The result also breaks the ceiling into its parts (`perRun`) and the runs
+into `unboundedRunsPerMonth`, `boundedRunsPerMonth`, `onceRuns` and one entry
+per trigger, so the screen can show where the number comes from.
+
 ## Reading the ledger by kind and reference
 
 Every charge lands in `credits_ledger`, one row per credit bucket it draws
@@ -281,7 +364,7 @@ Every spend also records how much of each unit it priced, in
 | ---------------------------- | ------------------------------------------ | ------------------------------------------- |
 | `prerender_tab_seconds`      | seconds of a prerender tab                 | `prerenderTabUsdPerSecond`                  |
 | `worker_process_seconds`     | seconds of a worker process                | `workerProcessUsdPerSecond`                 |
-| `downloaded_gb`              | GB downloaded                              | `PRICING_USD_PER_DOWNLOADED_GB`             |
+| `downloaded_gb`              | GB (2^30 bytes) downloaded                 | `PRICING_USD_PER_DOWNLOADED_GB`             |
 | `file_storage_gb_months`     | GB-months of files                         | `PRICING_USD_PER_FILE_STORAGE_GB_MONTH`     |
 | `database_storage_gb_months` | GB-months of index rows                    | `PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH` |
 | `ai_provider_usd`            | the AI provider's reported cost, in USD    | itself, at `CREDITS_PER_USD`, no margin     |
