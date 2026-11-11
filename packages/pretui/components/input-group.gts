@@ -254,7 +254,10 @@ export class InputGroup extends Component<InputGroupSignature> {
            and the helper row take the step below the field's text */
         .pretui-inputgroup {
           /* the field's height and type, with Input's opt-in knobs */
-          --_group-h: var(--pretui-field-h, var(--boxel-form-control-height-sm));
+          --_group-h: var(
+            --pretui-row-h,
+            var(--pretui-field-h, var(--boxel-form-control-height-sm))
+          );
           width: 100%;
           font-size: var(--pretui-field-font-size, var(--boxel-font-size-xs));
           letter-spacing: var(--boxel-lsp-xs);

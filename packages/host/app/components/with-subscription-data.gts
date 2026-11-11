@@ -10,7 +10,10 @@ import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { cn, formatNumber } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
 
-import type BillingService from '../services/billing-service';
+import {
+  awaitsDailyGrant,
+  type default as BillingService,
+} from '../services/billing-service';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -169,8 +172,7 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
       return null;
     }
 
-    let availableCredits = this.billingService.availableCredits;
-    if (availableCredits < this.lowCreditThreshold) {
+    if (awaitsDailyGrant(this.billingService.subscriptionData)) {
       if (!this.nextDailyCreditGrantAt) {
         return null;
       }

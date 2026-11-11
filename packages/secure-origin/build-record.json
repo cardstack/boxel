@@ -679,7 +679,7 @@
       ]
     },
     "shared.css": {
-      "bytes": 18040,
+      "bytes": 18060,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -699,11 +699,11 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "internal/2d68bd1d08.css"
+          "module": "internal/86ee7a4370.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "internal/86ee7a4370.css"
+          "module": "internal/d55f58c5fe.css"
         }
       ]
     },
@@ -827,7 +827,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "internal/field-dress.gts",
-          "sha256": "19a8a9cf6fab91720d34b682b3613a282675bb16c965daeb9171a66a205297dd",
+          "sha256": "3f2057a229c9adc3ad63b1e81ae3cc53c72fc88b7be9fe6690e3baa1fe0b361a",
           "size": 741
         },
         {
@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 133839,
+      "bytes": 133959,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -1734,6 +1734,10 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
+          "module": "components/0d951727a7.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
           "module": "components/1f591b670b.css"
         },
         {
@@ -1750,15 +1754,11 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
+          "module": "components/5d128e5049.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
           "module": "components/64fe82e6e1.css"
-        },
-        {
-          "package": "@cardstack/pretui@0.0.0",
-          "module": "components/69120dd1a0.css"
-        },
-        {
-          "package": "@cardstack/pretui@0.0.0",
-          "module": "components/78049cf645.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -1774,11 +1774,11 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "components/a4714df51a.css"
+          "module": "components/b2e0c6c378.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "components/b2e0c6c378.css"
+          "module": "components/b640b40f8a.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -2071,7 +2071,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 574480,
+      "bytes": 574496,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2244,14 +2244,14 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/button.gts",
-          "sha256": "b583cbc2124b7588486a267f67233c2f71a2f9b7feedf4be47c01d9cb09c462c",
+          "sha256": "15ab5720a5e0cc1ab4100a93f98407b618bd7e059ee44bc814db1bec8a43caa7",
           "size": 7011
         },
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/card.gts",
-          "sha256": "6d6c5b48e18f7ca358a3c72ba4220891185418d0a8edfcd358e98409c578179a",
-          "size": 6390
+          "sha256": "8c05d6f5faee8aaebd3d7ba445ce0a5d804ac25565bb67a6864d9811df825276",
+          "size": 5822
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -2280,7 +2280,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/input-group.gts",
-          "sha256": "26229ef3f19c46adc36b01694dd02c5e63197c23a73475105193a8bef3d5e133",
+          "sha256": "eb40ed2673102ed8ecb2f5df0b4d88ebf73f50c8717aa528d0211d5fdc360951",
           "size": 3866
         },
         {
@@ -2316,7 +2316,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/select.gts",
-          "sha256": "3789ea21029ae6477aabc2fedaa41765a5f17dd5ea244763bb5888f5e7808aa9",
+          "sha256": "6bdf2da3b29c304e11d6eb8f6f0809a64a2745423eb760413f8385fa4f9808d9",
           "size": 9549
         },
         {
@@ -2346,8 +2346,8 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "focus.gts",
-          "sha256": "97518bad5031a6cd6919f401308b5e0b7d91bd2db0aa34b0f2a408b89ec86385",
-          "size": 1981
+          "sha256": "8718144c91b5fe956e2ca14931f68cad1fd99118116c824d13b209ba0825792a",
+          "size": 2613
         },
         {
           "package": "@cardstack/pretui@0.0.0",

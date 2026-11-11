@@ -94,6 +94,7 @@ import {
   matrixServerNameFromEnv,
 } from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
+import { checkPricingAtStartup } from './lib/pricing.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -108,6 +109,7 @@ writeSync(
 );
 
 let log = logger('main');
+checkPricingAtStartup('realm-server');
 const runtimeMetadataFile = process.env.TEST_HARNESS_REALM_SERVER_METADATA_FILE;
 
 function writeRuntimeMetadata(payload: unknown): void {

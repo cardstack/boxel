@@ -136,6 +136,10 @@ export class CardIdCard extends CardDef {
   @field cardId = contains(StringField);
 }
 
+export class SetWorkspacePinInput extends CardIdCard {
+  @field pinned = contains(BooleanField);
+}
+
 export class CardTypeSchemaInput extends CardDef {
   @field codeRef = contains(CodeRefField);
 }

@@ -301,10 +301,7 @@ module(basename(import.meta.filename), function (hooks) {
     }[];
     keys: { id: string; name: string; covers: string[] }[];
     shares: { id: string; label: string; covers: string[] }[];
-    fillers: Record<
-      'interactive' | 'automations' | 'pipelines',
-      Record<string, string[]>
-    >;
+    fillers: Record<'interactive' | 'automations', Record<string, string[]>>;
   }
 
   async function batch(
@@ -701,9 +698,9 @@ module(basename(import.meta.filename), function (hooks) {
       'with nothing approved for automations only, both uses offer the same keys',
     );
     assert.deepEqual(
-      found.fillers.pipelines,
-      found.fillers.automations,
-      'a client built before the automations use was named reads the same keys',
+      Object.keys(found.fillers).sort(),
+      ['automations', 'interactive'],
+      'the batch names fillers for exactly the uses an approval can be for',
     );
 
     // Asked for the operations an approval covers, only where those send
