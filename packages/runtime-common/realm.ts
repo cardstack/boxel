@@ -866,6 +866,82 @@ export type RealmIndexCounts = {
   definitionCount: number | null;
 };
 
+// One host routing rule as the indexed realm.json's search document holds it,
+// before any validation: a value can have any shape a hand-edited realm.json
+// gives it. Fields the rule leaves unset are absent. Two fields differ from
+// what realm.json says: `instance` is the linked card as the search document
+// flattens it (`{ id, ...its searchable fields }`, `id` absolute), and `type`
+// is a code ref whose module is absolute (the search document stores it as
+// one `module/name` string, which the read splits back).
+export interface RawHostRoutingRule {
+  path?: unknown;
+  name?: unknown;
+  card?: unknown;
+  type?: unknown;
+  where?: unknown;
+  match?: unknown;
+  parent?: unknown;
+  instance?: unknown;
+  redirectTo?: unknown;
+  statusCode?: unknown;
+  routes?: RawHostRoutingRule[];
+}
+
+// Reads the `hostRoutingRules` of a RealmConfig search document, child routes
+// included, in authored order. Anything that isn't an object is skipped.
+export function readRawHostRoutingRules(
+  searchDoc: Record<string, unknown> | null | undefined,
+): RawHostRoutingRule[] {
+  return readRawRoutingRuleList(searchDoc?.hostRoutingRules);
+}
+
+function readRawRoutingRuleList(value: unknown): RawHostRoutingRule[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((rule) =>
+    rule && typeof rule === 'object' && !Array.isArray(rule)
+      ? [readRawRoutingRule(rule as Record<string, unknown>)]
+      : [],
+  );
+}
+
+const RAW_ROUTING_RULE_FIELDS = [
+  'path',
+  'name',
+  'card',
+  'where',
+  'match',
+  'parent',
+  'instance',
+  'redirectTo',
+  'statusCode',
+] as const;
+
+function readRawRoutingRule(rule: Record<string, unknown>): RawHostRoutingRule {
+  let raw: RawHostRoutingRule = {};
+  for (let key of RAW_ROUTING_RULE_FIELDS) {
+    if (rule[key] != null) {
+      raw[key] = rule[key];
+    }
+  }
+  let type = rule.type;
+  if (typeof type === 'string') {
+    let slash = type.lastIndexOf('/');
+    raw.type =
+      slash > 0 && slash < type.length - 1
+        ? { module: type.slice(0, slash), name: type.slice(slash + 1) }
+        : type;
+  } else if (type != null) {
+    raw.type = type;
+  }
+  let routes = readRawRoutingRuleList(rule.routes);
+  if (routes.length > 0) {
+    raw.routes = routes;
+  }
+  return raw;
+}
+
 // Marker header the host SPA attaches to its outbound search calls and card
 // writes when it's running inside a prerender tab. Two different host-side
 // flags produce it, and the split is deliberate:
@@ -17772,6 +17848,21 @@ export class Realm {
     }
   }
 
+  // The realm's routing rules exactly as the indexed RealmConfig card's search
+  // document holds them, child routes included and nothing validated. Not
+  // cached: `getHostRoutingMap` caches what it builds from this.
+  async getRawHostRoutingRules(): Promise<RawHostRoutingRule[]> {
+    let realmConfigCardURL = new URL(
+      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    );
+    let indexEntry =
+      await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
+    if (indexEntry?.type !== 'instance') {
+      return [];
+    }
+    return readRawHostRoutingRules(indexEntry.searchDoc);
+  }
+
   // CS-10054: read host routing rules from the indexed RealmConfig card.
   // The `instance` field is `linksTo(CardDef)`, so the indexed
   // searchDoc flattens each rule's link as `{ id, ...flattened
@@ -17783,23 +17874,10 @@ export class Realm {
     if (this.#cachedHostRoutingMap) {
       return this.#cachedHostRoutingMap;
     }
-    let realmConfigCardURL = new URL(
-      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
-    );
     try {
-      let indexEntry =
-        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
-      if (indexEntry?.type !== 'instance') {
-        return (this.#cachedHostRoutingMap = []);
-      }
-      let rules = (indexEntry.searchDoc ?? {}).hostRoutingRules;
-      if (!Array.isArray(rules)) {
-        return (this.#cachedHostRoutingMap = []);
-      }
+      let rules = await this.getRawHostRoutingRules();
       let map = rules.flatMap((rule): HostRoutingRule[] => {
-        if (!rule || typeof rule !== 'object') return [];
-        let path = (rule as Record<string, unknown>).path;
-        let instance = (rule as Record<string, unknown>).instance;
+        let { path, instance } = rule;
         if (typeof path !== 'string') return [];
         // Normalize a rule authored with a trailing slash ('/pricing/') to
         // its canonical slash-free form ('/pricing'). Request paths are
@@ -17810,7 +17888,7 @@ export class Realm {
         // the editor's duplicate detection so a '/pricing' + '/pricing/'
         // collision is flagged there. The realm-root rule '/' is preserved.
         let normalizedPath = normalizeRoutingPath(path);
-        let redirectTo = (rule as Record<string, unknown>).redirectTo;
+        let redirectTo = rule.redirectTo;
         if (typeof redirectTo === 'string' && redirectTo.trim()) {
           // A redirect rule. A rule carrying both `redirectTo` and
           // `instance` is only reachable by hand-editing realm.json —
@@ -17833,9 +17911,8 @@ export class Realm {
             );
           } else {
             let statusCode =
-              parseRedirectStatusCode(
-                (rule as Record<string, unknown>).statusCode,
-              ) ?? DEFAULT_REDIRECT_STATUS;
+              parseRedirectStatusCode(rule.statusCode) ??
+              DEFAULT_REDIRECT_STATUS;
             return [{ path: normalizedPath, redirectTo: target, statusCode }];
           }
         }
