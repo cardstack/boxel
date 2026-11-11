@@ -4320,9 +4320,6 @@ export default class RunRealmCodeTool extends HostBaseTool<
     };
   }
 
-  // realmOf matches an identifier only in the form the realm is keyed by, and
-  // the input may name the realm by its prefix or by its URL, so a miss is
-  // retried with the identifier resolved to its URL.
   // Whether the user may run a script in the realm: they can read or write
   // it, or its policy judges them. A realm answers its info to a caller its
   // permissions don't let read only when its policy judges them, so info the
@@ -4335,6 +4332,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     );
   }
 
+  // realmOf matches an identifier only in the form the realm is keyed by, and
+  // the input may name the realm by its prefix or by its URL, so a miss is
+  // retried with the identifier resolved to its URL.
   private realmOfInput(
     realmId: RealmResourceIdentifier,
   ): RealmIdentifier | undefined {
