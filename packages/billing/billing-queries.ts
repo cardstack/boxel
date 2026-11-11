@@ -336,6 +336,11 @@ export async function addToCreditsLedger(
 
 // The identity of a charge that is written at most once: its kind and
 // reference. Undefined for an `ai` charge, which is one per call.
+//
+// The payer is not part of it: a run, a batch, or an automation's storage for
+// one day is charged once, to whoever pays when it is first charged. A retry
+// after the payer changes (an automation resumed by another direct writer)
+// reads as `already-charged` and bills no one a second time.
 function chargeIdentity(charge: SpendCharge): string | undefined {
   switch (charge.kind) {
     case 'ai':
@@ -760,6 +765,11 @@ export type SpendResult = 'charged' | 'already-charged' | 'nothing-to-charge';
 // A charge with an identity (see `chargeIdentity`) is written at most once:
 // in one transaction, holding a lock on the identity, it checks whether the
 // charge is already in the ledger and writes nothing if it is.
+//
+// The balance it draws on is read and spent without a lock of its own, so two
+// different charges for one user must not run at once: callers hold the
+// payer's cost lock (`DBAdapter.withUserCostLock`) around it, as billable
+// calls do when they settle.
 export async function spendCredits(
   dbAdapter: DBAdapter,
   userId: string,
@@ -767,6 +777,11 @@ export async function spendCredits(
   charge: SpendCharge = { kind: 'ai' },
   usage: ChargeUsage = {},
 ): Promise<SpendResult> {
+  if (charge.kind === 'storage' && !isCalendarDay(charge.day)) {
+    throw new Error(
+      `a storage charge's day must be a YYYY-MM-DD date, got ${charge.day}`,
+    );
+  }
   let identity = chargeIdentity(charge);
   if (identity === undefined) {
     return await writeSpend(dbAdapter, userId, creditsToSpend, charge, usage);
@@ -841,6 +856,14 @@ async function writeSpend(
     ] as Expression);
   }
   return 'charged';
+}
+
+function isCalendarDay(day: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return false;
+  }
+  let date = new Date(`${day}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(day);
 }
 
 // The ledger entries that spend `creditsToSpend` from the user's buckets.

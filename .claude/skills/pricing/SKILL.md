@@ -257,7 +257,12 @@ the database. An `ai` charge is one per call and a run makes many, so AI
 rows have no identity and every call writes.
 
 Two charges with the same reference but different amounts or pricing
-versions are the same charge: the first one written stands.
+versions are the same charge: the first one written stands. So are two
+charges against different payers. A run, batch or storage day is charged once,
+to whoever pays when it is first charged, so a retry after an automation's
+payer changes bills no one again. Charge writers hold the payer's
+`withUserCostLock` around `spendCredits`, since the balance it draws on has no
+lock of its own.
 
 **Where a kind comes from.** `spendCredits(dbAdapter, userId, credits,
 charge)` takes the kind and reference; it defaults to `{ kind: 'ai' }`.

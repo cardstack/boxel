@@ -1703,6 +1703,61 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a charge is written once whoever pays it', async function (assert) {
+        let otherPayer = await insertUser(
+          dbAdapter,
+          '@ledger-other-payer:localhost',
+          'cus_ledger_other_payer',
+          'ledger-other-payer@test.com',
+        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: otherPayer.id,
+          creditAmount: 100,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+        let storage = {
+          kind: 'storage' as const,
+          realm,
+          automationId: 'http://test-realm/ledger/Automation/sync',
+          day: '2026-11-10',
+          pricingVersion,
+        };
+        assert.strictEqual(
+          await spendCredits(dbAdapter, user.id, 5, storage),
+          'charged',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, otherPayer.id, 5, storage),
+          'already-charged',
+          'a retry after the payer changed bills no one again',
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: otherPayer.id }),
+          100,
+        );
+      });
+
+      test("a storage charge's day must be a calendar date", async function (assert) {
+        for (let day of ['2026-13-01', '2026-02-30', '11/10/2026', '']) {
+          await assert.rejects(
+            spendCredits(dbAdapter, user.id, 5, {
+              kind: 'storage',
+              realm,
+              automationId: 'http://test-realm/ledger/Automation/sync',
+              day,
+              pricingVersion,
+            }),
+            /must be a YYYY-MM-DD date/,
+            `${JSON.stringify(day)} is refused`,
+          );
+        }
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: user.id }),
+          1000,
+        );
+      });
+
       test('usage must be a finite quantity of a known unit', async function (assert) {
         for (let bad of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
           await assert.rejects(
