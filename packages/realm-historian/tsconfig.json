@@ -39,6 +39,7 @@
     "../base/types/**/*",
     "main.ts",
     "setup-logger.ts",
+    "scripts",
     "src",
     "tests"
   ]

@@ -1,6 +1,49 @@
 ---
 name: search-shape-diagnosis
-description: Read the per-request query-shape telemetry the federated search emits — one JSON log line per `_federated-search` request on the `boxel:search-shape` channel (the same `| json` convention as `boxel:client-perf` and `boxel:capture-perf`), carrying the query's *shape* with every caller-supplied value elided, plus which cache answered, the result counts, and the wall-clock. Use it to answer what a search load was actually made of, which the request rate alone cannot show: (1) what a burst of searches asked for — the filter trees, type anchors, page sizes and fieldsets behind a spike, and how many distinct shapes (`shapeHash`) it decomposes into; (2) which shapes dominate a window by volume, by latency, or by rows returned; (3) how much of a load the caches absorbed — `miss`/`join`/`hit` on the live-search cache and `job-miss`/`job-hit`/`not-modified` on the indexer's job-scoped cache — and therefore how much of it reached the index at all; (4) separating prerender search load from live browser load via `linkMode`, since a prerender skips the `loadLinks` relationship-assembly pass and so costs a different amount for the same query; (5) attributing live search load to a person or a tab session, by joining `correlationId` to the `server-request` event on `boxel:client-perf`; (6) attributing in-render search load to the indexing job that caused it via `jobId` and `consumingRealm`; and (7) authoring a replay that exercises the same index paths a real load did; and (8) auditing the link-shape policy, which picks how much of each result's link graph a live read carries from the load the process is under and may overrule a caller — answering "was this page served a degraded shape, and why" from `requestedLinkMode` / `linkModeDowngraded` / `linkShapeLoad` / `linkShapeLevel` beside the served `linkMode`, and "is the policy engaging more than it should" from the per-realm transition records and sampled no-change records on the `boxel:link-shape-policy` channel, whose `dwellMs` is the flapping signal. Carries the traps that make naive aggregates silently wrong: a cache hit reports no counts, an incomplete merge reports no total, `correlationId` is minted per search so nothing on the line groups one render (`jobId` is a whole index pass), `linkMode` is what was *served* rather than what was asked for, `linkShapeLoad` is a sustained mean that will not match a health line's instantaneous `inFlightSearch`, and a search the admission gate sheds emits no line at all — so under saturation this counts admitted searches rather than arriving ones. Joins to `realm:requests` and the `realm:search-timing` stage breakdown on `correlationId`. For staging/prod this layers on `aws-access` (the AWS session and Loki auth) and `tail-logs` (the Loki wrapper); hand off to `indexing-diagnostics` when the cost is inside the indexer rather than in what was asked for, and to the `search` skill when the task is authoring a query rather than reading one. Use when someone asks what a search spike was made of, which queries a realm is issuing, why search load is high, what a representative query looks like, or wants to replay a real load.
+description: >-
+  Read the per-request query-shape telemetry the federated search emits — one
+  JSON log line per `_federated-search` request on the `boxel:search-shape`
+  channel (the same `| json` convention as `boxel:client-perf` and
+  `boxel:capture-perf`), carrying the query's *shape* with every
+  caller-supplied value elided, plus which cache answered, the result counts,
+  and the wall-clock. Use it to answer what a search load was actually made
+  of, which the request rate alone cannot show: (1) what a burst of searches
+  asked for — the filter trees, type anchors, page sizes and fieldsets behind
+  a spike, and how many distinct shapes (`shapeHash`) it decomposes into; (2)
+  which shapes dominate a window by volume, by latency, or by rows returned;
+  (3) how much of a load the caches absorbed — `miss`/`join`/`hit` on the
+  live-search cache and `job-miss`/`job-hit`/`not-modified` on the indexer's
+  job-scoped cache — and therefore how much of it reached the index at all;
+  (4) separating prerender search load from live browser load via `linkMode`,
+  since a prerender skips the `loadLinks` relationship-assembly pass and so
+  costs a different amount for the same query; (5) attributing live search
+  load to a person or a tab session, by joining `correlationId` to the
+  `server-request` event on `boxel:client-perf`; (6) attributing in-render
+  search load to the indexing job that caused it via `jobId` and
+  `consumingRealm`; and (7) authoring a replay that exercises the same index
+  paths a real load did; and (8) auditing the link-shape policy, which picks
+  how much of each result's link graph a live read carries from the load the
+  process is under and may overrule a caller — answering "was this page served
+  a degraded shape, and why" from `requestedLinkMode` / `linkModeDowngraded` /
+  `linkShapeLoad` / `linkShapeLevel` beside the served `linkMode`, and "is the
+  policy engaging more than it should" from the per-realm transition records
+  and sampled no-change records on the `boxel:link-shape-policy` channel,
+  whose `dwellMs` is the flapping signal. Carries the traps that make naive
+  aggregates silently wrong: a cache hit reports no counts, an incomplete
+  merge reports no total, `correlationId` is minted per search so nothing on
+  the line groups one render (`jobId` is a whole index pass), `linkMode` is
+  what was *served* rather than what was asked for, `linkShapeLoad` is a
+  sustained mean that will not match a health line's instantaneous
+  `inFlightSearch`, and a search the admission gate sheds emits no line at all
+  — so under saturation this counts admitted searches rather than arriving
+  ones. Joins to `realm:requests` and the `realm:search-timing` stage
+  breakdown on `correlationId`. For staging/prod this layers on `aws-access`
+  (the AWS session and Loki auth) and `tail-logs` (the Loki wrapper); hand off
+  to `indexing-diagnostics` when the cost is inside the indexer rather than in
+  what was asked for, and to the `search` skill when the task is authoring a
+  query rather than reading one. Use when someone asks what a search spike was
+  made of, which queries a realm is issuing, why search load is high, what a
+  representative query looks like, or wants to replay a real load.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 

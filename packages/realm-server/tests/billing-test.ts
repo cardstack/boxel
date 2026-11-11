@@ -1703,6 +1703,67 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a charge the balance can only partly pay draws what it holds and records all its usage', async function (assert) {
+        let short = await insertUser(
+          dbAdapter,
+          '@ledger-short:localhost',
+          'cus_ledger_short',
+          'ledger-short@test.com',
+        );
+        await addToCreditsLedger(dbAdapter, {
+          userId: short.id,
+          creditAmount: 3,
+          creditType: 'extra_credit',
+          subscriptionCycleId: null,
+        });
+        let charge = {
+          kind: 'run_indexing' as const,
+          realm,
+          runId: otherRunId,
+          pricingVersion,
+        };
+        assert.strictEqual(
+          await spendCredits(dbAdapter, short.id, 10, charge, {
+            worker_process_seconds: 40,
+            prerender_tab_seconds: 25,
+          }),
+          'charged',
+        );
+        let entries = await getLedgerEntries(dbAdapter, {
+          runId: otherRunId,
+        });
+        assert.strictEqual(
+          entries.reduce((sum, e) => sum + e.creditAmount, 0),
+          -3,
+          'the charge draws only what the balance holds',
+        );
+        assert.strictEqual(
+          await sumUpCreditsLedger(dbAdapter, { userId: short.id }),
+          0,
+        );
+        assert.deepEqual(
+          await getLedgerUsage(dbAdapter, { runId: otherRunId }),
+          [
+            {
+              chargeKind: 'run_indexing',
+              unit: 'prerender_tab_seconds',
+              quantity: 25,
+            },
+            {
+              chargeKind: 'run_indexing',
+              unit: 'worker_process_seconds',
+              quantity: 40,
+            },
+          ],
+          'the usage is the whole pass, not the part the credits paid for',
+        );
+        assert.strictEqual(
+          await spendCredits(dbAdapter, short.id, 10, charge),
+          'already-charged',
+          'the unpaid part is not charged again',
+        );
+      });
+
       test('a charge is written once whoever pays it', async function (assert) {
         let otherPayer = await insertUser(
           dbAdapter,

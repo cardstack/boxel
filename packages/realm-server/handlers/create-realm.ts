@@ -4,7 +4,9 @@ import fsExtra from 'fs-extra';
 const { ensureDirSync, writeFileSync, writeJSONSync } = fsExtra;
 import * as Sentry from '@sentry/node';
 import type {
+  ChangeJournal,
   DBAdapter,
+  Querier,
   Realm,
   RealmInfo,
   VirtualNetwork,
@@ -16,9 +18,11 @@ import {
   logger,
   param,
   query,
+  stringifyErrorForLog,
   SupportedMimeType,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
+import { emitChangeJournal } from '@cardstack/runtime-common/card-operations/telemetry';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
@@ -46,6 +50,9 @@ export type CreateRealmDeps = {
   virtualNetwork: VirtualNetwork;
   realmsRootPath: string;
   reconciler: RealmRegistryReconciler;
+  // The journal the new realm's `scan` event goes to. Absent when the realm
+  // server records no history (`REALM_HISTORY_JOURNAL=off`).
+  changeJournal?: ChangeJournal;
 };
 
 export type CreateRealmInput = {
@@ -98,6 +105,7 @@ export async function createRealm(
     virtualNetwork,
     realmsRootPath,
     reconciler,
+    changeJournal,
   } = deps;
 
   // Server-root collision check. Read realms[] AND realm_registry —
@@ -167,7 +175,15 @@ export async function createRealm(
   // concurrent publish/unpublish/delete). This is almost never a real
   // concurrency concern — the endpoint was already checked above for
   // collision.
-  await dbAdapter.withWriteLock(url, async () => {
+  await dbAdapter.withWriteLock(url, async (txQuerier) => {
+    // The registry row and the realm's scan event commit on the lock's
+    // transaction (below). Only an adapter with no cross-connection locking
+    // passes none, and the realm server never runs on one.
+    if (!txQuerier) {
+      throw new Error(
+        `cannot create the realm ${url}: the database adapter's write lock has no transaction to register it on`,
+      );
+    }
     await insertPermissions(dbAdapter, new URL(url), {
       [ownerUserId]: DEFAULT_PERMISSIONS,
     });
@@ -240,11 +256,27 @@ export async function createRealm(
     // Register the source realm in realm_registry. The INSERT emits
     // NOTIFY realm_registry; the reconciler on every instance picks
     // up the row, and the realm is lazy-mounted on first request.
-    await insertSourceRealmInRegistry(dbAdapter, {
-      url,
-      diskId: `${ownerUsername}/${endpoint}`,
-      ownerUsername,
-    });
+    //
+    // The seed files were written straight to disk, outside the realm, so
+    // the realm's history learns of them from a `scan` event by the creator,
+    // appended on the same transaction as the registry row: the write lock's
+    // own. No instance can mount the realm before both commit, so the scan
+    // comes before any write to it.
+    await insertSourceRealmInRegistry(
+      dbAdapter,
+      {
+        url,
+        diskId: `${ownerUsername}/${endpoint}`,
+        ownerUsername,
+      },
+      txQuerier,
+    );
+    if (changeJournal) {
+      await appendSeedScan(txQuerier, changeJournal, {
+        realmURL: url,
+        author: ownerUserId,
+      });
+    }
   });
 
   // virtualNetwork URL mapping was historically bridged here so a
@@ -284,6 +316,56 @@ export async function createRealm(
   }
 
   return { url, realm, info };
+}
+
+// Appends the `scan` event that asks realm-historian to record a new realm's
+// seed files, as its first revision, by the realm's creator. The append runs
+// under a savepoint, so a journal failure rolls back only the event: the
+// registry row still commits and creating the realm still succeeds, and the
+// realm's first revision is then not attributed to its creator.
+//
+// The journal writes the event only for a realm whose `realm_history_state`
+// row is already enabled. The realm's registry row is inserted on this same
+// transaction, so recording for a new realm has to be turned on there too,
+// before this append. A realm whose recording is turned on any later, such as
+// from the registry's NOTIFY, gets no scan, and its first revision isn't its
+// creator's.
+async function appendSeedScan(
+  querier: Querier,
+  journal: ChangeJournal,
+  { realmURL, author }: { realmURL: string; author: string },
+): Promise<void> {
+  let started = performance.now();
+  await querier(['SAVEPOINT change_journal']);
+  try {
+    let written = await journal.append(querier, {
+      realmURL,
+      author,
+      channel: 'system',
+      intent: { kind: 'scan' },
+      changes: [],
+    });
+    emitChangeJournal({
+      realm: realmURL,
+      outcome: written ? 'written' : 'skipped',
+      durationMs: Math.round(performance.now() - started),
+      paths: 0,
+      partial: false,
+    });
+  } catch (err: unknown) {
+    await querier(['ROLLBACK TO SAVEPOINT change_journal']);
+    log.error(
+      `could not append the scan event for the new realm ${realmURL} to the change journal: ${stringifyErrorForLog(err)}`,
+    );
+    emitChangeJournal({
+      realm: realmURL,
+      outcome: 'failed',
+      durationMs: Math.round(performance.now() - started),
+      paths: 0,
+      partial: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 export default function handleCreateRealmRequest(

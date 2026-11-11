@@ -22,6 +22,7 @@ import {
   rri,
   RealmPaths,
   type LocalPath,
+  codeRefWithAbsoluteIdentifier,
   isResolvedCodeRef,
   isCardDocumentString,
   isCardInstance,
@@ -32,7 +33,9 @@ import {
   SupportedMimeType,
   internalKeyFor,
   realmURL as realmURLSymbol,
+  realmPolicyCardNamed,
   trimJsonExtension,
+  MAX_MATRIX_EVENT_CONTENT_BYTES,
 } from '@cardstack/runtime-common';
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
@@ -82,7 +85,36 @@ import type { Stack } from '../components/operator-mode/interact-submode';
 
 import type IndexController from '../controllers';
 import type { CardDef, Format } from '@cardstack/base/card-api';
-import type { BoxelContext } from '@cardstack/base/matrix-event';
+import type {
+  BoxelContext,
+  RealmPolicyForContext,
+} from '@cardstack/base/matrix-event';
+
+// The most the AI context may take, serialized, with a realm policy's rules in
+// it. The context rides inline in every message and tool-result event sent
+// from the realm, beside the message's body and attachments, and Matrix
+// refuses an event whose content passes MAX_MATRIX_EVENT_CONTENT_BYTES. So a
+// policy whose rules would take the context past a quarter of that is named
+// without them, and the rules never take the context past that quarter. A
+// policy of a dozen grants takes about 1 KB.
+const MAX_CONTEXT_BYTES_WITH_POLICY_RULES = MAX_MATRIX_EVENT_CONTENT_BYTES / 4;
+
+// The fields the AI context reads from a realm's config card and from the
+// policy card it names, a `RealmPolicy`, whose definition is in the catalog.
+type RealmConfigCard = CardDef & { policy?: string | null };
+type RealmPolicyCard = CardDef & {
+  rules?:
+    | ({
+        targetType?: CodeRef | null;
+        grants?:
+          | ({
+              operation?: string | null;
+              where?: { source: string } | null;
+            } | null)[]
+          | null;
+      } | null)[]
+    | null;
+};
 
 export interface CreateListingModalPayload {
   codeRef: CodeRef;
@@ -1810,6 +1842,20 @@ export default class OperatorModeStateService extends Service {
       canRead: this.realm.canRead(realmUrl),
       canWrite: this.realm.canWrite(realmUrl),
     };
+    // A realm's policy decides only for a caller its permissions decline, so
+    // it matters to the assistant only where the user can't write. The realm
+    // refuses its config card to a caller its permissions don't let read, so
+    // only a reader can learn which policy the realm names. The realm answers
+    // such a caller its info only when a policy judges them, though, so info
+    // it answered tells the host that a policy does, if not which.
+    let realmPolicy: RealmPolicyForContext | undefined;
+    if (!realmPermissions.canWrite) {
+      if (realmPermissions.canRead) {
+        realmPolicy = await this.realmPolicyForAIBot(realmUrl);
+      } else if (this.realm.isInfoLoaded(ri(realmUrl))) {
+        realmPolicy = {};
+      }
+    }
 
     let result: BoxelContext = {
       agentId: this.matrixService.agentId,
@@ -1819,13 +1865,100 @@ export default class OperatorModeStateService extends Service {
       realmPrefixes: this.realmPrefixes,
       realmUrl,
       realmPermissions,
+      ...(realmPolicy ? { realmPolicy } : {}),
       codeMode,
     };
     let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
     if (errorsDisplayed.length) {
       result.errorsDisplayed = errorsDisplayed;
     }
+    if (
+      result.realmPolicy?.rules &&
+      new TextEncoder().encode(JSON.stringify(result)).length >
+        MAX_CONTEXT_BYTES_WITH_POLICY_RULES
+    ) {
+      result.realmPolicy = { card: result.realmPolicy.card, tooLarge: true };
+    }
     return result;
+  }
+
+  // The policy the realm's config names, with the rules the user can read on
+  // it. Both cards are read through the store, and a read here takes no
+  // reference. So a repeat read within a few minutes is served from the store,
+  // while the store's sweep evicts the cards two to four minutes after they
+  // were read, and the next read fetches them again. Until then the store
+  // reloads a card on its realm's index event only while something else from
+  // that realm is referenced, which a policy card in another realm usually
+  // isn't. The rules the context carries can therefore lag an edit to the
+  // policy by those few minutes, which an advisory note can bear: the realm
+  // decides each invocation against the policy in force. Whatever can't be
+  // read is left out rather than failing the message. A config card that
+  // doesn't load leaves the context without a policy: it says nothing of
+  // whether the realm names one, and the realms a user can only read mostly
+  // name none, so the context claims a policy only where the host knows of
+  // one. A policy card that doesn't load leaves its rules unknown.
+  private async realmPolicyForAIBot(
+    realmURL: string,
+  ): Promise<RealmPolicyForContext | undefined> {
+    let configId = new RealmPaths(ri(realmURL)).fileRRI('realm');
+    let config = await this.storeGetQuietly(configId);
+    // Read as the realm reads it, so a pointer the realm ignores names nothing.
+    let pointer = isCardInstance(config)
+      ? realmPolicyCardNamed(
+          (config as RealmConfigCard).policy,
+          this.network.virtualNetwork,
+        )
+      : undefined;
+    if (!pointer) {
+      return undefined;
+    }
+    let policyId = rri(pointer);
+    let policy = await this.storeGetQuietly(policyId);
+    if (!isCardInstance(policy)) {
+      return { card: policyId };
+    }
+    let card = policy.id ? rri(policy.id) : policyId;
+    // A rule whose type isn't a module and a name, and a grant that names no
+    // operation, are left out: the realm compiles neither, so neither grants
+    // anything.
+    let rules: NonNullable<RealmPolicyForContext['rules']> = [];
+    for (let rule of (policy as RealmPolicyCard).rules ?? []) {
+      if (!rule?.targetType) {
+        continue;
+      }
+      // A rule's type is stored as its author wrote it, so a relative module
+      // is resolved against the policy card.
+      let targetType = codeRefWithAbsoluteIdentifier(
+        rule.targetType,
+        card,
+        undefined,
+      );
+      if (!isResolvedCodeRef(targetType)) {
+        continue;
+      }
+      let grants = (rule.grants ?? []).flatMap((grant) =>
+        grant?.operation
+          ? [
+              {
+                operation: grant.operation,
+                ...(grant.where?.source ? { where: grant.where.source } : {}),
+              },
+            ]
+          : [],
+      );
+      if (grants.length > 0) {
+        rules.push({ targetType, grants });
+      }
+    }
+    return { card, rules };
+  }
+
+  private async storeGetQuietly(id: RealmResourceIdentifier) {
+    try {
+      return await this.store.get(id);
+    } catch {
+      return undefined;
+    }
   }
 
   // The identifiers in the AI context are RRIs, so the context carries the
