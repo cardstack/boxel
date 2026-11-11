@@ -22,15 +22,6 @@ export interface Known {
 export const KNOWN: Known[] = [
   {
     about:
-      'a number written as a string (`"2.00"`) does not equal the number on a number field, a number does not equal a big-integer field (stored as a string), and a string range bound on a big integer compares as text (`"10" > "9"` is false)',
-    evaluators: ['matcher'],
-    file: 'values',
-    cases:
-      /^(not )?(eq d "|in d strings$|eq g$|in g$|range g gt "9"$)|^not of a big integer and a list$/,
-    kind: 'answers',
-  },
-  {
-    about:
       'a date-time bound with seconds, `Z` or an offset (`2000-01-01T00:00:00Z`, `…T05:30+05:30`), and a date-time bound on a date field, is compared as text with the stored `yyyy-MM-ddTHH:mm` instead of as the instant it names',
     evaluators: ['matcher', 'postgres', 'sqlite'],
     file: 'values',
@@ -40,7 +31,7 @@ export const KNOWN: Known[] = [
   {
     about:
       'a number written as a string compares as text with a list of numbers (`eq: { ds: "0.50" }` misses `[0.5]`), where on a single number field Postgres compares it as a number',
-    evaluators: ['matcher', 'postgres'],
+    evaluators: ['postgres'],
     file: 'values',
     cases: /^(not )?eq ds "0\.50"$/,
     kind: 'answers',

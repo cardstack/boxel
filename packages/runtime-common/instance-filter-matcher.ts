@@ -551,7 +551,7 @@ function matchEq(
   value: any,
   api: CardAPIForMatching,
 ): Truth {
-  let resolution = resolvePath(instance, path, api);
+  let resolution = asNumbers(resolvePath(instance, path, api));
   let { leafField } = resolution;
   // `eq: null` (and `missing`) is the card having no value there. It is true
   // or false, never unknown.
@@ -579,7 +579,7 @@ function matchIn(
   if (rawValues.length === 0) {
     return 'no-match';
   }
-  let resolution = resolvePath(instance, path, api);
+  let resolution = asNumbers(resolvePath(instance, path, api));
   let { leafField } = resolution;
   let hasNull = rawValues.some((v) => v === null);
   let formatted = rawValues
@@ -636,7 +636,7 @@ function matchRange(
   constraints: RangeFilterValue,
   api: CardAPIForMatching,
 ): Truth {
-  let resolution = resolvePath(instance, path, api);
+  let resolution = asNumbers(resolvePath(instance, path, api));
   let { leafField } = resolution;
   let formattedConstraints = Object.entries(constraints).map(
     ([operator, bound]) => {
@@ -701,13 +701,53 @@ function formatFilterValue(
   value: any,
   api: CardAPIForMatching,
 ): any {
-  let serializerName = leafField
-    ? (leafField.card as any)[fieldSerializer]
-    : undefined;
+  let serializerName = serializerOf(leafField);
   return (
     relativeDateForField(value, serializerName) ??
-    formatValue(leafField, value, api)
+    asNumber(serializerName, formatValue(leafField, value, api))
   );
+}
+
+function serializerOf(field: Field<any> | undefined): string | undefined {
+  return field ? (field.card as any)[fieldSerializer] : undefined;
+}
+
+const NUMERIC_TEXT = /^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/;
+const INTEGER_TEXT = /^\s*[-+]?\d+\s*$/;
+
+// On a number or big-integer field both sides compare as numbers, as the
+// server's `::numeric` does: a number written as a string reads as the
+// number, and a big integer (held as a string) as a `bigint`, so values past
+// 2^53 compare exactly. Anything else is left as it is.
+function asNumber(serializerName: string | undefined, value: any): any {
+  if (serializerName === 'number') {
+    return typeof value === 'string' && NUMERIC_TEXT.test(value)
+      ? Number(value)
+      : value;
+  }
+  if (serializerName === 'big-integer') {
+    if (typeof value === 'string' && INTEGER_TEXT.test(value)) {
+      return BigInt(value.trim());
+    }
+    if (typeof value === 'number' && Number.isInteger(value)) {
+      return BigInt(value);
+    }
+    if (typeof value === 'string' && NUMERIC_TEXT.test(value)) {
+      return Number(value);
+    }
+  }
+  return value;
+}
+
+function asNumbers(resolution: PathResolution): PathResolution {
+  let serializerName = serializerOf(resolution.leafField);
+  if (serializerName !== 'number' && serializerName !== 'big-integer') {
+    return resolution;
+  }
+  return {
+    ...resolution,
+    values: resolution.values.map((v) => asNumber(serializerName, v)),
+  };
 }
 
 // No value at the path, as the server's `eq: null` reads it. On a scalar path
