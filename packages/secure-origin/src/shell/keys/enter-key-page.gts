@@ -59,6 +59,7 @@ import { Alert } from '@cardstack/pretui/components/alert';
 import RectangleEllipsis from '@cardstack/boxel-icons/rectangle-ellipsis';
 import Tag from '@cardstack/boxel-icons/tag';
 import { Input } from '@cardstack/pretui/components/input';
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { eq } from '@cardstack/pretui/helpers';
 import { navigation } from '../navigation.js';
 import { pageURL } from '../urls.js';
@@ -185,7 +186,12 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
         {{/if}}
       </DonePage>
     {{else if this.entering}}
-      <form novalidate {{on 'submit' this.save}} data-test-enter-key-form>
+      <form
+        novalidate
+        data-form-type='other'
+        {{on 'submit' this.save}}
+        data-test-enter-key-form
+      >
         <EditPage @heading={{this.title}} data-test-enter-key>
           <:intro>The key is encrypted as soon as it is saved, and nothing can
             read it back. Cards can send it only to the places you approve for
@@ -278,6 +284,7 @@ class EnterKey extends Component<{ Args: EnterKeyArgs }> {
                           @onInput={{this.setClientId}}
                           name='client-id'
                           spellcheck='false'
+                          {{ignoredByPasswordManagers}}
                           data-test-oauth-client-id-input
                         />
                       </Field>

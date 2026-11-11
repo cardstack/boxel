@@ -62,6 +62,14 @@ async function renderForm(formName: keyof typeof FORMS): Promise<Rendered> {
   };
 }
 
+// The attribute each password manager reads to skip a field.
+const HINTS = [
+  'data-1p-ignore',
+  'data-lpignore',
+  'data-form-type',
+  'data-bwignore',
+];
+
 function inputs() {
   return [
     ...document.querySelectorAll<HTMLInputElement>(
@@ -116,6 +124,28 @@ module('Integration | credential fields', function (hooks) {
     });
   });
 
+  module('password managers', function () {
+    for (let form of ['change-password', 'confirm-password'] as const) {
+      test(`${form}: carries no hint that keeps a password manager out of its fields`, async function (assert) {
+        await renderForm(form);
+        let fields = [
+          ...document.querySelectorAll<HTMLInputElement>(
+            '#credential-fields input',
+          ),
+        ];
+        assert.ok(fields.length > 0, 'the form draws its fields');
+        for (let field of fields) {
+          for (let hint of HINTS) {
+            assert.false(
+              field.hasAttribute(hint),
+              `${field.autocomplete} has no ${hint}`,
+            );
+          }
+        }
+      });
+    }
+  });
+
   module('validity', function () {
     test('reports what is typed to the frame, and the app hears only that a field is filled in', async function (assert) {
       let { frame, sent } = await renderForm('change-password');
@@ -134,6 +164,28 @@ module('Integration | credential fields', function (hooks) {
       );
       assert.notOk(JSON.stringify(sent).includes('the-old-password'));
       assert.notOk(JSON.stringify(sent).includes('a-long-password'));
+    });
+
+    test('the new password fields state the password rule, and the form posts', async function (assert) {
+      await renderForm('change-password');
+      for (let field of [
+        '[data-test-new-password-field]',
+        '[data-test-confirm-password-field]',
+      ]) {
+        assert
+          .dom(field)
+          .hasAttribute('autocomplete', 'new-password')
+          .hasAttribute('minlength', '8')
+          .hasAttribute('passwordrules', 'minlength: 8; maxlength: 512;')
+          // A browser cuts a pasted password to `maxlength` without a word.
+          .doesNotHaveAttribute('maxlength');
+      }
+      assert
+        .dom('[data-test-current-password-field]')
+        .doesNotHaveAttribute('minlength')
+        .doesNotHaveAttribute('maxlength')
+        .doesNotHaveAttribute('passwordrules');
+      assert.dom('form#credential-fields').hasAttribute('method', 'post');
     });
 
     test('shows an invalid field as Pret UI Input does, and clears it on typing', async function (assert) {

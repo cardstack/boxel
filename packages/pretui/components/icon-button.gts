@@ -147,11 +147,11 @@ export class IconButton extends Component<IconButtonSignature> {
       @layer PretComposite {
         .pretui-iconbtn {
           padding: 0;
-          width: var(--pretui-button-h, 2.24em);
+          width: var(--pretui-row-h, var(--pretui-button-h, 2.24em));
         }
         /* square against Button's 24px minimum height at xs */
         .pretui-iconbtn[data-size='xs'] {
-          width: max(var(--pretui-button-h, 2.24em), 1.5rem);
+          width: max(var(--pretui-row-h, var(--pretui-button-h, 2.24em)), 1.5rem);
         }
         /* block-level, so the glyph is not set on Button's label line and
            its baseline */

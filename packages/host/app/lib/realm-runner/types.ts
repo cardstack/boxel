@@ -25,6 +25,7 @@ export type RealmRunnerCallMethod =
   | 'room.enableSkills'
   | 'room.disableSkills'
   | 'room.setModel'
+  | 'room.credits'
   | 'ui.switchSubmode'
   | 'ui.openFile'
   | 'ui.previewFormat'

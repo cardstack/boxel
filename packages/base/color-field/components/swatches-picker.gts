@@ -3,6 +3,7 @@ import type { ColorFieldConfiguration } from '../util/color-utils';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { ColorPalette } from '@cardstack/boxel-ui/components';
 import type { ColorFieldSignature } from '../util/color-field-signature';
+import { ignoredByPasswordManagers } from '../../components/password-managers';
 
 export default class SwatchesPicker extends Component<ColorFieldSignature> {
   private handleChange = (value: string | null) => {
@@ -24,6 +25,7 @@ export default class SwatchesPicker extends Component<ColorFieldSignature> {
       @onChange={{this.handleChange}}
       @disabled={{not @canEdit}}
       @paletteColors={{this.paletteColors}}
+      {{ignoredByPasswordManagers}}
     />
   </template>
 }

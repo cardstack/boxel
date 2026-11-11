@@ -71,6 +71,7 @@ import {
   proposeFix,
 } from '../lib/realm-runner/auto-fix';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
+import { roomCredits, type RoomCredits } from '../lib/realm-runner/credits';
 import {
   compactDiff,
   CARD_CHANGES_IN_DETAIL,
@@ -143,6 +144,10 @@ import type {
   RealmScriptErrorInfo,
 } from '../lib/realm-runner/types';
 
+import type {
+  default as BillingService,
+  SubscriptionData,
+} from '../services/billing-service';
 import type CardService from '../services/card-service';
 import type ClientTelemetryService from '../services/client-telemetry';
 import type EnvironmentService from '../services/environment-service';
@@ -410,7 +415,7 @@ type CreateWorkspace = (input: {
   endpoint?: string;
 }) => Promise<{ url: string; name: string }>;
 
-// Deletes a workspace the current user owns and returns its URL.
+// Deletes a workspace the current user administers and returns its URL.
 type DeleteWorkspace = (realmIdentifier: string) => Promise<{ url: string }>;
 
 // The index of the run's realm. Every call acts on the whole realm or on
@@ -423,6 +428,16 @@ interface IndexActions {
 }
 
 const MAX_INVALIDATE_PATHS = 100;
+// The index calls a run may make. Each call starts an index job on the realm
+// server, so a loop must not start many. A reindex or a full reindex covers
+// the whole realm, so a second one in the same run does no more work; a full
+// reindex is the most costly of them.
+const MAX_INDEX_CALLS = {
+  'index.invalidate': 10,
+  'index.reindex': 1,
+  'index.fullReindex': 1,
+} as const;
+type LimitedIndexCall = keyof typeof MAX_INDEX_CALLS;
 
 // Calls that cannot be undone, that spend the user's credit, that change
 // the state of a whole realm for a long time, or that fetch any URL with the
@@ -490,6 +505,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'room.enableSkills': false,
   'room.disableSkills': false,
   'room.setModel': false,
+  'room.credits': false,
   'ui.switchSubmode': false,
   'ui.openFile': false,
   'ui.previewFormat': false,
@@ -613,6 +629,9 @@ class RealmFsSession {
   private webCalls = 0;
   private reportedActivities = 0;
   private resolveCalls = 0;
+  private indexCalls = Object.fromEntries(
+    Object.keys(MAX_INDEX_CALLS).map((method) => [method, 0]),
+  ) as Record<LimitedIndexCall, number>;
   private researchBytes = 0;
   private researchSlots = MAX_PARALLEL_RESEARCH;
   private researchWaiters: (() => void)[] = [];
@@ -973,6 +992,32 @@ class RealmFsSession {
         `Firecrawl could not read ${host}: ${coerceErrorMessage(error, 'unknown error')}`,
       );
       throw error;
+    }
+  }
+
+  // Runs an index call that counts toward its limit. The call is counted
+  // before it starts, so calls made at the same time cannot pass the limit.
+  // A call that fails did not start a job, so it gives its slot back and the
+  // script can try again.
+  private async runIndexCall(
+    method: LimitedIndexCall,
+    call: () => Promise<void>,
+  ) {
+    let max = MAX_INDEX_CALLS[method];
+    if (this.indexCalls[method] >= max) {
+      throw new Error(
+        `Realm code may call realm.${method} at most ${max === 1 ? 'once' : `${max} times`} per run` +
+          (method === 'index.invalidate'
+            ? `; pass up to ${MAX_INVALIDATE_PATHS} paths in one call`
+            : ''),
+      );
+    }
+    this.indexCalls[method] += 1;
+    try {
+      await call();
+    } catch (e) {
+      this.indexCalls[method] -= 1;
+      throw e;
     }
   }
 
@@ -1462,6 +1507,8 @@ class RealmFsSession {
         return this.room.disableSkills(args[0]);
       case 'room.setModel':
         return await this.room.setModel(args[0]);
+      case 'room.credits':
+        return await this.room.credits();
       case 'ui.switchSubmode': {
         let submode = args[0];
         if (submode !== 'interact' && submode !== 'code') {
@@ -1538,20 +1585,20 @@ class RealmFsSession {
           );
         }
         let urls = paths.map((path) => this.resolve(method, path));
-        await this.index.invalidate(urls);
+        await this.runIndexCall(method, () => this.index.invalidate(urls));
         let invalidated = urls.map((url) => this.relative(url));
         this.indexActions.push(`invalidate ${invalidated.join(', ')}`);
         return { invalidated };
       }
       case 'index.reindex':
-        await this.index.reindex();
+        await this.runIndexCall(method, () => this.index.reindex());
         this.indexActions.push('reindex');
         return { reindex: 'started' };
       case 'index.fullReindex':
         if (!this.namedCalls.has('realm.index.fullReindex')) {
           throw notNamedError('realm.index.fullReindex');
         }
-        await this.index.fullReindex();
+        await this.runIndexCall(method, () => this.index.fullReindex());
         this.indexActions.push('fullReindex');
         return { fullReindex: 'started' };
       case 'index.cancelJob':
@@ -2779,6 +2826,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeInput,
   typeof BaseToolModule.RunRealmCodeResult
 > {
+  @service declare private billingService: BillingService;
   @service declare private cardService: CardService;
   @service declare private clientTelemetry: ClientTelemetryService;
   @service declare private environmentService: EnvironmentService;
@@ -2834,7 +2882,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'realm.activity({ message, current, total }) (current is 1-based into the ' +
     'plan; add count and of for progress inside a step, e.g. page 3 of 5), ' +
     'can create workspaces with realm.workspaces.create, ' +
-    'can change the skills and model of this room with room.*, and can ' +
+    'can change the skills and model of this room with room.*, can read ' +
+    "the user's plan, credit balance and this room's spend with " +
+    'room.credits(), and can ' +
     'refresh the index of the workspace with realm.index.*. A card that ' +
     'realm.cards.get reports as not indexed while the workspace is not ' +
     'indexing will not index by waiting: run ' +
@@ -3071,6 +3121,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         new RoomActions({
           checkSkill: (id) => this.checkSkill(id),
           knownModels: () => this.matrixService.pickableModelIds(roomId),
+          credits: () => this.roomCredits(roomId),
         }),
         this.research(roomId),
         (search) =>
@@ -3323,6 +3374,36 @@ export default class RunRealmCodeTool extends HostBaseTool<
       }
     }
     return changes;
+  }
+
+  // `room.credits()`: the balance is read fresh, since every answer spends
+  // from it, and a balance that can't be read is an error rather than an
+  // older one.
+  private async roomCredits(roomId: string): Promise<RoomCredits> {
+    let roomResource = this.matrixService.roomResources.get(roomId);
+    if (!roomResource) {
+      throw new Error(
+        `room.credits cannot read the messages of room ${roomId}`,
+      );
+    }
+    let subscription: SubscriptionData | undefined;
+    try {
+      subscription = await this.billingService.loadSubscriptionData();
+    } catch (error) {
+      console.error('room.credits: loading the subscription failed', error);
+    }
+    if (!subscription) {
+      throw new Error(
+        "room.credits could not read the account's credits from the server. Try again, or see Profile → Membership Tier",
+      );
+    }
+    // The room's processing restarts when a new event arrives, which cancels
+    // the run being awaited; the messages read after it are current either way.
+    await Promise.allSettled([roomResource.processing]);
+    return roomCredits(
+      subscription,
+      roomResource.messages.map((message) => message.usage),
+    );
   }
 
   private async checkSkill(id: string): Promise<void> {

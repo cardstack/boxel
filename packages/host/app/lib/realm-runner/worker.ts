@@ -124,6 +124,7 @@ const BOOTSTRAP = `
       enableSkills: (ids) => call('room.enableSkills', [ids]),
       disableSkills: (ids) => call('room.disableSkills', [ids]),
       setModel: (model) => call('room.setModel', [model]),
+      credits: () => call('room.credits', []),
     });
     delete globalThis.__realmURL;
   })();
@@ -190,6 +191,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'room.enableSkills',
   'room.disableSkills',
   'room.setModel',
+  'room.credits',
   'ui.switchSubmode',
   'ui.openFile',
   'ui.previewFormat',

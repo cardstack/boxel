@@ -54,7 +54,7 @@ evidence.
   browser action of a paid run. For evaluations, `pnpm eval:setup` has created the
   AI Assistant Evaluations workspace of the writer user (`user` locally), at
   the endpoint `evals`, and pushed the cards.
-- An evaluation with `pipelineApprovals` (the "Interactive use not approved"
+- An evaluation with `automationApprovals` (the "Interactive use not approved"
   evaluations in `Evaluation/interactive-use-*.json`) also needs
   `ai-assistant-eval-key-sharer` (`EVAL_SHARE_OWNER`), which `pnpm eval:users`
   registers, and the `boxel-pg` container: the runner seeds each approval

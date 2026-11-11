@@ -3,6 +3,8 @@ import { action } from '@ember/object';
 
 import Component from '@glimmer/component';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
+
 import {
   BoxelInput,
   BoxelSelect,
@@ -209,6 +211,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
               @value={{@selection.widthInput}}
               @onInput={{this.setWidth}}
               aria-label='Width'
+              {{ignoredByPasswordManagers}}
               data-test-markdown-embed-preview-width
             />
             <IconX
@@ -220,6 +223,7 @@ export default class MarkdownEmbedPreviewPane extends Component<Signature> {
               @value={{@selection.heightInput}}
               @onInput={{this.setHeight}}
               aria-label='Height'
+              {{ignoredByPasswordManagers}}
               data-test-markdown-embed-preview-height
             />
           </div>

@@ -85,7 +85,12 @@ class UseKey extends Component<{
         @onRetry={{this.load}}
       />
     {{else if this.choosing}}
-      <form novalidate {{on 'submit' this.next}} data-test-use-key-form>
+      <form
+        novalidate
+        data-form-type='other'
+        {{on 'submit' this.next}}
+        data-test-use-key-form
+      >
         <EditPage @heading={{this.title}} data-test-use-key>
           <:intro>
             {{#if this.choosing.share}}

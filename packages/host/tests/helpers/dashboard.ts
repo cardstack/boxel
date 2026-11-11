@@ -95,7 +95,7 @@ export const ownedRealmURL = 'http://test-realm/testuser/workspace-b/';
 export const sharedRealmURL = 'http://test-realm/testuser/workspace-c/';
 
 // Adds Workspace B, which the test user owns too, and Workspace C, which is
-// only shared with them, to the dashboard's Workspace A.
+// shared with them to read only, to the dashboard's Workspace A.
 export function setupMoreWorkspaces(
   hooks: NestedHooks,
   mockMatrixUtils: MockUtils,
@@ -103,7 +103,7 @@ export function setupMoreWorkspaces(
   hooks.beforeEach(async function () {
     for (let [url, name, permissions] of [
       [ownedRealmURL, 'Workspace B', ['read', 'write', 'realm-owner']],
-      [sharedRealmURL, 'Workspace C', ['read', 'write']],
+      [sharedRealmURL, 'Workspace C', ['read']],
     ] as const) {
       await setupAcceptanceTestRealm({
         realmURL: url,

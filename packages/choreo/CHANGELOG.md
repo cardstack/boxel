@@ -46,6 +46,19 @@ versions may change behavior until `1.0.0`.
   its first frame advances like any other, clock and tweens alike, so that motion doesn't stand
   still for a frame. A run replaced before it painted was never seen moving, and its replacement
   opens at its start.
+- **Measuring doesn't move the scroll.** A region measures with its runs' values at rest, and a
+  translate that reached past the end of its scroller had added to the scroll height, so a reader at
+  the end was clamped to the shorter height, and a scroll owner such as a stick-to-bottom transcript
+  took the clamp for the reader scrolling up. While the regions measure, the render pass now holds
+  the scroll height of the nearest block-flow scroller above each region with a hidden block after
+  its content, and takes the block out once the runs stand again. A region with no scrolling element
+  above it holds the document, with the block at the end of `<body>`. A `@route` region takes the
+  block out before it runs `@scroll` and places the window. `<body>` with an overflow of its own (such as
+  `overflow-x: hidden`) while `<html>`'s is visible is no longer taken for a scroller, since its
+  overflow goes to the viewport: the document is held, and `@inView` measures against the viewport
+  there. A scroller that is a flex or grid container, or whose own size would change with the block
+  in, is not held. While the block stands, a stylesheet rule that picks the scroller's children by
+  their place among siblings (`:last-child`) doesn't match the real last child.
 - **`animationsSettled()` waits for a text delivery to give its text back.** A `@by='character'`
   or `@by='word'` delivery lands on its own platform animations, which can finish after the run's
   clock has ended. The region now reports `delivery in flight` until the sprite's original text is

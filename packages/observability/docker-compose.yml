@@ -29,6 +29,10 @@ services:
       # committed provisioning/datasources/ tree only and never sees this
       # override. See provisioning/local-only/synapse-prometheus.yaml.
       - ./provisioning/local-only/synapse-prometheus.yaml:/etc/grafana/provisioning/datasources/synapse-prometheus.yaml:ro
+      # Local-only override of the realm-server-operator datasource: the dev
+      # realm server on the host, its mkcert certificate not verified, and its
+      # default GRAFANA_SECRET. See provisioning/local-only/realm-server-operator.yaml.
+      - ./provisioning/local-only/realm-server-operator.yaml:/etc/grafana/provisioning/datasources/realm-server-operator.yaml:ro
       # Dashboards arrive via grafanactl resources push (Phase 3 / CS-10922).
       # Local file-based dashboard provisioning is also possible — uncomment
       # the next line if a dev wants dashboards baked into the container.
@@ -37,6 +41,16 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # The URL the browser reaches Grafana at. A table panel's operator action
+      # posts to a path on Grafana itself, and Grafana resolves that path
+      # against this, so it must match the published port. Staging and
+      # production set it to their public host (cardstack/infra configs/grafana).
+      GF_SERVER_ROOT_URL: http://localhost:3001/
+      # Grafana refuses a table panel's action that POSTs to Grafana itself
+      # unless the path is listed here. Operator actions post to the
+      # realm-server-operator datasource proxy. Staging and production set the
+      # same value (cardstack/infra configs/grafana).
+      GF_SECURITY_ACTIONS_ALLOW_POST_URL: /api/datasources/proxy/uid/realm-server-operator/*
       # Business Forms panel — used by the Operator Actions panels in the
       # boxel-status/indexing, realms, users, and job-queue dashboards.
       # Community-signed; maintained by Grafana Labs (the original Volkov

@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { chromeSandboxEnabled } from '@cardstack/runtime-common/chrome-sandbox';
 
 // `render-desync=info` stays on so the desync detector's verdicts (warns
 // on detection, plus any debug logs we add later) make it into CI output;
@@ -36,6 +37,9 @@ export default defineConfig({
     baseURL: realmURL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    // The sandbox is off only on Linux, for the reasons
+    // `chromeSandboxEnabled` gives.
+    launchOptions: { chromiumSandbox: chromeSandboxEnabled() },
   },
   globalSetup: './playwright.global-setup.ts',
   globalTeardown: './playwright.global-teardown.ts',

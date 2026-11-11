@@ -17,6 +17,11 @@ declare global {
   interface HTMLStyleElementAttributes {
     ['scoped']: string | boolean | null | undefined;
   }
+  // `passwordrules`, which password managers read on a new-password input
+  // and Glint's element types don't name.
+  interface HTMLInputElementAttributes {
+    ['passwordrules']: string | null | undefined;
+  }
 }
 
 // `ember-source` types its template intrinsics (`on`, `concat`, `fn`) as

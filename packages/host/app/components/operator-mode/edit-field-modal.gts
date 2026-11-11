@@ -8,6 +8,7 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { restartableTask } from 'ember-concurrency';
 
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
@@ -389,6 +390,7 @@ export default class EditFieldModal extends Component<Signature> {
             @onInput={{this.onFieldNameInput}}
             @errorMessage={{this.fieldNameErrorMessage}}
             @state={{if (bool this.fieldNameErrorMessage) 'invalid' 'none'}}
+            {{ignoredByPasswordManagers}}
             data-test-field-name-input
           />
         </FieldContainer>

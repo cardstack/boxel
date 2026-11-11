@@ -2904,9 +2904,9 @@ await realm.workspaces.create({ name: 'Side Project' });`,
       calls.push(realmURL);
     };
     let realmService = getService('realm');
-    let isRealmOwner = realmService.isRealmOwner.bind(realmService);
-    realmService.isRealmOwner = (url) =>
-      url === ownedRealmURL || isRealmOwner(url);
+    let canAdminister = realmService.canAdminister.bind(realmService);
+    realmService.canAdminister = (url) =>
+      url === ownedRealmURL || canAdminister(url);
     return calls;
   }
 
@@ -2929,7 +2929,7 @@ await realm.workspaces.create({ name: 'Side Project' });`,
     );
   });
 
-  test('realm.workspaces.delete deletes a workspace the user owns', async function (assert) {
+  test('realm.workspaces.delete deletes a workspace the user administers', async function (assert) {
     let oldWorkspace = 'http://test-realm/testuser/old/';
     let deleteRealmCalls = stubWorkspaceDeletion(oldWorkspace);
     let command = new RunRealmCodeTool(getService('tool-service').toolContext);
@@ -2997,7 +2997,7 @@ await realm.workspaces.create({ name: 'Old' });`,
     );
   });
 
-  test('realm.workspaces.delete refuses a workspace the user does not own', async function (assert) {
+  test('realm.workspaces.delete refuses a workspace the user does not administer', async function (assert) {
     let deleteRealmCalls = stubWorkspaceDeletion(
       'http://test-realm/testuser/old/',
     );
@@ -3009,7 +3009,7 @@ await realm.workspaces.create({ name: 'Old' });`,
         roomId: '!room:example.com',
         code: `await realm.workspaces.delete('http://test-realm/someone-else/theirs/');`,
       }),
-      /the current user is not its owner/,
+      /the current user does not administer it/,
     );
     assert.deepEqual(deleteRealmCalls, [], 'no realm is deleted');
   });
@@ -3116,6 +3116,77 @@ return refused;`,
     assert.true(/Path is outside this realm/.test(outside), outside);
     assert.true(/expects a path or an array/.test(empty), empty);
     assert.deepEqual(calls, [], 'nothing is invalidated');
+  });
+
+  test('a script may make only a few index calls per run', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let refused = [];
+for (let i = 0; i < 11; i++) {
+  try { await realm.index.invalidate('task.json'); } catch (e) { refused.push(e.message); }
+}
+for (let i = 0; i < 2; i++) {
+  try { await realm.index.reindex(); } catch (e) { refused.push(e.message); }
+  try { await realm.index.fullReindex(); } catch (e) { refused.push(e.message); }
+}
+return refused;`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), [
+      'Realm code may call realm.index.invalidate at most 10 times per run; pass up to 100 paths in one call',
+      'Realm code may call realm.index.reindex at most once per run',
+      'Realm code may call realm.index.fullReindex at most once per run',
+    ]);
+    assert.strictEqual(
+      calls.filter((call) => call.action === 'invalidate').length,
+      10,
+      'only 10 invalidations start',
+    );
+    assert.deepEqual(
+      calls.filter((call) => call.action !== 'invalidate'),
+      [
+        { action: 'reindex', realm: testRealmURL },
+        { action: 'fullReindex', realm: testRealmURL },
+      ],
+      'one reindex and one full reindex start',
+    );
+  });
+
+  test('an index call that fails on the realm server does not use up its slot', async function (assert) {
+    let calls = stubIndexing();
+    let realmService = getService('realm');
+    let failures = 1;
+    realmService.reindex = async (realm) => {
+      if (failures > 0) {
+        failures -= 1;
+        throw new Error('realm server error');
+      }
+      calls.push({ action: 'reindex', realm });
+    };
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let errors = [];
+try { await realm.index.reindex(); } catch (e) { errors.push(e.message); }
+let retry = await realm.index.reindex();
+return { errors, retry };`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      errors: ['realm server error'],
+      retry: { reindex: 'started' },
+    });
+    assert.deepEqual(
+      calls,
+      [{ action: 'reindex', realm: testRealmURL }],
+      'the retry starts the reindex',
+    );
   });
 
   test('a script that starts a full reindex or cancels an indexing job always waits for the user', async function (assert) {

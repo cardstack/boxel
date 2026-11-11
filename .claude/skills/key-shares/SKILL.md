@@ -41,6 +41,30 @@ label keep working once it is brought back. Deleting a realm deletes its
 shares and their notices, so a realm later made at the same URL gets none of
 them back.
 
+### What an unattended run checks before it starts
+
+An automation (a run the realm server makes on its own, for its payer) asks
+`automationAdmission` in `lib/key-bindings.ts` about each operation it
+declares before its script starts. For a slot filled from a share, that's the
+check every call makes (`checkSlots`), and the first one the slot fails stops
+the run:
+
+- the share is suspended, for any reason: `share-suspended`;
+- the share's binding was made for another request than the operation sends
+  now: `binding-needs-reapproval`;
+- the share's grant at the destination is gone: `binding-not-approved`;
+- the vendor rejected the share's key at that destination, or Google refused
+  its service-account key, and no probe is due: `credential-rejected`;
+- the share's key is a `client_credentials` client whose token endpoint
+  refused its secret (`oauth_clients.state = 'broken'`): `credential-rejected`
+  with `reason: 'needs-admin'`. A connection is never shared, so the
+  connection-only reasons don't arise for a share slot. See the
+  `oauth-connections` skill.
+
+The run opens no key at admission and asks no vendor. A run doesn't need the
+share's binding approved for interactive use, and it isn't counted against
+the share's limits, since only interactive calls are.
+
 ## Triggers
 
 Suspensions that follow from another change are made by triggers, so they

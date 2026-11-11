@@ -6,7 +6,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
-import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
+import { CardCrudFunctionsContextName, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { setupBaseRealm } from './base-realm';
@@ -41,6 +41,22 @@ export interface GalleryInstance {
     meta: { adoptsFrom: { module: string; name: string } };
     relationships?: Record<string, { links: { self: string } }>;
   };
+}
+
+/** the attributes of the gallery's theme card that a test edits */
+export interface GalleryThemeAttributes {
+  rootVariables: Record<string, string>;
+  darkModeVariables: Record<string, string>;
+  customCssVariables: { name: string; value: string; darkValue?: string }[];
+  typography: Record<string, Record<string, string>>;
+}
+
+/**
+ * The theme a card the helpers build links: the gallery's own when `theme`
+ * is left out, the given theme card, or none for `null`.
+ */
+export interface DemoThemeOptions {
+  theme?: CardAPI.CardDef | null;
 }
 
 const CONTENTS = choreoGalleryContents();
@@ -116,26 +132,41 @@ export function setupChoreoGalleryTest(
      * instance a test builds.
      */
     theme(): Promise<CardAPI.CardDef> {
-      theme ??= (async () => {
-        let doc = JSON.parse(CONTENTS['theme.json'] as string);
-        let { createFromSerialized } = await gallery.loader.import<
-          typeof CardAPI
-        >('@cardstack/base/card-api');
-        return await createFromSerialized<typeof CardAPI.CardDef>(
-          doc.data,
-          doc,
-          new URL(`${testRealmURL}theme`),
-        );
-      })();
+      theme ??= gallery.buildTheme();
       return theme;
     },
 
-    /** the `cardInfo` of a gallery card: its link to the gallery's theme */
-    async cardInfo(): Promise<CardAPI.CardInfoField> {
+    /**
+     * A new theme card built from the realm's `theme.json`, after `edit`
+     * changes its attributes: a variation on the gallery's theme.
+     */
+    async buildTheme(
+      edit: (attributes: GalleryThemeAttributes) => void = () => {},
+    ): Promise<CardAPI.CardDef> {
+      let doc = JSON.parse(CONTENTS['theme.json'] as string);
+      edit(doc.data.attributes);
+      let { createFromSerialized } = await gallery.loader.import<
+        typeof CardAPI
+      >('@cardstack/base/card-api');
+      return await createFromSerialized<typeof CardAPI.CardDef>(
+        doc.data,
+        doc,
+        rri(`${testRealmURL}theme`),
+      );
+    },
+
+    /**
+     * The `cardInfo` of a gallery card: its link to the gallery's theme, or
+     * to the theme `opts` names.
+     */
+    async cardInfo(
+      opts: DemoThemeOptions = {},
+    ): Promise<CardAPI.CardInfoField> {
       let { CardInfoField } = await gallery.loader.import<typeof CardAPI>(
         '@cardstack/base/card-api',
       );
-      return new CardInfoField({ theme: await gallery.theme() });
+      let theme = opts.theme === undefined ? await gallery.theme() : opts.theme;
+      return new CardInfoField(theme ? { theme } : {});
     },
 
     /** a module of the gallery realm, by its path there: `stages/fold` */
@@ -182,8 +213,8 @@ export function setupChoreoGalleryTest(
     },
 
     /** Render one demo the index links as its card's page, isolated. */
-    async renderDemo(slug: string) {
-      let demo = (await gallery.demos([slug]))[0]!;
+    async renderDemo(slug: string, opts: DemoThemeOptions = {}) {
+      let demo = (await gallery.demos([slug], opts))[0]!;
       await renderCard(gallery.loader, demo, 'isolated');
     },
 
@@ -193,6 +224,7 @@ export function setupChoreoGalleryTest(
      */
     async demos(
       slugs: string[] = GALLERY_DEMOS,
+      opts: DemoThemeOptions = {},
     ): Promise<DemoModule.GalleryDemo[]> {
       let { DemoLesson, WalkthroughStep } =
         await gallery.import<typeof DemoModule>('demo');
@@ -207,7 +239,7 @@ export function setupChoreoGalleryTest(
           return new classes[name]!({
             id: `${testRealmURL}demos/${slug}`,
             ...attributes,
-            cardInfo: await gallery.cardInfo(),
+            cardInfo: await gallery.cardInfo(opts),
             lesson: lesson ? new DemoLesson(lesson) : undefined,
             walkthrough: (walkthrough ?? []).map(
               (step) => new WalkthroughStep(step),

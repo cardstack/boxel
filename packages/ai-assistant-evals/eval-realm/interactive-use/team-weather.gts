@@ -5,7 +5,7 @@ import { instance, operation } from '@cardstack/base/operations';
 // A card whose forecast comes from an outside weather service, sent with a
 // key someone shared into the workspace (an `apiKey` slot). The evaluation
 // that seeds it has another user share their key and approve `forecast` for
-// the realm's scheduled pipelines only, so an invocation from the AI
+// the realm's automations only, so an invocation from the AI
 // assistant is refused "Interactive use not approved", and only the user who
 // shared the key can allow it.
 export class TeamWeather extends CardDef {
