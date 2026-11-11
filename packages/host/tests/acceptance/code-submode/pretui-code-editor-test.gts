@@ -26,6 +26,7 @@ import {
 } from '../../helpers';
 import {
   codeEditorContent,
+  codeEditorContentSelector,
   codeEditorView,
   typeInCodeEditor,
   waitForCodeEditor,
@@ -164,7 +165,7 @@ module('Acceptance | code submode | pretui code editor', function (hooks) {
     setMonacoContent(snippetDocument('const c = 3;'));
     await waitUntil(
       () =>
-        document.querySelector(`${EDITOR} .cm-content`) &&
+        document.querySelector(codeEditorContentSelector(EDITOR)) &&
         codeEditorContent(EDITOR) === 'const c = 3;',
       { timeout: 10_000 },
     );
@@ -188,7 +189,11 @@ module('Acceptance | code submode | pretui code editor', function (hooks) {
     let view = codeEditorView(EDITOR);
     view.focus();
     view.dispatch({ selection: { anchor: view.state.doc.length } });
-    await triggerKeyEvent(`${EDITOR} .cm-content`, 'keydown', 'Enter');
+    await triggerKeyEvent(
+      codeEditorContentSelector(EDITOR),
+      'keydown',
+      'Enter',
+    );
 
     assert.true(
       codeEditorView(EDITOR).contentDOM.contains(document.activeElement),

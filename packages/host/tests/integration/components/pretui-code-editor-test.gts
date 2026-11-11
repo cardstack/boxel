@@ -12,6 +12,7 @@ import { module, test } from 'qunit';
 import cmContext from '@cardstack/host/lib/codemirror-context';
 
 import {
+  codeEditorContentSelector,
   codeEditorView,
   setCodeEditorContent,
   typeInCodeEditor,
@@ -56,7 +57,9 @@ module('Integration | pretui code editor', function (hooks) {
         element.querySelector('.tok-keyword'),
         'JavaScript tokens are tagged for the host component to colour',
       );
-      let content = element.querySelector<HTMLElement>('.cm-content');
+      let content = element.querySelector<HTMLElement>(
+        "[aria-multiline='true']",
+      );
       assert.strictEqual(
         content?.getAttribute('aria-readonly'),
         'true',
@@ -98,7 +101,7 @@ module('Integration | pretui code editor', function (hooks) {
 
     assert.dom('.pretui-code-editor').hasAttribute('data-loaded', 'true');
     assert
-      .dom('[data-test-pretui-code-editor-host] .cm-content')
+      .dom(codeEditorContentSelector('[data-test-pretui-code-editor-host]'))
       .hasAttribute('id', 'script-source', 'the label can point at it');
     assert.dom('.cm-lineNumbers').exists('line numbers show');
 
@@ -219,7 +222,7 @@ module('Integration | pretui code editor', function (hooks) {
     );
     await waitForCodeEditor();
     let content = document.querySelector(
-      '[data-test-pretui-code-editor-host] .cm-content',
+      codeEditorContentSelector('[data-test-pretui-code-editor-host]'),
     )!;
     let name = content
       .getAttribute('aria-labelledby')
@@ -254,7 +257,7 @@ module('Integration | pretui code editor', function (hooks) {
     let view = codeEditorView();
     assert.true(view.state.readOnly);
     assert
-      .dom('[data-test-pretui-code-editor-host] .cm-content')
+      .dom(codeEditorContentSelector('[data-test-pretui-code-editor-host]'))
       .hasAttribute('aria-readonly', 'true');
     view.contentDOM.focus();
     assert.strictEqual(

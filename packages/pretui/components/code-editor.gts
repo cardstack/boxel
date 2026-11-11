@@ -452,6 +452,8 @@ export class CodeEditor extends Component<CodeEditorSignature> {
           @maxLines={{this.maxLines}}
           @noCopy={{true}}
           @label={{@label}}
+          @labelledBy={{@labelledBy}}
+          @describedBy={{@describedBy}}
           @density='compact'
         />
       {{/if}}
