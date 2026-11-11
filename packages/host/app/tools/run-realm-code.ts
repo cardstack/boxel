@@ -1314,10 +1314,15 @@ class RealmFsSession {
             );
           }
           let { path, operation, payload } = item as Record<string, unknown>;
-          // A type is refused under either spelling: as its own member, and
-          // as { module, name } where the path goes, which `operationEntry`
-          // otherwise reads as a type.
-          if ('type' in item || (path !== null && typeof path === 'object')) {
+          // A type is refused where it stands in for the path: as
+          // { module, name } in the path slot, which `operationEntry`
+          // otherwise reads as a type, or as a `type` member on an entry with
+          // no path. An entry with a path names a card even when it carries a
+          // `type` too, as a card spread from realm.cards.search does.
+          if (
+            (path !== null && typeof path === 'object') ||
+            (path === undefined && 'type' in item)
+          ) {
             // A batch commits in the realm of the card it is anchored on, and
             // an operation on a type names no card to anchor it.
             throw new TypeError(

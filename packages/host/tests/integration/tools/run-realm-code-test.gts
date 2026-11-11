@@ -5859,6 +5859,39 @@ return refusals;`);
       );
     });
 
+    // A search answers each card with its type beside its path, so a batch
+    // built by spreading the results carries both.
+    test('a batch entry spread from a search result runs on the card at its path', async function (assert) {
+      let result = await run(`
+let found = await realm.cards.search({
+  filter: {
+    on: { module: ${JSON.stringify(`${testRealmURL}patient`)}, name: 'Patient' },
+    eq: { ward: 'Oncology' },
+  },
+});
+let answers = await realm.operations.invokeBatchOperation(
+  found.cards.map((patient) => ({
+    ...patient,
+    operation: 'recordVitals',
+    payload: { reading: 'HR 70' },
+  })),
+);
+return {
+  carriedType: found.cards.every((patient) => patient.type !== undefined),
+  paths: answers.map((answer) => answer.path),
+};`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        carriedType: true,
+        paths: ['Patient/dev.json'],
+      });
+      assert.strictEqual(
+        (await attributesOf('Patient/dev.json')).lastVitals,
+        'HR 70',
+        'the operation ran on the card at the path',
+      );
+    });
+
     // The example the realm runner is for: find the patients of a ward, then
     // record their vitals in one batch that the realm carries out whole.
     test('realm.operations.invokeBatchOperation updates many patients in one batch', async function (assert) {
