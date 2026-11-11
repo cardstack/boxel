@@ -66,13 +66,13 @@ export interface ReadAutomationOptions {
   virtualNetwork?: Pick<VirtualNetwork, 'toURL' | 'toURLHref'>;
 }
 
-// Values a trigger or the automation hands the script.
+// Values the automation hands the script.
 export type AutomationParams = Record<string, string>;
 
 export type AutomationTriggerDeclaration =
-  | (CronTrigger & { params: AutomationParams })
-  | (OnceTrigger & { timeZone: string; params: AutomationParams })
-  | (WebhookTrigger & { webhookPath: string; params: AutomationParams });
+  | CronTrigger
+  | (OnceTrigger & { timeZone: string })
+  | (WebhookTrigger & { webhookPath: string });
 
 export interface AutomationOperationDeclaration {
   targetType: ResolvedCodeRef;
@@ -577,17 +577,16 @@ function readTriggers(
     } else {
       labels.add(label);
     }
-    let params = readParams(trigger.params, `${path}.params`, report);
     let kind = trigger.kind;
     if (kind === 'cron') {
       let cron = readCron(trigger, path, report);
       if (cron && label !== undefined) {
-        triggers.push({ kind, label, ...cron, params });
+        triggers.push({ kind, label, ...cron });
       }
     } else if (kind === 'once') {
       let once = readOnce(trigger, path, report);
       if (once && label !== undefined) {
-        triggers.push({ kind, label, ...once, params });
+        triggers.push({ kind, label, ...once });
       }
     } else if (kind === 'webhook') {
       let webhookPath = text(trigger.webhookPath);
@@ -598,7 +597,7 @@ function readTriggers(
           'A webhook trigger names one of the realm’s incoming webhooks by its path',
         );
       } else if (label !== undefined) {
-        triggers.push({ kind, label, webhookPath, params });
+        triggers.push({ kind, label, webhookPath });
       }
     } else {
       report(

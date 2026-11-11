@@ -38,7 +38,6 @@ function cron(expression: string, extra: Record<string, unknown> = {}) {
     date: null,
     time: null,
     webhookPath: null,
-    params: [],
     ...extra,
   };
 }
@@ -93,7 +92,6 @@ const tests = Object.freeze({
             cron('30 2 * * *', {
               count: 10,
               untilDate: '2026-12-31',
-              params: [{ name: 'mode', value: 'full' }],
             }),
             {
               ...cron(''),
@@ -142,20 +140,17 @@ const tests = Object.freeze({
             'America/Chicago',
           ),
           count: 10,
-          params: { mode: 'full' },
         },
         {
           kind: 'once',
           label: 'launch',
           at: zonedDateTimeToUnixSeconds('2026-11-20T15:00', 'America/Chicago'),
           timeZone: 'America/Chicago',
-          params: {},
         },
         {
           kind: 'webhook',
           label: 'push',
           webhookPath: 'github-push',
-          params: {},
         },
       ],
       operations: [

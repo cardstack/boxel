@@ -50,7 +50,6 @@ module(basename(import.meta.filename), function (hooks) {
         date: null,
         time: null,
         webhookPath: null,
-        params: [{ name: 'mode', value: 'full' }],
       },
       {
         kind: 'once',
@@ -63,7 +62,6 @@ module(basename(import.meta.filename), function (hooks) {
         date: '2026-11-20',
         time: '15:00',
         webhookPath: null,
-        params: [],
       },
       {
         kind: 'webhook',
@@ -76,7 +74,6 @@ module(basename(import.meta.filename), function (hooks) {
         date: null,
         time: null,
         webhookPath: 'github-push',
-        params: [],
       },
     ],
     operations: [

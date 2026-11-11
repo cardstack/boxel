@@ -47,7 +47,6 @@ function trigger(kind: string, extra: Record<string, unknown> = {}) {
     date: null,
     time: null,
     webhookPath: null,
-    params: [],
     ...extra,
   };
 }
@@ -134,6 +133,17 @@ function inputOf(label: string, scope: ParentNode = document) {
   let input = field(label, scope).querySelector('input');
   if (!input) {
     throw new Error(`the field labelled "${label}" has no input`);
+  }
+  return input;
+}
+
+// A param row's inputs are named by the list's Name and Value headings.
+function paramInput(part: 'name' | 'value', row: ParentNode) {
+  let input = row.querySelector<HTMLInputElement>(
+    `input[aria-label="Param ${part}"]`,
+  );
+  if (!input) {
+    throw new Error(`the param row has no ${part} input`);
   }
   return input;
 }
@@ -528,7 +538,7 @@ module('Acceptance | automation edit format', function (hooks) {
     assert.ok(true);
   });
 
-  test('a trigger changes kind, takes a webhook path, and carries its own params', async function (assert) {
+  test('a trigger changes kind and takes a webhook path', async function (assert) {
     await openEdit();
     let item = triggerItem(0);
 
@@ -540,28 +550,10 @@ module('Acceptance | automation edit format', function (hooks) {
         d.attributes.triggers[0].webhookPath === 'stripe-events',
       'the webhook kind and path are saved',
     );
-
-    let params = section('Params for this trigger');
-    await click(buttonIn(params, 'Add a param'));
-    await fillIn(
-      params.querySelector('input[aria-label="Param name"]')!,
-      'fullRefresh',
-    );
-    await fillIn(
-      params.querySelector('input[aria-label="Param value"]')!,
-      'true',
-    );
-    await waitForSave(
-      (d) =>
-        d.attributes.triggers[0].params.length === 1 &&
-        d.attributes.triggers[0].params[0].name === 'fullRefresh' &&
-        d.attributes.triggers[0].params[0].value === 'true',
-      'the trigger’s param is saved',
-    );
-    await click(buttonIn(params, 'Remove'));
-    await waitForSave(
-      (d) => d.attributes.triggers[0].params.length === 0,
-      'removing the trigger’s param is saved',
+    assert.strictEqual(
+      item.querySelector('input[aria-label="Param name"]'),
+      null,
+      'a trigger has no params of its own',
     );
 
     await click(item.querySelector('input[type="radio"][value="once"]')!);
@@ -586,6 +578,10 @@ module('Acceptance | automation edit format', function (hooks) {
       'cron',
       'a new trigger starts as a schedule',
     );
+    assert
+      .dom('[data-test-automation-remove-trigger="2"]')
+      .hasText('Remove this trigger');
+    assert.dom('[data-test-automation-remove-trigger="2"] svg').exists();
     await click('[data-test-automation-remove-trigger="2"]');
     await waitForSave(
       (d) => d.attributes.triggers.length === 2,
@@ -817,6 +813,10 @@ module('Acceptance | automation edit format', function (hooks) {
       'the chosen call is saved as its card type and name',
     );
 
+    assert
+      .dom('[data-test-automation-remove-service]')
+      .hasAria('label', 'Remove this outside service');
+    assert.dom('[data-test-automation-remove-service] svg').exists();
     await click('[data-test-automation-remove-service]');
     await waitForSave(
       (d) => d.attributes.operations.length === 0,
@@ -848,9 +848,9 @@ module('Acceptance | automation edit format', function (hooks) {
     let param = document.querySelector(
       '[data-test-automation-param="0"]',
     ) as HTMLElement;
-    await fillIn(inputOf('Name', param), 'repository');
+    await fillIn(paramInput('name', param), 'repository');
     assert.dom('[data-test-automation-params-problem]').doesNotExist();
-    await fillIn(inputOf('Value', param), 'cardstack/boxel');
+    await fillIn(paramInput('value', param), 'cardstack/boxel');
     await waitForSave(
       (d) =>
         d.attributes.params.length === 1 &&
@@ -860,8 +860,8 @@ module('Acceptance | automation edit format', function (hooks) {
     );
     await click('[data-test-automation-add-param]');
     await fillIn(
-      inputOf(
-        'Name',
+      paramInput(
+        'name',
         document.querySelector('[data-test-automation-param="1"]')!,
       ),
       'repository',
@@ -869,6 +869,10 @@ module('Acceptance | automation edit format', function (hooks) {
     assert
       .dom('[data-test-automation-params-problem]')
       .hasText('Two params share the name “repository”');
+    assert
+      .dom('[data-test-automation-remove-param="1"]')
+      .hasAria('label', 'Remove this param');
+    assert.dom('[data-test-automation-remove-param="1"] svg').exists();
     await click('[data-test-automation-remove-param="1"]');
     await click('[data-test-automation-remove-param="0"]');
     await waitForSave(
