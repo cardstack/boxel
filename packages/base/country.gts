@@ -2,7 +2,8 @@ import { contains, field, Component, CardDef, FieldDef } from './card-api';
 import StringField from './string';
 import World from '@cardstack/boxel-icons/world';
 import MapPinned from '@cardstack/boxel-icons/map-pinned';
-import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { Select } from '@cardstack/pretui/components/select';
+import type { SelectOption } from '@cardstack/pretui/components/select';
 import { markdownEscape } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
@@ -34,21 +35,9 @@ function getCountryFlagEmoji(countryCode: string) {
   return String.fromCodePoint(...codePoints);
 }
 
-interface CountryData {
-  code: string;
-  name: string;
-  emoji?: string;
-}
-
 class CountryFieldEdit extends Component<typeof CountryField> {
-  @tracked country: CountryData | undefined =
-    this.args.model.name && this.args.model.code
-      ? {
-          name: this.args.model.name,
-          code: this.args.model.code,
-        }
-      : undefined;
-  @tracked countries: CountryData[] = [];
+  // Each country's ISO code is its value; its flag leads its name.
+  @tracked countries: SelectOption[] = [];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -56,48 +45,62 @@ class CountryFieldEdit extends Component<typeof CountryField> {
   }
 
   private loadCountries = restartableTask(async () => {
-    this.countries = Object.values(countryData).map((country: any) => {
-      return {
-        code: country.ISO2_CODE,
-        name: country.LIST_OF_NAME.ENG[0],
-        emoji: getCountryFlagEmoji(country.ISO2_CODE),
-      } as CountryData;
-    });
+    this.countries = Object.values(countryData).map((country: any) => ({
+      value: country.ISO2_CODE,
+      label: country.LIST_OF_NAME.ENG[0],
+      glyph: getCountryFlagEmoji(country.ISO2_CODE),
+    }));
   });
 
-  @action onSelectCountry(country: CountryData | null) {
+  // The picker shows the country the field stores. A code the dataset lacks
+  // (one it doesn't list, or one saved in another case) gets an option of its
+  // own, and a listed code keeps the name stored with it.
+  get options(): SelectOption[] {
+    let { code, name } = this.args.model;
+    if (!code) {
+      return this.countries;
+    }
+    let listed = this.countries.find((option) => option.value === code);
+    if (!listed) {
+      return [{ value: code, label: name || code }, ...this.countries];
+    }
+    if (!name || name === listed.label) {
+      return this.countries;
+    }
+    return this.countries.map((option) =>
+      option === listed ? { ...option, label: name } : option,
+    );
+  }
+
+  @action onSelectCountry(code: string) {
+    let country = this.options.find((option) => option.value === code);
     if (!country) {
       return;
     }
-    this.country = country;
-    this.args.model.name = country.name;
-    this.args.model.code = country.code;
-  }
-
-  @action countryEmoji(countryCode: string) {
-    return this.countries?.find((country) => country.code === countryCode)
-      ?.emoji;
+    this.args.model.name = country.label;
+    this.args.model.code = country.value;
   }
 
   <template>
     {{#if this.loadCountries.isRunning}}
       Loading countries...
     {{else}}
-      <BoxelSelect
+      <Select
         @placeholder='Choose a country'
-        @options={{this.countries}}
-        @selected={{this.country}}
-        @onChange={{this.onSelectCountry}}
+        @options={{this.options}}
+        @value={{@model.code}}
+        @onValueChange={{this.onSelectCountry}}
         @searchEnabled={{true}}
-        @searchField='name'
-        as |country|
-      >
-        {{#let (this.countryEmoji country.code) as |emoji|}}
-          {{emoji}}
-        {{/let}}
-        {{country.name}}
-      </BoxelSelect>
+        class='country-field-edit'
+      />
     {{/if}}
+    <style scoped>
+      /* the app's full control size, beside the edit form's other inputs */
+      .country-field-edit {
+        --pretui-field-h: var(--boxel-form-control-height);
+        --pretui-field-font-size: var(--boxel-font-size-sm);
+      }
+    </style>
   </template>
 }
 
