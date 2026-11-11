@@ -17,7 +17,7 @@ It lays out and chooses; it paints nothing. It is not a page header (no title sl
 | Arg              | On   | Meaning                                                                                                                                                                                                                                                          |
 | ---------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@label`         | bar  | accessible name of the `role='group'` row (default `'Toolbar'`)                                                                                                                                                                                                  |
-| `@controlHeight` | bar  | any CSS length; sets `--control-height` on the bar so every control shares one height (default: inherited from an ancestor, else the row's own height)                                                                                                           |
+| `@controlHeight` | bar  | any CSS length; sets `--pretui-row-h` (and `--control-height`) on the bar so every control that reads it shares one height (default: none set, so each control keeps its own height, unless an ancestor sets one)                                                |
 | `@overflowLabel` | bar  | name of the ⋯ button (default `'More options'`)                                                                                                                                                                                                                  |
 | `@id`            | Slot | stable id, unique in the bar                                                                                                                                                                                                                                     |
 | `@priority`      | Slot | 0 = most important; larger steps down sooner (default 1)                                                                                                                                                                                                         |
@@ -30,7 +30,7 @@ It lays out and chooses; it paints nothing. It is not a page header (no title sl
 
 **LayoutControl-ready checklist.** A component is ready to sit in a slot when:
 
-- [ ] it reads `--control-height`, or LayoutControl maps it onto a height knob the component has (see Equal height);
+- [ ] it reads `--pretui-row-h`, or LayoutControl maps it onto a height knob the component has (see Equal height);
 - [ ] it has a `@display`-style arg for its smaller forms, or the author swaps components per form in the slot block;
 - [ ] every form the slot lists declares a `minWidth` (rem) that covers its widest real content;
 - [ ] it supplies `@menuItems` when it should fold to native menu items; otherwise it folds to the `'@label…'` fallback, so its full form must work inside a popover or sheet;
@@ -84,16 +84,17 @@ What we leave out: no per-item `isHidden` breakpoints, no CSS `display: none` va
 
 ## Theming
 
-| Knob                                                              | Default                      | Effect                                                      |
-| ----------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------- |
-| `--control-height` (via `@controlHeight`, or set by any ancestor) | unset (the row's own height) | row min-height; also the ⋯ button size the chooser reserves |
-| `--pretui-lc-gap`                                                 | `var(--boxel-sp-xs)`         | gap between slots; the chooser reads the computed gap       |
+| Knob                                                              | Default                                            | Effect                                                      |
+| ----------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
+| `--control-height` (via `@controlHeight`, or set by any ancestor) | the theme's `2.5rem` in a themed scope, else unset | row min-height; also the ⋯ button size the chooser reserves |
+| `--pretui-row-h` (via `@controlHeight`)                           | unset                                              | the height a control that reads it takes                    |
+| `--pretui-lc-gap`                                                 | `var(--boxel-sp-xs)`                               | gap between slots; the chooser reads the computed gap       |
 
-**Equal height.** LayoutControl sets `--control-height` on its root. Each child maps it onto its own height knob from the bar's style block (custom properties inherit, so no `:deep()` or `!important`). Today no Pret UI control has such a knob, so children keep their own height and render their default form; the bar still measures them, so the chooser works either way.
+**Equal height.** `@controlHeight` sets `--pretui-row-h` on the root, beside `--control-height`. The theme defines `--control-height` for every themed scope, so a control reads the row-scoped `--pretui-row-h`, which only a sized row sets. SegmentedControl, FilterChips, Select, Button, IconButton, Input and the typed inputs built on it (not Textarea), SearchInput and InputGroup take it as the first link of their height chain (`--pretui-row-h`, then the control's own knob, then its default), so custom properties inherit and no `:deep()` or `!important` is needed. A control that doesn't read it keeps its own height and renders its default form; the bar still measures it, so the chooser works either way. The contract is for single-line controls.
 
 A control joins by adding, in its own component:
 
-- a height knob read as `var(--pretui-<name>-h, <current height>)`, and the matching line in `.pretui-lc` here;
+- its height read as `var(--pretui-row-h, var(--pretui-<name>-h, <current height>))`, so a sized row sets it;
 - a `@display` arg for its smaller forms (so a slot block can pass `@display={{form}}` instead of swapping components);
 - a documented `minWidth` (rem) per form.
 
