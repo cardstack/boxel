@@ -51,6 +51,12 @@ export interface FieldSignature {
      * status, which a screen reader can miss.
      */
     reserveMessage?: boolean;
+    /**
+     * marks the field as one that must be filled in, with an asterisk after
+     * the label. The control still says so to assistive technology itself
+     * (its own `required` or `aria-required`), as the field can't reach it.
+     */
+    required?: boolean;
   };
   Blocks: {
     /** the control. Second param is the id of the message line, for
@@ -160,6 +166,14 @@ export class Field extends Component<FieldSignature> {
               for={{this.controlId}}
               data-test-pretui-field-label
             >{{@label}}</label>
+          {{/if}}
+          {{#if @required}}
+            <span
+              class='pretui-fieldrequired'
+              title='Required'
+              aria-hidden='true'
+              data-test-pretui-field-required
+            >*</span>
           {{/if}}
         </div>
       {{/if}}
@@ -285,6 +299,14 @@ export class Field extends Component<FieldSignature> {
               ) /
               2
           );
+        }
+        /* the asterisk sits against the label, inside the head's gap */
+        .pretui-fieldrequired {
+          margin-inline-start: calc(
+            var(--boxel-sp-6xs) - var(--boxel-sp-xs)
+          );
+          color: var(--destructive-ink);
+          font-weight: 600;
         }
         .pretui-fieldlabel {
           font-family: var(--boxel-ui-label-font-family);

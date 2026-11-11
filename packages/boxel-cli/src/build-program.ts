@@ -15,7 +15,60 @@ import { registerCaptureCommand } from './commands/capture.ts';
 import { registerSearchCommand } from './commands/search.ts';
 import { registerTestCommand } from './commands/test.ts';
 import { setQuiet } from './lib/cli-log.ts';
+import { FG_RED, RESET } from './lib/colors.ts';
+import { getProfileManager } from './lib/profile-manager.ts';
 import { warnIfMisplacedLocalRealmDirs } from './lib/realm-local-paths.ts';
+
+// Act as the profile `--profile` (or else `BOXEL_PROFILE`) names for this one
+// invocation. Only this process is affected: the active profile, which every
+// other terminal and agent session on the machine uses, is left as it is.
+//
+// `boxel profile` manages the saved profiles themselves, so it takes no
+// `--profile` and ignores `BOXEL_PROFILE`; it always shows and changes the
+// active profile.
+function selectInvocationProfile(
+  program: Command,
+  actionCommand: Command,
+): void {
+  let flag = program.opts().profile as string | undefined;
+  let fail = (message: string) => {
+    console.error(`${FG_RED}Error:${RESET} ${message}`);
+    process.exit(1);
+  };
+  if (actionCommand.parent === program && actionCommand.name() === 'profile') {
+    if (flag !== undefined) {
+      fail(
+        '`boxel profile` manages the saved profiles and does not take --profile. ' +
+          'To change the active profile, run `boxel profile switch <id>`.',
+      );
+    }
+    return;
+  }
+  // An empty value is usually an unset shell variable (`--profile "$OWNER"`),
+  // and falling back to the active profile would act as the wrong account.
+  // An empty BOXEL_PROFILE counts as not set, so `BOXEL_PROFILE=` clears it.
+  if (flag === '') {
+    fail(
+      '--profile was given an empty value. Pass the ID of a saved profile; ' +
+        '`boxel profile list` shows them.',
+    );
+  }
+  let fromEnv = flag === undefined;
+  let profileId = flag ?? process.env.BOXEL_PROFILE;
+  if (!profileId) {
+    return;
+  }
+  try {
+    getProfileManager().selectProfile(profileId);
+  } catch (err) {
+    let message = err instanceof Error ? err.message : String(err);
+    fail(
+      fromEnv
+        ? `${message} (BOXEL_PROFILE is set to "${profileId}".)`
+        : message,
+    );
+  }
+}
 
 /**
  * Construct the boxel CLI program with every command registered. Pure builder
@@ -35,11 +88,16 @@ export function buildBoxelProgram(version: string): Command {
       '-q, --quiet',
       'Suppress informational progress logs (info/log/debug). Errors and warnings, plus command result payloads (JSON, file contents), are still emitted. Use this when invoking the CLI from automation (e.g. the software factory test harness) to keep stdout focused on the result.',
     )
-    .hook('preAction', (thisCommand) => {
+    .option(
+      '--profile <id>',
+      'Act as this saved profile (its exact Matrix ID) for this one command instead of the active profile, which stays as it is for every other terminal and session. Defaults to BOXEL_PROFILE when that is set.',
+    )
+    .hook('preAction', (thisCommand, actionCommand) => {
       let opts = thisCommand.optsWithGlobals?.() ?? thisCommand.opts();
       if (opts.quiet) {
         setQuiet(true);
       }
+      selectInvocationProfile(thisCommand, actionCommand);
       warnIfMisplacedLocalRealmDirs(process.cwd());
     });
 

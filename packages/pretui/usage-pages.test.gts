@@ -43,6 +43,7 @@ import { DEMOS_CHECKBOX_CARD } from './components/checkbox-card.usage';
 import { DEMOS_CHECKBOX } from './components/checkbox.usage';
 import { DEMOS_CHIP } from './components/chip.usage';
 import { DEMOS_CODE_BLOCK } from './components/code-block.usage';
+import { DEMOS_CODE_EDITOR } from './components/code-editor.usage';
 import { DEMOS_COLLAPSED_TURN } from './components/collapsed-turn.usage';
 import { DEMOS_COLLAPSIBLE } from './components/collapsible.usage';
 import { DEMOS_COLOR_AREA } from './components/color-area.usage';
@@ -340,6 +341,7 @@ const REGISTRIES: Record<string, Record<string, unknown>> = {
   DEMOS_CHECKBOX,
   DEMOS_CHIP,
   DEMOS_CODE_BLOCK,
+  DEMOS_CODE_EDITOR,
   DEMOS_COLLAPSED_TURN,
   DEMOS_COLLAPSIBLE,
   DEMOS_COLOR_AREA,

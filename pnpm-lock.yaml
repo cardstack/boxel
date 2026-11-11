@@ -75,6 +75,9 @@ catalogs:
     '@codemirror/commands':
       specifier: ^6.10.3
       version: 6.10.3
+    '@codemirror/lang-javascript':
+      specifier: ^6.2.5
+      version: 6.2.5
     '@codemirror/lang-markdown':
       specifier: ^6.5.0
       version: 6.5.0
@@ -117,6 +120,9 @@ catalogs:
     '@koa/router':
       specifier: ^14.0.0
       version: 14.0.0
+    '@lezer/highlight':
+      specifier: ^1.2.3
+      version: 1.2.3
     '@lezer/markdown':
       specifier: ^1.6.3
       version: 1.6.4
@@ -2991,6 +2997,9 @@ importers:
       '@codemirror/commands':
         specifier: 'catalog:'
         version: 6.10.3
+      '@codemirror/lang-javascript':
+        specifier: 'catalog:'
+        version: 6.2.5
       '@codemirror/lang-markdown':
         specifier: 'catalog:'
         version: 6.5.0
@@ -3054,6 +3063,9 @@ importers:
       '@joplin/turndown-plugin-gfm':
         specifier: ^1.0.64
         version: 1.0.67
+      '@lezer/highlight':
+        specifier: 'catalog:'
+        version: 1.2.3
       '@lezer/markdown':
         specifier: 'catalog:'
         version: 1.6.4

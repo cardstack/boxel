@@ -103,7 +103,6 @@ export function buildBrowseUrl(
 }
 
 export interface BrowseOptions {
-  profile?: string;
   hostUrl?: string;
   printUrl?: boolean;
   // Block and retry once when login-token minting is rate-limited, even for a
@@ -120,27 +119,6 @@ export interface BrowseOptions {
   isInteractive?: () => boolean;
 }
 
-// Resolve the target profile: the named one, or the active one. A missing
-// *named* profile is always an error (the user asked for it by name), but a
-// missing active profile returns null so the caller can still try the
-// anonymous published-realm path — which needs no credentials — before
-// insisting on a profile for the token flow.
-function resolveProfile(
-  pm: ProfileManager,
-  profileId: string | undefined,
-): { id: string; profile: Profile } | null {
-  if (profileId) {
-    let profile = pm.getProfile(profileId);
-    if (!profile) {
-      throw new Error(
-        `No profile named "${profileId}". Run \`boxel profile list\` to see your profiles.`,
-      );
-    }
-    return { id: profileId, profile };
-  }
-  return pm.getActiveProfile();
-}
-
 export async function browse(
   cardPath: string | undefined,
   options: BrowseOptions = {},
@@ -155,7 +133,11 @@ export async function browse(
   let isInteractive =
     options.isInteractive ?? (() => process.stderr.isTTY === true);
 
-  let resolved = resolveProfile(pm, options.profile);
+  // The profile this invocation acts as (`--profile`, or the active one). A
+  // missing profile isn't an error yet: the anonymous published-realm path
+  // below needs no credentials, so it is tried before insisting on one for
+  // the token flow.
+  let resolved = pm.getActiveProfile();
 
   // Fast path: a *published* realm is served on its own origin, which the host
   // renders with no sign-in. When the given card path is such a URL, open it
@@ -296,7 +278,6 @@ export async function browse(
 }
 
 interface BrowseCliOptions {
-  profile?: string;
   hostUrl?: string;
   printUrl?: boolean;
   wait?: boolean;
@@ -307,14 +288,14 @@ export function registerBrowseCommand(program: Command): void {
     .command('browse')
     .description(
       'Open the Boxel app in your browser, already signed in as your active ' +
-        'profile (a published-realm card URL opens directly, no sign-in needed)',
+        'profile or the one --profile names (a published-realm card URL opens ' +
+        'directly, no sign-in needed)',
     )
     .argument(
       '[card-path]',
       'Card to open: a realm-relative path (opens signed in) or a ' +
         'published-realm URL (opens directly, no sign-in)',
     )
-    .option('--profile <id>', 'Profile to use (default: the active profile)')
     .option(
       '--host-url <url>',
       'Override the host app URL the token is redeemed against',
