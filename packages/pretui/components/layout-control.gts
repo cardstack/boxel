@@ -237,7 +237,7 @@ export interface LayoutControlSignature {
     label?: string;
     /** one height for every control in the row; sets --pretui-row-h (and
      * --control-height) on the bar. Any CSS length (default: none set, so
-     * each control keeps its own height) */
+     * each control keeps its own height, unless an ancestor sets one) */
     controlHeight?: string;
     /** accessible name of the ⋯ button (default 'More options') */
     overflowLabel?: string;

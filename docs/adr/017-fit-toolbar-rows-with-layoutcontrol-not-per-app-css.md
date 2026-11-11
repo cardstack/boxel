@@ -8,6 +8,7 @@ scope:
   - packages/pretui/components/segmented-control.gts
   - packages/pretui/components/select.gts
   - packages/pretui/components/search-input.gts
+  - packages/pretui/components/input-group.gts
   - packages/pretui/components/filter-chips.gts
   - packages/pretui/internal/field-dress.gts
 ---

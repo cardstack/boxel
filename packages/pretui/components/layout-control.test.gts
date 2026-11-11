@@ -78,8 +78,8 @@ module('Pretui | components/layout-control | folding', function (hooks) {
   ];
 
   test('@controlHeight sets --pretui-row-h on the bar, and none without it', async function (assert) {
-    // Scoped CSS is inert in this harness, so the controls' own height is
-    // checked on the usage page; this pins the value they read.
+    // Scoped CSS is inert in this harness, so only the value LayoutControl
+    // sets is pinned here; the controls' height chains have no test.
     await render(
       <template>
         <LayoutControl @label='Sized' @controlHeight='2rem' data-test-sized as |lc|>
