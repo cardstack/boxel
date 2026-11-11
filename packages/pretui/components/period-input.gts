@@ -504,7 +504,13 @@ export function parsePeriod(
       : {
           empty: false,
           issue:
-            'There is no ' + kind + ' ' + index + ' in ' + resolvedYear + '.',
+            'There is no ' +
+            kind +
+            ' ' +
+            index +
+            ' in ' +
+            resolvedYear +
+            '.',
         };
   };
 
@@ -547,10 +553,7 @@ export function parsePeriod(
   }
   return {
     empty: false,
-    issue:
-      'Not a period I recognise. Try ' +
-      PERIOD_FORMS.slice(0, 4).join(', ') +
-      '.',
+    issue: 'Not a period I recognise. Try ' + PERIOD_FORMS.slice(0, 4).join(', ') + '.',
   };
 }
 
@@ -929,10 +932,7 @@ export class PeriodInput extends Component<PeriodInputSignature> {
         data-test-pretui-period-readout
       >{{this.readout}}</p>
       {{#unless @quiet}}
-        <p
-          class='pretui-period-forms'
-          id={{this.formsId}}
-        >{{this.formsText}}</p>
+        <p class='pretui-period-forms' id={{this.formsId}}>{{this.formsText}}</p>
       {{/unless}}
     </div>
     <style scoped>
@@ -1018,7 +1018,8 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           min-height: 1.5rem;
           padding: 0;
           border-radius: calc(
-            var(--radius) - var(--pretui-radius-encroach, 0.35) * var(--radius)
+            var(--radius) - var(--pretui-radius-encroach, 0.35) *
+              var(--radius)
           );
           background: transparent;
           font: inherit;
@@ -1028,14 +1029,10 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           transition:
             background-color 140ms
               var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1)),
-            transform 140ms
-              var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
+            transform 140ms var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
         }
         .pretui-period-arrow:hover {
-          background: var(
-            --hover,
-            color-mix(in oklch, var(--foreground) 7%, transparent)
-          );
+          background: var(--hover, color-mix(in oklch, var(--foreground) 7%, transparent));
           color: var(--foreground);
         }
         /* One consistent press across everything pressable. */
@@ -1074,7 +1071,11 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           margin: 0;
           font-size: var(--text-ui-xs, 10.5px);
           font-family: var(--font-mono);
-          color: color-mix(in oklch, var(--muted-foreground) 75%, transparent);
+          color: color-mix(
+            in oklch,
+            var(--muted-foreground) 75%,
+            transparent
+          );
         }
         @media (pointer: coarse) {
           .pretui-period-shell {
