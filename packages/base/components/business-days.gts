@@ -11,6 +11,12 @@ export interface BusinessDaysSignature {
   };
 }
 
+const DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
 export class BusinessDays extends GlimmerComponent<BusinessDaysSignature> {
   get calendarDays() {
     const start = this.args.model?.start;
@@ -58,11 +64,7 @@ export class BusinessDays extends GlimmerComponent<BusinessDaysSignature> {
     if (!start) return 'Not set';
 
     try {
-      return new Date(start).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
+      return DATE_FORMAT.format(new Date(start));
     } catch {
       return String(start);
     }
@@ -73,11 +75,7 @@ export class BusinessDays extends GlimmerComponent<BusinessDaysSignature> {
     if (!end) return 'Not set';
 
     try {
-      return new Date(end).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
+      return DATE_FORMAT.format(new Date(end));
     } catch {
       return String(end);
     }

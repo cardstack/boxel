@@ -46,6 +46,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
+import { cachedDateTimeFormat } from '../internal/intl-cache';
 
 // ═══════════════════════════════════════════════════════════════════════
 // The pure layer. No DOM, no clock.
@@ -221,7 +222,7 @@ function monthVocabulary(locale: string): Map<string, number> {
     for (let style of ['long', 'short'] as const) {
       let format: Intl.DateTimeFormat;
       try {
-        format = new Intl.DateTimeFormat(tag, { month: style, timeZone: 'UTC' });
+        format = cachedDateTimeFormat(tag, { month: style, timeZone: 'UTC' });
       } catch {
         continue;
       }
@@ -341,7 +342,7 @@ export function makePeriod(
     id = pad(year, 4) + '-' + pad(index, 2);
     try {
       label =
-        new Intl.DateTimeFormat(locale, {
+        cachedDateTimeFormat(locale, {
           month: 'long',
           year: 'numeric',
           timeZone: 'UTC',
@@ -386,7 +387,7 @@ function dayPeriod(iso: string, options: PeriodOptions): Period | undefined {
   let locale = options.locale ?? 'en-US';
   let label = iso;
   try {
-    label = new Intl.DateTimeFormat(locale, {
+    label = cachedDateTimeFormat(locale, {
       dateStyle: 'medium',
       timeZone: 'UTC',
     }).format(new Date(isoToDay(iso) as number));
@@ -503,13 +504,7 @@ export function parsePeriod(
       : {
           empty: false,
           issue:
-            'There is no ' +
-            kind +
-            ' ' +
-            index +
-            ' in ' +
-            resolvedYear +
-            '.',
+            'There is no ' + kind + ' ' + index + ' in ' + resolvedYear + '.',
         };
   };
 
@@ -552,7 +547,10 @@ export function parsePeriod(
   }
   return {
     empty: false,
-    issue: 'Not a period I recognise. Try ' + PERIOD_FORMS.slice(0, 4).join(', ') + '.',
+    issue:
+      'Not a period I recognise. Try ' +
+      PERIOD_FORMS.slice(0, 4).join(', ') +
+      '.',
   };
 }
 
@@ -623,7 +621,7 @@ export function periodRangeText(period: Period, locale = 'en-US'): string {
     return period.start + ' – ' + period.end;
   }
   try {
-    let format = new Intl.DateTimeFormat(locale, {
+    let format = cachedDateTimeFormat(locale, {
       dateStyle: 'medium',
       timeZone: 'UTC',
     });
@@ -931,7 +929,10 @@ export class PeriodInput extends Component<PeriodInputSignature> {
         data-test-pretui-period-readout
       >{{this.readout}}</p>
       {{#unless @quiet}}
-        <p class='pretui-period-forms' id={{this.formsId}}>{{this.formsText}}</p>
+        <p
+          class='pretui-period-forms'
+          id={{this.formsId}}
+        >{{this.formsText}}</p>
       {{/unless}}
     </div>
     <style scoped>
@@ -1017,8 +1018,7 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           min-height: 1.5rem;
           padding: 0;
           border-radius: calc(
-            var(--radius) - var(--pretui-radius-encroach, 0.35) *
-              var(--radius)
+            var(--radius) - var(--pretui-radius-encroach, 0.35) * var(--radius)
           );
           background: transparent;
           font: inherit;
@@ -1028,10 +1028,14 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           transition:
             background-color 140ms
               var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1)),
-            transform 140ms var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
+            transform 140ms
+              var(--pretui-ease-snap, cubic-bezier(0.23, 1, 0.32, 1));
         }
         .pretui-period-arrow:hover {
-          background: var(--hover, color-mix(in oklch, var(--foreground) 7%, transparent));
+          background: var(
+            --hover,
+            color-mix(in oklch, var(--foreground) 7%, transparent)
+          );
           color: var(--foreground);
         }
         /* One consistent press across everything pressable. */
@@ -1070,11 +1074,7 @@ export class PeriodInput extends Component<PeriodInputSignature> {
           margin: 0;
           font-size: var(--text-ui-xs, 10.5px);
           font-family: var(--font-mono);
-          color: color-mix(
-            in oklch,
-            var(--muted-foreground) 75%,
-            transparent
-          );
+          color: color-mix(in oklch, var(--muted-foreground) 75%, transparent);
         }
         @media (pointer: coarse) {
           .pretui-period-shell {
