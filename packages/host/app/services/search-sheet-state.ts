@@ -119,8 +119,8 @@ export default class SearchSheetStateService extends Service {
       // Cap each realm's results at the focused-section display limit — the
       // most the sheet ever shows in one section. The search still reports the
       // match count in `meta.page.total` (which drives the result-count
-      // summary; past the server's cap it is a lower bound, flagged
-      // `totalIsEstimate` and shown as "1,000+"), so this only trims rows the
+      // summary; past the server's cap it is a lower bound, with the
+      // `total-estimated` warning and shown as "1,000+"), so this only trims rows the
       // sheet would never render.
       page: { size: SECTION_DISPLAY_LIMIT_FOCUSED },
     };

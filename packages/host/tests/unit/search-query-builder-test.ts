@@ -76,7 +76,7 @@ module('Unit | search/query-builder', function () {
             { not: { type: specRef } },
             {
               any: [
-                { typeahead: 'xylophone' },
+                { matches: 'xylophone', prefix: true, scope: 'title' },
                 { matches: 'xylophone' },
                 ...titleBranches('xylophone'),
               ],
@@ -124,7 +124,7 @@ module('Unit | search/query-builder', function () {
             baseFilter,
             {
               any: [
-                { typeahead: 'puppy' },
+                { matches: 'puppy', prefix: true, scope: 'title' },
                 { matches: 'puppy' },
                 ...titleBranches('puppy'),
               ],
@@ -147,7 +147,7 @@ module('Unit | search/query-builder', function () {
             baseFilter,
             {
               any: [
-                { typeahead: 'mango' },
+                { matches: 'mango', prefix: true, scope: 'title' },
                 { matches: 'mango' },
                 ...titleBranches('mango'),
               ],
@@ -201,7 +201,7 @@ module('Unit | search/query-builder', function () {
             { type: authorRef },
             {
               any: [
-                { typeahead: 'droid' },
+                { matches: 'droid', prefix: true, scope: 'title' },
                 { matches: 'droid' },
                 ...titleBranches('droid'),
               ],
@@ -257,7 +257,12 @@ module('Unit | search/query-builder', function () {
         filter: {
           every: [
             { not: { type: specRef } },
-            { any: [{ typeahead: 'mango' }, ...titleBranches('mango')] },
+            {
+              any: [
+                { matches: 'mango', prefix: true, scope: 'title' },
+                ...titleBranches('mango'),
+              ],
+            },
             DEDUP_FILTER,
           ],
         },

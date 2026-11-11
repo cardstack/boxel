@@ -4,6 +4,7 @@ import type { Filter } from '@cardstack/runtime-common';
 import { assertQuery } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
+import { lowerForWire } from '../utils/search/lower-for-wire';
 import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
 
 import type RealmServerService from '../services/realm-server';
@@ -91,8 +92,9 @@ export class SearchCardsByQueryTool extends HostBaseTool<
     let instances: CardDef[] = [];
     try {
       // store.search pins `scope: 'cards'`, so the raw query already resolves
-      // to card instances only.
-      instances = await this.store.search(query, realmUrls);
+      // to card instances only. It wires the older spelling, so a query in the
+      // newer one is lowered first.
+      instances = await this.store.search(lowerForWire(query), realmUrls);
     } catch (e) {
       console.error(`Error searching in realms:`, e, query);
     }

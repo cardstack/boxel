@@ -1574,30 +1574,58 @@ function holdsReference(node: unknown): boolean {
 }
 
 // A def class stands in for the code ref lowering derives from it. The
-// sentinel satisfies the realm's code-ref check, which reads `module` and
-// `name`, while carrying a function under `notJson` — which the realm's JSON
-// check refuses anywhere it walks a value — so the sentinel is accepted
-// exactly where a type belongs and refused wherever a value does.
-function withTypeSentinels(node: unknown): unknown {
+// realm's validator holds a query to plain JSON data everywhere, a type slot
+// included, so the class becomes a plain code ref the validator accepts where
+// a type belongs. A class anywhere else (a value under `eq`, `in`, …) is
+// refused here, as the realm would refuse a non-JSON value there.
+function withTypeSentinels(
+  node: unknown,
+  key?: string,
+  parent?: string,
+): unknown {
   if (typeof node === 'function') {
-    return {
-      notJson: () => {},
-      module: TYPE_SLOT_SENTINEL,
-      name: TYPE_SLOT_SENTINEL,
-    };
+    if ((key === 'on' || key === 'type') && !VALUE_MAPS.has(parent ?? '')) {
+      return {
+        module: TYPE_SLOT_SENTINEL.module,
+        name: TYPE_SLOT_SENTINEL.name,
+      };
+    }
+    throw new InvalidQueryError(
+      `${key ?? '/'}: a card type where a value belongs; a type goes in an \`on\` or \`type\``,
+      'invalid-value',
+    );
   }
   if (Array.isArray(node)) {
-    return node.map(withTypeSentinels);
+    return node.map((item) => withTypeSentinels(item, undefined, key));
   }
   if (!isPlainObject(node)) {
     return node;
   }
   return Object.fromEntries(
-    Object.entries(node).map(([key, value]) => [key, withTypeSentinels(value)]),
+    Object.entries(node).map(([k, value]) => [
+      k,
+      withTypeSentinels(value, k, key),
+    ]),
   );
 }
 
-const TYPE_SLOT_SENTINEL = '$operation-type-slot';
+// The members whose own keys are field paths and whose values are values.
+const VALUE_MAPS = new Set([
+  'eq',
+  'in',
+  'range',
+  'contains',
+  'pattern',
+  'regex',
+  'near',
+  'linkedFrom',
+]);
+
+// An absolute module, as a type reference must name, that no realm serves.
+const TYPE_SLOT_SENTINEL = {
+  module: 'https://operation-type-slot.invalid/type',
+  name: 'TypeSlot',
+};
 
 function assertValidClauses(
   label: string,

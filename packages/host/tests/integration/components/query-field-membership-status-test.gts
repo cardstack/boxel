@@ -85,6 +85,15 @@ module('Integration | query-field relationship status', function (hooks) {
         },
       });
       @field declared = linksToMany(() => Person);
+      // In the newer spelling (a top-level type) with a member the grammar
+      // lacks, so the query is refused rather than read without it.
+      @field refused = linksToMany(() => Person, {
+        query: {
+          type: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          filter: { eq: { name: '$this.cardTitle' } },
+          sortBy: [{ by: 'name' }],
+        } as any,
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -564,6 +573,29 @@ module('Integration | query-field relationship status', function (hooks) {
     } finally {
       network.virtualNetwork.unmount(spy);
     }
+  });
+
+  test('a field whose query is refused links no cards and reports the refusal', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState } = cardApi;
+    let host = await loadHost();
+
+    let refused = getRelationshipMembershipState(host, 'refused');
+    assert.false(refused.isLoading, 'a refused field is not loading');
+    assert.true(refused.isLoaded, 'it is settled');
+    assert.deepEqual(refused.membership, [], 'and links no cards');
+    assert.false(refused.isPartial, 'a refusal is not a shortfall');
+    assert.strictEqual(refused.queryError?.code, 'unknown-key');
+    assert.true(
+      refused.queryError?.message.includes('sortBy'),
+      `the message names the member: ${refused.queryError?.message}`,
+    );
+
+    let matches = getRelationshipMembershipState(host, 'matches');
+    assert.strictEqual(
+      matches.queryError,
+      undefined,
+      'a field whose query runs reports no refusal',
+    );
   });
 
   test('a declared linksToMany reports no match count', async function (this: RenderingTestContext, assert) {

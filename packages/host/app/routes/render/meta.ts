@@ -33,6 +33,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type RenderStoreService from '@cardstack/host/services/render-store';
 
+import { facetFieldSpecsOfClass } from '../../lib/facet-field-specs';
 import { createAuthErrorGuard } from '../../utils/auth-error-guard';
 
 import { runFileExtract } from '../../utils/file-extract-runner';
@@ -290,7 +291,8 @@ export default class RenderMetaRoute extends Route<Model> {
     // `cardTitle` computed already present in the search doc.
     searchDoc._title = searchDoc.cardTitle;
     // `_typeahead` is the card's type-ahead text: its title and its
-    // `cardInfo.alternativeNames`, one per line, which the `typeahead` filter
+    // `cardInfo.alternativeNames`, one per line, which a type-ahead `matches`
+    // (`prefix: true, scope: 'title'`)
     // matches on an index of its own. Every card has a title, so every card
     // can be suggested; a type extends what it is suggested by through the
     // card info's alternative names (or a CardInfoField subclass).
@@ -329,6 +331,17 @@ export default class RenderMetaRoute extends Route<Model> {
         searchDoc._typeahead = [searchDoc._typeahead, typeWords]
           .filter(Boolean)
           .join('\n');
+      }
+      // The type's declared facet fields, for the index writer's facet
+      // table (docs/search.md, Facets). It leaves the stored doc with the
+      // rest of `_searchText`.
+      let facetFields = await facetFieldSpecsOfClass(
+        api,
+        this.loaderService.loader,
+        Klass,
+      );
+      if (Object.keys(facetFields).length > 0) {
+        searchText.facets = facetFields;
       }
       if (Object.keys(searchText).length > 0) {
         searchDoc[SEARCH_TEXT_KEY] = searchText;

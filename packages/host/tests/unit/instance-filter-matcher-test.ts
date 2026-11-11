@@ -43,6 +43,8 @@ module('Unit | instance-filter-matcher', function (hooks) {
   let rankedA: CardDef;
   let rankedB: CardDef;
   let fileDef: FileDef;
+  // A person with no name, no age and no nicknames: the card with no value.
+  let nameless: CardDef;
 
   hooks.beforeEach(async function () {
     let virtualNetwork = new VirtualNetwork();
@@ -198,6 +200,10 @@ module('Unit | instance-filter-matcher', function (hooks) {
       card.id = rri(`${testRealmURL}${name}`);
       setCardAsSavedForTest(card);
     }
+
+    nameless = new Person({});
+    nameless.id = rri(`${testRealmURL}nameless`);
+    setCardAsSavedForTest(nameless);
 
     // `rankedA` sorts before `rankedB` by URL (ascending id) but after it by
     // `_matchRelevance` descending (1 vs 9), so a comparator that resolved the
@@ -573,6 +579,172 @@ module('Unit | instance-filter-matcher', function (hooks) {
     );
     assert.strictEqual(
       match(mango, { on: personRef, not: { eq: { name: 'Mango' } } }),
+      'no-match',
+    );
+  });
+
+  // -- missing values ---------------------------------------------------------
+  // The server compares a missing value as SQL does: neither true nor false,
+  // carried through not, every and any. A list field's filter asks whether
+  // some element matches, which is plainly true or false.
+
+  test('a card with no value is returned by neither a comparison nor its not', function (assert) {
+    let filters: Filter[] = [
+      { eq: { name: 'Mango' } },
+      { in: { name: ['Mango', 'Ringo'] } },
+      { contains: { name: 'an' } },
+      { range: { age: { gt: 1 } } },
+    ];
+    for (let filter of filters) {
+      assert.strictEqual(
+        match(nameless, { on: personRef, ...filter } as Filter),
+        'no-match',
+        `${JSON.stringify(filter)} drops it`,
+      );
+      assert.strictEqual(
+        match(nameless, { on: personRef, not: filter }),
+        'no-match',
+        `its not drops it too`,
+      );
+      assert.strictEqual(
+        match(nameless, { on: personRef, not: { not: filter } }),
+        'no-match',
+        `and so does not of not`,
+      );
+    }
+  });
+
+  test('eq null and missing are plain true or false', function (assert) {
+    let { mango } = cards;
+    assert.strictEqual(
+      match(nameless, { on: personRef, eq: { name: null } }),
+      'match',
+    );
+    assert.strictEqual(
+      match(nameless, { on: personRef, not: { eq: { name: null } } }),
+      'no-match',
+    );
+    assert.strictEqual(
+      match(mango, { on: personRef, not: { eq: { name: null } } }),
+      'match',
+    );
+    assert.strictEqual(
+      match(nameless, { on: personRef, in: { name: [null, 'Mango'] } }),
+      'match',
+      'null in the list matches a card with no value',
+    );
+  });
+
+  test('an empty list is missing, as the server reads it', function (assert) {
+    let { mango } = cards;
+    // nameless has no nicknames; mango has two
+    assert.strictEqual(
+      match(nameless, { on: personRef, eq: { nickNames: null } }),
+      'match',
+      'eq null finds an empty list',
+    );
+    assert.strictEqual(
+      match(nameless, { on: personRef, not: { eq: { nickNames: null } } }),
+      'no-match',
+      'and exists (its not) leaves it out',
+    );
+    assert.strictEqual(
+      match(mango, { on: personRef, eq: { nickNames: null } }),
+      'no-match',
+      'a list with an element is not missing',
+    );
+    assert.strictEqual(
+      match(mango, { on: personRef, not: { eq: { nickNames: null } } }),
+      'match',
+    );
+    assert.strictEqual(
+      match(nameless, { on: personRef, in: { nickNames: ['Mang', null] } }),
+      'match',
+      'null in an in list finds an empty list',
+    );
+    assert.strictEqual(
+      match(nameless, { on: personRef, contains: { nickNames: null } }),
+      'match',
+      'contains null is eq null',
+    );
+    assert.strictEqual(
+      match(nameless, { on: personRef, eq: { friends: null } }),
+      'match',
+      'an empty linksToMany is missing too',
+    );
+  });
+
+  test('a card with no value is included by asking for it', function (assert) {
+    assert.strictEqual(
+      match(nameless, {
+        on: personRef,
+        any: [{ eq: { name: null } }, { not: { eq: { name: 'Mango' } } }],
+      }),
+      'match',
+    );
+  });
+
+  test('unknown combines with true and false as in SQL', function (assert) {
+    // unknown AND false is false, so its not is true.
+    assert.strictEqual(
+      match(nameless, {
+        on: personRef,
+        not: {
+          every: [{ eq: { name: 'Mango' } }, { eq: { nickNames: 'Nope' } }],
+        },
+      }),
+      'match',
+    );
+    // unknown OR false is unknown, so its not is unknown too.
+    assert.strictEqual(
+      match(nameless, {
+        on: personRef,
+        not: {
+          any: [{ eq: { name: 'Mango' } }, { eq: { nickNames: 'Nope' } }],
+        },
+      }),
+      'no-match',
+    );
+    // unknown OR true is true.
+    assert.strictEqual(
+      match(nameless, {
+        on: personRef,
+        any: [{ eq: { name: 'Mango' } }, { eq: { name: null } }],
+      }),
+      'match',
+    );
+  });
+
+  test('a path through an unset link has no value at its leaf', function (assert) {
+    let { ringo } = cards;
+    // ringo has no bestFriend: the server reads `bestFriend.name` as NULL.
+    assert.strictEqual(
+      match(ringo, {
+        on: personRef,
+        not: { eq: { 'bestFriend.name': 'Van Gogh' } },
+      }),
+      'no-match',
+    );
+  });
+
+  test('on a list field not keeps an empty list', function (assert) {
+    let { ringo, mango } = cards;
+    // nameless has no nicknames; ringo is 'Ring' and 'Star'.
+    assert.strictEqual(
+      match(nameless, { on: personRef, not: { eq: { nickNames: 'Ring' } } }),
+      'match',
+    );
+    assert.strictEqual(
+      match(ringo, { on: personRef, not: { eq: { nickNames: 'Ring' } } }),
+      'no-match',
+    );
+    // Through a linksToMany: ringo has no friends, mango has ringo.
+    assert.strictEqual(
+      match(ringo, { on: personRef, not: { eq: { 'friends.name': 'Ringo' } } }),
+      'match',
+    );
+    assert.strictEqual(
+      match(mango, { on: personRef, not: { eq: { 'friends.name': 'Ringo' } } }),
       'no-match',
     );
   });

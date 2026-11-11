@@ -29,6 +29,7 @@ import {
 import {
   barePath,
   buildQuerySearchURL,
+  InvalidQueryError,
   looksLikeLabel,
   mapQueryPaths,
   normalizeQueryDefinition,
@@ -133,6 +134,8 @@ interface QueryFieldState {
     type: string;
     message: string;
     status?: number;
+    // An `invalid-query` refusal's code.
+    code?: string;
   }>;
   // Identity of the result set the owner's most recent document carried. Only
   // an indexer-resolved umbrella gets one — a raw source document carries no
@@ -190,6 +193,67 @@ const queryFieldStates = initSharedState(
 );
 
 const log = runtimeLogger('query-field-support');
+
+// A field query refused here (an `InvalidQueryError` while normalizing it),
+// per instance and field. The field links no cards, and its status says why.
+const queryFieldRefusals = initSharedState(
+  'queryFieldRefusals',
+  () => new WeakMap<BaseDef, Map<string, QueryFieldRefusal>>(),
+);
+
+// Why a field's query was refused: the refusal's code (`unknown-key`, …) and
+// message.
+export interface QueryFieldRefusal {
+  code: string;
+  message: string;
+}
+
+const INVALID_QUERY_ERROR = 'invalid-query';
+
+function recordQueryFieldRefusal(
+  instance: BaseDef,
+  fieldName: string,
+  refusal: QueryFieldRefusal | undefined,
+): void {
+  let refusals = queryFieldRefusals.get(instance);
+  if (!refusal) {
+    refusals?.delete(fieldName);
+    return;
+  }
+  if (!refusals) {
+    refusals = new Map();
+    queryFieldRefusals.set(instance, refusals);
+  }
+  refusals.set(fieldName, refusal);
+}
+
+// The refusal of a field's query, as this side found it or as the server
+// reported it on the field's relationship (`meta.errors`, type
+// `invalid-query`). `undefined` when the query was not refused.
+export function queryFieldRefusal(
+  instance: BaseDef,
+  fieldName: string,
+): QueryFieldRefusal | undefined {
+  let local = queryFieldRefusals.get(instance)?.get(fieldName);
+  if (local) {
+    return local;
+  }
+  let reported = queryFieldStates
+    .get(instance)
+    ?.get(fieldName)
+    ?.seedErrors?.find((error) => error.type === INVALID_QUERY_ERROR);
+  return reported
+    ? { code: reported.code ?? 'invalid-query', message: reported.message }
+    : undefined;
+}
+
+// The errors that stand for a realm that did not answer: everything but a
+// refusal, which is the query's fault and no realm's.
+function realmFailures(fieldState: QueryFieldState) {
+  return (fieldState.seedErrors ?? []).filter(
+    (error) => error.type !== INVALID_QUERY_ERROR,
+  );
+}
 
 export function ensureQueryFieldSearchResource(
   store: CardStore,
@@ -465,8 +529,8 @@ export function queryFieldHasUnreachableRealms(
   instance: BaseDef,
   fieldName: string,
 ): boolean {
-  let errors = queryFieldStates.get(instance)?.get(fieldName)?.seedErrors;
-  return (errors?.length ?? 0) > 0;
+  let fieldState = queryFieldStates.get(instance)?.get(fieldName);
+  return fieldState ? realmFailures(fieldState).length > 0 : false;
 }
 
 // Mirror the SearchResource's resource-level error state onto the data bucket
@@ -906,7 +970,7 @@ function queryFieldSeed(fieldState: QueryFieldState) {
     // inference legitimately, because there nothing was withheld.
     ...(fieldState.seedTotal != null
       ? { meta: { page: { total: fieldState.seedTotal } } }
-      : fieldState.seedErrors?.length
+      : realmFailures(fieldState).length
         ? {
             meta: {
               page: { total: seedRecords.length },
@@ -938,33 +1002,49 @@ function resolveQueryAndRealm(
   // (prefix form for mapped realms, URL otherwise) and is a valid base for
   // relative code-ref resolution. The index and the client-side filter matcher
   // both tolerate either spelling in the resulting query.
-  let normalized = normalizeQueryDefinition({
-    fieldDefinition,
-    queryDefinition: field.queryDefinition ?? {},
-    realmURL,
-    fieldName: field.name,
-    fieldPath,
-    resolvePathValue: (path) => resolveInstancePathValue(instance, path),
-    relativeTo: (instance as CardDef).id
-      ? rri((instance as CardDef).id)
-      : realmURL,
-    // A card definition never holds the realm mappings, so the store answers
-    // which realm a reference belongs to — the same boundary `resolveURL` and
-    // `canonicalizeId` sit on. A reference the store can't place falls back to
-    // the containing realm only when it actually lives there; otherwise the
-    // normalizer drops it rather than searching the wrong realm. A prefix-form
-    // reference never reaches this fallback: the store places it whenever it
-    // holds the prefix mapping.
-    resolveRealmForReference: (reference) => {
-      let realm = store.realmForId(reference);
-      if (realm) {
-        return realm;
-      }
-      return new RealmPaths(realmURL).inRealm(rri(reference))
-        ? realmURL.href
-        : undefined;
-    },
-  });
+  let normalized: ReturnType<typeof normalizeQueryDefinition>;
+  try {
+    normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: field.queryDefinition ?? {},
+      realmURL,
+      fieldName: field.name,
+      fieldPath,
+      resolvePathValue: (path) => resolveInstancePathValue(instance, path),
+      relativeTo: (instance as CardDef).id
+        ? rri((instance as CardDef).id)
+        : realmURL,
+      // A card definition never holds the realm mappings, so the store answers
+      // which realm a reference belongs to — the same boundary `resolveURL` and
+      // `canonicalizeId` sit on. A reference the store can't place falls back to
+      // the containing realm only when it actually lives there; otherwise the
+      // normalizer drops it rather than searching the wrong realm. A prefix-form
+      // reference never reaches this fallback: the store places it whenever it
+      // holds the prefix mapping.
+      resolveRealmForReference: (reference) => {
+        let realm = store.realmForId(reference);
+        if (realm) {
+          return realm;
+        }
+        return new RealmPaths(realmURL).inRealm(rri(reference))
+          ? realmURL.href
+          : undefined;
+      },
+    });
+  } catch (err: unknown) {
+    // A refused field query links no cards, and its status says why
+    // (`queryFieldRefusal`); failing here would fail the card's render.
+    if (err instanceof InvalidQueryError) {
+      log.warn(`query field "${field.name}" was refused: ${err.message}`);
+      recordQueryFieldRefusal(instance, field.name, {
+        code: err.code,
+        message: err.message,
+      });
+      return undefined;
+    }
+    throw err;
+  }
+  recordQueryFieldRefusal(instance, field.name, undefined);
 
   if (!normalized) {
     return undefined;
@@ -1010,7 +1090,9 @@ function resolveInstancePathValue(instance: BaseDef, path: string): any {
     }
     return undefined;
   }
-  return current;
+  // A `containsMany` reads as a tracked array, which the query cannot carry:
+  // the search resource clones its query. Pass the list as plain data.
+  return Array.isArray(current) ? Array.from(current) : current;
 }
 
 function buildFieldDefinition(field: Field): FieldDefinition | undefined {

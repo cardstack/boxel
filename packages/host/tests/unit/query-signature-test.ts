@@ -74,10 +74,9 @@ module('Unit | canonicalQuerySignature', function (hooks) {
     assert.notStrictEqual(sig(base), sig(differentId));
   });
 
-  test('eq on a reference field stays exact (engine applies tolerance to `in` only)', function (assert) {
-    // `eq:{id}` compiles to an exact match server-side, so URL-form and
-    // prefix-form eq values are genuinely different queries with different
-    // result sets — their signatures must not collapse.
+  test('eq on a reference field folds the two id forms, as the engine matches them', function (assert) {
+    // `eq:{id}` matches a card written in either form, as `in` does, so the
+    // URL-form and prefix-form spellings are one query with one result set.
     let urlForm: Query = {
       filter: {
         on: { module: rri('@scope/realm/defs'), name: 'Pet' },
@@ -90,7 +89,14 @@ module('Unit | canonicalQuerySignature', function (hooks) {
         eq: { id: '@scope/realm/Pet/mango' },
       },
     };
-    assert.notStrictEqual(sig(urlForm), sig(prefixForm));
+    assert.strictEqual(sig(urlForm), sig(prefixForm));
+    let otherCard: Query = {
+      filter: {
+        on: { module: rri('@scope/realm/defs'), name: 'Pet' },
+        eq: { id: '@scope/realm/Pet/paper' },
+      },
+    };
+    assert.notStrictEqual(sig(prefixForm), sig(otherCard));
   });
 
   test('non-reference filter values are not collapsed', function (assert) {

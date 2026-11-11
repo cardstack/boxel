@@ -92,4 +92,42 @@ module('Unit | prune-empty-query', function () {
       filter: { type: listing },
     });
   });
+
+  test('keeps the newer spelling signal sorts, which have no field `by`', function (assert) {
+    let blend = {
+      blend: [{ by: 'textRelevance' }, { by: 'createdAt', weight: 0.2 }],
+    };
+    let expression = { expression: 'item.price * 2', direction: 'desc' };
+    let relevance = { relevance: true, on: listing };
+    let boost = { boost: { eq: { featured: true } }, weight: 2 };
+    let query = {
+      type: listing,
+      filter: { matches: 'recipe' },
+      sort: [blend, expression, relevance, boost, { by: '' }],
+    } as unknown as Query;
+    assert.deepEqual(
+      pruneEmptyQueryParts(query).sort as unknown,
+      [blend, expression, relevance, boost],
+      'each signal sort is kept as written; the empty field sort is dropped',
+    );
+  });
+
+  test('keeps a top-level type and drops an empty one', function (assert) {
+    let typed = {
+      type: listing,
+      filter: { missing: 'cardTitle' },
+    } as unknown as Query;
+    assert.deepEqual(pruneEmptyQueryParts(typed) as unknown, {
+      type: listing,
+      filter: { missing: 'cardTitle' },
+    });
+
+    let empty = {
+      type: { module: '', name: '' },
+      filter: { on: listing, eq: { name: 'Pasta' } },
+    } as unknown as Query;
+    assert.deepEqual(pruneEmptyQueryParts(empty) as unknown, {
+      filter: { on: listing, eq: { name: 'Pasta' } },
+    });
+  });
 });

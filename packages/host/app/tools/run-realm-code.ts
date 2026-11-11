@@ -116,6 +116,7 @@ import {
   type ViewOptions,
 } from '../lib/visual-capture';
 import { createWorkspace, deleteWorkspace } from '../lib/workspaces';
+import { lowerForWire } from '../utils/search/lower-for-wire';
 import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
 
 import LintAndFixTool from './lint-and-fix';
@@ -2246,7 +2247,7 @@ class RealmFsSession {
         ? Math.min(Math.max(Math.floor(requested), 1), MAX_SEARCH_RESULTS)
         : DEFAULT_SEARCH_RESULTS;
     let wireQuery = searchEntryWireQueryFromQuery(
-      composeSearchEntriesQuery(query, 'cards').query,
+      composeSearchEntriesQuery(lowerForWire(query), 'cards').query,
       { fields: ['item'], scope: 'cards' },
     );
     wireQuery.page = { ...wireQuery.page, size };

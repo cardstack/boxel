@@ -2093,6 +2093,18 @@ export class RealmConfig extends CardDef {
       'Legacy spelling of allowArbitraryCaptures; either one set to true opens the capture gate',
   });
 
+  // The realm's default time zone: the IANA zone (`America/New_York`) whose
+  // calendar its searches reckon "today", "this week" and day buckets in
+  // when a query names no `timeZone` of its own, query-backed fields
+  // included (they are evaluated at index time, with no viewer). Absent, the
+  // realm reckons in UTC. A name that is no zone is ignored, with a warning
+  // in the realm server's log. Read from the indexed config on every search,
+  // so an edit takes effect with its index update.
+  @field timeZone = contains(StringField, {
+    description:
+      "The IANA time zone (such as America/New_York) whose calendar this realm's searches use for relative dates, day buckets and TODAY() when a query names none. Absent: UTC",
+  });
+
   @field config = contains(RealmSettingsField, {
     description:
       "Realm-level settings a card operation reads with realmConfig('key') — an approver's user id, a threshold, a default assignee. Values are JSON. They are not indexed for search and are not included in the realmInfo carried on card responses",

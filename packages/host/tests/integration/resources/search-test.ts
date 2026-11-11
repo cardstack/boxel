@@ -18,6 +18,8 @@ import {
   QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
   SEARCH_CONCURRENCY_CAP,
   SearchBoundError,
+  resetSearchBoundsForTests,
+  setSearchBoundsForTests,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -1563,6 +1565,100 @@ module(`Integration | search resource`, function (hooks) {
       4,
       'meta.page.total remains correct on empty page',
     );
+  });
+
+  test(`a card search naming no page that the default page cuts short says so: isTruncated, hasMore, totalMatchCount and one development warning`, async function (assert) {
+    // The card default page is applied client-side, so the realm sees a page
+    // it was asked for; the store marks the answer itself. Lowered so the
+    // four Books overflow it.
+    setSearchBoundsForTests({ defaultPageSize: 2 });
+    let logged: string[] = [];
+    let originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      logged.push(String(args[0]));
+    };
+    let bookRef = { module: testRRI('book'), name: 'Book' };
+    let query: Query = {
+      filter: { type: bookRef },
+      sort: [{ by: 'author.firstName', on: bookRef, direction: 'asc' }],
+    };
+    let resourceFor = (q: Query) =>
+      getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: q,
+          realms: [testRealmURL],
+          isLive: false,
+          isAutoSaved: false,
+          cardInitiated: true,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+    try {
+      let search = resourceFor(query);
+      await search.loaded;
+      assert.strictEqual(search.instances.length, 2, 'the default page');
+      assert.strictEqual(search.totalMatchCount, 4, 'every match counted');
+      assert.true(search.hasMore, 'hasMore');
+      assert.true(search.isTruncated, 'isTruncated');
+      assert.true(search.meta.page?.hasMore, 'meta.page.hasMore');
+      assert.deepEqual(
+        (search.meta.warnings ?? []).filter(
+          (w) => w.code === 'default-page-truncated',
+        ),
+        [
+          {
+            code: 'default-page-truncated',
+            message:
+              'Returned the first 2 of 4 matches; pass page.size or page through the results',
+          },
+        ],
+        'the answer carries the notice',
+      );
+
+      // The same query again logs nothing new: once per query.
+      await storeService.search(query, [testRealmURL], { cardInitiated: true });
+      assert.strictEqual(
+        logged.filter((m) => m.includes('Returned the first 2 of 4')).length,
+        1,
+        'one development warning per query',
+      );
+
+      // Paging through: a page the query names is the page it asked for.
+      let seen: string[] = [];
+      for (let number = 0; ; number++) {
+        let page = resourceFor({ ...query, page: { size: 2, number } });
+        await page.loaded;
+        assert.false(page.isTruncated, `page ${number}: not truncated`);
+        seen.push(...page.instances.map((c) => c.id!));
+        if (!page.hasMore) break;
+        assert.true(number < 5, 'paging ends');
+      }
+      assert.strictEqual(seen.length, 4, 'paging reaches every match');
+      assert.strictEqual(new Set(seen).size, 4, 'each once');
+    } finally {
+      console.warn = originalWarn;
+      resetSearchBoundsForTests();
+    }
+  });
+
+  test(`a card search whose default page holds every match is neither truncated nor has more`, async function (assert) {
+    let search = getSearchResourceForTest(loaderService, () => ({
+      named: {
+        query: { filter: { type: { module: testRRI('book'), name: 'Book' } } },
+        realms: [testRealmURL],
+        isLive: false,
+        isAutoSaved: false,
+        cardInitiated: true,
+        storeService,
+        owner: this.owner,
+      },
+    }));
+    await search.loaded;
+    assert.strictEqual(search.instances.length, 4);
+    assert.strictEqual(search.totalMatchCount, 4);
+    assert.false(search.hasMore);
+    assert.false(search.isTruncated);
   });
 
   test(`can search for file-meta instances using SearchResource`, async function (assert) {

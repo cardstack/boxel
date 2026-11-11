@@ -69,6 +69,8 @@ import {
   SupportedMimeType,
   subscribeToRealm,
   codeRefFromInternalKey,
+  hasWarning,
+  TOTAL_ESTIMATED,
   type Query,
   type Filter,
   type CodeRef,
@@ -144,7 +146,7 @@ const RELEVANCE_SORT = [
 function cardTermFilter(term: string, opts: { fullText?: boolean } = {}) {
   return {
     any: [
-      { on: baseCardRef, typeahead: term },
+      { on: baseCardRef, matches: term, prefix: true, scope: 'title' as const },
       ...(opts.fullText ? [{ on: baseCardRef, matches: term }] : []),
       { on: baseCardRef, contains: { cardTitle: term } },
     ],
@@ -474,8 +476,12 @@ const INDEX_REFRESH_DEBOUNCE_MS = 200;
 // bounded to this many of the most recently modified cards.
 const ACTIVITY_FEED_CAP = 100;
 type FeedMeta = {
-  page?: { total?: number; totalIsEstimate?: boolean; hasMore?: boolean };
+  page?: { total?: number; hasMore?: boolean };
+  // `total-estimated` when `page.total` is a lower bound.
+  warnings?: { code: string }[];
 };
+const totalEstimated = (meta: { warnings?: { code: string }[] } | undefined) =>
+  hasWarning(meta, TOTAL_ESTIMATED);
 // The feed reveals this many rows at a time as the sentinel scrolls into view.
 const FEED_REVEAL_CHUNK = 20;
 
@@ -3572,13 +3578,13 @@ class Isolated extends Component<typeof Workspace> {
       }
       let doc = (await response.json()) as {
         rows?: unknown[][];
-        meta?: { page?: { total?: number; totalIsEstimate?: boolean } };
+        meta?: { page?: { total?: number }; warnings?: { code: string }[] };
       };
       let rows = doc.rows ?? [];
       return {
         rows,
         total: doc.meta?.page?.total ?? rows.length,
-        totalIsEstimate: Boolean(doc.meta?.page?.totalIsEstimate),
+        totalIsEstimate: totalEstimated(doc.meta),
       };
     } catch (e) {
       // Same posture as `searchRealm`: a passive panel reads fine as empty.
@@ -4167,7 +4173,7 @@ class Isolated extends Component<typeof Workspace> {
     );
 
   private feedTotalKnown = (meta: FeedMeta | undefined) =>
-    !meta?.page?.totalIsEstimate;
+    !totalEstimated(meta);
 
   private moreFeed = (meta: FeedMeta | undefined) =>
     this.feedShown < ACTIVITY_FEED_CAP &&

@@ -120,7 +120,8 @@ function buildTitleTermFilters(searchTerm: string): Filter[] {
 // is the synthetic key stamped on both card and file rows (a card's title, a
 // file's name), so the term matches files by name too.
 //
-// `typeahead` adds word-prefix matching on titles, alternative names and type
+// Type-ahead (`matches` with `prefix: true` and `scope: 'title'`) adds
+// word-prefix matching on titles, alternative names and type
 // names, in any order ("kle mart" finds "Martin Kleppmann"), through its own
 // small index; under the Relevance sort its title tiers put the closest title
 // first. All of it is exact: typo tolerance is a UI's opt-in, never the
@@ -128,7 +129,7 @@ function buildTitleTermFilters(searchTerm: string): Filter[] {
 function buildSearchTermFilter(searchTerm: string): Filter {
   return {
     any: [
-      { typeahead: searchTerm },
+      { matches: searchTerm, prefix: true, scope: 'title' },
       { matches: searchTerm },
       ...buildTitleTermFilters(searchTerm),
     ],
@@ -322,7 +323,12 @@ export function buildRecentsQuery(
   // Type-ahead (titles, alternative names, type names; word prefixes) is
   // still title-like, so it joins the title substring match.
   const termFilter: Filter | undefined = term
-    ? { any: [{ typeahead: term }, ...buildTitleTermFilters(term)] }
+    ? {
+        any: [
+          { matches: term, prefix: true, scope: 'title' },
+          ...buildTitleTermFilters(term),
+        ],
+      }
     : undefined;
   let filters: Filter[];
   if (baseFilter) {

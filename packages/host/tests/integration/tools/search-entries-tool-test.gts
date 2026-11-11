@@ -190,6 +190,24 @@ module('Integration | tools | search-entries', function (hooks) {
     );
   });
 
+  test('a query with a top-level type and missing is lowered, not dropped', async function (assert) {
+    // A top-level `type` was dropped on the way to the wire, so the filter
+    // lost its anchor; `missing` threw. Both are the newer spelling.
+    let result = await runSearch({
+      query: {
+        type: { module: rri(`${testRealmURL}author`), name: 'Author' },
+        filter: {
+          every: [{ eq: { firstName: 'Mark' } }, { exists: 'lastName' }],
+        },
+      } as any,
+      scope: 'cards',
+    });
+    assert.deepEqual(
+      result.results.map((row) => row.url),
+      [`${testRealmURL}Author/mark`],
+    );
+  });
+
   test('spec rows carry ref, specType, and the full readMe', async function (assert) {
     let result = await runSearch({
       query: {

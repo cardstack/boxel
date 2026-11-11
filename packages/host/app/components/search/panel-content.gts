@@ -262,8 +262,8 @@ export default class PanelContent extends Component<Signature> {
       // most the sheet ever shows in one section. The search applies
       // `page.size` per realm (so every realm section is still represented) and
       // still reports the match count in `meta.page.total` (which drives the
-      // result-count summary; past the server's cap a lower bound, flagged
-      // `totalIsEstimate`), so this only trims rows the sheet would never
+      // result-count summary; past the server's cap a lower bound, with the
+      // `total-estimated` warning), so this only trims rows the sheet would never
       // render — a large payload reduction on broad queries.
       page: { size: SECTION_DISPLAY_LIMIT_FOCUSED },
     });

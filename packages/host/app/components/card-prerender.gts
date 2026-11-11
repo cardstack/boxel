@@ -986,23 +986,41 @@ export default class CardPrerender extends Component {
 // at, can tell that it is still live (`isLiveRender` in base's
 // `render-context`). A prerender tab, which sets the context for its whole
 // page, names no element.
+//
+// Calls overlap: an index pass keeps several visits in flight, and each one
+// enters here before the prerender task queue serializes it. The context is
+// held from the first entry to the last exit. A per-call "was it already set?"
+// check hands the context to whichever call entered first: it clears the
+// context while a later call is still rendering, the render routes that call
+// drives set it again, and nothing clears it after that, so the tab's own
+// cards go on reading as an index render.
+let renderContextDepth = 0;
+let ownsRenderContext = false;
+let restoreRenderTimers: (() => void) | undefined;
 async function withRenderContext<T>(cb: () => Promise<T>): Promise<T> {
-  let hadContext = Boolean((globalThis as any).__boxelRenderContext);
-  let restoreTimers: (() => void) | undefined;
-  if (!hadContext) {
-    (globalThis as any).__boxelRenderContext = true;
-    (globalThis as any).__boxelRenderContextScope = ISOLATED_RENDER_ELEMENT_ID;
-    if (!isTesting()) {
-      restoreTimers = enableRenderTimerStub();
+  if (renderContextDepth === 0) {
+    // A prerender tab sets the context for its whole page; leave that alone.
+    ownsRenderContext = !(globalThis as any).__boxelRenderContext;
+    if (ownsRenderContext) {
+      (globalThis as any).__boxelRenderContext = true;
+      (globalThis as any).__boxelRenderContextScope =
+        ISOLATED_RENDER_ELEMENT_ID;
+      if (!isTesting()) {
+        restoreRenderTimers = enableRenderTimerStub();
+      }
     }
   }
+  renderContextDepth++;
   try {
     return await cb();
   } finally {
-    if (!hadContext) {
+    renderContextDepth--;
+    if (renderContextDepth === 0 && ownsRenderContext) {
+      ownsRenderContext = false;
       delete (globalThis as any).__boxelRenderContext;
       delete (globalThis as any).__boxelRenderContextScope;
-      restoreTimers?.();
+      restoreRenderTimers?.();
+      restoreRenderTimers = undefined;
     }
   }
 }

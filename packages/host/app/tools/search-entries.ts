@@ -22,6 +22,7 @@ import {
   type CatalogSearch,
 } from '../lib/catalog-search-telemetry';
 import HostBaseTool from '../lib/host-base-tool';
+import { lowerForWire } from '../utils/search/lower-for-wire';
 import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
 import { hasNarrowingPositiveTypeRef } from '../utils/search/query-builder';
 
@@ -178,13 +179,19 @@ export async function searchEntrySummaries(
 ): Promise<{
   rows: EntrySummary[];
   total: number;
-  totalIsEstimate?: true;
+  // The search's caveats (`meta.warnings`): `total-estimated` when `total` is
+  // a lower bound, `approximate-order`, `incomplete`, ….
+  warnings?: { code: string; message: string; realms?: string[] }[];
   incomplete: boolean;
   realmTotals: Record<string, number> | undefined;
+  // The query's facet counts and statistics, when it asked for facets.
+  facets?: { facets?: unknown; facetStats?: unknown };
 }> {
   let resolvedScope = resolveSearchEntryScope(scope);
+  // The wire translator reads the older spelling; lowered first, a top-level
+  // `type` anchors the filter and `exists`/`missing` are `eq` on null.
   let { query, addedRelevanceSort } = composeSearchEntriesQuery(
-    requestQuery,
+    lowerForWire(requestQuery),
     resolvedScope,
   );
   let wireQuery = searchEntryWireQueryFromQuery(query, {
@@ -218,15 +225,28 @@ export async function searchEntrySummaries(
   return {
     rows,
     total: doc.meta.page.total,
-    // `total` stopped counting at the server's cap: there are at least this
-    // many matches.
-    ...(doc.meta.page.totalIsEstimate ? { totalIsEstimate: true } : {}),
+    // The search's caveats, as it gave them: with `total-estimated`, `total`
+    // stopped counting at the server's cap and there are at least this many
+    // matches.
+    ...(doc.meta.warnings?.length ? { warnings: doc.meta.warnings } : {}),
     // A realm that fails (or never resolves) during the federated fan-out is
     // reported through this flag rather than a thrown error — the realms
     // that answered still return; the flag keeps their partiality visible.
     incomplete: doc.meta.incomplete === true,
     // The match count of each realm that answered, keyed by realm URL.
     realmTotals: doc.meta.realmTotals,
+    ...((doc.meta as { facets?: unknown }).facets
+      ? {
+          facets: {
+            facets: (doc.meta as { facets?: unknown }).facets,
+            ...((doc.meta as { facetStats?: unknown }).facetStats
+              ? {
+                  facetStats: (doc.meta as { facetStats?: unknown }).facetStats,
+                }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -300,7 +320,7 @@ export default class SearchEntriesTool extends HostBaseTool<
       this.recordSearch(input, { query: requestQuery, realms, error });
       throw error;
     }
-    let { rows, total, incomplete, realmTotals } = found;
+    let { rows, total, incomplete, realmTotals, facets } = found;
     this.recordSearch(input, {
       query: requestQuery,
       realms,
@@ -313,6 +333,7 @@ export default class SearchEntriesTool extends HostBaseTool<
       results: rows.map((row) => new SearchEntrySummaryField(row)),
       total,
       incomplete,
+      ...(facets ? { facets: JSON.stringify(facets) } : {}),
       cardDescription: `Query: ${JSON.stringify(requestQuery.filter ?? {})}`,
     });
   }

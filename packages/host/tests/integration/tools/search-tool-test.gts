@@ -196,4 +196,39 @@ module('Integration | tools | search', function (hooks) {
     );
     assert.strictEqual(result.cardIds[0], 'http://test-realm/test/Author/r2');
   });
+
+  // The newer spelling reaches the tool when a model writes it. Before the
+  // query is wired it is lowered, as the HTTP path lowers it.
+  test('a query with a top-level type finds the cards of that type', async function (assert) {
+    let result = await runQuerySearch({
+      type: { module: rri('http://test-realm/test/author'), name: 'Author' },
+      filter: { eq: { firstName: 'Mark' } },
+    } as unknown as Query);
+    assert.deepEqual(result.cardIds, ['http://test-realm/test/Author/mark']);
+  });
+
+  test('missing and exists find the cards without and with a value', async function (assert) {
+    let type = {
+      module: rri('http://test-realm/test/author'),
+      name: 'Author',
+    };
+    let missing = await runQuerySearch({
+      type,
+      filter: { missing: 'lastName' },
+    } as unknown as Query);
+    assert.deepEqual(
+      missing.cardIds,
+      ['http://test-realm/test/Author/r2'],
+      'r2 has no last name',
+    );
+    let exists = await runQuerySearch({
+      type,
+      filter: { exists: 'lastName' },
+    } as unknown as Query);
+    assert.deepEqual(
+      exists.cardIds,
+      ['http://test-realm/test/Author/mark'],
+      'mark has one',
+    );
+  });
 });

@@ -102,6 +102,10 @@ export default class SearchResults extends Component<HostSearchResultsSignature>
       entriesQuery: this.renderables.entriesQuery,
       meta: this.renderables.meta,
       errors: this.renderables.errors,
+      // Why the realm refused the query, and what it did short of refusing,
+      // so a card can show either rather than an empty result.
+      refusal: this.renderables.errors?.find((e) => e.refusal)?.refusal,
+      warnings: this.renderables.meta?.warnings,
     };
   }
 

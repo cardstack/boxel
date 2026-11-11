@@ -17,6 +17,8 @@ import {
   Deferred,
   definitionDisplayName,
   definitionSearchIntent,
+  definitionFacetValue,
+  definitionIndexFields,
   definitionKind,
   getFieldDefinitions,
   identifyCard,
@@ -589,6 +591,14 @@ async function makeDefinition(
     let search = definitionSearchIntent(def);
     if (search) {
       definition.search = search;
+    }
+    let facetValue = definitionFacetValue(def);
+    if (facetValue) {
+      definition.facetValue = facetValue;
+    }
+    let indexFields = definitionIndexFields(def);
+    if (indexFields) {
+      definition.indexFields = indexFields;
     }
     let operations = await captureOperations(
       def,

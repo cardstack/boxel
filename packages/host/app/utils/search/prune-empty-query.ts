@@ -13,6 +13,10 @@ import {
 // filter.
 export function pruneEmptyQueryParts(query: Query): Query {
   let result: Record<string, unknown> = { ...query };
+  // The newer spelling's top-level `type`: an empty CodeRef is no type.
+  if ('type' in result && !isUsableCodeRef(result.type)) {
+    delete result.type;
+  }
   let filter = pruneFilter(query.filter);
   if (filter === undefined) {
     delete result.filter;
@@ -26,13 +30,18 @@ export function pruneEmptyQueryParts(query: Query): Query {
     let sort = (result.sort as unknown[]).filter(
       (entry) =>
         isObject(entry) &&
-        isNonEmptyString(entry.by) &&
-        (hasTerms || entry.by !== MATCH_RELEVANCE_SORT_KEY),
+        (isSignalSort(entry) ||
+          (isNonEmptyString(entry.by) &&
+            (hasTerms || entry.by !== MATCH_RELEVANCE_SORT_KEY))),
     );
     if (sort.length === 0) {
       delete result.sort;
     } else {
       result.sort = sort.map((entry) => {
+        // A signal sort is the caller's whole intent; validation judges it.
+        if (isSignalSort(entry as Record<string, unknown>)) {
+          return entry;
+        }
         let { on, ...rest } = entry as Record<string, unknown>;
         // Relevance is not a field of any card type, so it takes no anchor;
         // the engine rejects `_matchRelevance` with `on` in every realm.
@@ -47,6 +56,13 @@ export function pruneEmptyQueryParts(query: Query): Query {
 }
 
 const CODE_REF_KEYS = new Set(['type', 'on']);
+// The newer spelling's signal sorts, keyed by what they rank with rather than
+// by a field `by`: `{ blend }`, `{ expression }`, `{ relevance }`, `{ boost }`.
+const SIGNAL_SORT_KEYS = ['blend', 'expression', 'relevance', 'boost'];
+
+function isSignalSort(entry: Record<string, unknown>): boolean {
+  return SIGNAL_SORT_KEYS.some((key) => key in entry);
+}
 const LIST_KEYS = new Set(['any', 'every']);
 
 function pruneFilter(filter: unknown): Record<string, unknown> | undefined {

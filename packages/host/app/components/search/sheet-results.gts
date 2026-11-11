@@ -7,6 +7,7 @@ import pluralize from 'pluralize';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
+import { TOTAL_ESTIMATED } from '@cardstack/runtime-common';
 import type {
   Filter,
   RenderableSearchEntryLike,
@@ -236,7 +237,9 @@ export default class SheetResults extends Component<Signature> {
     }
     const total = this.args.mainResults.meta.page?.total ?? 0;
     // A total the search stopped counting at is a lower bound: "1,000+".
-    const results = this.args.mainResults.meta.page?.totalIsEstimate
+    const results = this.args.mainResults.meta.warnings?.some(
+      (w) => w.code === TOTAL_ESTIMATED,
+    )
       ? `${total.toLocaleString('en-US')}+ results`
       : pluralize('result', total, true);
     // The mini variant compresses the summary to "X results" — the design puts

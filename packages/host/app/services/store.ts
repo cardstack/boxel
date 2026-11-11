@@ -7,7 +7,7 @@ import type Owner from '@ember/owner';
 import { getOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
+import { isDevelopingApp, isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
@@ -36,6 +36,7 @@ import {
   loadCardDef,
   resolveFileDefCodeRef,
   searchEntryWireQueryFromQuery,
+  assertAuthoredQuerySpelling,
   getTypeRefsFromFilter,
   X_BOXEL_JOB_PRIORITY_HEADER,
   userInitiatedPriority,
@@ -53,6 +54,10 @@ import {
   stringifyErrorForLog,
   applySearchPageBound,
   assertRealmsBound,
+  takesDefaultPage,
+  defaultPageTruncationWarning,
+  DEFAULT_PAGE_TRUNCATED,
+  queryFieldDefaultPageSize,
   isJsonContentType,
   QUERY_FIELD_SEARCH_CONCURRENCY_CAP,
   SEARCH_CONCURRENCY_CAP,
@@ -1587,13 +1592,25 @@ export default class StoreService extends Service implements StoreInterface {
     if (searchRealms.length === 0) {
       return { instances: [], meta: { page: { total: 0 } } };
     }
+    let defaultPage: Query['page'];
     if (opts?.cardInitiated) {
+      // A card's query is an author's: one in the newer spelling names its
+      // type with a top-level `type`, never an `on` on its top filter
+      // (`mixed-spelling`, with the rewrite).
+      assertAuthoredQuerySpelling(query);
       // Enforce the card-facing caps on the resolved request: the realms cap on
       // the (already current-realm-resolved) list, and the page cap on the
       // query. These throw a SearchBoundError the caller surfaces as a search
       // error.
       assertRealmsBound(searchRealms);
-      query = applySearchPageBound(query);
+      let asked = query;
+      query = applySearchPageBound(asked);
+      // The card page default is applied here rather than by the server, so
+      // the server sees a page it was asked for and cannot tell a short
+      // answer was the default's doing. This side says so instead.
+      if (takesDefaultPage(asked)) {
+        defaultPage = query.page;
+      }
     }
     let run = () =>
       this.fetchAndHydrateSearchResults<ElementForScope[S]>(
@@ -1618,8 +1635,82 @@ export default class StoreService extends Service implements StoreInterface {
           return await run();
         }, lane)
       : await run();
+    if (
+      opts?.throttled &&
+      !opts.cardInitiated &&
+      isDevelopingApp() &&
+      Number(query.page?.size) === queryFieldDefaultPageSize() &&
+      (result.meta?.page?.total ?? 0) > result.instances.length
+    ) {
+      // A query-backed field that names no page holds the field default. Its
+      // page is explicit on the wire (every leg must agree on it), so no
+      // notice rides the answer; `totalMatchCount` and `isPartial` say how
+      // short it is, and a development build says so once.
+      this.warnDefaultPageOnce(
+        query,
+        `a query-backed field holds the first ${result.instances.length} of ${result.meta.page.total} matches (its default page); read totalMatchCount for the count, or declare page.size`,
+      );
+    }
+    return this.noteDefaultPageTruncation(result, query, defaultPage);
+  }
+
+  // A search whose page nobody asked for, and which left matches out, says so
+  // in its answer: `meta.warnings` gains `default-page-truncated` and
+  // `meta.page.hasMore` is set, so a caller holding a short page can tell it
+  // from a short match set (`SearchResource.isTruncated` reads it). The
+  // server's own default (a host search naming no page) arrives with the
+  // notice already on it. Either way a development build logs it once per
+  // query, since the symptom is otherwise a number that looks right.
+  private noteDefaultPageTruncation<T>(
+    result: { instances: T[]; meta: SearchEntryResults['meta'] },
+    query: Query,
+    defaultPage: Query['page'],
+  ): { instances: T[]; meta: SearchEntryResults['meta'] } {
+    let { meta } = result;
+    let warnings = meta?.warnings ?? [];
+    let warning = warnings.find((w) => w.code === DEFAULT_PAGE_TRUNCATED);
+    if (!warning && defaultPage) {
+      warning = defaultPageTruncationWarning(
+        defaultPage,
+        result.instances.length,
+        meta?.page,
+        warnings,
+      );
+      if (warning) {
+        result = {
+          ...result,
+          meta: {
+            ...meta,
+            page: { ...meta?.page, hasMore: true },
+            warnings: [...warnings, warning],
+          },
+        };
+      }
+    }
+    if (warning && isDevelopingApp()) {
+      this.warnDefaultPageOnce(query, warning.message);
+    }
     return result;
   }
+
+  private warnDefaultPageOnce(query: Query, message: string) {
+    let key = JSON.stringify(query);
+    if (
+      this.reportedDefaultPageTruncations.has(key) ||
+      this.reportedDefaultPageTruncations.size >= 200
+    ) {
+      return;
+    }
+    this.reportedDefaultPageTruncations.add(key);
+    console.warn(
+      `[boxel search] ${message}. Query: ${key}. Read meta.page.total (totalMatchCount), or walk page.number until meta.page.hasMore is false.`,
+    );
+  }
+
+  // The queries whose default-page truncation a development build has logged,
+  // so each is logged once. Capped so a page walking many distinct queries
+  // cannot grow it without bound.
+  private reportedDefaultPageTruncations = new Set<string>();
 
   // The raw wire format: heterogeneous `entry` resources with the
   // `html` / `item` branches the query's `fields[entry]` selects.

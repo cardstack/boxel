@@ -679,22 +679,23 @@ export class SearchEntriesResource extends Resource<Args> {
                 (r.meta as { _explain: ResultExplanation })._explain,
               ]),
           );
-          // Under `rerank`, each result's formula value, by card id.
-          let reranks = Object.fromEntries(
+          // Under a window (a leading expression sort entry with `top`),
+          // each result's value, by card id.
+          let windows = Object.fromEntries(
             (doc.data ?? [])
               .filter(
-                (r) => (r.meta as { _rerank?: unknown })?._rerank !== undefined,
+                (r) => (r.meta as { _window?: unknown })?._window !== undefined,
               )
               .map((r) => [
                 r.id,
-                (r.meta as { _rerank: number | null })._rerank,
+                (r.meta as { _window: number | null })._window,
               ]),
           );
           this._meta = {
             ...doc.meta,
             ...(realmTotals ? { realmTotals } : {}),
             ...(Object.keys(explanations).length ? { explanations } : {}),
-            ...(Object.keys(reranks).length ? { reranks } : {}),
+            ...(Object.keys(windows).length ? { windows } : {}),
           };
           this._entriesQuery = query;
           this.hasCompletedFullRun = true;
