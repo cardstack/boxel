@@ -45,6 +45,7 @@ import {
   prepareTestDB,
   testRealm,
 } from './helpers/index.ts';
+import { sized } from './helpers/query-extended.ts';
 
 // The adversarial sweep of the query language: hostile and broken input at
 // every entry point that accepts a query. The standard is a database's own
@@ -114,8 +115,50 @@ const DOCUMENTED_CODES = new Set([
 // fraction of it.
 const HANG_MS = 8_000;
 // How many generated cases with no expected rows a group runs against the
-// database (cases with expected rows always run).
+// database (cases with expected rows always run): one case in `stride`, up
+// to 150. With QUERY_TESTS_EXTENDED=1 all of those run. A pull request runs
+// one in ten of them, the same ones on every run, plus each of them whose
+// input is of a kind that found a defect (below). Every case still goes
+// through the grammar, the lowering and the wire either way.
 const DB_SAMPLE = 150;
+const DB_SPREAD = sized(10, 1);
+
+// The inputs that found a defect when they ran against the database
+// (findings F1 to F23): on a pull request these keep every database run the
+// extended run gives them. Each is matched by what its input holds, so a new
+// case of the same kind is kept too.
+const FINDING_TRIGGERS: [string, RegExp][] = [
+  // F7, F19: a NUL character or a lone surrogate reached Postgres
+  ['a NUL or a lone surrogate', /\\u0000|\\ud[89a-f][0-9a-f]{2}/i],
+  // F8, F16: a regular expression or a glob Postgres rejected or ran long
+  ['a pattern or a regex', /"(pattern|regex)"/],
+  // F9, F17: relative dates overflowing, or read on a text field
+  ['a relative date', /\bnow\b/i],
+  // F10, F12: numbers past what LIMIT, OFFSET, k or a vector take
+  ['a very large number', /\d{10,}|\de\+?\d{2,}|"k":-?\d*\.\d/i],
+  // F11: a date facet over text that is not a date
+  ['a facet interval', /"interval"/],
+  // F14, F20: a select over a type or a path that is not there
+  ['a select', /"select"/],
+  // F18: a value past the length an index entry holds inline
+  ['a value of 3,000 characters', /[^"]{3000}/],
+  // F21: accents folding in a word being typed
+  ['an accented word', /cr[eè]me/i],
+];
+function isFindingInput(c: Case): boolean {
+  // F3, F12, F16: nesting, long lists and megabyte terms are built from a
+  // recipe; an in-process input is not read again outside its checks
+  if (c.inProcess) return false;
+  if (hasRecipe(c.input) || hasRecipe(c.wire)) return true;
+  let text: string;
+  try {
+    text = `${JSON.stringify(c.input)} ${JSON.stringify(c.wire ?? null)}`;
+  } catch {
+    // a cycle or a BigInt: not an input the database ever saw
+    return false;
+  }
+  return FINDING_TRIGGERS.some(([, pattern]) => pattern.test(text));
+}
 
 // ---------------------------------------------------------------------------
 // The fixture
@@ -952,8 +995,12 @@ class Sweep {
   }
 
   // Whether a generated case with no expected rows still gets a database run.
-  sample(): boolean {
-    return this.#asked++ % this.stride === 0 && this.#sampled++ < DB_SAMPLE;
+  // A pull request's cases are always among the extended run's.
+  sample(c: Case): boolean {
+    let inFullSample =
+      this.#asked++ % this.stride === 0 && this.#sampled++ < DB_SAMPLE;
+    if (!inFullSample) return false;
+    return (this.#sampled - 1) % DB_SPREAD === 0 || isFindingInput(c);
   }
 
   of(...kinds: FailureKind[]): Failure[] {
@@ -2428,7 +2475,7 @@ module(basename(import.meta.filename), function (hooks) {
     // 4. the engine, for a query the grammar accepts
     if (c.db === false) return;
     let wanted = c.db === true || Boolean(c.expect?.ids || c.expect?.atLeast);
-    if (accepted && (wanted || sweep.sample())) {
+    if (accepted && (wanted || sweep.sample(c))) {
       await searchEngine(sweep, c, 'engine', large ? build(c.input) : input);
     }
     if (parsed && !('hang' in parsed) && parsed.ok && parsed.value) {
@@ -2437,8 +2484,8 @@ module(basename(import.meta.filename), function (hooks) {
       // the case's own, or where the grammar check did not take the query.
       let own = hasOwnWire && (c.wireOnly || wanted);
       if (entryQuery.columns) {
-        if (own || sweep.sample()) await searchTable(sweep, c, entryQuery);
-      } else if (own || (!accepted && sweep.sample())) {
+        if (own || sweep.sample(c)) await searchTable(sweep, c, entryQuery);
+      } else if (own || (!accepted && sweep.sample(c))) {
         await searchEngine(sweep, c, 'engine (wire)', entryQuery.itemQuery, {
           ...(entryQuery.cardUrls ? { cardUrls: entryQuery.cardUrls } : {}),
         });

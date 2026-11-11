@@ -17,7 +17,6 @@ import {
   SEARCH_TEXT_KEY,
   normalizeQueryDefinition,
   param,
-  parseSearchEntryQueryFromPayload,
   query,
   resetSearchBoundsForTests,
   rri,
@@ -876,21 +875,6 @@ module(basename(import.meta.filename), function () {
           );
         });
       }
-
-      test('columns in a select: 64 accepted, 65 refused (limit-exceeded)', function (assert) {
-        let request = (n: number) => ({
-          type: Note,
-          select: many(n, (i) => ({ [`c${i}`]: 'level' })),
-        });
-        assert.strictEqual(
-          codeOf(() => parseSearchEntryQueryFromPayload(request(64))),
-          'accepted',
-        );
-        assert.strictEqual(
-          codeOf(() => parseSearchEntryQueryFromPayload(request(65))),
-          'refused: limit-exceeded',
-        );
-      });
     });
 
     module('a limit: what the answer is at it', function () {
@@ -926,28 +910,6 @@ module(basename(import.meta.filename), function () {
           meta.page.total,
           30,
           'the total counts what remains',
-        );
-      });
-
-      test('a window of 500 over more matches re-orders the first 500 and says the rest kept their order', async function (assert) {
-        // The query orders by level, lowest first; the window orders its
-        // window (levels 0 to 499) highest first; levels 500 to 599 follow in
-        // the query's order.
-        let { urls, meta } = await search(
-          lowered({
-            type: Note,
-            filter: { range: { level: { lt: 2000 } } },
-            sort: [{ expression: 'level', top: 500 }, { by: 'level' }],
-            page: { size: 600 },
-          }),
-        );
-        assert.deepEqual(urls, [
-          ...levelsBelow(500).reverse().map(bulkUrl),
-          ...levelsBelow(100).map((i) => bulkUrl(500 + i)),
-        ]);
-        assert.true(
-          Boolean(meta.window?.truncated),
-          'meta.window.truncated says the query matched more than the window',
         );
       });
 

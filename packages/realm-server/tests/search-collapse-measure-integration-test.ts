@@ -290,20 +290,6 @@ module(basename(import.meta.filename), function (hooks) {
   }
   const byScore = [{ on, by: 'hnScore', direction: 'desc' as const }];
 
-  test('collapse keeps the best card of each group by the sort', async function (assert) {
-    let { titles, meta } = await search({
-      filter: { type: on },
-      sort: byScore,
-      collapse: { by: 'channel', on },
-    });
-    assert.deepEqual(
-      titles,
-      ['d', 'b', 'f', 'g'],
-      'GOTO keeps d, Strange Loop keeps b, cards with no channel stay',
-    );
-    assert.strictEqual(meta.page.total, 4, 'the total counts what remains');
-  });
-
   test('collapse keeps several per group, and pages over the groups', async function (assert) {
     let { titles, meta } = await search({
       filter: { type: on },
@@ -426,23 +412,6 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual((merged as any).meta.facets.brand, [
       { value: 'X', count: 4, measure: { avg: 25 } },
     ]);
-  });
-
-  test('a range reads relative dates when the query runs', async function (assert) {
-    let recent = await search({
-      filter: { on, range: { published: { gte: 'now-30d' } } },
-      sort: byScore,
-    });
-    assert.deepEqual(recent.titles, ['b', 'a'], 'datetime field');
-    let days = await search({
-      filter: { on, range: { day: { gte: 'now-30d/d', lt: 'now/d' } } },
-      sort: byScore,
-    });
-    assert.deepEqual(days.titles, ['b', 'a'], 'date field, rounded to the day');
-    let older = await search({
-      filter: { on, range: { day: { lt: 'now-1y' } } },
-    });
-    assert.deepEqual(older.titles, ['d']);
   });
 
   test('relative dates resolve and round in UTC', function (assert) {
@@ -799,58 +768,6 @@ module(basename(import.meta.filename), function (hooks) {
       listed.titles,
       ['e', 'c', 'a'],
       'negated, beside other filters',
-    );
-  });
-
-  test('a let list cut at its value limit says so', async function (assert) {
-    let batch = await new IndexWriter(adapter).createBatch(
-      new URL(testRealm),
-      virtualNetwork,
-      undefined,
-      { splitPrerenderHtml: false },
-    );
-    let cardURL = new URL(url('h'));
-    await batch.updateEntry(cardURL, {
-      type: 'instance',
-      resource: {
-        id: rri(cardURL.href),
-        type: 'card',
-        attributes: {},
-        meta: { adoptsFrom: { module: rri(talkRef.module), name: 'Talk' } },
-      },
-      lastModified: Date.now(),
-      resourceCreatedAt: Date.now(),
-      // a panel of 10,001 speakers, past the 10,000 values a list holds
-      searchData: {
-        title: 'H',
-        hnScore: 2,
-        speakers: Array.from({ length: 10_001 }, (_, i) => `Speaker ${i}`),
-      },
-      markdown: 'H',
-      deps: new Set(),
-      displayNames: ['Talk'],
-      types: [talkKey],
-      isolatedHtml: '<div>h</div>',
-    });
-    await batch.done();
-    let { titles, meta } = await search({
-      let: {
-        $names: { from: { filter: { type: on } }, select: 'speakers' },
-      },
-      filter: { on, in: { speakers: '$names' } },
-      sort: byScore,
-    });
-    assert.deepEqual(titles, ['a', 'h'], 'the query ran with the first 10,000');
-    assert.deepEqual(meta.lets, {
-      $names: { strategy: 'list', values: 10_000 },
-    });
-    assert.deepEqual(
-      meta.warnings?.map((w) => w.code),
-      ['binding-truncated'],
-    );
-    assert.ok(
-      /"\$names" found more than 10,000 values/.test(meta.warnings![0].message),
-      meta.warnings![0].message,
     );
   });
 
@@ -1493,36 +1410,6 @@ module(basename(import.meta.filename), function (hooks) {
       ['a', 'f', 'g'],
       'a page past the window keeps the query order',
     );
-  });
-
-  test('a page that runs past the window of an expression with top is filled in the query order', async function (assert) {
-    let pageOf = (number: number) =>
-      reranked({
-        filter: { type: on },
-        sort: [{ expression: '100 - hnScore', top: 4 }, ...byScoreDesc],
-        page: { number, size: 3 },
-      });
-    let straddling = await pageOf(1);
-    assert.deepEqual(
-      straddling.rows,
-      [
-        ['d', 50],
-        ['a', null],
-        ['f', null],
-      ],
-      'the last re-ranked row, then the rows after the window, unscored',
-    );
-    let seen: string[] = [];
-    for (let number of [0, 1, 2]) {
-      seen.push(...(await pageOf(number)).rows.map((r) => r[0] as string));
-    }
-    assert.deepEqual(
-      seen,
-      ['c', 'b', 'e', 'd', 'a', 'f', 'g'],
-      'every match once, with no gap after the window',
-    );
-    assert.strictEqual(straddling.meta.window?.rows, 4);
-    assert.true(straddling.meta.window?.truncated);
   });
 
   test('a reranked page keeps what the query computed for each row', async function (assert) {

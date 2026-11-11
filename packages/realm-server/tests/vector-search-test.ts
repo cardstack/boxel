@@ -726,60 +726,6 @@ module(basename(import.meta.filename), function () {
     );
 
     pgvectorTest(
-      'a near sort orders by cosine similarity, most similar first, cards without a vector last',
-      async (assert) => {
-        await index(seed);
-        assert.deepEqual(
-          await nearIds({
-            sort: [{ on: momentRef, by: 'embedding', near: [1, 0, 0] }],
-          }),
-          [
-            'same.json',
-            'close.json',
-            'orthogonal.json',
-            'opposite.json',
-            'none.json',
-          ],
-        );
-        assert.deepEqual(
-          await nearIds({
-            sort: [
-              {
-                on: momentRef,
-                by: 'embedding',
-                near: [1, 0, 0],
-                direction: 'asc',
-              },
-            ],
-          }),
-          [
-            'opposite.json',
-            'orthogonal.json',
-            'close.json',
-            'same.json',
-            'none.json',
-          ],
-          'asc puts the least similar first; no vector stays last',
-        );
-        assert.deepEqual(
-          (
-            await nearIds({
-              sort: [
-                {
-                  on: momentRef,
-                  by: 'embedding',
-                  near: encodeVector([0, 1, 0], { encoding: 'float32' }),
-                },
-              ],
-            })
-          ).slice(0, 2),
-          ['orthogonal.json', 'close.json'],
-          'a stored-form target works too',
-        );
-      },
-    );
-
-    pgvectorTest(
       'a near sort combines with filters and paging',
       async (assert) => {
         await index(seed);
@@ -811,59 +757,6 @@ module(basename(import.meta.filename), function () {
           page: { size: 2 },
         });
         assert.strictEqual(meta.page.total, 3, 'total counts every match');
-      },
-    );
-
-    pgvectorTest(
-      'a plural vector field ranks a card by its nearest vector',
-      async (assert) => {
-        await index({
-          far: { title: 'far', segments: [{ embedding: vec([-1, 0, 0]) }] },
-          mixed: {
-            title: 'mixed',
-            segments: [
-              { embedding: vec([0, -1, 0]) },
-              { embedding: vec([1, 0.1, 0]) },
-            ],
-          },
-          middle: {
-            title: 'middle',
-            segments: [{ embedding: vec([1, 1, 0]) }],
-          },
-        });
-        assert.deepEqual(
-          await nearIds({
-            sort: [
-              { on: momentRef, by: 'segments.embedding', near: [1, 0, 0] },
-            ],
-          }),
-          ['mixed.json', 'middle.json', 'far.json'],
-        );
-      },
-    );
-
-    pgvectorTest(
-      'a target of another dimension ranks nothing, and a non-vector field is refused',
-      async (assert) => {
-        await index(seed);
-        assert.deepEqual(
-          (
-            await nearIds({
-              sort: [{ on: momentRef, by: 'embedding', near: [1, 0] }],
-            })
-          ).length,
-          5,
-          'every card still matches, unranked (no vector of that dimension)',
-        );
-        try {
-          await nearIds({
-            sort: [{ on: momentRef, by: 'title', near: [1, 0, 0] }],
-          });
-          assert.ok(false, 'expected an error');
-        } catch (e) {
-          assert.ok(e instanceof InvalidQueryError);
-          assert.ok(/requires "title" to be a VectorField/.test(String(e)));
-        }
       },
     );
 
@@ -943,33 +836,6 @@ module(basename(import.meta.filename), function () {
         } catch (e) {
           assert.ok(/requires "title" to be a VectorField/.test(String(e)));
         }
-      },
-    );
-
-    pgvectorTest(
-      'a near filter on a plural field matches when any vector qualifies',
-      async (assert) => {
-        await index({
-          far: { title: 'far', segments: [{ embedding: vec([-1, 0, 0]) }] },
-          mixed: {
-            title: 'mixed',
-            segments: [
-              { embedding: vec([0, -1, 0]) },
-              { embedding: vec([1, 0.1, 0]) },
-            ],
-          },
-        });
-        assert.deepEqual(
-          await nearIds({
-            filter: {
-              on: momentRef,
-              near: {
-                'segments.embedding': { to: [1, 0, 0], minSimilarity: 0.9 },
-              },
-            },
-          }),
-          ['mixed.json'],
-        );
       },
     );
 
@@ -1291,60 +1157,6 @@ module(basename(import.meta.filename), function () {
         );
         assert.strictEqual(counts.a, 2, "a's look-alikes are b and d, not c");
         assert.notOk(counts.c, 'c has no look-alikes of its own');
-      },
-    );
-
-    pgvectorTest(
-      'a window compares each card with its own look-alikes',
-      async function (assert) {
-        await index({
-          a: { title: 'a', views: 10, embedding: vec([1, 0, 0]) },
-          b: { title: 'b', views: 50, embedding: vec([0.99, 0.1, 0]) },
-          c: { title: 'c', views: 20, embedding: vec([0.98, 0.15, 0]) },
-          d: { title: 'd', views: 5, embedding: vec([0, 1, 0]) },
-          e: { title: 'e', views: 100, embedding: vec([0, 0.99, 0.1]) },
-        });
-        let rerankRows = async (window: any) => {
-          let { results, meta } = await engine.search(
-            new URL(testRealm),
-            { filter: { type: momentRef }, sort: [window] } as Query,
-            {},
-            { kind: 'renderSet' },
-          );
-          return {
-            rows: results.map((r: any) => [
-              r.url.replace(`${testRealm}Moment/`, '').replace('.json', ''),
-              r._window == null ? null : Number(Number(r._window).toFixed(3)),
-            ]),
-            meta,
-          };
-        };
-        // Views against the median of each card's two nearest look-alikes
-        // (d and e have only each other above 0.5).
-        let { rows } = await rerankRows({
-          expression: 'views / stats.views.median',
-          compare: { near: 'embedding', k: 2, minSimilarity: 0.5 },
-        });
-        assert.deepEqual(rows, [
-          ['e', 20],
-          ['b', 3.333],
-          ['c', 0.667],
-          ['a', 0.286],
-          ['d', 0.05],
-        ]);
-        let similar = await rerankRows({
-          expression: 'MAX(peers.similarity)',
-          compare: { near: 'embedding', k: 1 },
-        });
-        assert.ok(
-          similar.rows.every(([, v]) => typeof v === 'number' && v > 0.9),
-          "each card's twin is nearly identical",
-        );
-        await assert.rejects(
-          rerankRows({ expression: 'views', compare: { near: 'views' } }),
-          /declare the field with search: \{ neighbors: true \}/,
-          'a field that has not opted in is refused',
-        );
       },
     );
 

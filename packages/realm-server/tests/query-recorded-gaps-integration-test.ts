@@ -1341,33 +1341,6 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    const worded = fixture('worded', {
-      Item: {
-        A: { title: 'organic beans', rating: 4 },
-        B: { title: 'beans', rating: 4.5 },
-      },
-    });
-    test('an expression with a text function is refused: every expression runs in SQL', async function (assert) {
-      let { refused } = await outcome(() =>
-        run(worded, {
-          type: worded.Item,
-          sort: [
-            {
-              expression:
-                'IF(ISNUMBER(SEARCH("organic", title)), 1.2, 1) * rating',
-            },
-          ],
-        }),
-      );
-      isCodedRefusal(
-        assert,
-        refused!,
-        /ISNUMBER|SEARCH/,
-        'a text function',
-        'expression-unsupported',
-      );
-    });
-
     // ---- blends and boosts ------------------------------------------------
     const cover = fixture('cover', {
       Item: {

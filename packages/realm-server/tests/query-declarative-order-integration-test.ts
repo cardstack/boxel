@@ -30,6 +30,7 @@ import {
 } from '@cardstack/runtime-common/search-entry';
 
 import { setupDB } from './helpers/index.ts';
+import { sized } from './helpers/query-extended.ts';
 
 // A query is declarative (docs/search.md, "The shape of a query"): it says
 // what it wants, and "no member means something different because of where it
@@ -1315,7 +1316,9 @@ module(basename(import.meta.filename), function (hooks) {
   module(
     'generated queries answer alike however they are written',
     function () {
-      const BATCHES = 6;
+      // QUERY_TESTS_EXTENDED=1 runs all six batches; a pull request runs the
+      // first (each batch has its own fixed seed).
+      const BATCHES = sized(1, 6);
       const PER_BATCH = 25;
       for (let batch = 0; batch < BATCHES; batch++) {
         test(`${PER_BATCH} generated filters with a sort, a page and two facets, five rewritings each, in three forms (batch ${batch + 1})`, async function (assert) {
@@ -3065,29 +3068,6 @@ module(basename(import.meta.filename), function (hooks) {
           }
         }
         assert.deepEqual(off.slice(0, 5), [], label);
-      }
-    });
-
-    test('`explain` lists the signals of a blend in the order they were written', async function (assert) {
-      // pins current behavior; rule not yet decided: the docs show the list
-      // but do not say what orders it. It is presentation either way: the
-      // test above shows each signal's numbers do not depend on it.
-      for (let order of [SIGNALS, [...SIGNALS].reverse()]) {
-        let { results } = await engine.search(
-          realmURL,
-          lowerQuery({
-            type: G,
-            sort: [{ blend: order.map((s) => s.entry) }],
-            explain: true,
-            page: { size: 1 },
-          }).query as Query,
-          {},
-          { kind: 'renderSet' },
-        );
-        assert.deepEqual(
-          (results[0] as any)._explain.signals.map((s: any) => s.signal),
-          order.map((s) => s.name),
-        );
       }
     });
 

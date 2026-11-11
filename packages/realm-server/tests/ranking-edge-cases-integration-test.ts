@@ -728,12 +728,6 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a `top` of 500, the documented maximum, is accepted', async function (assert) {
-      await index(items);
-      let outcome = await attempt(windowQuery({ top: 500 }));
-      assertOrder(assert, outcome, ordered(byScoreDesc, heatValue), 'top: 500');
-    });
-
     for (let [what, top] of [
       ['just past the maximum', 501],
       ['zero', 0],
@@ -1066,7 +1060,14 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
-      for (let broken of ['score +* (', 'IF(', 'score + ', ')score']) {
+      for (let broken of [
+        'score +* (',
+        'IF(',
+        'score + ',
+        ')score',
+        'score; heat',
+        "LEN('single')",
+      ]) {
         test(`${form}: the malformed expression ${JSON.stringify(broken)} is refused with invalid-expression`, async function (assert) {
           await index(items);
           assertRefused(
@@ -1138,29 +1139,9 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    for (let placement of ['sql', 'top']) {
-      test(`\`placement: "${placement}"\` is refused with unknown-key: every expression runs in SQL`, async function (assert) {
-        await index(items);
-        assertRefused(
-          assert,
-          await attempt({
-            type: itemRef,
-            sort: [{ expression: 'score', placement }],
-          }),
-          'unknown-key',
-          `placement: ${placement}`,
-        );
-      });
-    }
-
     // What SQL cannot compute is refused, whatever its place in the query:
     // there is no other place an expression runs.
-    for (let expression of [
-      'LEN(name)',
-      'SEARCH("a", name)',
-      'LET(x, score, x * 2)',
-      'STDEV_S(score)',
-    ]) {
+    for (let expression of ['LET(x, score, x * 2)', 'STDEV_S(score)']) {
       for (let [form, queryOf] of Object.entries(forms)) {
         test(`${form}: ${expression} is refused with expression-unsupported`, async function (assert) {
           await index(items);
@@ -1985,31 +1966,6 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(ids, idsOf(bySimilarity.slice(0, 3)));
     });
 
-    test('past the threshold, a leading paged near sort reads the index (hnsw) and returns the exact order', async function (assert) {
-      await index(vectors);
-      await settingsWithIndex({ exactThreshold: 3 });
-      let { rows, meta } = await run({
-        type: itemRef,
-        sort: [nearSort()],
-        page: { size: 3 },
-      });
-      assert.strictEqual(meta.near?.path, 'hnsw');
-      assert.strictEqual(meta.near?.reason, undefined, 'no reason to be exact');
-      assert.strictEqual(meta.near?.rescored, 4, 'four cards re-scored');
-      assert.deepEqual(warningCodes(meta), []);
-      assert.deepEqual(
-        rounded(
-          rows.map((r) => [r.id, r.similarity]),
-          5,
-        ),
-        rounded(
-          bySimilarity.slice(0, 3).map((r) => [r.id, similarityTo(xAxis)(r)]),
-          5,
-        ),
-        'the three nearest, each with its exact similarity',
-      );
-    });
-
     for (let [what, reason, query] of [
       ['an unpaged near sort', 'unpaged', { sort: [nearSort()] }],
       [
@@ -2587,19 +2543,6 @@ module(basename(import.meta.filename), function (hooks) {
             ordered(byNameRows, similarityTo(target)),
             target,
           ),
-        );
-      });
-
-      test('a near sort on a field that is not a vector is refused with needs-declaration', async function (assert) {
-        await index(vectors);
-        assertRefused(
-          assert,
-          await attempt({
-            type: itemRef,
-            sort: [{ by: 'name', near: xAxis }],
-          }),
-          'needs-declaration',
-          'near on a text field',
         );
       });
     });

@@ -12,7 +12,10 @@ import {
 // them), so a caller can react to it without parsing the message. The code
 // is a required argument, so a refusal written without one fails the type
 // check; this test keeps it required and checks that the mistakes a caller
-// can make come back with the code they should.
+// can make come back with the code they should. Rows here are the older
+// spelling and the codes query-refusals-test.ts does not assert; a mistake
+// it already holds (a facet, binding, collapse or window limit, `rerank`,
+// `placement`, an expression SQL cannot run) lives there only.
 
 const on = { module: 'http://test-realm/talk', name: 'Talk' };
 
@@ -78,31 +81,9 @@ const MISTAKES: [string, unknown, string][] = [
     'invalid-value',
   ],
   [
-    'too many facets',
-    { facets: Array.from({ length: 9 }, (_, i) => ({ by: `f${i}` })) },
-    'limit-exceeded',
-  ],
-  [
     'an unknown facet member',
     { facets: [{ by: 'a', group: true }] },
     'unknown-key',
-  ],
-  [
-    'ranges beside an interval',
-    { facets: [{ by: 'a', ranges: [{ from: 1 }], interval: 'month' }] },
-    'conflicting-members',
-  ],
-  [
-    'too many bindings',
-    {
-      let: Object.fromEntries(
-        [1, 2, 3, 4, 5].map((n) => [
-          `$b${n}`,
-          { from: { filter: { type: on } }, select: 'a' },
-        ]),
-      ),
-    },
-    'limit-exceeded',
   ],
   [
     'an unknown binding member',
@@ -113,36 +94,6 @@ const MISTAKES: [string, unknown, string][] = [
     'a binding with no filter',
     { let: { $b: { from: {}, select: 'a' } } },
     'missing-member',
-  ],
-  [
-    'a collapse keep out of range',
-    { collapse: { by: 'a', keep: 0 } },
-    'invalid-value',
-  ],
-  [
-    'an unknown member of an expression sort entry with top',
-    { sort: [{ expression: 'a', top: 5, model: 'x' }] },
-    'unknown-key',
-  ],
-  [
-    'an expression sort entry with top out of range',
-    { sort: [{ expression: 'a', top: 10_000 }] },
-    'invalid-value',
-  ],
-  [
-    'a top-level rerank (re-ranking is a sort entry)',
-    { type: on, rerank: { expression: 'a' } },
-    'unknown-key',
-  ],
-  [
-    'an expression with placement',
-    { sort: [{ expression: 'a', placement: 'sql' }] },
-    'unknown-key',
-  ],
-  [
-    'an expression SQL cannot run',
-    { sort: [{ expression: 'LEN(a)' }] },
-    'expression-unsupported',
   ],
   [
     'realm beside realms',

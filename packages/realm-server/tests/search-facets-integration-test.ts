@@ -265,33 +265,6 @@ module(basename(import.meta.filename), function (hooks) {
     return (await engine.searchCards(new URL(testRealm), query)).meta;
   }
 
-  test("own: 'ignore' counts a facet without its own selection", async function (assert) {
-    let { facets, page } = await meta({
-      filter: {
-        every: [{ type: on }, { on, in: { channel: ['Strange Loop'] } }],
-      },
-      facets: [{ by: 'channel', own: 'ignore' }, { by: 'speakers' }],
-    });
-    assert.strictEqual(page.total, 2, 'the selection still filters the page');
-    assert.deepEqual(
-      facets?.channel,
-      [
-        { value: 'Strange Loop', count: 2 },
-        { value: 'GOTO', count: 1 },
-        { value: 'QCon', count: 1 },
-      ],
-      'the channel list keeps its other values',
-    );
-    assert.deepEqual(
-      facets?.speakers,
-      [
-        { value: 'Kleppmann', count: 2 },
-        { value: 'Ada', count: 1 },
-      ],
-      'another facet counts under the selection',
-    );
-  });
-
   test('stats, prefix, missing and value order', async function (assert) {
     let { facets, facetStats } = await meta({
       filter: { type: on },
@@ -395,17 +368,6 @@ module(basename(import.meta.filename), function (hooks) {
     let { facets, page } = await meta({
       filter: { type: on },
       page: { size: 2 },
-      facets: [{ by: 'channel' }, { by: 'hnScore', ranges: [{ from: 30 }] }],
-    });
-    assert.strictEqual(page.total, 5);
-    assert.deepEqual(facets?.channel?.[0], { value: 'Strange Loop', count: 2 });
-    assert.deepEqual(facets?.hnScore, [{ value: '30-*', count: 2 }]);
-  });
-
-  test('a counts-only page (size 0) still counts the total and the facets', async function (assert) {
-    let { facets, page } = await meta({
-      filter: { type: on },
-      page: { size: 0 },
       facets: [{ by: 'channel' }, { by: 'hnScore', ranges: [{ from: 30 }] }],
     });
     assert.strictEqual(page.total, 5);

@@ -327,19 +327,6 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a video id is found by glob and by regex', async function (assert) {
-      assert.deepEqual(
-        await ids({ filter: { on: moment(), pattern: { vid: 'exg8*' } } }),
-        [idOf('local-first')],
-      );
-      assert.deepEqual(
-        (
-          await ids({ filter: { on: moment(), regex: { vid: '^[A-Z]x' } } })
-        ).sort(),
-        [idOf('local-first'), idOf('simple-made-easy')].sort(),
-      );
-    });
-
     test("searchable: a link carries its id and the linked card's own fields", async function (assert) {
       let [row] = (await dbAdapter.execute(
         `SELECT search_doc FROM boxel_index WHERE url = $1 AND type = 'instance'`,

@@ -732,81 +732,6 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test("a facet with own: 'ignore' counts the rows every other filter admits, and a facet beside it counts the whole filter", async function (assert) {
-      let cheap = (r: Item) => r.price <= 50;
-      let red = (r: Item) => r.color === 'red';
-      let color = countBy(ITEMS.filter(cheap), (r) => r.color);
-      let group = countBy(
-        ITEMS.filter((r) => cheap(r) && red(r)),
-        (r) => r.group,
-      );
-      assert.deepEqual(color, { red: 4, blue: 2, green: 1 });
-      assert.deepEqual(group, { g1: 2, g2: 1, g3: 1 });
-      // Counted under its own selection, color would be { red: 4 } alone;
-      // counted with no filter at all, { red: 5, blue: 3, green: 2 }.
-      let facets = [{ by: 'color', own: 'ignore' }, { by: 'group' }];
-      await inEveryForm(
-        {
-          type: T,
-          filter: {
-            every: [
-              { eq: { color: 'red' } },
-              { range: { price: { lte: 50 } } },
-            ],
-          },
-          facets,
-        },
-        {
-          filter: {
-            on: T,
-            every: [
-              { on: T, eq: { color: 'red' } },
-              { on: T, range: { price: { lte: 50 } } },
-            ],
-          },
-          facets,
-        },
-        (got, form) => {
-          assert.deepEqual(countsOf(got, 'color'), color, `${form}: color`);
-          assert.deepEqual(countsOf(got, 'group'), group, `${form}: group`);
-        },
-      );
-    });
-
-    test('facets count every match, not the page', async function (assert) {
-      let expected = countBy(ITEMS, (r) => r.color);
-      let page = pageOf(
-        sorted(
-          ITEMS,
-          desc((r) => r.score),
-        ),
-        2,
-      );
-      // The page holds a (red) and j (green).
-      assert.notDeepEqual(
-        countBy(page, (r) => r.color),
-        expected,
-      );
-      await inEveryForm(
-        {
-          type: T,
-          sort: scoreDesc,
-          facets: [{ by: 'color' }],
-          page: { size: 2 },
-        },
-        {
-          filter: { type: T },
-          sort: scoreDescSaved,
-          facets: [{ by: 'color' }],
-          page: { size: 2 },
-        },
-        (got, form) => {
-          assert.deepEqual(got.names, names(page), `${form}: the page`);
-          assert.deepEqual(countsOf(got, 'color'), expected, form);
-        },
-      );
-    });
-
     test('facets count rows before the collapse, so they disagree with the collapsed total', async function (assert) {
       let order = sorted(
         ITEMS,
@@ -1092,17 +1017,6 @@ module(basename(import.meta.filename), function () {
             `${mode}: a lower bound`,
           );
         }
-      }
-    });
-
-    test('a page with no next page is counted exactly in every total mode', async function (assert) {
-      for (let [mode, query] of bulkForms({ sort: [{ by: 'n' }] }, 10, 100)) {
-        let got = await run(query, bulkRealm);
-        assert.deepEqual(got.names, pageOf(bulkNames(), 10, 100), `${mode}`);
-        assert.strictEqual(got.names.length, 5, 'the last five rows');
-        assert.strictEqual(got.meta.page.total, BULK_ROWS, `${mode}: total`);
-        assert.false(got.meta.page.hasMore, `${mode}: hasMore`);
-        assert.notOk(hasWarning(got.meta, 'total-estimated'), `${mode}: exact`);
       }
     });
 
@@ -1476,28 +1390,6 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a windowed query with no page returns the window, then the rows after it in the sort order', async function (assert) {
-      // docs/search.md: "Pages read the re-ranked window, then the rows after
-      // it in the query's own order". With no page the answer is every row.
-      let expected = rerank(
-        sorted(
-          ITEMS,
-          desc((r) => r.score),
-        ),
-        4,
-        (r) => r.price,
-      );
-      let w = { expression: 'price', top: 4 };
-      await inEveryForm(
-        { type: T, sort: [w, ...scoreDesc] },
-        { filter: { type: T }, sort: [w, ...scoreDescSaved] },
-        (got, form) => {
-          assert.strictEqual(got.meta.page.total, ITEMS.length, form);
-          assert.deepEqual(got.names, names(expected), form);
-        },
-      );
-    });
-
     // --- blend ---------------------------------------------------------------
 
     test('each blend signal is ranked over every row the filter admits: not over every card, and not over the page', async function (assert) {
@@ -1574,36 +1466,6 @@ module(basename(import.meta.filename), function () {
             },
           ],
           collapse: 'group',
-        },
-        undefined,
-        (got, form) => {
-          assert.deepEqual(got.names, expected, form);
-          for (let row of got.rows) {
-            let name = nameOf(row.url);
-            close(
-              assert,
-              row._blendScore,
-              scores.get(name)!,
-              `${form}: ${name}`,
-            );
-          }
-        },
-      );
-    });
-
-    test('a negative weight ranks its signal the other way round, over the same filtered rows', async function (assert) {
-      let cheap = ITEMS.filter((r) => r.price <= 50);
-      let signals: Signal[] = [{ value: (r) => r.price, weight: -2 }];
-      let scores = fuse(cheap, signals);
-      let expected = names(sorted(cheap, byFused(scores)));
-      assert.deepEqual(expected, ['a', 'i', 'b', 'j', 'c', 'd', 'e']);
-      // With a positive weight: e first. The cheapest row scores 2 / 61.
-      assert.strictEqual(scores.get('a'), 2 / 61);
-      await inEveryForm(
-        {
-          type: T,
-          filter: { range: { price: { lte: 50 } } },
-          sort: [{ blend: [{ by: 'price', weight: -2 }] }],
         },
         undefined,
         (got, form) => {

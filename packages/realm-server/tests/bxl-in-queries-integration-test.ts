@@ -1233,21 +1233,6 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a window that is not the first sort entry is refused with expression-placement', async function (assert) {
-      let error = await refusal(() =>
-        run({
-          sort: [
-            { by: 'tier', on: itemRef },
-            { expression: 'price * rating', top: 5 },
-          ],
-        }),
-      );
-      assert.strictEqual(
-        (error as InvalidQueryError)?.code,
-        'expression-placement',
-      );
-    });
-
     test('the older spelling of an expression sort ranks the same', async function (assert) {
       let newer = await run({
         sort: [{ expression: 'price * rating' }, byUrl],
@@ -1398,40 +1383,6 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a window orders only its first rows and leaves the rows after it alone', async function (assert) {
-      let { ids, values, meta } = await run(
-        { sort: [{ expression: 'price * rating', top: 5 }, byUrl] },
-        '_window',
-      );
-      let window = ITEMS.slice(0, 5);
-      let products = new Map<string, number | null>(
-        window.map((item) => [item.id, productValues.get(item.id) ?? null]),
-      );
-      assert.deepEqual(
-        ids,
-        [
-          ...orderOf(products, 'desc'),
-          ...ITEMS.slice(5).map((item) => item.id),
-        ],
-        'the first five by price * rating, then the rest in url order',
-      );
-      assert.deepEqual(
-        differences(
-          new Map(window.map((item) => [item.id, values.get(item.id)!])),
-          products,
-        ),
-        [],
-        'each row of the window carries meta._window',
-      );
-      assert.deepEqual(
-        ITEMS.slice(5).map((item) => values.get(item.id)),
-        ITEMS.slice(5).map(() => null),
-        'a row after the window carries none',
-      );
-      assert.strictEqual(meta.window?.rows, 5);
-      assert.strictEqual(meta.expression, undefined, 'no placement report');
-    });
-
     test('a window re-orders the rows an expression sort ranked, and both values ride along', async function (assert) {
       let { ids, rows } = await run({
         sort: [
@@ -1501,37 +1452,6 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('an expression that is not a non-empty string is refused', async function (assert) {
-      for (let expression of ['', '   ', 5, null, ['price']]) {
-        let error = await refusal(() => run({ sort: [{ expression }] }));
-        assert.strictEqual(
-          (error as InvalidQueryError)?.code,
-          'invalid-expression',
-          JSON.stringify(expression),
-        );
-      }
-    });
-
-    test('an expression that does not parse is refused', async function (assert) {
-      for (let expression of [
-        'IF(',
-        'price +',
-        'price; stock',
-        "LEN('single')",
-      ]) {
-        let error = await refusal(() => run({ sort: [{ expression }] }));
-        assert.ok(
-          error instanceof InvalidQueryError,
-          `${expression} is refused`,
-        );
-        assert.strictEqual(
-          (error as InvalidQueryError)?.code,
-          'invalid-expression',
-          expression,
-        );
-      }
-    });
-
     for (let placement of ['sql', 'top', 'gpu']) {
       test(`placement "${placement}" is refused with unknown-key: every expression runs in SQL`, async function (assert) {
         let error = await refusal(() =>
@@ -1544,17 +1464,6 @@ module(basename(import.meta.filename), function () {
         );
       });
     }
-
-    test('a top-level rerank is refused with unknown-key', async function (assert) {
-      let error = await refusal(() =>
-        run({
-          type: itemRef,
-          sort: [byUrl],
-          rerank: { expression: 'price', top: 5 },
-        }),
-      );
-      assert.strictEqual((error as InvalidQueryError)?.code, 'unknown-key');
-    });
 
     test('a word before a parenthesis inside a text literal is not a function call', async function (assert) {
       // read as text, not a call of `pad`; SEARCH itself is outside the
@@ -1647,18 +1556,6 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(error?.code, 'invalid-expression', error?.message);
       assert.true(/pipe/.test(String(error?.message)), error?.message);
-    });
-
-    test('a window with a function BXL does not have is refused with unknown-function', async function (assert) {
-      // decided: as an `expression` sort does, a window refuses a function
-      // BXL does not have, rather than ranking every row as blank
-      try {
-        await run(windowOf('NOPE(price)'), '_window');
-        assert.ok(false, 'the window was answered');
-      } catch (e: any) {
-        assert.strictEqual(e?.code, 'unknown-function', String(e?.message));
-        assert.true(/NOPE/.test(String(e?.message)), 'names the function');
-      }
     });
 
     // Text crafted to break out of SQL quoting. In a text literal it is data:

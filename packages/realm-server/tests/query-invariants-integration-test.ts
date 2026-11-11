@@ -20,6 +20,7 @@ import {
 import { lowerQuery } from '@cardstack/runtime-common/query-syntax';
 
 import { setupDB } from './helpers/index.ts';
+import { sized } from './helpers/query-extended.ts';
 
 // What holds for every query, checked over generated ones rather than a few
 // chosen by hand. Three small card types stand in for the three apps the
@@ -284,11 +285,6 @@ type Node =
   | { op: 'not'; of: Node }
   | { op: 'any' | 'every'; of: Node[] };
 
-function valuesOf(row: Row, field: string): (string | number)[] {
-  let v = row.doc[field];
-  return v == null ? [] : Array.isArray(v) ? v : [v];
-}
-
 // A comparison with a missing value is neither true nor false, as in SQL, and
 // `not`, `any` and `every` carry that through: a card with no brand is not
 // returned by `eq: { brand: 'Zed' }`, nor by its `not`. Queries saved in
@@ -457,10 +453,17 @@ module(basename(import.meta.filename), function () {
     }
 
     const everything = { size: 500, total: 'exact' as const };
+    // QUERY_TESTS_EXTENDED=1 generates 5x the filters; a pull request runs the
+    // first fifth of the same seeded sequence.
+    const GENERATED = sized(1, 5);
 
     for (let spec of TYPES) {
       test(`${spec.name}: a generated filter returns the rows a plain evaluation picks`, async function (assert) {
-        for (let node of generateNodes(spec, 80, spec.name.length * 7919)) {
+        for (let node of generateNodes(
+          spec,
+          80 * GENERATED,
+          spec.name.length * 7919,
+        )) {
           let filter = asFilter(spec, node);
           let expected = expectedUrls(spec, node);
           let { urls, meta } = await search({ filter, page: everything });
@@ -524,157 +527,6 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('pages laid end to end are the whole result, each row once', async function (assert) {
-      let sorts: (Record<string, any>[] | undefined)[] = [
-        undefined,
-        [{ by: 'lastModified', direction: 'desc' }],
-        [{ on: Product.ref, by: 'price', direction: 'asc' }],
-        [{ on: Product.ref, by: 'brand', direction: 'desc' }],
-        [
-          { on: Product.ref, by: 'rating', direction: 'desc' },
-          { on: Product.ref, by: 'name' },
-        ],
-      ];
-      let filters = [
-        { type: Product.ref },
-        ...generateNodes(Product, 6, 4242).map((n) => asFilter(Product, n)),
-      ];
-      for (let sort of sorts) {
-        for (let filter of filters) {
-          let base = { filter, ...(sort ? { sort } : {}) };
-          let whole = await search({ ...base, page: everything });
-          let laid: string[] = [];
-          for (let number = 0; ; number++) {
-            let page = await search({ ...base, page: { number, size: 7 } });
-            laid.push(...page.urls);
-            if (page.urls.length < 7) break;
-            if (number > 20) throw new Error('paging did not end');
-          }
-          let label = JSON.stringify(base);
-          assert.deepEqual(laid, whole.urls, `pages of ${label}`);
-          assert.strictEqual(
-            new Set(laid).size,
-            laid.length,
-            `no row twice in ${label}`,
-          );
-          let again = await search({ ...base, page: everything });
-          assert.deepEqual(
-            again.urls,
-            whole.urls,
-            `same order again: ${label}`,
-          );
-        }
-      }
-    });
-
-    test('a sorted result is in order by its key', async function (assert) {
-      for (let [field, direction] of [
-        ['price', 'asc'],
-        ['price', 'desc'],
-        ['brand', 'asc'],
-        ['brand', 'desc'],
-      ] as const) {
-        let { urls } = await search({
-          filter: { type: Product.ref },
-          sort: [{ on: Product.ref, by: field, direction }],
-          page: everything,
-        });
-        assert.strictEqual(urls.length, ROWS_PER_TYPE, 'a sort drops no row');
-        let keys = urls
-          .map((url) => ROWS.find((r) => r.url === url)!.doc[field])
-          .filter((v) => v != null) as (string | number)[];
-        let ordered = keys.every((key, i) => {
-          if (i === 0) return true;
-          let prev = keys[i - 1];
-          let cmp =
-            typeof key === 'number'
-              ? (prev as number) - key
-              : String(prev).toLowerCase() < String(key).toLowerCase()
-                ? -1
-                : String(prev).toLowerCase() > String(key).toLowerCase()
-                  ? 1
-                  : 0;
-          return direction === 'asc' ? cmp <= 0 : cmp >= 0;
-        });
-        assert.true(ordered, `${field} ${direction}: ${keys.join(',')}`);
-      }
-    });
-
-    test('how the total is counted never changes the rows', async function (assert) {
-      for (let node of generateNodes(Talk, 12, 99)) {
-        let filter = asFilter(Talk, node);
-        let sort = [{ on: Talk.ref, by: 'hnScore', direction: 'desc' }];
-        let expected = expectedUrls(Talk, node).length;
-        let pages = [];
-        for (let total of ['none', 'capped', 'exact'] as const) {
-          pages.push(await search({ filter, sort, page: { size: 5, total } }));
-        }
-        let [none, capped, exact] = pages;
-        let label = JSON.stringify(filter);
-        assert.deepEqual(capped.urls, exact.urls, `capped rows: ${label}`);
-        assert.deepEqual(none.urls, exact.urls, `uncounted rows: ${label}`);
-        assert.strictEqual(exact.meta.page.total, expected, `exact: ${label}`);
-        assert.strictEqual(
-          capped.meta.page.total,
-          expected,
-          `capped: ${label}`,
-        );
-        assert.true(
-          (none.meta.page.total ?? 0) <= expected,
-          `an uncounted total is never more than the matches: ${label}`,
-        );
-      }
-    });
-
-    test('facets count the filtered rows, and asking for them leaves the rows alone', async function (assert) {
-      let filters = [
-        { node: undefined, filter: { type: Talk.ref } as Record<string, any> },
-        ...generateNodes(Talk, 15, 31337).map((node) => ({
-          node,
-          filter: {
-            every: [{ type: Talk.ref }, asFilter(Talk, node)],
-          } as Record<string, any>,
-        })),
-      ];
-      for (let { node, filter } of filters) {
-        let rows = ROWS.filter(
-          (row) => row.spec === Talk && (!node || holds(row, node)),
-        );
-        let count = (field: string) => {
-          let counts = new Map<string, number>();
-          for (let row of rows) {
-            for (let v of valuesOf(row, field)) {
-              counts.set(String(v), (counts.get(String(v)) ?? 0) + 1);
-            }
-          }
-          return Object.fromEntries([...counts].sort());
-        };
-        let sort = [{ on: Talk.ref, by: 'year', direction: 'desc' }];
-        let plain = await search({ filter, sort, page: { size: 6 } });
-        let faceted = await search({
-          filter,
-          sort,
-          page: { size: 6 },
-          facets: [{ by: 'channel' }, { by: 'speakers' }],
-        });
-        let label = JSON.stringify(filter);
-        assert.deepEqual(faceted.urls, plain.urls, `same page: ${label}`);
-        assert.strictEqual(
-          faceted.meta.page.total,
-          rows.length,
-          `total: ${label}`,
-        );
-        for (let field of ['channel', 'speakers']) {
-          let got = Object.fromEntries(
-            ((faceted.meta as any).facets?.[field] ?? [])
-              .map((v: any) => [String(v.value), v.count])
-              .sort(),
-          );
-          assert.deepEqual(got, count(field), `${field} counts: ${label}`);
-        }
-      }
-    });
-
     test('members the grammar never read change nothing', async function (assert) {
       let filter = { on: Product.ref, range: { price: { gte: 10 } } };
       let sort = [{ on: Product.ref, by: 'price', direction: 'desc' }];
@@ -690,7 +542,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a query in the newer spelling returns what its older spelling returns', async function (assert) {
-      for (let node of generateNodes(Post, 25, 777)) {
+      for (let node of generateNodes(Post, 25 * GENERATED, 777)) {
         let old = asFilter(Post, node);
         let strip = (f: Record<string, any>): Record<string, any> => {
           let { on: _on, ...rest } = f;

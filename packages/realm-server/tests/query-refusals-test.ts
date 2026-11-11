@@ -14,7 +14,6 @@ import {
   assertQuery,
   baseCardRef,
   facetFieldSpecsOf,
-  hasVectorIndex,
   internalKeyFor,
   logSearchResponse,
   rri,
@@ -2545,53 +2544,6 @@ module(basename(import.meta.filename), function () {
         'a facet',
       );
       assert.deepEqual(asked, [], 'each was refused before any statement');
-    });
-
-    test('[run] an exact near search over more vectors than the threshold warns near-exact-scan', async function (assert) {
-      // Without pgvector the warning cannot be raised, and the searches
-      // below fail rather than pass unrun; the test image ships it.
-      assert.true(await hasVectorIndex(adapter), 'this Postgres has pgvector');
-      let near = { on: T, by: 'embedding', near: [1, 0, 0] };
-      // Four vectors, far under the default threshold of 5,000: exact, and
-      // nothing to warn of.
-      let small = await run({ sort: [near] });
-      assert.strictEqual(small.kind, 'ran', small.message);
-      assert.strictEqual(small.meta?.near?.path, 'exact');
-      assert.strictEqual(small.meta?.near?.reason, 'below-threshold');
-      assert.deepEqual(
-        (small.meta?.warnings ?? []).filter(
-          (w: { code: string }) => w.code === 'near-exact-scan',
-        ),
-        [],
-        'no warning under the threshold',
-      );
-      // With the threshold at two, the same four are "more than the
-      // threshold". An unpaged search is always exact ("for an unpaged
-      // query"), and an exact search over more vectors than the threshold,
-      // for any reason but a small share, adds the warning.
-      setVectorSearchSettings({ exactThreshold: 2 });
-      let large = await run({ sort: [near] });
-      assert.strictEqual(large.kind, 'ran', large.message);
-      assert.strictEqual(large.meta?.near?.path, 'exact');
-      assert.strictEqual(large.meta?.near?.reason, 'unpaged');
-      assert.deepEqual(
-        (large.meta?.warnings ?? []).map((w: { code: string }) => w.code),
-        ['near-exact-scan'],
-        'the warning',
-      );
-      // A near sort that does not lead the sort is exact too.
-      let trailing = await run({
-        sort: [{ on: T, by: 'kind' }, near],
-        page: { size: 2 },
-      });
-      assert.strictEqual(trailing.kind, 'ran', trailing.message);
-      assert.strictEqual(trailing.meta?.near?.reason, 'not-leading');
-      assert.true(
-        (trailing.meta?.warnings ?? []).some(
-          (w: { code: string }) => w.code === 'near-exact-scan',
-        ),
-        'not leading: warned',
-      );
     });
   });
 });

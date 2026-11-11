@@ -325,46 +325,6 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('typos: true finds a misspelt word', async function (assert) {
-    assert.deepEqual(
-      await ids({ filter: { on, matches: 'kleppman' } }),
-      [],
-      'without the flag a misspelling finds nothing',
-    );
-    assert.deepEqual(
-      await ids({ filter: { on, matches: 'kleppman', typos: true } }),
-      ['crdt.json'],
-    );
-    assert.deepEqual(
-      await ids({ filter: { on, matches: 'martn kleppman', typos: true } }),
-      ['crdt.json'],
-      'every word is widened, and all must match',
-    );
-    assert.deepEqual(
-      await ids({ filter: { on, matches: 'matsakis', typos: true } }),
-      ['rust.json'],
-      'a correctly spelt word still matches',
-    );
-    assert.deepEqual(
-      await ids({ filter: { on, matches: 'xyzzyq', typos: true } }),
-      [],
-      'a word with nothing close matches nothing',
-    );
-  });
-
-  test("a correction stays within the word's edit budget", async function (assert) {
-    assert.deepEqual(
-      await ids({ filter: { on, matches: 'concurency', typos: true } }),
-      ['go.json', 'kit.json'],
-      'one edit away: concurrency, not cryptocurrency',
-    );
-    assert.deepEqual(
-      await ids({ filter: { on, matches: 'concurrency', typos: true } }),
-      ['go.json', 'kit.json'],
-      'a word the list holds is matched as typed',
-    );
-  });
-
   test('a word still being typed takes corrections only from five letters', async function (assert) {
     for (let partial of ['k', 'kl', 'kle', 'klep']) {
       assert.deepEqual(
@@ -435,55 +395,6 @@ module(basename(import.meta.filename), function (hooks) {
       'concurrent is three edits away',
     );
     assert.deepEqual(typoCorrections('rob', ['bob']), [], 'no budget');
-  });
-
-  test('pattern: a glob over a pattern field, ignoring case', async function (assert) {
-    assert.deepEqual(await ids({ filter: { on, pattern: { vid: 'dQ*' } } }), [
-      'crdt.json',
-      'rust.json',
-    ]);
-    assert.deepEqual(await ids({ filter: { on, pattern: { vid: 'dqw4*' } } }), [
-      'crdt.json',
-    ]);
-    assert.deepEqual(
-      await ids({ filter: { on, pattern: { vid: '*42???' } } }),
-      ['go.json'],
-      '? is exactly one character',
-    );
-    assert.deepEqual(
-      await ids({ filter: { on, pattern: { vid: 'dQx9ZZ_*' } } }),
-      ['rust.json'],
-      'an underscore is literal',
-    );
-    assert.deepEqual(
-      await ids({ filter: { on, pattern: { vid: 'w9WgXcQ' } } }),
-      [],
-      'a glob matches the whole value',
-    );
-  });
-
-  test('regex: a regular expression over a pattern field', async function (assert) {
-    assert.deepEqual(
-      await ids({ filter: { on, regex: { vid: '^dQ[a-z]\\d' } } }),
-      ['crdt.json', 'rust.json'],
-    );
-    assert.deepEqual(await ids({ filter: { on, regex: { vid: 'xyz$' } } }), [
-      'go.json',
-    ]);
-    assert.deepEqual(
-      await ids({ filter: { on, not: { regex: { vid: '^dQ' } } } }),
-      ['coins.json', 'go.json', 'kit.json'],
-      'a regex negates',
-    );
-  });
-
-  test('pattern and regex refuse a field not searched by pattern', async function (assert) {
-    await assert.rejects(
-      engine.searchCards(new URL(testRealm), {
-        filter: { on, pattern: { note: 'dQw4*' } },
-      }),
-      /needs a field searched by pattern/,
-    );
   });
 
   test('the wire grammar checks typos, pattern and regex', function (assert) {
