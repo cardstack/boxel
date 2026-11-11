@@ -60,17 +60,30 @@ import { IndexRows } from './index-rows.ts';
 import {
   InvalidQueryError,
   assertRelativeDateWellFormed,
-  isRelativeDate,
-  resolveRelativeDate,
+  relativeDateForField,
 } from '../query.ts';
 import type * as JSONTypes from 'json-typescript';
 import type { RequestTimings } from '../request-timings.ts';
 import { SEARCH_DOC_INLINE_STRING_MAX } from '../search-doc-spill.ts';
 import { flatten } from 'lodash-es';
 import { jsonPathOfKeys } from '../sql-literal.ts';
-import { localDateInZone, zoneOfClock } from '../time-zone.ts';
 import { matchSearchableRoutes } from '../searchable-routes.ts';
 import stringify from 'safe-stable-stringify';
+
+// A filter value resolved in the containment route, which runs after
+// `withFilterNow` has returned: it carries the clock its node captured, so a
+// relative date reads the query's clock, not the wall clock.
+function filterFieldValue(
+  path: string,
+  value: CardExpression,
+  type: CodeRef,
+  now: Date | undefined,
+): FieldValue {
+  return {
+    ...fieldValue(path, value, type, 'filter'),
+    ...(now ? { now } : {}),
+  };
+}
 
 export abstract class ExpressionResolver extends IndexRows {
   // Split the two phases so the search-timing line can attribute the SQL
@@ -497,26 +510,12 @@ export abstract class ExpressionResolver extends IndexRows {
         ) {
           assertRelativeDateWellFormed(value.param, path);
         }
-        if (
-          isParam(value) &&
-          isRelativeDate(value.param) &&
-          (field.serializerName === 'date' ||
-            field.serializerName === 'datetime')
-        ) {
+        let relative = isParam(value)
+          ? relativeDateForField(value.param, field.serializerName, now)
+          : undefined;
+        if (relative !== undefined) {
           // `now-30d` and the like, as the field's search doc spells a date.
-          // Only a date or date-time field reads one: to any other field it
-          // is the text as written.
-          let clock = now ?? new Date();
-          let when = new Date(resolveRelativeDate(value.param, clock));
-          // A date field holds a calendar day: the day the bound falls on in
-          // the query's zone, as the bound itself is reckoned there (UTC by
-          // default).
-          // A date-time field holds a zoneless `yyyy-MM-ddTHH:mm`, which a
-          // query reads as UTC: the bound is spelled so too.
-          queryValue =
-            field.serializerName === 'date'
-              ? localDateInZone(when, zoneOfClock(clock))
-              : when.toISOString().slice(0, 16);
+          queryValue = relative;
         } else if (isParam(value)) {
           queryValue = serializer?.formatQuery?.(value.param) ?? value.param;
         } else if (typeof value === 'string') {
@@ -549,6 +548,7 @@ export abstract class ExpressionResolver extends IndexRows {
           node.path,
           node.type,
           node.anyOf ?? [node.value],
+          node.now,
         )) ?? (await this.makeExpression(node.orElse))
       );
     }
@@ -557,7 +557,7 @@ export abstract class ExpressionResolver extends IndexRows {
     }
     let { path, type, value } = node;
     let resolvedValue = await this.makeExpression([
-      fieldValue(path, value, type, 'filter'),
+      filterFieldValue(path, value, type, node.now),
     ]);
     let [leaf] = resolvedValue;
     let definition = await this.getDefinition(type);
@@ -630,6 +630,7 @@ export abstract class ExpressionResolver extends IndexRows {
     path: string,
     type: CodeRef,
     values: CardExpression[],
+    now?: Date,
   ): Promise<Expression | undefined> {
     if (values.length === 0 || values.length > JSONPATH_ANY_MAX) {
       return undefined;
@@ -645,7 +646,7 @@ export abstract class ExpressionResolver extends IndexRows {
     let texts: string[] = [];
     for (let value of values) {
       let [leaf, ...rest] = await this.makeExpression([
-        fieldValue(path, value, type, 'filter'),
+        filterFieldValue(path, value, type, now),
       ]);
       if (
         rest.length > 0 ||
@@ -677,7 +678,7 @@ export abstract class ExpressionResolver extends IndexRows {
       leafField.serializerName === 'big-integer';
     let resolved = await Promise.all(
       values.map((value) =>
-        this.makeExpression([fieldValue(path, value, type, 'filter')]),
+        this.makeExpression([filterFieldValue(path, value, type, node.now)]),
       ),
     );
     let segments = path.split('.');

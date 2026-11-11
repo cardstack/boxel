@@ -57,6 +57,7 @@ import {
   assertTimeZone,
   canonicalTimeZone,
   isUtcZone,
+  localDateInZone,
   resolveRelativeDateInZone,
   zoneOfClock,
 } from './time-zone.ts';
@@ -933,6 +934,30 @@ export function assertRelativeDateWellFormed(
 
 // Reckoned in `zone` (see time-zone.ts): by default the zone the query's
 // clock reading carries (`clockInZone`), UTC for a bare `new Date()`.
+// A relative date (`now-30d`) as a field of `serializerName` spells it in
+// the search doc, reckoned from `now` in its zone. Only a date or date-time
+// field reads one: undefined otherwise, and for a value that is not one, so
+// the value stays the text as written. A date field holds the calendar day
+// the instant falls on in the query's zone; a date-time field the zoneless
+// `yyyy-MM-ddTHH:mm` a query reads as UTC. The engine and the host matcher
+// both read relative dates through this.
+export function relativeDateForField(
+  value: unknown,
+  serializerName: string | undefined,
+  now: Date = new Date(),
+): string | undefined {
+  if (
+    (serializerName !== 'date' && serializerName !== 'datetime') ||
+    !isRelativeDate(value)
+  ) {
+    return undefined;
+  }
+  let when = new Date(resolveRelativeDate(value, now));
+  return serializerName === 'date'
+    ? localDateInZone(when, zoneOfClock(now))
+    : when.toISOString().slice(0, 16);
+}
+
 export function resolveRelativeDate(
   value: string,
   now = new Date(),

@@ -33,22 +33,6 @@ export const KNOWN: Known[] = [
   },
   {
     about:
-      'a relative date in `eq` or `in` on a date or date-time field is compared as the text `now/d`, so it matches nothing, while a malformed one there is refused',
-    evaluators: ['matcher'],
-    file: 'dates',
-    cases: /^(not )?(eq|in) (dy|ts) now/,
-    kind: 'answers',
-  },
-  {
-    about:
-      "a relative date in a positive `eq` or `in` on a date or date-time field is reckoned from the wall clock in UTC, not the query's clock and zone, while its `not` uses the query's: the containment path (`handleJsonContainsQuery`) builds its `fieldValue` after `withFilterNow` has returned, so a card dated the query's today can be in neither answer",
-    evaluators: ['postgres', 'sqlite'],
-    file: 'dates',
-    cases: /^(not )?(eq|in) (dy|ts) now/,
-    kind: 'answers',
-  },
-  {
-    about:
       '`in` on a number or big-integer field fails with `invalid input syntax for type numeric` when a card of another type holds text under the field name: the extracted value is cast to numeric unguarded',
     evaluators: ['postgres'],
     file: 'values',

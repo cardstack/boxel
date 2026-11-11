@@ -1,6 +1,7 @@
 import { isEqual } from 'lodash-es';
 
 import { canonicalModuleKey, getField, identifyCard } from './code-ref.ts';
+import { fieldSerializer } from './constants.ts';
 import {
   filterOperators,
   isAnyFilter,
@@ -18,6 +19,7 @@ import {
   type Sort,
   isRelevanceSort,
   isRelativeDate,
+  relativeDateForField,
   resolveRelativeDate,
   isExprSort,
 } from './query.ts';
@@ -557,7 +559,7 @@ function matchEq(
   if (value === null) {
     return noValue(resolution);
   }
-  let formatted = formatValue(leafField, value, api);
+  let formatted = formatFilterValue(leafField, value, api);
   // Exact match, including for reference (`id`/`url`) leaves: the server's
   // `fieldEqFilter` deliberately keeps `eq` exact (so a singular `.id` eq is
   // served by the `@>` GIN path) and applies canonical-RRI tolerance to `in`
@@ -583,7 +585,7 @@ function matchIn(
   let hasNull = rawValues.some((v) => v === null);
   let formatted = rawValues
     .filter((v) => v !== null)
-    .map((v) => formatValue(leafField, v, api));
+    .map((v) => formatFilterValue(leafField, v, api));
   if (hasNull && resolution.plural) {
     // On a list, the null member is "no element has a value", as `eq: null`.
     return combineOr([
@@ -694,6 +696,23 @@ function formatValue(
     return value;
   }
   return api.formatQueryValue(leafField, value);
+}
+
+// A value compared with the leaf, as the server spells it: a relative date
+// on a date or date-time field is resolved in the field's own format (see
+// `relativeDateForField`), anything else goes through the field's serializer.
+function formatFilterValue(
+  leafField: Field<any> | undefined,
+  value: any,
+  api: CardAPIForMatching,
+): any {
+  let serializerName = leafField
+    ? (leafField.card as any)[fieldSerializer]
+    : undefined;
+  return (
+    relativeDateForField(value, serializerName) ??
+    formatValue(leafField, value, api)
+  );
 }
 
 // No value at the path, as the server's `eq: null` reads it. On a scalar path

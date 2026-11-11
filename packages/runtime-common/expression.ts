@@ -107,6 +107,9 @@ export interface JsonContainsQuery {
   // when its values allow (see `#containedJsonPath` in the query engine),
   // and this otherwise.
   orElse?: CardExpression;
+  // The query's clock, captured while the filter compiles: the value is
+  // resolved later, after `withFilterNow` has returned.
+  now?: Date;
 }
 
 // Resolved (pass-2 input) node describing JSON containment of `column` by the
@@ -334,6 +337,7 @@ export function jsonContainsQuery(
     path,
     type,
     value,
+    ...(filterNow ? { now: filterNow } : {}),
   };
 }
 

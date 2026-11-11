@@ -8,6 +8,7 @@
 import {
   isBaseInstance,
   isField,
+  fieldSerializer,
   primitive,
 } from '@cardstack/runtime-common/constants';
 import { exportIdentitySymbolKey } from '@cardstack/runtime-common/export-identity-plugin';
@@ -49,6 +50,12 @@ const primitiveFor = (of: string) => {
         static baseDef = true;
         static [primitive] = true;
         static serializerName = of;
+        // as a card-api primitive names its serializer
+        static [fieldSerializer] = (SERIALIZED as readonly string[]).includes(
+          of,
+        )
+          ? of
+          : undefined;
       },
     );
   }
