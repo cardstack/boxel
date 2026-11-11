@@ -11,11 +11,22 @@ import {
   type CardIdPattern,
   type ParseRoutePatternOptions,
   type RoutePathPattern,
+  type RouteParams,
   type RoutePatternErrorCode,
 } from '../route-pattern.ts';
 import type { SharedTests } from '../helpers/index.ts';
 
 const REALM = 'https://example.test/user/blog/';
+
+// The card id functions take served URLs. These wrappers keep the
+// assertions below readable by taking strings.
+function fillId(pattern: CardIdPattern, params: RouteParams, realm: string) {
+  return fillCardIdPattern(pattern, params, new URL(realm));
+}
+
+function matchId(pattern: CardIdPattern, id: string, realm: string) {
+  return matchCardIdPattern(pattern, new URL(id), new URL(realm));
+}
 
 function path(source: string, options?: ParseRoutePatternOptions) {
   let result = parseRoutePathPattern(source, options);
@@ -108,6 +119,7 @@ const tests: SharedTests<unknown> = Object.freeze({
         ['/posts/:1st', 'invalid-param-name', 1],
         ['/posts/:a-b', 'invalid-param-name', 1],
         ['/posts/:a.b', 'invalid-param-name', 1],
+        ['/posts/:__proto__', 'invalid-param-name', 1],
         ['/foo bar', 'invalid-literal', 0],
         ['/foo?x=1', 'invalid-literal', 0],
         ['/%zz', 'invalid-literal', 0],
@@ -414,26 +426,15 @@ const tests: SharedTests<unknown> = Object.freeze({
 
   'matchCardIdPattern: turns a card id into params': async (assert) => {
     let pattern = cardId('./Person/:person_id');
+    assert.deepEqual(matchId(pattern, `${REALM}Person/robin`, REALM), {
+      person_id: 'robin',
+    });
     assert.deepEqual(
-      matchCardIdPattern(pattern, `${REALM}Person/robin`, REALM),
-      {
-        person_id: 'robin',
-      },
-    );
-    assert.deepEqual(
-      matchCardIdPattern(
-        pattern,
-        `${REALM}Person/caf%C3%A9%20au%20lait`,
-        REALM,
-      ),
+      matchId(pattern, `${REALM}Person/caf%C3%A9%20au%20lait`, REALM),
       { person_id: 'café au lait' },
     );
     assert.deepEqual(
-      matchCardIdPattern(
-        cardId('./c/:category/:product'),
-        `${REALM}c/shoes/trail`,
-        REALM,
-      ),
+      matchId(cardId('./c/:category/:product'), `${REALM}c/shoes/trail`, REALM),
       { category: 'shoes', product: 'trail' },
     );
   },
@@ -443,11 +444,7 @@ const tests: SharedTests<unknown> = Object.freeze({
   ) => {
     let pattern = cardId('./Person/:person_id');
     let noMatch = (id: string, message: string) =>
-      assert.strictEqual(
-        matchCardIdPattern(pattern, id, REALM),
-        undefined,
-        message,
-      );
+      assert.strictEqual(matchId(pattern, id, REALM), undefined, message);
     noMatch(`${REALM}Person/archive/abc`, 'a value never spans two segments');
     noMatch(`${REALM}Person`, 'missing the param segment');
     noMatch(`${REALM}Person/`, 'empty param segment');
@@ -460,7 +457,7 @@ const tests: SharedTests<unknown> = Object.freeze({
     noMatch(`${REALM}Person/%zz`, 'a malformed escape');
     noMatch(`${REALM}Person/%2E%2E`, 'a dot-dot value');
     assert.strictEqual(
-      matchCardIdPattern(
+      matchId(
         pattern,
         'https://example.test/user/blogPerson/robin',
         'https://example.test/user/blog',
@@ -473,24 +470,17 @@ const tests: SharedTests<unknown> = Object.freeze({
   'fillCardIdPattern: builds a card id under the realm': async (assert) => {
     let pattern = cardId('./Person/:person_id');
     assert.strictEqual(
-      fillCardIdPattern(pattern, { person_id: 'robin' }, REALM),
+      fillId(pattern, { person_id: 'robin' }, REALM),
       `${REALM}Person/robin`,
     );
     assert.strictEqual(
-      fillCardIdPattern(pattern, { person_id: 'a b/c' }, REALM),
+      fillId(pattern, { person_id: 'a b/c' }, REALM),
       `${REALM}Person/a%20b%2Fc`,
     );
-    assert.strictEqual(fillCardIdPattern(pattern, {}, REALM), undefined);
+    assert.strictEqual(fillId(pattern, {}, REALM), undefined);
+    assert.strictEqual(fillId(pattern, { person_id: '..' }, REALM), undefined);
     assert.strictEqual(
-      fillCardIdPattern(pattern, { person_id: '..' }, REALM),
-      undefined,
-    );
-    assert.strictEqual(
-      fillCardIdPattern(
-        pattern,
-        { person_id: 'robin' },
-        'https://example.test/user/blog',
-      ),
+      fillId(pattern, { person_id: 'robin' }, 'https://example.test/user/blog'),
       undefined,
       'the realm URL must end with /',
     );
@@ -502,15 +492,11 @@ const tests: SharedTests<unknown> = Object.freeze({
     let pattern: CardIdPattern = cardId('./c/:category/:product');
     for (let value of AWKWARD_VALUES) {
       let params = { category: value, product: 'p' };
-      let id = fillCardIdPattern(pattern, params, REALM);
+      let id = fillId(pattern, params, REALM);
       assert.ok(id, `fills ${value}`);
-      assert.deepEqual(matchCardIdPattern(pattern, id!, REALM), params);
+      assert.deepEqual(matchId(pattern, id!, REALM), params);
       assert.strictEqual(
-        fillCardIdPattern(
-          pattern,
-          matchCardIdPattern(pattern, id!, REALM)!,
-          REALM,
-        ),
+        fillId(pattern, matchId(pattern, id!, REALM)!, REALM),
         id,
       );
     }
@@ -539,12 +525,12 @@ const tests: SharedTests<unknown> = Object.freeze({
     for (let name of fileNames) {
       let realmId = new URL(`Person/${name}`, REALM).href;
       assert.strictEqual(
-        fillCardIdPattern(pattern, { person_id: name }, REALM),
+        fillId(pattern, { person_id: name }, REALM),
         realmId,
         `fills ${name} as the realm's id`,
       );
       assert.deepEqual(
-        matchCardIdPattern(pattern, realmId, REALM),
+        matchId(pattern, realmId, REALM),
         { person_id: name },
         `matches the realm's id for ${name}`,
       );
@@ -552,11 +538,11 @@ const tests: SharedTests<unknown> = Object.freeze({
 
     let root = cardId('./:id');
     assert.strictEqual(
-      fillCardIdPattern(root, { id: 'http:foo' }, REALM),
+      fillId(root, { id: 'http:foo' }, REALM),
       `${REALM}http:foo`,
       'a first segment with a colon is not read as a URL scheme',
     );
-    assert.deepEqual(matchCardIdPattern(root, `${REALM}http:foo`, REALM), {
+    assert.deepEqual(matchId(root, `${REALM}http:foo`, REALM), {
       id: 'http:foo',
     });
   },
@@ -574,14 +560,14 @@ const tests: SharedTests<unknown> = Object.freeze({
       ['new\nline', 'new%0Aline'],
     ];
     for (let [value, segment] of cases) {
-      let id = fillCardIdPattern(pattern, { person_id: value }, REALM);
+      let id = fillId(pattern, { person_id: value }, REALM);
       assert.strictEqual(id, `${REALM}Person/${segment}`, `fills ${value}`);
-      assert.deepEqual(matchCardIdPattern(pattern, id!, REALM), {
+      assert.deepEqual(matchId(pattern, id!, REALM), {
         person_id: value,
       });
     }
     assert.strictEqual(
-      fillCardIdPattern(pattern, { person_id: '\uD800' }, REALM),
+      fillId(pattern, { person_id: '\uD800' }, REALM),
       undefined,
       'a lone surrogate has no encoding',
     );
@@ -594,9 +580,9 @@ const tests: SharedTests<unknown> = Object.freeze({
       route,
       '/people/sample%20%C3%B1and%C3%BA',
     )!;
-    let id = fillCardIdPattern(card, params, REALM)!;
+    let id = fillId(card, params, REALM)!;
     assert.strictEqual(id, `${REALM}Person/sample%20%C3%B1and%C3%BA`);
-    let back = matchCardIdPattern(card, id, REALM)!;
+    let back = matchId(card, id, REALM)!;
     assert.strictEqual(
       fillRoutePathPattern(route, back),
       '/people/sample%20%C3%B1and%C3%BA',

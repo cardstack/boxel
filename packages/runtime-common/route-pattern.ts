@@ -13,9 +13,11 @@
 // matching are inverses. A matched segment is percent-decoded. A filled
 // request path encodes every character except the RFC 3986 unreserved
 // ones (`A-Z a-z 0-9 - . _ ~`), with upper-case hex digits. A filled card
-// id is spelled the way the realm spells it: `new URL(local, realmURL)`.
+// URL is spelled the way the realm spells it: `new URL(local, realmURL)`.
 // So `fill(match(x)) === x` for a canonically spelled `x`, and
 // `match(fill(v)) === v` for any value `fill` accepts.
+
+import { RealmPaths } from './paths.ts';
 
 export interface RoutePatternLiteralSegment {
   kind: 'literal';
@@ -249,11 +251,14 @@ export function fillRoutePathPattern(
 }
 
 /**
- * Fills a card id pattern from parameter values and returns the card
- * id under `realmURL`, which must end with `/`.
+ * Fills a card id pattern from parameter values and returns the card's
+ * served URL, as an `href`, under `realmURL`. `realmURL` is the URL the
+ * realm is served at, and its path must end with `/`. These functions
+ * work on served URLs, the form the realm server keys index rows by, not
+ * on prefix-form realm identifiers.
  *
- * The id is spelled the way the realm spells a card id, as
- * `new URL(local, realmURL).href`, so it is the id the index holds for
+ * The URL is spelled the way the realm spells a card's URL, as
+ * `new URL(local, realmURL).href`, so it is the URL the index holds for
  * the card. That spelling encodes non-ASCII characters, spaces and a few
  * others, and leaves characters such as `+ : , ; = & @ $ ' ( ) ! *` as
  * they are. Before that, each value has the characters that would change
@@ -261,14 +266,14 @@ export function fillRoutePathPattern(
  * a value always stays one segment.
  *
  * Returns `undefined` under the same conditions as
- * `fillRoutePathPattern`.
+ * `fillRoutePathPattern`, and when `realmURL` doesn't end with `/`.
  */
 export function fillCardIdPattern(
   pattern: CardIdPattern,
   params: RouteParams,
-  realmURL: string,
+  realmURL: URL,
 ): string | undefined {
-  if (!realmURL.endsWith('/')) {
+  if (!realmURL.pathname.endsWith('/') || realmURL.search || realmURL.hash) {
     return undefined;
   }
   let segments = fillSegments(pattern, params, encodeCardIdSegment);
@@ -277,34 +282,46 @@ export function fillCardIdPattern(
   }
   // The `./` keeps a first segment such as `http:foo` from being read as
   // a URL scheme.
-  let id = new URL('./' + segments.join('/'), realmURL).href;
-  return id.startsWith(realmURL) ? id : undefined;
+  let cardURL = new URL('./' + segments.join('/'), realmURL);
+  return new RealmPaths(realmURL).inRealm(cardURL) ? cardURL.href : undefined;
 }
 
 /**
- * Matches a card id against a card id pattern, the reverse of
+ * Matches a card's served URL against a card id pattern, the reverse of
  * `fillCardIdPattern`, and returns the decoded parameter values.
  *
- * The card id must start with `realmURL` (which ends with `/`), and the
- * rest of it must match the pattern as a whole (see
- * `parseCardIdPattern` for the anchoring). An id that doesn't fit is no
- * match: one in another realm, one with a query or fragment, one with
- * more or fewer segments than the pattern (a value never spans two
- * segments), or one whose segments differ from the literals.
+ * The card must be in the realm served at `realmURL` (whose path ends
+ * with `/`), and the rest of its path must match the pattern as a whole
+ * (see `parseCardIdPattern` for the anchoring). A card URL that doesn't
+ * fit is no match: one in another realm, one with a query or fragment,
+ * one with more or fewer segments than the pattern (a value never spans
+ * two segments), or one whose segments differ from the literals.
  */
 export function matchCardIdPattern(
   pattern: CardIdPattern,
-  cardId: string,
-  realmURL: string,
+  cardURL: URL,
+  realmURL: URL,
 ): RouteParams | undefined {
-  if (!realmURL.endsWith('/') || !cardId.startsWith(realmURL)) {
+  if (
+    !realmURL.pathname.endsWith('/') ||
+    cardURL.search ||
+    cardURL.hash ||
+    !new RealmPaths(realmURL).inRealm(cardURL)
+  ) {
     return undefined;
   }
-  let rest = cardId.slice(realmURL.length);
-  if (rest.includes('?') || rest.includes('#')) {
+  // `RealmPaths.local` reads the path with `decodeURI`, which leaves
+  // `%2F` and other reserved escapes encoded, so the segments are taken
+  // from the encoded path here and decoded one by one.
+  if (
+    cardURL.origin !== realmURL.origin ||
+    !cardURL.pathname.startsWith(realmURL.pathname)
+  ) {
     return undefined;
   }
-  let segments = splitAndDecode(rest);
+  let segments = splitAndDecode(
+    cardURL.pathname.slice(realmURL.pathname.length),
+  );
   if (!segments) {
     return undefined;
   }
@@ -371,7 +388,9 @@ function parseSegments(
           { segmentIndex: index },
         );
       }
-      if (!PARAM_NAME.test(name)) {
+      // `__proto__` would set the prototype of the params object rather
+      // than add a value to it.
+      if (!PARAM_NAME.test(name) || name === '__proto__') {
         return fail(
           'invalid-param-name',
           `Segment name "${name}" may only contain letters, numbers and _, and must not start with a number`,
