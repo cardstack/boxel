@@ -12,7 +12,6 @@ import type {
 import { DBRateLimitStore } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
-import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session.ts';
 import handleCreateRealmRequest, {
   type CreateRealmDeps,
@@ -916,15 +915,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleUnlistedRealmPathRequest(args),
   );
-  // Matrix tests don't need the GitHub PR integration, and skipping this route
-  // keeps the realm server from loading Octokit's ESM entrypoint during boot.
-  if (process.env.DISABLE_GITHUB_PR_ROUTE !== 'true') {
-    router.post(
-      '/_github-pr',
-      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-      handleGitHubPRRequestLazy(args),
-    );
-  }
   router.get('/_download-realm', handleDownloadRealm(args));
   router.post(
     '/_bot-registration',
@@ -994,21 +984,4 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_webhooks/:webhookPath', handleWebhookReceiverRequest(args));
 
   return router.routes();
-}
-
-function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
-  let handler:
-    | ((ctxt: Koa.Context, next: Koa.Next) => Promise<void>)
-    | undefined;
-
-  return async function (ctxt: Koa.Context, next: Koa.Next) {
-    if (!handler) {
-      handler = (
-        createRequire(import.meta.filename)(
-          './handlers/handle-github-pr',
-        ) as typeof import('./handlers/handle-github-pr.ts')
-      ).default(args);
-    }
-    return await handler(ctxt, next);
-  };
 }
