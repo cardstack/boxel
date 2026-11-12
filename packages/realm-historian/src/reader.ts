@@ -38,10 +38,12 @@ import {
   MAIN_REF,
   messageWithoutTrailers,
   parseIncludesSuperseded,
+  parseRawLog,
   parseSizeOnlyMarker,
   parseTrailers,
   repoPath,
   SIZE_ONLY_MARKER_NAME,
+  type RawEntry,
   type TrailerKey,
   type Trailers,
 } from './repo-format.ts';
@@ -101,15 +103,6 @@ interface PathFilter {
 
 // The whole realm, or a list of filters.
 type Filters = PathFilter[] | 'all';
-
-interface RawEntry {
-  srcMode: string;
-  dstMode: string;
-  srcId: string;
-  dstId: string;
-  status: string;
-  path: string;
-}
 
 interface LogRecord {
   id: string;
@@ -1347,40 +1340,12 @@ function sizeOnlyMarkerOf(
     : undefined;
 }
 
-// Revisions from `git log -z --raw` with `LOG_FORMAT`: each revision's
-// fields, each ended by a NUL, then, for a revision that changed anything,
-// a newline and one raw entry per path, `:<modes> <ids> <status>` and the
-// path, each ended by a NUL. A revision's id starts with a hex digit and a
-// raw entry with `:`, which is how the next revision is told from the next
-// entry.
+// Revisions from `git log -z` (with `--raw` or without) and `LOG_FORMAT`.
 function parseLog(output: string): LogRecord[] {
-  let records: LogRecord[] = [];
-  let position = 0;
-  let next = (): string => {
-    let end = output.indexOf('\0', position);
-    if (end === -1) {
-      end = output.length;
-    }
-    let token = output.slice(position, end);
-    position = end + 1;
-    return token;
-  };
-  while (position < output.length) {
-    let fields: string[] = [];
-    for (let index = 0; index < LOG_FIELD_COUNT; index++) {
-      fields.push(next());
-    }
+  return parseRawLog(output, LOG_FIELD_COUNT).map(({ fields, entries }) => {
     let [id, parents, author, time, message] = fields;
-    let entries: RawEntry[] = [];
-    if (output[position] === '\n') {
-      position++;
-    }
-    while (output[position] === ':') {
-      let [srcMode, dstMode, srcId, dstId, status] = next().slice(1).split(' ');
-      entries.push({ srcMode, dstMode, srcId, dstId, status, path: next() });
-    }
     let parent = parents.split(' ')[0];
-    records.push({
+    return {
       id,
       ...(parent ? { parent } : {}),
       author,
@@ -1388,9 +1353,8 @@ function parseLog(output: string): LogRecord[] {
       message,
       trailers: parseTrailers(message),
       entries,
-    });
-  }
-  return records;
+    };
+  });
 }
 
 // A patch's `diff --git` sections. Every other line of a patch starts with

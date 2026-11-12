@@ -362,12 +362,6 @@ export interface RevisionRecord {
 // The revisions `git log` lists for `revisionArgs` (such as `<old>..<new>`,
 // or `-n 100 <head>`), newest first, each with its trailers and the paths
 // it changed, from one git process.
-//
-// With `-z`, each revision is its id and its message, each ended by a NUL,
-// then, for a revision that changed anything, a newline and one raw entry per
-// path: `:<modes> <ids> <status>` and the path, each ended by a NUL. A
-// revision's id starts with a hex digit and a raw entry with `:`, which is
-// how the next revision is told from the next entry.
 export async function readRevisions(
   gitDir: string,
   revisionArgs: string[],
@@ -389,7 +383,37 @@ export async function readRevisions(
       '--',
     ])
   ).toString('utf8');
-  let revisions: RevisionRecord[] = [];
+  return parseRawLog(output, 2).map(({ fields: [id, message], entries }) => ({
+    id,
+    message,
+    trailers: parseTrailers(message),
+    changedPaths: [...new Set(entries.map((entry) => realmPathOf(entry.path)))],
+  }));
+}
+
+// One path a revision changed, as `git log --raw` prints it: the modes and
+// object ids before and after (zeros for none) and git's status letter.
+export interface RawEntry {
+  srcMode: string;
+  dstMode: string;
+  srcId: string;
+  dstId: string;
+  status: string;
+  path: string;
+}
+
+// The revisions in the output of `git log -z --raw` with a `--format` of
+// `fieldCount` fields, each ended by `%x00`. With `-z`, each revision is its
+// fields, each ended by a NUL, then, for a revision that changed anything, a
+// newline and one raw entry per path: `:<modes> <ids> <status>` and the
+// path, each ended by a NUL. The first field is the revision's id, which
+// starts with a hex digit, and a raw entry starts with `:`, which is how the
+// next revision is told from the next entry.
+export function parseRawLog(
+  output: string,
+  fieldCount: number,
+): { fields: string[]; entries: RawEntry[] }[] {
+  let revisions: { fields: string[]; entries: RawEntry[] }[] = [];
   let position = 0;
   let next = (): string => {
     let end = output.indexOf('\0', position);
@@ -401,22 +425,19 @@ export async function readRevisions(
     return token;
   };
   while (position < output.length) {
-    let id = next();
-    let message = next();
-    let changed = new Set<string>();
+    let fields: string[] = [];
+    for (let index = 0; index < fieldCount; index++) {
+      fields.push(next());
+    }
+    let entries: RawEntry[] = [];
     if (output[position] === '\n') {
       position++;
     }
     while (output[position] === ':') {
-      next();
-      changed.add(realmPathOf(next()));
+      let [srcMode, dstMode, srcId, dstId, status] = next().slice(1).split(' ');
+      entries.push({ srcMode, dstMode, srcId, dstId, status, path: next() });
     }
-    revisions.push({
-      id,
-      message,
-      trailers: parseTrailers(message),
-      changedPaths: [...changed],
-    });
+    revisions.push({ fields, entries });
   }
   return revisions;
 }
