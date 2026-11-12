@@ -50,6 +50,7 @@ const CAPS: AutomationCaps = {
   callApiCalls: 20,
   responseBytes: 1_000_000,
   resolveCalls: 5,
+  aiCredits: 100,
   writes: 50,
   seconds: 300,
   dailyCredits: 100,
@@ -581,6 +582,21 @@ module(basename(import.meta.filename), function () {
     });
 
     module('a card edit that asks for more than the snapshot', function () {
+      test('raising the AI spending cap pauses the automation', async function (assert) {
+        await switchOn();
+        let automation = await checkAutomationCaps(dbAdapter, AUTOMATION, {
+          caps: { ...CAPS, aiCredits: CAPS.aiCredits + 1 },
+          batchedAI: false,
+        });
+        assert.strictEqual(automation?.state, 'paused');
+        assert.strictEqual(automation?.pauseReason, 'caps-raised');
+        assert.strictEqual(
+          automation?.capsSnapshot.aiCredits,
+          CAPS.aiCredits,
+          'the snapshot keeps the AI spending cap the payer agreed to',
+        );
+      });
+
       test('raising a run cap pauses the automation, cancels its pending run, and keeps the payer', async function (assert) {
         await switchOn();
         let pending = await pendingRun();

@@ -20,6 +20,7 @@ const CAPS = {
   callApiCalls: 10,
   responseBytes: 1_000_000,
   resolveCalls: 2,
+  aiCredits: 40,
   writes: 5,
   seconds: 300,
   dailyCredits: 50,
@@ -530,9 +531,43 @@ const tests = Object.freeze({
         'missing-cap',
         'missing-cap',
         'missing-cap',
+        'missing-cap',
         'missing-credit-cap',
       ],
       'each run limit is required, and one credit limit',
+    );
+  },
+
+  'reads the AI spending cap, which every automation must set': async (
+    assert,
+  ) => {
+    let result = read(entry());
+    assert.true(result.ok, 'the declaration reads');
+    if (result.ok) {
+      assert.strictEqual(result.declaration.caps.aiCredits, 40);
+    }
+    let forbidden = read(
+      entry({ attributes: { caps: { ...CAPS, aiCredits: 0 } } }),
+    );
+    assert.true(forbidden.ok, '0 forbids AI spending and is valid');
+    if (forbidden.ok) {
+      assert.strictEqual(forbidden.declaration.caps.aiCredits, 0);
+    }
+    assert.deepEqual(
+      codes(
+        read(entry({ attributes: { caps: { ...CAPS, aiCredits: null } } })),
+      ),
+      [['missing-cap', 'caps.aiCredits']],
+      'an empty AI spending cap is missing, not unlimited',
+    );
+    assert.deepEqual(
+      codes(read(entry({ attributes: { caps: { ...CAPS, aiCredits: 2.5 } } }))),
+      [['invalid-cap', 'caps.aiCredits']],
+      'credits are whole numbers',
+    );
+    assert.deepEqual(
+      codes(read(entry({ attributes: { caps: { ...CAPS, aiCredits: -1 } } }))),
+      [['invalid-cap', 'caps.aiCredits']],
     );
   },
 

@@ -86,6 +86,7 @@ module(basename(import.meta.filename), function (hooks) {
       callApiCalls: 10,
       responseBytes: 1000000,
       resolveCalls: 2,
+      aiCredits: 40,
       writes: 5,
       seconds: 300,
       dailyCredits: 50,

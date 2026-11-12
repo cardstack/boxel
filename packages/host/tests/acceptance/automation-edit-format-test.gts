@@ -80,6 +80,7 @@ function automationJSON(
           callApiCalls: 0,
           responseBytes: 0,
           resolveCalls: 0,
+          aiCredits: 0,
           writes: 1,
           seconds: 60,
           dailyCredits: 5,
@@ -284,7 +285,11 @@ module('Acceptance | automation edit format', function (hooks) {
           let json = automationJSON('Batched', { script: null });
           let attributes = json.data.attributes as Record<string, any>;
           attributes.triggers = [attributes.triggers[1]];
-          attributes.caps = { ...attributes.caps, resolveCalls: 5 };
+          attributes.caps = {
+            ...attributes.caps,
+            resolveCalls: 5,
+            aiCredits: 50,
+          };
           attributes.batchedAI = true;
           return json;
         })(),
@@ -623,6 +628,7 @@ module('Acceptance | automation edit format', function (hooks) {
       callApiCalls: ['Outside calls', '7', 7],
       responseBytes: ['Data received, in MB', '3', 3_000_000],
       resolveCalls: ['AI requests', '4', 4],
+      aiCredits: ['AI spending, in credits', '25', 25],
       writes: ['Saves', '12', 12],
       seconds: ['Run time, in minutes', '10', 600],
       dailyCredits: ['Credits a day', '20', 20],
@@ -642,6 +648,7 @@ module('Acceptance | automation edit format', function (hooks) {
       'Outside calls',
       'Data received, in MB',
       'AI requests',
+      'AI spending, in credits',
       'Saves',
       'Run time, in minutes',
     ]) {
@@ -702,6 +709,7 @@ module('Acceptance | automation edit format', function (hooks) {
           callApiCalls: 10,
           responseBytes: 5_000_000,
           resolveCalls: 5,
+          aiCredits: 300,
           writes: 50,
           seconds: 300,
           dailyCredits: 500,
@@ -744,7 +752,7 @@ module('Acceptance | automation edit format', function (hooks) {
     );
   });
 
-  test('batched AI needs AI requests, and saves its deadline', async function (assert) {
+  test('batched AI needs AI requests and AI spending, and saves its deadline', async function (assert) {
     await openEdit();
     let batched = section('Batched AI');
     let toggle = () =>
@@ -756,6 +764,10 @@ module('Acceptance | automation edit format', function (hooks) {
       .includesText('This automation may not make AI requests');
 
     await fillIn(inputOf('AI requests', section('Limits')), '3');
+    assert
+      .dom(toggle())
+      .isDisabled('AI requests with no credits to spend on them');
+    await fillIn(inputOf('AI spending, in credits', section('Limits')), '50');
     assert.dom(toggle()).isEnabled();
     assert.dom(batched).doesNotIncludeText('may not make AI requests');
 
