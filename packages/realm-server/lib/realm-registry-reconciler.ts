@@ -50,10 +50,12 @@ export interface ReconcilerDeps {
 
 // Reconciles a process's in-memory realm state against realm_registry.
 //
-// Phase 3 behavior: the reconcile loop eagerly mounts only `pinned=true`
-// rows (bootstrap realms — base, catalog). Non-pinned rows (source and
-// published) are left to mount on first request via lookupOrMount(),
-// which is wired into the request hot path. The reconcile loop still
+// Phase 3 behavior: the reconcile loop eagerly mounts only the
+// `pinned=true` rows this process was started with (`bootstrapRealms`:
+// base, catalog and the other CLI --path realms). Every other row, whether
+// source, published or a pinned row this process wasn't started with, is
+// left to mount on first request via lookupOrMount(), which is wired into
+// the request hot path. The reconcile loop still
 // unmounts any reconciler-owned mount whose registry row has disappeared.
 //
 // The reconciler maintains three maps:
