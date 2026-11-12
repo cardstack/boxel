@@ -3943,6 +3943,20 @@ const PATIENT_MODULE = `
       query: { filter: { on: () => Patient, eq: { ward: 'north' } } },
     };
   }
+
+  // A type the clinic holds no card of. Its own create opens the first one,
+  // reached through the type rather than through a ward that exists.
+  export class Ward extends CardDef {
+    static displayName = 'Ward';
+    @field name = contains(StringField);
+
+    @operation static open = {
+      base: 'create',
+      of: () => Ward,
+      params: { name: StringField },
+      fill: { name: params('name') },
+    };
+  }
 `;
 
 function patientFile(name: string, ward: string) {
@@ -5776,6 +5790,106 @@ return await realm.operations.invoke('Patient/ana', 'transferTo', { ward: 'ICU' 
         'the answer has the version the card now holds',
       );
       assert.strictEqual((await attributesOf('Patient/ana.json')).ward, 'ICU');
+    });
+
+    test('realm.operations.invoke runs an operation on a type the workspace holds no card of', async function (assert) {
+      let result = await run(`
+return await realm.operations.invoke({ module: './patient', name: 'Ward' }, 'open', { name: 'North' });`);
+
+      let answer = JSON.parse(result.scriptResult!);
+      assert.strictEqual(answer.operation, 'open');
+      assert.deepEqual(
+        answer.type,
+        { module: './patient', name: 'Ward' },
+        'the answer names the type as the script did',
+      );
+      assert.true(
+        String(answer.path).endsWith('.json'),
+        `the answer names the card the operation made: ${answer.path}`,
+      );
+      assert.strictEqual(
+        answer.id,
+        `${testRealmURL}${answer.path.replace(/\.json$/, '')}`,
+        "in the run's realm",
+      );
+      assert.strictEqual(
+        (await attributesOf(answer.path)).name,
+        'North',
+        'and the declaration filled it from the payload',
+      );
+    });
+
+    test('an operation that acts on a card is refused when named on its type', async function (assert) {
+      let result = await run(`
+try {
+  await realm.operations.invoke({ module: './patient', name: 'Patient' }, 'transferTo', { ward: 'ICU' });
+  return 'ran';
+} catch (e) {
+  return e.message;
+}`);
+
+      assert.strictEqual(
+        JSON.parse(result.scriptResult!),
+        '"transferTo" is not an operation Patient carries on the type itself: it acts on one of its cards, so it is invoked on that card. On the type it carries: create',
+      );
+    });
+
+    test('a batch entry names a card rather than a type, however the type is spelled', async function (assert) {
+      let result = await run(`
+let refusals = [];
+for (let entry of [
+  { type: { module: './patient', name: 'Ward' }, operation: 'open', payload: { name: 'South' } },
+  { path: { module: './patient', name: 'Ward' }, operation: 'open', payload: { name: 'East' } },
+]) {
+  try {
+    await realm.operations.invokeBatchOperation([entry]);
+    refusals.push('ran');
+  } catch (e) {
+    refusals.push(e.message);
+  }
+}
+return refusals;`);
+
+      let refusal =
+        'a realm.operations.invokeBatchOperation entry names a card by its path; run an operation on a type with realm.operations.invoke(type, operation, payload)';
+      assert.deepEqual(
+        JSON.parse(result.scriptResult!),
+        [refusal, refusal],
+        'a type as its own member and a type where the path goes are both refused',
+      );
+    });
+
+    // A search answers each card with its type beside its path, so a batch
+    // built by spreading the results carries both.
+    test('a batch entry spread from a search result runs on the card at its path', async function (assert) {
+      let result = await run(`
+let found = await realm.cards.search({
+  filter: {
+    on: { module: ${JSON.stringify(`${testRealmURL}patient`)}, name: 'Patient' },
+    eq: { ward: 'Oncology' },
+  },
+});
+let answers = await realm.operations.invokeBatchOperation(
+  found.cards.map((patient) => ({
+    ...patient,
+    operation: 'recordVitals',
+    payload: { reading: 'HR 70' },
+  })),
+);
+return {
+  carriedType: found.cards.every((patient) => patient.type !== undefined),
+  paths: answers.map((answer) => answer.path),
+};`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        carriedType: true,
+        paths: ['Patient/dev.json'],
+      });
+      assert.strictEqual(
+        (await attributesOf('Patient/dev.json')).lastVitals,
+        'HR 70',
+        'the operation ran on the card at the path',
+      );
     });
 
     // The example the realm runner is for: find the patients of a ward, then

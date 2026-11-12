@@ -118,6 +118,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               resolveCalls: 1,
               writes: 1,
               seconds: 60,
+              aiCredits: 0,
               dailyCredits: 10,
               monthlyCredits: null,
             },

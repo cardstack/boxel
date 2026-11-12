@@ -1,10 +1,13 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { mkdirSync } from 'fs';
+import { basename, join } from 'path';
+import { dirSync } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm } from '@cardstack/runtime-common';
 import { asExpressions, insert, query } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
+import { mountableRealmDiskPath } from '../lib/realm-disk-path.ts';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
@@ -142,7 +145,7 @@ module(basename(import.meta.filename), function () {
       let started: string[] = [];
       let ordered = new RealmRegistryReconciler({
         dbAdapter,
-        bootstrapOrder: [
+        bootstrapRealms: [
           '@cardstack/base/',
           '@cardstack/skills/',
           '@cardstack/pretui/',
@@ -165,6 +168,96 @@ module(basename(import.meta.filename), function () {
         '@cardstack/skills/',
         '@cardstack/pretui/',
       ]);
+    });
+
+    test('reconcile eagerly mounts only the pinned rows the process was started with', async function (assert) {
+      // A shared dev database keeps the pinned row of a realm another
+      // checkout's stack mounted, at that checkout's path.
+      for (let url of [
+        '@cardstack/base/',
+        'http://localhost:4201/experiments/',
+      ]) {
+        await seedRow(dbAdapter, {
+          url,
+          kind: 'bootstrap',
+          disk_id: `/abs/${url}`,
+          owner_username: 'system',
+          pinned: true,
+        });
+      }
+      let mounted: string[] = [];
+      let startedWithBase = new RealmRegistryReconciler({
+        dbAdapter,
+        bootstrapRealms: ['@cardstack/base/'],
+        prepareRealmFromRow: (row) => {
+          mounted.push(row.url);
+          return makeFakeRealm(row.url);
+        },
+        unmount: async () => {},
+        pollIntervalMs: 1000,
+      });
+
+      await startedWithBase.reconcile();
+
+      assert.deepEqual(mounted, ['@cardstack/base/']);
+      assert.true(
+        startedWithBase.knownByUrl.has('http://localhost:4201/experiments/'),
+        'the other pinned row is still known, for the request path',
+      );
+    });
+
+    test('a row whose directory is missing is refused before its realm starts', async function (assert) {
+      let realmsRoot = dirSync({ unsafeCleanup: true }).name;
+      let presentDir = join(realmsRoot, 'live-checkout', 'base');
+      mkdirSync(presentDir, { recursive: true });
+      let presentURL = '@cardstack/base/';
+      let missingURL = 'http://localhost:4201/experiments/';
+      await seedRow(dbAdapter, {
+        url: presentURL,
+        kind: 'bootstrap',
+        disk_id: presentDir,
+        owner_username: 'system',
+        pinned: true,
+      });
+      await seedRow(dbAdapter, {
+        url: missingURL,
+        kind: 'bootstrap',
+        disk_id: join(realmsRoot, 'deleted-checkout', 'experiments'),
+        owner_username: 'system',
+        pinned: true,
+      });
+      let started: string[] = [];
+      let local = new RealmRegistryReconciler({
+        dbAdapter,
+        bootstrapRealms: [presentURL, missingURL],
+        prepareRealmFromRow: (row) => {
+          mountableRealmDiskPath(row, realmsRoot);
+          return {
+            ...makeFakeRealm(row.url),
+            start: async () => {
+              started.push(row.url);
+            },
+          } as unknown as Realm;
+        },
+        unmount: async () => {},
+        pollIntervalMs: 1000,
+      });
+
+      await local.reconcile();
+
+      assert.deepEqual(started, [presentURL], 'only the present realm started');
+      assert.false(local.mounted.has(missingURL), 'missing realm not mounted');
+
+      await assert.rejects(
+        local.lookupOrMount(missingURL),
+        /the directory for http:\/\/localhost:4201\/experiments\/ does not exist/,
+        'a request for the missing realm is refused',
+      );
+      assert.deepEqual(
+        started,
+        [presentURL],
+        'the request did not start the missing realm',
+      );
     });
 
     test('reconcile does NOT eagerly mount unpinned rows', async function (assert) {

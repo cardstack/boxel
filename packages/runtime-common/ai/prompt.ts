@@ -3618,9 +3618,10 @@ function readOnlyWorkspaceNote(
   return note;
 }
 
-// Both tools invoke an operation through a card that exists: a create is
-// reached through a card of the type it creates.
-const OFFER_GRANTED_OPERATIONS = `When the user asks what they can do here, or asks for a change that an operation the policy grants would make, offer that operation and run it with invoke-card-operation, or realm.operations in run-realm-code, instead of telling them they need write access. An operation that creates a card runs through an existing card of the type it creates, so where the workspace holds no card of that type yet, neither tool can run it: say so rather than offering it.`;
+// Both tools reach an operation through a card, or through its type alone,
+// named the way a policy names it, so a granted create runs in a workspace
+// that holds no card of the type yet.
+const OFFER_GRANTED_OPERATIONS = `When the user asks what they can do here, or asks for a change that an operation the policy grants would make, offer that operation and run it with invoke-card-operation, or realm.operations in run-realm-code, instead of telling them they need write access. An operation on a type, such as a create, needs no card of that type: name the type by its module and export, as "type" with "realm" in invoke-card-operation, or as { module, name } in place of the path in realm.operations.invoke.`;
 
 // Text from a policy, which the realm's owner writes, as a Markdown code span
 // on one line. A line break in it would end the list entry it is part of, and

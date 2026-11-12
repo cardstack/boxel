@@ -58,6 +58,7 @@ function automationJSON(name: string) {
           callApiCalls: 0,
           responseBytes: 0,
           resolveCalls: 0,
+          aiCredits: 0,
           writes: 1,
           seconds: 60,
           dailyCredits: 5,
