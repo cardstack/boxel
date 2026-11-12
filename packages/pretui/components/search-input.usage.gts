@@ -107,7 +107,7 @@ class SearchInputUsage extends Component {
     >
       <:example>
         {{#each this.rowWidths as |w|}}
-          <div class='pretui-demo-row' style='inline-size: {{w}}'>
+          <div class='pretui-demo-row' data-demo-width={{w}}>
             <LayoutControl @label='Row {{w}}' as |lc|>
               <lc.Slot @id='search' @forms={{this.iconOnly}} @label='Search'>
                 <SearchInput @display='collapsed' @placeholder='Search' />
@@ -125,6 +125,15 @@ class SearchInputUsage extends Component {
       .pretui-demo-row {
         max-inline-size: 100%;
         margin-block-end: var(--boxel-sp-sm);
+      }
+      .pretui-demo-row[data-demo-width='18rem'] {
+        inline-size: 18rem;
+      }
+      .pretui-demo-row[data-demo-width='26rem'] {
+        inline-size: 26rem;
+      }
+      .pretui-demo-row[data-demo-width='36rem'] {
+        inline-size: 36rem;
       }
       .pretui-demo-readout {
         margin: 8px 0 0;

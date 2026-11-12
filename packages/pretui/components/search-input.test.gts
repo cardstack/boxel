@@ -61,6 +61,7 @@ const GEOMETRY = `#ember-testing { transform: none !important; zoom: 1 !importan
   [data-test-pretui-search-anchor] { display: grid; inline-size: 32px; block-size: 32px; }
   [data-test-pretui-search-anchor] > span { position: fixed; display: block; }
   [data-test-pretui-search-toggle] { inline-size: 100%; block-size: 100%; }
+  [data-test-lead] { flex: none; inline-size: 60px; }
   [data-test-pad] { padding: 2rem; }
   [data-test-scroller] { block-size: 6rem; overflow: auto; }
   [data-test-spacer] { block-size: 3rem; }
@@ -148,7 +149,7 @@ module('Pretui | components/search-input', function (hooks) {
       await render(
         <template>
           <div data-pretui-layout-control data-test-row style={{rowStyle}}>
-            <span style='flex: none; inline-size: 60px'></span>
+            <span data-test-lead></span>
             <SearchInput @display='collapsed' />
             <button type='button' data-test-primary>New</button>
           </div>
@@ -167,7 +168,7 @@ module('Pretui | components/search-input', function (hooks) {
       assert.strictEqual(
         Math.round(box.left),
         Math.round(row.left),
-        'starts at the row start',
+        `starts at the row start (row ${row.left}, field ${box.left}, written ${layer().style.left}, anchor ${anchorRect().left}-${anchorRect().right})`,
       );
       assert.strictEqual(
         Math.round(box.width),
