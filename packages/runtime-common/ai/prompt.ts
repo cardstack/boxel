@@ -3571,11 +3571,16 @@ function mediaFileLabel(file: SerializedFileDef): string {
   return file.sourceUrl ? `${name} (${file.sourceUrl})` : name;
 }
 
+// A user the realm admits only through its policy reads only what the policy
+// grants, and each kind of read on a grant of its own (ADR 024 §1.4, §1.7).
+// The realm answers anything else as missing rather than refused, so the note
+// says so before a read comes back empty.
+const POLICY_GRANTED_READS = `The user can't read this workspace directly either. The realm serves them only what its policy grants, and each read needs its own grant: realm.cards.get a read, realm.cards.search a query, and realm.fs.readText (a card's .json too) a readSource. It answers anything no grant reaches as not found, so realm.fs.exists can't tell a missing file from one the user can't read, and throws rather than answer false.`;
+
 // Whether a grant admits the user on a given card turns on its condition,
 // which reads the card and the user, and on grants the context may not list.
 // The realm answers that without running anything, so the note names the call
-// that asks it. The call runs in run-realm-code, which runs only for a user
-// who can read or write the workspace, so the note names it only to a reader.
+// that asks it.
 const CHECK_GRANTED_OPERATIONS = `To learn whether the realm allows the user an operation now, on a given card or as a create of a given type, ask it with realm.operations.capabilities in run-realm-code, which runs nothing. Ask before offering an operation whose grant, or whose condition, you can't confirm from what you've read.`;
 
 // What the context says about a workspace the user can't write. The realm's
@@ -3589,16 +3594,16 @@ function readOnlyWorkspaceNote(
   user: string | undefined,
   canRead: boolean,
 ): string {
-  let check = canRead ? ` ${CHECK_GRANTED_OPERATIONS}` : '';
+  let reads = canRead ? '' : ` ${POLICY_GRANTED_READS}`;
   if (!policy) {
     return `This workspace is read-only for the user: edits to its cards and files will be rejected.\n`;
   }
   if (policy.tooLarge && policy.card) {
-    return `The user can't edit this workspace's cards and files directly, but its policy, ${policy.card}, grants them operations here: more than the context can list. Read that card to see which. ${OFFER_GRANTED_OPERATIONS}${check} The realm refuses an operation the policy doesn't grant when it runs.\n`;
+    return `The user can't edit this workspace's cards and files directly, but its policy, ${policy.card}, grants them operations here: more than the context can list. Read that card to see which. ${OFFER_GRANTED_OPERATIONS} ${CHECK_GRANTED_OPERATIONS}${reads} The realm refuses an operation the policy doesn't grant when it runs.\n`;
   }
   if (!policy.rules) {
     let named = policy.card ? `, ${policy.card},` : '';
-    return `The user can't edit this workspace's cards and files directly. Its policy${named} can still grant them operations a card's type declares, but the policy couldn't be read, so which ones is unknown. ${OFFER_GRANTED_OPERATIONS}${check} The realm refuses an operation the policy doesn't grant when it runs.\n`;
+    return `The user can't edit this workspace's cards and files directly. Its policy${named} can still grant them operations a card's type declares, but the policy couldn't be read, so which ones is unknown. ${OFFER_GRANTED_OPERATIONS} ${CHECK_GRANTED_OPERATIONS}${reads} The realm refuses an operation the policy doesn't grant when it runs.\n`;
   }
   if (policy.rules.length === 0) {
     return `This workspace is read-only for the user: edits to its cards and files will be rejected. Its policy, ${policy.card}, grants no operations.\n`;
@@ -3614,7 +3619,7 @@ function readOnlyWorkspaceNote(
       .join('; ');
     note += ` - ${humanReadable(targetType)}: ${granted}\n`;
   }
-  note += `In a condition, actor() is the user${user ? ` (${user})` : ''}, and a path that starts with "." reads a field of the card. ${OFFER_GRANTED_OPERATIONS}${check} Any other change to this workspace is refused.\n`;
+  note += `In a condition, actor() is the user${user ? ` (${user})` : ''}, and a path that starts with "." reads a field of the card. ${OFFER_GRANTED_OPERATIONS} ${CHECK_GRANTED_OPERATIONS}${reads} Any other change to this workspace is refused.\n`;
   return note;
 }
 
