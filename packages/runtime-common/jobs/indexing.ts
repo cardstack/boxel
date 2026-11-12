@@ -18,6 +18,7 @@ import { baseRealm, baseRealmRRI } from '../constants.ts';
 import { systemInitiatedPriority, userInitiatedPriority } from '../queue.ts';
 import { Deferred } from '../deferred.ts';
 import { parseSpawningIndexPasses } from './prerender-html.ts';
+import { parseRunIndexing, type RunIndexing } from '../run-indexing.ts';
 import { laneFamilyPredicate, writerLane, type Lane } from './lane-family.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { isObjectLike } from 'lodash-es';
@@ -715,10 +716,8 @@ function parseDeferredPrerenderHtml(
   if (!isObjectLike(value) || Array.isArray(value)) {
     return undefined;
   }
-  let { changes, spawningIndexPass, generation, loaderEpoch } = value as Record<
-    string,
-    PgPrimitive
-  >;
+  let { changes, spawningIndexPass, generation, loaderEpoch, runIndexing } =
+    value as Record<string, PgPrimitive>;
   if (
     !Array.isArray(changes) ||
     typeof generation !== 'number' ||
@@ -748,6 +747,7 @@ function parseDeferredPrerenderHtml(
     loaderEpoch,
     spawningIndexPass: pass ?? null,
     generation,
+    runIndexing: parseRunIndexing(runIndexing),
   };
 }
 
@@ -760,6 +760,8 @@ export interface IncrementalIndexEnqueueArgs {
   deferPrerenderHtml?: boolean;
   carriedPrerenderHtmlChanges?: IncrementalChange[];
   readsOwnWrite?: boolean;
+  // See IncrementalArgs.runIndexing.
+  runIndexing?: RunIndexing | null;
 }
 
 export function makeIncrementalArgsWithCallerMetadata(
@@ -793,6 +795,7 @@ export function makeIncrementalArgsWithCallerMetadata(
     carriedPrerenderHtmlChanges: args.carriedPrerenderHtmlChanges ?? [],
     readsOwnWrite: args.readsOwnWrite === true,
     realmEvents: caller?.realmEvents !== false,
+    runIndexing: args.runIndexing ?? null,
   };
 }
 
