@@ -18,8 +18,15 @@ import type { MeteredCharges } from './metered-charges.ts';
 // when its last job completes.
 //
 // A job carrying a run's indexing never shares a pass with another writer's
-// work, in either direction (see `sameRunIndexing`), so everything it
-// measures was caused by that run.
+// work, in either direction (see `sameRunIndexing`). When another writer's
+// pass commits while a run's pass runs, the run's pass checks what that
+// commit left stale and re-visits it before committing, and may enqueue a
+// follow-up pass for what is still stale after that. Those rounds, and the
+// follow-up, are caused by the other writer, so the run's pass measures
+// neither: it leaves out the rounds' worker time (`validationMs`) and the tab
+// time of renders made in them (`meteredPrerenderer`'s `excluding`), and the
+// follow-up carries no run. Everything else it measures was caused by the
+// run.
 export interface RunIndexing extends JSONTypes.Object {
   // The `automation_runs` id of the run whose commit is being indexed.
   runId: string;
@@ -104,14 +111,24 @@ export function addRunIndexingUsage(
 // prerender server's own, on prerenderers a job doesn't own, so a job's
 // measurement leaves their tab time out; the job's wall clock still counts the
 // time it waited on them.
+//
+// `excluding` runs work whose renders are not counted: a commit-validation
+// round re-visiting what another writer's commit left stale is caused by that
+// writer, not by the run (see `RunIndexing`). A render counts or not by
+// whether it started inside such work.
 export function meteredPrerenderer(prerenderer: Prerenderer): {
   prerenderer: Prerenderer;
   tabSeconds(): number;
+  excluding<T>(work: () => Promise<T>): Promise<T>;
 } {
   let tabMs = 0;
+  let excludingDepth = 0;
   async function meter<T extends { meta?: PrerenderResponseMeta }>(
     call: () => Promise<T>,
   ): Promise<T> {
+    if (excludingDepth > 0) {
+      return await call();
+    }
     let start = Date.now();
     let response: T;
     try {
@@ -138,7 +155,18 @@ export function meteredPrerenderer(prerenderer: Prerenderer): {
       ? { prerenderCapture: (args) => prerenderer.prerenderCapture!(args) }
       : {}),
   };
-  return { prerenderer: metered, tabSeconds: () => tabMs / 1000 };
+  return {
+    prerenderer: metered,
+    tabSeconds: () => tabMs / 1000,
+    async excluding(work) {
+      excludingDepth++;
+      try {
+        return await work();
+      } finally {
+        excludingDepth--;
+      }
+    },
+  };
 }
 
 // How many times a step that hands on or charges a run's indexing is tried

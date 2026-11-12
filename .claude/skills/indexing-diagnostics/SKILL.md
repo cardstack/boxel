@@ -2078,7 +2078,7 @@ The `NULL` writer row is the family as a whole. With writer lanes, a pass enqueu
 
 An automation run's writes land as one commit, and that commit's indexing is charged to the run's identity as a `run_indexing` ledger charge (see the `pricing` skill). Every job the commit causes carries the run in its args as `runIndexing`: `{ runId, workerProcessSeconds, prerenderTabSeconds }`, the run's `automation_runs` id and the usage the jobs before it measured. Usually that is one `incremental-index` job and the `prerender_html` job it spawns. A commit that writes a module and then instances runs two index passes, the first for the module alone. The last job the commit causes adds its own measurement and charges the total: the render job, or the index pass when it left nothing to render. A `prerender_html` job with no changes is one the realm enqueued only to charge a run whose passes left nothing to render.
 
-A run's jobs never coalesce with another write's, in either direction, so every row they write belongs to that run's commit. A follow-up pass a commit enqueues when peer commits leave its rows stale (Mode O) carries no run and is not charged. A run that wrote only files identical to what was stored causes no job and no charge.
+A run's jobs never coalesce with another write's, in either direction, so every row they write belongs to that run's commit. Work a peer's commit causes (Mode O) is left out of the measurement: the validation rounds that re-visit rows a peer left stale (the pass's `phaseTimings.validationMs`, and the renders made in them), and the follow-up pass a commit enqueues for what is still stale, which carries no run. A URL a round adds to the run's render set is rendered by the run's render job and counted there. A run that wrote only files identical to what was stored causes no job and no charge.
 
 ### Finding a run's jobs
 
@@ -2098,7 +2098,7 @@ The job ids lead to everything else in this skill: the rows each pass wrote (`bo
 
 ### What the measurement covers
 
-- **Worker time** is each job's wall clock from the start of its task to its charge or hand-off, including the wait on its permissions read and, for a render job, the wait on its spawning pass's commit.
+- **Worker time** is each job's wall clock from the start of its task to its charge or hand-off, including the wait on its permissions read and, for a render job, the wait on its spawning pass's commit. An index pass leaves out its `validationMs`.
 - **Tab time** is each render's own measure, `renderElapsedMs` from the render's diagnostics, summed over every render the job made through its own prerenderer: the card and file visits, and the module renders the pass asks for itself. A render without one counts its `totalElapsedMs` (which includes the wait for a tab), and one without that counts the time its call took.
 - **Not counted:** the module renders that fill the shared definition cache when a pass or a render looks up a type it hasn't cached. Those are made by the definition lookup, or by the prerender server for a render in progress, on prerenderers the job doesn't own, and the cache they fill serves every later reader. A run that writes modules is charged for the worker time it spent waiting on them, but not their tab time.
 
