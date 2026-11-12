@@ -24,6 +24,7 @@ import {
   switchOnAutomation,
   syncAutomationWithCard,
   type AutomationActorOptions,
+  type AutomationCardSource,
   type AutomationRow,
   type AutomationSync,
 } from '@cardstack/runtime-common/automations';
@@ -33,6 +34,8 @@ import {
   type AutomationDeclaration,
   type AutomationIndexEntry,
 } from '@cardstack/runtime-common/automation-declaration';
+import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
+import type { DefinitionLookup } from '@cardstack/runtime-common';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
 import { createVirtualNetwork, setupDB } from './helpers/index.ts';
 import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
@@ -86,12 +89,12 @@ function declaration(
   };
 }
 
-// Each trigger's run count, last slot and cursor, without the timing record
-// the index hook compares.
+// Each trigger's run count, last slot and cursor, without the records the
+// index hook compares.
 function runCounts(automation: AutomationRow) {
   return Object.fromEntries(
     Object.entries(automation.triggerRuns).map(
-      ([label, { timing: _timing, ...counts }]) => [label, counts],
+      ([label, { timing: _timing, live: _live, ...counts }]) => [label, counts],
     ),
   );
 }
@@ -840,14 +843,19 @@ module(basename(import.meta.filename), function () {
       }
 
       async function sync(
-        card: AutomationIndexEntry | undefined,
+        card: AutomationCardSource | undefined,
         now = NOW,
       ): Promise<AutomationSync | undefined> {
-        return await syncAutomationWithCard(dbAdapter, AUTOMATION, card, {
-          automationTypeKey: automationTypeKey(),
-          virtualNetwork: options.virtualNetwork,
-          now,
-        });
+        return await syncAutomationWithCard(
+          dbAdapter,
+          AUTOMATION,
+          async () => card,
+          {
+            automationTypeKey: automationTypeKey(),
+            virtualNetwork: options.virtualNetwork,
+            now,
+          },
+        );
       }
 
       async function setRuns(label: string, runs: number, lastSlot?: number) {
@@ -953,16 +961,52 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(spent?.automation.state, 'done');
         assert.strictEqual(spent?.automation.nextRun, null);
 
+        // Four days later the count goes up to 5.
+        let raisedAt = NOW + 4 * 86400;
         let raised = await sync(
           indexed({ triggers: [cronTrigger({ count: 5 })] }),
+          raisedAt,
         );
         assert.strictEqual(raised?.automation.state, 'active');
-        assert.strictEqual(raised?.automation.nextRun, NEXT_DAILY);
+        assert.strictEqual(
+          raised?.automation.nextRun,
+          NEXT_DAILY + 4 * 86400,
+          'the next run is the first slot after the raise, not a make-up run for the days it was spent',
+        );
         assert.strictEqual(
           runCounts(raised!.automation).daily.runs,
           3,
           'raising the count keeps the runs already started',
         );
+      });
+
+      test('a trigger the card removes and later adds back starts at the re-add, keeping its count', async function (assert) {
+        await switchOn();
+        await setRuns('daily', 2, NEXT_DAILY - 86400);
+        let removed = await sync(
+          indexed({
+            triggers: [
+              {
+                ...cronTrigger(),
+                kind: 'webhook',
+                label: 'push',
+                expression: null,
+                timeZone: null,
+                webhookPath: 'github-push',
+              },
+            ],
+          }),
+        );
+        assert.strictEqual(removed?.automation.nextRun, null);
+
+        let readdedAt = NOW + 3 * 86400;
+        let readded = await sync(indexed(), readdedAt);
+        assert.strictEqual(
+          readded?.automation.nextRun,
+          NEXT_DAILY + 3 * 86400,
+          'the next run is the first slot after the re-add, not a make-up run for the days it was gone',
+        );
+        assert.strictEqual(runCounts(readded!.automation).daily.runs, 2);
       });
 
       test('a one-time trigger whose time has passed leaves the automation done', async function (assert) {
@@ -1024,6 +1068,15 @@ module(basename(import.meta.filename), function () {
         let before = await switchOn();
         let failed = await sync({ ...indexed(), instance: null });
         assert.strictEqual(failed?.kind, 'unchanged');
+        let withheld = await sync({
+          ...indexed({ triggers: [cronTrigger({ expression: '0 11 * * *' })] }),
+          failureWithheld: true,
+        });
+        assert.strictEqual(
+          withheld?.kind,
+          'unchanged',
+          'a row carrying an earlier visit after a failed one is not read',
+        );
         let invalid = await sync(
           indexed({ triggers: [cronTrigger({ expression: 'not cron' })] }),
         );
@@ -1058,6 +1111,58 @@ module(basename(import.meta.filename), function () {
       test('a card whose automation is not switched on is left alone', async function (assert) {
         assert.strictEqual(await sync(indexed()), undefined);
         assert.strictEqual(await sync(undefined), undefined);
+      });
+    });
+
+    module('the index hook after a pass', function (hooks) {
+      // The index holds no row for the card in these tests, so a sync reads
+      // it as deleted: whether the row survives shows whether the pass
+      // matched the card.
+      const definitionLookup = {} as DefinitionLookup;
+      // The worker's network, which maps the catalog's prefix.
+      let virtualNetwork: VirtualNetwork;
+      hooks.beforeEach(function () {
+        virtualNetwork = createVirtualNetwork();
+      });
+
+      test('an incremental pass syncs an automation whose card file it touched, and only that one', async function (assert) {
+        await switchOn();
+        let untouched = await syncAutomationsAfterIndex({
+          dbAdapter,
+          definitionLookup,
+          virtualNetwork,
+          realmURL: REALM_URL,
+          touched: [`${REALM_URL}Automation/other.json`],
+        });
+        assert.strictEqual(untouched.size, 0);
+        assert.notStrictEqual(
+          await getAutomation(dbAdapter, AUTOMATION),
+          undefined,
+        );
+
+        let touched = await syncAutomationsAfterIndex({
+          dbAdapter,
+          definitionLookup,
+          virtualNetwork,
+          realmURL: REALM_URL,
+          touched: [`${AUTOMATION}.json`],
+        });
+        assert.strictEqual(touched.get(AUTOMATION)?.kind, 'removed');
+        assert.strictEqual(
+          await getAutomation(dbAdapter, AUTOMATION),
+          undefined,
+        );
+      });
+
+      test('a pass over the whole realm syncs every automation in it', async function (assert) {
+        await switchOn();
+        let synced = await syncAutomationsAfterIndex({
+          dbAdapter,
+          definitionLookup,
+          virtualNetwork,
+          realmURL: REALM_URL,
+        });
+        assert.deepEqual([...synced.keys()], [AUTOMATION]);
       });
     });
 

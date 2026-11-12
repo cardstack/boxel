@@ -45,6 +45,7 @@ import {
 import { cancelPendingAutomationRuns } from './automation-runs.ts';
 import {
   computeAutomationSchedule,
+  type AutomationSchedule,
   type TriggerRunState,
 } from './automation-schedule.ts';
 import type { DBAdapter } from './db.ts';
@@ -84,12 +85,25 @@ export type AutomationPauseReason =
 export type AutomationCapsSnapshot = AutomationCaps & { batchedAI: boolean };
 
 // A trigger's run state as the row keeps it: what the schedule reads, plus
-// `timing`, which the index hook compares to tell that the card changed the
-// trigger's timing and its cursor must move up to the edit (see
-// `triggerTiming`).
+// what the index hook compares to tell when a trigger starts afresh and its
+// cursor must move up to the edit:
+// - `timing`: the trigger's timing when the row last followed the card (see
+//   `triggerTiming`). A change is an edit to when it fires.
+// - `live`: whether the card had the trigger, unspent, when the row last
+//   followed it. A trigger that comes back (re-added, or a spent one given a
+//   higher `count` or a later `until`) starts at the edit, so the slots it
+//   missed while gone don't collapse into a make-up run.
 export interface AutomationTriggerRuns extends TriggerRunState {
   timing?: string;
+  live?: boolean;
 }
+
+// The card's committed index row as the index hook reads it.
+// `failureWithheld` marks a row whose latest visit failed and that still
+// carries what an earlier visit recorded (see `IndexedInstanceSource`).
+export type AutomationCardSource = AutomationIndexEntry & {
+  failureWithheld?: boolean;
+};
 
 // The result of the automation's most recent run.
 export type AutomationRunResult = 'complete' | 'error' | 'canceled';
@@ -218,7 +232,7 @@ export async function switchOnAutomation(
       ',',
       param(JSON.stringify(snapshotCaps(declaration))),
       '::jsonb,',
-      param(JSON.stringify(withTriggerTimings({}, declaration.triggers))),
+      param(JSON.stringify(schedule.triggerRuns)),
       '::jsonb,',
       param(unixSecondsToISO(now)),
       '::timestamptz,',
@@ -314,14 +328,7 @@ export async function resumeAutomation(
       ', pause_reason = NULL, paused_by = NULL, caps_snapshot =',
       param(JSON.stringify(snapshotCaps(declaration))),
       '::jsonb, trigger_runs =',
-      param(
-        JSON.stringify(
-          withTriggerTimings(
-            found.automation.triggerRuns,
-            declaration.triggers,
-          ),
-        ),
-      ),
+      param(JSON.stringify(schedule.triggerRuns)),
       '::jsonb, scheduled_since =',
       param(unixSecondsToISO(now)),
       '::timestamptz, next_run =',
@@ -483,22 +490,25 @@ export interface AutomationSyncOptions {
 }
 
 // Brings a switched-on automation's row in step with its card as just
-// indexed. `card` is the card's committed index row, or undefined when the
-// index holds no live instance there (the card was deleted). Returns what it
-// did, or undefined when the automation isn't switched on.
+// indexed. `readCard` reads the card's committed index row, or undefined when
+// the index holds no live instance there (the card was deleted). It is called
+// once the automation's row is locked, so of two index passes over the card
+// that sync at once, the later one reads the card no older than the earlier
+// one did, and the row ends on the newest card. Returns what it did, or
+// undefined when the automation isn't switched on.
 //
 // The next run is recomputed from the card's triggers and the row's
 // per-trigger run counts, which are keyed by label, so an edit keeps each
-// trigger's count. A trigger whose timing changed (or that is new) has its
-// cursor moved up to now, so a slot that passed before the edit never comes
-// due. An automation whose triggers are all spent becomes *done*, and a *done*
+// trigger's count. A trigger whose timing changed, that is new, or that
+// comes back after being removed or spent has its cursor moved up to now, so
+// a slot that passed before the edit never comes due. An automation whose triggers are all spent becomes *done*, and a *done*
 // one with a trigger left becomes active again. Like `checkAutomationCaps`, a
 // card that asks for more than the caps snapshot pauses the automation, and a
 // paused one keeps its reason and its schedule until a resume restarts it.
 export async function syncAutomationWithCard(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
-  card: AutomationIndexEntry | undefined,
+  readCard: () => Promise<AutomationCardSource | undefined>,
   options: AutomationSyncOptions,
 ): Promise<AutomationSync | undefined> {
   let now = options.now ?? currentUnixSeconds();
@@ -508,17 +518,24 @@ export async function syncAutomationWithCard(
       return undefined;
     }
     let automation = automationFromRow(row);
+    let card = await readCard();
     if (!card) {
       return await removeForCard(txQuery, automation, 'card-deleted');
     }
-    // A card that failed to index carries no document to read. Its row keeps
-    // the schedule it had: an error is no reason to stop the automation, and
-    // the run reads the card again when it starts.
-    if (!card.instance) {
+    // A card that failed to index carries no document to read, or carries
+    // only what an earlier visit recorded. Its row keeps the schedule it had:
+    // an error is no reason to stop the automation, and the run reads the
+    // card again when it starts.
+    if (!card.instance || card.failureWithheld) {
       return { kind: 'unchanged', automation };
     }
     let read = readAutomationDeclaration(
-      { ...card, url: automationId },
+      {
+        url: automationId,
+        realmURL: card.realmURL,
+        types: card.types,
+        instance: card.instance,
+      },
       options,
     );
     if (!read.ok) {
@@ -538,7 +555,7 @@ export async function syncAutomationWithCard(
         automation: await pause(txQuery, automationId, reason),
       };
     }
-    let triggerRuns = withTriggerTimings(
+    let cursors = withEditCursors(
       automation.triggerRuns,
       declaration.triggers,
       now,
@@ -547,8 +564,9 @@ export async function syncAutomationWithCard(
       triggers: declaration.triggers,
       since: automation.scheduledSince,
       now,
-      runState: triggerRuns,
+      runState: cursors,
     });
+    let triggerRuns = recordTriggers(cursors, declaration.triggers, schedule);
     let state: AutomationState = schedule.done
       ? 'done'
       : automation.state === 'done'
@@ -650,28 +668,49 @@ function triggerTiming(trigger: AutomationTriggerDeclaration): string {
   }
 }
 
-// Records each trigger's timing on its run state. With `editedAt`, a trigger
-// whose timing differs from the one recorded, or that has no run state yet,
-// gets `since: editedAt`, so its cursor moves up to the edit. A run state
-// that predates timing records takes the card's timing as it is. Run states
-// of labels the card no longer has are kept, so a label that comes back
-// keeps its count.
-function withTriggerTimings(
+// Moves each trigger's cursor up to `editedAt` when the trigger starts
+// afresh: it has no run state yet, its timing differs from the one recorded,
+// or it wasn't live (removed from the card, or spent) when the row last
+// followed the card. A run state that predates those records starts nothing
+// afresh. Run states of labels the card no longer has are kept, so a label
+// that comes back keeps its count.
+function withEditCursors(
   triggerRuns: Record<string, AutomationTriggerRuns>,
   triggers: AutomationTriggerDeclaration[],
-  editedAt?: number,
+  editedAt: number,
 ): Record<string, AutomationTriggerRuns> {
   let next: Record<string, AutomationTriggerRuns> = { ...triggerRuns };
   for (let trigger of triggers) {
-    let timing = triggerTiming(trigger);
     let current = next[trigger.label];
-    let edited =
-      editedAt !== undefined &&
-      (!current || (current.timing !== undefined && current.timing !== timing));
+    let afresh =
+      !current ||
+      current.live === false ||
+      (current.timing !== undefined &&
+        current.timing !== triggerTiming(trigger));
+    if (afresh) {
+      next[trigger.label] = { ...(current ?? { runs: 0 }), since: editedAt };
+    }
+  }
+  return next;
+}
+
+// Records, on each run state, the trigger's timing and whether it is live
+// under `schedule`. A label the card no longer has is recorded as not live.
+function recordTriggers(
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+  triggers: AutomationTriggerDeclaration[],
+  schedule: AutomationSchedule,
+): Record<string, AutomationTriggerRuns> {
+  let spent = new Map(schedule.triggers.map((t) => [t.label, t.spent]));
+  let next: Record<string, AutomationTriggerRuns> = {};
+  for (let [label, state] of Object.entries(triggerRuns)) {
+    next[label] = { ...state, live: false };
+  }
+  for (let trigger of triggers) {
     next[trigger.label] = {
-      ...(current ?? { runs: 0 }),
-      ...(edited ? { since: editedAt } : {}),
-      timing,
+      ...(next[trigger.label] ?? { runs: 0 }),
+      timing: triggerTiming(trigger),
+      live: !spent.get(trigger.label),
     };
   }
   return next;
@@ -784,8 +823,12 @@ async function selectAutomation(
 function startSchedule(
   declaration: AutomationDeclaration,
   now: number,
-  triggerRuns: Record<string, TriggerRunState>,
-): { state: 'active' | 'done'; nextRun: string | null } {
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+): {
+  state: 'active' | 'done';
+  nextRun: string | null;
+  triggerRuns: Record<string, AutomationTriggerRuns>;
+} {
   let schedule = computeAutomationSchedule({
     triggers: declaration.triggers,
     since: now,
@@ -793,6 +836,7 @@ function startSchedule(
     runState: triggerRuns,
   });
   return {
+    triggerRuns: recordTriggers(triggerRuns, declaration.triggers, schedule),
     state: schedule.done ? 'done' : 'active',
     nextRun:
       schedule.nextRun === undefined

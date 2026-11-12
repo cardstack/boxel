@@ -43,13 +43,16 @@ export default function handleArchiveRealm({
     let { realmURL, permissions } = target;
 
     try {
-      await archiveRealm(dbAdapter, new URL(realmURL));
       // An archived realm's automations stop with it: each is paused, and its
-      // pending run canceled, until a direct writer resumes it.
+      // pending run canceled, until a direct writer resumes it. They pause
+      // before the realm is marked archived, so a failure in between leaves
+      // the realm visible with its automations stopped, never archived with
+      // them running, and a retry archives it.
       await pauseRealmAutomations(
         dbAdapter,
         ri(virtualNetwork.unresolveURL(realmURL)),
       );
+      await archiveRealm(dbAdapter, new URL(realmURL));
       // Stop the realm's indexer: cancel any in-flight from-scratch /
       // incremental-index job and drop the pending queue in every lane of
       // this realm's index lane family. Mirrors the realm-level cancel-jobs endpoint

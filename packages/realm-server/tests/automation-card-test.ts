@@ -300,9 +300,10 @@ module(basename(import.meta.filename), function (hooks) {
     if (entry?.type !== 'instance') {
       throw new Error(`no indexed instance: ${JSON.stringify(entry)}`);
     }
+    // Switch-on takes the declaration read from the card's own id.
     let read = readAutomationDeclaration(
       {
-        url: entry.canonicalURL,
+        url: automationId,
         realmURL: entry.realmURL,
         types: entry.types,
         instance: entry.instance,

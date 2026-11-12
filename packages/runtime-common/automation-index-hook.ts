@@ -73,12 +73,12 @@ export async function syncAutomationsAfterIndex({
     if (touchedCards && !touchedCards.has(cardURL)) {
       continue;
     }
-    let card = await engine.getInstanceSource(new URL(cardURL));
-    let result = await syncAutomationWithCard(dbAdapter, automationId, card, {
-      automationTypeKey,
-      virtualNetwork,
-      now,
-    });
+    let result = await syncAutomationWithCard(
+      dbAdapter,
+      automationId,
+      () => engine.getInstanceSource(new URL(cardURL)),
+      { automationTypeKey, virtualNetwork, now },
+    );
     if (result) {
       synced.set(automationId, result);
     }
