@@ -523,7 +523,9 @@ module('background work through the historian', (hooks) => {
         expiryMs: 1000,
         holder: 'background-test-task',
       },
-      recording: { clockGraceMs: 0, idleAfterMs: 0 },
+      // Long enough that only a recorder that never handled an event counts
+      // as idle within a test.
+      recording: { clockGraceMs: 0, idleAfterMs: 60_000 },
       background: { kinds },
       recorderFor: (realm, beat, onCommits) => {
         let recorder = new Recorder({
