@@ -10,6 +10,7 @@ import type {
   LinkShapePolicy,
 } from '@cardstack/runtime-common';
 import { DBRateLimitStore } from '@cardstack/runtime-common';
+import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import { createRequire } from 'module';
@@ -47,9 +48,11 @@ import {
   jwtMiddleware,
   grafanaAuthorization,
   operatorAuthorization,
+  sendResponseForUnauthorizedRequest,
 } from './middleware/index.ts';
 import type Koa from 'koa';
 import { carriesRunToken } from '@cardstack/runtime-common/run-token';
+import { verifyRunToken } from './lib/run-token.ts';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
 import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
 import handleQueueStatusRequest from './handlers/handle-queue-status.ts';
@@ -612,18 +615,34 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleSecureWindowCards(args),
   );
   // A request carrying an automation run's token skips the session check,
-  // which refuses it on its signature; the handler checks the run token
-  // itself.
+  // which refuses it on its signature. Its own signature is verified here, in
+  // the session check's place, so a bearer that only looks like a run token
+  // is refused before the handler reads anything. The handler then checks
+  // the run itself.
   let requestForwardSession = jwtMiddleware(
     args.realmSecretSeed,
     args.dbAdapter,
   );
   router.post(
     REQUEST_FORWARD_PATH,
-    async (ctxt: Koa.Context, next: Koa.Next) =>
-      carriesRunToken(ctxt.req.headers['authorization'] ?? null)
-        ? await next()
-        : await requestForwardSession(ctxt, next),
+    async (ctxt: Koa.Context, next: Koa.Next) => {
+      let authorization = ctxt.req.headers['authorization'] ?? null;
+      if (!carriesRunToken(authorization)) {
+        return await requestForwardSession(ctxt, next);
+      }
+      if (
+        !verifyRunToken(
+          authorization!.slice('Bearer '.length),
+          args.realmSecretSeed,
+        )
+      ) {
+        return await sendResponseForUnauthorizedRequest(
+          ctxt,
+          AuthenticationErrorMessages.TokenInvalid,
+        );
+      }
+      await next();
+    },
     handleRequestForward({
       dbAdapter: args.dbAdapter,
       definitionLookup: args.definitionLookup,

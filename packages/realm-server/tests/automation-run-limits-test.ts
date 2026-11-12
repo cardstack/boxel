@@ -541,6 +541,28 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a bearer that only looks like a run token is refused before anything is read', async function (assert) {
+      let payload = Buffer.from(JSON.stringify({ run: 1 })).toString(
+        'base64url',
+      );
+      let response = await request
+        .post('/_request-forward')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer x.${payload}.y`)
+        .send({
+          url: 'https://not-allowlisted.example.com/',
+          method: 'POST',
+          requestBody: '{}',
+        });
+      assert.strictEqual(
+        response.status,
+        401,
+        `refused as unauthenticated, not answered about the allowlist: ${response.text}`,
+      );
+      assert.strictEqual(forwarded.length, 0);
+    });
+
     test('a run may forward only a chat completion to OpenRouter', async function (assert) {
       let { token } = await runOf(ROOMY);
       let response = await request
