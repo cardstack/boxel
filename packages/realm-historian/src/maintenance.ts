@@ -136,6 +136,8 @@ export async function maintainRepo(
   let commitGraph = performance.now() - step;
 
   step = performance.now();
+  // `prune -v` lists each object it removes as `<id> <type>`, and also names
+  // the stale temporary files it removes, which aren't objects.
   let pruned = (
     await runGit(
       gitDir,
@@ -145,7 +147,7 @@ export async function maintainRepo(
   )
     .toString()
     .split('\n')
-    .filter((line) => line.trim() !== '').length;
+    .filter((line) => /^[0-9a-f]{40} /.test(line)).length;
   let prune = performance.now() - step;
 
   step = performance.now();

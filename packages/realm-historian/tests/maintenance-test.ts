@@ -355,8 +355,20 @@ module('maintenance', (hooks) => {
     assert.strictEqual(first.pruned, 0);
     assert.deepEqual(await missingObjects(gitDir, orphans), []);
 
+    // A temporary file a crashed object write left behind, which prune
+    // removes too but which isn't an object.
+    await writeFile(
+      join(gitDir, 'objects', orphans[0].slice(0, 2), 'tmp_obj_left_behind'),
+      'partial',
+    );
     let second = await maintainRepo(gitDir, { pruneExpiryMs: 0 });
-    assert.strictEqual(second.pruned, orphans.length);
+    assert.strictEqual(second.pruned, orphans.length, 'objects pruned');
+    await assert.rejects(
+      stat(
+        join(gitDir, 'objects', orphans[0].slice(0, 2), 'tmp_obj_left_behind'),
+      ),
+      'the temporary file is gone',
+    );
     assert.strictEqual(second.after.looseObjects, 0, 'no loose object is left');
     assert.deepEqual(
       await missingObjects(gitDir, orphans),
