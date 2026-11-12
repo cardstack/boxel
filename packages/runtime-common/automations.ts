@@ -9,8 +9,11 @@
 // Switch-on and resume start the automation *done* instead of active when
 // every trigger is already spent. Remove deletes the row in any state. The
 // tick moves an automation between active and *waiting for credits* on its
-// payer's balance, and the card's index hook between active and *done* as its
-// triggers are spent or added.
+// payer's balance, and the card's index hook (`syncAutomationWithCard`)
+// between active and *done* as its triggers are spent or added. The index
+// hook also removes the row when the card is deleted or no longer adopts from
+// the catalog `Automation` type, and archiving the realm pauses it
+// (`pauseRealmAutomations`).
 //
 // A direct writer of the automation's realm switches an automation on,
 // pauses, resumes or removes it. That is asked with `isDirectWriterLocked`
@@ -19,8 +22,9 @@
 // payer, and their caps are snapshotted. Two changes pause it without a
 // person asking: a card edit that raises a cap above the snapshot or turns on
 // `batchedAI` (`checkAutomationCaps`), and the payer no longer being a direct
-// writer (`checkAutomationPayer`). Each ends only through a resume, which
-// makes its caller the payer and takes a new snapshot.
+// writer (`checkAutomationPayer`). Archiving the automation's realm pauses it
+// too. Each ends only through a resume, which makes its caller the payer and
+// takes a new snapshot.
 //
 // Pausing and removing cancel the automation's pending run, so nothing it
 // queued starts once it stops. A run already running carries on.
@@ -32,12 +36,16 @@
 
 import {
   AUTOMATION_CAP_NAMES,
+  readAutomationDeclaration,
   type AutomationCaps,
   type AutomationDeclaration,
+  type AutomationIndexEntry,
+  type AutomationTriggerDeclaration,
 } from './automation-declaration.ts';
 import { cancelPendingAutomationRuns } from './automation-runs.ts';
 import {
   computeAutomationSchedule,
+  type AutomationSchedule,
   type TriggerRunState,
 } from './automation-schedule.ts';
 import type { DBAdapter } from './db.ts';
@@ -64,15 +72,38 @@ export type AutomationState =
 // - `caps-raised`: its card raised a cap above the snapshot.
 // - `batched-ai-enabled`: its card turned on `batchedAI`, which the snapshot
 //   had off.
+// - `realm-archived`: its realm was archived.
 export type AutomationPauseReason =
   | 'requested'
   | 'payer-lost-access'
   | 'caps-raised'
-  | 'batched-ai-enabled';
+  | 'batched-ai-enabled'
+  | 'realm-archived';
 
 // The caps the payer agreed to pay for when they switched the automation on
 // or resumed it, and whether it used batched AI then.
 export type AutomationCapsSnapshot = AutomationCaps & { batchedAI: boolean };
+
+// A trigger's run state as the row keeps it: what the schedule reads, plus
+// what the index hook compares to tell when a trigger starts afresh and its
+// cursor must move up to the edit:
+// - `timing`: the trigger's timing when the row last followed the card (see
+//   `triggerTiming`). A change is an edit to when it fires.
+// - `live`: whether the card had the trigger, unspent, when the row last
+//   followed it. A trigger that comes back (re-added, or a spent one given a
+//   higher `count` or a later `until`) starts at the edit, so the slots it
+//   missed while gone don't collapse into a make-up run.
+export interface AutomationTriggerRuns extends TriggerRunState {
+  timing?: string;
+  live?: boolean;
+}
+
+// The card's committed index row as the index hook reads it.
+// `failureWithheld` marks a row whose latest visit failed and that still
+// carries what an earlier visit recorded (see `IndexedInstanceSource`).
+export type AutomationCardSource = AutomationIndexEntry & {
+  failureWithheld?: boolean;
+};
 
 // The result of the automation's most recent run.
 export type AutomationRunResult = 'complete' | 'error' | 'canceled';
@@ -90,8 +121,9 @@ export interface AutomationRow {
   pausedBy: string | null;
   capsSnapshot: AutomationCapsSnapshot;
   // Each trigger's run state, keyed by its label, in the shape
-  // `computeAutomationSchedule` reads as `runState`.
-  triggerRuns: Record<string, TriggerRunState>;
+  // `computeAutomationSchedule` reads as `runState`, with each trigger's
+  // timing as the row last saw it.
+  triggerRuns: Record<string, AutomationTriggerRuns>;
   // Unix seconds: when the automation was switched on or last resumed. No
   // slot at or before it is due; it is the schedule's `since`.
   scheduledSince: number;
@@ -189,7 +221,7 @@ export async function switchOnAutomation(
       return { ok: false, reason: 'not-a-direct-writer' };
     }
     let [inserted] = await txQuery([
-      'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, scheduled_since, next_run) VALUES (',
+      'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since, next_run) VALUES (',
       param(automationId),
       ',',
       param(realm),
@@ -199,6 +231,8 @@ export async function switchOnAutomation(
       param(schedule.state),
       ',',
       param(JSON.stringify(snapshotCaps(declaration))),
+      '::jsonb,',
+      param(JSON.stringify(schedule.triggerRuns)),
       '::jsonb,',
       param(unixSecondsToISO(now)),
       '::timestamptz,',
@@ -293,6 +327,8 @@ export async function resumeAutomation(
       param(schedule.state),
       ', pause_reason = NULL, paused_by = NULL, caps_snapshot =',
       param(JSON.stringify(snapshotCaps(declaration))),
+      '::jsonb, trigger_runs =',
+      param(JSON.stringify(schedule.triggerRuns)),
       '::jsonb, scheduled_since =',
       param(unixSecondsToISO(now)),
       '::timestamptz, next_run =',
@@ -422,6 +458,265 @@ export async function checkAutomationPayer(
   });
 }
 
+// What the index hook did with an automation's row:
+//
+// - `removed`: the card is deleted (`card-deleted`), or no longer adopts from
+//   the catalog `Automation` type (`not-an-automation`), so the row and its
+//   pending run are gone.
+// - `paused`: the card raised a cap or turned on `batchedAI`.
+// - `recomputed`: the next run, *done* and the trigger cursors follow the
+//   card as indexed.
+// - `unchanged`: the row stays as it was. It is paused, or the card failed to
+//   index or doesn't read as a declaration, so there is nothing to schedule
+//   from until a later index reads it.
+export type AutomationSync =
+  | {
+      kind: 'removed';
+      reason: 'card-deleted' | 'not-an-automation';
+      automation: AutomationRow;
+    }
+  | {
+      kind: 'paused' | 'recomputed' | 'unchanged';
+      automation: AutomationRow;
+    };
+
+export interface AutomationSyncOptions {
+  // `automationRef` as `internalKeyFor` spells it in the realm the index
+  // reads, as `readAutomationDeclaration` takes it.
+  automationTypeKey: string;
+  virtualNetwork: Pick<VirtualNetwork, 'toURL' | 'toURLHref'>;
+  // Unix seconds; the current time when absent.
+  now?: number;
+}
+
+// Brings a switched-on automation's row in step with its card as just
+// indexed. `readCard` reads the card's committed index row, or undefined when
+// the index holds no live instance there (the card was deleted). It is called
+// once the automation's row is locked, so of two index passes over the card
+// that sync at once, the later one reads the card no older than the earlier
+// one did, and the row ends on the newest card. Returns what it did, or
+// undefined when the automation isn't switched on.
+//
+// The next run is recomputed from the card's triggers and the row's
+// per-trigger run counts, which are keyed by label, so an edit keeps each
+// trigger's count. A trigger whose timing changed, that is new, or that
+// comes back after being removed or spent has its cursor moved up to now, so
+// a slot that passed before the edit never comes due. An automation whose triggers are all spent becomes *done*, and a *done*
+// one with a trigger left becomes active again. Like `checkAutomationCaps`, a
+// card that asks for more than the caps snapshot pauses the automation, and a
+// paused one keeps its reason and its schedule until a resume restarts it.
+export async function syncAutomationWithCard(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+  readCard: () => Promise<AutomationCardSource | undefined>,
+  options: AutomationSyncOptions,
+): Promise<AutomationSync | undefined> {
+  let now = options.now ?? currentUnixSeconds();
+  return await dbAdapter.withTransaction(async (txQuery) => {
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    let card = await readCard();
+    if (!card) {
+      return await removeForCard(txQuery, automation, 'card-deleted');
+    }
+    // A card that failed to index carries no document to read, or carries
+    // only what an earlier visit recorded. Its row keeps the schedule it had:
+    // an error is no reason to stop the automation, and the run reads the
+    // card again when it starts.
+    if (!card.instance || card.failureWithheld) {
+      return { kind: 'unchanged', automation };
+    }
+    let read = readAutomationDeclaration(
+      {
+        url: automationId,
+        realmURL: card.realmURL,
+        types: card.types,
+        instance: card.instance,
+      },
+      options,
+    );
+    if (!read.ok) {
+      if (read.problems.some(({ code }) => code === 'not-an-automation')) {
+        return await removeForCard(txQuery, automation, 'not-an-automation');
+      }
+      return { kind: 'unchanged', automation };
+    }
+    let { declaration } = read;
+    if (automation.state === 'paused') {
+      return { kind: 'unchanged', automation };
+    }
+    let reason = capsRaisedAbove(automation.capsSnapshot, declaration);
+    if (reason) {
+      return {
+        kind: 'paused',
+        automation: await pause(txQuery, automationId, reason),
+      };
+    }
+    let cursors = withEditCursors(
+      automation.triggerRuns,
+      declaration.triggers,
+      now,
+    );
+    let schedule = computeAutomationSchedule({
+      triggers: declaration.triggers,
+      since: automation.scheduledSince,
+      now,
+      runState: cursors,
+    });
+    let triggerRuns = recordTriggers(cursors, declaration.triggers, schedule);
+    let state: AutomationState = schedule.done
+      ? 'done'
+      : automation.state === 'done'
+        ? 'active'
+        : automation.state;
+    let [updated] = await txQuery([
+      'UPDATE automations SET state =',
+      param(state),
+      ', trigger_runs =',
+      param(JSON.stringify(triggerRuns)),
+      '::jsonb, next_run =',
+      param(
+        schedule.nextRun === undefined
+          ? null
+          : unixSecondsToISO(schedule.nextRun),
+      ),
+      '::timestamptz, updated_at = now() WHERE automation_id =',
+      param(automationId),
+      'RETURNING *',
+    ]);
+    return { kind: 'recomputed', automation: automationFromRow(updated) };
+  });
+}
+
+// Every switched-on automation in `realm`, as the index hook looks them up
+// after a pass over the realm.
+export async function automationsInRealm(
+  dbAdapter: DBAdapter,
+  realm: RealmIdentifier,
+): Promise<AutomationRow[]> {
+  let rows = await dbAdapterQuerier(dbAdapter)([
+    'SELECT * FROM automations WHERE realm =',
+    param(realm),
+    'ORDER BY automation_id',
+  ]);
+  return rows.map(automationFromRow);
+}
+
+// Pauses every automation in `realm` that isn't paused already, with
+// `realm-archived`, and cancels their pending runs, as archiving the realm
+// does. One already paused keeps its reason: a resume ends any pause. Returns
+// the automations it paused.
+export async function pauseRealmAutomations(
+  dbAdapter: DBAdapter,
+  realm: RealmIdentifier,
+): Promise<AutomationRow[]> {
+  return await dbAdapter.withTransaction(async (txQuery) => {
+    let rows = await txQuery([
+      'SELECT automation_id FROM automations WHERE realm =',
+      param(realm),
+      "AND state <> 'paused' ORDER BY automation_id FOR UPDATE",
+    ]);
+    let paused: AutomationRow[] = [];
+    for (let row of rows) {
+      paused.push(
+        await pause(
+          txQuery,
+          row.automation_id as RealmResourceIdentifier,
+          'realm-archived',
+        ),
+      );
+    }
+    return paused;
+  });
+}
+
+// Deletes the row of an automation whose card is gone or is no longer an
+// automation, and cancels its pending run with that reason.
+async function removeForCard(
+  txQuery: Querier,
+  automation: AutomationRow,
+  reason: 'card-deleted' | 'not-an-automation',
+): Promise<AutomationSync> {
+  await cancelPendingAutomationRuns(txQuery, automation.automationId, {
+    reason,
+  });
+  await txQuery([
+    'DELETE FROM automations WHERE automation_id =',
+    param(automation.automationId),
+  ]);
+  return { kind: 'removed', reason, automation };
+}
+
+// The fields that decide when a trigger fires, as one string to compare:
+// its kind, and its expression, time zone, `at` and `until`. `count` isn't
+// timing; it is compared with the trigger's run count as it stands.
+function triggerTiming(trigger: AutomationTriggerDeclaration): string {
+  switch (trigger.kind) {
+    case 'cron':
+      return JSON.stringify([
+        'cron',
+        trigger.expression,
+        trigger.timeZone,
+        trigger.until ?? null,
+      ]);
+    case 'once':
+      return JSON.stringify(['once', trigger.at]);
+    case 'webhook':
+      return JSON.stringify(['webhook']);
+  }
+}
+
+// Moves each trigger's cursor up to `editedAt` when the trigger starts
+// afresh: it has no run state yet, its timing differs from the one recorded,
+// or it wasn't live (removed from the card, or spent) when the row last
+// followed the card. A run state that predates those records starts nothing
+// afresh. Run states of labels the card no longer has are kept, so a label
+// that comes back keeps its count.
+function withEditCursors(
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+  triggers: AutomationTriggerDeclaration[],
+  editedAt: number,
+): Record<string, AutomationTriggerRuns> {
+  let next: Record<string, AutomationTriggerRuns> = { ...triggerRuns };
+  for (let trigger of triggers) {
+    let current = next[trigger.label];
+    let afresh =
+      !current ||
+      current.live === false ||
+      (current.timing !== undefined &&
+        current.timing !== triggerTiming(trigger));
+    if (afresh) {
+      next[trigger.label] = { ...(current ?? { runs: 0 }), since: editedAt };
+    }
+  }
+  return next;
+}
+
+// Records, on each run state, the trigger's timing and whether it is live
+// under `schedule`. A label the card no longer has is recorded as not live.
+function recordTriggers(
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+  triggers: AutomationTriggerDeclaration[],
+  schedule: AutomationSchedule,
+): Record<string, AutomationTriggerRuns> {
+  let spent = new Map(schedule.triggers.map((t) => [t.label, t.spent]));
+  let next: Record<string, AutomationTriggerRuns> = {};
+  for (let [label, state] of Object.entries(triggerRuns)) {
+    next[label] = { ...state, live: false };
+  }
+  for (let trigger of triggers) {
+    next[trigger.label] = {
+      ...(next[trigger.label] ?? { runs: 0 }),
+      timing: triggerTiming(trigger),
+      live: !spent.get(trigger.label),
+    };
+  }
+  return next;
+}
+
 // Pauses the row and cancels its pending run. A run a person's pause cancels
 // names them in `canceled_by`; one any other pause cancels names no one, and
 // carries the pause's reason in `error_reason`.
@@ -529,8 +824,12 @@ async function selectAutomation(
 function startSchedule(
   declaration: AutomationDeclaration,
   now: number,
-  triggerRuns: Record<string, TriggerRunState>,
-): { state: 'active' | 'done'; nextRun: string | null } {
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+): {
+  state: 'active' | 'done';
+  nextRun: string | null;
+  triggerRuns: Record<string, AutomationTriggerRuns>;
+} {
   let schedule = computeAutomationSchedule({
     triggers: declaration.triggers,
     since: now,
@@ -538,6 +837,7 @@ function startSchedule(
     runState: triggerRuns,
   });
   return {
+    triggerRuns: recordTriggers(triggerRuns, declaration.triggers, schedule),
     state: schedule.done ? 'done' : 'active',
     nextRun:
       schedule.nextRun === undefined
@@ -568,7 +868,10 @@ function automationFromRow(row: Record<string, PgPrimitive>): AutomationRow {
     pauseReason: (row.pause_reason as AutomationPauseReason | null) ?? null,
     pausedBy: (row.paused_by as string | null) ?? null,
     capsSnapshot: json(row.caps_snapshot) as AutomationCapsSnapshot,
-    triggerRuns: json(row.trigger_runs) as Record<string, TriggerRunState>,
+    triggerRuns: json(row.trigger_runs) as Record<
+      string,
+      AutomationTriggerRuns
+    >,
     scheduledSince: isoToUnixSeconds(row.scheduled_since)!,
     nextRun: isoToUnixSeconds(row.next_run),
     lastEnqueuedAt: iso(row.last_enqueued_at),

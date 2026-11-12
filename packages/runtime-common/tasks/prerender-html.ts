@@ -119,6 +119,10 @@ export interface PrerenderHtmlResult extends JSONTypes.Object {
   // How the queue claimed this job, as on an index job's result (see
   // `IncrementalResult.queueClaim`); null when no queue claimed it.
   queueClaim: QueueClaim | null;
+  // The automation run's indexing the job charged, every earlier job's usage
+  // included, or null when it charged no run (see
+  // `IncrementalResult.chargedRunIndexing`).
+  chargedRunIndexing: RunIndexing | null;
 }
 
 // The measured phases only, or null when none was measured.
@@ -199,16 +203,10 @@ function spawnedByIndexPasses(args: PrerenderHtmlArgs): boolean {
 //   repair read, and a merged job rendering under the older one would keep a
 //   stale module cache in every tab it reuses.
 //
-// - either renders an automation run's commit, whose job must render nothing
-//   else (see `RunIndexing`).
-//
 // Kept apart, the two run in order, since a publish only ever meets
 // candidates of its own lane, and a lane runs one job at a time.
 function canMergePending(existing: CoalesceArgs, incoming: CoalesceArgs) {
   if (existing.legacy || incoming.legacy) {
-    return false;
-  }
-  if (!sameRunIndexing(existing.runIndexing, incoming.runIndexing)) {
     return false;
   }
   if (
@@ -266,15 +264,14 @@ function choosePrerenderHtmlCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
+  // A pending job rendering an automation run's commit renders nothing else,
+  // and a run's publish joins nothing (see `RunIndexing`), so the candidate is
+  // the first pending job neither of them rules out.
   let sameTypeCandidate = candidates.find(
-    (candidate) => candidate.jobType === incoming.jobType,
+    (candidate) =>
+      candidate.jobType === incoming.jobType &&
+      sameRunIndexing(candidate.args, incoming.args),
   );
-  if (
-    sameTypeCandidate &&
-    !sameRunIndexing(sameTypeCandidate.args, incoming.args)
-  ) {
-    return { type: 'insert' };
-  }
   if (sameTypeCandidate) {
     let existingArgs = parsePrerenderHtmlArgsForCoalesce(
       sameTypeCandidate.args,
@@ -351,7 +348,7 @@ function choosePrerenderHtmlCoalesceDecision(
         // A running job's args can no longer change, so a publish that
         // announces cannot ride on one that won't.
         (existingArgs.announce || !incomingArgs.announce) &&
-        sameRunIndexing(existingArgs.runIndexing, incomingArgs.runIndexing)
+        sameRunIndexing(candidate.args, incoming.args)
       ) {
         return { type: 'join', jobId: candidate.id };
       }
@@ -430,13 +427,14 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     if (runIndexing && changes.length === 0) {
       // Enqueued only to charge a run whose commit's index passes left
       // nothing to render; see `Realm.enqueueDeferredPrerenderHtml`.
+      let chargedRunIndexing = addRunIndexingUsage(runIndexing, {
+        workerProcessSeconds: (Date.now() - startedAt) / 1000,
+        prerenderTabSeconds: 0,
+      });
       await chargeRunIndexing({
         dbAdapter,
         meteredCharges,
-        runIndexing: addRunIndexingUsage(runIndexing, {
-          workerProcessSeconds: (Date.now() - startedAt) / 1000,
-          prerenderTabSeconds: 0,
-        }),
+        runIndexing: chargedRunIndexing,
         log,
       });
       return {
@@ -452,6 +450,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         },
         phaseTimings: null,
         queueClaim: queueClaimOf(jobInfo) ?? null,
+        chargedRunIndexing,
       };
     }
     // A job rendering a run's commit measures the tab time of every render it
@@ -530,14 +529,16 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       });
     }
 
+    let chargedRunIndexing: RunIndexing | null = null;
     if (runIndexing) {
+      chargedRunIndexing = addRunIndexingUsage(runIndexing, {
+        workerProcessSeconds: (Date.now() - startedAt) / 1000,
+        prerenderTabSeconds: meter!.tabSeconds(),
+      });
       await chargeRunIndexing({
         dbAdapter,
         meteredCharges,
-        runIndexing: addRunIndexingUsage(runIndexing, {
-          workerProcessSeconds: (Date.now() - startedAt) / 1000,
-          prerenderTabSeconds: meter!.tabSeconds(),
-        }),
+        runIndexing: chargedRunIndexing,
         log,
       });
     }
@@ -562,5 +563,6 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         janitorStagingsCleared: pass.janitorStagingsCleared,
       }),
       queueClaim: queueClaimOf(jobInfo) ?? null,
+      chargedRunIndexing,
     };
   };

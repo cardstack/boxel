@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 
-import type { PgAdapter } from '@cardstack/postgres';
+import { PgQueuePublisher, type PgAdapter } from '@cardstack/postgres';
 import {
   addToCreditsLedger,
   getLedgerEntries,
@@ -12,6 +12,7 @@ import {
   logger,
   ri,
   rri,
+  userInitiatedPriority,
   type DBAdapter,
   type Realm,
 } from '@cardstack/runtime-common';
@@ -20,8 +21,15 @@ import {
   type AutomationRun,
 } from '@cardstack/runtime-common/automation-runs';
 import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  makeIncrementalArgsWithCallerMetadata,
+  mapIncrementalDoneResult,
+} from '@cardstack/runtime-common/jobs/indexing';
+import { enqueuePrerenderHtmlJob } from '@cardstack/runtime-common/jobs/prerender-html';
+import {
   chargeRunIndexing,
   runIndexingFor,
+  type RunIndexing,
 } from '@cardstack/runtime-common/run-indexing';
 
 import {
@@ -263,6 +271,158 @@ module(basename(import.meta.filename), function (hooks) {
       usage.worker_process_seconds >
         passes[1].run_indexing!.workerProcessSeconds,
       'the charge covers every job the commit caused',
+    );
+  });
+
+  // What a run's indexing was charged, by unit.
+  async function chargedUsage(runId: string): Promise<Record<string, number>> {
+    return Object.fromEntries(
+      (await getLedgerUsage(dbAdapter, { runId })).map(({ unit, quantity }) => [
+        unit,
+        quantity,
+      ]),
+    );
+  }
+
+  // A measurement no single job in these tests comes near, so a job that
+  // dropped what it was handed would show.
+  function seeded(runId: string): RunIndexing {
+    return { runId, workerProcessSeconds: 1000, prerenderTabSeconds: 500 };
+  }
+
+  test('a module flush whose instances were all already stored hands its measurement to the job that charges it', async function (assert) {
+    // The module is written, then the instance, which is what was stored: the
+    // flush that indexes the module is the commit's only pass, and the realm
+    // enqueues the render job it deferred.
+    await realm.writeMany(
+      new Map([
+        ['other.gts', personModule(7).replace('Person', 'Other')],
+        ['ada.json', person('Ada')],
+      ]),
+      { runId: run.id },
+    );
+    await settled();
+
+    let jobs = await runJobs(run.id);
+    assert.deepEqual(
+      jobs.map(({ job_type, status }) => [job_type, status]),
+      [
+        ['incremental-index', 'resolved'],
+        ['prerender_html', 'resolved'],
+      ],
+      'the flush and the render job the realm enqueued for it carry the run',
+    );
+    assert.true(
+      jobs[1].run_indexing!.workerProcessSeconds > 0,
+      'the render job carries what the flush measured',
+    );
+    let charges = await runIndexingCharges(run.id);
+    assert.strictEqual(
+      new Set(charges.map(({ chargeId }) => chargeId)).size,
+      1,
+      'the run’s indexing is one charge',
+    );
+    assert.true(
+      (await chargedUsage(run.id)).worker_process_seconds >
+        jobs[1].run_indexing!.workerProcessSeconds,
+      'the charge covers the flush and the render job',
+    );
+  });
+
+  test('an index pass adds what it measured to what it was handed', async function (assert) {
+    let publisher = new PgQueuePublisher(dbAdapter as PgAdapter);
+    try {
+      let job = await publisher.publish({
+        jobType: 'incremental-index',
+        concurrencyGroup: `indexing:${realm.url}`,
+        timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        priority: userInitiatedPriority,
+        args: makeIncrementalArgsWithCallerMetadata(
+          {
+            realmURL: realm.url,
+            realmUsername: await realm.getRealmOwnerUsername(),
+            ignoreData: {},
+            changes: [{ url: `${realm.url}ada.json`, operation: 'update' }],
+            runIndexing: seeded(run.id),
+          },
+          null,
+        ),
+        mapResult: mapIncrementalDoneResult(null),
+      });
+      await job.done;
+    } finally {
+      await publisher.destroy();
+    }
+    await settled();
+
+    let [, render] = await runJobs(run.id);
+    assert.true(
+      render.run_indexing!.workerProcessSeconds > 1000,
+      'the render job is handed the seeded worker time plus the pass’s',
+    );
+    assert.true(
+      render.run_indexing!.prerenderTabSeconds > 500,
+      'the render job is handed the seeded tab time plus the pass’s',
+    );
+    let usage = await chargedUsage(run.id);
+    assert.true(
+      usage.worker_process_seconds > render.run_indexing!.workerProcessSeconds,
+      'the charge adds the render job’s worker time',
+    );
+    assert.true(
+      usage.prerender_tab_seconds > render.run_indexing!.prerenderTabSeconds,
+      'the charge adds the render job’s tab time',
+    );
+  });
+
+  test('a render job with nothing to render only charges what it was handed', async function (assert) {
+    let publisher = new PgQueuePublisher(dbAdapter as PgAdapter);
+    try {
+      let job = await enqueuePrerenderHtmlJob(publisher, {
+        realmURL: realm.url,
+        realmUsername: await realm.getRealmOwnerUsername(),
+        changes: [],
+        spawningIndexPasses: [],
+        generation: 0,
+        loaderEpoch: '',
+        spawningJobId: null,
+        spawningPriority: userInitiatedPriority,
+        timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        preWarm: false,
+        runIndexing: seeded(run.id),
+      });
+      let result = (await job.done) as {
+        invalidations: string[];
+        chargedRunIndexing: RunIndexing;
+      };
+      assert.deepEqual(result.invalidations, [], 'nothing was rendered');
+      assert.strictEqual(result.chargedRunIndexing.runId, run.id);
+      assert.strictEqual(
+        result.chargedRunIndexing.prerenderTabSeconds,
+        500,
+        'the job used no tab',
+      );
+    } finally {
+      await publisher.destroy();
+    }
+
+    let usage = await chargedUsage(run.id);
+    assert.true(usage.worker_process_seconds >= 1000);
+    assert.strictEqual(usage.prerender_tab_seconds, 500);
+    assert.strictEqual(
+      -(await runIndexingCharges(run.id)).reduce(
+        (sum, e) => sum + e.creditAmount,
+        0,
+      ),
+      Math.ceil(
+        exactMeteredCredits(
+          {
+            worker_process_seconds: usage.worker_process_seconds,
+            prerender_tab_seconds: 500,
+          },
+          testPricing(),
+        ),
+      ),
     );
   });
 

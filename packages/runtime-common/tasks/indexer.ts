@@ -1,5 +1,5 @@
 import type * as JSONTypes from 'json-typescript';
-import type { Task, WorkerArgs } from './index.ts';
+import type { Task, TaskArgs, WorkerArgs } from './index.ts';
 import {
   jobIdentity,
   notifyAllFileChanges,
@@ -36,8 +36,10 @@ import {
   meteredPrerenderer,
   parseRunIndexing,
   sameRunIndexing,
+  withRunIndexingRetries,
   type RunIndexing,
 } from '../run-indexing.ts';
+import { syncAutomationsAfterIndex } from '../automation-index-hook.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
@@ -189,6 +191,11 @@ export interface IncrementalResult {
   // named them. Optional so a result produced by an older worker mid-deploy
   // still parses; its absence leaves each caller announcing the pass itself.
   coalescedCallers?: CoalescedCaller[];
+  // Present only when the pass was the last job an automation run's commit
+  // caused: the run's indexing it charged, every earlier job's usage
+  // included. Kept on the job so a charge that could not be written can be
+  // priced again from it.
+  chargedRunIndexing?: RunIndexing;
 }
 
 // A pass that indexed more than one publish, as one of its callers sees it.
@@ -375,18 +382,15 @@ function chooseIncrementalCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
+  // A pending job indexing an automation run's commit indexes nothing else,
+  // and a run's publish joins nothing (see `RunIndexing`), so the candidate
+  // is the first pending job neither of them rules out. With none, the
+  // publish is inserted and runs after the lane's pending jobs.
   let sameTypeCandidate = candidates.find(
-    (candidate) => candidate.jobType === incoming.jobType,
+    (candidate) =>
+      candidate.jobType === incoming.jobType &&
+      sameRunIndexing(candidate.args, incoming.args),
   );
-  if (
-    sameTypeCandidate &&
-    !sameRunIndexing(sameTypeCandidate.args, incoming.args)
-  ) {
-    // One of the two indexes an automation run's commit, whose pass must
-    // index nothing else (see `RunIndexing`). Inserted, it runs after the
-    // pending job, since its lane runs one job at a time.
-    return { type: 'insert' };
-  }
   if (sameTypeCandidate) {
     let existingArgs = parseIncrementalArgsForCoalesce(sameTypeCandidate.args);
     let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
@@ -819,6 +823,14 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     // Grafana variants, direct `enqueueReindexRealmJob`) don't otherwise run
     // `clearRealmIndexCachesAndBroadcast()`. Best-effort, same as above.
     await notifyRealmIndexUpdated(dbAdapter, args.realmURL);
+    // The pass rebuilt the whole realm, so every automation in it follows
+    // its card.
+    await syncAutomationsAfterPass(log, jobInfo, {
+      dbAdapter,
+      definitionLookup,
+      virtualNetwork,
+      realmURL,
+    });
     reportStatus(args.jobInfo, 'finish');
     let queueClaim = queueClaimOf(jobInfo);
     return {
@@ -1041,6 +1053,16 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       }
       await notifyRealmIndexUpdated(dbAdapter, realmURL);
     }
+    // A deleted card's row is gone from the index, so the pass's changes are
+    // named alongside what it visited.
+    await syncAutomationsAfterPass(log, jobInfo, {
+      dbAdapter,
+      definitionLookup,
+      virtualNetwork,
+      realmURL,
+      touched: [...invalidations, ...changes.map(({ url }) => url)],
+    });
+    let chargedRunIndexing: RunIndexing | undefined;
     if (runIndexing) {
       // The run's indexing so far, with this pass's: the worker process was
       // this job's from the start of the task, and the tabs for the renders
@@ -1069,7 +1091,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         let enqueued = false;
         if (set && set.changes.length > 0) {
           try {
-            await enqueueRender(set, measured);
+            await withRunIndexingRetries(() => enqueueRender(set, measured));
             enqueued = true;
           } catch (e) {
             log.warn(
@@ -1078,8 +1100,11 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           }
         }
         if (!enqueued) {
-          // Nothing left to render, so this pass is the last job the run's
-          // commit causes.
+          // Nothing left to render, or the render could not be queued, so
+          // this pass is the last job the run's commit causes. A render that
+          // was never queued never ran for the run, so the run is charged for
+          // the indexing that did.
+          chargedRunIndexing = measured;
           await chargeRunIndexing({
             dbAdapter,
             meteredCharges,
@@ -1102,8 +1127,40 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ...(queueClaim ? { queueClaim } : {}),
       ...(deferredPrerenderHtml !== undefined ? { deferredPrerenderHtml } : {}),
       coalescedCallers,
+      ...(chargedRunIndexing ? { chargedRunIndexing } : {}),
     };
   };
+
+// The automation card's index hook, run once the pass has committed. The index
+// is already committed, so a failure here is logged, naming the automation
+// when one automation's sync failed, and leaves the job a success: the next
+// pass over the card syncs its automation again.
+async function syncAutomationsAfterPass(
+  log: TaskArgs['log'],
+  jobInfo: JobInfo | undefined,
+  args: Parameters<typeof syncAutomationsAfterIndex>[0],
+): Promise<void> {
+  try {
+    let synced = await syncAutomationsAfterIndex(args);
+    for (let [automationId, result] of synced) {
+      if (result.kind === 'failed') {
+        log.warn(
+          `${jobIdentity(jobInfo)} failed to sync automation ${automationId} with its card: ${(result.error as Error)?.message}`,
+        );
+      } else if (result.kind !== 'unchanged') {
+        log.debug(
+          `${jobIdentity(jobInfo)} automation ${automationId} ${result.kind}${
+            result.kind === 'removed' ? ` (${result.reason})` : ''
+          } after indexing its card`,
+        );
+      }
+    }
+  } catch (e) {
+    log.warn(
+      `${jobIdentity(jobInfo)} failed to sync automations with their cards in ${args.realmURL}: ${(e as Error)?.message}`,
+    );
+  }
+}
 
 export function ensureRealmOwnerPermissions(
   permissions: RealmPermissions,
