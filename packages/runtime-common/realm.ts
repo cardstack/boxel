@@ -2926,14 +2926,6 @@ function utf8OrUndefined(bytes: Uint8Array): string | undefined {
   }
 }
 
-// A realm URL in one spelling, whichever spelling it arrived in (decoded or
-// percent-encoded, with or without its trailing slash), so the realm a run
-// token names, the realm its row names and the realm a call reached compare
-// as equal when they are one realm.
-function sameRealmSpelling(url: string): string {
-  return ensureTrailingSlash(new URL(url).href);
-}
-
 // A run-token call `Realm.handleAutomation` admitted (see
 // `RequestContext.automationRun`).
 export interface AutomationRunCall {
@@ -12915,6 +12907,19 @@ export class Realm {
     }
   }
 
+  // A realm in one spelling, whichever spelling it arrived in: a prefix
+  // such as `@cardstack/base/`, or a URL decoded or percent-encoded, with or
+  // without its trailing slash. So the realm a run token names, the realm
+  // its row names and the realm a call reached compare as equal when they
+  // are one realm. Undefined when it names no realm, so it matches none.
+  #sameRealmSpelling(realm: string): string | undefined {
+    try {
+      return ensureTrailingSlash(this.#virtualNetwork.toURL(realm).href);
+    } catch {
+      return undefined;
+    }
+  }
+
   // Admits a call carrying a run token, or refuses it before anything about
   // the request is judged, so no policy grant can admit a call the run's row
   // refuses. The token must verify under the run-token key and within its
@@ -12960,11 +12965,14 @@ export class Realm {
     if (!context) {
       return refuse('the token does not name a run');
     }
-    let realmURL = sameRealmSpelling(this.url);
-    let ownRealm = sameRealmSpelling(context.realm) === realmURL;
+    let realmURL = this.#sameRealmSpelling(this.url);
+    let ownRealm =
+      realmURL !== undefined &&
+      this.#sameRealmSpelling(context.realm) === realmURL;
     let readOnly =
       !ownRealm &&
-      context.readRealms.some((r) => sameRealmSpelling(r) === realmURL);
+      realmURL !== undefined &&
+      context.readRealms.some((r) => this.#sameRealmSpelling(r) === realmURL);
     if (!ownRealm && !readOnly) {
       return refuse(
         `run ${context.runId} is in realm ${context.realm}, not ${this.url}`,
@@ -13008,10 +13016,11 @@ export class Realm {
         'The automation run is not running',
       );
     }
-    let runRealm = sameRealmSpelling(
-      this.#virtualNetwork.toURL(call.run.realm).href,
-    );
-    if (runRealm !== sameRealmSpelling(context.realm)) {
+    let runRealm = this.#sameRealmSpelling(call.run.realm);
+    if (
+      runRealm === undefined ||
+      runRealm !== this.#sameRealmSpelling(context.realm)
+    ) {
       return refuse(
         `run ${context.runId} is in realm ${call.run.realm}, but the token names ${context.realm}`,
       );

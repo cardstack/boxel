@@ -9,10 +9,12 @@
 // alone (`run_id IS NOT NULL`), and the insert of a run's refusal names its
 // columns. An interactive refusal keeps `key_uses_refusal_window_idx` as its
 // conflict target, so its collapse is the same. That older index also covers
-// run rows, without the run, so while it does, a refusal from a second run
-// that matches another run's row in the same minute is refused by it, and
-// the call path logs it as a use it could not record. A later migration
-// narrows it to interactive rows.
+// run rows, without the run, so while it does, a run's refusal that matches
+// a row it doesn't arbitrate on in the same minute is refused by it: one from
+// another run, or a concurrent refusal of the same run that loses the race to
+// insert the row. The call path logs it as a use it could not record. A later
+// migration narrows the older index to interactive rows, and it lands before
+// any run token is minted outside tests.
 //
 // CONCURRENTLY keeps `key_uses` writable while the indexes build, since every
 // `callApi` writes to it; it can't run in a transaction, hence noTransaction().

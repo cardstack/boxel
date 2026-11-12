@@ -295,6 +295,32 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(response.text, 'hello');
   });
 
+  test('capture URLs signed with a run token are not bound to the person the run acts as', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let url = `${realmURL.href}_capture/notes`;
+    let response = await request
+      .post('/run-token-test/_sign-capture-urls')
+      .set('X-HTTP-Method-Override', 'QUERY')
+      .set('Accept', 'application/json')
+      .set('Content-Type', 'application/json')
+      .set('Authorization', `Bearer ${token}`)
+      .send(JSON.stringify({ urls: [url] }));
+    assert.strictEqual(response.status, 200, response.text);
+    assert.deepEqual(
+      response.body.signed[0],
+      { url, signedUrl: url, expiresAt: null },
+      'the URL comes back unsigned, as for a caller who is no one',
+    );
+  });
+
+  test('a realm the token names in prefix form, or that resolves to no realm, is refused, not an error', async function (assert) {
+    for (let readRealms of [['@cardstack/base/'], ['not a realm']]) {
+      let token = tokenElsewhere(await runElsewhere(), readRealms);
+      let response = (await read(token))!;
+      assert.strictEqual(response.status, 401, JSON.stringify(readRealms));
+    }
+  });
+
   test('maybeHandle sends a run token through handleAutomation too', async function (assert) {
     let { token, run } = await createAutomationRunToken(
       dbAdapter,
