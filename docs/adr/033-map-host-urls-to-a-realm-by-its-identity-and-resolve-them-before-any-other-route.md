@@ -41,12 +41,12 @@ copy a realm in order to serve it.
 ### 1.3. A change takes effect when its request returns
 
 A change to a realm's host URLs MUST take effect on the process that made it
-before the response is sent. Every other process that caches host URLs MUST
-drop a removed or changed entry when the change's notification reaches it.
-Such a process MUST read the table again before it answers a request that its
-cache does not resolve, so a new host URL resolves at once. A removed host URL
-MUST answer 404, and MUST NOT redirect. Deleting a realm MUST delete its host
-URLs.
+before the response is sent. The change MUST be announced to every other
+process. A process that caches host URLs MUST drop a host's entries when a
+change to that host is announced. It MUST NOT keep an entry for longer than a
+fixed time without reading the table again, so a lost announcement cannot keep
+a stale entry. A removed host URL MUST answer 404, and MUST NOT redirect.
+Deleting a realm MUST delete its host URLs.
 
 ### 1.4. Exactly one host URL is canonical
 
