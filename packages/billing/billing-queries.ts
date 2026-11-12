@@ -817,6 +817,13 @@ const chargeQueues = new WeakMap<DBAdapter, Map<string, Promise<void>>>();
 // pooled connection per process however many calls for it arrive at once.
 // The same shape as `PgAdapter.withUserCostLock`'s in-process queue.
 //
+// Callers that hold the payer's cost lock already wait in memory behind
+// same-payer writers. That lock does not cover writers of one charge under
+// different payers: a charge's identity leaves out the payer (see
+// `chargeIdentity`), so an automation's storage for a day can be retried for
+// a new payer while a write for the old one is still waiting on the lock.
+// Those writers hold different cost locks and meet only here.
+//
 // A call that fails does not fail the calls queued behind it: each waits for
 // the one ahead to settle, not to succeed, and sees only its own outcome.
 async function inChargeQueue<T>(

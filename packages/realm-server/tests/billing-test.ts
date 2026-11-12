@@ -1290,19 +1290,25 @@ module(basename(import.meta.filename), function () {
       const otherRunId = '0a8e3c55-2f0d-4c1c-8f6b-3e5b2a7d9c41';
       const pricingVersion = 'pv-test-1';
 
-      hooks.beforeEach(async function () {
-        user = await insertUser(
+      async function insertFundedUser(matrixUserId: string) {
+        let name = matrixUserId.slice(1, matrixUserId.indexOf(':'));
+        let funded = await insertUser(
           dbAdapter,
-          '@ledger:localhost',
-          'cus_ledger',
-          'ledger@test.com',
+          matrixUserId,
+          `cus_${name}`,
+          `${name}@test.com`,
         );
         await addToCreditsLedger(dbAdapter, {
-          userId: user.id,
+          userId: funded.id,
           creditAmount: 1000,
           creditType: 'extra_credit',
           subscriptionCycleId: null,
         });
+        return funded;
+      }
+
+      hooks.beforeEach(async function () {
+        user = await insertFundedUser('@ledger:localhost');
       });
 
       test('an AI charge records kind ai, with its realm and run when given', async function (assert) {
@@ -1570,7 +1576,40 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('writers of one charge for different payers, each holding its own cost lock, queue in memory', async function (assert) {
+        let otherPayer = await insertFundedUser(
+          '@ledger-other-payer:localhost',
+        );
+        let charge = {
+          kind: 'storage' as const,
+          realm,
+          automationId: 'http://test-realm/ledger/Automation/sync',
+          day: '2026-11-10',
+          pricingVersion,
+        };
+        let { adapter, maxOpenTransactions } = countingTransactions(dbAdapter);
+        let results = await Promise.all(
+          [user, otherPayer].map((payer) =>
+            adapter.withUserCostLock(payer.matrixUserId, () =>
+              spendCredits(adapter, payer.id, 10, charge),
+            ),
+          ),
+        );
+        assert.deepEqual(results.slice().sort(), [
+          'already-charged',
+          'charged',
+        ]);
+        assert.strictEqual(
+          maxOpenTransactions(),
+          1,
+          'the cost locks do not serialize them, so the charge queue does',
+        );
+      });
+
       test('concurrent writers of different charges do not queue behind each other', async function (assert) {
+        let otherPayer = await insertFundedUser(
+          '@ledger-other-payer:localhost',
+        );
         let { adapter, maxOpenTransactions } = countingTransactions(dbAdapter);
         let results = await Promise.all([
           spendCredits(adapter, user.id, 10, {
@@ -1579,10 +1618,10 @@ module(basename(import.meta.filename), function () {
             runId,
             pricingVersion,
           }),
-          spendCredits(adapter, user.id, 10, {
-            kind: 'run_indexing',
+          spendCredits(adapter, otherPayer.id, 10, {
+            kind: 'run',
             realm,
-            runId,
+            runId: otherRunId,
             pricingVersion,
           }),
         ]);
