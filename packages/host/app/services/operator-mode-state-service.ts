@@ -1845,14 +1845,14 @@ export default class OperatorModeStateService extends Service {
     // A realm's policy decides only for a caller its permissions decline, so
     // it matters to the assistant only where the user can't write. The realm
     // refuses its config card to a caller its permissions don't let read, so
-    // only a reader can learn which policy the realm names. The realm answers
-    // such a caller its info only when a policy judges them, though, so info
-    // it answered tells the host that a policy does, if not which.
+    // only a reader can learn which policy the realm names. The host can still
+    // tell that a policy judges such a caller, if not which one, and the
+    // Realm Runner serves them on the same sign (ADR 022 §1.8).
     let realmPolicy: RealmPolicyForContext | undefined;
     if (!realmPermissions.canWrite) {
       if (realmPermissions.canRead) {
         realmPolicy = await this.realmPolicyForAIBot(realmUrl);
-      } else if (this.realm.isInfoLoaded(ri(realmUrl))) {
+      } else if (this.realm.admitsOnlyThroughPolicy(ri(realmUrl))) {
         realmPolicy = {};
       }
     }
