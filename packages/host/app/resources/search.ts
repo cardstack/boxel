@@ -9,7 +9,7 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { didCancel, restartableTask, task } from 'ember-concurrency';
+import { didCancel, restartableTask, task, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import { difference } from 'lodash-es';
@@ -57,6 +57,7 @@ import { LiveSearchTypeGate } from '../lib/live-search-type-gate';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
 import { isAbortError } from '../lib/search-abort';
 import { searchErrorEntry } from '../lib/search-error-entry';
+import { SearchSettle } from '../lib/search-settle';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -247,6 +248,9 @@ export class SearchResource<
   // changes, but reading this keeps the derivation self-contained).
   @tracked private activeQuery: Query | undefined;
   #isLive = false;
+  // Leading-edge debounce for this consumer's query changes (see
+  // `lib/search-settle.ts`).
+  #settle = new SearchSettle();
   #cardInitiated = false;
   #throttled = false;
   // Bumped by each run of the search task, so a run can tell whether it is
@@ -749,7 +753,11 @@ export class SearchResource<
       ),
     );
     this.#pendingRefreshFloors = new Map();
-    this.trackStoreLoad(this.search.perform(query, floors), 'search');
+    // Only a live consumer smooths a burst of query changes. A non-live
+    // (prerender, indexing) search and any render for the index fetch at once,
+    // so indexing never waits on interactive debounce.
+    let settleMs = this.#settle.delayForChange({ live: this.#isLive });
+    this.trackStoreLoad(this.search.perform(query, floors, settleMs), 'search');
   }
 
   // Take `query` as the one this resource is running.
@@ -1372,7 +1380,13 @@ export class SearchResource<
   }
 
   private search = restartableTask(
-    async (query: Query, refreshFloors?: Map<RealmIdentifier, number>) => {
+    // `settleMs` is the wait a query change asked for (0 on the leading edge
+    // and for every other trigger); a newer change restarts the run during it.
+    async (
+      query: Query,
+      refreshFloors?: Map<RealmIdentifier, number>,
+      settleMs = 0,
+    ) => {
       let epoch = ++this.#searchEpoch;
       this.#log.info(
         `search task start; realms=${this.realmsToSearch.join(',')}; query=${JSON.stringify(query)}`,
@@ -1392,6 +1406,10 @@ export class SearchResource<
         // every run but the last is cancelled before it fetches. One
         // microtask, so no added delay.
         await Promise.resolve();
+        if (settleMs > 0) {
+          await timeout(settleMs);
+        }
+        this.#settle.fetchStarted();
         let dependencyTrackingContext = this.dependencyTrackingContext(
           'search-resource:search',
         );

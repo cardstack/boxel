@@ -8,7 +8,7 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
-import { didCancel, restartableTask } from 'ember-concurrency';
+import { didCancel, restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import { isEqual } from 'lodash-es';
@@ -57,6 +57,7 @@ import {
 } from '../lib/realm-utils';
 import { isAbortError } from '../lib/search-abort';
 import { searchErrorEntry } from '../lib/search-error-entry';
+import { isIndexRender, SearchSettle } from '../lib/search-settle';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -137,6 +138,9 @@ export class SearchEntriesResource extends Resource<Args> {
 
   private realmsToSearch: string[] = [];
   private subscriptions: { realm: string; unsubscribe: () => void }[] = [];
+  // Leading-edge debounce for this consumer's query changes (see
+  // `lib/search-settle.ts`).
+  #settle = new SearchSettle();
   private _entries = new TrackedArray<SearchEntry>();
   @tracked private _meta: EntryCollectionDocument['meta'] = {
     page: { total: 0 },
@@ -256,7 +260,7 @@ export class SearchEntriesResource extends Resource<Args> {
     // (`prerender-fetch-headers.ts`, `resolveOutboundJobPriority`): store
     // selection and header emission must agree, so a search routed to the
     // render store is also sent with prerender headers.
-    if ((globalThis as any).__boxelRenderContext === true) {
+    if (isIndexRender()) {
       let renderStore = getOwner(this)?.lookup('service:render-store') as
         | StoreService
         | undefined;
@@ -475,6 +479,10 @@ export class SearchEntriesResource extends Resource<Args> {
     // synchronously (via a Deferred) so a prerender still waits for the search,
     // but defer the task start a microtask so its `isRunning` write lands after
     // the render. `isLoading` below still reports loading across that gap.
+    //
+    // A render for the index or a prerender never waits; a live query change
+    // fetches at once when idle and settles first when it is part of a burst.
+    let settleMs = this.#settle.delayForChange();
     let loaded = new Deferred<void>();
     this.#trackSearchLoad(loaded.promise);
     void Promise.resolve().then(() => {
@@ -482,7 +490,7 @@ export class SearchEntriesResource extends Resource<Args> {
         loaded.fulfill();
         return;
       }
-      this.search.perform().then(
+      this.search.perform(settleMs).then(
         () => loaded.fulfill(),
         () => loaded.fulfill(),
       );
@@ -560,7 +568,9 @@ export class SearchEntriesResource extends Resource<Args> {
     this.#trackSearchLoad(this.search.perform());
   }
 
-  private search = restartableTask(async () => {
+  // `settleMs` is the wait a query change asked for (0 on the leading edge and
+  // for every other trigger); a newer change restarts the run during it.
+  private search = restartableTask(async (settleMs = 0) => {
     let query = this.#previousQuery;
     if (query === undefined) {
       return;
@@ -579,6 +589,10 @@ export class SearchEntriesResource extends Resource<Args> {
       // and this await is a cancellation point, so every run but the last is
       // cancelled here, before it fetches. One microtask, so no added delay.
       await Promise.resolve();
+      if (settleMs > 0) {
+        await timeout(settleMs);
+      }
+      this.#settle.fetchStarted();
       // A prerender_html event queued a selective per-member refresh. Perform
       // the targeted card+html GETs when no index event is also pending (an
       // index event changes membership and supersedes it) and the query still
