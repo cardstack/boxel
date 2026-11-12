@@ -137,6 +137,33 @@ export async function runOverlayPathsUnder(
   return rows.map((row) => String(row.path));
 }
 
+// A path the attempt staged that `path` can't sit beside: a file at one of
+// the directories `path` is under, or a file under `path` as a directory. A
+// realm can't hold both, so the commit would fail. Undefined when there is
+// none.
+export async function runOverlayPathClash(
+  dbAdapter: DBAdapter,
+  key: RunOverlayKey,
+  path: string,
+): Promise<string | undefined> {
+  let parents = path
+    .split('/')
+    .slice(0, -1)
+    .map((_, i, parts) => parts.slice(0, i + 1).join('/'));
+  let [row] = await query(dbAdapter, [
+    'SELECT path FROM run_overlay_files WHERE run_id =',
+    param(key.runId),
+    'AND attempt =',
+    param(key.attempt),
+    'AND (starts_with(path,',
+    param(`${path}/`),
+    ')',
+    ...parents.flatMap((parent) => ['OR path =', param(parent)]),
+    ') ORDER BY path LIMIT 1',
+  ]);
+  return row ? String(row.path) : undefined;
+}
+
 // Every file the attempt staged, in path order.
 export async function runOverlayFiles(
   dbAdapter: DBAdapter,
