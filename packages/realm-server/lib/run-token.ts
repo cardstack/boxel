@@ -12,7 +12,10 @@ import { createJWT } from '../jwt.ts';
 // admits.
 //
 // A token is minted for one attempt of a running run, for the run's identity
-// (`acts_as`), and expires at the run's time limit. A realm accepts it only
+// (`acts_as`), and expires at the run's deadline: its first start
+// (`started_at`, which a retry keeps) plus its time limit. So a retry's token
+// expires when the run's first attempt's would have, and a retry can't extend
+// the run. A realm accepts it only
 // through `Realm.handleAutomation`, which checks the run's row on every call.
 // A realm-server route that serves run tokens verifies one with
 // `verifyRunToken` and checks the run's row itself with
@@ -31,9 +34,11 @@ export interface MintRunTokenOptions {
   // catalog realms), which the token lets the run read.
   readRealms: string[];
   realmServerURL: string;
-  // The run's time limit: the token expires this many seconds after it is
-  // minted.
+  // The run's time limit: the token expires this many seconds after the run
+  // first started.
   timeLimitSeconds: number;
+  // The current time, in milliseconds since the epoch.
+  now?: number;
 }
 
 export function mintRunToken({
@@ -43,8 +48,9 @@ export function mintRunToken({
   readRealms,
   realmServerURL,
   timeLimitSeconds,
+  now = Date.now(),
 }: MintRunTokenOptions): string {
-  if (run.state !== 'running' || run.attempt === null) {
+  if (run.state !== 'running' || run.attempt === null || !run.startedAt) {
     throw new Error(
       `a run token is minted only for a running run's attempt; run ${run.id} is ${run.state}`,
     );
@@ -52,6 +58,13 @@ export function mintRunToken({
   if (!Number.isFinite(timeLimitSeconds) || timeLimitSeconds <= 0) {
     throw new Error(
       `a run token needs a positive time limit, not ${timeLimitSeconds}`,
+    );
+  }
+  let deadlineMs = Date.parse(run.startedAt) + timeLimitSeconds * 1000;
+  let lifetimeSeconds = Math.floor((deadlineMs - now) / 1000);
+  if (lifetimeSeconds <= 0) {
+    throw new Error(
+      `run ${run.id}'s time limit passed at ${new Date(deadlineMs).toISOString()}, so no token is minted for it`,
     );
   }
   return createJWT(
@@ -65,7 +78,7 @@ export function mintRunToken({
       realmServerURL,
       run: { id: run.id, attempt: run.attempt, readRealms },
     },
-    Math.ceil(timeLimitSeconds),
+    lifetimeSeconds,
     runTokenSecret(realmSecretSeed),
   );
 }

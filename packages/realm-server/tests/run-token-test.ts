@@ -6,6 +6,7 @@ import jsonwebtoken from 'jsonwebtoken';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   cancelAutomationRun,
+  insertPermissions,
   createAutomationRun,
   finishAutomationRun,
   ri,
@@ -21,6 +22,7 @@ import {
   realmSecretSeed,
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
+import type { SuperTest, Test } from 'supertest';
 import { mintRunToken, verifyRunToken } from '../lib/run-token.ts';
 import type { Readable } from 'stream';
 import { nodeStreamToBuffer } from '../stream.ts';
@@ -44,6 +46,7 @@ const SOURCE = 'application/vnd.card+source';
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
   let dbAdapter: PgAdapter;
+  let request: SuperTest<Test>;
 
   setupPermissionedRealmCached(hooks, {
     realmURL,
@@ -57,6 +60,7 @@ module(basename(import.meta.filename), function (hooks) {
     onRealmSetup(args) {
       realm = args.testRealm;
       dbAdapter = args.dbAdapter;
+      request = args.request;
     },
   });
 
@@ -276,6 +280,119 @@ module(basename(import.meta.filename), function (hooks) {
       verifyRunToken(token, 'another seed'),
       undefined,
       'a token signed under another seed does not verify',
+    );
+  });
+
+  test('a run token reaches the realm through the realm server', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let response = await request
+      .get('/run-token-test/notes.txt')
+      .set('Accept', SOURCE)
+      .set('Authorization', `Bearer ${token}`);
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.text, 'hello');
+  });
+
+  test('maybeHandle sends a run token through handleAutomation too', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let request = () =>
+      new Request(`${realmURL.href}notes.txt`, {
+        headers: { Accept: SOURCE, Authorization: `Bearer ${token}` },
+      });
+    assert.strictEqual((await realm.maybeHandle(request()))!.status, 200);
+    await finishAutomationRun(dbAdapter, run.id, 1, { state: 'complete' });
+    assert.strictEqual(
+      (await realm.maybeHandle(request()))!.status,
+      401,
+      'the run row is checked on that path as well',
+    );
+  });
+
+  test('a token for another realm is refused even where anyone may read', async function (assert) {
+    await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
+    let token = tokenElsewhere(await runElsewhere());
+    assert.strictEqual(
+      (await read(token))!.status,
+      401,
+      'a run token is never read as an anonymous caller',
+    );
+  });
+
+  test('a token whose run is in another realm is refused', async function (assert) {
+    let run = await runElsewhere();
+    let token = mintRunToken({
+      realmSecretSeed,
+      run,
+      realmURL: realmURL.href,
+      readRealms: [],
+      realmServerURL: realm.realmServerURL,
+      timeLimitSeconds: 600,
+    });
+    assert.strictEqual((await read(token))!.status, 401);
+  });
+
+  test('a run never administers a realm', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}_permissions`, {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+    ))!;
+    assert.strictEqual(response.status, 403);
+  });
+
+  test('a token is refused once its person’s sessions are revoked', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    assert.strictEqual((await read(token))!.status, 200);
+    await dbAdapter.execute(
+      `INSERT INTO users (matrix_user_id, sessions_revoked_at)
+         VALUES ($1, EXTRACT(EPOCH FROM now())::bigint + 10)
+         ON CONFLICT (matrix_user_id)
+         DO UPDATE SET sessions_revoked_at = EXCLUDED.sessions_revoked_at`,
+      { bind: [OWNER] },
+    );
+    let response = (await read(token))!;
+    assert.strictEqual(response.status, 401);
+    assert.strictEqual(await response.text(), 'Session revoked');
+  });
+
+  test('a retry’s token keeps the run’s deadline', async function (assert) {
+    let { run } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let started = Date.parse(run.startedAt!);
+    let retry = mintRunToken({
+      realmSecretSeed,
+      run: { ...run, attempt: 2 },
+      realmURL: realmURL.href,
+      readRealms: [],
+      realmServerURL: realm.realmServerURL,
+      timeLimitSeconds: 600,
+      now: started + 400_000,
+    });
+    let { exp } = jsonwebtoken.decode(retry) as { exp: number };
+    assert.true(
+      Math.abs(exp * 1000 - (started + 600_000)) <= 1000,
+      'the token expires at the first start plus the time limit',
+    );
+    assert.throws(
+      () =>
+        mintRunToken({
+          realmSecretSeed,
+          run,
+          realmURL: realmURL.href,
+          readRealms: [],
+          realmServerURL: realm.realmServerURL,
+          timeLimitSeconds: 600,
+          now: started + 601_000,
+        }),
+      /time limit passed/,
+      'no token is minted for a run past its deadline',
     );
   });
 });

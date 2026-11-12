@@ -33,7 +33,8 @@ import { UserKeyError } from './user-keys.ts';
 // slots were filled from records it (`key_uses`). A call that was sent, or
 // failed, is a row of its own. A refusal is collapsed into the row of the
 // same refusal in the same minute (same share or key, realm, operation,
-// caller, mode, run, code, status and host), whose `count` it adds one to, so a
+// caller, mode, code, status and host, and for an automation's call the
+// same run), whose `count` it adds one to, so a
 // caller who keeps calling past a limit adds a row a minute, not a row a
 // call. Every count below sums `count`. A refusal raised
 // while the slots were being filled is written against the one share or key
@@ -122,7 +123,11 @@ export async function recordKeyUses(
       param(hostOf(use.url)),
       ...(use.outcome === 'refused'
         ? [
-            `, date_trunc('minute', NOW())) ON CONFLICT (share_id, key_id, md5(realm_url), md5(operation), md5(caller), mode, run_id, code, status, host, refusal_window) WHERE refusal_window IS NOT NULL DO UPDATE SET count = key_uses.count + 1, created_at = GREATEST(key_uses.created_at, EXCLUDED.created_at)`,
+            `, date_trunc('minute', NOW())) ON CONFLICT `,
+            use.runId
+              ? `(share_id, key_id, md5(realm_url), md5(operation), md5(caller), mode, run_id, code, status, host, refusal_window) WHERE refusal_window IS NOT NULL AND run_id IS NOT NULL`
+              : `(share_id, key_id, md5(realm_url), md5(operation), md5(caller), mode, code, status, host, refusal_window) WHERE refusal_window IS NOT NULL`,
+            ` DO UPDATE SET count = key_uses.count + 1, created_at = GREATEST(key_uses.created_at, EXCLUDED.created_at)`,
           ]
         : [`, NULL)`]),
     ]);
