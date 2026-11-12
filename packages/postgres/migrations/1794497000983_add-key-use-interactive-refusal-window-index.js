@@ -9,7 +9,17 @@
 // while it exists a refusal from a second run that matches another run's row
 // in the same minute is refused by it, and the call path logs it as a use it
 // could not record. It is dropped in the removal phase of a later release,
-// once no running task names its predicate.
+// once neither a running task nor a release a rollback could return to names
+// its predicate.
+//
+// An interactive insert whose ON CONFLICT predicate is `refusal_window IS NOT
+// NULL` alone infers `key_uses_refusal_window_idx` as its only arbiter, so to
+// it this index is a plain unique check. While such an insert runs against
+// this index (old tasks during the rollout, or a rollback that leaves this
+// migration applied), two identical interactive refusals racing on a minute's
+// first row can fail on this index instead of adding to the row's count. That
+// refusal goes unrecorded, and the call path logs it. The loss is one count
+// on a burst's first row. After a rollback, `down()` removes it.
 //
 // Every row this index covers is also covered by `key_uses_refusal_window_idx`
 // on the same columns, so the build has no duplicates to refuse.

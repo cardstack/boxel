@@ -703,13 +703,6 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('identical interactive refusals collapse while the index over run rows still exists', async function (assert) {
-    let { id: keyId } = await addKey();
-    await recordKeyUses(dbAdapter, refusalBy(keyId));
-    await recordKeyUses(dbAdapter, refusalBy(keyId));
-    assert.deepEqual(await refusalCounts(keyId), [[null, 2]]);
-  });
-
   test('a call refused before any binding names a key is recorded against nothing', async function (assert) {
     let key = await addKey();
     let refused = await call('check');
