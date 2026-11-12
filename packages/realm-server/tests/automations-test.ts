@@ -34,7 +34,7 @@ import {
   type AutomationIndexEntry,
 } from '@cardstack/runtime-common/automation-declaration';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
-import { setupDB } from './helpers/index.ts';
+import { createVirtualNetwork, setupDB } from './helpers/index.ts';
 import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
 
 const REALM_URL = 'http://127.0.0.1:4444/payroll/';
@@ -834,10 +834,9 @@ module(basename(import.meta.filename), function () {
         };
       }
 
-      // The catalog type as the index spells it here, where no realm maps the
-      // catalog's prefix.
+      // The catalog type as the index spells it.
       function automationTypeKey() {
-        return internalKeyFor(automationRef, undefined, new VirtualNetwork());
+        return internalKeyFor(automationRef, undefined, createVirtualNetwork());
       }
 
       async function sync(
