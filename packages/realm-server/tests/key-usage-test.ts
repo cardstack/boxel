@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -638,6 +638,76 @@ module(basename(import.meta.filename), function (hooks) {
       ],
       'the two identical refusals share a row; the anonymous one has its own',
     );
+  });
+
+  // `key_uses_refusal_window_idx` keys every collapsed refusal without its
+  // run; these drop it, as its removal migration does, to show that each kind
+  // of refusal collapses on an index of its own.
+  async function dropRefusalWindowIndexOverRunRows() {
+    await dbAdapter.execute(`DROP INDEX IF EXISTS key_uses_refusal_window_idx`);
+  }
+
+  async function refusalCounts(keyId: string) {
+    let rows = (await dbAdapter.execute(
+      `SELECT run_id, count FROM key_uses WHERE key_id = $1 AND outcome = 'refused' ORDER BY id`,
+      { bind: [keyId] },
+    )) as { run_id: string | null; count: number }[];
+    return rows.map((row) => [row.run_id, Number(row.count)]);
+  }
+
+  function refusalBy(keyId: string, runId?: string) {
+    return {
+      realmURL: realmURL.href,
+      operation: 'check',
+      caller: OWNER,
+      mode: runId ? ('automation' as const) : ('interactive' as const),
+      ...(runId ? { runId } : {}),
+      url: null,
+      outcome: 'refused' as const,
+      code: 'rate-limited',
+      countsAgainst: [{ kind: 'key' as const, id: keyId }],
+    };
+  }
+
+  test('identical refusals from two runs in one minute are two rows', async function (assert) {
+    let { id: keyId } = await addKey();
+    await dropRefusalWindowIndexOverRunRows();
+    let [first, second] = [randomUUID(), randomUUID()];
+    await recordKeyUses(dbAdapter, refusalBy(keyId, first));
+    await recordKeyUses(dbAdapter, refusalBy(keyId, second));
+    await recordKeyUses(dbAdapter, refusalBy(keyId, first));
+    assert.deepEqual(
+      await refusalCounts(keyId),
+      [
+        [first, 2],
+        [second, 1],
+      ],
+      'each run’s refusals collapse on a row of their own',
+    );
+  });
+
+  test('identical interactive refusals in one minute collapse on the interactive index', async function (assert) {
+    let { id: keyId } = await addKey();
+    await dropRefusalWindowIndexOverRunRows();
+    let run = randomUUID();
+    await recordKeyUses(dbAdapter, refusalBy(keyId));
+    await recordKeyUses(dbAdapter, refusalBy(keyId, run));
+    await recordKeyUses(dbAdapter, refusalBy(keyId));
+    assert.deepEqual(
+      await refusalCounts(keyId),
+      [
+        [null, 2],
+        [run, 1],
+      ],
+      'the interactive refusals share a row apart from the run’s',
+    );
+  });
+
+  test('identical interactive refusals collapse while the index over run rows still exists', async function (assert) {
+    let { id: keyId } = await addKey();
+    await recordKeyUses(dbAdapter, refusalBy(keyId));
+    await recordKeyUses(dbAdapter, refusalBy(keyId));
+    assert.deepEqual(await refusalCounts(keyId), [[null, 2]]);
   });
 
   test('a call refused before any binding names a key is recorded against nothing', async function (assert) {
