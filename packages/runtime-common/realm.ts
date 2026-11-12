@@ -1228,7 +1228,10 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // grant admits them to shows (see `realmInfo`). The policy's own pointer is
 // kept out of it. Since it runs nothing a grant admits, an archived realm
 // answers such a caller as it does while active, so the answer does not say
-// the realm is archived (see `APPLIES_ARCHIVED_SEAL`).
+// the realm is archived (see `APPLIES_ARCHIVED_SEAL`). The host reads info a
+// realm answered a caller its permissions don't let read as the sign that its
+// policy judges them, and runs the assistant's scripts for such a caller
+// (ADR 022 §1.8), so a change to whom `_info` answers changes that too.
 //
 // No other route does, but for the byte routes and the hashed scoped-CSS
 // serve described below. Each of the rest is marked `ACL_ONLY` where it is
@@ -1264,10 +1267,15 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   read.
 // - `_sign-capture-urls` signs the URLs of the capture serve, which the ACL
 //   alone admits a caller to.
+// - `_automation-status` answers an automation's server row, which only the
+//   realm's direct writers see (see `automation-status.ts`). A grant reaches
+//   a card, not the row.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
 // differently on some of them (see `#refusalUnderPolicy`), as does the
-// directory listing.
+// directory listing. The Realm Runner refuses the calls that reach these
+// routes before it asks the realm (ADR 022 §1.4), so a route a grant comes to
+// reach changes the runner's tables in the same change.
 //
 // The card+source read and the realm's fallback file and module serve consume
 // it path by path instead: for a file or a card's document, whose bytes a
@@ -3670,6 +3678,15 @@ export class Realm {
         '/_permissions',
         SupportedMimeType.Permissions,
         this.patchRealmPermissions.bind(this),
+        ACL_ONLY,
+      )
+      // An automation card's switched-on state, payer and each trigger's runs
+      // left, for the card's view. Answered on the realm ACL, and then only
+      // to a direct writer (see `automation-status.ts`).
+      .get(
+        '/_automation-status',
+        SupportedMimeType.JSON,
+        this.automationStatus.bind(this),
         ACL_ONLY,
       )
       .get(
@@ -17714,6 +17731,70 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  private async automationStatus(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    // Loaded on first use: only a realm server answers it with a row, and
+    // the schedule code it reads stays out of every bundle that imports the
+    // realm.
+    let { answerAutomationStatus, automationRef, AUTOMATION_STATUS_PARAM } =
+      await import('./automation-status.ts');
+    let answer = await answerAutomationStatus({
+      dbAdapter: this.#dbAdapter,
+      realmURL: new URL(this.url),
+      matrixServerName: this.#matrixClient.serverName,
+      virtualNetwork: this.#virtualNetwork,
+      automationTypeKey: internalKeyFor(
+        automationRef,
+        undefined,
+        this.#virtualNetwork,
+      ),
+      viewer: await this.#statusViewer(requestContext),
+      automation: new URL(request.url).searchParams.get(
+        AUTOMATION_STATUS_PARAM,
+      ),
+      readInstance: (url) => this.#realmIndexQueryEngine.instanceSource(url),
+    });
+    if (answer.status !== 200) {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [{ status: String(answer.status), detail: answer.message }],
+        }),
+        init: {
+          status: answer.status,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+        requestContext,
+      });
+    }
+    return createResponse({
+      body: JSON.stringify(answer.document),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          // The row changes with every run, pause and resume.
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
+  }
+
+  // Who asks for an automation's status: the session the realm vouches for
+  // (`#sessionPrincipal`), so a revoked session or one delegated to another
+  // realm asks as no one. A realm-authority session is a realm rendering its
+  // own cards, and a diagnostic session is an operator reading as a user;
+  // neither is a person looking at the card, so neither sees the payer.
+  async #statusViewer(
+    requestContext: RequestContext,
+  ): Promise<string | undefined> {
+    if (requestContext.realmAuthority || requestContext.diagnosticSession) {
+      return undefined;
+    }
+    return await this.#sessionPrincipal(requestContext);
   }
 
   private async patchRealmPermissions(
