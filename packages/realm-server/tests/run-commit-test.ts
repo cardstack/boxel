@@ -308,8 +308,9 @@ module(basename(import.meta.filename), function (hooks) {
       10,
     );
     let refused = await commit(token);
+    let clientError = refused.status >= 400 && refused.status < 500;
     assert.true(
-      refused.status >= 400 && refused.status < 500,
+      clientError,
       `refused with a client error: ${JSON.stringify(refused.json)}`,
     );
     assert.strictEqual((await read(session(), 'aaa-first.txt')).status, 404);
