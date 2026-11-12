@@ -1254,6 +1254,39 @@ export function isTitlePrefixMatch(filter: unknown): filter is MatchesFilter {
   );
 }
 
+// A type-ahead term's `or` (docs/search.md: `matches` reads `or` as
+// `websearch_to_tsquery` does, binding the words either side of it more
+// tightly than the words around them): "cafe or crem" is either word, and
+// "brass lamp or light" is brass with lamp or light. The type-ahead node
+// holds words that must all match, so a term with an `or` between two words
+// runs as one node per combination, any of which matches. Undefined when
+// the term has no such `or`, or more combinations than a type-ahead runs.
+const MAX_TYPE_AHEAD_ALTERNATIVES = 32;
+function typeAheadAlternatives(text: string): string[] | undefined {
+  let tokens = text.trim().split(/\s+/);
+  let isOr = (t: string | undefined) => t !== undefined && /^or$/i.test(t);
+  if (!tokens.some((t, i) => isOr(t) && i > 0 && i < tokens.length - 1)) {
+    return undefined;
+  }
+  let groups: string[][] = [];
+  let joinNext = false;
+  for (let token of tokens) {
+    if (isOr(token) && groups.length > 0) {
+      joinNext = true;
+      continue;
+    }
+    if (joinNext) groups[groups.length - 1].push(token);
+    else groups.push([token]);
+    joinNext = false;
+  }
+  let combinations: string[][] = [[]];
+  for (let group of groups) {
+    combinations = combinations.flatMap((c) => group.map((w) => [...c, w]));
+    if (combinations.length > MAX_TYPE_AHEAD_ALTERNATIVES) return undefined;
+  }
+  return combinations.map((words) => words.join(' '));
+}
+
 // Rewrites each title-scoped prefix `matches` in a filter tree to the
 // engine's type-ahead node. Idempotent; leaves every other node as it is.
 export function lowerTitlePrefixMatches<T extends Filter | undefined>(
@@ -1263,7 +1296,10 @@ export function lowerTitlePrefixMatches<T extends Filter | undefined>(
     if (!node || typeof node !== 'object' || Array.isArray(node)) return node;
     if (isTitlePrefixMatch(node)) {
       let { matches, prefix: _p, scope: _s, ...rest } = node as any;
-      return { ...rest, typeahead: matches };
+      let alternatives = typeAheadAlternatives(matches);
+      return alternatives
+        ? { any: alternatives.map((typeahead) => ({ ...rest, typeahead })) }
+        : { ...rest, typeahead: matches };
     }
     if (Array.isArray(node.every))
       return { ...node, every: node.every.map(walk) };

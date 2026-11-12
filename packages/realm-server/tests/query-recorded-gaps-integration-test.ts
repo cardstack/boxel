@@ -870,6 +870,31 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(await find('crem'), ['B'], 'the unfinished word alone');
       assert.deepEqual(await find('cafe or crem'), ['A', 'B'], 'either');
     });
+
+    // Recorded: the same with `scope: 'title'` (type-ahead) returns nothing,
+    // since every type-ahead word had to match and `or` was one of them.
+    // docs/search.md: `or` takes either word, binding the words beside it.
+    test('type-ahead with "or" is the union, every word a prefix', async function (assert) {
+      let find = async (term: string) =>
+        (
+          await run(either, {
+            type: either.Item,
+            filter: { matches: term, prefix: true, scope: 'title' },
+          })
+        ).names.sort();
+      assert.deepEqual(await find('cafe or crem'), ['A', 'B'], 'either');
+      assert.deepEqual(
+        await find('cafe or creme or mug'),
+        ['A', 'B', 'C'],
+        'any of three',
+      );
+      assert.deepEqual(
+        await find('crem or cafe tea'),
+        ['B'],
+        'or binds the words beside it: (crem or cafe) and tea',
+      );
+      assert.deepEqual(await find('cafe crem'), [], 'without or, both words');
+    });
   });
 
   // ==========================================================================
