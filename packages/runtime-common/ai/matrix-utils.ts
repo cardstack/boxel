@@ -14,6 +14,7 @@ import {
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   isToolResultEventType,
   isToolResultRelType,
 } from '../matrix-constants.ts';
@@ -321,6 +322,7 @@ export const ROOM_EVENTS_MAX_PAGES = 10;
 export const ROOM_CONFIG_EVENT_TYPES = [
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   'm.room.name',
 ];
 const ROOM_CONFIG_MAX_PAGES = 5;
@@ -403,8 +405,8 @@ export async function fetchRoomEventsBackwards(
  * pages. When the
  * history does not start at the start of the room, the events older than it
  * that the prompt still needs are put ahead of it, in time order: the room
- * config events (`ROOM_CONFIG_EVENT_TYPES`), so the room's skills, model and
- * title are still known, the events the compaction lists as having
+ * config events (`ROOM_CONFIG_EVENT_TYPES`), so the room's skills, model,
+ * mode and title are still known, the events the compaction lists as having
  * contributed the room's tools (`toolSourceEventIds`), and the readRealmFile
  * results whose skill files the prompt carries (`skillFileEventIds`).
  *

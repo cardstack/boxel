@@ -488,6 +488,7 @@ export type RealmEventContent =
 
 export type IndexRealmEventContent =
   | IncrementalIndexEventContent
+  | RealmWideIncrementalIndexEventContent
   | FullIndexEventContent
   | IncrementalIndexInitiationContent;
 
@@ -586,6 +587,45 @@ export interface IncrementalIndexEventContent {
   coalescedWrites?: CoalescedIndexWrite[];
   // The realm generation the indexing pass committed. Lets a consumer correlate
   // this search-doc update with the prerendered HTML that belongs to it.
+  generation?: number;
+  realmURL: string;
+}
+
+// The completion of an index pass whose `IncrementalIndexEventContent` would
+// not fit in a Matrix event. The specification caps an event at 65536 bytes
+// and the homeserver rejects a larger one outright, so a pass that invalidated
+// several hundred URLs cannot announce them by name; this form says only that
+// the pass landed, and that any card or search of the realm may have moved.
+//
+// A subscriber answers it the way it answers a full index: the realm reads as
+// done indexing, every card it holds from the realm is re-read, and every
+// live search over the realm re-runs. One event in place of the list, rather
+// than the list split across several, because every event a realm sends costs
+// a send to each subscriber's room.
+//
+// Authorship rides along where it fits, with the meanings it has on the listed
+// form, so a writer still recognizes its own write: a tab waiting on its
+// request id hears its pass land, and a tab that sent a card's content keeps
+// what it holds of that card. Each member degrades toward re-reading, never
+// away from it: `clientAuthored` is emptied when the writer's list will not
+// fit, which keeps the request id and re-reads every card, and every
+// `coalescedWrites` entry carries `changed: null`. Only when even the ids will
+// not fit does authorship go, and every subscriber re-reads as a stranger.
+export interface RealmWideIncrementalIndexEventContent {
+  eventName: 'index';
+  indexType: 'incremental';
+  realmWide: true;
+  // The executable modules among what the pass invalidated, spelled as
+  // `invalidations` spells them. A bulk write of instances invalidates few or
+  // none, so the list nearly always fits where the whole one did not, and it
+  // lets a subscriber that has loaded code from the realm tell whether that
+  // code changed — a tab holding none of these modules re-reads its cards
+  // rather than rebuilding everything it loaded. Absent when it would not fit
+  // either, which means any module of the realm may have changed.
+  invalidatedModules?: string[];
+  clientRequestId?: string | null;
+  clientAuthored?: string[];
+  coalescedWrites?: CoalescedIndexWrite[];
   generation?: number;
   realmURL: string;
 }

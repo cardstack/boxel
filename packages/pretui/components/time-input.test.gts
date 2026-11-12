@@ -4,7 +4,8 @@
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
 // not applied).
 import { module, test } from 'qunit';
-import { fillIn, render, triggerKeyEvent } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { click, fillIn, render, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { TimeInput } from './time-input';
 
@@ -210,4 +211,54 @@ module('Pretui | components/time-input', function (hooks) {
     assert.false(byArg?.hasAttribute('aria-labelledby'));
     assert.strictEqual(byAttr?.getAttribute('aria-label'), 'End', 'a caller aria-label wins over the default');
   });
+  test('TimeInput takes a click anywhere on its face, and keeps focus while digits are typed', async function (assert) {
+    let seen: string[] = [];
+    const record = (v: string) => seen.push(v);
+    await render(<template><TimeInput @onValueChange={{record}} /></template>);
+    await click('[data-test-pretui-time-input]');
+    assert.strictEqual(
+      document.activeElement,
+      timeSegs()[0],
+      'a click on the face, off the digits, focuses the first empty segment',
+    );
+    for (let digit of ['1', '7', '4', '5']) {
+      await triggerKeyEvent(document.activeElement as HTMLElement, 'keydown', digit);
+      assert.ok(
+        timeSegs().includes(document.activeElement as HTMLElement),
+        `focus stays in the field after typing ${digit}`,
+      );
+    }
+    assert.strictEqual(timeText(), '17|45');
+    assert.strictEqual(seen.at(-1), '17:45', 'the typed time is reported');
+
+    await click(timeSegs()[1] as HTMLElement);
+    assert.strictEqual(document.activeElement, timeSegs()[1], 'a click on a digit focuses its segment');
+  });
+
+  test('TimeInput reads a null value as empty, so typing into it is kept', async function (assert) {
+    // An owner that keeps what it is told, as a card field does, and starts
+    // with no time: null, as a card hands an unset field in.
+    class Owner {
+      @tracked value: string | null = null;
+      set = (value: string) => (this.value = value === '' ? null : value);
+    }
+    let owner = new Owner();
+    await render(
+      <template><TimeInput @value={{owner.value}} @onValueChange={{owner.set}} /></template>,
+    );
+    let hour = timeSegs()[0] as HTMLElement;
+    hour.focus();
+    await triggerKeyEvent(hour, 'keydown', '1');
+    assert.strictEqual(
+      timeText(),
+      '01|––',
+      'a partly typed time stays on display while the value is still null',
+    );
+    for (let digit of ['4', '3', '0']) {
+      await triggerKeyEvent(document.activeElement as HTMLElement, 'keydown', digit);
+    }
+    assert.strictEqual(timeText(), '14|30');
+    assert.strictEqual(owner.value, '14:30');
+  });
+
 });

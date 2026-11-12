@@ -624,7 +624,7 @@ module(
         // The file changes between the stat the ref was opened with and the
         // read, as when another host rewrites it.
         fsExtra.writeFileSync(join(dir, 'page.html'), '<p>hello</p>');
-        let opened = ref!.openContent!()!;
+        let opened = (await ref!.openContent!())!;
 
         assert.strictEqual(
           opened.size,
@@ -646,13 +646,137 @@ module(
       }
     });
 
+    test('content touched before openContent shares its open, its stream and its measured length', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        fsExtra.writeFileSync(join(dir, 'page.html'), '<p>hello world</p>');
+        let adapter = new NodeAdapter(dir);
+        let ref = await adapter.openFile('page.html');
+
+        fsExtra.writeFileSync(join(dir, 'page.html'), '<p>hello</p>');
+        let content = ref!.content;
+        let opened = (await ref!.openContent!())!;
+
+        assert.strictEqual(
+          opened.content,
+          content,
+          'openContent hands out the stream content already returned',
+        );
+        assert.strictEqual(
+          opened.size,
+          Buffer.byteLength('<p>hello</p>'),
+          'the length describes the content that is streamed',
+        );
+        assert.strictEqual(
+          await readAll(content as NodeJS.ReadableStream),
+          '<p>hello</p>',
+          'the stream delivers the content the length describes',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+
+    test('content touched first and destroyed unread releases the descriptor its open took', async function (assert) {
+      // Descriptors are read from the process's own fd table, which only
+      // Linux exposes this way.
+      if (fsExtra.existsSync('/proc/self/fd')) {
+        await assertDescriptorReleased(assert);
+      } else {
+        assert.ok(true, 'no /proc fd table on this platform');
+      }
+    });
+
+    async function assertDescriptorReleased(assert: Assert) {
+      let dir = fsExtra.realpathSync(
+        fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-')),
+      );
+      let descriptorsOn = (file: string) =>
+        fsExtra.readdirSync('/proc/self/fd').filter((fd) => {
+          try {
+            return fsExtra.readlinkSync(`/proc/self/fd/${fd}`) === file;
+          } catch {
+            return false;
+          }
+        }).length;
+      let released = async (file: string) => {
+        for (let i = 0; i < 50 && descriptorsOn(file) > 0; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        return descriptorsOn(file);
+      };
+      try {
+        let file = join(dir, 'page.html');
+        fsExtra.writeFileSync(file, '<p>hello</p>');
+        let adapter = new NodeAdapter(dir);
+
+        let ref = await adapter.openFile('page.html');
+        let content = ref!.content as NodeJS.ReadableStream & {
+          destroy(): void;
+        };
+        await ref!.openContent!();
+        assert.strictEqual(descriptorsOn(file), 1, 'the open holds one');
+        content.destroy();
+        assert.strictEqual(
+          await released(file),
+          0,
+          'destroying content after the open releases it',
+        );
+
+        ref = await adapter.openFile('page.html');
+        content = ref!.content as NodeJS.ReadableStream & { destroy(): void };
+        content.destroy();
+        await ref!.openContent!();
+        assert.strictEqual(
+          await released(file),
+          0,
+          'an open that starts after content was destroyed releases it',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    }
+
+    test('content touched first on a file deleted since the stat fails its read, and openContent reports it gone', async function (assert) {
+      let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
+      try {
+        fsExtra.writeFileSync(join(dir, 'sample.png'), 'bytes');
+        let adapter = new NodeAdapter(dir);
+        let ref = await adapter.openFile('sample.png');
+
+        fsExtra.removeSync(join(dir, 'sample.png'));
+
+        let content = ref!.content as NodeJS.ReadableStream;
+        let error = await new Promise<NodeJS.ErrnoException | undefined>(
+          (resolve) => {
+            content.on('error', resolve);
+            content.on('end', () => resolve(undefined));
+            content.resume();
+          },
+        );
+        assert.strictEqual(
+          error?.code,
+          'ENOENT',
+          'content fails its read as a vanished file does',
+        );
+        assert.strictEqual(
+          await ref!.openContent!(),
+          undefined,
+          'the open the two share found nothing to read',
+        );
+      } finally {
+        fsExtra.removeSync(dir);
+      }
+    });
+
     test('write replaces a file whole, so a read already open keeps the content it opened', async function (assert) {
       let dir = fsExtra.mkdtempSync(join(tmpdir(), 'node-realm-test-'));
       try {
         let adapter = new NodeAdapter(dir);
         let original = 'a'.repeat(64 * 1024);
         await adapter.write('page.html', original);
-        let opened = (await adapter.openFile('page.html'))!.openContent!()!;
+        let opened = (await (await adapter.openFile('page.html'))!
+          .openContent!())!;
 
         await adapter.write('page.html', 'b');
 
@@ -682,7 +806,8 @@ module(
       try {
         let adapter = new NodeAdapter(dir);
         await adapter.write('log.txt', 'a'.repeat(100));
-        let opened = (await adapter.openFile('log.txt'))!.openContent!()!;
+        let opened = (await (await adapter.openFile('log.txt'))!
+          .openContent!())!;
 
         await adapter.append('log.txt' as LocalPath, 'b'.repeat(50));
 
@@ -709,7 +834,7 @@ module(
         fsExtra.removeSync(join(dir, 'sample.png'));
 
         assert.strictEqual(
-          ref!.openContent!(),
+          await ref!.openContent!(),
           undefined,
           'the open finds nothing to read',
         );
@@ -736,7 +861,8 @@ module(
       try {
         fsExtra.writeFileSync(join(dir, 'empty.txt'), '');
         let adapter = new NodeAdapter(dir);
-        let opened = (await adapter.openFile('empty.txt'))!.openContent!()!;
+        let opened = (await (await adapter.openFile('empty.txt'))!
+          .openContent!())!;
 
         assert.strictEqual(opened.size, 0);
         assert.strictEqual(

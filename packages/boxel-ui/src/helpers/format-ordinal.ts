@@ -1,3 +1,4 @@
+import { cachedPluralRules } from '../utils/intl-formatters.ts';
 export default function formatOrdinal(
   number: number | null | undefined,
   options: {
@@ -21,7 +22,7 @@ export default function formatOrdinal(
 
   // Use Intl.PluralRules for proper localization
   try {
-    const pr = new Intl.PluralRules(locale, { type: 'ordinal' });
+    const pr = cachedPluralRules(locale, { type: 'ordinal' });
     const rule = pr.select(Math.abs(n));
 
     // Get locale-specific formatting

@@ -4,6 +4,7 @@ import {
   jobIdentity,
   notifyAllFileChanges,
   notifyRealmIndexUpdated,
+  incrementalCompletionThatFits,
   userIdFromUsername,
   fetchUserPermissions,
   type RealmPermissions,
@@ -959,7 +960,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       // announcement to hosts is withheld from a pass following writes that
       // asked for no realm events.
       if (args.realmEvents !== false) {
-        reportRealmEvent?.({
+        let { event, warning } = incrementalCompletionThatFits({
           eventName: 'index',
           indexType: 'incremental',
           invalidations: invalidations.map((href) =>
@@ -968,6 +969,12 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           ...(generation !== undefined ? { generation } : {}),
           realmURL,
         });
+        if (warning) {
+          log.warn(
+            `${jobIdentity(jobInfo)} index event for ${realmURL} ${warning}`,
+          );
+        }
+        reportRealmEvent?.(event);
       }
       await notifyRealmIndexUpdated(dbAdapter, realmURL);
     }

@@ -40,6 +40,7 @@ jobs:
             packages/catalog/scripts/sync-test-subset.ts
             packages/catalog/scripts/pairing.ts
             packages/host/app/lib/externals.ts
+            packages/host/app/tools/index.ts
           sparse-checkout-cone-mode: false
 
       - name: Does this change touch the subset?
@@ -53,7 +54,7 @@ jobs:
           )
           if git diff-tree -r --quiet HEAD^1 HEAD -- "${pin_paths[@]}"; then
             echo "pin=false" >> "$GITHUB_OUTPUT"
-            if git diff-tree -r --quiet HEAD^1 HEAD -- packages/host/app/lib/externals.ts; then
+            if git diff-tree -r --quiet HEAD^1 HEAD -- packages/host/app/lib/externals.ts packages/host/app/tools/index.ts; then
               echo "closure=false" >> "$GITHUB_OUTPUT"
               echo "This change keeps its base branch's catalog test subset pin; nothing to validate."
             else

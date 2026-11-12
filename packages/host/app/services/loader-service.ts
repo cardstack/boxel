@@ -102,6 +102,19 @@ export default class LoaderService extends Service {
     return key ? this.flushedForCodeChange.has(key) : false;
   }
 
+  // Every module that counts as loaded in the sense above — loaded by the
+  // current loader, or by one a code change discarded — keyed the way the
+  // loader keys module identity. For a caller that has to ask the question of
+  // a whole realm rather than of one module it can name.
+  public get loadedOrFlushedModuleKeys(): string[] {
+    return [
+      ...new Set([
+        ...(this.loader?.loadedModuleKeys ?? []),
+        ...this.flushedForCodeChange,
+      ]),
+    ];
+  }
+
   // Called whenever the loader is actually replaced. A code-change flush makes
   // every module the outgoing loader held invisible — not just the one being
   // written — so record the whole set, keyed the way the loader keys module

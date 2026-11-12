@@ -1,3 +1,4 @@
+import type { StagedFile } from '../staged-file.ts';
 import { cloneDeep, isEqual, merge, mergeWith } from 'lodash-es';
 import { v4 as uuidV4 } from 'uuid';
 
@@ -247,7 +248,7 @@ export interface UpdateEntry extends EntryCommon {
   // The file's new content. Text through the operations envelope; raw bytes
   // when the facade dispatches an upload, which is why the two spellings are
   // one member rather than a text one and a binary one.
-  content?: string | Uint8Array;
+  content?: string | Uint8Array | StagedFile;
   // Replace the bytes stored at the target verbatim, whatever they are — the
   // one way an update reaches a module's source, a card's stored `.json`, or a
   // path that holds nothing yet.
@@ -337,7 +338,7 @@ export interface StagedWrite {
   content: StagedContent;
 }
 
-export type StagedContent = string | Uint8Array | SplicedSource;
+export type StagedContent = string | Uint8Array | SplicedSource | StagedFile;
 
 // Content one entry adds to the end of a file. Distinct from a write because
 // what it names is not the file's next content but an addition to it: the
@@ -995,7 +996,7 @@ async function replacePrimitiveValues(
 // once they dispatch through here.
 async function stageFileUpdate(
   entry: UpdateEntry,
-  content: string | Uint8Array,
+  content: string | Uint8Array | StagedFile,
   url: URL,
   ctx: StagingContext,
 ): Promise<StagedChange> {

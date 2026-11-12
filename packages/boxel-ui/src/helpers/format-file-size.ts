@@ -1,3 +1,5 @@
+import { cachedNumberFormat } from '../utils/intl-formatters.ts';
+
 export default function formatFileSize(
   bytes: number | null | undefined,
   options: {
@@ -39,10 +41,10 @@ export default function formatFileSize(
 
   // Format the number based on locale if provided
   const formattedNumber = locale
-    ? size.toLocaleString(locale, {
+    ? cachedNumberFormat(locale, {
         minimumFractionDigits: precision,
         maximumFractionDigits: precision,
-      })
+      }).format(size)
     : size.toFixed(precision);
 
   return `${formattedNumber} ${units[i]}`;

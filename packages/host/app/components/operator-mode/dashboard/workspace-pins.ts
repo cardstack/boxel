@@ -99,12 +99,17 @@ function indexCardURL(realmURL: string): string {
 // On the split index path, an edit to a pinned card re-renders the index
 // card's HTML without reindexing it, so it isn't one of these. The fused path
 // (SQLite) reindexes it, which only costs an extra search.
-function indexCardReindexed(
+export function indexCardReindexed(
   event: RealmEventContent,
   realmURL: string,
 ): boolean {
   if (event.eventName !== 'index' || event.indexType !== 'incremental') {
     return false;
+  }
+  // A pass too large to list what it invalidated may have moved any card of
+  // the realm, the index card among them.
+  if ('realmWide' in event) {
+    return true;
   }
   let indexCard = trimJsonExtension(indexCardURL(realmURL));
   return (event.invalidations ?? []).some(

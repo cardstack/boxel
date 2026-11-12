@@ -1,6 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
+import { waitForPromise } from '@ember/test-waiters';
 import { tracked, cached } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
@@ -10,18 +11,23 @@ import {
   isCardInstance,
   localId,
   isLocalId,
+  logger,
   trimJsonExtension,
 } from '@cardstack/runtime-common';
 
 import { RecentCards } from '../utils/local-storage-keys';
 
 import type CardService from './card-service';
+import type MatrixService from './matrix-service';
 import type NetworkService from './network';
 import type RecentFilesService from './recent-files-service';
 import type SessionService from './session';
 import type StoreService from './store';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef, BaseDef } from '@cardstack/base/card-api';
+
+const log = logger('service:recent-cards-service');
+const MAX_OPENED_CARD_WRITE_FAILURES = 2;
 
 export interface RecentCard {
   cardId: string;
@@ -34,10 +40,14 @@ export default class RecentCardsService extends Service {
   @service declare private recentFilesService: RecentFilesService;
   @service declare private store: StoreService;
   @service declare private network: NetworkService;
+  @service declare private matrixService: MatrixService;
   @tracked private ascendingRecentCards = new TrackedArray<RecentCard>([]);
   private cachedAPI?: typeof CardAPI;
   private addToRecentFiles = new Set<string>();
   private pendingCardIdSubscriptions = new Map<string, CardDef>();
+  // The pending write recording an opened card, so only one is out at once.
+  private openedCardRecording: Promise<void> | undefined;
+  private openedCardWriteFailures = 0;
 
   constructor(owner: Owner) {
     super(owner);
@@ -72,6 +82,8 @@ export default class RecentCardsService extends Service {
   }
 
   resetState() {
+    this.openedCardRecording = undefined;
+    this.openedCardWriteFailures = 0;
     this.clearPendingCardIdSubscriptions();
     this.ascendingRecentCards = new TrackedArray([]);
     this.addToRecentFiles.clear();
@@ -107,6 +119,44 @@ export default class RecentCardsService extends Service {
       RecentCards,
       JSON.stringify(this.ascendingRecentCards),
     );
+    this.recordOpenedCard();
+  }
+
+  // Recent cards are kept per browser, so the account also records that a
+  // card was opened, for Get started's open-card step in every browser. Only
+  // cards opened in this session count: the browser's list may be another
+  // account's. A session is authenticated only once login's read of the
+  // dashboard state has applied, so the stored flag has been read (or is
+  // empty if that read failed). A failed write is only logged, and the next
+  // card opened tries again, until two writes fail in this session: a
+  // homeserver rejecting writes would otherwise get two requests per card
+  // opened, queued ahead of the dashboard's own writes.
+  private recordOpenedCard() {
+    if (
+      !this.session.isAuthenticated ||
+      this.openedCardRecording ||
+      this.openedCardWriteFailures >= MAX_OPENED_CARD_WRITE_FAILURES ||
+      this.matrixService.dashboardState.openedCard
+    ) {
+      return;
+    }
+    let recording: Promise<void> = this.matrixService
+      .updateDashboardState({ openedCard: true })
+      .catch((error: unknown) => {
+        if (this.openedCardRecording === recording) {
+          this.openedCardWriteFailures++;
+        }
+        log.warn(`recording that a card was opened failed: ${error}`);
+      })
+      .finally(() => {
+        // A logout since may have started another.
+        if (this.openedCardRecording === recording) {
+          this.openedCardRecording = undefined;
+        }
+      });
+    this.openedCardRecording = recording;
+    // Nothing awaits it, so tests' settled() waits on it here.
+    waitForPromise(recording);
   }
 
   async addNewCard(instance: CardDef, opts?: { addToRecentFiles?: true }) {

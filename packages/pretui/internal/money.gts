@@ -1,4 +1,5 @@
 // Pretui — the amount engine shared by AmountInput and MoneyInput: parsing, formatting and units.
+import { cachedNumberFormat } from './intl-cache';
 
 // ═══════════════════════════════════════════════════════════════════════
 // The pure layer. No DOM, no clock, no component state.
@@ -63,7 +64,7 @@ export function separatorsFor(locale: string): {
   decimal: string;
 } {
   try {
-    let parts = new Intl.NumberFormat(locale).formatToParts(SEPARATOR_PROBE);
+    let parts = cachedNumberFormat(locale).formatToParts(SEPARATOR_PROBE);
     let group = parts.find((p) => p.type === 'group')?.value ?? ',';
     let decimal = parts.find((p) => p.type === 'decimal')?.value ?? '.';
     return { group, decimal };
@@ -77,7 +78,7 @@ export function separatorsFor(locale: string): {
 function localeDigits(locale: string): Map<string, string> {
   let map = new Map<string, string>();
   try {
-    let format = new Intl.NumberFormat(locale, { useGrouping: false });
+    let format = cachedNumberFormat(locale, { useGrouping: false });
     for (let digit = 0; digit <= 9; digit++) {
       let glyph = format.format(digit);
       if (glyph.length === 1 && glyph !== String(digit)) {
@@ -208,7 +209,7 @@ export function fractionDigitsFor(
   }
   if (amountUnit?.currency) {
     try {
-      return new Intl.NumberFormat(locale, {
+      return cachedNumberFormat(locale, {
         style: 'currency',
         currency: amountUnit.currency,
       }).resolvedOptions().maximumFractionDigits;
@@ -236,7 +237,7 @@ export function amountAffixes(
   }
   if (amountUnit.currency) {
     try {
-      let parts = new Intl.NumberFormat(locale, {
+      let parts = cachedNumberFormat(locale, {
         style: 'currency',
         currency: amountUnit.currency,
         currencyDisplay: 'narrowSymbol',
@@ -318,7 +319,7 @@ export function formatAmountPlain(
   }
   let digits = fractionDigitsFor(amountUnit, locale) ?? precision;
   try {
-    return new Intl.NumberFormat(
+    return cachedNumberFormat(
       locale,
       digits === undefined
         ? {}
@@ -341,7 +342,7 @@ export function formatAmount(
     return '';
   }
   try {
-    return new Intl.NumberFormat(
+    return cachedNumberFormat(
       locale,
       optionsFor(amountUnit, locale, extra),
     ).format(value);
