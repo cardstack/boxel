@@ -1,4 +1,5 @@
 import { task } from 'ember-concurrency';
+import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { scheduleOnce } from '@ember/runloop';
 import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -118,28 +119,39 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   private _modifierHasRun = false;
 
   // Whether this markdown renders for someone looking at it rather than for
-  // the indexer. Only a live render loads Monaco, KaTeX and Mermaid. Until the
+  // the indexer. Only a live render loads Monaco, KaTeX and Mermaid. Before the
   // element is placed, the render context answers as it stands, so a render
   // that starts while the host tab runs its own index render reads as not
-  // live. `placeRender` then records the element's own answer, so a live
-  // render outside the index render's element re-renders with highlighting,
-  // math and diagrams instead of keeping the raw markup.
-  @tracked private placedLive: boolean | undefined;
+  // live. Once placed, the element's own answer decides every later render, so
+  // markdown outside the index render's element keeps its highlighting, math
+  // and diagrams even when it re-renders while that index render runs.
+  //
+  // The element's answer is recorded untracked, and the render is invalidated
+  // only when that answer differs from what the placing render read, so
+  // markdown whose first render already had it right is not parsed a second
+  // time.
+  private placedLive: boolean | undefined;
+  @tracked private liveRevision = 0;
 
   get isLive(): boolean {
+    void this.liveRevision;
     return this.placedLive ?? isLiveRender();
   }
 
+  // Installed in the same render that read `isLive`, so `this.isLive` here is
+  // the answer that render used.
   placeRender = modifier((element: HTMLElement) => {
     let live = isLiveRender(element);
-    if (live === this.isLive) {
+    let renderedLive = this.isLive;
+    this.placedLive = live;
+    if (live === renderedLive) {
       return;
     }
     let cancelled = false;
     // After the render that installed this modifier, which read `isLive`.
     queueMicrotask(() => {
-      if (!cancelled) {
-        this.placedLive = live;
+      if (!cancelled && !isDestroying(this) && !isDestroyed(this)) {
+        this.liveRevision++;
       }
     });
     return () => {

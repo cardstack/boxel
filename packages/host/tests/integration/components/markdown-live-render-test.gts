@@ -44,11 +44,11 @@ module('Integration | markdown live render', function (hooks) {
       @field body = contains(MarkdownField);
     }
     let doc = new Doc({ body: 'The formula $E = mc^2$ is famous.' });
-    return getComponent(doc);
+    return { doc, DocComponent: getComponent(doc) };
   }
 
   test('markdown outside a scoped index render renders math with KaTeX', async function (assert) {
-    let DocComponent = mathDoc();
+    let { DocComponent } = mathDoc();
     (globalThis as any).__boxelRenderContext = true;
     (globalThis as any).__boxelRenderContextScope = INDEX_RENDER_SCOPE;
 
@@ -75,8 +75,42 @@ module('Integration | markdown live render', function (hooks) {
       .doesNotIncludeText('$E = mc^2$', 'raw LaTeX source is replaced');
   });
 
+  test('markdown placed live keeps KaTeX when it re-renders during a scoped index render', async function (assert) {
+    let { doc, DocComponent } = mathDoc();
+
+    await render(
+      <template>
+        <div id={{INDEX_RENDER_SCOPE}}></div>
+        <DocComponent @format='isolated' />
+      </template>,
+    );
+    assert
+      .dom('.math-placeholder .katex')
+      .exists('precondition: the live render loads KaTeX');
+
+    (globalThis as any).__boxelRenderContext = true;
+    (globalThis as any).__boxelRenderContextScope = INDEX_RENDER_SCOPE;
+    doc.body = 'The identity $a^2 + b^2 = c^2$ holds.';
+    await settled();
+
+    assert
+      .dom('.math-placeholder .katex')
+      .exists('a re-render during the index render keeps KaTeX');
+
+    delete (globalThis as any).__boxelRenderContext;
+    delete (globalThis as any).__boxelRenderContextScope;
+    await settled();
+
+    assert
+      .dom('.math-placeholder .katex')
+      .exists('the rendered math survives the index render finishing');
+    assert
+      .dom('.math-placeholder')
+      .doesNotIncludeText('$a^2 + b^2 = c^2$', 'raw LaTeX source is replaced');
+  });
+
   test('markdown inside a scoped index render keeps the raw math placeholders', async function (assert) {
-    let DocComponent = mathDoc();
+    let { DocComponent } = mathDoc();
     (globalThis as any).__boxelRenderContext = true;
     (globalThis as any).__boxelRenderContextScope = INDEX_RENDER_SCOPE;
 
@@ -97,7 +131,7 @@ module('Integration | markdown live render', function (hooks) {
   });
 
   test('markdown rendered with no render context renders math with KaTeX', async function (assert) {
-    let DocComponent = mathDoc();
+    let { DocComponent } = mathDoc();
 
     await render(<template><DocComponent @format='isolated' /></template>);
 
