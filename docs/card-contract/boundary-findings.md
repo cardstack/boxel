@@ -24,7 +24,7 @@ stays here with status `fixed`, so the boundary it protects is not re-broken.
 
 | ID            | Finding                                                                          | Class | Status   |
 | ------------- | -------------------------------------------------------------------------------- | ----- | -------- |
-| [B-01](#b-01) | The `searchable` field option does nothing                                       | leak  | open     |
+| [B-01](#b-01) | What `searchable` promises is stated only in code comments                       | gap   | proposed |
 | [B-02](#b-02) | `data-test-*` means two different things                                         | leak  | proposed |
 | [B-03](#b-03) | The format list has three sources of truth, and they disagree                    | leak  | proposed |
 | [B-04](#b-04) | Host UI modes are in the card context                                            | leak  | proposed |
@@ -55,34 +55,35 @@ stays here with status `fixed`, so the boundary it protects is not re-broken.
 
 ## B-01
 
-**The `searchable` field option does nothing**
+**What `searchable` promises is stated only in code comments**
 
-**Class:** leak · **Status:** open
+**Class:** gap · **Status:** proposed
 
-`@field` accepts `searchable: true | string | string[]`, and its type and
-validation are complete: dotted paths are checked against the definition graph.
-Nothing consumes it. `packages/host/tests/unit/searchable-option-test.ts` says
-so directly: "additive, inert — nothing consumes it for search-doc depth yet".
+`@field` accepts `searchable: true | string | string[]`, and it is the
+author-facing answer to "how deep does my card's search go?".
+`packages/base/searchable.ts` builds the search document from it: it is the
+only place the option is read, and it decides which linked cards are pulled
+into the search document and which are left as a bare `{ id }`.
 
-An author who writes `searchable: 'address.city'` today gets a card that
-compiles, lints, and does not behave as written. That is the worst shape a leak
-can take: the API is finished, so the author believes it.
+The semantics are good, and they are written down only in the comments on the
+`Searchable` type in `packages/base/card-api.gts` and at the top of
+`packages/base/searchable.ts`. Two of them are easy to get wrong without being
+told:
 
-**Why it matters.** The option is the author-facing answer to "how deep does my
-card's search go?" Without it, the runtime decides depth, and an author who
-needs a nested value searchable has no way to ask. With it inert, an author has
-a way to ask that silently fails.
+- `searchable` governs links only. A contained value is always in the search
+  document once its owner is; a path on a contained field is meaningful only to
+  reach a link beneath it.
+- Depth is governed entirely by the card being indexed. A card pulled in as a
+  link target does not consult its own `searchable`; only the indexed card's
+  dotted path continues into it.
 
-**Proposal.** Decide which of these is true, and delete the other:
+**Proposal.** State these in [author API §8](author-api.md) (done, §8.7), so the
+comments describe one implementation of a stated contract.
 
-1. **The runtime decides depth.** Remove `searchable` from the author API. State
-   the depth rule in [author API §8](author-api.md) as a runtime decision, and
-   give authors the concept they actually need if they need it.
-2. **Depth is the author's.** Implement it in the search-doc generator, with the
-   invalidation that follows from a deeper doc.
-
-Option 2 is the larger change. Option 1 is the smaller contract. Either is fine;
-leaving it as it is is not.
+**Note.** `packages/host/tests/unit/searchable-option-test.ts` described the
+option as "inert — nothing consumes it" after the generator started reading it.
+A stale comment that says an author-facing option does nothing is how an option
+gets deleted by someone who believes it.
 
 ---
 
@@ -124,7 +125,12 @@ on a card's test hook.
 - A `formats` array of seven, which omits both.
 - Three per-family lists: `cardDefFormats`, `fieldDefFormats`, `fileDefFormats`.
 
-`form` appears nowhere else in the repository. `metadata` is in
+No card can declare a `form` template, and the renderer does not know the name.
+It is a menu value: the code-submode playground's format chooser offers `form`
+("auto-generated standard view") after `edit` when a card has a custom edit
+template, and `playground-panel.gts` and `preview-panel/index.gts` render it as
+`edit` against the base card's template. A host UI's menu entry is in the type
+that names the formats a card's templates are keyed by. `metadata` is in
 `fileDefFormats` but not in `formats`, so `isValidFormat('metadata')` is false
 by default while the file family accepts it. Meanwhile `FileDef` declares
 `static edit` (`FileDefEditTemplate`) while `fileDefFormats` excludes `edit`.
@@ -134,7 +140,9 @@ of another. A runtime implementing "the formats" has to guess which list is the
 contract.
 
 **Proposal.** One source: a per-family map from family to its formats, with the
-`Format` union derived from it. Delete `form`. Resolve the `FileDef` / `edit`
+`Format` union derived from it. Move `form` out of `Format` into the
+playground's own chooser type (a chooser option that maps to a format and a
+template source), then delete it from the union. Resolve the `FileDef` / `edit`
 contradiction by deciding whether a file is editable in place (see B-13). Make
 the union a type-level projection so adding a format to one family cannot
 silently make it a name a card may write.
@@ -149,10 +157,8 @@ silently make it a name a card may write.
 
 `CardContext` carries `mode?: 'host' | 'operator'` and
 `submode?: 'interact' | 'code' | 'host'`, described as "Optional runtime
-mode/submode hints used by cards that render differently per context." Base-realm
-cards already branch on them: `base/field-component.gts`,
-`base/links-to-editor.gts`, and `base/realm-config.gts` all change behavior for
-"code submode".
+mode/submode hints used by cards that render differently per context." Nothing
+in `packages/base` reads them today, but the interface invites every card to.
 
 The vocabulary goes deeper than the context. `base/command.gts` declares
 `@field submode = contains(StringField)`, so a host navigation state is stored as
@@ -171,13 +177,22 @@ knowing the host's shape. Two are enough for the cases in use today:
 - **editing** — the person is changing this card.
 - **definition-visible** — the person can see the card's own code.
 
-`code submode` is really the second: a card renders differently because the
+`code submode` is really the second: a card would render differently because the
 viewer can edit the card's definition, not because a host tab is named "code".
 Freeze `mode` / `submode` as host-internal, and give the host a way to pass the
 intents.
 
-**Open question.** Is there a card today that branches on `mode: 'host'` for a
-reason the two intents do not cover? None was found in `packages/base`.
+**A related gap.** The host's layout already decides which context services a
+card gets. `RealmURLContext` is provided only by an operator-mode stack item, so
+a card rendered in code submode's playground or spec preview has none.
+`base/links-to-editor.gts` and `base/realm-config.gts` work around it by reading
+`model[realmURL]` and passing the realm explicitly, and their comments say why.
+A service whose presence depends on where the host laid the card out is the
+same leak by another route: [author API §10.2](author-api.md) requires such a
+service to be named in this contract, with what a card does without it.
+
+**Open question.** Is there a card outside `packages/base` that branches on
+`mode` or `submode` for a reason the two intents do not cover?
 
 ---
 
@@ -255,7 +270,8 @@ which the compiler can do because it already decides which modules to rewrite.
 
 **Class:** gap · **Status:** open
 
-Several `Symbol.for` keys carry values across module universes:
+About thirty `Symbol.for` keys in `packages/base` and
+`packages/runtime-common` carry values across module universes. For example:
 `cardstack.getFields` (carried on every instance so BXL materializes through the
 card-api copy that created it), `cardstack-ident` (the identity tag),
 `shimmed-module` and `shimmed-module-deps` (the only way into the module map),
@@ -382,7 +398,7 @@ author-facing.
 
 **Class:** gap · **Status:** proposed
 
-Three statements in `docs/` are not true of the code, and each is something a
+Four statements in `docs/` are not true of the code, and each is something a
 card author would act on:
 
 - `docs/computed-fields.md`: "Computed fields are eagerly evaluated, they do not
@@ -729,15 +745,14 @@ Recorded so a later change does not accidentally break them.
 
 ## Decisions this register needs from people
 
-1. **B-01** — Is search depth the author's or the runtime's?
-2. **B-04** — Do "editing" and "definition-visible" cover every card that
+1. **B-04** — Do "editing" and "definition-visible" cover every card that
    branches on host mode today?
-3. **B-08** — What is the rule for a value crossing two loader universes?
-4. **B-13** — Is a file ever edited in place?
-5. **B-16** — Is `cardInfo` the author's data or the platform's?
-6. **B-20** — Which instance members are reserved, and may the platform ever add
+2. **B-08** — What is the rule for a value crossing two loader universes?
+3. **B-13** — Is a file ever edited in place?
+4. **B-16** — Is `cardInfo` the author's data or the platform's?
+5. **B-20** — Which instance members are reserved, and may the platform ever add
    one that collides?
-7. **B-23** — Must a card's icon ever be a component?
-8. **B-24** — Is `cardURL` a sort by identity or by storage order?
-9. **B-26** — Should a card's template be able to ask the environment to show
+6. **B-23** — Must a card's icon ever be a component?
+7. **B-24** — Is `cardURL` a sort by identity or by storage order?
+8. **B-26** — Should a card's template be able to ask the environment to show
    the card's own definition at all?

@@ -66,7 +66,7 @@ convention while leaving it on the interface a card reads.
 ### 1.6. A rule a card must follow is stated in the contract
 
 A rule that decides whether card code is correct MUST be stated in Card
-Contract, not only in a lint rule, a code comment, or an example a author
+Contract, not only in a lint rule, a code comment, or an example an author
 happens to copy. A lint rule then enforces a contract; it MUST NOT be the only
 place the rule lives.
 
@@ -97,8 +97,9 @@ built, in a host whose UI we have not designed.
 
 Most of what a card depends on today was never decided. The prerenderer renders
 before a live view, so a card that reads a capability answer as "no" when it
-means "not yet" renders wrong; nobody chose that. `searchable` is a finished
-looking option that nothing reads; nobody chose that either. `_cardType` appears
+means "not yet" renders wrong; nobody chose that. `form` is in the `Format` type
+a card's templates are keyed by because one host chooser needed a value for its
+menu; nobody chose that either. `_cardType` appears
 in card-authored filters because the index stores a card as two rows; that is a
 storage decision leaking into a query grammar.
 

@@ -106,18 +106,18 @@ class it returns as the same declaration.
 
 Every field kind takes an options object.
 
-| Option          | Kind  | Meaning                                                                                            |
-| --------------- | ----- | -------------------------------------------------------------------------------------------------- |
-| `computeVia`    | All   | The value is derived. See §3.                                                                      |
-| `description`   | All   | A short human-facing description of the field.                                                     |
-| `configuration` | All   | Per-usage settings, merged with the field def's own defaults.                                      |
-| `searchable`    | All   | Which link paths this field makes queryable. See §8 and finding [B-01](boundary-findings.md#b-01). |
-| `query`         | Links | A declared query that resolves the link's targets. See §4.                                         |
-| `eager`         | Links | Whether the query resolves with the owner or on first read. Default: with the owner.               |
+| Option          | Kind  | Meaning                                                                              |
+| --------------- | ----- | ------------------------------------------------------------------------------------ |
+| `computeVia`    | All   | The value is derived. See §3.                                                        |
+| `description`   | All   | A short human-facing description of the field.                                       |
+| `configuration` | All   | Per-usage settings, merged with the field def's own defaults.                        |
+| `searchable`    | All   | Which links this field pulls into the search document. See §8.7.                     |
+| `query`         | Links | A declared query that resolves the link's targets. See §4.                           |
+| `eager`         | Links | Whether the query resolves with the owner or on first read. Default: with the owner. |
 
 **§2.6** Every option an author may write MUST have stated semantics and a
 runtime that produces them. An option that a runtime ignores is a defect, not a
-roadmap item. See finding [B-01](boundary-findings.md#b-01).
+roadmap item ([ADR 032 §1.3](../adr/032-define-the-card-contract-as-the-boundary-between-card-code-and-its-runtime.md)).
 
 **§2.7** `configuration` MUST be the only per-usage customization an author
 needs to change how one field of one card renders. A runtime MUST NOT require an
@@ -337,6 +337,30 @@ how stale a computed search value can be.
 field values. An author who filters on a query-backed relationship's targets
 filters on membership.
 
+**§8.7** `searchable` decides which linked cards a card's search document
+includes, and so which linked values a query can filter on:
+
+- With no `searchable`, a link appears as its target's id only.
+- `true` includes the field's own link target.
+- A dotted path (`'venue.owner'`) includes a link reached through the field's
+  target, one hop per segment. A segment MAY name a contained field, to reach a
+  link beneath it.
+- An array combines paths.
+
+`searchable` governs links only. A contained value is always in the search
+document once its owner is, so a path on a `contains` field is meaningful only
+to reach a link beneath it.
+
+Depth is decided by the card being indexed, and only by it. A card pulled into
+the search document as a link target does not apply its own `searchable`; only
+the indexed card's path continues into it. A path is rooted at the field's
+target type. A runtime MUST report a path that does not resolve in the
+definition graph as an issue when it indexes the definition, and MUST NOT fail
+the definition because of one: the bad path may come from an edit to a
+different module than the one being indexed. A link along a path
+that cannot be loaded appears as its id, as an unfollowed link does. See
+finding [B-01](boundary-findings.md#b-01).
+
 ## 9. Presentation an author declares
 
 | Declaration                | Meaning                                                             |
@@ -403,11 +427,18 @@ given a runtime's internal mode names as the thing to branch on. See finding
 An operation is an action the environment carries out. Some every card has;
 some an author declares.
 
-**§11.1** Every card def carries `read`, `readSource`, `create`, `update`,
-`delete`, `query`, `transform`, `appendContainsMany`, and `explain`/`validate`
-only when declared. Every file def carries `read`, `readSource`, `update`, and
-`appendLine`. A runtime MUST make these available without an author declaring
-them.
+**§11.1** Every def family carries a fixed set of operations without an author
+declaring them, and a runtime MUST make these available:
+
+| Family | Implied operations                                                                             |
+| ------ | ---------------------------------------------------------------------------------------------- |
+| Card   | `read`, `readSource`, `create`, `update`, `delete`, `query`, `transform`, `appendContainsMany` |
+| File   | `read`, `readSource`, `update`, `appendLine`                                                   |
+| Base   | `read`, `readSource`                                                                           |
+| Field  | None. A field is not addressable ([vocabulary §2.1](vocabulary.md)).                           |
+
+`explain`, `validate`, and `callApi` are implied by no family. A def has one
+only when an author declares an operation built on it.
 
 **§11.2** An author declares an operation with `@operation` and a declaration
 object naming a `base`. The declaration describes the program the runtime runs;
