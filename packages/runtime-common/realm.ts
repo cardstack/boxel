@@ -6760,11 +6760,11 @@ export class Realm {
   // The rows that describe what a write left on disk, and the change event
   // that records it, committed together. `realm_file_meta` is written and
   // trimmed on one transaction, and the event is appended on the same one
-  // through `withChangeEvent`, under a savepoint: if the journal insert fails,
-  // only the insert rolls back, the file meta still commits, and the write
-  // still succeeds, with the failure recorded so reconciliation can attribute
-  // the change to no one. Reconciliation therefore never sees a file-meta
-  // change whose event is still on its way.
+  // through `withChangeEvent`, which decides what a journal failure does to
+  // the write: normally only the event rolls back and the write succeeds,
+  // with the failure recorded so reconciliation can attribute the change to
+  // no one. Reconciliation therefore never sees a file-meta change whose
+  // event is still on its way.
   //
   // Called for a commit that completed and for one that failed partway, with
   // whatever paths had landed by then; the `partial` event records them,

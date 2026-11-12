@@ -278,10 +278,9 @@ export async function createRealm(
       // the realm's history learns of them from the `scan` event by the
       // creator, appended on the same transaction as the registry row: the
       // write lock's own. No instance can mount the realm before both commit,
-      // so the scan comes before any write to it. A journal failure rolls back
-      // only the event: the registry row still commits and creating the realm
-      // still succeeds, and the realm's first revision is then not attributed
-      // to its creator.
+      // so the scan comes before any write to it. A journal failure is handled
+      // as `withChangeEvent` describes: normally only the event rolls back,
+      // and the realm's first revision is then not attributed to its creator.
       await insertSourceRealmInRegistry(
         dbAdapter,
         {
