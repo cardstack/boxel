@@ -216,7 +216,7 @@ Run counts are keyed by label, so editing the card keeps them. Each trigger's `t
 
 `syncAutomationWithCard` takes a `readCard` callback and reads the card only once it holds the automation's row lock. Two incremental passes over one card can overlap (different writers' lanes); reading under the lock means the later sync never reads an older card than the earlier one, so the row ends on the newest card.
 
-The hook only logs a failure (`failed to sync automations with their cards`); the index pass still succeeds, and the next pass over the card syncs again. A row stuck on an old schedule after an edit is worth checking against that log line and the card's index row (`has_error`, `types`).
+The hook only logs a failure; the index pass still succeeds, and the next pass over the card syncs again. Each automation syncs on its own, so one that fails (`failed to sync automation <id> with its card`) doesn't stop the rest of the realm's. A failure before any automation syncs logs `failed to sync automations with their cards in <realm>`. A row stuck on an old schedule after an edit is worth checking against that log line and the card's index row (`has_error`, `types`).
 
 Every direct-writer check is `isDirectWriterLocked`, asked inside the change's transaction against the served URL `virtualNetwork.toURL(realm)` resolves the realm to, since permission rows are keyed by served URLs. A wildcard (`*`, `users`) row, a bot account and a policy grant never make a direct writer. A refusal returns `{ ok: false, reason }` (`not-a-direct-writer`, `missing`, `outside-realm`, `other-card`, `already-switched-on`, `not-paused`, `not-pausable`) rather than throwing.
 
