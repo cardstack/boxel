@@ -118,11 +118,17 @@ nothing captured, and it runs four steps:
    repo can be cloned read-only over git's dumb HTTP protocol from a static
    file server. `info/refs` also names the HEAD the last complete pass saw.
 
-Readers on other hosts keep working through a pass. Repack removes a loose
-copy only once its pack is in place, and prune removes only objects HEAD
-doesn't reach. `git repack --geometric` isn't used: it packs loose objects
-whether or not anything reaches them, and prune never removes an object
-once it is packed.
+`git repack --geometric` isn't used: it packs loose objects whether or not
+anything reaches them, and prune never removes an object once it is packed.
+A pack left under a temporary name, as a killed repack leaves one, is
+replaced by the next pass once it is an hour old.
+
+On one host, a reader never misses an object during a pass: repack removes
+a loose copy only once its pack is in place, and prune removes only objects
+HEAD doesn't reach. A reader on another host of the shared file system can
+go on seeing a cached listing of the pack directory, or a pack that a `-a`
+repack removed, for as long as its client caches them. Whether reads there
+stay whole through a pass is measured on the deployed file system.
 
 The commit-graph's Bloom filters serve `git log` with one path filter from
 git 2.27, and with several path filters only from git 2.51.

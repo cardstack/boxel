@@ -33,11 +33,14 @@
 //    cloned read-only from a static file server. Written last, `info/refs`
 //    also records the HEAD the last complete pass saw.
 //
-// Readers on other hosts never see an object disappear: repack removes a
-// loose copy only once its pack is in place, and prune removes only objects
-// HEAD doesn't reach. A reader that has listed the packs before a `-a`
-// repack removed them finds the object missing, and git looks for its packs
-// again before it gives up.
+// On one host, a reader never misses an object during a pass: repack
+// removes a loose copy only once its pack is in place, prune removes only
+// objects HEAD doesn't reach, and a reader that finds an object missing
+// looks for its packs again before it gives up. A reader on another host of
+// the shared file system can go on seeing a cached listing of the pack
+// directory, or a pack that a `-a` repack removed, for as long as its client
+// caches them. Whether reads there stay whole through a pass is measured on
+// the deployed file system, not assumed here.
 
 import { readdir, readFile, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
