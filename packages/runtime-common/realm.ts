@@ -3586,6 +3586,15 @@ export class Realm {
         this.patchRealmPermissions.bind(this),
         ACL_ONLY,
       )
+      // An automation card's switched-on state, payer and each trigger's runs
+      // left, for the card's view. Answered on the realm ACL, and then only
+      // to a direct writer (see `automation-status.ts`).
+      .get(
+        '/_automation-status',
+        SupportedMimeType.JSON,
+        this.automationStatus.bind(this),
+        ACL_ONLY,
+      )
       .get(
         READINESS_CHECK_PATH,
         SupportedMimeType.RealmInfo,
@@ -17535,6 +17544,56 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.Permissions },
+      },
+      requestContext,
+    });
+  }
+
+  private async automationStatus(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    // Loaded on first use: only a realm server answers it with a row, and
+    // the schedule code it reads stays out of every bundle that imports the
+    // realm.
+    let { answerAutomationStatus, automationRef, AUTOMATION_STATUS_PARAM } =
+      await import('./automation-status.ts');
+    let answer = await answerAutomationStatus({
+      dbAdapter: this.#dbAdapter,
+      realmURL: new URL(this.url),
+      matrixServerName: this.#matrixClient.serverName,
+      virtualNetwork: this.#virtualNetwork,
+      automationTypeKey: internalKeyFor(
+        automationRef,
+        undefined,
+        this.#virtualNetwork,
+      ),
+      viewer: requestContext.authenticatedUser,
+      automation: new URL(request.url).searchParams.get(
+        AUTOMATION_STATUS_PARAM,
+      ),
+      readInstance: (url) => this.#realmIndexQueryEngine.instanceSource(url),
+    });
+    if (answer.status !== 200) {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [{ status: String(answer.status), detail: answer.message }],
+        }),
+        init: {
+          status: answer.status,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+        requestContext,
+      });
+    }
+    return createResponse({
+      body: JSON.stringify(answer.document),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          // The row changes with every run, pause and resume.
+          'cache-control': 'no-store',
+        },
       },
       requestContext,
     });

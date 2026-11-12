@@ -139,6 +139,23 @@ Every view is built from Pret UI, which subset files may import, and speaks plai
 
 The card declares `update`, `delete`, `transform` and `appendContainsMany` `nonGrantable`, as `RealmPolicy` does, so only the realm's direct writers edit an automation.
 
+### The card's view and the status route
+
+The views read the card's own fields for everyone, and the server's row for a direct writer:
+
+- **Everyone** who can read the card sees the triggers in words (`describeCron` for a schedule, plus each schedule's stop: a `count`, an `untilDate`, or both), the limits, the outside services and the params.
+- **A direct writer** also sees the row: a state chip (Off, On, Paused, Waiting for credits, Done), a sentence on what the state means for the next run (one per pause reason), who pays, the next run and the last result, and under each trigger its runs so far, runs left, last possible run and next run. Isolated shows all of it in a _Status_ `PanelSection` and per-trigger `Descriptions`; embedded and fitted show only the state chip. Everyone else sees the _Who turns this automation on, and who pays_ `Callout` instead.
+
+The views get the row from `GET <realm>/_automation-status?automation=<card URL>` (`Accept: application/json`), through the host's `authed-fetch` tool, so the realm token goes with it. The realm answers on its ACL (read), then `answerAutomationStatus` in `packages/runtime-common/automation-status.ts`:
+
+- **403** unless the caller is a direct writer of the realm (`isDirectWriter`): a reader, a writer by the `*` or `users` row, a policy grant and an anonymous caller (401 from the ACL) never see the row.
+- **400** when `automation` is missing, not a URL, or outside the realm.
+- **200** with `{ data: { type: 'automation-status', id, attributes } }`. `attributes` is `{ switchedOn: false }` when no row exists. Otherwise it holds `state`, `pauseReason`, `payer`, `viewerIsPayer`, `nextRun`, `lastResult`, `lastFinishedAt` and `triggers`, one per trigger the card declares, in the card's order: `label`, `runs`, and for a bounded trigger `runsLeft` (with `runsLeftAtLeast` past `REMAINING_RUNS_LIMIT`) and `until`, plus `nextRun` and `spent`. Times are ISO strings.
+
+`payer` is the payer's Matrix id only when the viewer is the payer or `shareARealmGrant` finds a realm whose permission rows name both (ADR 011 §1.2). Otherwise it is null, and the view reads "A person who shares no workspace with you". Runs left come from `computeAutomationSchedule` over the indexed declaration, the row's `scheduled_since` and `trigger_runs`, with no `now`, so a slot that has passed but isn't enqueued yet still counts as left. When the card no longer reads as a declaration, each trigger the row has counted reports `runs` alone. The response is `no-store`. The view fetches again when the card is re-indexed, not when the row changes.
+
+The realm loads `automation-status.ts` with a dynamic `import()` on the route's first use, so the schedule code stays out of every bundle that imports the realm. An in-browser test realm has no `automations` table. Host tests mount a virtual-network handler that answers the route (`tests/acceptance/automation-view-test.gts`).
+
 ### The declaration reader
 
 `readAutomationDeclaration(entry, { automationTypeKey, virtualNetwork? })` in `packages/runtime-common/automation-declaration.ts` turns an index row (`url`, `realmURL`, `types`, `instance`; `IndexedInstanceSource` has this shape, and `IndexedInstance` maps onto it with `canonicalURL` as `url`) into an `AutomationDeclaration`, or returns every problem it finds. It never throws for anything the card says.

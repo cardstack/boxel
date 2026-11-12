@@ -26,6 +26,7 @@
   "tests": {
     "host": [
       "Acceptance | automation edit format",
+      "Acceptance | automation view",
       "Acceptance | code submode | automation script editor",
       "Integration | realm policy",
       "Integration | realm config policy standing",
@@ -35,6 +36,7 @@
     "realmServer": [
       "anonymous-key-use-test",
       "automation-card-test",
+      "automation-status-test",
       "catalog-test-subset-test",
       "direct-writer-queries-test",
       "policy-share-audit-test",
