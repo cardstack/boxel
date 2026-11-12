@@ -62,6 +62,11 @@ import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts'
 import handleInviteCheck from './handlers/handle-invite-check.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
+import {
+  handleAIBatchStatus,
+  handleSubmitAIBatch,
+} from './handlers/handle-ai-batches.ts';
+import { AI_BATCHES_PATH } from './lib/openrouter-batches.ts';
 import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
@@ -615,6 +620,25 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
+    }),
+  );
+  // An automation run's calls to OpenRouter's Batch API. They carry a run
+  // token, which the handler checks itself, since an ordinary session is
+  // refused.
+  router.post(
+    AI_BATCHES_PATH,
+    handleSubmitAIBatch({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
+    }),
+  );
+  router.get(
+    `${AI_BATCHES_PATH}/:batchId`,
+    handleAIBatchStatus({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
     }),
   );
   // Batched client performance beacons. The host sends its server session
