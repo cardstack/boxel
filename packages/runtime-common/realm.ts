@@ -3091,6 +3091,9 @@ interface RequestDispatch {
   // anonymous rate limit (see `AnonymousDispatch`). A dispatch without it
   // never admits a caller who isn't signed in.
   anonymous?: AnonymousDispatch;
+  // The dispatch takes an automation run's write into the run's overlay (see
+  // `RouteOptions.takesRunWrites`).
+  takesRunWrites?: boolean;
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
@@ -3808,12 +3811,13 @@ export class Realm {
         ACL_ONLY,
       )
       // An automation run's commit of its overlay. It is answered on the
-      // realm ACL alone, like the verbatim writes it is made of.
+      // realm ACL alone, like the verbatim writes it is made of, and it is
+      // where a run's staged writes reach the realm.
       .post(
         RUN_COMMIT_PATH,
         SupportedMimeType.JSONAPI,
         this.commitRunOverlay.bind(this),
-        ACL_ONLY,
+        { ...ACL_ONLY, takesRunWrites: true },
       )
       // The operations envelope, under the media type that carries its
       // extension and under the plain JSON:API one it extends. Both reach the
@@ -3827,11 +3831,19 @@ export class Realm {
       // are what separates a batch that may write from one that may not:
       // `POST` needs realm write, `QUERY` needs realm read, and a `QUERY`
       // carrying a write is refused by the handler.
+      //
+      // An automation run sends its `callApi` entries here as a `POST`, so the
+      // route takes a run's writes, and the handler refuses a run's batch
+      // that writes the realm, since it doesn't stage one.
       .post(
         '/_operations',
         SupportedMimeType.BoxelOperations,
         this.handleOperations.bind(this),
-        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_OPERATIONS },
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_OPERATIONS,
+          takesRunWrites: true,
+        },
       )
       .query(
         '/_operations',
@@ -3843,7 +3855,11 @@ export class Realm {
         '/_operations',
         SupportedMimeType.JSONAPI,
         this.handleOperations.bind(this),
-        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_OPERATIONS },
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_OPERATIONS,
+          takesRunWrites: true,
+        },
       )
       .query(
         '/_operations',
@@ -3939,7 +3955,7 @@ export class Realm {
         '/.*',
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
-        ACL_ONLY,
+        { ...ACL_ONLY, takesRunWrites: true },
       )
       // The octet-stream spelling of the card+source write: the same one-file
       // `update` operation, sent as bytes rather than text.
@@ -3947,7 +3963,7 @@ export class Realm {
         '/.*',
         SupportedMimeType.OctetStream,
         this.upsertBinaryFile.bind(this),
-        ACL_ONLY,
+        { ...ACL_ONLY, takesRunWrites: true },
       )
       .get(
         '/.*',
@@ -7609,6 +7625,26 @@ export class Realm {
         }
       }
 
+      // A run's writes are staged in its overlay (ADR 027 §1.2), and a batch
+      // writes the realm directly, so a run's batch carries no write. Its
+      // `callApi` entries write nothing in the realm and still go through.
+      if (requestContext.automationRun) {
+        let write = resolved.find(({ definition }) => isWrite(definition.base));
+        if (write) {
+          throw new OperationFailure({
+            ...(write.entry.href ? { id: write.entry.href } : {}),
+            status: 403,
+            code: 'run-write-not-staged',
+            title: 'Forbidden',
+            detail:
+              `operation "${write.entry.name}" writes the realm, and an ` +
+              `automation run's writes go through the card+source write alone, ` +
+              `so they can be committed together`,
+            meta: { entry: write.entry.position },
+          });
+        }
+      }
+
       // A request sent outside the realm cannot be taken back, so it travels in
       // a batch of its own: alongside any other entry, a refusal after it had
       // been sent would answer the batch as not having happened when part of
@@ -9484,6 +9520,22 @@ export class Realm {
         );
       }
       let dispatch = this.#routeRequest(request, localPath, requestContext);
+      // A run's writes are staged, never written to the realm while it runs
+      // (ADR 027 §1.2), so a run's write reaches only a route that stages
+      // it. A route that would write the realm, or remove from it, refuses
+      // the run until it stages too.
+      if (
+        requestContext.automationRun &&
+        requiredPermission === 'write' &&
+        !dispatch.takesRunWrites
+      ) {
+        this.#log.warn(
+          `run-token call ${request.method} ${maskLoggedURL(request.url)} refused: run ${requestContext.automationRun.runId} wrote through a route that doesn't stage its writes`,
+        );
+        throw new AuthorizationError(
+          "An automation run's writes go through the card+source write alone, so they can be committed together",
+        );
+      }
       if (!isLocal) {
         // A capture-URL token (`?token=` on a `_capture/` GET) authorizes
         // exactly this request without an Authorization header — the door for
@@ -9780,6 +9832,7 @@ export class Realm {
         admitsVerifiedNonReaders: matched.admitsVerifiedNonReaders,
         operationalEndpoint: matched.operationalEndpoint,
         answersWithoutCredentials: matched.operationalEndpoint,
+        takesRunWrites: matched.takesRunWrites,
         ...(matched.anonymous ? { anonymous: matched.anonymous } : {}),
         handle: serve,
       };
@@ -13265,6 +13318,12 @@ export class Realm {
           'Writes cap reached',
           `This run may write at most ${staged.cap} files, and has written them all; ${path} was not written`,
         );
+      case 'over-bytes':
+        return refuse(
+          413,
+          'Payload Too Large',
+          `This run's staged files may come to at most ${staged.limit} bytes together; ${path} was not written`,
+        );
       case 'not-running':
         return createResponse({
           body: 'The automation run is not running',
@@ -13541,17 +13600,25 @@ export class Realm {
   }
 
   // What a run may not write at `path`, named for a person, or undefined
-  // when it may (ADR 026 §1.4): `realm.json`, the card the realm's policy
-  // pointer names, and any card that is a RealmPolicy or an automation,
-  // either as the realm stores it at the path or as the run's bytes would
-  // make it. So a run can't change who reaches its realm or widen the
-  // declaration that bounds its next run.
+  // when it may (ADR 026 §1.4): `realm.json`, any module, the card the
+  // realm's policy pointer names, and any card that is a RealmPolicy or an
+  // automation, either as the realm stores it at the path or as the run's
+  // bytes would make it. So a run can't change who reaches its realm or
+  // widen the declaration that bounds its next run.
   async #runMayNotWrite(
     path: LocalPath,
     text: string | undefined,
   ): Promise<string | undefined> {
     if (path === 'realm.json') {
       return 'realm.json';
+    }
+    // Whether a card is a RealmPolicy or an automation is settled by the
+    // module its class comes from, and the type lookup below reads modules
+    // from the index, which a staged module never reaches. A run that could
+    // write a module could make a new or existing card an automation where
+    // no check sees it, so a run writes no module at all.
+    if (executableExtensions.some((extension) => path.endsWith(extension))) {
+      return 'a module';
     }
     if (!path.endsWith('.json')) {
       return undefined;

@@ -1699,6 +1699,11 @@ export type OperationErrorCode =
   // it is planned and run on the search engine, so reaching the operation core
   // with one means the caller used the wrong entry point.
   | 'wrong-entry-point'
+  // An automation run's batch carries a write. A run's writes are staged in
+  // its overlay and committed together, and a batch writes the realm
+  // directly, so the run writes through the card+source write instead.
+  // Carries a 403. Nothing was written.
+  | 'run-write-not-staged'
   // Two entries of one parallel group stage a change to the same file. The
   // members of a parallel group are evaluated against the state the group
   // started from, so neither of the two composes over the other and only one
