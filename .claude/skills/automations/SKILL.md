@@ -447,8 +447,9 @@ check, and `exp` is when the run's time limit passes.
 
 ### The run overlay
 
-A run's writes don't reach the realm while it runs (ADR 027 §1.2). Each one is
-staged in the run's **overlay**, `run_overlay_files` in Postgres, one row per
+A run's card+source writes, and their octet-stream spelling, don't reach the
+realm while it runs (ADR 027 §1.2; the other write routes are listed in
+`docs/adr/remediation/027.md`). Each one is staged in the run's **overlay**, `run_overlay_files` in Postgres, one row per
 file keyed by run, attempt and realm-local path, with the bytes inline. The
 functions are in `packages/runtime-common/run-overlay.ts`. Every realm-server
 instance reads the same overlay, so a run's calls can land on any of them.
@@ -460,8 +461,13 @@ What goes through it, for a run-token call in the run's own realm
   `replace` and `copy`): a card+source `POST`, or its octet-stream spelling,
   is staged with `stageRunOverlayFile` instead of written. Any file may be
   staged, card instance or not. The realm's size limit for the file's kind
-  applies, `realm.json` is refused, and the token's `run.writesCap` bounds how
-  many files the attempt stages (403 `Writes cap reached`). Rewriting a staged
+  applies (the card limit for a card document, the file limit otherwise,
+  checked before the body is buffered), as do the realm's reserved paths. A
+  run may not stage `realm.json`, the realm's policy card, a RealmPolicy card
+  or an automation card, whether the realm holds one at the path or the
+  run's bytes would make one (403). A path can't be staged as both a file and
+  a directory (409). The token's `run.writesCap` bounds how many files the
+  attempt stages (403 `Writes cap reached`). Rewriting a staged
   path replaces it and doesn't count again. The run's row is locked for the
   check, so racing writes can't pass the cap, and a write after the run
   stopped running is refused.
@@ -475,11 +481,14 @@ What goes through it, for a run-token call in the run's own realm
 No other caller sees a staged file. Staged files aren't indexed.
 
 An overlay is per attempt. `startAutomationRunAttempt` drops what any other
-attempt staged in the statement that makes the new attempt the owner, so a
+attempt staged, in the transaction that makes the new attempt the owner, so a
 retry starts from an empty overlay and a replaced attempt's writes never
-reach its commit. Every way a run ends (`finishAutomationRun`,
-`cancelAutomationRun`, `abandonAutomationRun`) discards its overlay in the
-statement that ends it, and deleting a run row deletes its overlay
+reach its commit. A run whose commit was already claimed keeps its files,
+since the claiming attempt may still be sending them. Every way a run ends
+(`finishAutomationRun`, `cancelAutomationRun`, `abandonAutomationRun`)
+discards its overlay in the transaction that ends it, as a statement of its
+own after the update, so it also catches a file staged while the end waited
+on the run's row lock. Deleting a run row deletes its overlay
 (`ON DELETE CASCADE`).
 
 The bound on a run's overlay is `writesCap` files, each within the realm's

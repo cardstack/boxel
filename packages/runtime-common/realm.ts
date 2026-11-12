@@ -2905,6 +2905,8 @@ function utf8OrUndefined(bytes: Uint8Array): string | undefined {
   } catch {
     return undefined;
   }
+}
+
 // A realm URL in one spelling, whichever spelling it arrived in (decoded or
 // percent-encoded, with or without its trailing slash), so the realm a run
 // token names, the realm its row names and the realm a call reached compare
