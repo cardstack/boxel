@@ -52,7 +52,9 @@ module it loads MUST behave as it would under a native ES module loader, with
 only the exceptions this ADR lists. The Loader's only inputs, and its two
 extension points, are the `fetch` and the `resolveImport` it is constructed
 with. `resolveImport` does only what an import map can, and everything about
-obtaining source happens in `fetch`.
+obtaining source happens in `fetch`. [ADR 032](032-evaluate-browser-modules-in-the-browsers-module-loader.md)
+removes the Loader from the browser's module path; where it still evaluates
+modules, this ADR governs it.
 
 ## 1. Decision
 
@@ -199,9 +201,10 @@ and `fetch` for transport. A Loader that stays within them can be replaced by
 the browser's, and keeps policy (retries, auth, which host serves a module)
 where the host can change it without touching module semantics.
 
-We expect to replace §1.4.4 with cooperative hot module replacement in the
-style of Vite, or by running the volatile parts of the application in an
-iframe with its own loader.
+§1.4.4 is a stopgap. [ADR 032](032-evaluate-browser-modules-in-the-browsers-module-loader.md)
+records what replaces it: in a browser the browser's own module loader
+evaluates modules, and re-evaluation is scoped to the edited module's
+dependents.
 
 ## 3. Considered options
 
