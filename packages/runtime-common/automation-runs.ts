@@ -203,17 +203,32 @@ export async function startAutomationRunAttempt(
   id: string,
   attempt: number,
 ): Promise<AutomationRunAttemptStart> {
-  // The same statement drops what any other attempt staged, so the attempt
-  // that owns the run starts from an empty overlay.
-  let [row] = await query(dbAdapter, [
-    "WITH started AS (UPDATE automation_runs SET state = 'running', attempt =",
-    param(attempt),
-    ', started_at = COALESCE(started_at, now()) WHERE id =',
-    param(id),
-    "AND state IN ('pending', 'running') AND (attempt IS NULL OR attempt <=",
-    param(attempt),
-    ') RETURNING *), dropped AS (DELETE FROM run_overlay_files USING started WHERE run_overlay_files.run_id = started.id AND run_overlay_files.attempt <> started.attempt) SELECT * FROM started',
-  ]);
+  // The same transaction drops what any other attempt staged, so the attempt
+  // that owns the run starts from an empty overlay. The drop is its own
+  // statement, which sees a file a replaced attempt staged while it held the
+  // run's row, since the takeover waited on that lock. A run whose commit was
+  // already claimed keeps its files: the claiming attempt may still be
+  // reading them to send its batch.
+  let row = await dbAdapter.withTransaction(async (txQuery) => {
+    let [started] = await txQuery([
+      "UPDATE automation_runs SET state = 'running', attempt =",
+      param(attempt),
+      ', started_at = COALESCE(started_at, now()) WHERE id =',
+      param(id),
+      "AND state IN ('pending', 'running') AND (attempt IS NULL OR attempt <=",
+      param(attempt),
+      ') RETURNING *',
+    ]);
+    if (started && started.commit_started_at == null) {
+      await txQuery([
+        'DELETE FROM run_overlay_files WHERE run_id =',
+        param(id),
+        'AND attempt <>',
+        param(attempt),
+      ]);
+    }
+    return started;
+  });
   if (!row) {
     let run = await getAutomationRun(dbAdapter, id);
     if (!run) {
@@ -336,18 +351,15 @@ export async function abandonAutomationRun(
   id: string,
   reason: string,
 ): Promise<AutomationRun | undefined> {
-  let [row] = await query(
-    dbAdapter,
-    discardingOverlay([
-      'UPDATE automation_runs SET finished_at = now(),',
-      "state = CASE WHEN committed_at IS NOT NULL THEN 'complete' ELSE 'error' END,",
-      'error_reason = CASE WHEN committed_at IS NOT NULL THEN NULL ELSE',
-      param(reason),
-      'END WHERE id =',
-      param(id),
-      "AND state IN ('pending', 'running') RETURNING *",
-    ]),
-  );
+  let row = await endRun(dbAdapter, [
+    'UPDATE automation_runs SET finished_at = now(),',
+    "state = CASE WHEN committed_at IS NOT NULL THEN 'complete' ELSE 'error' END,",
+    'error_reason = CASE WHEN committed_at IS NOT NULL THEN NULL ELSE',
+    param(reason),
+    'END WHERE id =',
+    param(id),
+    "AND state IN ('pending', 'running') RETURNING *",
+  ]);
   return row ? runFromRow(row) : undefined;
 }
 
@@ -358,16 +370,13 @@ export async function cancelAutomationRun(
   id: string,
   canceledBy: string,
 ): Promise<AutomationRun | undefined> {
-  let [row] = await query(
-    dbAdapter,
-    discardingOverlay([
-      "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
-      param(canceledBy),
-      'WHERE id =',
-      param(id),
-      "AND state IN ('pending', 'running') AND commit_started_at IS NULL RETURNING *",
-    ]),
-  );
+  let row = await endRun(dbAdapter, [
+    "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
+    param(canceledBy),
+    'WHERE id =',
+    param(id),
+    "AND state IN ('pending', 'running') AND commit_started_at IS NULL RETURNING *",
+  ]);
   return row ? runFromRow(row) : undefined;
 }
 
@@ -551,19 +560,32 @@ async function updateOwned(
     ...where,
     'RETURNING *',
   ];
-  let [row] = await query(dbAdapter, ends ? discardingOverlay(update) : update);
+  let row = ends
+    ? await endRun(dbAdapter, update)
+    : (await query(dbAdapter, update))[0];
   return row ? runFromRow(row) : undefined;
 }
 
-// An `UPDATE … RETURNING *` that ends runs, made into one statement that also
-// discards the overlay of every run it ended (`run-overlay.ts`), so a run
-// never ends with staged files left behind.
-function discardingOverlay(update: Expression): Expression {
-  return [
-    'WITH ended AS (',
-    ...update,
-    '), discarded AS (DELETE FROM run_overlay_files WHERE run_id IN (SELECT id FROM ended)) SELECT * FROM ended',
-  ];
+// Runs an `UPDATE … RETURNING *` that ends a run, and in the same transaction
+// discards the overlay of the run it ended (`run-overlay.ts`), so a run never
+// ends with staged files left behind. The discard is its own statement after
+// the update: a file staged while the update waited on the run's row lock has
+// committed by then, and a later stage waits on the lock and then finds the
+// run no longer running.
+async function endRun(
+  dbAdapter: DBAdapter,
+  update: Expression,
+): Promise<Record<string, PgPrimitive> | undefined> {
+  return await dbAdapter.withTransaction(async (txQuery) => {
+    let [row] = await txQuery(update);
+    if (row) {
+      await txQuery([
+        'DELETE FROM run_overlay_files WHERE run_id =',
+        param(String(row.id)),
+      ]);
+    }
+    return row;
+  });
 }
 
 function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {

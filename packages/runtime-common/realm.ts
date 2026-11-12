@@ -199,6 +199,7 @@ import {
   runTokenSecret,
   type RunTokenClaim,
 } from './run-token.ts';
+import { automationRef } from './automation-declaration.ts';
 import {
   addAutomationRunCounts,
   automationRunForCall,
@@ -211,6 +212,7 @@ import {
   discardRunOverlay,
   readRunOverlayFile,
   runOverlayFiles,
+  runOverlayPathClash,
   runOverlayPathsUnder,
   stageRunOverlayFile,
   type RunOverlayKey,
@@ -2865,6 +2867,63 @@ export interface MatrixConfig {
   username: string;
 }
 
+// A request's body, read no further than `limit` bytes: undefined when it
+// declares or turns out to hold more, so an oversized body is refused without
+// being buffered.
+async function readBodyWithin(
+  request: Request,
+  limit: number,
+): Promise<Uint8Array<ArrayBuffer> | undefined> {
+  let declared = request.headers.get('content-length');
+  if (declared !== null && Number(declared) > limit) {
+    return undefined;
+  }
+  if (!request.body) {
+    return new Uint8Array(0);
+  }
+  let reader = request.body.getReader();
+  let chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    let { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  let bytes = new Uint8Array(total);
+  let offset = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+// `bytes` as text, when they are UTF-8; otherwise undefined.
+function utf8OrUndefined(bytes: Uint8Array): string | undefined {
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
+      bytes,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+// A realm URL in one spelling, whichever spelling it arrived in (decoded or
+// percent-encoded, with or without its trailing slash), so the realm a run
+// token names, the realm its row names and the realm a call reached compare
+// as equal when they are one realm.
+function sameRealmSpelling(url: string): string {
+  return ensureTrailingSlash(new URL(url).href);
+}
+
 // A run-token call `Realm.handleAutomation` admitted (see
 // `RequestContext.automationRun`).
 export interface AutomationRunCall {
@@ -3100,6 +3159,7 @@ export class Realm {
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #policyCache: RealmPolicyCache;
   #policyTypeKey: string | undefined;
+  #automationTypeKey: string | undefined;
   #operationCore: OperationCore | undefined;
   #batchCore: BatchCore | undefined;
   #adapter: RealmAdapter;
@@ -5618,14 +5678,27 @@ export class Realm {
   // as the realm resolves it. A document naming no type, or one that doesn't
   // resolve, isn't one.
   async #writesPolicyCard(path: LocalPath, content: string): Promise<boolean> {
+    let types = await this.#adoptedTypes(path, content);
+    return !!types && this.#isPolicyCard(types);
+  }
+
+  // The adoption chain of the card `content` would be at `path`, as the index
+  // spells one: the type its `adoptsFrom` names, resolved against the card as
+  // the realm resolves it, and every type that type descends from. Undefined
+  // for a document naming no type, or one that doesn't resolve. A type with
+  // no definition the realm can look up is known by its own name alone.
+  async #adoptedTypes(
+    path: LocalPath,
+    content: string,
+  ): Promise<string[] | undefined> {
     if (!content.includes('adoptsFrom')) {
-      return false;
+      return undefined;
     }
     let adoptsFrom: unknown;
     try {
       adoptsFrom = JSON.parse(content)?.data?.meta?.adoptsFrom;
     } catch {
-      return false;
+      return undefined;
     }
     if (
       !adoptsFrom ||
@@ -5633,12 +5706,9 @@ export class Realm {
       typeof (adoptsFrom as { module?: unknown }).module !== 'string' ||
       typeof (adoptsFrom as { name?: unknown }).name !== 'string'
     ) {
-      return false;
+      return undefined;
     }
     let { module, name } = adoptsFrom as { module: string; name: string };
-    // A type that doesn't resolve, or a deployment that maps no catalog for
-    // RealmPolicy to come from, names no policy card: no realm there can be
-    // governed by one.
     try {
       let codeRef = codeRefWithAbsoluteIdentifier(
         { module: rri(module), name },
@@ -5647,21 +5717,32 @@ export class Realm {
         this.#virtualNetwork,
       );
       if (!isResolvedCodeRef(codeRef)) {
-        return false;
+        return undefined;
       }
-      if (
-        this.#isPolicyCard([
-          internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-        ])
-      ) {
-        return true;
+      let types = [internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
+      try {
+        types.push(
+          ...(await this.#definitionLookup.lookupDefinitionEntry(codeRef))
+            .types,
+        );
+      } catch {
+        // A type with no definition is known only by its own name.
       }
-      return this.#isPolicyCard(
-        (await this.#definitionLookup.lookupDefinitionEntry(codeRef)).types,
-      );
+      return types;
     } catch {
-      return false;
+      return undefined;
     }
+  }
+
+  // Whether an adoption chain, as the index records one, is an automation
+  // card's: the catalog's Automation, or a type descending from it.
+  #isAutomationCard(types: string[]): boolean {
+    this.#automationTypeKey ??= internalKeyFor(
+      automationRef,
+      undefined,
+      this.#virtualNetwork,
+    );
+    return types.includes(this.#automationTypeKey);
   }
 
   // A notice that can't be recorded costs the write nothing: it has landed.
@@ -8741,12 +8822,14 @@ export class Realm {
   // to end, a capture-URL token (minted only for a reader this vouched for —
   // see `signCaptureURLs`), or a token a public realm's read path took
   // without checking it, once it passes those checks here. A delegated session
-  // reads this realm as the user it acts for. A diagnostic session is drawn
-  // as no one: a capture outlives its request, and a capture-URL token its
-  // session (see `RequestContext.diagnosticSession`). Anyone else is
-  // `ANONYMOUS_RENDER`, drawn with no session at all.
+  // reads this realm as the user it acts for. A diagnostic session and an
+  // automation run are drawn as no one: a capture outlives its request, and a
+  // capture-URL token its session, so either would carry the identity past
+  // the diagnostic session's scope or the run's row (see
+  // `RequestContext.diagnosticSession`, `RequestContext.automationRun`).
+  // Anyone else is `ANONYMOUS_RENDER`, drawn with no session at all.
   async #captureReader(requestContext: RequestContext): Promise<string> {
-    if (requestContext.diagnosticSession) {
+    if (requestContext.diagnosticSession || requestContext.automationRun) {
       return ANONYMOUS_RENDER;
     }
     let session = requestContext.unvouchedSession;
@@ -12811,11 +12894,11 @@ export class Realm {
     if (!context) {
       return refuse('the token does not name a run');
     }
-    let realmURL = ensureTrailingSlash(this.url);
-    let ownRealm = ensureTrailingSlash(context.realm) === realmURL;
+    let realmURL = sameRealmSpelling(this.url);
+    let ownRealm = sameRealmSpelling(context.realm) === realmURL;
     let readOnly =
       !ownRealm &&
-      context.readRealms.some((r) => ensureTrailingSlash(r) === realmURL);
+      context.readRealms.some((r) => sameRealmSpelling(r) === realmURL);
     if (!ownRealm && !readOnly) {
       return refuse(
         `run ${context.runId} is in realm ${context.realm}, not ${this.url}`,
@@ -12827,6 +12910,11 @@ export class Realm {
       );
       throw new AuthorizationError(
         'An automation run may only read this realm',
+      );
+    }
+    if (context.actsAs === this.#matrixClientUserId) {
+      return refuse(
+        `run ${context.runId} acts as the realm's own user, which no run may (ADR 026 §1.5)`,
       );
     }
     if (requiredPermission === 'administer') {
@@ -12854,10 +12942,10 @@ export class Realm {
         'The automation run is not running',
       );
     }
-    let runRealm = ensureTrailingSlash(
+    let runRealm = sameRealmSpelling(
       this.#virtualNetwork.toURL(call.run.realm).href,
     );
-    if (runRealm !== ensureTrailingSlash(context.realm)) {
+    if (runRealm !== sameRealmSpelling(context.realm)) {
       return refuse(
         `run ${context.runId} is in realm ${call.run.realm}, but the token names ${context.realm}`,
       );
@@ -12980,14 +13068,18 @@ export class Realm {
   }
 
   // A run's write of one file's bytes, staged in its overlay rather than
-  // written to the realm. The realm's size limit for the file's kind applies
-  // as it would to the write itself, and the run's `writes` cap bounds how
-  // many files it stages. The run may not write `realm.json` (ADR 026 §1.4).
+  // written to the realm. The checks are the ones the write itself would meet
+  // where they concern the file alone: the realm's size limit for the file's
+  // kind (a card document's limit for a card document, the file limit for any
+  // other file, read off the body before it is buffered), and the realm's
+  // reserved paths. A run may not write `realm.json`, the realm's policy card,
+  // any RealmPolicy card or any automation card (ADR 026 §1.4). A path may not
+  // be both a file and a directory among the run's staged files. The run's
+  // `writes` cap bounds how many files it stages.
   async #stageRunWrite(
     request: Request,
     requestContext: RequestContext,
     run: RunOverlayKey,
-    content: Uint8Array,
   ): Promise<Response> {
     let path = this.paths.local(new URL(request.url));
     let refuse = (status: number, title: string, detail: string) =>
@@ -13001,25 +13093,52 @@ export class Realm {
         },
         requestContext,
       });
-    if (path === 'realm.json') {
+    let fileLimit = fileSizeLimitFor(path, {
+      default: this.#fileSizeLimitBytes,
+      audio: this.#audioSizeLimitBytes,
+      video: this.#videoSizeLimitBytes,
+    });
+    let tooLarge = (size: number | undefined, limit: number) =>
+      refuse(
+        413,
+        'Payload Too Large',
+        size === undefined
+          ? `File size exceeds maximum allowed size (${limit} bytes)`
+          : `File size (${size} bytes) exceeds maximum allowed size (${limit} bytes)`,
+      );
+    let readLimit = path.endsWith('.json')
+      ? Math.max(fileLimit, this.#cardSizeLimitBytes)
+      : fileLimit;
+    let content = await readBodyWithin(request, readLimit);
+    if (!content) {
+      return tooLarge(undefined, readLimit);
+    }
+    let text = path.endsWith('.json') ? utf8OrUndefined(content) : undefined;
+    let limit =
+      text !== undefined && isCardDocumentString(text)
+        ? this.#cardSizeLimitBytes
+        : fileLimit;
+    if (content.byteLength > limit) {
+      return tooLarge(content.byteLength, limit);
+    }
+    let reserved = reservedWriteDestination(path);
+    if (reserved) {
+      return refuse(403, 'Forbidden', reserved);
+    }
+    let protectedTarget = await this.#runMayNotWrite(path, text);
+    if (protectedTarget) {
       return refuse(
         403,
         'Forbidden',
-        'An automation run may not write realm.json',
+        `An automation run may not write ${protectedTarget}`,
       );
     }
-    let limit = path.endsWith('.json')
-      ? this.#cardSizeLimitBytes
-      : fileSizeLimitFor(path, {
-          default: this.#fileSizeLimitBytes,
-          audio: this.#audioSizeLimitBytes,
-          video: this.#videoSizeLimitBytes,
-        });
-    if (content.byteLength > limit) {
+    let clash = await runOverlayPathClash(this.#dbAdapter, run, path);
+    if (clash) {
       return refuse(
-        413,
-        'Payload Too Large',
-        `File size (${content.byteLength} bytes) exceeds maximum allowed size (${limit} bytes)`,
+        409,
+        'Conflict',
+        `This run has staged ${clash}, so ${path} can't be both a file and a directory`,
       );
     }
     let staged = await stageRunOverlayFile(
@@ -13198,6 +13317,52 @@ export class Realm {
     });
   }
 
+  // What a run may not write at `path`, named for a person, or undefined
+  // when it may (ADR 026 §1.4): `realm.json`, the card the realm's policy
+  // pointer names, and any card that is a RealmPolicy or an automation,
+  // either as the realm stores it at the path or as the run's bytes would
+  // make it. So a run can't change who reaches its realm or widen the
+  // declaration that bounds its next run.
+  async #runMayNotWrite(
+    path: LocalPath,
+    text: string | undefined,
+  ): Promise<string | undefined> {
+    if (path === 'realm.json') {
+      return 'realm.json';
+    }
+    if (!path.endsWith('.json')) {
+      return undefined;
+    }
+    let policy = await this.getRealmPolicy();
+    if (policy) {
+      let cardURL = this.paths.fileURL(path.slice(0, -'.json'.length)).href;
+      try {
+        if (
+          new URL(this.#virtualNetwork.toURL(policy.card).href, this.url)
+            .href === cardURL
+        ) {
+          return "the realm's policy card";
+        }
+      } catch {
+        // A pointer that names nothing protects no path.
+      }
+    }
+    let stored = (await this.readFileAsText(path))?.content;
+    for (let content of [text, stored]) {
+      if (content === undefined) {
+        continue;
+      }
+      let types = await this.#adoptedTypes(path, content);
+      if (types && this.#isPolicyCard(types)) {
+        return 'a RealmPolicy card';
+      }
+      if (types && this.#isAutomationCard(types)) {
+        return 'an automation card';
+      }
+    }
+    return undefined;
+  }
+
   // A file the run staged, served as the source route serves the realm's
   // copy: the bytes as written, never from a cache.
   #stagedFileResponse(
@@ -13226,12 +13391,7 @@ export class Realm {
   ): Promise<Response> {
     let run = this.#runOverlay(requestContext);
     if (run) {
-      return await this.#stageRunWrite(
-        request,
-        requestContext,
-        run,
-        new TextEncoder().encode(await request.text()),
-      );
+      return await this.#stageRunWrite(request, requestContext, run);
     }
     return await this.replaceFileContent(
       request,
@@ -13246,12 +13406,7 @@ export class Realm {
   ): Promise<Response> {
     let run = this.#runOverlay(requestContext);
     if (run) {
-      return await this.#stageRunWrite(
-        request,
-        requestContext,
-        run,
-        new Uint8Array(await request.arrayBuffer()),
-      );
+      return await this.#stageRunWrite(request, requestContext, run);
     }
     let path = this.paths.local(new URL(request.url));
     // A `.json` document is read as text by the write path (the policy-share

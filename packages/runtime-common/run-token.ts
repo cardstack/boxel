@@ -19,9 +19,6 @@
 
 export const RUN_TOKEN_SCOPE = 'automation-run';
 
-// The channel the realm logs a refused run-token call on.
-export const RUN_TOKEN_LOG_CHANNEL = 'automation-run';
-
 export interface RunTokenClaim {
   // The run's `automation_runs` id.
   id: string;

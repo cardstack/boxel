@@ -266,9 +266,9 @@ module(basename(import.meta.filename), function (hooks) {
       realmServerURL: realm.realmServerURL,
       timeLimitSeconds: 600,
     });
-    assert.notStrictEqual(
+    assert.strictEqual(
       (await writeText(token, 'outside.txt', 'nope')).status,
-      204,
+      403,
     );
     assert.deepEqual(await overlayRows(run.id), []);
   });
@@ -300,6 +300,81 @@ module(basename(import.meta.filename), function (hooks) {
       (await writeText(token, 'late.txt', 'from attempt 1')).status,
       401,
       'the replaced attempt can no longer stage',
+    );
+  });
+
+  test('large binary content round-trips byte for byte', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let bytes = new Uint8Array(200_003);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = (i * 7919 + (i >> 8)) & 0xff;
+    }
+    assert.strictEqual(await writeBytes(token, 'big.bin', bytes), 204);
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}big.bin`, {
+        headers: { Accept: SOURCE, Authorization: `Bearer ${token}` },
+      }),
+    ))!;
+    let back = await body(response);
+    assert.strictEqual(back.byteLength, bytes.byteLength);
+    assert.true(
+      back.every((b, i) => b === bytes[i]),
+      'every byte is the byte staged',
+    );
+  });
+
+  test('staging holds a file to the limit the realm’s own write would', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let padding = 'x'.repeat(600 * 1024);
+    let card = JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { padding },
+        meta: { adoptsFrom: { module: './thing', name: 'Thing' } },
+      },
+    });
+    assert.strictEqual(
+      (await writeText(token, 'cards/huge.json', card)).status,
+      413,
+      'a card document past the card limit is refused',
+    );
+    assert.strictEqual(
+      (await writeText(token, 'data/big.json', JSON.stringify({ padding })))
+        .status,
+      204,
+      'a .json file that is not a card takes the file limit',
+    );
+  });
+
+  test('a run may not stage at a path the realm reserves', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    assert.strictEqual(
+      (await writeText(token, 'notes.txt.boxel-partial', 'nope')).status,
+      403,
+    );
+    assert.deepEqual(await overlayRows(run.id), []);
+  });
+
+  test('a path is not staged as both a file and a directory', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    assert.strictEqual((await writeText(token, 'clash', 'a file')).status, 204);
+    assert.strictEqual(
+      (await writeText(token, 'clash/inside.txt', 'under it')).status,
+      409,
+    );
+    assert.strictEqual(
+      (await writeText(token, 'dir/inside.txt', 'under it')).status,
+      204,
+    );
+    assert.strictEqual((await writeText(token, 'dir', 'a file')).status, 409);
+    assert.strictEqual(
+      (await writeText(token, 'clash2', 'a sibling name')).status,
+      204,
+      'a sibling whose name starts the same is no clash',
     );
   });
 

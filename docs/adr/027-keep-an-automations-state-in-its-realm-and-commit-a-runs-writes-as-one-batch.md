@@ -8,6 +8,8 @@ scope:
   - packages/realm-server/**/run-overlay/**
   - packages/postgres/migrations/*run-overlay*
   - packages/runtime-common/card-operations/coordinator.ts
+  - packages/runtime-common/realm.ts
+  - packages/runtime-common/automation-runs.ts
   - packages/runtime-common/card-operations/executors.ts
   - packages/host/app/tools/*automation*
 ---

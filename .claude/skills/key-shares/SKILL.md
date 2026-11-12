@@ -43,7 +43,7 @@ them back.
 
 ### What an unattended run checks before it starts
 
-An automation (a run the realm server makes on its own, for its payer) asks
+An automation run, acting as its identity (the payer, or whoever started it), asks
 `automationAdmission` in `lib/key-bindings.ts` about each operation it
 declares before its script starts. For a slot filled from a share, that's the
 check every call makes (`checkSlots`), and the first one the slot fails stops
