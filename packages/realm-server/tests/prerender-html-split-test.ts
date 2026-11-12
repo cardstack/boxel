@@ -75,6 +75,7 @@ function prerenderHtmlArgs(
     coalescedPublishes: null,
     preWarm: false,
     announce: true,
+    runIndexing: null,
     ...overrides,
   };
 }

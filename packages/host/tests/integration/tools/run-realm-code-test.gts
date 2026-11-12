@@ -2347,6 +2347,30 @@ return { byPrefix, byURL, listByPrefix, listByURL, rootByPrefix, rootByURL };`,
     );
   });
 
+  test('refuses a folder listing to a user who can only write, without pointing them at a policy', async function (assert) {
+    let nestedRealmURL = `${testRealmURL}nested/`;
+    knowReadableWorkspace(nestedRealmURL, ['write']);
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: nestedRealmURL,
+      roomId: '!room:example.com',
+      code: `try {
+  await realm.fs.list('');
+  return 'listed';
+} catch (e) {
+  return e.message;
+}`,
+    });
+
+    assert.strictEqual(
+      JSON.parse(result.scriptResult!),
+      "You can't read this workspace directly; realm.fs.list was not run",
+      'the listing is refused before the realm is asked, and names no policy, which the realm may not have',
+    );
+  });
+
   test('refuses paths outside the realm, and names the files it already saved', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');

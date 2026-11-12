@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "4dfb03376909cc821eab0e373e3e918b38332fce",
+  "revision": "7769aac5bca8d47985391aa3fac7664b9ae312ba",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -26,6 +26,7 @@
   "tests": {
     "host": [
       "Acceptance | automation edit format",
+      "Acceptance | automation view",
       "Acceptance | code submode | automation script editor",
       "Integration | realm policy",
       "Integration | realm config policy standing",
@@ -36,6 +37,7 @@
       "anonymous-key-use-test",
       "automation-card-test",
       "automation-run-limits-test",
+      "automation-status-test",
       "catalog-test-subset-test",
       "direct-writer-queries-test",
       "google-service-account-keys-test",
