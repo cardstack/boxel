@@ -10,7 +10,10 @@ import {
   startAutomationRunAttempt,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common';
-import { RUN_COMMIT_PATH } from '@cardstack/runtime-common/run-overlay';
+import {
+  RUN_COMMIT_PATH,
+  stageRunOverlayFile,
+} from '@cardstack/runtime-common/run-overlay';
 import {
   createAutomationRunToken,
   createJWT,
@@ -93,7 +96,13 @@ module(basename(import.meta.filename), function (hooks) {
       }),
     ))!;
     let text = await response.text();
-    return { status: response.status, json: text ? JSON.parse(text) : {} };
+    let json: any = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = { text };
+    }
+    return { status: response.status, json };
   }
 
   async function overlayCount(runId: string) {
@@ -158,35 +167,43 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a batch with a failing entry lands none of its files', async function (assert) {
+  test('a batch with a file that can’t be written lands none of its files', async function (assert) {
     let { token, run } = await createAutomationRunToken(
       dbAdapter,
       realm,
       OWNER,
     );
     assert.strictEqual(await stage(token, 'aaa-first.txt', 'first'), 204);
-    // A file at `clash`, and another file under `clash/`, can't both exist.
-    assert.strictEqual(await stage(token, 'clash', 'a file'), 204);
-    assert.strictEqual(await stage(token, 'clash/inside.txt', 'under it'), 204);
+    // Staged beneath `notes.txt`, which the realm holds as a file. Staging
+    // through the route checks only the run's own files, so this is put in
+    // the overlay directly, as a realm that changed since staging would leave
+    // it.
+    await stageRunOverlayFile(
+      dbAdapter,
+      { runId: run.id, attempt: 1 },
+      'notes.txt/inside.txt',
+      new TextEncoder().encode('under a file'),
+      10,
+    );
 
     let committed = await commit(token);
-    assert.notStrictEqual(committed.status, 200);
+    assert.strictEqual(committed.status, 409, JSON.stringify(committed.json));
+    assert.strictEqual(committed.json.errors[0].code, 'path-clash');
     assert.strictEqual(
       (await read(session(), 'aaa-first.txt')).status,
       404,
       'no file of the batch landed',
     );
-    assert.strictEqual((await read(session(), 'clash')).status, 404);
+    assert.deepEqual(await read(session(), 'notes.txt'), {
+      status: 200,
+      text: 'in the realm',
+    });
     let row = await getAutomationRun(dbAdapter, run.id);
-    assert.strictEqual(
-      row?.committedAt,
-      null,
-      'nothing was recorded as landed',
-    );
+    assert.strictEqual(row?.commitStartedAt, null, 'no commit was claimed');
     assert.ok(
       await finishAutomationRun(dbAdapter, run.id, 1, {
         state: 'error',
-        reason: 'commit-failed',
+        reason: 'commit-refused',
       }),
       'the run finishes as an error',
     );

@@ -13247,13 +13247,35 @@ export class Realm {
         `This run staged ${files.length} files, more than the ${writesCap} it may write; nothing was saved`,
       );
     }
-    if (files.some((file) => file.path === 'realm.json')) {
-      return refuse(
-        403,
-        'forbidden-path',
-        'Forbidden',
-        'An automation run may not write realm.json; nothing was saved',
-      );
+    // The staging checks, again: a file staged under them can still meet a
+    // realm that changed since, such as a policy pointer moved onto it or a
+    // file the realm now holds where the run staged a directory.
+    for (let { path, content } of files) {
+      let reserved = reservedWriteDestination(path);
+      let protectedTarget =
+        reserved === undefined
+          ? await this.#runMayNotWrite(
+              path,
+              path.endsWith('.json') ? utf8OrUndefined(content) : undefined,
+            )
+          : undefined;
+      if (reserved || protectedTarget) {
+        return refuse(
+          403,
+          'forbidden-path',
+          'Forbidden',
+          `${reserved ?? `An automation run may not write ${protectedTarget}`}; nothing was saved`,
+        );
+      }
+      let clash = await this.#realmPathClash(path);
+      if (clash) {
+        return refuse(
+          409,
+          'path-clash',
+          'Conflict',
+          `The run staged ${path}, but the workspace holds ${clash}, so one of them would have to be both a file and a directory; nothing was saved`,
+        );
+      }
     }
     if (!(await claimAutomationRunCommit(this.#dbAdapter, runId, attempt))) {
       return refuse(
@@ -13267,10 +13289,12 @@ export class Realm {
       try {
         await commitBatch(
           this.batchCore,
+          // Text goes as text, as the card+source write sends it, so a file
+          // whose text matches the stored file's is left alone.
           files.map(({ path, content }) => ({
             op: 'update' as const,
             href: this.paths.fileURL(path).href,
-            content,
+            content: utf8OrUndefined(content) ?? content,
             rawSource: true,
           })),
           {
@@ -13315,6 +13339,23 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // A file or directory the realm holds that `path` can't be written beside:
+  // a file at one of the directories `path` is under, or a directory at
+  // `path` itself. Undefined when there is none.
+  async #realmPathClash(path: LocalPath): Promise<string | undefined> {
+    let parts = path.split('/');
+    for (let i = 1; i < parts.length; i++) {
+      let parent = parts.slice(0, i).join('/');
+      if (await this.#adapter.openFile(parent)) {
+        return `a file at ${parent}`;
+      }
+    }
+    if (await this.directoryEntries(this.paths.directoryURL(path))) {
+      return `a directory at ${path}`;
+    }
+    return undefined;
   }
 
   // What a run may not write at `path`, named for a person, or undefined
