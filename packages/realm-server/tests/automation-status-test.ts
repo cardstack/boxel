@@ -155,24 +155,34 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   async function indexedDeclaration(): Promise<AutomationDeclaration> {
-    let entry = await testRealm.realmIndexQueryEngine.instanceSource(
+    let entry = await testRealm.realmIndexQueryEngine.instance(
       new URL(automationURL()),
     );
-    if (!entry) {
-      throw new Error('the automation card is not indexed');
+    if (entry?.type !== 'instance') {
+      throw new Error(
+        `the automation card is not indexed: ${JSON.stringify(entry)}`,
+      );
     }
     let virtualNetwork = createVirtualNetwork();
-    let result = readAutomationDeclaration(entry, {
-      automationTypeKey: internalKeyFor(
-        automationRef,
-        undefined,
+    let result = readAutomationDeclaration(
+      {
+        url: entry.canonicalURL,
+        realmURL: entry.realmURL,
+        types: entry.types,
+        instance: entry.instance,
+      },
+      {
+        automationTypeKey: internalKeyFor(
+          automationRef,
+          undefined,
+          virtualNetwork,
+        ),
         virtualNetwork,
-      ),
-      virtualNetwork,
-    });
+      },
+    );
     if (!result.ok) {
       throw new Error(
-        `the declaration did not read: ${JSON.stringify(result.problems)}; index error: ${JSON.stringify(entry.error)}`,
+        `the declaration did not read: ${JSON.stringify(result.problems)}`,
       );
     }
     return result.declaration;
