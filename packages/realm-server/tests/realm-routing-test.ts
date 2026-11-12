@@ -273,6 +273,66 @@ function makeUnavailableTypeFixture(): Record<
   };
 }
 
+// Field-match routes over types whose definitions the index caches: a
+// venue linking to a type its parent route's type descends from, and a
+// route naming an export its module doesn't have.
+function makeCachedTypesFixture(): Record<
+  string,
+  string | LooseSingleCardDocument
+> {
+  return {
+    'places.gts': `
+      import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      export class Place extends CardDef {
+        static displayName = 'Place';
+        @field slug = contains(StringField);
+      }
+      export class City extends Place {
+        static displayName = 'City';
+      }
+      export class Venue extends CardDef {
+        static displayName = 'Venue';
+        @field slug = contains(StringField);
+        @field place = linksTo(Place);
+      }
+    `,
+    'realm.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Cached Types Realm' },
+          hostRoutingRules: [
+            {
+              path: '/cities/:city',
+              type: { module: './places', name: 'City' },
+              match: { slug: ':city' },
+              routes: [
+                {
+                  path: '/:venue',
+                  type: { module: './places', name: 'Venue' },
+                  match: { slug: ':venue' },
+                },
+              ],
+            },
+            {
+              path: '/nope/:slug',
+              type: { module: './places', name: 'Nope' },
+              match: { slug: ':slug' },
+            },
+          ],
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/realm-config'),
+            name: 'RealmConfig',
+          },
+        },
+      },
+    },
+  };
+}
+
 module(basename(import.meta.filename), function () {
   module('Realm.getHostRoutingMap', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-unit/');
@@ -504,6 +564,48 @@ module(basename(import.meta.filename), function () {
       });
     },
   );
+
+  module('Realm.getHostRoutes with cached type definitions', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/routing-cached-types/');
+    let testRealm: Realm;
+
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
+      permissions: { '*': ['read'] },
+      fileSystem: makeCachedTypesFixture(),
+      onRealmSetup({ testRealm: realm }) {
+        testRealm = realm;
+      },
+    });
+
+    hooks.beforeEach(async function () {
+      await testRealm.indexing();
+    });
+
+    test('infers a parent link to a type the parent descends from', async function (assert) {
+      let { routes } = await testRealm.getHostRoutes();
+      let venue = routes[0]?.routes[0];
+      assert.strictEqual(venue?.fullPath, '/cities/:city/:venue');
+      assert.deepEqual(
+        venue?.kind === 'field-match' ? venue.parentLink : undefined,
+        { field: 'place', side: 'child', kind: 'linksTo', inferred: true },
+      );
+    });
+
+    test('drops a route whose cached module has no such export, and caches the validation', async function (assert) {
+      let first = await testRealm.getHostRoutes();
+      assert.true(first.complete, 'the validation is final');
+      assert.deepEqual(
+        first.warnings.map((w) => [w.code, w.path, w.dropped]),
+        [['not-card-type', '/nope/:slug', true]],
+      );
+      assert.strictEqual(
+        await testRealm.getHostRoutes(),
+        first,
+        'the next call answers from the cache',
+      );
+    });
+  });
 
   module('resolveRealmsForFederatedRequest', function (hooks) {
     let dbAdapter: PgAdapter;

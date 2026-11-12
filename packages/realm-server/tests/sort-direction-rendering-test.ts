@@ -112,6 +112,9 @@ function makeDefinitionLookup(): DefinitionLookup {
     async lookupCachedDefinition() {
       return undefined;
     },
+    async lookupCachedDefinitionEntry() {
+      return { status: 'not-cached' as const };
+    },
     async invalidate() {
       return [];
     },

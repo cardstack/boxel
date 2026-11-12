@@ -383,6 +383,11 @@ export interface PopulateDefinitionCacheEntryArgs {
   priority?: number;
 }
 
+export type CachedDefinitionEntryResult =
+  | { status: 'not-cached' }
+  | { status: 'missing-export' }
+  | { status: 'found'; entry: ModuleDefinitionResult };
+
 export interface DefinitionLookup {
   lookupDefinition(
     codeRef: ResolvedCodeRef,
@@ -404,6 +409,14 @@ export interface DefinitionLookup {
   lookupCachedDefinition(
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined>;
+  // Like lookupCachedDefinition, never rendering a module, but it tells a
+  // module the cache doesn't hold yet (`not-cached`) apart from a cached
+  // module that has no usable definition for the export (`missing-export`:
+  // no such export, or one whose definition failed to build), and it
+  // answers with the whole entry, the type's adoption chain included.
+  lookupCachedDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+  ): Promise<CachedDefinitionEntryResult>;
   invalidate(moduleURL: string): Promise<string[]>;
   clearRealmDefinitions(resolvedRealmURL: string): Promise<void>;
   clearAllDefinitions(): Promise<void>;
@@ -598,6 +611,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
   ): Promise<Definition | undefined> {
+    let result = await this.lookupCachedDefinitionEntry(codeRef, contextOpts);
+    return result.status === 'found' ? result.entry.definition : undefined;
+  }
+
+  async lookupCachedDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+    contextOpts?: LookupContext,
+  ): Promise<CachedDefinitionEntryResult> {
     let canonicalModuleURL = canonicalURL(
       codeRef.module,
       undefined,
@@ -608,7 +629,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       contextOpts,
     );
     if (!context) {
-      return undefined;
+      return { status: 'not-cached' };
     }
     let { cacheUserId, cacheScope, resolvedRealmURL } = context;
 
@@ -626,12 +647,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           canonicalModuleURL,
         );
         if (entry && 'definition' in entry) {
-          return entry.definition;
+          return { status: 'found', entry };
         }
-        return undefined;
+        return { status: 'missing-export' };
       }
     }
-    return undefined;
+    return { status: 'not-cached' };
   }
 
   async getCachedDefinitions(
@@ -2367,6 +2388,14 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined> {
     return await this.#inner.lookupCachedDefinition(codeRef, {
+      requestingRealm: this.#realm,
+    });
+  }
+
+  async lookupCachedDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+  ): Promise<CachedDefinitionEntryResult> {
+    return await this.#inner.lookupCachedDefinitionEntry(codeRef, {
       requestingRealm: this.#realm,
     });
   }

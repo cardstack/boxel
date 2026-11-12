@@ -18504,18 +18504,30 @@ export class Realm {
       // ADR 015 §1.1 rules out rendering a module for a routing decision
       // while a request waits. A type that isn't cached yet, or whose read
       // fails, is unavailable: its routes are dropped for now, and the
-      // validation isn't cached, so a later call reads again.
-      let types = new Map<string, HostRouteTypeInfo | 'unavailable'>();
+      // validation isn't cached, so a later call reads again. A cached module
+      // with no such export is final: the route is dropped, and the
+      // validation is cached.
+      let types = new Map<
+        string,
+        HostRouteTypeInfo | 'unavailable' | undefined
+      >();
       for (let ref of hostRouteTypeRefs(rules)) {
-        let info: HostRouteTypeInfo | 'unavailable';
+        let info: HostRouteTypeInfo | 'unavailable' | undefined;
         try {
-          let definition =
-            await this.#definitionLookup.lookupCachedDefinition(ref);
-          info = definition
-            ? hostRouteTypeInfo({ definition }, (codeRef) =>
-                internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-              )
-            : 'unavailable';
+          let result =
+            await this.#definitionLookup.lookupCachedDefinitionEntry(ref);
+          if (result.status === 'found') {
+            info = hostRouteTypeInfo(result.entry, (codeRef) =>
+              internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+            );
+          } else if (result.status === 'missing-export') {
+            // The module is cached and has no card type by that name: the
+            // route is dropped, and that answer is final until the module
+            // changes, which reindexes the realm.
+            info = undefined;
+          } else {
+            info = 'unavailable';
+          }
         } catch (e) {
           this.#log.warn(
             `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,

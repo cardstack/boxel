@@ -92,4 +92,8 @@ module(basename(import.meta.filename), function () {
   test('validateHostRoutes: an unavailable type makes the validation incomplete', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
+
+  test('validateHostRoutes: a link to a type the parent descends from counts', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
 });

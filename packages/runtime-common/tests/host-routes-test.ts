@@ -64,6 +64,21 @@ const TYPES: Record<string, HostRouteTypeInfo> = {
   Shelf: cardType('Shelf', { slug: contains, items: linksToMany('Item') }),
   Item: cardType('Item', { slug: contains }),
   Address: { ...cardType('Address', { city: contains }), isCardType: false },
+  // City descends from Place, and a venue links to a Place.
+  City: {
+    ...cardType('City', { slug: contains }),
+    types: [
+      `${MODULE}/City`,
+      `${MODULE}/Place`,
+      'https://base/card-api/CardDef',
+    ],
+  },
+  // The same city type without its adoption chain.
+  BareCity: {
+    ...cardType('City', { slug: contains }),
+    types: [`${MODULE}/City`],
+  },
+  Venue: cardType('Venue', { slug: contains, place: linksTo('Place') }),
 };
 
 function type(name: string): ResolvedCodeRef {
@@ -865,6 +880,44 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.deepEqual(hostRoutingMapFromRoutes(routes), [
         { path: '/', id: `${REALM}home` },
       ]);
+    },
+  'validateHostRoutes: a link to a type the parent descends from counts':
+    async (assert) => {
+      let { routes, warnings } = validate([
+        fieldMatch(
+          '/cities/:city',
+          'City',
+          { slug: ':city' },
+          {
+            routes: [fieldMatch('/:venue', 'Venue', { slug: ':venue' })],
+          },
+        ),
+        fieldMatch(
+          '/bare/:city',
+          'BareCity',
+          { slug: ':city' },
+          {
+            routes: [fieldMatch('/:venue', 'Venue', { slug: ':venue' })],
+          },
+        ),
+      ]);
+      let venue = routes[0]!.routes[0];
+      assert.deepEqual(
+        venue?.kind === 'field-match' ? venue.parentLink : undefined,
+        { field: 'place', side: 'child', kind: 'linksTo', inferred: true },
+        "the venue's link to Place connects it to a City",
+      );
+      assert.deepEqual(
+        codes(warnings),
+        [
+          {
+            code: 'invalid-parent-link',
+            path: '/bare/:city/:venue',
+            dropped: true,
+          },
+        ],
+        'without the adoption chain, the link does not count',
+      );
     },
 });
 
