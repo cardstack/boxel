@@ -1078,6 +1078,39 @@ module(basename(import.meta.filename), function (hooks) {
       });
     });
 
+    // Recorded: a label in a facet measure was not resolved. docs/search.md:
+    // a field "may be written as ... a label in any case and spacing", and a
+    // measure names a field as the facet's `by` does: a label with a space is
+    // quoted there (unquoted, both are refused as not a path).
+    test('a label in a facet measure resolves as it does elsewhere', async function (assert) {
+      let measures = async (field: string) =>
+        Object.fromEntries(
+          (
+            await run(named, {
+              type: named.Item,
+              facets: [{ by: 'kind', measure: { avg: field } }],
+            })
+          ).meta.facets.kind.map((e: any) => [e.value, e.measure?.avg]),
+        );
+      let byPath = await measures('reviewCount');
+      assert.deepEqual(byPath, { lamp: 4.5, rug: 5 }, 'the path');
+      assert.deepEqual(await measures('"Review Count"'), byPath, 'quoted');
+      assert.deepEqual(await measures('ReviewCount'), byPath, 'capitalized');
+      let { refused } = await outcome(() =>
+        run(named, {
+          type: named.Item,
+          facets: [{ by: 'kind', measure: { avg: 'ReviewTotal' } }],
+        }),
+      );
+      isCodedRefusal(
+        assert,
+        refused,
+        /ReviewTotal/,
+        'a label the type does not have',
+        'unknown-field',
+      );
+    });
+
     test('a label in select reads the column, or is refused by name', async function (assert) {
       let { answer, refused } = await outcome(() =>
         table(named, {
@@ -2099,7 +2132,7 @@ module(basename(import.meta.filename), function (hooks) {
         'a label with a space in a facet measure',
         { facets: [{ ...byKind, measure: { avg: 'Review Count' } }] },
         'invalid-value',
-        /measure/,
+        /measure: "Review Count" is not a field path/,
       ],
       [
         'a label with a space in select',

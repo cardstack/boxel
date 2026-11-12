@@ -3528,11 +3528,18 @@ function assertFacetMembers(facet: any, at: string) {
     if (
       keys.length !== 1 ||
       !(FACET_MEASURES as readonly string[]).includes(keys[0]) ||
-      typeof m[keys[0]] !== 'string' ||
-      !FACET_PATH.test(m[keys[0]])
+      typeof m[keys[0]] !== 'string'
     ) {
       throw new InvalidQueryError(
         `${at}/measure: measure must be one of ${FACET_MEASURES.map((k) => `{ ${k}: "<field>" }`).join(', ')}`,
+        'invalid-value',
+      );
+    }
+    if (!FACET_PATH.test(m[keys[0]])) {
+      // the shape is right; the field is not written as a path or a label
+      // the facet's `by` would take
+      throw new InvalidQueryError(
+        `${at}/measure: ${JSON.stringify(m[keys[0]])} is not a field path; write the field's path (priceMin) or its label, in quotes when it has a space ('"Price Min"')`,
         'invalid-value',
       );
     }

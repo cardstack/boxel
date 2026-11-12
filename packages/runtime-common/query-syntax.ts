@@ -963,7 +963,13 @@ function lowerQueryInto(
   if (Array.isArray(query.facets)) {
     query.facets = query.facets.map((f: any) =>
       isObject(f) && typeof f.by === 'string'
-        ? { ...f, by: barePath(f.by) }
+        ? {
+            ...f,
+            by: barePath(f.by),
+            ...(isObject(f.measure)
+              ? { measure: mapMeasure(f.measure, barePath) }
+              : {}),
+          }
         : f,
     );
     query.facets = assertDistinctFacets(query.facets);
@@ -1099,6 +1105,19 @@ export async function resolveLabel(
   return out.join('.');
 }
 
+// A facet measure (`{ avg: 'priceMin' }`) with its field rewritten by `map`.
+function mapMeasure(
+  measure: Record<string, unknown>,
+  map: (path: string) => string,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(measure).map(([op, p]) => [
+      op,
+      typeof p === 'string' ? map(p) : p,
+    ]),
+  );
+}
+
 // Every field path a query names, in either grammar, rewritten by `map`:
 // filter operators' paths and `fields`, sort and signal `by`s, boost filters,
 // collapse, facets and a rerank's comparison `by`. `map` gets the path as
@@ -1176,7 +1195,13 @@ export function mapQueryPaths<Q>(
   if (Array.isArray(q.facets)) {
     out.facets = q.facets.map((f: any) =>
       isObject(f) && typeof f.by === 'string'
-        ? { ...f, by: map(f.by, f.on ?? top) }
+        ? {
+            ...f,
+            by: map(f.by, f.on ?? top),
+            ...(isObject(f.measure)
+              ? { measure: mapMeasure(f.measure, (p) => map(p, f.on ?? top)) }
+              : {}),
+          }
         : f,
     );
   }
@@ -1246,6 +1271,13 @@ export function queryHasLabels(query: Record<string, any>): boolean {
           if (Object.keys(x).some(looksLikeLabel)) found = true;
         } else if ((k === 'by' || k === 'collapse') && typeof x === 'string') {
           if (looksLikeLabel(x)) found = true;
+        } else if (k === 'measure' && isObject(x)) {
+          if (
+            Object.values(x).some(
+              (p) => typeof p === 'string' && looksLikeLabel(p),
+            )
+          )
+            found = true;
         } else if (k !== 'on' && k !== 'type') walk(x);
       }
     }
@@ -1324,7 +1356,27 @@ export async function resolveQueryLabels(
     out.facets = await Promise.all(
       query.facets.map(async (f: any) =>
         isObject(f) && typeof f.by === 'string'
-          ? { ...f, by: await resolve(f.on ?? anchor, f.by) }
+          ? {
+              ...f,
+              by: await resolve(f.on ?? anchor, f.by),
+              ...(isObject(f.measure)
+                ? {
+                    measure: Object.fromEntries(
+                      await Promise.all(
+                        Object.entries(f.measure).map(
+                          async ([op, p]) =>
+                            [
+                              op,
+                              typeof p === 'string'
+                                ? await resolve(f.on ?? anchor, p)
+                                : p,
+                            ] as const,
+                        ),
+                      ),
+                    ),
+                  }
+                : {}),
+            }
           : f,
       ),
     );
