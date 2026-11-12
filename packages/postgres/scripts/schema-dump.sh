@@ -23,6 +23,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=realm_history_state \
   --exclude-table-and-children=realm_history_path_state \
   --exclude-table-and-children=realm_historian_leases \
+  --exclude-table-and-children=realm_host_urls \
   --exclude-table-and-children=queues \
   --exclude-table-and-children=job_reservations \
   --exclude-table-and-children=job_progress \
