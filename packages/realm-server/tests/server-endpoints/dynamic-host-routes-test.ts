@@ -44,7 +44,7 @@ function makeSiteFixture(): Record<string, string | LooseSingleCardDocument> {
       ${extra}
       static isolated = class Isolated extends Component<typeof this> {
         <template>
-          <p data-test-label>Served <@fields.label /></p>
+          <p data-test-label>Served {{@model.label}}</p>
         </template>
       };
     }`;
