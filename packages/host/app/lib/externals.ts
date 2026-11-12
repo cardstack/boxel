@@ -409,6 +409,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     resolve: () => import('@cardstack/runtime-common/marked-sync'),
   });
   virtualNetwork.shimAsyncModule({
+    id: '@cardstack/runtime-common/render-context',
+    resolve: () => import('@cardstack/runtime-common/render-context'),
+  });
+  virtualNetwork.shimAsyncModule({
     id: '@cardstack/runtime-common/bfm-card-references',
     resolve: () => import('@cardstack/runtime-common/bfm-card-references'),
   });
