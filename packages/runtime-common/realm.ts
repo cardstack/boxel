@@ -212,11 +212,13 @@ import {
   getFileMetaForPaths,
 } from './file-meta.ts';
 import {
+  unavailableHistoryReader,
   writeContextForEvent,
   writeContextFromHeaders,
   type ChangeEventChange,
   type ChangeEventInput,
   type RealmHistory,
+  type RealmHistoryReader,
   type WriteContext,
 } from './realm-history.ts';
 import {
@@ -3375,6 +3377,13 @@ export class Realm {
 
   get isPublished(): boolean {
     return this.#published;
+  }
+
+  // The reader the history operations read through. A realm that records no
+  // history, such as the in-browser realm, answers every read with
+  // `history-unavailable`.
+  get historyReader(): RealmHistoryReader {
+    return this.#history?.reader ?? unavailableHistoryReader;
   }
 
   constructor(

@@ -97,6 +97,7 @@ export const TRAILERS = {
   superseded: 'Boxel-Superseded',
   includesSuperseded: 'Boxel-Includes-Superseded',
   journalSeq: 'Boxel-Journal-Seq',
+  gap: 'Boxel-Gap',
 } as const;
 
 export type ChangeStatus = 'A' | 'M' | 'D';
@@ -339,6 +340,15 @@ export interface PendingWrite {
   paths: string[];
 }
 
+// Why a change carries no diff: its content is binary, its diff is larger
+// than the per-file cap, the response's diff budget was spent before it, or
+// one side of it is a size-only entry, whose content history doesn't keep.
+export type DiffOmitted =
+  | 'binary'
+  | 'too-large'
+  | 'budget'
+  | 'content-not-kept';
+
 export interface RevisionChange {
   path: string;
   status: ChangeStatus;
@@ -346,8 +356,12 @@ export interface RevisionChange {
   // within history, and are not the `content-hash.ts` fingerprint.
   beforeBlob?: string;
   afterBlob?: string;
+  // The file's size after the change, or before it for a deletion. A
+  // size-only entry's is the size its marker records.
   size?: number;
+  // The file's section of `git diff-tree -p`, when diffs were asked for.
   diff?: string;
+  diffOmitted?: DiffOmitted;
 }
 
 export interface RevisionSummary {
@@ -357,28 +371,63 @@ export interface RevisionSummary {
   author: string;
   // The last write's time, as an ISO timestamp.
   timestamp: string;
+  // The message without its trailer block.
   message: string;
+  // The `Boxel-*` trailers by their git names, such as `Boxel-Channel`.
   trailers: Record<string, string[]>;
+  // A revision that records what changed while nothing recorded the realm.
   gap?: boolean;
   changes: RevisionChange[];
 }
 
 export interface ReadHistoryParams {
-  path?: string;
+  // The path filters. Each is a file path, a directory ending in `/`, or `/`
+  // for the whole realm, relative to the realm with no leading slash
+  // needed. A revision is listed when it changes a path under any of them,
+  // and its changes elsewhere are left out. Absent means the whole realm,
+  // and an empty list matches nothing.
+  paths?: string[];
+  // At most `MAX_HISTORY_LIMIT`.
   limit?: number;
+  // A revision a previous page ended on: the listing continues after it.
   before?: string;
   includeDiffs?: boolean;
   status?: ChangeStatus;
   correlationId?: string;
 }
 
-export interface ReadHistoryResult {
-  revisions: RevisionSummary[];
-  diffsTruncated?: boolean;
+export const DEFAULT_HISTORY_LIMIT = 50;
+export const MAX_HISTORY_LIMIT = 500;
+
+export interface HistoryUnavailable {
+  kind: 'history-unavailable';
 }
 
+export type ReadHistoryResult =
+  | {
+      kind: 'history';
+      // Newest first.
+      revisions: RevisionSummary[];
+      // Whether a page after this one may list more.
+      hasMore: boolean;
+      diffsTruncated?: boolean;
+    }
+  // `before` names no revision in the realm's history.
+  | { kind: 'revision-not-found' }
+  | HistoryUnavailable;
+
 export type ReadAtRevisionResult =
-  | { kind: 'file'; content: string; binary: boolean; size: number }
+  | {
+      kind: 'file';
+      // UTF-8 text, or base64 when `binary` is set. A `range` is always
+      // base64, so the parts of a file join back into its bytes.
+      content: string;
+      binary: boolean;
+      // The whole file's size.
+      size: number;
+      // The bytes returned, when a range was asked for.
+      range?: { start: number; length: number };
+    }
   | {
       kind: 'directory';
       entries: { name: string; kind: 'file' | 'directory' }[];
@@ -390,22 +439,68 @@ export type ReadAtRevisionResult =
         | 'revision-not-found'
         | 'path-not-found-at-revision'
         | 'path-deleted-at-revision';
-    };
+    }
+  | HistoryUnavailable;
+
+// A file in a revision's tree. `id` is its blob id, or its tree id when it
+// is a size-only entry, whose content history doesn't keep.
+export interface TreeFileAtRevision {
+  path: string;
+  id: string;
+  size: number;
+  sizeOnly?: true;
+}
+
+export type ReadTreeAtRevisionResult =
+  | { kind: 'tree'; files: TreeFileAtRevision[] }
+  | {
+      kind:
+        | 'revision-not-found'
+        | 'path-not-found-at-revision'
+        | 'path-deleted-at-revision';
+    }
+  | HistoryUnavailable;
 
 // Reads a realm's history from its repo. Runs in the realm server, with
-// read-only git commands, and never calls realm-historian.
+// read-only git commands, and never calls realm-historian. `realmId` is the
+// realm's `realm_registry.id`, which keys its repo.
 export interface RealmHistoryReader {
   readHistory(
     realmId: string,
     params: ReadHistoryParams,
   ): Promise<ReadHistoryResult>;
+  // A file's content, or a directory's listing, at `revision`. `path` is a
+  // file, a directory ending in `/`, or `/` for the realm's root.
   readAtRevision(
     realmId: string,
     revision: string,
     path: string,
     range?: { start: number; length: number },
   ): Promise<ReadAtRevisionResult>;
+  // Every file at or under `path` at `revision`: the whole realm when `path`
+  // is absent or `/`.
+  readTreeAtRevision(
+    realmId: string,
+    revision: string,
+    path?: string,
+  ): Promise<ReadTreeAtRevisionResult>;
 }
+
+const HISTORY_UNAVAILABLE: HistoryUnavailable = { kind: 'history-unavailable' };
+
+// The reader of a realm that records no history, such as the in-browser
+// realm: every read answers `history-unavailable`.
+export const unavailableHistoryReader: RealmHistoryReader = {
+  async readHistory() {
+    return HISTORY_UNAVAILABLE;
+  },
+  async readAtRevision() {
+    return HISTORY_UNAVAILABLE;
+  },
+  async readTreeAtRevision() {
+    return HISTORY_UNAVAILABLE;
+  },
+};
 
 // The realm's history collaborators, injected by the realm server. A realm
 // with none emits no events and answers `history-unavailable`.

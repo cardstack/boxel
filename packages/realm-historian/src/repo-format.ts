@@ -287,6 +287,19 @@ export function parseTrailers(message: string): Trailers {
   return trailers;
 }
 
+// The message without its trailer block: the paragraphs before it, or the
+// whole message when its last paragraph holds anything but trailers.
+export function messageWithoutTrailers(message: string): string {
+  let paragraphs = message.trimEnd().split(/\n\s*\n/);
+  if (paragraphs.length > 1) {
+    let last = paragraphs[paragraphs.length - 1];
+    if (last.split('\n').every((line) => TRAILER_LINE.test(line))) {
+      return paragraphs.slice(0, -1).join('\n\n');
+    }
+  }
+  return message.trimEnd();
+}
+
 // `Boxel-Journal-Seq`: the change events a revision covers, as the `seq` of
 // its first and last events in the realm's journal order, `<first>-<last>`,
 // or the one `seq` of a revision that covers one event. The journal is read

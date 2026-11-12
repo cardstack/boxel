@@ -62,6 +62,30 @@ starts or takes over the realm's shard, which reads the realm's events again
 from its cursor. A `scan` or `delete-realm` event records no revision: the
 recorder moves its cursor past it.
 
+## Reading
+
+The realm server reads history itself, through `GitRealmHistoryReader` from
+`src/reader.ts` (`@cardstack/realm-historian/src/reader`). It runs read-only
+git commands against the repo, and never calls realm-historian:
+
+- `readHistory` lists revisions newest first with `git log` over path
+  filters, with their changes and, by default, their diffs. A diff larger
+  than 64 KB is left out, as are the diffs past the listing's 1 MB budget,
+  and binary files get ids and sizes only. A superseded write's revision,
+  which changed nothing under the filters, is listed after the oldest
+  revision whose `Boxel-Includes-Superseded` names it.
+- `readAtRevision` returns a file's content (base64 when it is binary, and
+  always for a `range`) or a directory's listing. A file above 5 MB answers
+  `too-large`, and a size-only entry answers `content-not-kept`.
+- `readTreeAtRevision` lists every file under a path, with size-only entries
+  flagged.
+
+At most 8 git processes run at once across every read, and each is killed
+after 30 s. Git uses the commit-graph's Bloom filters for several path filters
+only from 2.51 on, and `bloomWithSeveralPaths` says whether the git in use
+does. With it off, the default, the reader runs one `git log` per filter and
+merges the results in history order, which is correct on any git.
+
 ## Scripts
 
 `scripts/scan.ts` appends a `scan` event for each realm a deploy wrote to
