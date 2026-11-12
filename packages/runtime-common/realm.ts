@@ -2905,6 +2905,12 @@ function utf8OrUndefined(bytes: Uint8Array): string | undefined {
   } catch {
     return undefined;
   }
+// A realm URL in one spelling, whichever spelling it arrived in (decoded or
+// percent-encoded, with or without its trailing slash), so the realm a run
+// token names, the realm its row names and the realm a call reached compare
+// as equal when they are one realm.
+function sameRealmSpelling(url: string): string {
+  return ensureTrailingSlash(new URL(url).href);
 }
 
 // A run-token call `Realm.handleAutomation` admitted (see
@@ -8797,12 +8803,14 @@ export class Realm {
   // to end, a capture-URL token (minted only for a reader this vouched for —
   // see `signCaptureURLs`), or a token a public realm's read path took
   // without checking it, once it passes those checks here. A delegated session
-  // reads this realm as the user it acts for. A diagnostic session is drawn
-  // as no one: a capture outlives its request, and a capture-URL token its
-  // session (see `RequestContext.diagnosticSession`). Anyone else is
-  // `ANONYMOUS_RENDER`, drawn with no session at all.
+  // reads this realm as the user it acts for. A diagnostic session and an
+  // automation run are drawn as no one: a capture outlives its request, and a
+  // capture-URL token its session, so either would carry the identity past
+  // the diagnostic session's scope or the run's row (see
+  // `RequestContext.diagnosticSession`, `RequestContext.automationRun`).
+  // Anyone else is `ANONYMOUS_RENDER`, drawn with no session at all.
   async #captureReader(requestContext: RequestContext): Promise<string> {
-    if (requestContext.diagnosticSession) {
+    if (requestContext.diagnosticSession || requestContext.automationRun) {
       return ANONYMOUS_RENDER;
     }
     let session = requestContext.unvouchedSession;
@@ -12867,11 +12875,11 @@ export class Realm {
     if (!context) {
       return refuse('the token does not name a run');
     }
-    let realmURL = ensureTrailingSlash(this.url);
-    let ownRealm = ensureTrailingSlash(context.realm) === realmURL;
+    let realmURL = sameRealmSpelling(this.url);
+    let ownRealm = sameRealmSpelling(context.realm) === realmURL;
     let readOnly =
       !ownRealm &&
-      context.readRealms.some((r) => ensureTrailingSlash(r) === realmURL);
+      context.readRealms.some((r) => sameRealmSpelling(r) === realmURL);
     if (!ownRealm && !readOnly) {
       return refuse(
         `run ${context.runId} is in realm ${context.realm}, not ${this.url}`,
@@ -12883,6 +12891,11 @@ export class Realm {
       );
       throw new AuthorizationError(
         'An automation run may only read this realm',
+      );
+    }
+    if (context.actsAs === this.#matrixClientUserId) {
+      return refuse(
+        `run ${context.runId} acts as the realm's own user, which no run may (ADR 026 §1.5)`,
       );
     }
     if (requiredPermission === 'administer') {
@@ -12910,10 +12923,10 @@ export class Realm {
         'The automation run is not running',
       );
     }
-    let runRealm = ensureTrailingSlash(
+    let runRealm = sameRealmSpelling(
       this.#virtualNetwork.toURL(call.run.realm).href,
     );
-    if (runRealm !== ensureTrailingSlash(context.realm)) {
+    if (runRealm !== sameRealmSpelling(context.realm)) {
       return refuse(
         `run ${context.runId} is in realm ${call.run.realm}, but the token names ${context.realm}`,
       );
