@@ -141,6 +141,7 @@ export class SearchInput extends Component<SearchInputSignature> {
   @tracked openPlacement = 'right-start';
   @tracked openDistance = 0;
   @tracked openRoom = 0;
+  @tracked openRowWidth = 0;
 
   get collapsed() {
     return this.args.display === 'collapsed';
@@ -163,41 +164,68 @@ export class SearchInput extends Component<SearchInputSignature> {
       return;
     }
     let square = event.currentTarget as HTMLElement;
-    // the panel is placed beside the square, pulled back by the square's own
-    // width so the field starts over it; toward the inline end, so RTL opens
-    // leftward, and Popup flips it to the other side when that end has no room
     this.openPlacement =
       getComputedStyle(square).direction === 'rtl'
         ? 'left-start'
         : 'right-start';
-    let rect = square.getBoundingClientRect();
-    this.openDistance = -rect.width;
-    this.measureRoom(rect);
+    this.measureOpen(square.getBoundingClientRect(), square);
     this.open = true;
   };
-  // the room on the roomier side, less Popup's 8px gutter: a field no wider
-  // than that always fits on one side, so a narrow screen never cuts it
-  private measureRoom(rect: DOMRect) {
+  // The field opens over the whole LayoutControl row when the square sits in
+  // one: anchored at the row's inline start (the panel is placed beside the
+  // square, pulled back to the row's edge; toward the inline end, so RTL opens
+  // leftward) and as wide as the row. Outside a row it starts over the square
+  // and takes --pretui-search-open-w. Popup flips the panel to the other side
+  // when its end has no room.
+  private measureOpen(rect: DOMRect, from: HTMLElement) {
+    let row = from
+      .closest('[data-pretui-layout-control]')
+      ?.getBoundingClientRect();
+    let rtl = this.openPlacement === 'left-start';
+    if (row) {
+      this.openDistance = rtl ? rect.left - row.right : row.left - rect.right;
+      this.openRowWidth = row.width;
+    } else {
+      this.openDistance = -rect.width;
+      this.openRowWidth = 0;
+    }
+    // the room on the roomier side, less Popup's 8px gutter: a field no wider
+    // than that always fits on one side, so a narrow screen never cuts it
     this.openRoom = Math.max(window.innerWidth - rect.left, rect.right) - 8;
   }
-  // while the field is open, the cap follows viewport resizes; the wrapper
-  // keeps the square's box, so it stands in for the swapped-out square.
-  // Popup's anchorTo measures the layer in its own resize listener, so this
-  // handler must stay synchronous and on the field (registered before
-  // anchorTo's): a throttle or requestAnimationFrame would cap it too late
-  // and the field would be placed at its old width.
+  // while the field is open, its placement follows viewport resizes and, in a
+  // LayoutControl row, the row's own resizes (a resizable pane or a sidebar
+  // changes the row without a window resize); the wrapper keeps the square's
+  // box, so it stands in for the swapped-out square. Popup's anchorTo
+  // measures the layer in its own resize listener, so the window handler must
+  // stay synchronous and on the field (registered before anchorTo's): a
+  // throttle or requestAnimationFrame would cap it too late and the field
+  // would be placed at its old width.
   capOnResize = modifier((field: HTMLElement) => {
-    let resize = () => {
-      let root = field.closest<HTMLElement>('[data-pretui-search-collapse]');
+    let root = field.closest<HTMLElement>('[data-pretui-search-collapse]');
+    let remeasure = () => {
       if (root) {
-        this.measureRoom(root.getBoundingClientRect());
+        this.measureOpen(root.getBoundingClientRect(), root);
       }
     };
-    window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
+    window.addEventListener('resize', remeasure);
+    let row = root?.closest('[data-pretui-layout-control]');
+    let observer = row ? new ResizeObserver(remeasure) : undefined;
+    if (row) {
+      observer?.observe(row);
+    }
+    return () => {
+      window.removeEventListener('resize', remeasure);
+      observer?.disconnect();
+    };
   });
   get openStyle() {
-    return htmlSafe(`max-inline-size: ${this.openRoom}px`);
+    // --pretui-search-open-w overrides the row width
+    return this.openRowWidth
+      ? htmlSafe(
+          `inline-size: var(--pretui-search-open-w, ${this.openRowWidth}px); max-inline-size: none`,
+        )
+      : htmlSafe(`max-inline-size: ${this.openRoom}px`);
   }
   // keydown and focusout from inside the field, on the wrapper; Popup renders
   // its layer inside the anchor, so both bubble here. With no backdrop, a
@@ -389,7 +417,8 @@ export class SearchInput extends Component<SearchInputSignature> {
           inline-size: 100%;
           block-size: 100%;
         }
-        /* capped inline, on open, to the roomier side of the square */
+        /* in a LayoutControl row the inline style sets the row's width; else
+           capped inline, on open, to the roomier side of the square */
         .pretui-searchcollapse-field {
           inline-size: var(--pretui-search-open-w, 15rem);
         }

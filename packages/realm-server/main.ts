@@ -52,7 +52,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler.ts';
-import { realmDiskPath } from './lib/realm-disk-path.ts';
+import { mountableRealmDiskPath } from './lib/realm-disk-path.ts';
 import { findRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
@@ -874,17 +874,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // has finished its first reconcile pass.
   reconciler = new RealmRegistryReconciler({
     dbAdapter,
-    bootstrapOrder: hrefs.map(([url]) => url),
+    bootstrapRealms: hrefs.map(([url]) => url),
     prepareRealmFromRow: (row: RealmRegistryRow) => {
       // The directory `mayNameRealmPolicy` reads a realm's `realm.json` from
       // to decide whether to mount it, so the file it reads is the one the
       // mounted realm reads its policy pointer from.
-      let diskPath = realmDiskPath(row, realmsRootPath);
-      if (!diskPath) {
-        throw new Error(
-          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
-        );
-      }
+      let diskPath = mountableRealmDiskPath(row, realmsRootPath);
       const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
       let publishedMount = publishedMountOf(row);
       let fullIndexOnStartup = resolveFullIndexOnStartup(

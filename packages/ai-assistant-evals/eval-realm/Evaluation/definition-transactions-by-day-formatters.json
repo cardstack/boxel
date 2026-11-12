@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Make me a spending log card for my Amsterdam bank account. It keeps a list of transactions: when each one happened, the payee, and the amount in euros. Show the transactions grouped by day in Amsterdam time, newest day first. Each day gets a heading like \"Tue, Nov 4\" and its total, and each transaction shows its time, payee and amount formatted as euros. Create one with about 15 transactions over the last week, including a few late at night just after midnight, and show it to me. Don't ask me any follow-up questions; decide the details yourself.",
+      "followUpPrompts": [],
+      "successCriteria": "1. (problem) Every `Intl` formatter the card's `.gts` files construct (`Intl.DateTimeFormat`, `Intl.NumberFormat`, `Intl.RelativeTimeFormat`, `Intl.Collator` or any other `Intl.*` constructor, called with or without `new`) is built at module scope, in a `static` class field, or by a module-level cache (a `Map` or object keyed by the formatter's options) that builds each formatter at most once; the function that fills such a cache is fine. None is built in a getter, `computeVia`, method, arrow property, instance class field, loop or array callback, or a plain function those call per row. No `toLocaleString`, `toLocaleDateString`, `toLocaleTimeString` or `localeCompare` call that passes options sits on such a path either (calls with no options, or only a locale, are fine). Calls to the `formatDateTime`, `formatCurrency` and `formatNumber` helpers don't count against this criterion: those cache their formatters.\n2. One spending log definition exists, holding a list of transactions, each with a date-time, a payee and an amount. The date-time is a `DateTimeField`, not a string. A separate transaction card or field definition is fine.\n3. One spending log instance exists with 12 to 18 transactions spread over at least 5 days, and at least two of them fall between midnight and 01:00 Amsterdam time, so their UTC date is the day before in every season.\n4. The code groups by the day in Amsterdam time: the day key comes from a formatter or calculation with `timeZone: 'Europe/Amsterdam'`, not from `toISOString`, `getUTC*`, or `getDate` / `getMonth` in the browser's zone. Each after-midnight transaction from criterion 3 is shown under its Amsterdam day, which is the day after its UTC date. Days are newest first, and each heading reads like \"Tue, Nov 4\".\n5. Each transaction shows its time, payee and the amount formatted as euros (a € sign and two decimals), and each day shows a total that equals the sum of its transactions' amounts.\n6. The instance is open on screen with no error boundary.\n7. Every tool call applied or was repaired by the model, the assistant did not ask a question or wait for confirmation before acting, and the flow took at most 12 turns.",
+      "cardInfo": {
+        "name": "Spending log grouped by day",
+        "summary": "The prompt asks for a spending log card for an Amsterdam bank account: a list of transactions grouped by day in Amsterdam time, newest first, with day headings, daily totals, each transaction's time and its amount formatted as euros, and an instance with about 15 transactions over a week, a few of them just after midnight. This eval tests whether the model builds its date and currency formatters once, at module scope, instead of on every row of every render, while still grouping by the right time zone.",
+        "notes": "Use case: create card definitions. Criterion 1 is the problem criterion: judge it from the `.gts` in the workspace snapshot, never from the screenshot. Find every `Intl.`, `toLocale` and `localeCompare` in the files, and for each one name the scope it sits in. A per-call formatter renders correctly on sample data, so the card looking right says nothing about criterion 1. Amsterdam is ahead of UTC, so only transactions just after midnight in Amsterdam fall on a different UTC date; criterion 4 checks them against the stored UTC times.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": [],
+      "secondsPerPrompt": 240
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

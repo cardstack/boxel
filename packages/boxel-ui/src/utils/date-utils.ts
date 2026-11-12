@@ -1,3 +1,4 @@
+import { cachedDateTimeFormat } from './intl-formatters.ts';
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 export type DateLike = Date | string | number;
@@ -81,7 +82,7 @@ export function getZonedDateParts(
   // the requested IANA timezone. We default to numeric 24-hour time so that
   // parsing is unambiguous; callers can supply a millisecond from the source
   // Date if needed (Intl does not surface milliseconds).
-  const formatter = new Intl.DateTimeFormat('en-CA', {
+  const formatter = cachedDateTimeFormat('en-CA', {
     timeZone,
     numberingSystem: 'latn',
     year: 'numeric',
@@ -185,7 +186,7 @@ function parseExcelSerial(
 
 export function resolveEffectiveTimeZone(input?: string): string {
   try {
-    return input ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+    return input ?? cachedDateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
   } catch {
     return input ?? 'UTC';
   }

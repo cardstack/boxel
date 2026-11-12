@@ -1198,12 +1198,14 @@ export class RealmServer {
     //    insertion order — realms[] is empty in production main.ts, so
     //    this is a no-op there.
     // 2. Reconciler-driven boot — reconciler.reconcile() reads
-    //    realm_registry into knownByUrl and eager-mounts every pinned
-    //    row via mountFromRow (the main.ts factory), which constructs
-    //    a Realm, publishes into realms[] + virtualNetwork, then
-    //    awaits realm.start() so each pinned realm is fully indexed
-    //    before this method returns. Non-pinned rows are deferred to
-    //    findOrMountRealm() on first request.
+    //    realm_registry into knownByUrl and eager-mounts the pinned
+    //    rows this process was started with (the reconciler's
+    //    `bootstrapRealms`; every pinned row when that is omitted) via
+    //    mountFromRow (the main.ts factory), which constructs a Realm,
+    //    publishes into realms[] + virtualNetwork, then awaits
+    //    realm.start() so each of those realms is fully indexed before
+    //    this method returns. Every other row, pinned or not, is
+    //    deferred to findOrMountRealm() on first request.
     //
     // The reconciler's background poll loop (LISTEN realm_registry +
     // 30s safety poll) starts in main.ts after this method returns.

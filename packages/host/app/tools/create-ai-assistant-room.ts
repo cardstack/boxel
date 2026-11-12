@@ -13,11 +13,8 @@ import {
 import { isSkillCard } from '../lib/file-def-manager';
 
 import HostBaseTool from '../lib/host-base-tool';
-import {
-  getSkillSourceTools,
-  loadSkillSource,
-  type SkillSource,
-} from '../lib/skill-tools';
+import { getSkillSourceTools, type SkillSource } from '../lib/skill-tools';
+import { loadSkillWithLayoutFallback } from '../lib/skills-layout-fallback';
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
@@ -106,7 +103,11 @@ export default class CreateAiAssistantRoomTool extends HostBaseTool<
     await Promise.all(
       ids.map(async (id) => {
         try {
-          let source = await loadSkillSource(this.store, id);
+          // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
+          // The uploaded file keeps the id it loaded from, so the room
+          // stores that id.
+          let source = (await loadSkillWithLayoutFallback(this.store, id))
+            ?.source;
           if (!source) {
             console.warn(
               `[CreateAiAssistantRoomTool] skipping skill "${id}": not a skill card or skill markdown file`,

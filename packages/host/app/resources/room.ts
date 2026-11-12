@@ -54,9 +54,12 @@ import { usedLLMsFromEvents } from '../lib/pickable-models';
 import {
   getSkillSourceTools,
   isMarkdownSkillId,
-  loadSkillSource,
   peekSkillSource,
 } from '../lib/skill-tools';
+import {
+  loadSkillWithLayoutFallback,
+  skillIdToStore,
+} from '../lib/skills-layout-fallback';
 
 import type { Message, MessageCompaction } from '../lib/matrix-classes/message';
 
@@ -163,6 +166,8 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   #skillIds = new Set<string>();
+  // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
+  #rewritingSkillUrls = false;
   #hasRegisteredDestructor = false;
   #responseStreamPreviewDisposer: (() => void) | undefined;
   // Highest to-device preview `sequence` applied per streaming message
@@ -800,11 +805,12 @@ export class RoomResource extends Resource<Args> {
         // A skill markdown file loads as a file-meta resource (not a card doc
         // downloaded from Matrix). Keep its instance in the store so the menu
         // pill renders and the room's usable commands resolve.
-        let source = await loadSkillSource(
+        // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
+        let resolved = await loadSkillWithLayoutFallback(
           this.store,
           skillCardFileDef.sourceUrl,
         );
-        return source ? skillCardFileDef.sourceUrl : undefined;
+        return resolved?.id;
       }
       let cardDoc =
         await this.matrixService.downloadCardFileDef(skillCardFileDef);
@@ -820,11 +826,46 @@ export class RoomResource extends Resource<Args> {
 
   private async loadSkills(skillCardFileDefs: SerializedFile[]) {
     let skillIds: string[] = [];
+    let hasMovedSkill = false;
     for (let skillCardFileDef of skillCardFileDefs) {
       let skillId = await this.loadEnabledSkill(skillCardFileDef);
       if (skillId) {
         skillIds.push(skillId);
+        if (
+          isMarkdownSkillId(skillCardFileDef.sourceUrl) &&
+          skillId !== skillCardFileDef.sourceUrl
+        ) {
+          hasMovedSkill = true;
+        }
       }
+    }
+    // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
+    // The skill pills and `tools` read the room state's URLs, so a skill that
+    // loads from the other URL, enabled or disabled, is written back to the
+    // state now rather than on the next send. The state update reloads the
+    // room with the new URLs.
+    for (let fileDef of this.matrixRoom?.skillsConfig.disabledSkillCards ??
+      []) {
+      if (hasMovedSkill) {
+        break;
+      }
+      if (
+        (await skillIdToStore(this.store, fileDef.sourceUrl)) !==
+        fileDef.sourceUrl
+      ) {
+        hasMovedSkill = true;
+      }
+    }
+    if (hasMovedSkill && this.roomId && !this.#rewritingSkillUrls) {
+      this.#rewritingSkillUrls = true;
+      this.matrixService
+        .updateSkillsAndToolsIfNeeded(this.roomId)
+        .catch((e) =>
+          console.warn(
+            `Failed to rewrite moved skill URLs for room ${this.roomId}: ${e}`,
+          ),
+        )
+        .finally(() => (this.#rewritingSkillUrls = false));
     }
     let oldReferences = [...(this.#skillIds ?? [])];
     let newReferences = [...(skillIds ?? [])];

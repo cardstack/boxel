@@ -1,6 +1,14 @@
-import type { BaseOperation } from '@cardstack/runtime-common';
+import {
+  ensureTrailingSlash,
+  humanReadable,
+  rri,
+  type BaseOperation,
+  type Loader,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
+import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
-import type { CardDef } from '@cardstack/base/card-api';
+import type { BaseDef, CardDef } from '@cardstack/base/card-api';
 import type * as OperationsModule from '@cardstack/base/operations';
 
 // The checks an operation named as data passes before it is sent, shared by
@@ -108,8 +116,17 @@ function own(
 // declared on `CardDef` itself, so a type that does not set one of its own
 // reports as "Card", which tells a caller nothing about the card they named.
 export function defNameOf(card: CardDef): string {
-  let owner = card.constructor as { displayName?: string; name?: string };
-  return owner.name || owner.displayName || 'this card';
+  return typeNameOf(card.constructor as typeof CardDef, 'this card');
+}
+
+// A type as a refusal names it, by the same reading. The fallback describes
+// what the call was reached through: a card, or a type with no card at all.
+export function typeNameOf(
+  type: typeof BaseDef,
+  fallback: 'this card' | 'this type' = 'this type',
+): string {
+  let owner = type as { displayName?: string; name?: string };
+  return owner.name || owner.displayName || fallback;
 }
 
 // An operation that acts on the card it is invoked on, as its type declares
@@ -148,4 +165,100 @@ export function assertInstanceOperation(
     );
   }
   return base;
+}
+
+// The class an operation on a type names. A relative module is read from the
+// root of the realm the operation runs in, as a path in that realm is.
+export async function loadOperationType(
+  name: string,
+  type: ResolvedCodeRef,
+  realm: string,
+  loader: Loader,
+): Promise<typeof BaseDef> {
+  try {
+    return await loadCardDef(type, {
+      loader,
+      relativeTo: rri(ensureTrailingSlash(realm)),
+    });
+  } catch (error) {
+    throw new Error(
+      `cannot run "${name}": ${humanReadable(type)} did not load: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
+
+// Invokes an operation on a type rather than on one of its cards, through the
+// class itself as card code's `operations(Class)` does: the plain `create`, or
+// a declared operation the type carries in that scope, such as a declared
+// create. It runs in `realm`, since a type names no card whose realm it could
+// take.
+//
+// Refuses what `assertInstanceOperation` refuses, listing the names the type
+// carries in this scope, and a payload missing a declared param.
+// `relationships` is read for the plain `create` alone, the one operation with
+// a new card for it to describe. Answers the base beside the answer, so the
+// caller knows whether the answer is a write or a document.
+//
+// Building the bucket names the class by its module and export, so a class no
+// module exports is refused by `operations()` itself.
+export async function invokeOnType(
+  operationsModule: typeof OperationsModule,
+  type: typeof BaseDef,
+  name: string,
+  payload: Record<string, unknown> | undefined,
+  opts: {
+    realm: string;
+    relationships?: Record<string, unknown>;
+    skipIndexWait?: boolean;
+  },
+): Promise<{ base: BaseOperation; answer: unknown }> {
+  let declarations = operationsModule.getDeclaredOperations(type);
+  let bucket = (
+    operationsModule.operations as (
+      target: unknown,
+      opts?: { skipIndexWait?: boolean },
+    ) => OperationsBucket
+  )(type, opts.skipIndexWait ? { skipIndexWait: true } : undefined);
+  let base = baseOf(name, declarations);
+  if (declarations[name] && base === 'query') {
+    throw new Error(
+      `"${name}" is a query operation: it answers a live set of search results, not a value. Search with search-entries, or realm.cards.search or realm.entries.search in run-realm-code, instead.`,
+    );
+  }
+  if (
+    name === BATCH_MEMBER ||
+    typeof bucket[name] !== 'function' ||
+    !offeredHere(name, 'type', base, declarations)
+  ) {
+    let names = invocableNames([{ scope: 'type', bucket }], declarations);
+    throw new Error(
+      `"${name}" is not an operation ${typeNameOf(type)} carries on the type itself${
+        declarations[name]
+          ? ': it acts on one of its cards, so it is invoked on that card'
+          : ''
+      }. ${
+        names.length > 0
+          ? `On the type it carries: ${names.join(', ')}`
+          : 'It carries none on the type'
+      }`,
+    );
+  }
+  let mintsACard = base === 'create' && !declarations[name];
+  if (opts.relationships && !mintsACard) {
+    throw new Error(
+      `"${name}" is not the plain "create", so it has no new card for "relationships" to describe. A declared operation takes the cards it links to among its params, in "payload".`,
+    );
+  }
+  assertPayloadSuppliesParams(name, declarations[name], payload);
+  let member = bucket[name] as (
+    payload?: unknown,
+    opts?: unknown,
+  ) => Promise<unknown>;
+  let answer = await member(payload, {
+    realm: opts.realm,
+    ...(opts.relationships ? { relationships: opts.relationships } : {}),
+  });
+  return { base, answer };
 }
