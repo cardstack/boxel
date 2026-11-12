@@ -612,6 +612,34 @@ module('reader', (hooks) => {
     );
   });
 
+  test('a superseded revision follows the revision that names it, even above a newer write to another path', async (assert) => {
+    let initial = await record([
+      await put('Author/jane.json', '{"v":0}', 'A'),
+      await put('Author/other.json', '{"v":0}', 'A'),
+    ]);
+    let [userEdit, otherEdit, aiPatch] = await recordLagging([
+      { changes: async () => [await put('Author/jane.json', '{"v":"alice"}')] },
+      {
+        changes: async () => [await put('Author/other.json', '{"v":"bob"}')],
+        fields: { author: BOB },
+      },
+      {
+        changes: async () => [await put('Author/jane.json', '{"v":"ai"}')],
+        fields: aiWrite('tool-call-1'),
+      },
+    ]);
+    assert.deepEqual(
+      ids(await history({ includeDiffs: false })),
+      [aiPatch, otherEdit, userEdit, initial],
+      'the whole realm lists them in history order',
+    );
+    assert.deepEqual(
+      ids(await history({ paths: ['Author/'], includeDiffs: false })),
+      [aiPatch, userEdit, otherEdit, initial],
+      'a directory lists the superseded revision right after the one that names it',
+    );
+  });
+
   test('the correlationId filter lists only the revisions whose trailer includes it', async (assert) => {
     await record([await put('a.json', '{}', 'A')]);
     let tool = await record(

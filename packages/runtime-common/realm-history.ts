@@ -406,7 +406,10 @@ export interface HistoryUnavailable {
 export type ReadHistoryResult =
   | {
       kind: 'history';
-      // Newest first.
+      // Newest first, except a superseded write's revision, which changed
+      // nothing under the paths: it follows the oldest listed revision whose
+      // `Boxel-Includes-Superseded` names it, so a newer revision that
+      // changed another path under the filters can come after it.
       revisions: RevisionSummary[];
       // Whether a page after this one may list more.
       hasMore: boolean;

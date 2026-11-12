@@ -677,11 +677,13 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
   // changed nothing there.
   //
   // A superseded revision is listed once in any listing, after the oldest
-  // listed revision that names it under the filters, which is its place in
-  // history. A revision the filters list on its own, or that a
-  // `correlationId` filter leaves out, is never inserted, and nothing is
-  // inserted into a listing by `status`, since the trailers don't record
-  // what kind of change the superseded write made.
+  // listed revision that names it under the filters. That keeps its place
+  // the same on every page, and puts it just below a write to the path it
+  // superseded; under a directory or several filters, a revision newer than
+  // it that changed another path can come after it. A revision the filters
+  // list on its own, or that a `correlationId` filter leaves out, is never
+  // inserted, and nothing is inserted into a listing by `status`, since the
+  // trailers don't record what kind of change the superseded write made.
   async #insertions(
     gitDir: string,
     hosts: LogRecord[],
