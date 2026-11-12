@@ -7,8 +7,10 @@ import {
   SupportedMimeType,
   type Realm,
   namedRealmUsers,
+  ri,
 } from '@cardstack/runtime-common';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
+import { pauseRealmAutomations } from '@cardstack/runtime-common/automations';
 import * as Sentry from '@sentry/node';
 import {
   sendResponseForSystemError,
@@ -26,6 +28,7 @@ export default function handleArchiveRealm({
   dbAdapter,
   matrixClient,
   sendEvent,
+  virtualNetwork,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let target = await resolveAndAuthorizeArchiveTarget(
@@ -40,6 +43,15 @@ export default function handleArchiveRealm({
     let { realmURL, permissions } = target;
 
     try {
+      // An archived realm's automations stop with it: each is paused, and its
+      // pending run canceled, until a direct writer resumes it. They pause
+      // before the realm is marked archived, so a failure in between leaves
+      // the realm visible with its automations stopped, never archived with
+      // them running, and a retry archives it.
+      await pauseRealmAutomations(
+        dbAdapter,
+        ri(virtualNetwork.unresolveURL(realmURL)),
+      );
       await archiveRealm(dbAdapter, new URL(realmURL));
       // Stop the realm's indexer: cancel any in-flight from-scratch /
       // incremental-index job and drop the pending queue in every lane of

@@ -1,5 +1,5 @@
 import type * as JSONTypes from 'json-typescript';
-import type { Task, WorkerArgs } from './index.ts';
+import type { Task, TaskArgs, WorkerArgs } from './index.ts';
 import {
   jobIdentity,
   notifyAllFileChanges,
@@ -30,6 +30,7 @@ import {
 } from '../jobs/prerender-html.ts';
 import type { JobInfo, Stats, IndexPhaseTimings } from '../worker.ts';
 import { queueClaimOf, type QueueClaim } from '../jobs/queue-claim.ts';
+import { syncAutomationsAfterIndex } from '../automation-index-hook.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
@@ -786,6 +787,14 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     // Grafana variants, direct `enqueueReindexRealmJob`) don't otherwise run
     // `clearRealmIndexCachesAndBroadcast()`. Best-effort, same as above.
     await notifyRealmIndexUpdated(dbAdapter, args.realmURL);
+    // The pass rebuilt the whole realm, so every automation in it follows
+    // its card.
+    await syncAutomationsAfterPass(log, jobInfo, {
+      dbAdapter,
+      definitionLookup,
+      virtualNetwork,
+      realmURL,
+    });
     reportStatus(args.jobInfo, 'finish');
     let queueClaim = queueClaimOf(jobInfo);
     return {
@@ -978,6 +987,15 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       }
       await notifyRealmIndexUpdated(dbAdapter, realmURL);
     }
+    // A deleted card's row is gone from the index, so the pass's changes are
+    // named alongside what it visited.
+    await syncAutomationsAfterPass(log, jobInfo, {
+      dbAdapter,
+      definitionLookup,
+      virtualNetwork,
+      realmURL,
+      touched: [...invalidations, ...changes.map(({ url }) => url)],
+    });
     reportStatus(jobInfo, 'finish');
     let queueClaim = queueClaimOf(jobInfo);
     return {
@@ -993,6 +1011,37 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       coalescedCallers,
     };
   };
+
+// The automation card's index hook, run once the pass has committed. The index
+// is already committed, so a failure here is logged, naming the automation
+// when one automation's sync failed, and leaves the job a success: the next
+// pass over the card syncs its automation again.
+async function syncAutomationsAfterPass(
+  log: TaskArgs['log'],
+  jobInfo: JobInfo | undefined,
+  args: Parameters<typeof syncAutomationsAfterIndex>[0],
+): Promise<void> {
+  try {
+    let synced = await syncAutomationsAfterIndex(args);
+    for (let [automationId, result] of synced) {
+      if (result.kind === 'failed') {
+        log.warn(
+          `${jobIdentity(jobInfo)} failed to sync automation ${automationId} with its card: ${(result.error as Error)?.message}`,
+        );
+      } else if (result.kind !== 'unchanged') {
+        log.debug(
+          `${jobIdentity(jobInfo)} automation ${automationId} ${result.kind}${
+            result.kind === 'removed' ? ` (${result.reason})` : ''
+          } after indexing its card`,
+        );
+      }
+    }
+  } catch (e) {
+    log.warn(
+      `${jobIdentity(jobInfo)} failed to sync automations with their cards in ${args.realmURL}: ${(e as Error)?.message}`,
+    );
+  }
+}
 
 export function ensureRealmOwnerPermissions(
   permissions: RealmPermissions,
