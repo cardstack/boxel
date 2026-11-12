@@ -1006,11 +1006,14 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
   }
 
   // The diff of each change on the page, from one `git diff-tree --stdin`
-  // fed the page's revisions. With `-z`, each revision's output is its id,
-  // its raw entries and, when it changed anything, a NUL and its patch, with
-  // one `diff --git` section per raw entry in the same order. A patch holds
-  // no NUL (binary content is reported, not printed), so the next NUL ends
-  // the next revision's id.
+  // fed the page's revisions. With `-z`, each revision's output is its id
+  // and a NUL, its raw entries and, when it changed anything, a NUL and its
+  // patch, with one `diff --git` section per raw entry in the same order.
+  // git prints a file as text unless a NUL falls in its first 8000 bytes, so
+  // a patch can hold a NUL; it ends where a line holds the next revision's
+  // id and a NUL, which no patch line can, since each starts with a space,
+  // `+`, `-` or a header word. A section that isn't UTF-8 text with no NUL
+  // is a binary change, like one git reports as binary.
   //
   // A section above the per-file cap is left out. Once the sections kept
   // reach the budget, the process is stopped and the rest are left out;
@@ -1084,11 +1087,14 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
           if (buffer[position] !== 0) {
             throw new Error(`git diff-tree printed no patch for ${id}`);
           }
-          let nextHeader = buffer.indexOf(0, position + 1);
+          let following = ids[next + 1];
+          let nextHeader = following
+            ? buffer.indexOf(`\n${following}\0`, position + 1, 'latin1')
+            : -1;
           if (nextHeader === -1 && !ended) {
             return false;
           }
-          let end = nextHeader === -1 ? buffer.byteLength : nextHeader - 40;
+          let end = nextHeader === -1 ? buffer.byteLength : nextHeader + 1;
           patch = buffer.subarray(position + 1, end);
           position = end;
         }
@@ -1105,7 +1111,8 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
             continue;
           }
           let section = sections[index];
-          if (/^Binary files .* differ$/m.test(section.toString('utf8'))) {
+          let text = utf8Text(section);
+          if (text === undefined || /^Binary files .* differ$/m.test(text)) {
             diffs.set(change, { omitted: 'binary' });
           } else if (section.byteLength > this.#maxDiffBytesPerFile) {
             diffs.set(change, { omitted: 'too-large' });
@@ -1114,7 +1121,7 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
             return true;
           } else {
             spent += section.byteLength;
-            diffs.set(change, { diff: section.toString('utf8') });
+            diffs.set(change, { diff: text });
           }
         }
         buffer = buffer.subarray(position);

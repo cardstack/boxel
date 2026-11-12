@@ -728,6 +728,48 @@ module('reader', (hooks) => {
     );
   });
 
+  test('a diff git prints as text but that is not UTF-8 text is a binary change', async (assert) => {
+    // git calls a file binary only for a NUL in its first 8000 bytes, so it
+    // prints these as text: a NUL further in, and Latin-1.
+    let late = (tail: string) =>
+      Buffer.concat([
+        Buffer.from('a'.repeat(9000)),
+        Buffer.from([0]),
+        Buffer.from(tail),
+      ]);
+    await record([
+      await put('late-nul.txt', late('one\n'), 'A'),
+      await put('latin1.txt', Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]), 'A'),
+    ]);
+    let edited = await record([
+      await put('late-nul.txt', late('two\n')),
+      await put('latin1.txt', Buffer.from([0x63, 0x61, 0x66, 0xe8, 0x0a])),
+    ]);
+    await record([await put('after.md', 'after\n', 'A')]);
+
+    let listing = await history();
+    assert.deepEqual(
+      ids(listing).slice(1, 2),
+      [edited],
+      'the listing reads past the revision',
+    );
+    for (let revision of listing.revisions.slice(1)) {
+      for (let change of revision.changes) {
+        assert.strictEqual(
+          change.diff,
+          undefined,
+          `${change.path} has no diff`,
+        );
+        assert.strictEqual(change.diffOmitted, 'binary');
+      }
+    }
+    assert.strictEqual(
+      listing.revisions[0].changes[0].diffOmitted,
+      undefined,
+      'a later text diff is still read',
+    );
+  });
+
   test('readAtRevision answers every outcome', async (assert) => {
     let first = await record([
       await put('Author/jane.json', '{"v":1}', 'A'),
