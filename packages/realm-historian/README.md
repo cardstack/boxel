@@ -86,11 +86,18 @@ Each job runs in its realm's recorder queue, so it never runs between a commit
 and its cursor update. It runs only when the realm has no events in hand. A job
 asked for while the realm has events captured, being handled or queued is
 skipped at once, and one that reaches the front of the queue with events queued
-behind it is skipped then. A skipped job is tried again a moment later. A job holds no recording permit.
-Stopping the recorder aborts the job's signal and waits for it. A realm with
-work due and no recorder gets one, which is dropped once idle again. A job that
-fails is logged and tried again after its kind's retry delay. The realm records
-on, unless the kind stalls the realm on failure.
+behind it is skipped then. A skipped job is tried again a moment later. A job
+holds no recording permit.
+
+A job's signal fires when its recorder stops, and when the realm's events fill
+the queue behind it, since a full queue holds up every realm the task records.
+Either way the job counts as not having run, whether it then returns or throws:
+cut short by events, it is skipped and tried again a moment later, from the
+beginning. So a kind must end promptly once its signal fires, and must be safe
+to start again. Stopping the recorder waits for the job. A realm with work due
+and no recorder gets one, which is dropped once idle again. A job that fails is
+logged and tried again after its kind's retry delay. The realm records on,
+unless the kind stalls the realm on failure.
 
 ## Scripts
 

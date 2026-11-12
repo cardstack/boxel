@@ -12,10 +12,12 @@
 // commits. A realm with no recorder gets one, and the task drops that
 // recorder again once it is idle.
 //
-// A job that is skipped, because the realm had events captured or queued,
-// stays due and is tried again a moment later. A job that fails, or that
-// its recorder can't run because the realm stalled or the recorder stopped,
-// is logged and tried again after the kind's retry delay.
+// A job that is skipped, because the realm had events in hand, or that was
+// cut short because the realm's events filled the queue behind it, stays
+// due and is tried again a moment later, from the beginning: a kind ends
+// promptly once its signal fires, and is safe to start again. A job that
+// fails, or that its recorder can't run because the realm stalled or the
+// recorder stopped, is logged and tried again after the kind's retry delay.
 
 import { logger } from '@cardstack/runtime-common';
 import type { RecordedRealm } from './realms.ts';
