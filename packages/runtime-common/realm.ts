@@ -2872,13 +2872,16 @@ export interface MatrixConfig {
 // Why a run's commit was refused before anything was claimed, with the
 // status and code the commit route answers with.
 class RunCommitRefusal extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    readonly title: string,
-    readonly detail: string,
-  ) {
+  readonly status: number;
+  readonly code: string;
+  readonly title: string;
+  readonly detail: string;
+  constructor(status: number, code: string, title: string, detail: string) {
     super(detail);
+    this.status = status;
+    this.code = code;
+    this.title = title;
+    this.detail = detail;
   }
 }
 
