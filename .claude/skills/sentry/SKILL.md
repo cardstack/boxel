@@ -53,13 +53,15 @@ prints the JSON response.
 ## Usage
 
 ```sh
-scripts/claude-sentry.sh [--env staging|prod] <api-path> [extra curl args...]
+scripts/claude-sentry.sh [--env staging|prod] [--headers] <api-path>
 ```
 
 `<api-path>` is relative to `https://sentry.io/api/0/`. Pipe the output to
-`jq`. Extra arguments go to curl. For example, `-D /dev/stderr` shows the
-response headers, which hold the pagination `Link` header (follow its
-`cursor` when `results="true"`).
+`jq`. The script makes exactly one GET request to that URL and takes no
+other curl arguments: an extra URL would receive the token too. `--headers`
+writes the response headers to stderr. Their `Link` header holds the cursor
+for the next page (follow it when `results="true"`, by adding
+`&cursor=<cursor>` to the path).
 
 The org slug is `cardstack`. The Sentry environment names are the values of
 `REALM_SENTRY_ENVIRONMENT`: `staging` and `production`. List the project
