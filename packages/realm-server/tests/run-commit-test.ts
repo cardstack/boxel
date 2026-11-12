@@ -404,6 +404,44 @@ module(basename(import.meta.filename), function (hooks) {
         headers: { Accept: JSONAPI, Authorization: `Bearer ${session()}` },
       }),
     ))!;
-    assert.strictEqual(response.status, 403);
+    assert.strictEqual(response.status, 403, 'an ordinary session is refused');
+
+    // A run of an automation in another realm, which may read this one.
+    let { run } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let elsewhere = 'http://127.0.0.1:4444/run-commit-elsewhere/';
+    await dbAdapter.execute(
+      `UPDATE automation_runs SET realm = $1 WHERE id = $2`,
+      {
+        bind: [elsewhere, run.id],
+      },
+    );
+    let reader = mintRunToken({
+      realmSecretSeed,
+      run: { ...run, realm: elsewhere as never },
+      realmURL: elsewhere,
+      readRealms: [realmURL.href],
+      writesCap: 10,
+      realmServerURL: realm.realmServerURL,
+      timeLimitSeconds: 600,
+    });
+    assert.strictEqual(
+      (await commit(reader)).status,
+      403,
+      'a run that may only read this realm is refused',
+    );
+    let foreign = mintRunToken({
+      realmSecretSeed,
+      run: { ...run, realm: elsewhere as never },
+      realmURL: elsewhere,
+      readRealms: [],
+      writesCap: 10,
+      realmServerURL: realm.realmServerURL,
+      timeLimitSeconds: 600,
+    });
+    assert.strictEqual(
+      (await commit(foreign)).status,
+      401,
+      'a run of another realm is refused',
+    );
   });
 });
