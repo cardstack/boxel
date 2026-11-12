@@ -73,6 +73,7 @@ const automationJSON = {
         seconds: 60,
         dailyCredits: 5,
         monthlyCredits: 10,
+        aiCredits: 0,
       },
       params: [],
       batchedAI: false,

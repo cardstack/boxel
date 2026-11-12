@@ -92,6 +92,7 @@ const attributes = {
     seconds: 300,
     dailyCredits: 50,
     monthlyCredits: 500,
+    aiCredits: 0,
   },
   params: [],
   batchedAI: false,
