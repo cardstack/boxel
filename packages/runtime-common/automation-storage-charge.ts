@@ -117,20 +117,32 @@ async function chargeOne(
   if (firstDay > day) {
     return { automationId, outcome: 'not-due' };
   }
-  let storage = await getAutomationStorage(dbAdapter, automationId);
-  await query(dbAdapter, [
-    'INSERT INTO automation_storage_days (automation_id, day, realm, file_bytes, index_bytes) VALUES (',
+  // A day is measured once: a duplicate or retried job finds its row and
+  // skips the measurement. Two jobs measuring at once both insert, and the
+  // first row stands.
+  let [measuredAlready] = await query(dbAdapter, [
+    'SELECT 1 FROM automation_storage_days WHERE automation_id =',
     param(automationId),
-    ',',
+    'AND day =',
     param(day),
-    '::date,',
-    param(automation.realm),
-    ',',
-    param(storage.fileBytes),
-    ',',
-    param(storage.indexBytes),
-    ') ON CONFLICT (automation_id, day) DO NOTHING',
+    '::date',
   ]);
+  if (!measuredAlready) {
+    let storage = await getAutomationStorage(dbAdapter, automationId);
+    await query(dbAdapter, [
+      'INSERT INTO automation_storage_days (automation_id, day, realm, file_bytes, index_bytes) VALUES (',
+      param(automationId),
+      ',',
+      param(day),
+      '::date,',
+      param(automation.realm),
+      ',',
+      param(storage.fileBytes),
+      ',',
+      param(storage.indexBytes),
+      ') ON CONFLICT (automation_id, day) DO NOTHING',
+    ]);
+  }
   // Each covered day at its own measurement: bytes summed over days are
   // byte-days.
   let [measured] = (await query(dbAdapter, [
