@@ -6,11 +6,7 @@ import { absolutizeSkillLinks } from '@cardstack/runtime-common/ai';
 const oneShotLogger = logger('llm:oneshot');
 
 import HostBaseTool from '../lib/host-base-tool';
-
-import {
-  loadSkillWithLayoutFallback,
-  otherSkillsLayoutURL,
-} from '../lib/skills-layout-fallback';
+import { loadSkillSource, type SkillSource } from '../lib/skill-tools';
 
 import { prettifyMessages } from '../utils/prettify-messages';
 import { prettifyPrompts } from '../utils/prettify-prompts';
@@ -18,8 +14,6 @@ import { prettifyPrompts } from '../utils/prettify-prompts';
 import ReadSourceTool from './read-source';
 import ReadTextFileTool from './read-text-file';
 import SendRequestViaProxyTool from './send-request-via-proxy';
-
-import type { SkillSource } from '../lib/skill-tools';
 
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
@@ -92,21 +86,9 @@ export default class OneShotLlmRequestTool extends HostBaseTool<
         const attachedFilePromises = input.attachedFileIdentifiers.map(
           async (fileUrl) => {
             try {
-              let fileContents;
-              try {
-                fileContents = await readTextFileCommand.execute({
-                  path: fileUrl,
-                });
-              } catch (error) {
-                // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
-                let otherUrl = otherSkillsLayoutURL(fileUrl);
-                if (!otherUrl) {
-                  throw error;
-                }
-                fileContents = await readTextFileCommand.execute({
-                  path: otherUrl,
-                });
-              }
+              const fileContents = await readTextFileCommand.execute({
+                path: fileUrl,
+              });
               return `\n\n--- ${fileUrl} ---\n${fileContents.content}`;
             } catch (error) {
               console.warn(`Failed to read attached file ${fileUrl}:`, error);
@@ -125,11 +107,7 @@ export default class OneShotLlmRequestTool extends HostBaseTool<
         const skillCardPromises = input.skillCardIds.map(
           async (skillCardId) => {
             try {
-              // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
-              return (
-                (await loadSkillWithLayoutFallback(this.store, skillCardId))
-                  ?.source ?? null
-              );
+              return (await loadSkillSource(this.store, skillCardId)) ?? null;
             } catch (e) {
               console.warn(`Failed to load skill ${skillCardId}:`, e);
               return null;

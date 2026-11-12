@@ -117,7 +117,7 @@ import {
 } from '../lib/realm-runner/transform';
 import { STOPPED_BY_USER } from '../lib/realm-runner/types';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
-import { loadSkillWithLayoutFallback } from '../lib/skills-layout-fallback';
+import { loadSkillSource } from '../lib/skill-tools';
 import {
   captureDeadline,
   captureForAgent,
@@ -3607,8 +3607,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   private async checkSkill(id: string): Promise<void> {
     let source;
     try {
-      // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
-      source = (await loadSkillWithLayoutFallback(this.store, id))?.source;
+      source = await loadSkillSource(this.store, id);
     } catch (error) {
       throw new Error(
         `Unable to load skill ${id}: ${coerceErrorMessage(error, 'unknown error')}`,
