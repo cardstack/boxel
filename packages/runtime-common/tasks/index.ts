@@ -11,6 +11,7 @@ import type {
 } from '../index.ts';
 import type { JobInfo, IndexingProgressEvent } from '../worker.ts';
 import type { MediaCacheAdapter } from '../media-cache.ts';
+import type { MeteredCharges } from '../metered-charges.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 export type * from './lint.ts';
 export * from '#lint-task';
@@ -67,6 +68,10 @@ export interface TaskArgs {
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
   createPrerenderAuth: CreatePrerenderAuth;
+  // Writes metered charges at the process's prices. Optional: a worker
+  // without it, such as a test harness's, measures what it would charge and
+  // writes nothing.
+  meteredCharges?: MeteredCharges;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
   reportProgress?(event: IndexingProgressEvent): void;
   // Request that a realm event be broadcast to subscribed hosts. A task runs
