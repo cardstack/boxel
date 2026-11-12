@@ -1,4 +1,4 @@
-import { waitFor, waitUntil } from '@ember/test-helpers';
+import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -83,24 +83,6 @@ const automationJSON = {
   },
 };
 
-// Shows the automation embedded and fitted, as a list or a link would.
-const HOLDER = `
-  import { CardDef, Component, field, linksTo } from '@cardstack/base/card-api';
-  import { Automation } from '@cardstack/catalog/automation/automation';
-  export class Holder extends CardDef {
-    static displayName = 'Holder';
-    @field automation = linksTo(() => Automation);
-    static isolated = class Isolated extends Component<typeof this> {
-      <template>
-        <div data-test-holder-embedded><@fields.automation @format='embedded' /></div>
-        <div data-test-holder-fitted style='width: 250px; height: 170px'>
-          <@fields.automation @format='fitted' />
-        </div>
-      </template>
-    };
-  }
-`;
-
 const ACTIVE = {
   switchedOn: true,
   state: 'active',
@@ -165,17 +147,6 @@ module('Acceptance | automation view', function (hooks) {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'scripts/nightly.js': `const { cards } = await realm.cards.search({});\n`,
         'automations/nightly.json': automationJSON,
-        'holder.gts': HOLDER,
-        'holders/one.json': {
-          data: {
-            type: 'card',
-            attributes: { cardInfo: { name: 'Holder' } },
-            relationships: {
-              automation: { links: { self: '../automations/nightly' } },
-            },
-            meta: { adoptsFrom: { module: '../holder', name: 'Holder' } },
-          },
-        },
       },
     });
 
@@ -221,6 +192,16 @@ module('Acceptance | automation view', function (hooks) {
     });
   }
 
+  // The automation in one format, as code mode previews it.
+  async function openFormat(format: 'embedded' | 'fitted') {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${AUTOMATION}.json`,
+    });
+    await click(`[data-test-format-chooser="${format}"]`);
+    await waitFor(`[data-test-automation-${format}]`, { timeout: 10000 });
+  }
+
   function text(selector: string) {
     return document.querySelector(selector)?.textContent?.replace(/\s+/g, ' ');
   }
@@ -248,16 +229,13 @@ module('Acceptance | automation view', function (hooks) {
         "the card's own bounds still read",
       );
 
-    await visitOperatorMode({
-      stacks: [[{ id: `${testRealmURL}holders/one`, format: 'isolated' }]],
-    });
-    await waitFor('[data-test-automation-embedded]', { timeout: 30000 });
-    await waitFor('[data-test-automation-fitted]', { timeout: 30000 });
+    await openFormat('embedded');
     assert.dom('[data-test-automation-embedded-state]').doesNotExist();
-    assert.dom('[data-test-automation-fitted-state]').doesNotExist();
     assert
       .dom('[data-test-automation-embedded-trigger]')
       .exists({ count: 4 }, 'the embedded view lists each trigger in words');
+    await openFormat('fitted');
+    assert.dom('[data-test-automation-fitted-state]').doesNotExist();
   });
 
   test('an automation nobody has switched on reads as off', async function (assert) {
@@ -304,16 +282,14 @@ module('Acceptance | automation view', function (hooks) {
     assert.ok(push?.includes('Runs so far 3'), push);
     assert.notOk(push?.includes('Next run'), 'a webhook has no next run');
 
-    await visitOperatorMode({
-      stacks: [[{ id: `${testRealmURL}holders/one`, format: 'isolated' }]],
-    });
+    await openFormat('embedded');
     await waitFor('[data-test-automation-embedded-state="On"]', {
       timeout: 10000,
     });
+    await openFormat('fitted');
     await waitFor('[data-test-automation-fitted-state="On"]', {
       timeout: 10000,
     });
-    assert.dom('[data-test-automation-embedded-state="On"]').exists();
     assert.dom('[data-test-automation-fitted-state="On"]').exists();
   });
 
@@ -370,10 +346,7 @@ module('Acceptance | automation view', function (hooks) {
     for (let [change, label, sentence] of cases) {
       answer = { status: 200, attributes: { ...ACTIVE, ...change } };
       // A view asks once when it mounts, so each state gets a fresh view.
-      await visitOperatorMode({
-        stacks: [[{ id: `${testRealmURL}holders/one`, format: 'isolated' }]],
-      });
-      await waitFor('[data-test-automation-embedded]', { timeout: 30000 });
+      await openFormat('embedded');
       await openIsolated();
       await waitUntil(
         () =>
