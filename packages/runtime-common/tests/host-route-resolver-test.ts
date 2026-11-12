@@ -120,10 +120,11 @@ class FakeRealm {
 
   load = async (request: HostRouteLoadRequest) => {
     this.loads.push(request);
-    if (this.failLoad.has(request.id)) {
-      throw new Error(`load of ${request.id} refused`);
+    let href = request.cardURL.href;
+    if (this.failLoad.has(href)) {
+      throw new Error(`load of ${href} refused`);
     }
-    let card = this.cards.find((c) => c.id === request.id && !c.private);
+    let card = this.cards.find((c) => c.id === href && !c.private);
     return card ? this.view(card, request.linkFields) : undefined;
   };
 
@@ -144,13 +145,13 @@ class FakeRealm {
   };
 
   private view(card: FakeCard, linkFields: readonly string[]): HostRouteCard {
-    let links: Record<string, string[]> = {};
+    let links: Record<string, URL[]> = {};
     for (let field of linkFields) {
       if (card.links?.[field]) {
-        links[field] = card.links[field]!;
+        links[field] = card.links[field]!.map((href) => new URL(href));
       }
     }
-    return { id: card.id, links };
+    return { cardURL: new URL(card.id), links };
   }
 }
 
@@ -181,9 +182,10 @@ async function resolve(
   });
 }
 
+// The served URL of the card a result serves, as an `href`.
 function cardIdOf(result: HostRouteResolution): string | undefined {
   return result.kind === 'card' || result.kind === 'alias'
-    ? result.cardId
+    ? result.cardURL.href
     : undefined;
 }
 
@@ -193,6 +195,17 @@ function tried(result: HostRouteResolution) {
     outcome: step.outcome,
     ...(step.reason ? { reason: step.reason } : {}),
   }));
+}
+
+function permutations<T>(items: readonly T[]): T[][] {
+  if (items.length <= 1) {
+    return [[...items]];
+  }
+  return items.flatMap((item, index) =>
+    permutations([...items.slice(0, index), ...items.slice(index + 1)]).map(
+      (rest) => [item, ...rest],
+    ),
+  );
 }
 
 const tests: SharedTests<unknown> = Object.freeze({
@@ -210,14 +223,14 @@ const tests: SharedTests<unknown> = Object.freeze({
       'returns the matched values',
     );
     assert.deepEqual(
-      realm.loads.map((l) => l.id),
+      realm.loads.map((l) => l.cardURL.href),
       [abs('Person/writer-a')],
       'loads the filled id once',
     );
     assert.strictEqual(realm.searches.length, 0, 'runs no search');
     assert.deepEqual(result.trace[0]?.lookup, {
       kind: 'load',
-      id: abs('Person/writer-a'),
+      cardHref: abs('Person/writer-a'),
       found: true,
     });
   },
@@ -360,6 +373,123 @@ const tests: SharedTests<unknown> = Object.freeze({
       { path: '/posts/:slug', outcome: 'resolved' },
     ]);
   },
+
+  'resolveHostRoute: a route that matches only a prefix does not hide a literal sibling':
+    async (assert) => {
+      let realm = new FakeRealm([
+        { id: 'Post/about' },
+        { id: 'Post/hello' },
+        { id: 'Page/about' },
+        { id: 'Archive/2020' },
+      ]);
+      // `/blog` matches `/blog/about` through its child `/:page`, so all
+      // three routes are candidates for it. Ranked by its own segments
+      // alone, `/blog` would tie with both siblings, or go ahead of
+      // `/blog/about` and commit to its child.
+      let rules: RawHostRoutingRule[] = [
+        { path: '/blog/:slug', card: './Post/:slug' },
+        {
+          path: '/blog',
+          instance: { id: abs('blog-index') },
+          routes: [
+            { path: '/archive/:year', card: './Archive/:year' },
+            { path: '/:page', card: './Page/:page' },
+          ],
+        },
+        { path: '/blog/about', instance: { id: abs('about-page') } },
+      ];
+      let about = await resolve(rules, realm, '/blog/about');
+      assert.strictEqual(
+        cardIdOf(about),
+        abs('about-page'),
+        'the fixed card wins over the :name sibling',
+      );
+      assert.deepEqual(tried(about), [
+        { path: '/blog/about', outcome: 'resolved' },
+      ]);
+      assert.strictEqual(
+        cardIdOf(await resolve(rules, realm, '/blog/archive/2020')),
+        abs('Archive/2020'),
+      );
+      assert.strictEqual(
+        cardIdOf(await resolve(rules, realm, '/blog/hello')),
+        abs('Post/hello'),
+        'routes that tie through a child keep their list order',
+      );
+      let noChild = await resolve(
+        [
+          { path: '/blog/:slug', card: './Post/:slug' },
+          {
+            path: '/blog',
+            instance: { id: abs('blog-index') },
+            routes: [{ path: '/archive/:year', card: './Archive/:year' }],
+          },
+          { path: '/blog/about', instance: { id: abs('about-page') } },
+        ],
+        realm,
+        '/blog/about',
+      );
+      assert.deepEqual(
+        tried(noChild),
+        [{ path: '/blog/about', outcome: 'resolved' }],
+        'a route whose children cannot match the rest is not tried',
+      );
+      assert.strictEqual(
+        cardIdOf(await resolve(rules, realm, '/blog')),
+        abs('blog-index'),
+      );
+    },
+
+  'resolveHostRoute: the order of siblings with different patterns does not depend on the list order':
+    async (assert) => {
+      let realm = new FakeRealm([
+        { id: 'Post/about' },
+        { id: 'Post/hello' },
+        { id: 'Section/x' },
+        { id: 'Any/blog/about' },
+        { id: 'Any/blog/hello' },
+        { id: 'Any/x/about' },
+        { id: 'Any/x/y' },
+        { id: 'Archive/2020' },
+        { id: 'Yearly/blog/2020' },
+        { id: 'Yearly/x/2020' },
+      ]);
+      let siblings: RawHostRoutingRule[] = [
+        { path: '/blog/about', instance: { id: abs('about-page') } },
+        { path: '/blog/:slug', card: './Post/:slug' },
+        { path: '/:section/about', card: './Section/:section' },
+        { path: '/:a/:b', card: './Any/:a/:b' },
+        { path: '/:a/archive/:y', card: './Yearly/:a/:y' },
+        {
+          path: '/blog',
+          instance: { id: abs('blog-index') },
+          routes: [{ path: '/archive/:year', card: './Archive/:year' }],
+        },
+      ];
+      let expected: Record<string, string> = {
+        '/blog/about': abs('about-page'),
+        '/blog/hello': abs('Post/hello'),
+        '/x/about': abs('Section/x'),
+        '/x/y': abs('Any/x/y'),
+        '/blog/archive/2020': abs('Archive/2020'),
+        '/x/archive/2020': abs('Yearly/x/2020'),
+      };
+      let mismatches: string[] = [];
+      let count = 0;
+      for (let rules of permutations(siblings)) {
+        count++;
+        for (let [path, cardHref] of Object.entries(expected)) {
+          let actual = cardIdOf(await resolve(rules, realm, path));
+          if (actual !== cardHref) {
+            mismatches.push(
+              `${rules.map((r) => r.path).join(' ')}: ${path} gave ${actual}`,
+            );
+          }
+        }
+      }
+      assert.strictEqual(count, 720, 'every order of the six routes');
+      assert.deepEqual(mismatches, []);
+    },
 
   'resolveHostRoute: a miss or an unreadable card falls through to the next sibling':
     async (assert) => {
@@ -628,7 +758,7 @@ const tests: SharedTests<unknown> = Object.freeze({
       'a parent that misses lets its sibling try',
     );
     assert.deepEqual(
-      realm.loads.map((l) => l.id),
+      realm.loads.map((l) => l.cardURL.href),
       [abs('Other/hats/x')],
     );
   },
@@ -718,12 +848,12 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.deepEqual(
         result.kind === 'alias'
           ? {
-              cardId: result.cardId,
+              cardURL: result.cardURL.href,
               statusCode: result.statusCode,
               position: result.position,
             }
           : result.kind,
-        { cardId: abs('Person/writer-a'), statusCode: 301, position: [1] },
+        { cardURL: abs('Person/writer-a'), statusCode: 301, position: [1] },
       );
       let missing = await resolve(rules, realm, '/p/nobody');
       assert.strictEqual(missing.kind, 'nothing', 'an alias can miss too');

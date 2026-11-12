@@ -25,6 +25,14 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRouteResolverTests, assert, {});
   });
 
+  test('resolveHostRoute: a route that matches only a prefix does not hide a literal sibling', async function (assert) {
+    await runSharedTest(hostRouteResolverTests, assert, {});
+  });
+
+  test('resolveHostRoute: the order of siblings with different patterns does not depend on the list order', async function (assert) {
+    await runSharedTest(hostRouteResolverTests, assert, {});
+  });
+
   test('resolveHostRoute: a miss or an unreadable card falls through to the next sibling', async function (assert) {
     await runSharedTest(hostRouteResolverTests, assert, {});
   });

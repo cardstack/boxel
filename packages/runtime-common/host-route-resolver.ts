@@ -9,10 +9,11 @@
 // visitor: the realm server with the request's permissions, the host app
 // with the browser's.
 //
-// Walking down the tree, each level tries the routes whose pattern matches
-// the path from where the parent's match stopped: those with a literal
-// segment first, at the first segment where two patterns differ, then in
-// list order. A dynamic route that finds no card, or a card the visitor
+// Walking down the tree, each level tries the routes that match the path
+// from where the parent's match stopped, alone or through their child
+// routes: those with a literal at the first segment of the path where two
+// routes differ go first (a route's child routes count as its segments),
+// then list order. A dynamic route that finds no card, or a card the visitor
 // can't read, lets the next one try. The first route that resolves commits
 // its level: when its children then find nothing, the path resolves to
 // nothing, and no earlier level is tried again. A lookup that throws stops
@@ -28,25 +29,29 @@ import {
   fillRoutePathPattern,
   matchPatternSegments,
   splitRequestPath,
-  type RoutePathPattern,
   type RouteParams,
 } from './route-pattern.ts';
 
-// A card as the resolver needs it: its id, and the cards some of its link
-// fields point to.
+// A card as the resolver needs it: its served URL, and the served URLs of
+// the cards some of its link fields point to.
+//
+// Every card here is named by the URL it is served at, without `.json`:
+// the form the index keys its rows by, and the form `fillCardIdPattern`
+// gives. Card ids and link targets are identifiers (RRIs), and an RRI can
+// be in prefix form, so the caller converts each one to its served URL at
+// its own boundary, with its VirtualNetwork, before it returns the card.
 export interface HostRouteCard {
-  // The card's id: its served URL, without `.json`.
-  id: string;
-  // For each field the lookup asked for in `linkFields`, the ids of the
-  // cards the field links to, as served URLs: one id or none for a
-  // `linksTo`, the list for a `linksToMany`. A field that is missing, or
-  // holds no link, may be left out.
-  links?: Readonly<Record<string, readonly string[] | undefined>>;
+  cardURL: URL;
+  // For each field the lookup asked for in `linkFields`, the served URLs
+  // of the cards the field links to: one or none for a `linksTo`, the
+  // list for a `linksToMany`. A field that is missing, or holds no link,
+  // may be left out.
+  links?: Readonly<Record<string, readonly URL[] | undefined>>;
 }
 
 export interface HostRouteLoadRequest {
-  // The card's id, in the routing realm.
-  id: string;
+  // The served URL of the card to load, in the routing realm.
+  cardURL: URL;
   // The link fields whose values the resolver reads on the card. Often
   // empty.
   linkFields: readonly string[];
@@ -62,7 +67,7 @@ export interface HostRouteSearchRequest {
   linkFields: readonly string[];
 }
 
-// Loads one card by id, as the visitor.
+// Loads one card by its served URL, as the visitor.
 // - Resolves to the card when it exists and the visitor can read it.
 // - Resolves to `undefined` when there is no such card, or the visitor
 //   can't read it. The resolver counts both as a miss.
@@ -75,7 +80,7 @@ export type HostRouteLoad = (
 // Searches the routing realm for cards of a type, as the visitor.
 // - Resolves to the cards the visitor can read that match the filter,
 //   sorted the way the index sorts a search with no sort of its own, which
-//   ends with the card id. The resolver takes the first one that fits, so
+//   ends with the card URL. The resolver takes the first one that fits, so
 //   duplicate values resolve to the card that sorts first. An empty list
 //   is a miss.
 // - Rejects as `HostRouteLoad` does.
@@ -110,7 +115,8 @@ export type HostRouteResolution =
 // Serve this card at the requested path.
 export interface HostRouteCardResult {
   kind: 'card';
-  cardId: string;
+  // The card's served URL.
+  cardURL: URL;
   // The route that resolved the card, as `HostRoute.position`.
   position: readonly number[];
   // Every `:name` value the path matched, decoded.
@@ -133,14 +139,15 @@ export interface HostRouteRedirectResult {
   trace: readonly HostRouteTraceStep[];
 }
 
-// An alias route (`"statusCode": 301`) resolved `cardId`. The resolver
+// An alias route (`"statusCode": 301`) resolved the card at `cardURL`. The resolver
 // doesn't know the card's canonical address: the caller looks it up with
 // the reverse lookup (card to address) and answers a 301 to it. When the
 // card has no other address, the caller serves the card at the requested
 // path instead, as for a `card` result.
 export interface HostRouteAliasResult {
   kind: 'alias';
-  cardId: string;
+  // The card's served URL.
+  cardURL: URL;
   statusCode: 301;
   position: readonly number[];
   params: RouteParams;
@@ -196,7 +203,7 @@ export interface HostRouteTraceStep {
   params: RouteParams;
   // The lookup the route ran, if any.
   lookup?:
-    | { kind: 'load'; id: string; found: boolean }
+    | { kind: 'load'; cardHref: string; found: boolean }
     | {
         kind: 'search';
         type: ResolvedCodeRef;
@@ -210,8 +217,8 @@ export interface HostRouteTraceStep {
   // route at the same level tries. `error`: a lookup rejected.
   outcome: 'resolved' | 'redirect' | 'miss' | 'error';
   reason?: HostRouteMissReason;
-  // The card the route resolved.
-  cardId?: string;
+  // The served URL of the card the route resolved, as an `href`.
+  cardHref?: string;
 }
 
 /**
@@ -319,7 +326,7 @@ class Resolver {
 
       let card: HostRouteCard;
       if (route.kind === 'fixed-card') {
-        card = { id: route.id };
+        card = { cardURL: new URL(route.id) };
       } else {
         let found: HostRouteCard | undefined;
         try {
@@ -339,7 +346,7 @@ class Resolver {
         card = found;
       }
       step.outcome = 'resolved';
-      step.cardId = card.id;
+      step.cardHref = card.cardURL.href;
 
       if (!atEnd) {
         // The route resolves its level: whatever its children find is the
@@ -366,7 +373,7 @@ class Resolver {
       ) {
         return {
           kind: 'alias',
-          cardId: card.id,
+          cardURL: card.cardURL,
           statusCode: 301,
           position: route.position,
           params: allParams,
@@ -375,7 +382,7 @@ class Resolver {
       }
       return {
         kind: 'card',
-        cardId: card.id,
+        cardURL: card.cardURL,
         position: route.position,
         params: allParams,
         trace: this.trace,
@@ -384,10 +391,12 @@ class Resolver {
     return { kind: 'missed' };
   }
 
-  // The routes at one level whose own pattern matches the path from
-  // `offset`, in the order they are tried. A route matches when its
-  // pattern covers the rest of the path, or a prefix of it and the route
-  // has child routes to go on with.
+  // The routes at one level that match the path from `offset`, in the
+  // order they are tried. A route matches when its pattern covers the rest
+  // of the path, or a prefix of it and a chain of its child routes covers
+  // the rest, by pattern alone. A route whose children can't match the
+  // rest never resolves its level, so it never keeps a later sibling from
+  // trying.
   private candidates(
     routes: readonly HostRoute[],
     segments: readonly string[],
@@ -397,30 +406,35 @@ class Resolver {
       route: HostRoute;
       end: number;
       params: RouteParams;
-      pattern: RoutePathPattern | undefined;
+      rank: SegmentRank;
     }[] = [];
     for (let route of routes) {
-      let pattern = route.pattern;
-      if (!pattern) {
+      if (!route.pattern) {
         // A top-level fixed route whose path the pattern parser rejects:
         // it matches its path exactly, as the routing map always matched
         // it, and has no children.
         if (offset === 0 && this.matchesUnparsedPath(route.path)) {
-          out.push({ route, end: segments.length, params: {}, pattern });
+          out.push({
+            route,
+            end: segments.length,
+            params: {},
+            rank: segments.map(() => true),
+          });
         }
         continue;
       }
-      let match = matchPatternSegments(pattern, segments, offset);
+      let match = matchPatternSegments(route.pattern, segments, offset);
       if (!match) {
         continue;
       }
-      if (match.end < segments.length && route.routes.length === 0) {
+      let rank = rankThrough(route, segments, offset);
+      if (!rank) {
         continue;
       }
-      out.push({ route, end: match.end, params: match.params, pattern });
+      out.push({ route, end: match.end, params: match.params, rank });
     }
     // `sort` is stable, so routes that tie keep their list order.
-    out.sort((a, b) => comparePatterns(a.pattern, b.pattern));
+    out.sort((a, b) => compareRanks(a.rank, b.rank));
     return out;
   }
 
@@ -470,20 +484,23 @@ class Resolver {
     let link = parent ? route.parentLink : undefined;
 
     if (route.kind === 'card-id') {
-      let id = fillCardIdPattern(route.card, params, this.options.realmURL);
-      if (id === undefined) {
+      let href = fillCardIdPattern(route.card, params, this.options.realmURL);
+      if (href === undefined) {
         step.reason = 'invalid-card-id';
         return undefined;
       }
-      let load = { kind: 'load' as const, id, found: false };
+      let load = { kind: 'load' as const, cardHref: href, found: false };
       step.lookup = load;
-      let card = await this.options.load({ id, linkFields });
+      let card = await this.options.load({
+        cardURL: new URL(href),
+        linkFields,
+      });
       if (!card) {
         step.reason = 'not-found';
         return undefined;
       }
       load.found = true;
-      if (!this.inRealm(card.id)) {
+      if (!this.inRealm(card.cardURL)) {
         step.reason = 'outside-realm';
         return undefined;
       }
@@ -522,7 +539,7 @@ class Resolver {
       step.reason = 'no-results';
       return undefined;
     }
-    let inRealm = results.filter((card) => this.inRealm(card.id));
+    let inRealm = results.filter((card) => this.inRealm(card.cardURL));
     if (inRealm.length === 0) {
       step.reason = 'outside-realm';
       return undefined;
@@ -538,14 +555,8 @@ class Resolver {
     return card;
   }
 
-  private inRealm(id: string): boolean {
-    let url: URL;
-    try {
-      url = new URL(id);
-    } catch {
-      return false;
-    }
-    return this.realmPaths.inRealm(url);
+  private inRealm(cardURL: URL): boolean {
+    return this.realmPaths.inRealm(cardURL);
   }
 }
 
@@ -581,8 +592,8 @@ function isMember(
   child: HostRouteCard,
   parent: HostRouteCard,
 ): boolean {
-  let childHolds = () => linksTo(child, link.field, parent.id);
-  let parentHolds = () => linksTo(parent, link.field, child.id);
+  let childHolds = () => linksTo(child, link.field, parent.cardURL);
+  let parentHolds = () => linksTo(parent, link.field, child.cardURL);
   switch (link.side) {
     case 'child':
       return childHolds();
@@ -593,25 +604,58 @@ function isMember(
   }
 }
 
-function linksTo(card: HostRouteCard, field: string, id: string): boolean {
-  let ids = card.links?.[field];
-  return Array.isArray(ids) && ids.includes(id);
+function linksTo(card: HostRouteCard, field: string, target: URL): boolean {
+  let urls = card.links?.[field];
+  return (
+    Array.isArray(urls) && urls.some((url: URL) => url.href === target.href)
+  );
 }
 
-// Literal segments before `:name` segments, at the first segment where
-// two patterns differ. A route with no parsed pattern is all literal.
-function comparePatterns(
-  a: RoutePathPattern | undefined,
-  b: RoutePathPattern | undefined,
-): number {
-  let aSegments = a?.segments ?? [];
-  let bSegments = b?.segments ?? [];
-  let length = Math.min(aSegments.length, bSegments.length);
+// For each segment of the path from a route's offset to the end, whether
+// the route matches it with a literal (`true`) or a `:name` (`false`).
+type SegmentRank = readonly boolean[];
+
+// The rank of `route` over the rest of the path: its own segments, then
+// those of the child route chain that ranks best and covers the rest.
+// `undefined` when the route doesn't match, or no child chain covers the
+// rest.
+function rankThrough(
+  route: HostRoute,
+  segments: readonly string[],
+  offset: number,
+): SegmentRank | undefined {
+  if (!route.pattern) {
+    return undefined;
+  }
+  let match = matchPatternSegments(route.pattern, segments, offset);
+  if (!match) {
+    return undefined;
+  }
+  let own = route.pattern.segments.map((s) => s.kind === 'literal');
+  if (match.end === segments.length) {
+    return own;
+  }
+  let best: SegmentRank | undefined;
+  for (let child of route.routes) {
+    let rank = rankThrough(child, segments, match.end);
+    if (rank && (!best || compareRanks(rank, best) < 0)) {
+      best = rank;
+    }
+  }
+  return best ? [...own, ...best] : undefined;
+}
+
+// Literal segments before `:name` segments, at the first segment of the
+// path where two routes differ, counting the segments a route matches
+// through its children. Every candidate at a level covers the same rest
+// of the path, so ranks have the same length and the order is total: the
+// result doesn't depend on which pairs `sort` compares. Routes that tie
+// keep their list order.
+function compareRanks(a: SegmentRank, b: SegmentRank): number {
+  let length = Math.min(a.length, b.length);
   for (let i = 0; i < length; i++) {
-    let aLiteral = aSegments[i]!.kind === 'literal';
-    let bLiteral = bSegments[i]!.kind === 'literal';
-    if (aLiteral !== bLiteral) {
-      return aLiteral ? -1 : 1;
+    if (a[i] !== b[i]) {
+      return a[i] ? -1 : 1;
     }
   }
   return 0;
