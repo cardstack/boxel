@@ -3,6 +3,7 @@
 // lowering (query-syntax.ts) can both use it without importing each other.
 import {
   BxlScoreSqlError,
+  type BxlScoreSqlOptions,
   compileBxlScoreToSql,
   queryExpressionIssues,
 } from '@cardstack/bxl/compiler';
@@ -97,6 +98,13 @@ function atInstant(
   return out;
 }
 
+interface ScoreSqlReads {
+  percentRankToSql?: BxlScoreSqlOptions['percentRankToSql'];
+  countIfToSql?: BxlScoreSqlOptions['countIfToSql'];
+  peerReductionToSql?: BxlScoreSqlOptions['peerReductionToSql'];
+  onFieldRead?: (parts: string[]) => void;
+}
+
 // In a time zone other than UTC (the zone the clock reading carries, see
 // time-zone.ts) every date inside DAYS is the zone's wall time, a
 // `timestamp`: NOW() is the instant's wall time there, TODAY() the zone's
@@ -108,9 +116,10 @@ export function exprSortSql(
   expr: string,
   bindings?: Record<string, Record<string, unknown> | null>,
   now?: Date,
+  reads?: ScoreSqlReads,
 ): string {
   let zone = zoneOfClock(now);
-  let sql = exprSortSqlAsCompiled(expr, bindings, zone);
+  let sql = exprSortSqlAsCompiled(expr, bindings, zone, reads);
   if (now && !isUtcZone(zone)) {
     // the score profile emits TODAY() as UTC midnight and NOW() as now()
     let z = sqlZoneLiteral(zone);
@@ -131,9 +140,13 @@ function exprSortSqlAsCompiled(
   expr: string,
   bindings?: Record<string, Record<string, unknown> | null>,
   zone: string = DEFAULT_TIME_ZONE,
+  reads?: ScoreSqlReads,
 ): string {
   try {
     return compileBxlScoreToSql(expr, {
+      percentRankToSql: reads?.percentRankToSql,
+      countIfToSql: reads?.countIfToSql,
+      peerReductionToSql: reads?.peerReductionToSql,
       fieldToSql(parts, usage) {
         // a comparison set's `peers.<field>` is a list: a function over a
         // list reads it (COUNT, SUM, MIN, MAX, AVERAGE, MEDIAN,
@@ -149,6 +162,7 @@ function exprSortSqlAsCompiled(
             `${parts.join('.')} is a list of the comparison set's values: read it with a function over a list (COUNT, SUM, MIN, MAX, AVERAGE, MEDIAN, PERCENTRANK_INC, COUNTIF), not in arithmetic or a comparison.`,
           );
         }
+        reads?.onFieldRead?.(parts);
         let bound =
           bindings &&
           parts.length > 0 &&

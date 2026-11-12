@@ -45,8 +45,20 @@ import {
 } from '../formula-sql.ts';
 import { filterAnchor } from './filter-sql.ts';
 import { getField } from './filter-paths.ts';
-import { sqlTextArrayLiteral, sqlTextLiteral } from '../sql-literal.ts';
+import { sqlTextArrayLiteral } from '../sql-literal.ts';
 import { tableFromOpts } from './index-sql.ts';
+import { PeerDistributions } from './peer-distributions.ts';
+import { PeerReductions, peerStatistics } from './peer-statistics.ts';
+
+function comparisonFields(expression: string): string[] {
+  return [
+    ...new Set(
+      [...expression.matchAll(/\b(?:peers|stats)\.([A-Za-z_$][\w$]*)/g)].map(
+        (match) => match[1],
+      ),
+    ),
+  ];
+}
 
 export abstract class SortWindow extends SortOrder {
   // A `rerank`: the query's first `top` rows, ordered by a BXL formula over
@@ -279,51 +291,37 @@ export abstract class SortWindow extends SortOrder {
     this.dialect.requirePostgres(
       'expression: a sort entry with `top` runs on Postgres only',
     );
-    let sql = exprSortSql(expr, undefined, opts.queryNow);
     let fields = compared?.fields ?? [];
-    // each field's numbers and, for `peers.`, its text values too
-    // (COUNTIF over text is outside the profile, but a list keeps them)
-    let num = (f: string) =>
-      `CASE jsonb_typeof(c.vals -> ${sqlTextLiteral(f)}) WHEN 'number' THEN (c.vals ->> ${sqlTextLiteral(f)})::double precision END`;
-    let aggregates = (f: string) =>
-      `jsonb_build_object('count', count(${num(f)}), 'sum', COALESCE(sum(${num(f)}), 0), 'avg', avg(${num(f)}), 'min', min(${num(f)}), 'max', max(${num(f)}), 'median', percentile_cont(0.5) WITHIN GROUP (ORDER BY ${num(f)}), 'p10', percentile_cont(0.1) WITHIN GROUP (ORDER BY ${num(f)}), 'p25', percentile_cont(0.25) WITHIN GROUP (ORDER BY ${num(f)}), 'p75', percentile_cont(0.75) WITHIN GROUP (ORDER BY ${num(f)}), 'p90', percentile_cont(0.9) WITHIN GROUP (ORDER BY ${num(f)}), 'stdev', stddev_samp(${num(f)}))`;
-    let peersOf = (f: string) =>
-      `COALESCE(jsonb_agg(c.vals -> ${sqlTextLiteral(f)} ORDER BY c.ord) FILTER (WHERE jsonb_typeof(c.vals -> ${sqlTextLiteral(f)}) IN ('number', 'string')), '[]'::jsonb)`;
-    let pairs = (fn: (f: string) => string) =>
-      fields.length
-        ? `jsonb_build_object(${fields.map((f) => `${sqlTextLiteral(f)}, ${fn(f)}`).join(', ')})`
-        : `'{}'::jsonb`;
-    // a group with no rows: no peers, a count and sum of 0, no other value
-    let none = JSON.stringify({
-      peers: Object.fromEntries(fields.map((f) => [f, []])),
-      stats: Object.fromEntries(
-        fields.map((f) => [
-          f,
-          {
-            count: 0,
-            sum: 0,
-            avg: null,
-            min: null,
-            max: null,
-            median: null,
-            p10: null,
-            p25: null,
-            p75: null,
-            p90: null,
-            stdev: null,
-          },
-        ]),
-      ),
+    let distributions = new PeerDistributions(fields);
+    let reductions = new PeerReductions(compared);
+    let reads: string[][] = [];
+    let sql = exprSortSql(expr, undefined, opts.queryNow, {
+      percentRankToSql: distributions.percentRank,
+      countIfToSql: distributions.countIf,
+      peerReductionToSql: reductions.compile,
+      onFieldRead(parts) {
+        if (parts[0] === 'peers' || parts[0] === 'stats') reads.push(parts);
+      },
     });
-    let statement = compared
-      ? `WITH w AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS w(ord int, doc jsonb, key text)), c AS (SELECT * FROM jsonb_to_recordset($2::jsonb) AS c(ord int, key text, vals jsonb)), g AS (SELECT c.key, jsonb_build_object('peers', ${pairs(peersOf)}, 'stats', ${pairs(aggregates)}) AS extra FROM c GROUP BY c.key) SELECT (${sql}) AS v FROM w LEFT JOIN g ON g.key = w.key CROSS JOIN LATERAL (SELECT w.doc || COALESCE(g.extra, $3::jsonb) AS search_doc) AS i ORDER BY w.ord`
-      : `SELECT (${sql}) AS v FROM jsonb_to_recordset($1::jsonb) AS w(ord int, doc jsonb, key text) CROSS JOIN LATERAL (SELECT w.doc AS search_doc) AS i ORDER BY w.ord`;
+    let statistics = compared && peerStatistics(fields, reads);
+    let groupColumns = reductions.columns;
+    if (statistics) groupColumns.push(`${statistics.sql} AS extra`);
+    let distributionCtes = distributions.ctes;
+    let needsPeers = Boolean(groupColumns.length || distributionCtes);
+    let c = needsPeers
+      ? ', c AS (SELECT * FROM jsonb_to_recordset($2::jsonb) AS c(ord int, key text, vals jsonb))'
+      : '';
+    let group = groupColumns.length
+      ? `, g AS (SELECT c.key, ${groupColumns.join(', ')} FROM c GROUP BY c.key)`
+      : '';
+    let groupJoin = group ? ' LEFT JOIN g ON g.key = w.key' : '';
+    let doc = statistics ? 'w.doc || COALESCE(g.extra, $3::jsonb)' : 'w.doc';
+    let statement = `WITH w AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS w(ord int, doc jsonb, key text))${c}${group}${distributionCtes} SELECT (${sql}) AS v FROM w${groupJoin}${distributions.joins} CROSS JOIN LATERAL (SELECT ${doc} AS search_doc) AS i ORDER BY w.ord`;
     let bind: unknown[] = [
       JSON.stringify(docs.map((doc, ord) => ({ ord, doc, key: keys[ord] }))),
     ];
-    if (compared) {
-      bind.push(JSON.stringify(compared.rows), none);
-    }
+    if (needsPeers) bind.push(JSON.stringify(compared!.rows));
+    if (statistics) bind.push(statistics.empty);
     try {
       let rows = await this.db(opts).execute(statement, {
         bind: bind as any[],
@@ -388,17 +386,9 @@ export abstract class SortWindow extends SortOrder {
         return new Set(results.map((r) => String((r as any).url)));
       },
     });
-    let fields = [
-      ...new Set(
-        [
-          ...query.rerank!.expression.matchAll(
-            /\b(?:peers|stats)\.([A-Za-z_$][\w$]*)/g,
-          ),
-        ]
-          .map((m) => m[1])
-          .filter((f) => f !== 'similarity'),
-      ),
-    ];
+    let fields = comparisonFields(query.rerank!.expression).filter(
+      (field) => field !== 'similarity',
+    );
     let neighbourUrls = [
       ...new Set([...bySrc.values()].flat().map((n) => n.url)),
     ];
@@ -452,15 +442,7 @@ export abstract class SortWindow extends SortOrder {
     entryType: 'instance' | 'file' | 'all',
   ): Promise<ComparedRows | undefined> {
     let rerank = query.rerank!;
-    let fields = [
-      ...new Set(
-        [
-          ...rerank.expression.matchAll(
-            /\b(?:peers|stats)\.([A-Za-z_$][\w$]*)/g,
-          ),
-        ].map((m) => m[1]),
-      ),
-    ];
+    let fields = comparisonFields(rerank.expression);
     if (fields.length === 0) {
       return undefined;
     }

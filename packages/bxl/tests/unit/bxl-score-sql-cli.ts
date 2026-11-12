@@ -105,6 +105,75 @@ check(() => {
 });
 
 check(() => {
+  let r = compileBxlScoreToSql('PERCENTRANK_INC(peers.rating, rating)', {
+    fieldToSql,
+    percentRankToSql(parts, value) {
+      deepStrictEqual(parts, ['peers', 'rating']);
+      deepStrictEqual(value, 'COALESCE(number:rating, 0)');
+      return 'shared_rank';
+    },
+  });
+  ok(r.sql.includes('shared_rank'));
+  ok(!r.sql.includes('unnest'));
+  deepStrictEqual([...r.fields].sort(), ['peers.rating', 'rating']);
+  ok(sql('PERCENTRANK_INC(peers.rating, rating)').includes('unnest'));
+});
+
+check(() => {
+  let calls: string[] = [];
+  let options: Parameters<typeof compileBxlScoreToSql>[1] = {
+    fieldToSql,
+    peerReductionToSql(name, parts) {
+      calls.push(name);
+      deepStrictEqual(parts, ['peers', 'price']);
+      return `shared_${name.toLowerCase()}`;
+    },
+  };
+  let r = compileBxlScoreToSql(
+    'COUNT(peers.price) + SUM(peers.price) + MEDIAN(peers.price) + MIN(peers.price) + MAX(peers.price) + AVERAGE(peers.price)',
+    options,
+  );
+  deepStrictEqual(calls, ['COUNT', 'SUM', 'MEDIAN', 'MIN', 'MAX', 'AVERAGE']);
+  deepStrictEqual(r.fields, ['peers.price']);
+  ok(!r.sql.includes('unnest'));
+  for (let source of [
+    'COUNTIF(peers.price, ">" & price)',
+    'SUM(peers.price, price)',
+    'SUM(prices)',
+  ]) {
+    deepStrictEqual(compileBxlScoreToSql(source, options).sql, sql(source));
+  }
+  deepStrictEqual(calls, ['COUNT', 'SUM', 'MEDIAN', 'MIN', 'MAX', 'AVERAGE']);
+});
+
+check(() => {
+  let kinds: string[] = [];
+  let options: Parameters<typeof compileBxlScoreToSql>[1] = {
+    fieldToSql,
+    countIfToSql(parts, criterion) {
+      deepStrictEqual(parts, ['peers', 'price']);
+      kinds.push(criterion.kind);
+      if (criterion.kind === 'number') deepStrictEqual(criterion.op, '>');
+      if (criterion.kind === 'text') deepStrictEqual(criterion.negate, true);
+      return 'shared_count';
+    },
+  };
+  for (let source of [
+    'COUNTIF(peers.price, ">" & price)',
+    'COUNTIF(peers.price, "<>rug")',
+    'COUNTIF(peers.price, price)',
+  ]) {
+    let r = compileBxlScoreToSql(source, options);
+    ok(r.sql.includes('shared_count'));
+    ok(r.fields.includes('peers.price'));
+    ok(!r.sql.includes('unnest') && !r.sql.includes('jsonb_array_elements'));
+  }
+  deepStrictEqual(kinds, ['number', 'text', 'field']);
+  let source = 'COUNTIF(prices, ">" & price)';
+  deepStrictEqual(compileBxlScoreToSql(source, options).sql, sql(source));
+});
+
+check(() => {
   ok(BXL_SCORE_FUNCTIONS.includes('LN'));
   ok(!(BXL_SCORE_FUNCTIONS as readonly string[]).includes('XIRR'));
 });

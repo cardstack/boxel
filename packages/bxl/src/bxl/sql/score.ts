@@ -64,9 +64,35 @@ export type BxlScoreSqlUsage =
   | 'timestamp'
   | 'json';
 
+export type BxlPeerReduction =
+  | 'COUNT'
+  | 'SUM'
+  | 'MIN'
+  | 'MAX'
+  | 'MEDIAN'
+  | 'AVERAGE';
+
+type CountIfOperator = '<' | '<=' | '=' | '<>' | '>=' | '>';
+
+export type BxlCountIfCriterion =
+  | { kind: 'number'; op: CountIfOperator; value: string }
+  | { kind: 'text'; negate: boolean; value: string }
+  | { kind: 'field'; value: string };
+
 export interface BxlScoreSqlOptions {
   // The SQL for a field, read as `usage` says.
   fieldToSql: (parts: string[], usage: BxlScoreSqlUsage) => string;
+  // A caller with a shared distribution may supply a lookup for a direct field.
+  percentRankToSql?: (parts: string[], value: string) => string | undefined;
+  countIfToSql?: (
+    parts: string[],
+    criterion: BxlCountIfCriterion,
+  ) => string | undefined;
+  // A caller with a comparison set can reduce a direct peer list per group.
+  peerReductionToSql?: (
+    name: BxlPeerReduction,
+    parts: string[],
+  ) => string | undefined;
 }
 
 export interface BxlScoreSqlResult {
@@ -428,6 +454,8 @@ class ScoreCompiler {
       case 'MAX':
       case 'AVERAGE': {
         this.#arity(name, args, 1, Infinity);
+        let shared = this.#peerReduction(name, args);
+        if (shared !== undefined) return shared;
         // Excel skips blanks, and a field read directly skips any non-number.
         // Such a field may be a list (the compiler does not know a field's
         // type): each of its numbers counts, as in a spreadsheet range. `list` is NULL
@@ -477,6 +505,8 @@ class ScoreCompiler {
       case 'SUM':
       case 'MEDIAN': {
         this.#arity(name, args, 1, Infinity);
+        let shared = this.#peerReduction(name, args);
+        if (shared !== undefined) return shared;
         // Over every number the arguments give: a field read directly gives
         // its number, or each number of a list (a comparison set's `peers.`
         // list among them). COUNT counts numbers and skips the rest, errors
@@ -505,6 +535,14 @@ class ScoreCompiler {
         // 0 to 1, interpolated between two of them; #N/A outside them or
         // over no numbers, 0 over one.
         this.#arity(name, args, 2, 2);
+        let field = this.#fieldParts(args[0]);
+        if (field && this.options.percentRankToSql) {
+          let rank = this.options.percentRankToSql(field, v(1));
+          if (rank !== undefined) {
+            this.fields.add(field.join('.'));
+            return rank;
+          }
+        }
         let list = this.#numbersOf([args[0]]);
         let x = v(1);
         let below = `count(*) FILTER (WHERE bxl_n < ${x})`;
@@ -522,8 +560,14 @@ class ScoreCompiler {
         this.#arity(name, args, 2, 2);
         let text = this.#textCriterion(args[0], args[1]);
         if (text) return text;
+        let criterion: { op: CountIfOperator; value: string } | undefined;
+        let shared = this.#peerCountIf(this.#fieldParts(args[0]), () => {
+          criterion = this.#criterion(args[1]);
+          return { kind: 'number', ...criterion };
+        });
+        if (shared !== undefined) return shared;
         let list = this.#numbersOf([args[0]]);
-        let { op, value } = this.#criterion(args[1]);
+        let { op, value } = criterion ?? this.#criterion(args[1]);
         return `(CASE WHEN ${isErr(value)} THEN ${ERR} ELSE (SELECT count(*) FROM unnest(${list}) AS bxl_n WHERE bxl_n <> ${ERR} AND bxl_n ${op} ${value})::double precision END)`;
       }
       case 'PI':
@@ -621,6 +665,24 @@ class ScoreCompiler {
     return undefined;
   }
 
+  #peerReduction(
+    name: BxlPeerReduction,
+    args: BxlAstNode[],
+  ): string | undefined {
+    if (args.length !== 1 || !this.options.peerReductionToSql) return;
+    let field = this.#fieldParts(args[0]);
+    if (
+      !field ||
+      field[0] !== 'peers' ||
+      field.length !== 2 ||
+      !FIELD_KEY.test(field[1])
+    )
+      return;
+    let sql = this.options.peerReductionToSql(name, field);
+    if (sql !== undefined) this.fields.add(field.join('.'));
+    return sql;
+  }
+
   // Every number a function's arguments give, as one `double precision[]`:
   // a field read directly gives its number or each number of its list (an
   // error stays NaN only for a computed argument; a field skips what is not
@@ -667,27 +729,59 @@ class ScoreCompiler {
         'COUNTIF in a score formula compares text only for equality ("Chair" or "<>Chair").',
       );
     }
-    let list = this.#field(listField, 'json');
-    let elements = `jsonb_array_elements(CASE jsonb_typeof(${list}) WHEN 'array' THEN ${list} WHEN 'number' THEN jsonb_build_array(${list}) WHEN 'string' THEN jsonb_build_array(${list}) ELSE '[]'::jsonb END) AS bxl_e`;
-    let isText = `jsonb_typeof(bxl_e) = 'string'`;
-    let isNumber = `jsonb_typeof(bxl_e) = 'number'`;
-    let elementText = `lower(bxl_e #>> '{}')`;
+    let quoted: string | undefined;
     if (literal) {
       let value = literal[2];
       if (value.includes('\u0000')) {
         throw new BxlScoreSqlError('A COUNTIF criterion cannot hold a NUL.');
       }
-      let quoted = `lower('${value.replace(/'/g, "''")}')`;
+      quoted = `lower('${value.replace(/'/g, "''")}')`;
+    }
+    let shared = quoted
+      ? this.#peerCountIf(listField, {
+          kind: 'text',
+          negate: literal![1] === '<>',
+          value: quoted,
+        })
+      : this.#peerCountIf(listField, () => ({
+          kind: 'field',
+          value: this.#field(critField!, 'json'),
+        }));
+    if (shared !== undefined) return shared;
+    let list = this.#field(listField, 'json');
+    let elements = `jsonb_array_elements(CASE jsonb_typeof(${list}) WHEN 'array' THEN ${list} WHEN 'number' THEN jsonb_build_array(${list}) WHEN 'string' THEN jsonb_build_array(${list}) ELSE '[]'::jsonb END) AS bxl_e`;
+    let isText = `jsonb_typeof(bxl_e) = 'string'`;
+    let isNumber = `jsonb_typeof(bxl_e) = 'number'`;
+    let elementText = `lower(bxl_e #>> '{}')`;
+    if (quoted) {
       let equal = `(${isText} AND ${elementText} = ${quoted})`;
-      return `(SELECT count(*) FROM ${elements} WHERE ${literal[1] === '<>' ? `NOT ${equal}` : equal})::double precision`;
+      return `(SELECT count(*) FROM ${elements} WHERE ${literal![1] === '<>' ? `NOT ${equal}` : equal})::double precision`;
     }
     let crit = this.#field(critField!, 'json');
     return `(CASE jsonb_typeof(${crit}) WHEN 'number' THEN (SELECT count(*) FROM ${elements} WHERE ${isNumber} AND (bxl_e #>> '{}')::double precision = (${crit} #>> '{}')::double precision) WHEN 'string' THEN (SELECT count(*) FROM ${elements} WHERE ${isText} AND ${elementText} = lower(${crit} #>> '{}')) ELSE (SELECT count(*) FROM ${elements} WHERE ${isNumber} AND (bxl_e #>> '{}')::double precision = 0) END)::double precision`;
   }
 
+  #peerCountIf(
+    parts: string[] | undefined,
+    criterion: BxlCountIfCriterion | (() => BxlCountIfCriterion),
+  ): string | undefined {
+    if (
+      !this.options.countIfToSql ||
+      parts?.length !== 2 ||
+      parts[0] !== 'peers' ||
+      !FIELD_KEY.test(parts[1])
+    )
+      return;
+    this.fields.add(parts.join('.'));
+    return this.options.countIfToSql(
+      parts,
+      typeof criterion === 'function' ? criterion() : criterion,
+    );
+  }
+
   // A COUNTIF criterion: a number, `">4"`, or `">" & x` (which BXL reads as
   // `(">" | tostring) + (x | tostring)`).
-  #criterion(node: BxlAstNode): { op: string; value: string } {
+  #criterion(node: BxlAstNode): { op: CountIfOperator; value: string } {
     let toString = (n: BxlAstNode): BxlAstNode | undefined =>
       n.type === 'binary' &&
       n.operator === '|' &&
@@ -698,7 +792,7 @@ class ScoreCompiler {
         : undefined;
     let opOf = (text: string) => {
       let m = /^\s*(<=|>=|<>|=|<|>)?\s*(.*)$/s.exec(text)!;
-      return { op: m[1] ?? '=', rest: m[2] };
+      return { op: (m[1] as CountIfOperator | undefined) ?? '=', rest: m[2] };
     };
     if (node.type === 'literal' && node.valueType === 'string') {
       let { op, rest } = opOf(node.value);

@@ -1226,6 +1226,59 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(ids, idsOf(ordered(byNameRows, value)));
     });
 
+    test('PERCENTRANK_INC uses each comparison group and keeps ties', async function (assert) {
+      await index(items);
+      let { rows, ids } = await run(
+        comparing({
+          expression: 'PERCENTRANK_INC(peers.stock, stock)',
+          compare: { by: 'group' },
+        }),
+      );
+      let value: Value = (row) => {
+        let stocks = itemRows
+          .filter((peer) => peer.group === row.group)
+          .flatMap((peer) => (peer.stock === undefined ? [] : [peer.stock]));
+        return percentRank(stocks, row.stock ?? 0);
+      };
+      assert.deepEqual(
+        valuesById(rows),
+        rounded(
+          Object.fromEntries(itemRows.map((row) => [row.id, value(row)])),
+        ),
+      );
+      assert.deepEqual(ids, idsOf(ordered(byNameRows, value)));
+    });
+
+    test('a shared rank can read alongside peer lists and selected stats', async function (assert) {
+      await index(items);
+      let { rows } = await run(
+        comparing({
+          expression:
+            'IFERROR(PERCENTRANK_INC(peers.price, price), -1) + 100 * COUNT(peers.price) + 10 * stats.stock.count + COUNTIF(peers.group, group)',
+          compare: {
+            by: 'group',
+            filter: { on: itemRef, eq: { group: 'x' } },
+          },
+        }),
+      );
+      let prices = pricesOf(groupX);
+      let stocked = groupX.filter(
+        (row) => typeof row.stock === 'number',
+      ).length;
+      let expected = Object.fromEntries(
+        itemRows.map((row) => [
+          row.id,
+          row.group === 'x'
+            ? (percentRank(prices, row.price) ?? -1) +
+              100 * prices.length +
+              10 * stocked +
+              groupX.length
+            : -1,
+        ]),
+      );
+      assert.deepEqual(valuesById(rows), rounded(expected));
+    });
+
     test('a filter that narrows the matches narrows the peers', async function (assert) {
       await index(items);
       let prices = pricesOf(groupX);
@@ -1456,6 +1509,37 @@ module(basename(import.meta.filename), function (hooks) {
         assert.deepEqual(ids, idsOf(ordered(byNameRows, value)), 'in order');
       });
     }
+
+    test('COUNTIF keeps numeric and case-insensitive text criteria distinct', async function (assert) {
+      await index({
+        a: { name: 'a', group: 'x', price: 4 },
+        b: { name: 'b', group: 'x', price: '4' },
+        c: { name: 'c', group: 'x', price: 'RUG' },
+        d: { name: 'd', group: 'x', price: 'rug' },
+        e: { name: 'e', group: 'x', price: 0 },
+        f: { name: 'f', group: 'x' },
+        g: { name: 'g', group: 'x', price: true },
+        h: { name: 'h', group: 'y', price: 4 },
+      });
+      let { rows, ids } = await run(
+        comparing({
+          expression:
+            '100 * COUNTIF(peers.price, price) + 10 * COUNTIF(peers.price, "<>RuG") + COUNTIF(peers.price, "RUG")',
+          compare: { by: 'group', filter: { on: itemRef, eq: { group: 'x' } } },
+        }),
+      );
+      assert.deepEqual(valuesById(rows), {
+        a: 132,
+        b: 132,
+        c: 232,
+        d: 232,
+        e: 132,
+        f: 132,
+        g: 132,
+        h: 0,
+      });
+      assert.deepEqual(ids, ['c', 'd', 'a', 'b', 'e', 'f', 'g', 'h']);
+    });
 
     module('look-alikes (compare.near)', function () {
       const withVector = vectorRows.filter((r) => angles[r.id] !== undefined);
