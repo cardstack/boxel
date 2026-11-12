@@ -52,6 +52,10 @@ export interface RoomAnalysis {
   // URLs the model read with readRealmFile. A skill file under test that is
   // missing here was never in the model's context.
   filesRead: string[];
+  // The same reads split by the user prompt they followed: entry n holds
+  // what was read after the nth prompt and before the next. The runner's
+  // `boxel-debug:` commands are not prompts.
+  readsByPrompt: string[][];
   filesWritten: string[];
   showCardIds: string[];
   lastBotBody: string;
@@ -133,6 +137,7 @@ export function analyzeRoom(
     firstWriteTurn: undefined,
     coldPromptTokens: undefined,
     filesRead: [],
+    readsByPrompt: [],
     filesWritten: [],
     showCardIds: [],
     lastBotBody: '',
@@ -196,10 +201,16 @@ export function analyzeRoom(
   }
 
   for (let event of sorted) {
-    if (event.type !== 'm.room.message' || event.sender !== botUserId) {
+    if (event.type !== 'm.room.message') {
       continue;
     }
     let content = event.content;
+    if (event.sender !== botUserId) {
+      if (!String(content.body ?? '').startsWith('boxel-debug:')) {
+        result.readsByPrompt.push([]);
+      }
+      continue;
+    }
     if (
       content.msgtype !== BOT_MESSAGE_MSGTYPE ||
       content.isStreamingFinished !== true
@@ -253,9 +264,11 @@ export function analyzeRoom(
         let args = parseArguments(request.arguments);
         let urls = args.attributes?.urls ?? args.urls;
         if (Array.isArray(urls)) {
-          result.filesRead.push(
-            ...urls.filter((u: unknown): u is string => typeof u === 'string'),
+          let read = urls.filter(
+            (u: unknown): u is string => typeof u === 'string',
           );
+          result.filesRead.push(...read);
+          result.readsByPrompt[result.readsByPrompt.length - 1]?.push(...read);
         }
       }
       if (WRITE_TOOL.test(name) && outcome?.key === 'applied') {

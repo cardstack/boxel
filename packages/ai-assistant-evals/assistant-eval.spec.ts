@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -14,6 +15,8 @@ import {
   type MatrixEvent,
 } from './matrix-api.ts';
 import { analyzeRoom } from './room-analysis.ts';
+import { REALM_SERVER_URL } from './eval-config.ts';
+import { routingSummary, scoreRouting } from './routing.ts';
 import { grade, type RunResult, type Verdict } from './run-result.ts';
 
 import {
@@ -47,6 +50,15 @@ import { captureWorkspace } from './workspace-snapshot.ts';
 
 const RESULTS_DIR =
   process.env.EVAL_RESULTS_DIR ?? join(import.meta.dirname, 'eval-results');
+// The folder of the boxel-skills clone the stack serves as its skills realm.
+// An expected read that isn't in it can't be checked; without the clone every
+// expected path is taken to exist.
+const SKILLS_DIR =
+  process.env.EVAL_SKILLS_DIR ??
+  join(import.meta.dirname, '..', 'skills-realm', 'contents', 'skills');
+// Where the stack serves that clone, for reads that name a skill by URL.
+const SKILLS_REALM_URL =
+  realmPaths(REALM_SERVER_URL).directoryURL('skills').href;
 const EVAL_BUNDLE = process.env.EVAL_BUNDLE;
 const SESSION_ID = process.env.EVAL_SESSION_ID;
 const EVAL_PROMPT =
@@ -1503,6 +1515,22 @@ async function runModel(
     );
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;
+    if (evaluation?.expectedReads.length) {
+      let skillsCloned = existsSync(SKILLS_DIR);
+      result.routing = scoreRouting(
+        prompts.slice(0, result.promptsSent),
+        evaluation.expectedReads,
+        result.analysis.readsByPrompt,
+        SKILLS_REALM_URL,
+        (path) => !skillsCloned || existsSync(join(SKILLS_DIR, path)),
+      );
+      result.reasons.push(routingSummary(result.routing));
+      if (result.routing.mismatch) {
+        result.reasons.push(
+          `routing may credit reads to the wrong question: ${result.routing.mismatch}`,
+        );
+      }
+    }
     // An enabled feature whose skill the model never opened means the run
     // did not exercise it, whatever the verdict says. This assumes each
     // feature's skill lives in a skills/<feature name>/SKILL.md directory.

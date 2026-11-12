@@ -146,6 +146,11 @@ stops such a run itself; do not stop a run for being slow or expensive.
 
 ## 4. Judge every result
 
+A conversation-only evaluation (`expectsNoWrites`, such as the `concierge-*`
+ones) is judged as below, but there is nothing built to check: judge the assistant's
+replies in the room against each criterion, and the snapshot only to confirm
+nothing was written.
+
 The runner cannot tell whether the work was right. That is your job, per
 model, from four sources:
 

@@ -132,6 +132,44 @@ export class AutomationApprovalField extends FieldDef {
   };
 }
 
+// The skill files that cover one prompt, any one of which counts as read
+// (packages/ai-assistant-evals/routing.ts). Paths are relative to the skills
+// realm; one ending in `/` stands for every file under it. None means the
+// answer needs no read.
+export class PromptReads extends FieldDef {
+  static displayName = 'Prompt Reads';
+
+  @field files = containsMany(StringField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{#if (gt @model.files.length 0)}}
+        {{#each @model.files as |file index|}}
+          {{#if (gt index 0)}} or {{/if}}<code>{{file}}</code>
+        {{/each}}
+      {{else}}
+        <span class='none'>No read needed</span>
+      {{/if}}
+      <style scoped>
+        .none {
+          color: var(--boxel-450);
+        }
+      </style>
+    </template>
+  };
+}
+
+// How one prompt's expected reads went in a run.
+export class PromptRouting extends FieldDef {
+  static displayName = 'Prompt Routing';
+
+  @field prompt = contains(TextAreaField);
+  @field expected = containsMany(StringField);
+  @field opened = containsMany(StringField);
+  // opened, already-read, missed, not-needed, read-anyway or unchecked.
+  @field outcome = contains(StringField);
+}
+
 export class EvaluationCard extends CardDef {
   static displayName = 'Evaluation';
   static icon = FlaskConical;
@@ -188,6 +226,9 @@ export class EvaluationCard extends CardDef {
   // nothing was written, and no card has to render. Writing anything fails
   // it.
   @field expectsNoWrites = contains(BooleanField);
+  // Per prompt, in order: the skill files that cover it. The runner checks
+  // each prompt's reads against them. Empty means no routing check.
+  @field expectedReads = containsMany(PromptReads);
 
   @field sessionReports = linksToMany(() => EvaluationReportCard, {
     query: {
@@ -222,8 +263,25 @@ export class EvaluationCard extends CardDef {
 
         <section>
           <h2>Success criteria</h2>
+          {{#if @model.expectsNoWrites}}
+            <p class='hint'>Conversation only: the run passes without a write
+              or a rendered card, and any write fails it.</p>
+          {{/if}}
           <@fields.successCriteria />
         </section>
+
+        {{#if (gt @model.expectedReads.length 0)}}
+          <section>
+            <h2>Expected reads</h2>
+            <p class='hint'>The skill each prompt should open, in prompt
+              order.</p>
+            <ol class='follow-ups'>
+              {{#each @fields.expectedReads as |Reads|}}
+                <li><Reads /></li>
+              {{/each}}
+            </ol>
+          </section>
+        {{/if}}
 
         {{#if (gt @model.initialCards.length 0)}}
           <section>
@@ -397,6 +455,12 @@ export class EvaluationResultCard extends CardDef {
   // 0 to 10, given by a judge reading the room and the screenshot against
   // the evaluation's success criteria. Empty until judged.
   @field qualityScore = contains(NumberField);
+  // The routing check, when the evaluation sets `expectedReads`: the
+  // questions whose covering skill was opened (or that needed none), out of
+  // those that could be checked, and the detail per prompt.
+  @field routingMet = contains(NumberField);
+  @field routingChecked = contains(NumberField);
+  @field routing = containsMany(PromptRouting);
   @field startedAt = contains(DateTimeField);
   @field endedAt = contains(DateTimeField);
   @field toolCalls = contains(StringField);
@@ -523,6 +587,47 @@ export class EvaluationResultCard extends CardDef {
 
         {{#if @model.toolCalls}}
           <p class='meta'>Tool calls: {{@model.toolCalls}}</p>
+        {{/if}}
+
+        {{#if (gt @model.routing.length 0)}}
+          <section>
+            <h2>Routing:
+              {{@model.routingMet}}
+              of
+              {{@model.routingChecked}}</h2>
+            <table class='routing'>
+              <thead>
+                <tr>
+                  <th scope='col'>Question</th>
+                  <th scope='col'>Should read</th>
+                  <th scope='col'>Read</th>
+                  <th scope='col'>Outcome</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#each @model.routing as |row|}}
+                  <tr>
+                    <td>{{row.prompt}}</td>
+                    <td>
+                      {{#each row.expected as |file|}}
+                        <code>{{file}}</code>
+                      {{else}}
+                        nothing
+                      {{/each}}
+                    </td>
+                    <td>
+                      {{#each row.opened as |file|}}
+                        <code>{{file}}</code>
+                      {{else}}
+                        nothing
+                      {{/each}}
+                    </td>
+                    <td>{{row.outcome}}</td>
+                  </tr>
+                {{/each}}
+              </tbody>
+            </table>
+          </section>
         {{/if}}
 
         {{#if (gt @model.notes.length 0)}}
@@ -657,6 +762,30 @@ export class EvaluationResultCard extends CardDef {
           display: flex;
           flex-wrap: wrap;
           gap: var(--boxel-sp-xs);
+        }
+        .routing {
+          width: 100%;
+          table-layout: fixed;
+          border-collapse: collapse;
+          font-size: var(--boxel-font-size-sm);
+        }
+        .routing th,
+        .routing td {
+          padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm) var(--boxel-sp-xxxs)
+            0;
+          text-align: start;
+          vertical-align: top;
+        }
+        .routing th {
+          color: var(--boxel-450);
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: var(--boxel-lsp-xl);
+        }
+        .routing code {
+          display: block;
+          overflow-wrap: break-word;
         }
       </style>
     </template>

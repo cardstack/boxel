@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "If a card shows a broken link where a contact should be, what's usually wrong?",
+      "followUpPrompts": [
+        "I searched for a client card and got nothing back. Does that mean it doesn't exist?",
+        "Is there already a card in the catalog I could use for tracking invoices?",
+        "I want a weekly summary of my projects. Should I make a new card for that?",
+        "Indexing has been running for a while. Should I cancel it?"
+      ],
+      "successCriteria": "**\"If a card shows a broken link where a contact should be, what's usually wrong?\"**\n\n- The card with the broken link is fine: the error is on the linked contact card, which was deleted or fails to load.\n- It says how to find out which: follow the link's URL to that card, which is either missing or in error, and fix that card.\n- It answers in general, since the user named no card, and offers to check one if they say which; it doesn't hunt the workspace for a broken link.\n\n**\"I searched for a client card and got nothing back. Does that mean it doesn't exist?\"**\n\n- No: an empty search isn't proof. A workspace the user can't read answers with no rows rather than an error, and a card that hasn't finished indexing doesn't show up yet. Checking this workspace and finding the real reason also meets this point: here the client is a text field on the Project card, not a card of its own.\n- It offers a way to check, such as searching the workspace the card should be in, or opening it by its URL.\n\n**\"Is there already a card in the catalog I could use for tracking invoices?\"**\n\n- It searches the catalog, or offers to, and reports what it found honestly. It names no catalog card it didn't find.\n- It prefers reusing what fits over building new, and offers to build only if nothing matches.\n\n**\"I want a weekly summary of my projects. Should I make a new card for that?\"**\n\n- No new card type: the usual way is a Rich Markdown document that embeds the existing project cards.\n- It offers to make it, without starting.\n\n**\"Indexing has been running for a while. Should I cancel it?\"**\n\n- No: slow indexing isn't stuck. Watch whether the indexed count keeps rising, and leave it alone if it does.\n- It warns that cancelling, especially cancelling the pending work, makes it worse. The skills index says all this, so no read is needed.\n\n**Throughout**\n\n- No file is written and no card is created or changed.\n- Each answer is short and in plain words, not Boxel internals. No narration of tool calls, and no clarifying question back to the user.\n- It reads a skill when the answer isn't already in front of it, and not otherwise.",
+      "expectsNoWrites": true,
+      "skillFeatures": ["catalog-reuse"],
+      "expectedReads": [
+        {
+          "files": ["boxel-environment/references/diagnosing-broken-links.md"]
+        },
+        {
+          "files": [
+            "boxel-environment/references/searching-and-querying.md",
+            "boxel-environment/references/indexing-operations.md"
+          ]
+        },
+        {
+          "files": ["catalog-reuse/"]
+        },
+        {
+          "files": ["rich-markdown-reports/"]
+        },
+        {
+          "files": []
+        }
+      ],
+      "cardInfo": {
+        "name": "Concierge: Workspace Help",
+        "summary": "Five questions a user asks when something in the workspace looks wrong or they want to reuse rather than build: a broken link, an empty search, a catalog card for invoices, a weekly summary, and slow indexing. The assistant only answers; a judge grades each answer, and the runner checks which skill it opened for each.",
+        "notes": "The indexing question is answered by the always-loaded skills index, so it expects no read; the other four need a skill file opened.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../card-mutation/linked-card/Project/harbor-app"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../card-mutation/linked-card/Contact/jonah-park.json"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../card-mutation/linked-card/Contact/mei-lin.json"
+        }
+      },
+      "initialFiles.2": {
+        "links": {
+          "self": "../card-mutation/linked-card/Contact/sara-okafor.json"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}
