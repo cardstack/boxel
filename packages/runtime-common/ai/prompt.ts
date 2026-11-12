@@ -3575,7 +3575,7 @@ function mediaFileLabel(file: SerializedFileDef): string {
 // grants, and each kind of read on a grant of its own (ADR 024 §1.4, §1.7).
 // The realm answers anything else as missing rather than refused, so the note
 // says so before a read comes back empty.
-const POLICY_GRANTED_READS = `The user can't read this workspace directly either. The realm serves them only what its policy grants, and each kind of read needs its own grant: read for a card, query for a search, readSource for a file's source (a card's .json too). It answers anything no grant reaches as not found.`;
+const POLICY_GRANTED_READS = `The user can't read this workspace directly either. The realm serves them only what its policy grants, and each read needs its own grant: realm.cards.get a read, realm.cards.search a query, and realm.fs.readText (a card's .json too) a readSource. It answers anything no grant reaches as not found, so realm.fs.exists can't tell a missing file from one the user can't read, and throws rather than answer false.`;
 
 // Whether a grant admits the user on a given card turns on its condition,
 // which reads the card and the user, and on grants the context may not list.
