@@ -28,6 +28,40 @@ degraded: a lost lease, a query failure or an unhandled error logs the reason
 and exits non-zero, and SIGTERM finishes the step in progress, releases the
 lease and exits 0.
 
+## Recording
+
+Each realm the task records gets a recorder (`src/recorder.ts`) when its
+first event arrives. The recorder:
+
+- reads each changed path from the realm directory as soon as it handles the
+  event, and checks the bytes against the event's fingerprint;
+- groups events into revisions with `src/grouper.ts`;
+- commits each revision to `<historyRoot>/<realm id>.git`. In the same
+  transaction it checks the lease and moves the realm's cursor, HEAD and path
+  state in `realm_history_state` and `realm_history_path_state`.
+
+Before every commit the recorder checks that HEAD hasn't moved, so no event
+is recorded twice after a crash, a lease handover or two overlapping tasks.
+
+When a newer write replaced a path before the recorder read it, the earlier
+write is still recorded, with `(content not kept)`. When nothing in the
+journal explains the bytes on disk, they are recorded as `Unattributed
+changes` once the maximum age has passed.
+
+At most 16 recorders do I/O at once. A recorder that has had nothing to
+record for 5 minutes is dropped.
+
+A file history can't hold is left out with a warning, and the rest of the
+write is recorded. That is a path with a segment git reads as `.git`, a
+segment named `.realm-history-size-only` (the name size-only entries
+reserve), or a path with a line break. Symlinks are not followed.
+
+A realm whose repo or files fail is marked `stalled`, and the other realms
+carry on. Setting its `status` back to `ok` takes effect when a task next
+starts or takes over the realm's shard, which reads the realm's events again
+from its cursor. A `scan` or `delete-realm` event records no revision: the
+recorder moves its cursor past it.
+
 ## Scripts
 
 `scripts/scan.ts` appends a `scan` event for each realm a deploy wrote to

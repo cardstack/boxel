@@ -80,14 +80,14 @@ export function treeBody(entries: TreeEntry[]): Uint8Array {
   let parts: Uint8Array[] = [];
   let names = new Set<string>();
   for (let entry of sorted) {
-    // The names git fsck refuses: empty, with a slash or NUL, `.git` in any
-    // case, `.` and `..`, and a name used twice, which a file and a
+    // The names git fsck refuses: empty, with a slash or NUL, `.` and `..`,
+    // a name git reads as `.git`, and a name used twice, which a file and a
     // directory of one name would be.
     if (
       entry.name === '' ||
       entry.name === '.' ||
       entry.name === '..' ||
-      entry.name.toLowerCase() === '.git' ||
+      isDotGitName(entry.name) ||
       entry.name.includes('/') ||
       entry.name.includes('\0') ||
       names.has(entry.name)
@@ -100,6 +100,21 @@ export function treeBody(entries: TreeEntry[]): Uint8Array {
   }
   return concat(parts);
 }
+
+// Whether git fsck reads a tree entry name as `.git`, which it refuses: `.git`
+// in any case, also with code points macOS ignores in file names, and the
+// names Windows takes for it: `.git` or its short name `git~1`, trailing
+// spaces and dots, or an alternate data stream, in any part of a name split
+// at backslashes.
+export function isDotGitName(name: string): boolean {
+  if (name.replace(HFS_IGNORED, '').toLowerCase() === '.git') {
+    return true;
+  }
+  return name.split('\\').some((part) => NTFS_DOT_GIT.test(part));
+}
+
+const HFS_IGNORED = /[\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]/g;
+const NTFS_DOT_GIT = /^(?:\.git|git~1)[. ]*(?::.*)?$/i;
 
 function sortKey(entry: TreeEntry): string {
   return entry.mode === TREE_MODE ? `${entry.name}/` : entry.name;
