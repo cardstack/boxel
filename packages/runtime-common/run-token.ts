@@ -4,7 +4,8 @@
  * names the run and the attempt that owns it. It admits read and write in the
  * automation's realm (the token's `realm`) and read in the realms its cards'
  * modules load from (`run.readRealms`: the base and catalog realms), and
- * nothing else. Its expiry is the run's time limit.
+ * nothing else. Its expiry is the run's time limit, and it carries the run's
+ * `writes` cap (`run.writesCap`), the most files the run may write.
  *
  * It is signed under its own key (`runTokenSecret`) rather than the bare
  * realm seed, so every verifier of ordinary sessions refuses it on its
@@ -30,6 +31,8 @@ export interface RunTokenClaim {
   // The URLs of the realms the run may read besides its own: the realms its
   // cards' modules load from.
   readRealms: string[];
+  // The most files the run may write: the automation's `writes` cap.
+  writesCap: number;
 }
 
 // What a verified run token says, in the shape a realm-server route or a
@@ -42,6 +45,7 @@ export interface RunTokenContext {
   // The URL of the automation's realm.
   realm: string;
   readRealms: string[];
+  writesCap: number;
   iat: number;
   exp: number;
 }
@@ -110,14 +114,17 @@ export function runTokenContext(claims: {
   ) {
     return undefined;
   }
-  let { id, attempt, readRealms } = run as Record<string, unknown>;
+  let { id, attempt, readRealms, writesCap } = run as Record<string, unknown>;
   if (
     typeof id !== 'string' ||
     !id ||
     typeof attempt !== 'number' ||
     !Number.isSafeInteger(attempt) ||
     !Array.isArray(readRealms) ||
-    !readRealms.every((r) => typeof r === 'string' && r)
+    !readRealms.every((r) => typeof r === 'string' && r) ||
+    typeof writesCap !== 'number' ||
+    !Number.isSafeInteger(writesCap) ||
+    writesCap < 0
   ) {
     return undefined;
   }
@@ -127,6 +134,7 @@ export function runTokenContext(claims: {
     actsAs: user,
     realm,
     readRealms: readRealms as string[],
+    writesCap,
     iat,
     exp,
   };

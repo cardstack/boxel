@@ -27,7 +27,10 @@ description: >-
   `commit-interrupted`, or committed twice. Also covers the run token a run's
   calls carry (`run-token.ts`, `mintRunToken`, `verifyRunToken`), how
   `Realm.handleAutomation` admits a call against the run row, and how to trace
-  a refused run-token call or a run's `key_uses`. Also covers how an automation run
+  a refused run-token call or a run's `key_uses`. Also covers the run
+  overlay (`run-overlay.ts`, `run_overlay_files`): how a run's writes are
+  staged, how its reads and listings read through them, the `writes` cap, and
+  how to inspect a run's staged files. Also covers how an automation run
   reaches a worker — the automation priority tier (`automationInitiatedPriority
   = 5` in runtime-common's queue.ts), the automation worker lane
   (`--automationCount` on the worker manager, `WORKER_AUTOMATION_PRIORITY_COUNT`
@@ -370,7 +373,9 @@ Every call a run makes carries the run's token (ADR 026 §1.2), minted per
 attempt by `mintRunToken` (`packages/realm-server/lib/run-token.ts`) once the
 attempt has started the run. It names the run (`run.id`) and the attempt
 (`run.attempt`), acts as the run's `acts_as` (`user`), and expires at the run's
-time limit. It admits read and write in the automation's realm (`realm`) and
+time limit. It carries the automation's `writes` cap (`run.writesCap`),
+which bounds the files the run stages. It admits read and write in the
+automation's realm (`realm`) and
 read in `run.readRealms`, the base and catalog realms its cards' modules load
 from. It carries no permissions; every call is checked as `acts_as`. It is
 signed under `runTokenSecret(seed)`, so no ordinary session verifier accepts it
@@ -398,7 +403,7 @@ token, so only a run token reaches automation mode.
 
 A realm-server route that serves run tokens verifies one with
 `verifyRunToken(token, seed)`, which answers `{ runId, attempt, actsAs, realm,
-readRealms, iat, exp }` or nothing, and then checks the run's row with
+readRealms, writesCap, iat, exp }` or nothing, and then checks the run's row with
 `automationRunForCall` itself.
 
 Tracing a run-token call: every refusal logs on the realm's log as
@@ -413,6 +418,59 @@ SELECT created_at, operation, outcome, code, status, host, count
 To read a token you have in hand, decode its payload (the middle segment,
 base64url) without verifying it: `run.id` and `run.attempt` name the row to
 check, and `exp` is when the run's time limit passes.
+
+### The run overlay
+
+A run's writes don't reach the realm while it runs (ADR 027 §1.2). Each one is
+staged in the run's **overlay**, `run_overlay_files` in Postgres, one row per
+file keyed by run, attempt and realm-local path, with the bytes inline. The
+functions are in `packages/runtime-common/run-overlay.ts`. Every realm-server
+instance reads the same overlay, so a run's calls can land on any of them.
+
+What goes through it, for a run-token call in the run's own realm
+(`requestContext.automationRun`, not `readOnly`):
+
+- **Writes** (`realm.fs.writeText`, `writeBytes`, and the writes behind
+  `replace` and `copy`): a card+source `POST`, or its octet-stream spelling,
+  is staged with `stageRunOverlayFile` instead of written. Any file may be
+  staged, card instance or not. The realm's size limit for the file's kind
+  applies, `realm.json` is refused, and the token's `run.writesCap` bounds how
+  many files the attempt stages (403 `Writes cap reached`). Rewriting a staged
+  path replaces it and doesn't count again. The run's row is locked for the
+  check, so racing writes can't pass the cap, and a write after the run
+  stopped running is refused.
+- **Reads** (`realm.fs.readText`, `exists`): a card+source `GET` or `HEAD` of a
+  path the attempt staged answers with the staged bytes; any other path reads
+  the realm as usual.
+- **Listings** (`realm.fs.list`): a directory listing adds the files the
+  attempt staged under it, and the directories they make, beside the realm's
+  own entries. A directory only staged files make is listed for the run.
+
+No other caller sees a staged file. Staged files aren't indexed.
+
+An overlay is per attempt. `startAutomationRunAttempt` drops what any other
+attempt staged in the statement that makes the new attempt the owner, so a
+retry starts from an empty overlay and a replaced attempt's writes never
+reach its commit. Every way a run ends (`finishAutomationRun`,
+`cancelAutomationRun`, `abandonAutomationRun`) discards its overlay in the
+statement that ends it, and deleting a run row deletes its overlay
+(`ON DELETE CASCADE`).
+
+The bound on a run's overlay is `writesCap` files, each within the realm's
+limit for its kind. Binary content is stored inline rather than as a
+reference, since the overlay lives only as long as its run.
+
+Inspecting what a run has staged:
+
+```sql
+SELECT attempt, path, size, updated_at
+  FROM run_overlay_files WHERE run_id = '<run id>' ORDER BY attempt, path;
+```
+
+A finished run has no rows. Rows from more than one attempt would mean a
+start that didn't drop its predecessors' files. To read a staged file's text:
+`SELECT convert_from(content, 'UTF8') FROM run_overlay_files WHERE run_id = …
+AND path = …`.
 
 ### The AI spending cap
 

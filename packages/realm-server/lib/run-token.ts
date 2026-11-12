@@ -30,6 +30,8 @@ export interface MintRunTokenOptions {
   // The URLs of the realms the run's cards' modules load from (the base and
   // catalog realms), which the token lets the run read.
   readRealms: string[];
+  // The automation's `writes` cap, which the run's staged writes are held to.
+  writesCap: number;
   realmServerURL: string;
   // The run's time limit: the token expires this many seconds after it is
   // minted.
@@ -41,6 +43,7 @@ export function mintRunToken({
   run,
   realmURL,
   readRealms,
+  writesCap,
   realmServerURL,
   timeLimitSeconds,
 }: MintRunTokenOptions): string {
@@ -63,7 +66,7 @@ export function mintRunToken({
       permissions: [],
       sessionRoom: undefined,
       realmServerURL,
-      run: { id: run.id, attempt: run.attempt, readRealms },
+      run: { id: run.id, attempt: run.attempt, readRealms, writesCap },
     },
     Math.ceil(timeLimitSeconds),
     runTokenSecret(realmSecretSeed),

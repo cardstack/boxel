@@ -51,6 +51,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=key_limit_notices \
   --exclude-table-and-children=key_uses \
   --exclude-table-and-children=automation_runs \
+  --exclude-table-and-children=run_overlay_files \
   --exclude-table-and-children=automations \
   --exclude-table-and-children=key_policy_notices \
   --exclude-table-and-children=oauth_clients \

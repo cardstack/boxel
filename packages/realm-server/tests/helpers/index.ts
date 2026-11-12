@@ -3841,10 +3841,12 @@ export async function createAutomationRunToken(
   {
     attempt = 1,
     readRealms = [],
+    writesCap = 100,
     timeLimitSeconds = 600,
   }: {
     attempt?: number;
     readRealms?: string[];
+    writesCap?: number;
     timeLimitSeconds?: number;
   } = {},
 ): Promise<{ token: string; run: AutomationRun }> {
@@ -3864,6 +3866,7 @@ export async function createAutomationRunToken(
     run: start.run,
     realmURL: realm.url,
     readRealms,
+    writesCap,
     realmServerURL: realm.realmServerURL,
     timeLimitSeconds,
   });

@@ -203,14 +203,16 @@ export async function startAutomationRunAttempt(
   id: string,
   attempt: number,
 ): Promise<AutomationRunAttemptStart> {
+  // The same statement drops what any other attempt staged, so the attempt
+  // that owns the run starts from an empty overlay.
   let [row] = await query(dbAdapter, [
-    "UPDATE automation_runs SET state = 'running', attempt =",
+    "WITH started AS (UPDATE automation_runs SET state = 'running', attempt =",
     param(attempt),
     ', started_at = COALESCE(started_at, now()) WHERE id =',
     param(id),
     "AND state IN ('pending', 'running') AND (attempt IS NULL OR attempt <=",
     param(attempt),
-    ') RETURNING *',
+    ') RETURNING *), dropped AS (DELETE FROM run_overlay_files USING started WHERE run_overlay_files.run_id = started.id AND run_overlay_files.attempt <> started.attempt) SELECT * FROM started',
   ]);
   if (!row) {
     let run = await getAutomationRun(dbAdapter, id);
@@ -307,6 +309,7 @@ export async function finishAutomationRun(
       attempt,
       ["state = 'complete', finished_at = now()"],
       ['AND (commit_started_at IS NULL OR committed_at IS NOT NULL)'],
+      { ends: true },
     );
   }
   return await updateOwned(
@@ -320,6 +323,7 @@ export async function finishAutomationRun(
       param(outcome.message ?? null),
     ],
     ['AND committed_at IS NULL'],
+    { ends: true },
   );
 }
 
@@ -332,15 +336,18 @@ export async function abandonAutomationRun(
   id: string,
   reason: string,
 ): Promise<AutomationRun | undefined> {
-  let [row] = await query(dbAdapter, [
-    'UPDATE automation_runs SET finished_at = now(),',
-    "state = CASE WHEN committed_at IS NOT NULL THEN 'complete' ELSE 'error' END,",
-    'error_reason = CASE WHEN committed_at IS NOT NULL THEN NULL ELSE',
-    param(reason),
-    'END WHERE id =',
-    param(id),
-    "AND state IN ('pending', 'running') RETURNING *",
-  ]);
+  let [row] = await query(
+    dbAdapter,
+    discardingOverlay([
+      'UPDATE automation_runs SET finished_at = now(),',
+      "state = CASE WHEN committed_at IS NOT NULL THEN 'complete' ELSE 'error' END,",
+      'error_reason = CASE WHEN committed_at IS NOT NULL THEN NULL ELSE',
+      param(reason),
+      'END WHERE id =',
+      param(id),
+      "AND state IN ('pending', 'running') RETURNING *",
+    ]),
+  );
   return row ? runFromRow(row) : undefined;
 }
 
@@ -351,13 +358,16 @@ export async function cancelAutomationRun(
   id: string,
   canceledBy: string,
 ): Promise<AutomationRun | undefined> {
-  let [row] = await query(dbAdapter, [
-    "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
-    param(canceledBy),
-    'WHERE id =',
-    param(id),
-    "AND state IN ('pending', 'running') AND commit_started_at IS NULL RETURNING *",
-  ]);
+  let [row] = await query(
+    dbAdapter,
+    discardingOverlay([
+      "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
+      param(canceledBy),
+      'WHERE id =',
+      param(id),
+      "AND state IN ('pending', 'running') AND commit_started_at IS NULL RETURNING *",
+    ]),
+  );
   return row ? runFromRow(row) : undefined;
 }
 
@@ -520,15 +530,18 @@ function assertCredits(action: string, credits: number) {
 }
 
 // Changes a running run that `attempt` owns, and returns it, or returns
-// undefined when the run isn't running or `attempt` doesn't own it.
+// undefined when the run isn't running or `attempt` doesn't own it. With
+// `ends`, the change ends the run, and the same statement discards its
+// overlay.
 async function updateOwned(
   dbAdapter: DBAdapter,
   id: string,
   attempt: number,
   set: Expression,
   where: Expression = [],
+  { ends = false }: { ends?: boolean } = {},
 ): Promise<AutomationRun | undefined> {
-  let [row] = await query(dbAdapter, [
+  let update: Expression = [
     'UPDATE automation_runs SET',
     ...set,
     'WHERE id =',
@@ -537,8 +550,20 @@ async function updateOwned(
     param(attempt),
     ...where,
     'RETURNING *',
-  ]);
+  ];
+  let [row] = await query(dbAdapter, ends ? discardingOverlay(update) : update);
   return row ? runFromRow(row) : undefined;
+}
+
+// An `UPDATE … RETURNING *` that ends runs, made into one statement that also
+// discards the overlay of every run it ended (`run-overlay.ts`), so a run
+// never ends with staged files left behind.
+function discardingOverlay(update: Expression): Expression {
+  return [
+    'WITH ended AS (',
+    ...update,
+    '), discarded AS (DELETE FROM run_overlay_files WHERE run_id IN (SELECT id FROM ended)) SELECT * FROM ended',
+  ];
 }
 
 function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {

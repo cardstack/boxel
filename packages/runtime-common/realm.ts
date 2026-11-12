@@ -201,6 +201,12 @@ import {
 } from './run-token.ts';
 import { automationRunForCall } from './automation-runs.ts';
 import {
+  readRunOverlayFile,
+  runOverlayPathsUnder,
+  stageRunOverlayFile,
+  type RunOverlayKey,
+} from './run-overlay.ts';
+import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -2861,6 +2867,8 @@ export interface AutomationRunCall {
   actsAs: string;
   // Set in a realm the run may only read: one its cards' modules load from.
   readOnly: boolean;
+  // The most files the run may write.
+  writesCap: number;
 }
 
 export type RequestContext = {
@@ -12848,6 +12856,7 @@ export class Realm {
       automationId: call.run.automationId,
       actsAs: context.actsAs,
       readOnly,
+      writesCap: context.writesCap,
     };
   }
 
@@ -12943,10 +12952,123 @@ export class Realm {
     );
   }
 
+  // The overlay a run-token call reads through and stages into (ADR 027):
+  // the run's own realm, for an admitted run call. A realm the run may only
+  // read has no overlay for it.
+  #runOverlay(requestContext: RequestContext): RunOverlayKey | undefined {
+    let run = requestContext.automationRun;
+    return run && !run.readOnly
+      ? { runId: run.runId, attempt: run.attempt }
+      : undefined;
+  }
+
+  // A run's write of one file's bytes, staged in its overlay rather than
+  // written to the realm. The realm's size limit for the file's kind applies
+  // as it would to the write itself, and the run's `writes` cap bounds how
+  // many files it stages. The run may not write `realm.json` (ADR 026 §1.4).
+  async #stageRunWrite(
+    request: Request,
+    requestContext: RequestContext,
+    run: RunOverlayKey,
+    content: Uint8Array,
+  ): Promise<Response> {
+    let path = this.paths.local(new URL(request.url));
+    let refuse = (status: number, title: string, detail: string) =>
+      createResponse({
+        body: JSON.stringify({
+          errors: [{ status: String(status), title, detail }],
+        }),
+        init: {
+          status,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    if (path === 'realm.json') {
+      return refuse(
+        403,
+        'Forbidden',
+        'An automation run may not write realm.json',
+      );
+    }
+    let limit = path.endsWith('.json')
+      ? this.#cardSizeLimitBytes
+      : fileSizeLimitFor(path, {
+          default: this.#fileSizeLimitBytes,
+          audio: this.#audioSizeLimitBytes,
+          video: this.#videoSizeLimitBytes,
+        });
+    if (content.byteLength > limit) {
+      return refuse(
+        413,
+        'Payload Too Large',
+        `File size (${content.byteLength} bytes) exceeds maximum allowed size (${limit} bytes)`,
+      );
+    }
+    let staged = await stageRunOverlayFile(
+      this.#dbAdapter,
+      run,
+      path,
+      content,
+      requestContext.automationRun!.writesCap,
+    );
+    switch (staged.kind) {
+      case 'over-cap':
+        return refuse(
+          403,
+          'Writes cap reached',
+          `This run may write at most ${staged.cap} files, and has written them all; ${path} was not written`,
+        );
+      case 'not-running':
+        return createResponse({
+          body: 'The automation run is not running',
+          init: { status: 401 },
+          requestContext,
+        });
+      case 'staged':
+        return createResponse({
+          body: null,
+          init: { status: 204 },
+          requestContext,
+        });
+    }
+  }
+
+  // A file the run staged, served as the source route serves the realm's
+  // copy: the bytes as written, never from a cache.
+  #stagedFileResponse(
+    request: Request,
+    requestContext: RequestContext,
+    path: LocalPath,
+    content: Uint8Array<ArrayBuffer>,
+  ): Response {
+    return createResponse({
+      body: request.method === 'HEAD' ? null : content,
+      init: {
+        status: 200,
+        headers: {
+          'content-type': inferContentType(path),
+          'content-length': String(content.byteLength),
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
+  }
+
   private async upsertCardSource(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      return await this.#stageRunWrite(
+        request,
+        requestContext,
+        run,
+        new TextEncoder().encode(await request.text()),
+      );
+    }
     return await this.replaceFileContent(
       request,
       requestContext,
@@ -12958,6 +13080,15 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      return await this.#stageRunWrite(
+        request,
+        requestContext,
+        run,
+        new Uint8Array(await request.arrayBuffer()),
+      );
+    }
     let path = this.paths.local(new URL(request.url));
     // A `.json` document is read as text by the write path (the policy-share
     // audit, the card checks), and its limit is the card limit, so it stays
@@ -13179,6 +13310,16 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
+    // A run reads its own writes: a file it staged is served from its overlay,
+    // at the exact path it wrote.
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      let path = this.paths.local(url);
+      let staged = await readRunOverlayFile(this.#dbAdapter, run, path);
+      if (staged) {
+        return this.#stagedFileResponse(request, requestContext, path, staged);
+      }
+    }
     // A caller the realm ACL declined, whose read the policy gate decides (see
     // `#grantableBytesDispatch`). They read the path exactly as named, with no
     // extension fallback and so no redirect, and outside the source cache,
@@ -16563,6 +16704,27 @@ export class Realm {
     let localPath: LocalPath = this.paths.local(new URL(request.url));
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
+    // A run lists its own writes too: each file it staged under this
+    // directory, and each directory a staged file makes, beside the realm's
+    // own entries. A directory only the run's files make is listed for it.
+    let run = this.#runOverlay(requestContext);
+    let stagedFiles = new Set<string>();
+    if (run) {
+      let dir = this.paths.local(url);
+      let prefix = dir ? `${dir}/` : '';
+      let named = new Set((entries ?? []).map((e) => `${e.kind}:${e.name}`));
+      for (let path of await runOverlayPathsUnder(this.#dbAdapter, run, dir)) {
+        let [name, ...rest] = path.slice(prefix.length).split('/');
+        let kind: Kind = rest.length ? 'directory' : 'file';
+        if (kind === 'file') {
+          stagedFiles.add(name);
+        }
+        if (!named.has(`${kind}:${name}`)) {
+          named.add(`${kind}:${name}`);
+          (entries ??= []).push({ name, kind, path: join(dir, name) });
+        }
+      }
+    }
     if (!entries) {
       this.#log.warn(`can't find directory ${url.href}`);
       return notFound(request, requestContext);
@@ -16582,7 +16744,9 @@ export class Realm {
     );
     for (let entry of entries) {
       let meta: FileMeta | DirectoryMeta;
-      if (entry.kind === 'file') {
+      if (entry.kind === 'file' && stagedFiles.has(entry.name)) {
+        meta = { kind: 'file', lastModified: null } as FileMeta;
+      } else if (entry.kind === 'file') {
         let innerPath = this.paths.local(
           new URL(`${this.paths.directoryURL(dir).href}${entry.name}`),
         );

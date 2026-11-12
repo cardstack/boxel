@@ -98,6 +98,7 @@ module(basename(import.meta.filename), function (hooks) {
       run,
       realmURL: elsewhereURL.href,
       readRealms,
+      writesCap: 100,
       realmServerURL: realm.realmServerURL,
       timeLimitSeconds: 600,
     });
@@ -183,6 +184,7 @@ module(basename(import.meta.filename), function (hooks) {
       run: { ...run, attempt: 2 },
       realmURL: realmURL.href,
       readRealms: [],
+      writesCap: 100,
       realmServerURL: realm.realmServerURL,
       timeLimitSeconds: 600,
     });
@@ -198,7 +200,7 @@ module(basename(import.meta.filename), function (hooks) {
         realm: realmURL.href,
         permissions: [],
         realmServerURL: realm.realmServerURL,
-        run: { id: run.id, attempt: 1, readRealms: [] },
+        run: { id: run.id, attempt: 1, readRealms: [], writesCap: 100 },
         iat: now - 700,
         exp: now - 100,
       },
@@ -217,7 +219,7 @@ module(basename(import.meta.filename), function (hooks) {
         realm: realmURL.href,
         permissions: ['read', 'write'],
         realmServerURL: realm.realmServerURL,
-        run: { id: run.id, attempt: 1, readRealms: [] },
+        run: { id: run.id, attempt: 1, readRealms: [], writesCap: 100 },
       },
       realmSecretSeed,
       { expiresIn: 600 },
