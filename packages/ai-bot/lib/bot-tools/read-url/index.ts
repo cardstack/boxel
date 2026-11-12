@@ -14,6 +14,7 @@ import {
   READ_URL_TOOL_NAME,
   readUrlLabel,
   readUrlTool,
+  roomReadsWithoutApproval,
   urlFromReadUrlArguments,
 } from './read.ts';
 
@@ -35,14 +36,21 @@ export const readUrlBotTool: BotTool = {
 
   async startTurn(room) {
     // A URL the room gave is read; a composed one carrying encoded data is
-    // refused outright; any other composed URL waits for the user.
+    // refused outright; any other composed URL waits for the user, unless
+    // the room is in Act mode.
     let preapproved = await collectPreapprovedUrls(
       room.history,
       room.aiBotUserId,
       (file) => downloadFile(room.client, file as SerializedFileDef),
     );
+    let readsWithoutApproval = roomReadsWithoutApproval(
+      room.history,
+      room.aiBotUserId,
+    );
     let needsApproval = (url: string) =>
-      !preapproved.has(url) && !carriesEncodedData(url);
+      !readsWithoutApproval &&
+      !preapproved.has(url) &&
+      !carriesEncodedData(url);
     let realmOrigins = knownRealmOrigins(room.history, room.aiBotUserId);
     let realmFileReadingAllowed = room.offeredToolNames.has(
       READ_REALM_FILE_TOOL_NAME,

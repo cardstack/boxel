@@ -1,3 +1,4 @@
+import { isStagedFile } from '../staged-file.ts';
 import {
   computeContentHash,
   computeContentHashFromRanges,
@@ -173,7 +174,7 @@ export interface BatchCore {
   // is held, which it is.
   commitUnlocked(
     batch: {
-      writes?: Map<LocalPath, string | Uint8Array | SplicedSource>;
+      writes?: Map<LocalPath, StagedContent>;
       appends?: Map<LocalPath, string | Uint8Array>;
       deletes?: LocalPath[];
     },
@@ -825,7 +826,9 @@ function compose(
     // batch started from — which is what a `baseVersion` on it is compared
     // against.
     storedMeta.set(write.path, {
-      contentHash: computeContentHash(write.content),
+      contentHash: isStagedFile(write.content)
+        ? write.content.contentHash
+        : computeContentHash(write.content),
     });
     if (typeof write.content !== 'string') {
       // Bytes rather than text: the content a file was replaced with, which
@@ -2308,7 +2311,7 @@ async function commitStaged(
   // bytes the first staged — so the file is written once holding the last of
   // them rather than twice, and a removal that follows drops the write
   // entirely instead of writing bytes the same commit then unlinks.
-  let writes = new Map<LocalPath, string | Uint8Array | SplicedSource>();
+  let writes = new Map<LocalPath, StagedContent>();
   // Everything bound for the end of a file, joined in batch order so two
   // entries adding a line to one log both land, in the order they were sent,
   // and the file is reached once.

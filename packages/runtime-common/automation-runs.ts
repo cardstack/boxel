@@ -23,7 +23,7 @@
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import type { DBAdapter } from './db.ts';
-import { param, query, type Expression } from './expression.ts';
+import { param, query, type Expression, type Querier } from './expression.ts';
 import type { PgPrimitive } from './index.ts';
 import type {
   RealmIdentifier,
@@ -61,8 +61,11 @@ export interface AutomationRun extends AutomationRunCounts {
   scriptId: RealmResourceIdentifier | null;
   scriptHash: string | null;
   state: AutomationRunState;
+  // For an error, a code such as `script-error`. A run canceled by a pause no
+  // person asked for carries that pause's reason here instead.
   errorReason: string | null;
   errorMessage: string | null;
+  // Who canceled the run, when a person did.
   canceledBy: string | null;
   // Credits the run's finished AI requests cost, and the most its AI requests
   // in flight can cost: the sum of the reservations it holds (see
@@ -325,6 +328,27 @@ export async function cancelAutomationRun(
     "AND state IN ('pending', 'running') AND commit_started_at IS NULL RETURNING *",
   ]);
   return row ? runFromRow(row) : undefined;
+}
+
+// Cancels every run of the automation that hasn't started, as pausing or
+// removing the automation does, inside the caller's transaction. A running
+// run is left to finish. A person's pause or remove names them in
+// `canceled_by`. A pause no person asked for names no one, and records its
+// reason (such as `caps-raised`) in `error_reason`.
+export async function cancelPendingAutomationRuns(
+  querier: Querier,
+  automationId: RealmResourceIdentifier,
+  by: { canceledBy: string } | { reason: string },
+): Promise<void> {
+  await querier([
+    "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
+    param('canceledBy' in by ? by.canceledBy : null),
+    ', error_reason =',
+    param('reason' in by ? by.reason : null),
+    'WHERE automation_id =',
+    param(automationId),
+    "AND state = 'pending'",
+  ]);
 }
 
 // Adds to the run's metered counts. The work they count was done whatever

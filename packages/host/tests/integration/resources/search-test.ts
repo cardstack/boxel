@@ -1198,6 +1198,50 @@ module(`Integration | search resource`, function (hooks) {
       }
     });
 
+    test('a realm-wide index event re-runs the query, and the gate judges the next event afresh', async function (assert) {
+      let fetch = countingFetch();
+      try {
+        let search = liveSearch(this.owner, {
+          filter: { on: { module: testRRI('book'), name: 'Book' }, eq: {} },
+        });
+        await search.loaded;
+        let baseline = fetch.count();
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 1,
+          'with the anchors resolved, an unrelated write is skipped',
+        );
+
+        getService('message-service').relayRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          realmWide: true,
+          realmURL: testRealmURL,
+        });
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 2,
+          'a pass too large to name what it touched re-runs the query',
+        );
+
+        relayIndexEvent([unrelatedType]);
+        await settled();
+        assert.strictEqual(
+          fetch.count(),
+          baseline + 3,
+          'the next typed event re-runs while the anchors resolve again, since the realm-wide pass may have changed the modules they came from',
+        );
+      } finally {
+        fetch.restore();
+      }
+    });
+
     test('a write to a subtype wakes a query anchored on its ancestor', async function (assert) {
       let fetch = countingFetch();
       try {

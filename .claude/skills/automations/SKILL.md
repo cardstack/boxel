@@ -1,6 +1,40 @@
 ---
 name: automations
-description: Developer guide to the automations system — realm admins' Realm Runner scripts that run on cron, one-time or webhook triggers. Covers how trigger timing is computed (cron in a time zone, daylight saving, `once`, `until` and `count`, per-trigger cursors and run counts, make-up runs after an outage, next run, *done*, runs left) in `runtime-common/automation-schedule.ts`. Also covers how an automation's runs are tracked on the server — the `automation_runs` table (the run row), its states (pending, running, complete, error, canceled), which queue attempt owns a run, how a commit is claimed and recorded so a run commits at most once, and what a retried job does with a run whose commit already happened. Use when working on the automations table, the tick, reconcile, the automation card's view, the switch-on estimate, or anything that asks when an automation runs next; or when changing or calling `packages/runtime-common/automation-runs.ts`, writing the run-command task or the `Realm.handleAutomation` checks that read the run row, adding a column to `automation_runs`, or diagnosing a run that is stuck, errored with `commit-interrupted`, or committed twice. Also covers how an automation run reaches a worker — the automation priority tier (`automationInitiatedPriority = 5` in runtime-common's queue.ts), the automation worker lane (`--automationCount` on the worker manager, `WORKER_AUTOMATION_PRIORITY_COUNT` in the start scripts and the dev stack), which lanes claim a run and which never do, and how the tier meets the prerender server's high-priority tab tier. Use when enqueueing the job that runs an automation (from its schedule, reconcile, an automation's webhook trigger, a batch follow-up, Preview or Run now), when a run waits in the queue longer than expected, when sizing or adding the automation lane in a deployment, or when changing the priority tiers, `lib/worker-lanes.ts` or `worker-manager.ts`.
+description: >-
+  Developer guide to the automations system — realm admins' Realm Runner scripts
+  that run on cron, one-time or webhook triggers. Covers how trigger timing is
+  computed (cron in a time zone, daylight saving, `once`, `until` and `count`,
+  per-trigger cursors and run counts, make-up runs after an outage, next run,
+  *done*, runs left) in `runtime-common/automation-schedule.ts`. Also covers the
+  `automations` table (the automation row): one row per switched-on automation
+  holding its payer, state (active, paused with a reason, waiting for credits,
+  done), caps snapshot, per-trigger run counts and next run, and the functions
+  in `packages/runtime-common/automations.ts` that switch an automation on,
+  pause, resume and remove it, pause it when a card edit raises a cap or turns
+  on `batchedAI`, and pause it when its payer loses direct write. Use when
+  calling or changing those functions, adding a column to `automations`, or
+  diagnosing why an automation is paused, has no next run, or isn't running.
+  Also covers how an automation's runs are tracked on the server — the
+  `automation_runs` table (the run row), its states (pending, running, complete,
+  error, canceled), which queue attempt owns a run, how a commit is claimed and
+  recorded so a run commits at most once, and what a retried job does with a run
+  whose commit already happened. Use when working on the automations table, the
+  tick, reconcile, the automation card's view, the switch-on estimate, or
+  anything that asks when an automation runs next; or when changing or calling
+  `packages/runtime-common/automation-runs.ts`, writing the run-command task or
+  the `Realm.handleAutomation` checks that read the run row, adding a column to
+  `automation_runs`, or diagnosing a run that is stuck, errored with
+  `commit-interrupted`, or committed twice. Also covers how an automation run
+  reaches a worker — the automation priority tier (`automationInitiatedPriority
+  = 5` in runtime-common's queue.ts), the automation worker lane
+  (`--automationCount` on the worker manager, `WORKER_AUTOMATION_PRIORITY_COUNT`
+  in the start scripts and the dev stack), which lanes claim a run and which
+  never do, and how the tier meets the prerender server's high-priority tab
+  tier. Use when enqueueing the job that runs an automation (from its schedule,
+  reconcile, an automation's webhook trigger, a batch follow-up, Preview or Run
+  now), when a run waits in the queue longer than expected, when sizing or
+  adding the automation lane in a deployment, or when changing the priority
+  tiers, `lib/worker-lanes.ts` or `worker-manager.ts`.
 ---
 
 # Automations
@@ -127,6 +161,59 @@ With a time zone it also applies each of the zone's offset changes (found once p
 
 The reader passes the trigger's time zone whenever it's valid.
 
+## The automation row
+
+Every switched-on automation has one row in `automations`, keyed by the card's canonical identifier (`automation_id`). The card is the definition; the row is who pays and where the automation is (ADR 028 §1.3). A card with no row is not switched on, and nothing runs it. The functions that change the row are in `packages/runtime-common/automations.ts`, imported as `@cardstack/runtime-common/automations` (it isn't re-exported from the package index, which would pull the declaration reader into every package that imports the index). The table is server-only and excluded from the SQLite schema dump.
+
+### What a row holds
+
+| Column                                                                   | Holds                                                                                                                                                                                              |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `automation_id`, `realm`                                                 | The automation card and its realm, as canonical identifiers (ADR 002), the same spellings `automation_runs` uses                                                                                   |
+| `payer`                                                                  | The Matrix user id of the direct writer who switched it on or last resumed it. Only switch-on and resume set it                                                                                    |
+| `state`, `pause_reason`, `paused_by`                                     | `active`, `paused`, `waiting-for-credits` or `done`. A paused row has a reason, and no other row does; `paused_by` names the person, when a person paused it                                       |
+| `caps_snapshot`                                                          | JSON: every cap in `AUTOMATION_CAP_NAMES` as the card set it, plus `batchedAI`, when the payer switched it on or resumed it                                                                        |
+| `trigger_runs`                                                           | JSON keyed by trigger label: `{ runs, lastSlot?, since? }`, the `runState` `computeAutomationSchedule` reads (see _The cursor_)                                                                    |
+| `scheduled_since`                                                        | When it was switched on or last resumed: the schedule's `since`. Slots at or before it never run                                                                                                   |
+| `next_run`                                                               | The earliest next run across unspent cron and one-time triggers; null when none is left. The `automations_due_idx` partial index serves the tick's search over active and waiting-for-credits rows |
+| `last_enqueued_at`, `last_started_at`, `last_finished_at`, `last_result` | The most recent run: when it was enqueued, started and finished, and whether it ended `complete`, `error` or `canceled`                                                                            |
+| `switched_on_at`, `updated_at`                                           | When the row was made and last changed                                                                                                                                                             |
+
+### States and who changes them
+
+| Reason a row is `paused` | Set by                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `requested`              | `pauseAutomation`: a direct writer paused it                                                                              |
+| `caps-raised`            | `checkAutomationCaps`: the card, as indexed, sets a cap above the snapshot, or leaves unset a credit cap the snapshot set |
+| `batched-ai-enabled`     | `checkAutomationCaps`: the card turned on `batchedAI` and the snapshot had it off                                         |
+| `payer-lost-access`      | `checkAutomationPayer`: the payer is no longer a direct writer of the realm                                               |
+
+- **`switchOnAutomation`** makes the row for a direct writer, who becomes the payer, snapshots the caps the declaration sets, and starts the schedule now. A row whose triggers are all spent starts `done`. A second switch-on is refused (`already-switched-on`).
+- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on.
+- **`checkAutomationCaps`** and **`checkAutomationPayer`** pause without a person. A row already paused keeps its reason, since a resume takes a new snapshot whatever paused it. A cap the snapshot doesn't limit (an unset credit cap, or a cap added to the card type after the snapshot) is never "raised"; `capsRaisedAbove` is the comparison.
+- The tick, the card's index hook and the run task own `next_run`, `trigger_runs`, `waiting-for-credits`, `done` and the `last_*` columns once the row exists. The lifecycle functions set the next run and `done` only where they start a schedule.
+
+Every direct-writer check is `isDirectWriterLocked`, asked inside the change's transaction against the served URL `virtualNetwork.toURL(realm)` resolves the realm to, since permission rows are keyed by served URLs. A wildcard (`*`, `users`) row, a bot account and a policy grant never make a direct writer. A refusal returns `{ ok: false, reason }` (`not-a-direct-writer`, `missing`, `outside-realm`, `other-card`, `already-switched-on`, `not-paused`, `not-pausable`) rather than throwing.
+
+The row's `realm` is what every later check asks about, so switch-on refuses a realm that doesn't contain the automation (`outside-realm`, decided by `RealmPaths.inRealm`), and switch-on and resume refuse a declaration read from another card (`other-card`). Each change locks the person's permission row before the automation's row, in that order everywhere, so two changes never wait on each other; code that touches both, such as a realm's archive or delete, takes them in the same order.
+
+**Pausing and removing cancel the automation's pending run** in the same transaction, so nothing it queued starts. A running run carries on. A run that a person's pause or remove canceled names them in `canceled_by`; one that `checkAutomationCaps` or `checkAutomationPayer` canceled has no `canceled_by` and carries the pause reason in `error_reason`.
+
+### Inspecting an automation
+
+```sql
+SELECT state, pause_reason, paused_by, payer, next_run, scheduled_since,
+       trigger_runs, caps_snapshot, last_result, last_finished_at
+  FROM automations
+ WHERE automation_id = '<automation card id>';
+```
+
+- No row: it isn't switched on (or was removed). Nothing runs it.
+- `paused` with `caps-raised` or `batched-ai-enabled`: compare `caps_snapshot` with the card's `caps` and `batchedAI`. A direct writer resumes it to agree to the new caps and pay for them.
+- `paused` with `payer-lost-access`: the payer's own permission row no longer grants write. Another direct writer resumes it and becomes the payer.
+- `active` with a null `next_run`: only webhook triggers, or none left that the schedule can place.
+- A run canceled with no `canceled_by`: an automatic pause canceled it; its `error_reason` names which.
+
 ## The run row
 
 Every run has one row in `automation_runs`, and that row is the source of
@@ -139,19 +226,19 @@ cancel works by changing it. The functions that change it are in
 
 ### What a row holds
 
-| Column                                                                         | Holds                                                                                                                        |
-| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `automation_id`, `realm`                                                       | The automation card and its realm, as canonical identifiers (ADR 002), never served URLs                                     |
-| `trigger`, `slot`                                                              | The trigger's label and the slot it fired for: the scheduled instant, a webhook delivery's id, a batch's id, or a click's id |
-| `acts_as`                                                                      | The Matrix user id of the person the run acts as (ADR 026 §1.1)                                                              |
-| `attempt`                                                                      | The queue attempt that owns the run: the job's reservation id, which grows with each reservation                             |
-| `script_id`, `script_hash`                                                     | The script file the run read, as an identifier, and the hash of the text it ran                                              |
-| `state`                                                                        | `pending`, `running`, `complete`, `error` or `canceled`                                                                      |
-| `error_reason`, `error_message`                                                | For an error: a code (such as `script-error`, `timed-out`, `commit-interrupted`) and its detail                              |
-| `canceled_by`                                                                  | Who canceled the run                                                                                                         |
-| `call_api_calls`, `call_api_response_bytes`, `resolve_calls`, `writes`         | The metered counts, which the realm server must add to where it does the work, never taking them from the tab                |
-| `ai_credits_spent`, `ai_credits_reserved`, `ai_reservations`                   | Credits the run's finished AI requests cost, and the worst case of those in flight (see _The AI spending cap_)               |
-| `created_at`, `started_at`, `commit_started_at`, `committed_at`, `finished_at` | When the run was enqueued, first started (a retry keeps it), claimed its commit, had its commit land, and ended              |
+| Column                                                                         | Holds                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `automation_id`, `realm`                                                       | The automation card and its realm, as canonical identifiers (ADR 002), never served URLs                                                                                                           |
+| `trigger`, `slot`                                                              | The trigger's label and the slot it fired for: the scheduled instant, a webhook delivery's id, a batch's id, or a click's id                                                                       |
+| `acts_as`                                                                      | The Matrix user id of the person the run acts as (ADR 026 §1.1)                                                                                                                                    |
+| `attempt`                                                                      | The queue attempt that owns the run: the job's reservation id, which grows with each reservation                                                                                                   |
+| `script_id`, `script_hash`                                                     | The script file the run read, as an identifier, and the hash of the text it ran                                                                                                                    |
+| `state`                                                                        | `pending`, `running`, `complete`, `error` or `canceled`                                                                                                                                            |
+| `error_reason`, `error_message`                                                | For an error: a code (such as `script-error`, `timed-out`, `commit-interrupted`) and its detail. A run canceled by a pause no person asked for carries that pause's reason (such as `caps-raised`) |
+| `canceled_by`                                                                  | Who canceled the run, when a person did; null when an automatic pause canceled it                                                                                                                  |
+| `call_api_calls`, `call_api_response_bytes`, `resolve_calls`, `writes`         | The metered counts, which the realm server must add to where it does the work, never taking them from the tab                                                                                      |
+| `ai_credits_spent`, `ai_credits_reserved`, `ai_reservations`                   | Credits the run's finished AI requests cost, and the worst case of those in flight (see _The AI spending cap_)                                                                                     |
+| `created_at`, `started_at`, `commit_started_at`, `committed_at`, `finished_at` | When the run was enqueued, first started (a retry keeps it), claimed its commit, had its commit land, and ended                                                                                    |
 
 A run is unique by `(automation_id, trigger, slot)`, the same three its
 `dedupeKey` names, so `createAutomationRun` called twice for one firing
@@ -210,6 +297,7 @@ says why) rather than throwing.
   last reservation, and no attempt is left to finish the run. This is for the
   reconcile pass (ADR 028 §1.5). A run whose commit landed finishes complete;
   any other finishes as an error with `reason`.
+- **`cancelPendingAutomationRuns(querier, automationId, by)`** cancels every pending run of an automation inside the caller's transaction, as pausing and removing it do. It leaves a running run to finish.
 - **`cancelAutomationRun`** cancels a pending or running run, and records who
   canceled it. It is refused once the commit is claimed, since the writes may
   already be landing. A canceled run can't be started, claim a commit or

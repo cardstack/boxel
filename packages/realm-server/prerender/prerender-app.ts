@@ -33,6 +33,7 @@ import { Prerenderer } from './index.ts';
 import type { Timings } from './render-runner.ts';
 import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { heapTelemetry } from './heap-telemetry.ts';
+import { formatVisitMemory } from './chrome-memory.ts';
 import { captureHeapSnapshot } from './heap-snapshot.ts';
 import {
   parseHostShellGeneration,
@@ -1432,7 +1433,7 @@ export function buildPrerenderApp(options: {
         respondDraining(ctxt);
         return;
       }
-      let { response, timings, pool } = raceResult.result;
+      let { response, timings, pool, memory } = raceResult.result;
       let shellAtCompletion = options.getHostShellHash?.();
       let warmedAtCompletion = sampleWarmed();
       if (
@@ -1511,7 +1512,7 @@ export function buildPrerenderApp(options: {
           respondDraining(ctxt);
           return;
         }
-        ({ response, timings, pool } = retryResult.result);
+        ({ response, timings, pool, memory } = retryResult.result);
         // The clock restarts with the render the response actually came from,
         // so `totalMs` and `timings` describe the same attempt. The discarded
         // attempt's cost is logged rather than folded into either.
@@ -1574,8 +1575,13 @@ export function buildPrerenderApp(options: {
         .map(([key]) => key)
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
+      // The tab's heap at the end of the visit and the browser's processes
+      // beside it, so a card type whose renders grow memory is visible on
+      // the renders that succeed, not only on the one that tips the task over.
+      let memoryText = formatVisitMemory(memory);
+      let memorySuffix = memoryText.length > 0 ? ` ${memoryText}` : '';
       log.info(
-        'visit prerendered %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms, tabProbe=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+        'visit prerendered %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms, tabProbe=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s%s',
         url,
         requestId,
         priority ?? 0,
@@ -1590,6 +1596,7 @@ export function buildPrerenderApp(options: {
         pool.affinityType,
         pool.affinityValue,
         poolFlagSuffix,
+        memorySuffix,
       );
       // A gateway/network failure is a statement about the network, not the
       // card, so mark the rows it hit unattributable regardless of whether the

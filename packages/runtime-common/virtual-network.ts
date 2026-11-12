@@ -1014,7 +1014,11 @@ export class VirtualNetwork {
     let remappedUrl = this.resolveURLMapping(request.url, direction);
 
     if (remappedUrl) {
-      return await buildRequest(remappedUrl, request);
+      return await buildRequest(
+        remappedUrl,
+        request,
+        direction === 'real-to-virtual',
+      );
     } else {
       return request;
     }
@@ -1325,7 +1329,11 @@ async function withRetries(
   }
 }
 
-export async function buildRequest(url: string, originalRequest: Request) {
+export async function buildRequest(
+  url: string,
+  originalRequest: Request,
+  streamBody = false,
+) {
   if (url === originalRequest.url) {
     return originalRequest;
   }
@@ -1342,6 +1350,17 @@ export async function buildRequest(url: string, originalRequest: Request) {
   // reading the body of the original request and creating a new Request with
   // the new url and the body as a Uint8Array.
 
+  // Server-side routing transfers the sole body stream; buffering or cloning
+  // here would undo streaming uploads before the realm can enforce its cap.
+  if (streamBody) {
+    return new Request(url, {
+      method: originalRequest.method,
+      headers: originalRequest.headers,
+      body: originalRequest.body,
+      signal: originalRequest.signal,
+      ...(originalRequest.body ? { duplex: 'half' } : {}),
+    });
+  }
   let body = null;
   if (['POST', 'PUT', 'PATCH', 'QUERY'].includes(originalRequest.method)) {
     body = await originalRequest.clone().text();

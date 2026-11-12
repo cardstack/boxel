@@ -1,3 +1,4 @@
+import { isStagedFile, type StagedFile } from './staged-file.ts';
 import { Deferred } from './deferred.ts';
 import {
   DEFAULT_ANONYMOUS_RATE_LIMIT,
@@ -591,6 +592,7 @@ import type {
   FileWatcherEventContent,
   IncrementalIndexEventContent,
   RealmEventContent,
+  RealmWideIncrementalIndexEventContent,
   UpdateRealmEventContent,
 } from '@cardstack/base/matrix-event';
 import type {
@@ -1008,13 +1010,14 @@ export interface FileRef {
   // Undefined when the open finds the file gone, which a stat on a network
   // filesystem can miss: another host's delete is not visible to it until the
   // file is opened.
-  openContent?: () =>
+  openContent?: () => Promise<
     | {
         content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
         size?: number;
         lastModifiedMs?: number;
       }
-    | undefined;
+    | undefined
+  >;
 
   [key: symbol]: object;
 }
@@ -1466,13 +1469,14 @@ function makeInvalidatedTypeAccumulator() {
 }
 
 // What this field may add to an event, encoded. It bounds this member's own
-// contribution and nothing else: `invalidations` carries no ceiling, so it is
-// what decides whether a large fan-out's event is deliverable at all, and a
-// budget here neither helps nor hurts that. What it buys is that a realm whose
-// pass touches a pathological number of distinct types — where the set has
-// stopped being selective enough to be worth carrying — drops the member
-// instead of adding to the bulk, and its subscribers take the unconditional
-// re-run they would have taken without it.
+// contribution and nothing else: `invalidations` is what decides whether a
+// large fan-out's pass can be announced by name at all — past the whole-event
+// budget it goes out realm-wide instead — and a budget here neither helps nor
+// hurts that. What it buys is that a realm whose pass touches a pathological
+// number of distinct types — where the set has stopped being selective enough
+// to be worth carrying — drops the member instead of adding to the bulk, and
+// its subscribers take the unconditional re-run they would have taken without
+// it.
 const MAX_BROADCAST_INVALIDATED_TYPES_BYTES = 8 * 1024;
 
 function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
@@ -1496,9 +1500,9 @@ function boundedInvalidatedTypes(invalidatedTypes: string[] | undefined): {
 //
 // A per-member budget is the wrong instrument here, and measuring one in
 // isolation is what makes it wrong: a bulk commit's URLs appear in the event
-// three times over — once in `invalidations`, which has no ceiling at all,
-// again in `clientAuthored` for a caller that asks for authorship, and again in
-// `versions`. A member that fits its own allowance can still be the increment
+// three times over — once in `invalidations`, whose own overflow sends the
+// pass realm-wide instead, again in `clientAuthored` for a caller that asks
+// for authorship, and again in `versions`. A member that fits its own allowance can still be the increment
 // that carries the total past the 65536 bytes the Matrix specification allows
 // an event, and a rejected event is not a degraded one: `sendEvent` throws,
 // `broadcastRealmEvent` logs it and moves to the next room, and subscribers get
@@ -1546,8 +1550,98 @@ function withVersionsIfItFits(
 
 // Measure what goes on the wire — the JSON encoding of the whole content, not
 // the character count of the keys and values inside one member.
-function encodedSize(content: IncrementalIndexEventContent): number {
+function encodedSize(content: RealmEventContent): number {
   return new TextEncoder().encode(JSON.stringify(content)).length;
+}
+
+// The completion for a pass whose invalidations will not fit in an event:
+// no list, so every subscriber reloads what it holds of the realm. See
+// `RealmWideIncrementalIndexEventContent`. Returns the event with a note on
+// what it had to leave out, for the sender to log.
+//
+// Which modules moved goes in first: without it every tab that loaded code
+// from the realm rebuilds. Authorship is then kept in the most specific form
+// that fits. The writer's own `clientAuthored` first, which spares its tab a
+// re-read of the cards it sent. Then the same request ids with
+// `clientAuthored` emptied, which still lets the writer recognize its write —
+// a wait keyed on the id hears the pass land — while re-reading every card,
+// the cautious reading an empty list carries. Shared-pass writers keep only
+// their ids, with `changed: null`, since the cards each changed are exactly
+// what does not fit. Only when none of that fits does authorship go entirely.
+export function realmWideCompletion(
+  content: IncrementalIndexEventContent,
+  coalescedWrites: CoalescedIndexWrite[] | undefined = content.coalescedWrites,
+): { event: RealmWideIncrementalIndexEventContent; warning: string } {
+  let bare: RealmWideIncrementalIndexEventContent = {
+    eventName: 'index',
+    indexType: 'incremental',
+    realmWide: true,
+    ...(content.generation !== undefined
+      ? { generation: content.generation }
+      : {}),
+    realmURL: content.realmURL,
+  };
+  let withModules: RealmWideIncrementalIndexEventContent = {
+    ...bare,
+    invalidatedModules: content.invalidations.filter(hasExecutableExtension),
+  };
+  let realmWide =
+    encodedSize(withModules) <= MAX_EVENT_CONTENT_BYTES ? withModules : bare;
+  let requestIds = {
+    ...(Object.prototype.hasOwnProperty.call(content, 'clientRequestId')
+      ? { clientRequestId: content.clientRequestId }
+      : {}),
+    ...(coalescedWrites
+      ? {
+          coalescedWrites: coalescedWrites.map(({ clientRequestId }) => ({
+            clientRequestId,
+            changed: null,
+          })),
+        }
+      : {}),
+  };
+  let candidates: RealmWideIncrementalIndexEventContent[] = [
+    {
+      ...realmWide,
+      ...requestIds,
+      ...(content.clientAuthored
+        ? { clientAuthored: content.clientAuthored }
+        : {}),
+    },
+    {
+      ...realmWide,
+      ...requestIds,
+      ...(content.clientAuthored ? { clientAuthored: [] } : {}),
+    },
+  ];
+  let reason = `its ${content.invalidations.length} invalidations encode to ${encodedSize(content)} bytes, over the ${MAX_EVENT_CONTENT_BYTES}-byte budget, so every subscriber reloads the realm's cards and searches${realmWide === bare ? '; its invalidated modules would not fit either' : ''}`;
+  for (let candidate of candidates) {
+    if (encodedSize(candidate) <= MAX_EVENT_CONTENT_BYTES) {
+      return {
+        event: candidate,
+        warning: `(request ${content.clientRequestId ?? 'none'}) goes out realm-wide: ${reason}`,
+      };
+    }
+  }
+  return {
+    event: realmWide,
+    warning: `goes out realm-wide without its writers' request ids, which would not fit either: ${reason}`,
+  };
+}
+
+// The incremental completion as it can be sent: itself when it fits in an
+// event, its realm-wide form when it does not. For a sender that assembles the
+// listed form whole, with nothing optional to shed first.
+export function incrementalCompletionThatFits(
+  content: IncrementalIndexEventContent,
+): {
+  event: IncrementalIndexEventContent | RealmWideIncrementalIndexEventContent;
+  warning?: string;
+} {
+  if (encodedSize(content) <= MAX_EVENT_CONTENT_BYTES) {
+    return { event: content };
+  }
+  return realmWideCompletion(content);
 }
 
 // The versions a shared pass's announcer may report: those of the cards no
@@ -2336,12 +2430,10 @@ export interface CommitBatch {
   deletes?: LocalPath[];
 }
 
-// What a caller hands the commit for one file: the bytes themselves, or a
-// description of them — a list of ranges of a stored file and the text going
-// between them. The second form exists for a file too large to hold: it is
-// written by streaming the ranges straight through, so a change to a file of
-// any size costs the change rather than the file.
-export type WriteContent = string | Uint8Array | SplicedSource;
+// A write carries small content directly, describes a splice of stored bytes,
+// or owns an adapter-staged upload. Described and staged writes keep large
+// files out of memory throughout the commit.
+export type WriteContent = string | Uint8Array | SplicedSource | StagedFile;
 
 export interface CommitBatchResult {
   // One result per staged write, in the order the caller staged them. A path
@@ -2490,6 +2582,19 @@ export interface RealmAdapter {
     path: LocalPath,
     contents: string | Uint8Array,
   ): Promise<AdapterWriteResult>;
+
+  stage(
+    path: LocalPath,
+    body: ReadableStream<Uint8Array>,
+    limit: number,
+    contentLength?: number,
+  ): Promise<StagedFile>;
+  disposeStaged(content: StagedFile): Promise<void>;
+  commitStaged(
+    path: LocalPath,
+    content: StagedFile,
+  ): Promise<AdapterWriteResult>;
+  stagedContentEquals(path: LocalPath, content: StagedFile): Promise<boolean>;
 
   // Replace a file's content with a rearrangement of its own bytes plus new
   // text — the form a change to a file too large to hold takes.
@@ -4488,15 +4593,25 @@ export class Realm {
         ...(clientAuthored ? { clientAuthored } : {}),
       });
     }
+    let delivery = opts?.recipients
+      ? { recipients: opts.recipients }
+      : undefined;
+    // Everything past this point is optional and degrades to fit, so whether
+    // the pass can be announced by name is settled here: a list the event
+    // cannot carry goes out as a realm-wide completion instead, and the
+    // homeserver never sees an event it would reject.
+    if (encodedSize(content) > MAX_EVENT_CONTENT_BYTES) {
+      let { event, warning } = realmWideCompletion(content, coalescedWrites);
+      this.#log.warn(`index event for ${this.url} ${warning}`);
+      this.broadcastRealmEvent(event, delivery);
+      return;
+    }
     let versions = opts?.versions;
     if (coalescedWrites) {
       versions = versionsOnlyThisWriterChanged(passes, versions);
       content = this.#withCoalescedWrites(content, coalescedWrites);
     }
-    this.broadcastRealmEvent(
-      withVersionsIfItFits(content, versions),
-      opts?.recipients ? { recipients: opts.recipients } : undefined,
-    );
+    this.broadcastRealmEvent(withVersionsIfItFits(content, versions), delivery);
   }
 
   // `coalescedWrites` on a shared pass's event, as much of it as fits.
@@ -5456,6 +5571,11 @@ export class Realm {
     if (content instanceof Uint8Array) {
       return new TextDecoder().decode(content);
     }
+    if (isStagedFile(content)) {
+      // Uploads of a `.json` document are held whole rather than staged
+      // (see `upsertBinaryFile`), so only non-documents reach here staged.
+      throw new Error('a staged upload cannot be read as text');
+    }
     let parts: Uint8Array[] = [];
     for (let segment of content.segments) {
       if (segment.kind === 'text') {
@@ -5750,7 +5870,10 @@ export class Realm {
         let couldMatch =
           stored !== undefined &&
           (stored.size === undefined ||
-            stored.size === computeContentSize(content));
+            stored.size ===
+              (isStagedFile(content)
+                ? content.size
+                : computeContentSize(content)));
         let unchanged: { lastModified: number } | undefined;
         if (
           stored &&
@@ -5781,9 +5904,16 @@ export class Realm {
         } else if (
           couldMatch &&
           stored &&
-          content instanceof Uint8Array &&
-          (await this.#indexDescribesFile(url, computeContentHash(content))) &&
-          (await fileContentEquals(stored, content))
+          (content instanceof Uint8Array || isStagedFile(content)) &&
+          (await this.#indexDescribesFile(
+            url,
+            isStagedFile(content)
+              ? content.contentHash
+              : computeContentHash(content),
+          )) &&
+          (await (isStagedFile(content)
+            ? this.#adapter.stagedContentEquals(path, content)
+            : fileContentEquals(stored, content)))
         ) {
           // Matching bytes are not enough on their own here. Re-sending an
           // upload is how a caller recovers from one whose bytes landed but
@@ -5794,13 +5924,10 @@ export class Realm {
           // from these bytes; otherwise the upload proceeds as a write, which
           // queues the pass the earlier attempt never got.
           //
-          // Bytes are compared as bytes and never decoded, so a match is a
-          // byte-for-byte one. The stored file is read a chunk at a time against
-          // a body already held whole, which keeps a large upload from being
-          // held twice. Not the hash recorded at the last write: only the
-          // file's length vouches for that record, so a file rewritten out of
-          // band at the same length would read as unchanged, and the bytes a
-          // caller sent to replace it would be dropped.
+          // Staged uploads compare a full SHA-256 of the current stored bytes;
+          // in-memory writes compare their bytes directly. Neither comparison
+          // trusts the persisted metadata or a sampled hash: a same-length edit
+          // made outside the realm must still be replaced by this upload.
           unchanged = stored;
         }
         if (unchanged) {
@@ -5818,7 +5945,9 @@ export class Realm {
           // has is a no-op for every file that has one. This is not what
           // makes `baseVersion` work: that is computed from the bytes read
           // inside the write lock and never consults the row.
-          let unchangedHash = computeContentHash(content);
+          let unchangedHash = isStagedFile(content)
+            ? content.contentHash
+            : computeContentHash(content);
           results.push({
             path,
             lastModified: unchanged.lastModified,
@@ -5827,7 +5956,9 @@ export class Realm {
           fileMetaRows.push({
             path,
             contentHash: unchangedHash,
-            contentSize: computeContentSize(content),
+            contentSize: isStagedFile(content)
+              ? content.size
+              : computeContentSize(content),
           });
           // The module flush above has already run for this file if it was
           // owed. Recording the file's kind keeps the next instance from
@@ -5840,18 +5971,25 @@ export class Realm {
         // From the open above rather than from a read, which a file whose
         // length already settled the comparison never had.
         let isNewFile = stored === undefined;
-        let contentHash = computeContentHash(content);
-        let contentSize = computeContentSize(content);
+        let contentHash = isStagedFile(content)
+          ? content.contentHash
+          : computeContentHash(content);
+        let contentSize = isStagedFile(content)
+          ? content.size
+          : computeContentSize(content);
         // Read before the write replaces the bytes it compares against.
         if (
           currentWriteType === 'module' &&
+          !isStagedFile(content) &&
           (await this.#writeLeavesModuleSchema(url, path, !isNewFile, content))
         ) {
           modulesWithoutSchemaChange.add(url.href);
         }
         announceIndexing(url);
         await this.trackOwnWrite(path);
-        let { lastModified } = await this.#adapter.write(path, content);
+        let { lastModified } = isStagedFile(content)
+          ? await this.#adapter.commitStaged(path, content)
+          : await this.#adapter.write(path, content);
         (isNewFile ? addedFiles : updatedFiles).push(path);
         this.invalidateCache(path);
         await this.#notifyFileChange(path);
@@ -11919,8 +12057,8 @@ export class Realm {
       // the operation that opens them, rather than from either stat.
       ...(source.openBody
         ? {
-            openContent: () => {
-              let opened = source.openBody!();
+            openContent: async () => {
+              let opened = await source.openBody!();
               if (!opened) {
                 return undefined;
               }
@@ -12137,7 +12275,7 @@ export class Realm {
     // larger than the body leaves the client waiting for bytes that never
     // arrive, one that is smaller cuts the body short.
     let opensContent = request.method === 'GET' && ref.openContent != null;
-    let openedContent = opensContent ? ref.openContent!() : undefined;
+    let openedContent = opensContent ? await ref.openContent!() : undefined;
     if (opensContent && !openedContent) {
       // The file was deleted after the stat this ref was built from, so there
       // is nothing to send. Answered here, before a body is committed to,
@@ -12554,11 +12692,67 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    return await this.replaceFileContent(
-      request,
-      requestContext,
-      new Uint8Array(await request.arrayBuffer()),
-    );
+    let path = this.paths.local(new URL(request.url));
+    // A `.json` document is read as text by the write path (the policy-share
+    // audit, the card checks), and its limit is the card limit, so it stays
+    // in memory. Every other upload streams to disk.
+    if (path.endsWith('.json')) {
+      return await this.replaceFileContent(
+        request,
+        requestContext,
+        new Uint8Array(await request.arrayBuffer()),
+      );
+    }
+    let limit = fileSizeLimitFor(path, {
+      default: this.#fileSizeLimitBytes,
+      audio: this.#audioSizeLimitBytes,
+      video: this.#videoSizeLimitBytes,
+    });
+    let declared = request.headers.get('content-length');
+    let contentLength = declared === null ? undefined : Number(declared);
+    if (
+      contentLength !== undefined &&
+      (!Number.isSafeInteger(contentLength) || contentLength < 0)
+    ) {
+      throw new CardError('Invalid Content-Length', { status: 400 });
+    }
+    if (contentLength !== undefined && contentLength > limit) {
+      throw new CardError(
+        `File size (${contentLength} bytes) exceeds maximum allowed size (${limit} bytes)`,
+        {
+          status: 413,
+          title: 'Payload Too Large',
+        },
+      );
+    }
+    let staged: StagedFile;
+    try {
+      staged = await this.#adapter.stage(
+        path,
+        request.body ??
+          new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+        limit,
+        contentLength,
+      );
+    } catch (err) {
+      if (err instanceof CardError && err.status === 503) {
+        return createResponse({
+          body: err.message,
+          init: { status: 503, headers: { 'Retry-After': '1' } },
+          requestContext,
+        });
+      }
+      throw err;
+    }
+    try {
+      return await this.replaceFileContent(request, requestContext, staged);
+    } finally {
+      await this.#adapter.disposeStaged(staged);
+    }
   }
 
   // The write behind both file-content routes: one `update` entry naming the
@@ -12586,7 +12780,7 @@ export class Realm {
   private async replaceFileContent(
     request: Request,
     requestContext: RequestContext,
-    content: string | Uint8Array,
+    content: string | Uint8Array | StagedFile,
   ): Promise<Response> {
     let url = new URL(request.url);
     let result: Awaited<ReturnType<typeof commitBatch>>[number];
@@ -12676,7 +12870,7 @@ export class Realm {
     try {
       // Described content reports its byte length without being read, which is
       // the whole point of it, so the ceiling is applied to that.
-      if (isSplicedSource(content)) {
+      if (isSplicedSource(content) || isStagedFile(content)) {
         validateByteLength(content.size, limit, type);
       } else {
         validateWriteSize(content, limit, type);
@@ -12913,7 +13107,7 @@ export class Realm {
         // Opened before it is read, so a file the stat still lists but another
         // host has deleted is answered as missing rather than as a read that
         // fails. The read below consumes the content this opened.
-        if (served.openContent && !served.openContent()) {
+        if (served.openContent && !(await served.openContent())) {
           return (
             notThere ??
             notFound(request, requestContext, `${localName} not found`)

@@ -422,6 +422,29 @@ module('Integration | canInvoke', function (hooks) {
     );
   });
 
+  test('a realm-wide index event asks again about every pair in the realm', async function (assert) {
+    service.canInvoke('read', cardAt(`${REALM}a`));
+    service.canInvoke('delete', cardAt(`${REALM}b`));
+    service.canInvoke('read', cardAt(`${OTHER}c`));
+    await settled();
+    for (let listener of realmUnderTest.listeners.get(REALM) ?? []) {
+      listener({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmWide: true,
+        realmURL: REALM,
+      });
+    }
+    await settled();
+    assert.deepEqual(
+      realmUnderTest.sent
+        .slice(2)
+        .map((request) => request.checks.map((check) => check.target)),
+      [[`${REALM}a`, `${REALM}b`]],
+      'a pass too large to list what it moved may have moved the config, and another realm’s answers are untouched',
+    );
+  });
+
   test('an answer past its age is asked again by the next read of it', async function (assert) {
     let realNow = Date.now;
     let now = realNow();
