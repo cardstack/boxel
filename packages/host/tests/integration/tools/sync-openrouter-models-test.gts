@@ -194,12 +194,15 @@ module('Integration | tools | sync-openrouter-models', function (hooks) {
         pricing: {
           prompt: '0.0000005',
           completion: '0.0000025',
+          input_cache_write: '0.000000625',
           overrides: [
             {
               min_prompt_tokens: 272000,
               prompt: '0.000001',
               completion: '0.00000375',
               input_cache_read: '0.00000005',
+              input_cache_write: '0.00000125',
+              input_cache_write_1h: '0.000002',
             },
             {
               utc_days: ['saturday', 'sunday'],
@@ -230,6 +233,8 @@ module('Integration | tools | sync-openrouter-models', function (hooks) {
           request: null,
           image: null,
           webSearch: null,
+          inputCacheWrite: '0.00000125',
+          inputCacheWrite1h: '0.000002',
         },
         {
           minPromptTokens: null,
@@ -241,9 +246,19 @@ module('Integration | tools | sync-openrouter-models', function (hooks) {
           request: null,
           image: null,
           webSearch: null,
+          inputCacheWrite: null,
+          inputCacheWrite1h: null,
         },
       ],
       'each override keeps its conditions and the rates it lists',
+    );
+    assert.deepEqual(
+      [
+        attributes?.pricing?.inputCacheWrite,
+        attributes?.pricing?.inputCacheWrite1h,
+      ],
+      ['0.000000625', null],
+      'the base cache-write rates are kept',
     );
     assert.deepEqual(
       (opFor('OpenRouterModel/google-gemini-pro.json')?.data as any)?.attributes

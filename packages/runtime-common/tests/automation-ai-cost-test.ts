@@ -395,6 +395,75 @@ const tests = Object.freeze({
     );
   },
 
+  'reads a model’s cache-write rate': async (assert) => {
+    let price = readOpenRouterModelPrice({
+      modelId: 'anthropic/claude-sonnet-4.6',
+      pricing: {
+        prompt: '0.000003',
+        completion: '0.000015',
+        inputCacheWrite: '0.00000375',
+        inputCacheWrite1h: '0.000006',
+        overrides: [
+          { minPromptTokens: 200000, prompt: '0.000006' },
+          { minPromptTokens: 400000, inputCacheWrite: '0.0000075' },
+        ],
+      },
+    });
+    assert.strictEqual(
+      price?.cacheWriteUsdPerToken,
+      0.000006,
+      'the higher of the default and one-hour cache-write rates',
+    );
+    assert.deepEqual(
+      price?.tiers?.map((tier) => tier.cacheWriteUsdPerToken),
+      [0.000006, 0.0000075],
+      'a tier that lists no cache-write rate keeps the base one',
+    );
+    assert.false(
+      'cacheWriteUsdPerToken' in
+        (readOpenRouterModelPrice({
+          modelId: 'x/y',
+          pricing: { prompt: '0.000001', completion: '0.000001' },
+        }) ?? {}),
+      'a model that lists no cache-write rate has none',
+    );
+    assert.strictEqual(
+      readOpenRouterModelPrice({
+        modelId: 'x/y',
+        pricing: {
+          prompt: '0.000001',
+          completion: '0.000001',
+          inputCacheWrite: '-1',
+        },
+      }),
+      undefined,
+      'a variable cache-write rate can’t bound a request',
+    );
+  },
+
+  'prices input at the cache-write rate when it is higher': async (assert) => {
+    let { ceiling } = ceilingOf(
+      { max_tokens: 1000, messages: MESSAGES },
+      { ...PRICE, cacheWriteUsdPerToken: 0.000006 },
+    );
+    close(
+      assert,
+      ceiling.credits,
+      (ceiling.inputTokens * 0.000006 + 1000 * 0.000015) * 1000,
+      'every input token can be written to the cache',
+    );
+    let cheaper = ceilingOf(
+      { max_tokens: 1000, messages: MESSAGES },
+      { ...PRICE, cacheWriteUsdPerToken: 0.000001 },
+    );
+    close(
+      assert,
+      cheaper.ceiling.credits,
+      (cheaper.ceiling.inputTokens * 0.000003 + 1000 * 0.000015) * 1000,
+      'a cache-write rate below the prompt rate doesn’t lower the worst case',
+    );
+  },
+
   'prices a request at the highest tier it can reach': async (assert) => {
     let tiered: AIModelPrice = {
       ...PRICE,

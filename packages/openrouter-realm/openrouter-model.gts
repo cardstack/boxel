@@ -32,6 +32,8 @@ export class OpenRouterPricingOverride extends FieldDef {
   @field request = contains(StringField);
   @field image = contains(StringField);
   @field webSearch = contains(StringField);
+  @field inputCacheWrite = contains(StringField);
+  @field inputCacheWrite1h = contains(StringField);
 }
 
 export class OpenRouterPricing extends FieldDef {
@@ -41,6 +43,10 @@ export class OpenRouterPricing extends FieldDef {
   @field request = contains(StringField);
   @field image = contains(StringField);
   @field webSearch = contains(StringField);
+  // What writing a prompt token to the cache costs, for the default cache
+  // and for a one-hour cache.
+  @field inputCacheWrite = contains(StringField);
+  @field inputCacheWrite1h = contains(StringField);
   @field overrides = containsMany(OpenRouterPricingOverride);
 }
 
