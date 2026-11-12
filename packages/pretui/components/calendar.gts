@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { nowDate } from '@cardstack/runtime-common';
 import { focusWhen, rovingTabindex } from '../focus';
 import { LABEL_FMT, MONTH_FMT, fromIso, toIso } from '../internal/reading-extras';
 
@@ -72,8 +73,8 @@ export class Calendar extends Component<CalendarSignature> {
         this.args.range?.end ??
         this.args.defaultRange?.end ??
         '',
-    ) ?? new Date();
-  private todayIso = toIso(new Date());
+    ) ?? nowDate();
+  private todayIso = toIso(nowDate());
   @tracked internalValue: string | undefined = this.args.defaultValue;
   @tracked internalRange: DateRangeValue | undefined = this.args.defaultRange;
   @tracked viewYear = this.initDate.getFullYear();
