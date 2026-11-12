@@ -15,6 +15,9 @@
 //   depth-first authored order, a route's children before its later
 //   siblings, never a route with `statusCode: 301`. A fixed card route is a
 //   candidate for its own card, with no levels.
+//   A route that can't tell yet whether the cards fit it, because a card or
+//   a value it reads isn't loaded, ends the search with its reason: a later
+//   route's address would not be the canonical one.
 // - A card type and field values (`{{hrefTo Tag name="crag"}}`): the
 //   canonical field-match route on that type, or one it descends from,
 //   whose `match` fields are exactly the given ones. No card is checked
@@ -42,6 +45,7 @@ import {
   type CardAPIForMatching,
 } from './instance-filter-matcher.ts';
 import { RealmPaths } from './paths.ts';
+import { resolveRRIReference, rri } from './realm-identifiers.ts';
 import {
   fillRoutePathPattern,
   matchCardIdPattern,
@@ -79,6 +83,7 @@ export interface HostRouteAddressOptions {
   // address.
   realmURL: URL;
   // The card API, for the type and `where` checks and for reading fields.
+  // Its virtual network resolves card ids, which may be in prefix form.
   api: CardAPIForMatching;
 }
 
@@ -101,13 +106,16 @@ export type HostRouteNoAddressReason =
   // A field-match level was given only an id. It gets an address once the
   // card is loaded.
   | 'card-not-loaded'
-  // A parent level comes from the child card's link to it, and that link
-  // leads to an id where the parent's route needs the loaded card, or to
-  // nothing.
+  // A parent level comes from the child card's link to it, and the child
+  // card, or the parent card the link points to, isn't loaded where the
+  // parent's route needs it.
   | 'parent-not-loaded'
   // A parent level would come from the child card's link to it, but only
   // the parent's card holds the link.
   | 'parent-holds-link'
+  // A parent level would come from the child card's link to it, and the
+  // link is empty.
+  | 'no-parent'
   // Two given cards don't belong together through the child route's link.
   | 'not-member'
   // The number of arguments doesn't fit the route.
@@ -154,6 +162,14 @@ export function hostRouteAddress(
 
 type DynamicRoute = HostCardIdRoute | HostFieldMatchRoute;
 
+// The reasons that mean a route can't tell yet whether the input fits it,
+// because a card or a value it needs isn't loaded.
+const UNDECIDED: ReadonlySet<HostRouteNoAddressReason> = new Set([
+  'card-not-loaded',
+  'parent-not-loaded',
+  'where-unresolvable',
+]);
+
 // A step of a route's chain from the top level down to the route.
 type Chain = readonly HostRoute[];
 
@@ -196,7 +212,7 @@ class Lookup {
         continue;
       }
       if (route.kind === 'fixed-card') {
-        if (cards.length === 1 && cardId(cards[0]!) === route.id) {
+        if (cards.length === 1 && this.sameId(cardId(cards[0]!), route.id)) {
           return { ok: true, address: fixedAddress(route), route };
         }
         continue;
@@ -207,6 +223,16 @@ class Lookup {
       let result = this.fillChain(chain, cards, 'cards');
       if (result.ok) {
         return result;
+      }
+      // A route that may still fit once more is loaded decides the canonical
+      // route as much as one that fits: trying later routes would give the
+      // card a different address before it loads than after.
+      if (UNDECIDED.has(result.miss.reason)) {
+        return {
+          ok: false,
+          reason: result.miss.reason,
+          route: result.miss.route,
+        };
       }
       misses.push(result.miss);
     }
@@ -417,8 +443,9 @@ class Lookup {
       if (id === undefined) {
         return { reason: 'card-without-id', fits: true };
       }
-      let params = safeURL(id)
-        ? matchCardIdPattern(level.card, new URL(id), this.options.realmURL)
+      let url = this.servedURL(id);
+      let params = url
+        ? matchCardIdPattern(level.card, url, this.options.realmURL)
         : undefined;
       return params ? { params } : { reason: 'no-route', fits: false };
     }
@@ -476,6 +503,9 @@ class Lookup {
     }
     let value = this.options.api.peekAtField(child, link.field);
     let first = Array.isArray(value) ? value[0] : value;
+    if (first == null) {
+      return { reason: 'no-parent' };
+    }
     let parent = this.linkTarget(child, first);
     return parent ?? { reason: 'parent-not-loaded' };
   }
@@ -505,10 +535,10 @@ class Lookup {
         let target = this.linkTarget(holder, v);
         return target === undefined ? undefined : cardId(target);
       });
-      if (ids.includes(undefined)) {
-        return ids.includes(otherId) ? true : undefined;
+      if (ids.some((id) => this.sameId(id, otherId))) {
+        return true;
       }
-      return ids.includes(otherId);
+      return ids.includes(undefined) ? undefined : false;
     }
     return undefined;
   }
@@ -528,15 +558,37 @@ class Lookup {
       if (typeof reference !== 'string' || base === undefined) {
         return undefined;
       }
-      let url = safeURL(reference, base);
-      return url ? stripJSON(url.href) : undefined;
+      return stripJSON(resolveRRIReference(reference, rri(base)));
     }
     return typeof value === 'object' ? (value as BaseDef) : undefined;
   }
 
   private inRealm(id: string): boolean {
-    let url = safeURL(id);
+    let url = this.servedURL(id);
     return Boolean(url && this.realmPaths.inRealm(url));
+  }
+
+  // The URL a card id is served at, resolved by the virtual network, so an
+  // id in prefix form and one in URL form name the same card. `undefined`
+  // for an id the network can't resolve.
+  private servedURL(id: string): URL | undefined {
+    try {
+      return this.options.api.virtualNetwork.toURL(id);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private sameId(a: string | undefined, b: string | undefined): boolean {
+    if (a === undefined || b === undefined) {
+      return false;
+    }
+    if (a === b) {
+      return true;
+    }
+    let urlA = this.servedURL(a);
+    let urlB = this.servedURL(b);
+    return Boolean(urlA && urlB && urlA.href === urlB.href);
   }
 
   private sameType(a: CodeRef, b: CodeRef): boolean {
@@ -670,14 +722,6 @@ function typeRefs(type: typeof BaseDef): CodeRef[] {
     klass = Object.getPrototypeOf(klass) as typeof BaseDef | null;
   }
   return refs;
-}
-
-function safeURL(value: string, base?: string): URL | undefined {
-  try {
-    return new URL(value, base);
-  } catch {
-    return undefined;
-  }
 }
 
 function stripJSON(href: string): string {
