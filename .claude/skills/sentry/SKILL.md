@@ -127,7 +127,7 @@ each:
 scripts/claude-sentry.sh organizations/cardstack/issues/<id>/hashes/ | jq '.[].id'
 
 scripts/claude-sentry.sh projects/cardstack/<project-slug>/events/<event-id>/grouping-info/ \
-  | jq 'to_entries[] | select(.value.contributes) | {variant: .key, hash: .value.hash, type: .value.type}'
+  | jq '.variants | to_entries[] | select(.value.contributes) | {variant: .key, hash: .value.hash, type: .value.type}'
 ```
 
 Usual causes: a different project (each service can report to its own
