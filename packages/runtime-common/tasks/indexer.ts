@@ -1013,8 +1013,9 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   };
 
 // The automation card's index hook, run once the pass has committed. The index
-// is already committed, so a failure here is logged and leaves the job a
-// success: the next pass over the card syncs its automation again.
+// is already committed, so a failure here is logged, naming the automation
+// when one automation's sync failed, and leaves the job a success: the next
+// pass over the card syncs its automation again.
 async function syncAutomationsAfterPass(
   log: TaskArgs['log'],
   jobInfo: JobInfo | undefined,
@@ -1023,7 +1024,11 @@ async function syncAutomationsAfterPass(
   try {
     let synced = await syncAutomationsAfterIndex(args);
     for (let [automationId, result] of synced) {
-      if (result.kind !== 'unchanged') {
+      if (result.kind === 'failed') {
+        log.warn(
+          `${jobIdentity(jobInfo)} failed to sync automation ${automationId} with its card: ${(result.error as Error)?.message}`,
+        );
+      } else if (result.kind !== 'unchanged') {
         log.debug(
           `${jobIdentity(jobInfo)} automation ${automationId} ${result.kind}${
             result.kind === 'removed' ? ` (${result.reason})` : ''

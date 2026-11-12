@@ -118,20 +118,21 @@ module(basename(import.meta.filename), function (hooks) {
     batchDeadlineMinutes: 90,
   };
 
-  async function writeAutomation(path: string, extra: object = {}) {
-    await testRealm.write(
-      `${path}.json`,
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: { ...attributes, ...extra },
-          relationships: {
-            script: { links: { self: '../scripts/nightly-import.js' } },
-          },
-          meta: { adoptsFrom: automationRef },
+  function automationJSON(extra: object = {}): string {
+    return JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { ...attributes, ...extra },
+        relationships: {
+          script: { links: { self: '../scripts/nightly-import.js' } },
         },
-      }),
-    );
+        meta: { adoptsFrom: automationRef },
+      },
+    });
+  }
+
+  async function writeAutomation(path: string, extra: object = {}) {
+    await testRealm.write(`${path}.json`, automationJSON(extra));
   }
 
   test('an Automation instance indexes, and its fields round-trip', async function (assert) {
@@ -338,6 +339,21 @@ module(basename(import.meta.filename), function (hooks) {
       'active',
       'the automation is switched on with a nightly run ahead',
     );
+
+    // A from-scratch pass syncs every automation in the realm, whether or not
+    // it visits the card: a row knocked out of step comes back to the card's
+    // nightly run.
+    await dbAdapter.execute(
+      `UPDATE automations SET state = 'done', next_run = NULL WHERE automation_id = '${automationId}'`,
+    );
+    await testRealm.fullIndex();
+    let rearmed = await getAutomation(dbAdapter, automationId);
+    assert.strictEqual(
+      rearmed?.state,
+      'active',
+      'the from-scratch pass brings the row back in step',
+    );
+    assert.notStrictEqual(rearmed?.nextRun, null);
 
     // The card's only trigger becomes a one-time run whose time has passed.
     await writeAutomation('automations/in-step', {

@@ -600,6 +600,7 @@ export async function automationsInRealm(
   let rows = await dbAdapterQuerier(dbAdapter)([
     'SELECT * FROM automations WHERE realm =',
     param(realm),
+    'ORDER BY automation_id',
   ]);
   return rows.map(automationFromRow);
 }

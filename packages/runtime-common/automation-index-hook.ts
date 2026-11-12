@@ -32,9 +32,17 @@ export interface AutomationIndexHookArgs {
   now?: number;
 }
 
+// What the hook did with one automation: the sync's result, or the error
+// that stopped its sync. One automation's failure doesn't stop the others.
+export type AutomationSyncOutcome =
+  | AutomationSync
+  | { kind: 'failed'; error: unknown };
+
 // Syncs each switched-on automation in the realm whose card is among
 // `touched` (every one when `touched` is absent), and returns what it did to
-// each, keyed by automation id.
+// each, keyed by automation id. Each automation syncs on its own: one whose
+// sync throws (a lock timeout, say) is reported as `failed`, and the rest
+// still sync in this pass.
 export async function syncAutomationsAfterIndex({
   dbAdapter,
   definitionLookup,
@@ -42,8 +50,8 @@ export async function syncAutomationsAfterIndex({
   realmURL,
   touched,
   now,
-}: AutomationIndexHookArgs): Promise<Map<string, AutomationSync>> {
-  let synced = new Map<string, AutomationSync>();
+}: AutomationIndexHookArgs): Promise<Map<string, AutomationSyncOutcome>> {
+  let synced = new Map<string, AutomationSyncOutcome>();
   if (dbAdapter.kind !== 'pg') {
     return synced;
   }
@@ -69,18 +77,22 @@ export async function syncAutomationsAfterIndex({
     virtualNetwork,
   );
   for (let { automationId } of automations) {
-    let cardURL = virtualNetwork.toURLHref(automationId);
-    if (touchedCards && !touchedCards.has(cardURL)) {
-      continue;
-    }
-    let result = await syncAutomationWithCard(
-      dbAdapter,
-      automationId,
-      () => engine.getInstanceSource(new URL(cardURL)),
-      { automationTypeKey, virtualNetwork, now },
-    );
-    if (result) {
-      synced.set(automationId, result);
+    try {
+      let cardURL = virtualNetwork.toURLHref(automationId);
+      if (touchedCards && !touchedCards.has(cardURL)) {
+        continue;
+      }
+      let result = await syncAutomationWithCard(
+        dbAdapter,
+        automationId,
+        () => engine.getInstanceSource(new URL(cardURL)),
+        { automationTypeKey, virtualNetwork, now },
+      );
+      if (result) {
+        synced.set(automationId, result);
+      }
+    } catch (error) {
+      synced.set(automationId, { kind: 'failed', error });
     }
   }
   return synced;

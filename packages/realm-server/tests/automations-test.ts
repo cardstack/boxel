@@ -1154,6 +1154,26 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test("one automation's failed sync doesn't stop the rest of the realm's", async function (assert) {
+        await switchOn();
+        // An id the network can't resolve sorts first and fails its sync.
+        await dbAdapter.execute(
+          `INSERT INTO automations (automation_id, realm, payer, caps_snapshot, scheduled_since) VALUES ('@nowhere/broken', '${REALM}', '${OWNER}', '{}'::jsonb, now())`,
+        );
+        let synced = await syncAutomationsAfterIndex({
+          dbAdapter,
+          definitionLookup,
+          virtualNetwork,
+          realmURL: REALM_URL,
+        });
+        assert.strictEqual(synced.get('@nowhere/broken')?.kind, 'failed');
+        assert.strictEqual(
+          synced.get(AUTOMATION)?.kind,
+          'removed',
+          'the automation after it still syncs',
+        );
+      });
+
       test('a pass over the whole realm syncs every automation in it', async function (assert) {
         await switchOn();
         let synced = await syncAutomationsAfterIndex({
