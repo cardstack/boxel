@@ -99,6 +99,37 @@ and no recorder gets one, which is dropped once idle again. A job that fails is
 logged and tried again after its kind's retry delay. The realm records on,
 unless the kind stalls the realm on failure.
 
+## Maintenance
+
+The recorder writes every object loose, and captures every write, including
+intermediate states that no revision keeps. `src/maintenance.ts` keeps each
+repo small and fast to read. A pass runs only while the realm's recorder holds
+nothing captured, and it runs four steps:
+
+1. `git repack -d` packs the loose objects HEAD reaches. Once a repo has 32
+   packs, the pass uses `git repack -a -d` instead and merges them into one.
+2. `git commit-graph write --reachable --split --changed-paths` keeps a
+   commit-graph with changed-path Bloom filters, so a path-filtered `git log`
+   doesn't read a tree per commit. It also runs on its own after every 100
+   revisions.
+3. `git prune --expire=1.hour.ago` removes captured objects no revision uses.
+   The hour protects objects another task is writing during a lease handover.
+4. `git update-server-info` writes `info/refs` and `objects/info/packs`, so a
+   repo can be cloned read-only over git's dumb HTTP protocol from a static
+   file server. `info/refs` also names the HEAD the last complete pass saw.
+
+Readers on other hosts keep working through a pass. Repack removes a loose
+copy only once its pack is in place, and prune removes only objects HEAD
+doesn't reach. `git repack --geometric` isn't used: it packs loose objects
+whether or not anything reaches them, and prune never removes an object
+once it is packed.
+
+The commit-graph's Bloom filters serve `git log` with one path filter from
+git 2.27, and with several path filters only from git 2.51.
+`src/git-capabilities.ts` probes the git on PATH for both, and the service
+logs the answer at startup. The reader runs one `git log` per path filter
+unless it is told the git it runs can use several.
+
 ## Reading
 
 The realm server reads history itself, through `GitRealmHistoryReader` from
