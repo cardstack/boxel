@@ -22,6 +22,8 @@ import {
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
 import { mintRunToken, verifyRunToken } from '../lib/run-token.ts';
+import type { Readable } from 'stream';
+import { nodeStreamToBuffer } from '../stream.ts';
 
 // ============================================================================
 // The run token: what an automation run's calls carry. Every request with one
@@ -57,6 +59,13 @@ module(basename(import.meta.filename), function (hooks) {
       dbAdapter = args.dbAdapter;
     },
   });
+
+  // A file's bytes ride the response's node stream.
+  async function body(response: Response & { nodeStream?: Readable }) {
+    return response.nodeStream
+      ? (await nodeStreamToBuffer(response.nodeStream)).toString()
+      : await response.text();
+  }
 
   function read(token: string, path = 'notes.txt') {
     return realm.handle(
@@ -107,12 +116,12 @@ module(basename(import.meta.filename), function (hooks) {
     let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
     let response = (await read(token))!;
     assert.strictEqual(response.status, 200);
-    assert.strictEqual(await response.text(), 'hello');
+    assert.strictEqual(await body(response), 'hello');
 
     let saved = (await write(token, 'from-run.txt', 'written by the run'))!;
     assert.strictEqual(saved.status, 204, await saved.text());
     let back = (await read(token, 'from-run.txt'))!;
-    assert.strictEqual(await back.text(), 'written by the run');
+    assert.strictEqual(await body(back), 'written by the run');
   });
 
   test('a run is checked as the person it acts as', async function (assert) {
