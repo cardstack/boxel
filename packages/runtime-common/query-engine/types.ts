@@ -437,10 +437,11 @@ export const DEFAULT_FILTER_CONTEXT: FilterContext = {
   indexTable: 'boxel_index',
 };
 
-// A page read by `plainTopN`: its keys in order, the total as far as the
-// page's `total` mode counted it, and whether another page follows.
+// A page read by `plainTopN`: its keys or projected rows in order, the
+// total as far as the page's `total` mode counted it, and its lookahead.
 export interface PlainPage {
-  keys: Record<string, unknown>[];
+  rows: Record<string, unknown>[];
+  hydrated: boolean;
   total: number;
   hasMore: boolean;
   totalIsEstimate: boolean;

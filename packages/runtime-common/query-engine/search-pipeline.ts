@@ -682,6 +682,9 @@ export abstract class SearchPipeline extends Columns {
           relevanceColumn,
           nearJoins,
           everyCondition,
+          hydration: isRealmUnion(realmURL)
+            ? undefined
+            : { realm: realmURL.href, select: selectClauseExpression },
         }))
       ) {
         // A plain page: nothing that fans a match out into several rows, so
@@ -689,15 +692,15 @@ export abstract class SearchPipeline extends Columns {
         // ordered LIMIT the planner can read off an index.
         totalResults = [{ total: plainPage.total }];
         results =
-          plainPage.keys.length > 0
-            ? await this.pageRows(
-                plainPage.keys,
+          plainPage.hydrated || plainPage.rows.length === 0
+            ? plainPage.rows
+            : await this.pageRows(
+                plainPage.rows,
                 selectClauseExpression,
                 baseConditions,
                 opts,
                 sort,
-              )
-            : [];
+              );
       } else if (page) {
         // A paged search runs as a narrow pass then a wide one. The narrow
         // pass evaluates the filter once and returns only each match's key, its

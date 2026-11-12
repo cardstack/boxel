@@ -49,15 +49,41 @@ const INDEX_SERVED_FILTER = /\bsearch_doc @[>?]/;
 // The furthest row of a page `#orderedWalk` reads off an order index.
 const ORDERED_WALK_MAX = 100;
 
+interface PlainHydration {
+  realm: string;
+  select: CardExpression;
+}
+
+function plainPageRows(
+  read: Record<string, unknown>[],
+  size: number,
+  hydrated: boolean,
+): Pick<PlainPage, 'rows' | 'hydrated' | 'hasMore'> {
+  let rows = read.filter((row) => row.url != null);
+  return {
+    rows: hydrated
+      ? rows.map(({ __page_count: _count, __matches: _matches, ...row }) => row)
+      : rows.slice(0, size).map(({ __matches: _matches, ...row }) => row),
+    hydrated,
+    hasMore: hydrated
+      ? Number(read[0]?.__page_count) > size
+      : rows.length > size,
+  };
+}
+
+function plainPageOrder(sort: Sort): Expression {
+  return separatedByCommas([
+    ...sort.map((entry, i) => [
+      `p._sort_${i}`,
+      sortDirection(entry.direction),
+      nullsPlacement(entry),
+    ]),
+    ['p.url COLLATE "POSIX"'],
+    ['p.type'],
+  ]) as Expression;
+}
+
 export abstract class Paging extends Bindings {
-  // The wide pass of a paged search: the projection for the rows the narrow
-  // pass chose, in its order, each carrying the synthetic columns
-  // (`_matchRelevance`, `_nearSimilarity`, `_blendScore`) the narrow pass
-  // computed over the whole match set. Those are not recomputed here: a blend
-  // ranks each signal across every match, so it cannot be recomputed over the
-  // page. The filter is not applied either; the rows are known to match it,
-  // and `baseConditions` keeps the realm, deletion and entry-kind rules. A row
-  // deleted between the passes is dropped from the page.
   // A page as an ordered LIMIT over the matches, with no grouping and no
   // materialized match set, when the query allows it: no relevance, blend or near columns (they aggregate), and
   // no condition that joins a table-valued function (a plural field walked
@@ -80,6 +106,7 @@ export abstract class Paging extends Bindings {
     relevanceColumn,
     nearJoins,
     everyCondition,
+    hydration,
   }: {
     opts: QueryOptions;
     sort: Sort | undefined;
@@ -87,6 +114,7 @@ export abstract class Paging extends Bindings {
     relevanceColumn: CardExpression;
     nearJoins: CardExpression;
     everyCondition: CardExpression;
+    hydration?: PlainHydration;
   }): Promise<PlainPage | undefined> {
     if (
       !this.dialect.plannerPaging ||
@@ -148,6 +176,9 @@ export abstract class Paging extends Bindings {
       opts.timings
         ? opts.timings.busyTime('sqlExec', () => this.query(expression, opts))
         : this.query(expression, opts);
+    // The keys already passed every predicate in this snapshot. A single
+    // realm's primary key identifies the same row the wide pass would read.
+    if (!opts.reader || opts.exposeSortValues) hydration = undefined;
     let requested: PageTotalMode = page.total ?? 'exact';
     // A filter the search doc's GIN index serves runs filter-first: the
     // matches are read through the index, counted, and the page taken from
@@ -165,46 +196,52 @@ export abstract class Paging extends Bindings {
           size,
           offset,
           bounded: requested !== 'exact',
+          hydration,
         })
       : undefined;
     if (filterFirst?.complete) {
-      let hasMore = filterFirst.rows.length > size;
-      let keys = hasMore ? filterFirst.rows.slice(0, size) : filterFirst.rows;
+      let { page: found } = filterFirst;
+      let { hasMore, rows } = found;
       // The total as the count below would report it, from the matches
       // the read counted, which are every match; `none` reports only what
       // the page passed, as it does below.
       let exactlyCounted = !hasMore || requested === 'exact';
       return {
-        keys,
+        ...found,
         total:
           !exactlyCounted && requested === 'none'
-            ? offset + keys.length
+            ? offset + rows.length
             : filterFirst.matches,
-        hasMore,
         totalIsEstimate: !exactlyCounted && requested === 'none',
       };
     }
-    let rows = (
-      filterFirst
-        ? await this.#orderedWalk(keyExpression, sort, size + offset, opts)
-        : await run(keyExpression)
-    ) as Record<string, unknown>[];
-    let hasMore = rows.length > size;
-    let keys = hasMore ? rows.slice(0, size) : rows;
+    let read = filterFirst
+      ? await this.#orderedWalk(keyExpression, sort, size + offset, opts)
+      : await run(
+          hydration
+            ? await this.#hydratePlainPage(
+                keyExpression,
+                hydration,
+                opts,
+                sort ?? [],
+                size,
+              )
+            : keyExpression,
+        );
+    let found = plainPageRows(read, size, Boolean(hydration && !filterFirst));
+    let { hasMore, rows } = found;
     if (filterFirst && hasMore && requested === 'capped') {
       // More matches than the cap, so the count stops past it, as below.
       return {
-        keys,
-        total: Math.max(offset + keys.length, SEARCH_TOTAL_CAP),
-        hasMore,
+        ...found,
+        total: Math.max(offset + rows.length, SEARCH_TOTAL_CAP),
         totalIsEstimate: true,
       };
     }
-    if (!hasMore && (keys.length > 0 || offset === 0)) {
+    if (!hasMore && (rows.length > 0 || offset === 0)) {
       return {
-        keys,
-        total: offset + keys.length,
-        hasMore,
+        ...found,
+        total: offset + rows.length,
         totalIsEstimate: false,
       };
     }
@@ -221,9 +258,8 @@ export abstract class Paging extends Bindings {
       // Nothing is counted: the total is the rows up to and on this page,
       // and `hasMore` says whether more follow.
       return {
-        keys,
-        total: offset + keys.length,
-        hasMore,
+        ...found,
+        total: offset + rows.length,
         totalIsEstimate: true,
       };
     }
@@ -240,15 +276,14 @@ export abstract class Paging extends Bindings {
       )) as { total: unknown }[];
       let counted = Number(row?.total ?? 0);
       return {
-        keys,
+        ...found,
         // A count under the cap is the count. Past it, the total is the
         // cap, and never below the rows already passed: a deep page past
         // the cap still has at least that many matches.
         total:
           counted <= SEARCH_TOTAL_CAP
             ? counted
-            : Math.max(offset + keys.length, SEARCH_TOTAL_CAP),
-        hasMore,
+            : Math.max(offset + rows.length, SEARCH_TOTAL_CAP),
         totalIsEstimate: counted > SEARCH_TOTAL_CAP,
       };
     }
@@ -256,11 +291,40 @@ export abstract class Paging extends Bindings {
       await this.makeExpression(['SELECT COUNT(*) AS total', ...from], opts),
     )) as { total: unknown }[];
     return {
-      keys,
+      ...found,
       total: Number(row?.total ?? 0),
-      hasMore,
       totalIsEstimate: false,
     };
+  }
+
+  // Limit the keys before reading the projection, so the lookahead row
+  // contributes to hasMore without fetching its document or renderings.
+  async #hydratePlainPage(
+    keys: Expression,
+    { realm, select }: PlainHydration,
+    opts: QueryOptions,
+    sort: Sort,
+    size: number,
+    carriesTotal = false,
+  ): Promise<Expression> {
+    let order = plainPageOrder(sort);
+    return [
+      'SELECT h.*, p.__page_count',
+      ...(carriesTotal ? [', p.__matches'] : []),
+      'FROM (SELECT p.*, COUNT(p.url) OVER () AS __page_count FROM (',
+      ...keys,
+      ') AS p ORDER BY',
+      ...order,
+      'LIMIT',
+      param(size),
+      ') AS p LEFT JOIN LATERAL (',
+      ...(await this.makeExpression(select, opts)),
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+      'WHERE i.url = p.url AND i.type = p.type AND i.realm_url =',
+      param(realm),
+      'GROUP BY i.url, i.type) AS h ON TRUE ORDER BY',
+      ...order,
+    ];
   }
 
   // A plain page read filter-first: the keys of every match, read through
@@ -291,6 +355,7 @@ export abstract class Paging extends Bindings {
     size,
     offset,
     bounded,
+    hydration,
   }: {
     opts: QueryOptions;
     sortColumns: CardExpression;
@@ -300,20 +365,12 @@ export abstract class Paging extends Bindings {
     size: number;
     offset: number;
     bounded: boolean;
+    hydration?: PlainHydration;
   }): Promise<{
-    rows: Record<string, unknown>[];
+    page: ReturnType<typeof plainPageRows>;
     matches: number;
     complete: boolean;
   }> {
-    let pageOrder = separatedByCommas([
-      ...sort.map((s, i) => [
-        `p._sort_${i}`,
-        sortDirection(s.direction),
-        nullsPlacement(s),
-      ]),
-      ['p.url COLLATE "POSIX"'],
-      ['p.type'],
-    ]);
     // The matches' keys first, counted; the sort values are read, and the
     // page taken, only when the read holds every match. The count rides on
     // every row, and on a row of its own when the page lies past the last
@@ -331,24 +388,33 @@ export abstract class Paging extends Bindings {
         'ORDER BY',
         ...separatedByCommas(orderKeys),
         `LIMIT ${size + 1} OFFSET ${offset}) AS p ON TRUE ORDER BY`,
-        ...pageOrder,
+        ...plainPageOrder(sort),
       ],
       opts,
     );
+    let statement = hydration
+      ? await this.#hydratePlainPage(
+          expression,
+          hydration,
+          opts,
+          sort,
+          size,
+          true,
+        )
+      : expression;
     let read = () =>
       this.db(opts).withTransaction(async (q) => {
         await q([
           `SELECT set_config('enable_seqscan', 'off', true), set_config('enable_indexscan', 'off', true)`,
         ]);
-        return await q(expression);
+        return await q(statement);
       });
     let all = (await (opts.timings
       ? opts.timings.busyTime('sqlExec', read)
       : read())) as Record<string, unknown>[];
     let matches = Number(all[0]?.__matches ?? 0);
-    let rows = all.filter((row) => row.url != null);
     return {
-      rows: rows.map(({ __matches: _m, ...key }) => key),
+      page: plainPageRows(all, size, Boolean(hydration)),
       matches,
       complete: !bounded || matches <= SEARCH_TOTAL_CAP,
     };
@@ -398,6 +464,14 @@ export abstract class Paging extends Bindings {
       : walk())) as Record<string, unknown>[];
   }
 
+  // The wide pass of a paged search: the projection for the rows the narrow
+  // pass chose, in its order, each carrying the synthetic columns
+  // (`_matchRelevance`, `_nearSimilarity`, `_blendScore`) the narrow pass
+  // computed over the whole match set. Those are not recomputed here: a blend
+  // ranks each signal across every match, so it cannot be recomputed over the
+  // page. The filter is not applied either; the rows are known to match it,
+  // and `baseConditions` keeps the realm, deletion and entry-kind rules. A row
+  // deleted between the passes is dropped from the page.
   protected async pageRows(
     keys: Record<string, unknown>[],
     selectClauseExpression: CardExpression,
@@ -406,6 +480,13 @@ export abstract class Paging extends Bindings {
     sort?: Sort,
   ): Promise<Record<string, unknown>[]> {
     let urls = [...new Set(keys.map((key) => String(key.url)))];
+    // A card and its file can share a URL. When the page chose one type,
+    // hydrate only that type instead of loading both and discarding one.
+    let type = keys[0]?.type;
+    let typeCondition: CardExpression[] =
+      typeof type === 'string' && keys.every((key) => key.type === type)
+        ? [['i.type =', param(type)]]
+        : [];
     let sortKinds = opts.exposeSortValues
       ? await this.sortValueKinds(sort)
       : [];
@@ -417,6 +498,7 @@ export abstract class Paging extends Bindings {
         'WHERE',
         ...every([
           ...baseConditions,
+          ...typeCondition,
           [
             'i.url IN',
             ...addExplicitParens(

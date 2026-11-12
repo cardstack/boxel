@@ -890,6 +890,33 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(after.facets, before.facets);
   });
 
+  test('combined plain pages match the separate projection for each total mode', async function (assert) {
+    let realm = new URL(testRealm);
+    let sort: Query['sort'] = [{ by: 'status', on, direction: 'desc' }];
+    let filters: NonNullable<Query['filter']>[] = [
+      { type: on },
+      { on, in: { status: ['open', 'closed'] } },
+    ];
+    for (let filter of filters) {
+      for (let total of ['exact', 'capped', 'none'] as const) {
+        for (let number of [0, 1, 8]) {
+          let query = { filter, sort, page: { size: 2, number, total } };
+          let combined = await engine.searchCards(realm, query);
+          // Sort metadata still uses the separate projection. searchCards
+          // returns the same card representation in both cases.
+          let split = await engine.searchCards(realm, query, {
+            exposeSortValues: true,
+          });
+          assert.deepEqual(
+            combined,
+            split,
+            `${Object.keys(filter).join('/')}, ${total}, page ${number}`,
+          );
+        }
+      }
+    }
+  });
+
   test('value facets sharing a filter match separate requests', async function (assert) {
     let filter: Query['filter'] = {
       every: [{ type: on }, { on, eq: { status: 'open' } }],
