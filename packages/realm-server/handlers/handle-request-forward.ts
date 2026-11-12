@@ -175,6 +175,8 @@ export default function handleRequestForward({
     let runForward: AdmittedRunForward | undefined;
     let sent = false;
     let costInUsd: number | undefined;
+    // The upstream's status, once it has answered.
+    let upstreamStatus: number | undefined;
 
     try {
       // 1. Validate JWT token and extract user
@@ -396,6 +398,20 @@ export default function handleRequestForward({
           // provider has already generated and billed for the tokens, and
           // abandoning the read only loses the charge. forwardJsonResponse
           // cancels the read only when nothing is charged.
+          if (runForward) {
+            // Counted just before it is sent, so a forward the person's
+            // credits refused never counts against the run's cap.
+            let counted = await runForward.countCall();
+            if (!counted.ok) {
+              await sendResponseForError(
+                ctxt,
+                counted.status,
+                STATUS_TEXT[counted.status],
+                counted.message,
+              );
+              return undefined;
+            }
+          }
           const upstreamCall = upstreamCallSignal(clientGone);
           sent = true;
           const externalResponse = await outboundFetch({
@@ -412,6 +428,7 @@ export default function handleRequestForward({
             scrubber,
           });
           upstreamCall.release();
+          upstreamStatus = externalResponse.status;
 
           return await forwardJsonResponse(ctxt, externalResponse, {
             chargesForUsage: destinationConfig.creditStrategy.chargesForUsage,
@@ -453,10 +470,19 @@ export default function handleRequestForward({
         'An error occurred while processing the request',
       );
     } finally {
-      // A request never sent cost nothing; one sent whose cost couldn't be
-      // learned spends its whole reservation, the most it could have cost.
+      // A request never sent cost nothing, and neither did one the upstream
+      // answered with an error and no cost. One sent whose cost couldn't be
+      // learned otherwise spends its whole reservation, the most it could
+      // have cost.
+      let settledCost =
+        !sent ||
+        (costInUsd === undefined &&
+          upstreamStatus !== undefined &&
+          upstreamStatus >= 400)
+          ? 0
+          : costInUsd;
       await runForward
-        ?.settle(sent ? costInUsd : 0)
+        ?.settle(settledCost)
         .catch((error) =>
           log.error(
             `Could not settle run ${runForward!.run.runId}'s AI reservation:`,

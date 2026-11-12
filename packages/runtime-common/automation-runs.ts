@@ -512,11 +512,16 @@ export type AutomationRunAIReservation =
 // credits can't both get them. Each reservation is held on the row under its
 // own id (`ai_reservations`) and counts against the cap until
 // `settleAutomationRunAICredits` replaces it with what the request cost.
+//
+// With `attempt`, only that attempt may reserve: a request admitted for an
+// attempt a retry has since taken the run over from is refused as
+// `not-running`.
 export async function reserveAutomationRunAICredits(
   dbAdapter: DBAdapter,
   id: string,
   credits: number,
   cap: number,
+  { attempt }: { attempt?: number } = {},
 ): Promise<AutomationRunAIReservation> {
   assertCredits('reserve', credits);
   assertCredits('cap a run at', cap);
@@ -531,6 +536,7 @@ export async function reserveAutomationRunAICredits(
     'AS numeric)) WHERE id =',
     param(id),
     "AND state = 'running'",
+    ...(attempt !== undefined ? ['AND attempt =', param(attempt)] : []),
     'AND ai_credits_spent + ai_credits_reserved +',
     param(credits),
     '<=',
@@ -544,7 +550,10 @@ export async function reserveAutomationRunAICredits(
   if (!run) {
     return { kind: 'missing' };
   }
-  return { kind: run.state === 'running' ? 'over-cap' : 'not-running', run };
+  let owned =
+    run.state === 'running' &&
+    (attempt === undefined || run.attempt === attempt);
+  return { kind: owned ? 'over-cap' : 'not-running', run };
 }
 
 // Settles the AI request that holds `reservationId`: releases its

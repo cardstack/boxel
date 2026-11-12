@@ -9,7 +9,7 @@ import {
 import {
   countRunCall,
   endRunAtCap,
-  readRunDeclaration,
+  readRunLimits,
   type LimitedRun,
 } from '@cardstack/runtime-common/automation-run-limits';
 import {
@@ -37,11 +37,14 @@ export const OPENROUTER_CHAT_COMPLETIONS_URL =
 // - the request is a chat completion to OpenRouter, not streamed: the only
 //   request a run forwards is a `resolve` call;
 // - its worst case is priced at the model's listed price and reserved against
-//   the run's `aiCredits` cap (`admitAutomationRunAIRequest`);
-// - it counts as one call against the run's `resolveCalls` cap.
+//   the run's `aiCredits` cap for the token's attempt
+//   (`admitAutomationRunAIRequest`).
 //
-// A call past either cap ends the run as an error, `hit-a-cap`, naming the
-// cap. An admitted request must be settled exactly once with `settle`.
+// The forward then counts it as one call against the run's `resolveCalls`
+// cap with `countCall`, just before the request is sent, so a forward the
+// person's credits refuse never counts. A call past either cap ends the run as
+// an error, `hit-a-cap`, naming the cap. An admitted request must be settled
+// exactly once with `settle`.
 export interface RunForwardRefusal {
   status: 401 | 403 | 422 | 503;
   message: string;
@@ -49,6 +52,9 @@ export interface RunForwardRefusal {
 
 export interface AdmittedRunForward {
   run: LimitedRun & { actsAs: string };
+  // Counts the request against the run's `resolveCalls` cap. A refusal has
+  // released the request's reservation; send it as the answer.
+  countCall(): Promise<{ ok: true } | ({ ok: false } & RunForwardRefusal)>;
   // Settles the request's AI reservation: with the generation's cost in USD
   // once it is known, 0 when the request was never sent, or undefined when
   // its cost can't be learned, which spends the whole reservation.
@@ -144,20 +150,20 @@ export async function admitRunForward(
       `run ${run.runId} asked to forward ${method} ${url}${stream ? ' streamed' : ''}${multipart ? ' as multipart' : ''}`,
     );
   }
-  let declaration = await readRunDeclaration({
+  let limits = await readRunLimits({
     dbAdapter,
     definitionLookup,
     virtualNetwork,
     automationId: run.automationId,
   });
-  if (!declaration.ok) {
+  if (!limits.ok) {
     return refuse(
       403,
       "The automation's declaration can't be read, so its run may make no AI request",
-      `run ${run.runId}: ${declaration.message}`,
+      `run ${run.runId}: ${limits.message}`,
     );
   }
-  let { caps } = declaration.declaration;
+  let { caps } = limits;
   let model = modelOf(body);
   let modelsRealmURL = openRouterModelsRealmURL(virtualNetwork);
   if (!modelsRealmURL) {
@@ -179,6 +185,7 @@ export async function admitRunForward(
   }
   let admission = await admitAutomationRunAIRequest(dbAdapter, {
     runId: run.runId,
+    attempt: run.attempt,
     aiCreditsCap: caps.aiCredits,
     body,
     price,
@@ -211,21 +218,30 @@ export async function admitRunForward(
       costInUsd,
     });
   };
-  let counted = await countRunCall(
-    dbAdapter,
-    run,
-    'resolveCalls',
-    caps.resolveCalls,
-  );
-  if (!counted.ok) {
+  let countCall = async () => {
+    let counted;
+    try {
+      counted = await countRunCall(
+        dbAdapter,
+        run,
+        'resolveCalls',
+        caps.resolveCalls,
+      );
+    } catch (error) {
+      await settle(0);
+      throw error;
+    }
+    if (counted.ok) {
+      return { ok: true as const };
+    }
     await settle(0);
     return refuse(
       counted.error.status === 401 ? 401 : 403,
       counted.error.detail,
       `run ${run.runId}: ${counted.error.detail}`,
     );
-  }
-  return { ok: true, admitted: { run, settle } };
+  };
+  return { ok: true, admitted: { run, countCall, settle } };
 }
 
 function modelOf(body: string): string | undefined {

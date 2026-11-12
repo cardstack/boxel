@@ -309,21 +309,61 @@ export async function sendCallApiRequest(
           }
         : {}),
     });
-    let bytes = new Uint8Array(await response.arrayBuffer());
-    options.onResponseBytes?.(bytes.byteLength, false);
-    let text = new TextDecoder().decode(bytes);
+    let text = await readCounted(response, (bytes, budgetReached) =>
+      options.onResponseBytes?.(bytes, budgetReached),
+    );
     return {
       status: response.status,
       headers: safeResponseHeaders(response.headers),
       body: bodyOf(text, response.headers.get('content-type')),
     };
   } catch (error) {
-    if (error instanceof OutboundResponseTooLargeError) {
-      options.onResponseBytes?.(error.bytesRead, error.byBudget);
+    if (
+      error instanceof OutboundResponseTooLargeError &&
+      error.measured === 'declared-length'
+    ) {
+      // Refused on its declared length, before any of the body was read.
+      options.onResponseBytes?.(0, error.byBudget);
     }
     scrubError(error, scrubber);
     throw refusalFor(error, describeOutboundError(error, context));
   }
+}
+
+// Reads the body as text, telling `report` once how many bytes were read:
+// all of them, or as many as arrived before the stream failed, whether it
+// failed for its size or otherwise. A size refusal says whether it was the
+// call's byte budget that refused it.
+async function readCounted(
+  response: Response,
+  report: (bytes: number, budgetReached: boolean) => void,
+): Promise<string> {
+  let reader = response.body?.getReader();
+  if (!reader) {
+    report(0, false);
+    return '';
+  }
+  let chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    for (;;) {
+      let { done, value } = await reader.read();
+      if (done || !value) {
+        break;
+      }
+      chunks.push(value);
+      bytes += value.byteLength;
+    }
+  } catch (error) {
+    if (error instanceof OutboundResponseTooLargeError) {
+      report(error.bytesRead, error.byBudget);
+    } else {
+      report(bytes, false);
+    }
+    throw error;
+  }
+  report(bytes, false);
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
 function bodyOf(text: string, contentType: string | null) {

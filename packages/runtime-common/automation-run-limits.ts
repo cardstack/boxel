@@ -18,9 +18,11 @@
 import {
   automationRef,
   readAutomationDeclaration,
+  type AutomationCaps,
   type AutomationDeclaration,
   type AutomationOperationDeclaration,
 } from './automation-declaration.ts';
+import { getAutomation, type AutomationCapsSnapshot } from './automations.ts';
 import {
   addAutomationRunCounts,
   countAutomationRunCall,
@@ -107,6 +109,58 @@ export async function readRunDeclaration({
     };
   }
   return { ok: true, declaration: read.declaration };
+}
+
+// What a run is held to: the operations its automation declares, and the
+// per-run caps. Each cap is the card's, but never more than the automation's
+// caps snapshot, what its payer agreed to when they switched it on or last
+// resumed it. Raising a cap pauses the automation, which stops new runs, but
+// a run already going reads the card as it is now, so the snapshot is what
+// keeps that run to what was agreed. A run of an automation with no row (a
+// Preview) is held to the card's caps.
+export interface RunLimits {
+  operations: AutomationOperationDeclaration[];
+  caps: AutomationCaps;
+}
+
+export type RunLimitsRead =
+  | ({ ok: true } & RunLimits)
+  | { ok: false; message: string };
+
+export async function readRunLimits(args: {
+  dbAdapter: DBAdapter;
+  definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
+  automationId: RealmResourceIdentifier;
+}): Promise<RunLimitsRead> {
+  let read = await readRunDeclaration(args);
+  if (!read.ok) {
+    return read;
+  }
+  let { operations, caps } = read.declaration;
+  let row = await getAutomation(args.dbAdapter, args.automationId);
+  return {
+    ok: true,
+    operations,
+    caps: row ? withinSnapshot(caps, row.capsSnapshot) : caps,
+  };
+}
+
+function withinSnapshot(
+  caps: AutomationCaps,
+  snapshot: AutomationCapsSnapshot,
+): AutomationCaps {
+  let lower = (card: number, agreed: number | undefined) =>
+    typeof agreed === 'number' ? Math.min(card, agreed) : card;
+  return {
+    ...caps,
+    callApiCalls: lower(caps.callApiCalls, snapshot.callApiCalls),
+    responseBytes: lower(caps.responseBytes, snapshot.responseBytes),
+    resolveCalls: lower(caps.resolveCalls, snapshot.resolveCalls),
+    aiCredits: lower(caps.aiCredits, snapshot.aiCredits),
+    writes: lower(caps.writes, snapshot.writes),
+    seconds: lower(caps.seconds, snapshot.seconds),
+  };
 }
 
 // Whether the declared operations name `operation` on `type`, the type the
@@ -212,9 +266,9 @@ export function automationRunCallApiMeter({
   virtualNetwork: VirtualNetwork;
   run: LimitedRun;
 }): CallApiRunMeter {
-  let declaration: Promise<RunDeclarationRead> | undefined;
-  let declared = async (): Promise<AutomationDeclaration> => {
-    let read = await (declaration ??= readRunDeclaration({
+  let limits: Promise<RunLimitsRead> | undefined;
+  let declared = async (): Promise<RunLimits> => {
+    let read = await (limits ??= readRunLimits({
       dbAdapter,
       definitionLookup,
       virtualNetwork,
@@ -229,7 +283,7 @@ export function automationRunCallApiMeter({
         detail: `The automation's declaration can't be read, so its run may call no outside service`,
       });
     }
-    return read.declaration;
+    return { operations: read.operations, caps: read.caps };
   };
   return {
     async checkDeclared(type, operation) {

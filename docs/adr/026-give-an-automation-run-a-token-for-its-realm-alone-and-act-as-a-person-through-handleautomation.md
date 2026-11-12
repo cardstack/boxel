@@ -10,6 +10,8 @@ scope:
   - packages/realm-server/lib/key-bindings.ts
   - packages/realm-server/lib/key-uses.ts
   - packages/runtime-common/card-operations/call-api.ts
+  - packages/runtime-common/automation-run-limits.ts
+  - packages/realm-server/handlers/handle-request-forward.ts
   - packages/realm-server/middleware/index.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
   - packages/realm-server/prerender/render-runner.ts
@@ -62,11 +64,18 @@ MUST be refused, and the refusal MUST name that realm.
 
 ### 1.3. Every call goes through `Realm.handleAutomation`
 
-The realm server MUST handle each request that carries a run token through
-`Realm.handleAutomation`, and through no other entry point.
+The realm server MUST handle each request to a realm that carries a run
+token through `Realm.handleAutomation`, and through no other entry point.
 `Realm.handleAutomation` MUST refuse a call unless the run's row says the run
 is still running, its time limit has not passed, and its caps are not spent.
 A cancel or a pause MUST stop the run's next call.
+
+A realm-server route that serves a run's requests to no realm, such as
+forwarding its AI requests, MUST make the same checks against the run's row
+before it acts: the token verifies under the run-token key, its identity's
+sessions were not revoked after it was minted, the run is running and owned
+by the token's attempt, and the caps that bound what the route does are not
+spent. Every other realm-server route MUST refuse a run token.
 
 Only a run token MUST reach automation mode. The server MUST treat a request
 as an automation call because it carries a run token, and for no other

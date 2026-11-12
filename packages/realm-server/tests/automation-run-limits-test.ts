@@ -5,18 +5,22 @@ import sinon from 'sinon';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  CREDITS_PER_USD,
   getAutomationRun,
+  ri,
   rri,
   SupportedMimeType,
   type Realm,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { HIT_A_CAP_REASON } from '@cardstack/runtime-common/automation-runs';
+import { switchOnAutomation } from '@cardstack/runtime-common/automations';
 import {
   addToCreditsLedger,
   getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
 import {
+  ROOMY_AUTOMATION_CAPS,
   automationFixture,
   createAutomationRunToken,
   insertPlan,
@@ -47,6 +51,8 @@ const OWNER = '@limits-owner:localhost';
 const REALM_USER = '@node-test_realm:localhost';
 const FEED = { module: rri(`${realmURL.href}feed`), name: 'Feed' };
 const MODEL = 'anthropic/claude-limits-test';
+// What the stubbed OpenRouter reports each generation cost.
+const GENERATION_COST_USD = 0.0001;
 
 // Each automation's card, by its path in the realm.
 const ROOMY = 'automation/roomy';
@@ -68,6 +74,13 @@ const feedModule = `
       base: 'callApi',
       params: { bytes: StringField },
       url: '${VENDOR}/large',
+      query: { bytes: params('bytes') },
+    };
+
+    @operation static streamed = {
+      base: 'callApi',
+      params: { bytes: StringField },
+      url: '${VENDOR}/gzip-bomb',
       query: { bytes: params('bytes') },
     };
 
@@ -102,7 +115,7 @@ module(basename(import.meta.filename), function (hooks) {
     AllowedProxyDestinations.reset();
   });
 
-  const declared = [{ type: FEED, names: ['latest', 'large'] }];
+  const declared = [{ type: FEED, names: ['latest', 'large', 'streamed'] }];
 
   // Proxy endpoints' keys are sealed as they are written.
   setupSecretsKeyring(hooks);
@@ -265,9 +278,10 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(row.state, 'error');
     assert.strictEqual(row.errorReason, HIT_A_CAP_REASON);
     assert.true(row.errorMessage?.includes('responseBytes'));
-    assert.true(
-      row.callApiResponseBytes <= 200,
-      `no more than the cap is counted: ${row.callApiResponseBytes}`,
+    assert.strictEqual(
+      row.callApiResponseBytes,
+      0,
+      'a response refused on its declared length was never read',
     );
   });
 
@@ -280,9 +294,69 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(row.callApiResponseBytes, 150);
   });
 
+  test('a streamed response the budget cuts off partway is counted as far as it was read, and ends the run', async function (assert) {
+    let { token, run } = await runOf(TIGHT);
+    let answer = await callApi(token, 'streamed', { bytes: '100000' });
+    let error = errorOf(answer.body);
+    assert.strictEqual(
+      error.code,
+      'run-cap-reached',
+      JSON.stringify(answer.body),
+    );
+    assert.strictEqual(error.meta?.cap, 'responseBytes');
+
+    let row = (await getAutomationRun(dbAdapter, run.id))!;
+    assert.strictEqual(row.state, 'error');
+    assert.strictEqual(row.errorReason, HIT_A_CAP_REASON);
+    assert.true(
+      row.callApiResponseBytes > 200,
+      `the bytes read up to the cut are counted: ${row.callApiResponseBytes}`,
+    );
+    assert.true(
+      row.callApiResponseBytes < 100000,
+      `the rest of the body was never read: ${row.callApiResponseBytes}`,
+    );
+  });
+
+  test("a run is held to its automation's caps snapshot when the card's caps are higher", async function (assert) {
+    let automationId = rri(`${realmURL.href}${ROOMY}`);
+    // The payer agreed to one call a run; the card asks for far more.
+    let switchedOn = await switchOnAutomation(
+      dbAdapter,
+      {
+        automationId,
+        realm: ri(realmURL.href),
+        user: OWNER,
+        declaration: {
+          url: automationId,
+          realmURL: realmURL.href,
+          script: rri(`${realmURL.href}${ROOMY}-script.js`),
+          triggers: [],
+          operations: [],
+          caps: { ...ROOMY_AUTOMATION_CAPS, callApiCalls: 1 },
+          params: {},
+          batchedAI: false,
+          batchDeadlineMinutes: 60,
+        },
+      },
+      { matrixServerName: 'localhost', virtualNetwork },
+    );
+    assert.true(switchedOn.ok, JSON.stringify(switchedOn));
+
+    let { token, run } = await runOf(ROOMY);
+    assert.strictEqual((await callApi(token, 'latest')).status, 200);
+    let second = await callApi(token, 'latest');
+    assert.strictEqual(errorOf(second.body).meta?.cap, 'callApiCalls');
+    let row = (await getAutomationRun(dbAdapter, run.id))!;
+    assert.strictEqual(row.errorReason, HIT_A_CAP_REASON);
+    assert.strictEqual(row.callApiCalls, 1);
+  });
+
   module('resolve calls', function (hooks) {
     let fetchStub: sinon.SinonStub;
     let forwarded: string[];
+    // What the stubbed OpenRouter answers.
+    let upstreamAnswer: { status: number; body: unknown };
 
     hooks.beforeEach(async function () {
       if (!virtualNetwork.isRegisteredPrefix(OPENROUTER_MODELS_REALM)) {
@@ -315,6 +389,14 @@ module(basename(import.meta.filename), function (hooks) {
       await insertModelListing(MODEL, 0.000002, 0.00001);
 
       forwarded = [];
+      upstreamAnswer = {
+        status: 200,
+        body: {
+          id: 'gen-limits-1',
+          choices: [{ message: { content: '{}' } }],
+          usage: { total_tokens: 20, cost: GENERATION_COST_USD },
+        },
+      };
       let realFetch = global.fetch;
       fetchStub = sinon
         .stub(global, 'fetch')
@@ -325,14 +407,10 @@ module(basename(import.meta.filename), function (hooks) {
               return await realFetch(input, init);
             }
             forwarded.push(String(init?.body ?? ''));
-            return new Response(
-              JSON.stringify({
-                id: 'gen-limits-1',
-                choices: [{ message: { content: '{}' } }],
-                usage: { total_tokens: 20, cost: 0.0001 },
-              }),
-              { status: 200, headers: { 'content-type': 'application/json' } },
-            );
+            return new Response(JSON.stringify(upstreamAnswer.body), {
+              status: upstreamAnswer.status,
+              headers: { 'content-type': 'application/json' },
+            });
           },
         );
     });
@@ -395,9 +473,34 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(row.state, 'running');
       assert.strictEqual(row.resolveCalls, 1);
       assert.strictEqual(row.aiCreditsReserved, 0, 'nothing is left reserved');
-      assert.true(
-        row.aiCreditsSpent > 0,
-        `the generation's cost is spent: ${row.aiCreditsSpent}`,
+      assert.strictEqual(
+        row.aiCreditsSpent,
+        GENERATION_COST_USD * CREDITS_PER_USD,
+        "the generation's cost is spent, not its reservation",
+      );
+    });
+
+    test('a resolve the upstream answers with an error costs the run nothing', async function (assert) {
+      upstreamAnswer = {
+        status: 429,
+        body: { error: { message: 'rate limited' } },
+      };
+      let { token, run } = await runOf(ROOMY);
+      let response = await resolve(token);
+      assert.strictEqual(response.status, 429, JSON.stringify(response.body));
+
+      let row = (await getAutomationRun(dbAdapter, run.id))!;
+      assert.strictEqual(row.state, 'running');
+      assert.strictEqual(
+        row.resolveCalls,
+        1,
+        'the request was sent, so it counts',
+      );
+      assert.strictEqual(row.aiCreditsReserved, 0);
+      assert.strictEqual(
+        row.aiCreditsSpent,
+        0,
+        'an error is not charged to the cap',
       );
     });
 
