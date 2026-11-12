@@ -6,11 +6,12 @@
 // row is held to the other's identity.
 //
 // `key_uses_refusal_window_idx` covers run rows as well, without the run, so
-// while it exists a refusal from a second run that matches another run's row
-// in the same minute is refused by it, and the call path logs it as a use it
-// could not record. It is dropped in the removal phase of a later release,
-// once neither a running task nor a release a rollback could return to names
-// its predicate.
+// while it exists a run's refusal that matches a row it doesn't arbitrate on
+// in the same minute is refused by it: one from another run, or a concurrent
+// refusal of the same run that loses the race to insert the row. The call
+// path logs it as a use it could not record. It is dropped in the removal
+// phase of a later release, once neither a running task nor a release a
+// rollback could return to names its predicate.
 //
 // An interactive insert whose ON CONFLICT predicate is `refusal_window IS NOT
 // NULL` alone infers `key_uses_refusal_window_idx` as its only arbiter, so to
