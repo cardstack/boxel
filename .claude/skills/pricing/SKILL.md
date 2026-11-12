@@ -296,11 +296,7 @@ as an `OpenRouterModel` card in the `@cardstack/openrouter/` realm like any
 other model. A model with no batch listing is priced at its own listed price,
 which a batch never costs more than. A request whose worst case can't be
 priced, or a model with no listing, is refused before anything is sent. The
-estimate is what a batch that ends with no reported cost is billed at. It is
-an upper bound at a model's base rates, but the model sync doesn't keep the
-higher rates some models list above a prompt-length threshold (OpenRouter's
-`pricing.overrides`), so for those models a request long enough to cross the
-threshold can cost more than its estimate.
+estimate is what a batch that ends with no reported cost is billed at.
 
 **The run's AI spending cap.** Before a batch is sent, it reserves twice its
 requests' worst case at the model's listed (normal) price on the submitting

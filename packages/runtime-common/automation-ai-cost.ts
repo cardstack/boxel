@@ -26,6 +26,26 @@ export interface AIModelPrice {
   // The model's context window: the most tokens it reads and writes in all,
   // whichever provider serves it.
   contextLength: number | null;
+  // The other rates the model lists (OpenRouter's `pricing.overrides`), each
+  // charged in place of the rates above when its conditions hold: a prompt of
+  // at least `minPromptTokens` tokens, or a time of day or week.
+  tiers?: AIModelPriceTier[];
+}
+
+type AIModelRates = Pick<
+  AIModelPrice,
+  'promptUsdPerToken' | 'completionUsdPerToken' | 'requestUsd'
+>;
+
+// One of a model's other listed rates. A rate the tier doesn't list is the
+// model's base rate.
+export interface AIModelPriceTier {
+  // The fewest prompt tokens the tier charges at, or null when the tier's
+  // conditions don't depend on the prompt's length.
+  minPromptTokens: number | null;
+  promptUsdPerToken: number;
+  completionUsdPerToken: number;
+  requestUsd: number;
 }
 
 // The most an AI request can cost, and the quantities it was priced at.
@@ -58,10 +78,12 @@ export const TOOL_PROMPT_ALLOWANCE_TOKENS = 1000;
 // Reads a model's price from an indexed `OpenRouterModel` card's attributes.
 // OpenRouter lists prices as decimal strings in USD per token, and per
 // request for `request`. The prompt and completion prices are required; a
-// missing request price is 0, since most models list none. Returns
-// undefined when the card names no model or a price isn't a number 0 or more
-// (a variable price is listed as `-1`), since a request can't be bounded at a
-// price that can't be read.
+// missing request price is 0, since most models list none. Each of the
+// card's `pricing.overrides` is read as a tier, and a rate a tier doesn't
+// list is the base rate. Returns undefined when the card names no model or
+// a price, the base's or a tier's, isn't a number 0 or more (a variable
+// price is listed as `-1`), since a request can't be bounded at a price that
+// can't be read.
 export function readOpenRouterModelPrice(
   attributes: Record<string, unknown> | undefined,
 ): AIModelPrice | undefined {
@@ -79,6 +101,32 @@ export function readOpenRouterModelPrice(
   ) {
     return undefined;
   }
+  let tiers: AIModelPriceTier[] = [];
+  let overrides = Array.isArray(pricing.overrides) ? pricing.overrides : [];
+  for (let override of overrides.map(record)) {
+    let tierPrompt = isAbsent(override.prompt)
+      ? promptUsdPerToken
+      : price(override.prompt);
+    let tierCompletion = isAbsent(override.completion)
+      ? completionUsdPerToken
+      : price(override.completion);
+    let tierRequest = isAbsent(override.request)
+      ? requestUsd
+      : price(override.request);
+    if (
+      tierPrompt === undefined ||
+      tierCompletion === undefined ||
+      tierRequest === undefined
+    ) {
+      return undefined;
+    }
+    tiers.push({
+      minPromptTokens: tokenLimit(override.minPromptTokens),
+      promptUsdPerToken: tierPrompt,
+      completionUsdPerToken: tierCompletion,
+      requestUsd: tierRequest,
+    });
+  }
   return {
     modelId: attributes.modelId,
     promptUsdPerToken,
@@ -87,6 +135,7 @@ export function readOpenRouterModelPrice(
     contextLength:
       tokenLimit(attributes.contextLength) ??
       tokenLimit(record(attributes.topProvider).contextLength),
+    tiers,
   };
 }
 
@@ -107,6 +156,11 @@ export function readOpenRouterModelPrice(
 //   window. The limit a provider lists isn't used: OpenRouter can route a
 //   request to another provider with a higher one.
 // - **Per request**: the model's request price.
+// - **Rates**: the highest of the model's base rates and each tier the
+//   request can reach. A tier with a `minPromptTokens` is reachable when the
+//   input bound is at least that many tokens. A tier set by the time of day
+//   or week is always reachable, since a request can be sent, or a batch's
+//   requests worked through, at any time.
 //
 // Output is priced at the completion rate, so a request asking for audio or
 // image output, which bills at other rates, is refused.
@@ -171,10 +225,21 @@ export function aiRequestCostCeiling(
     (Array.isArray(request.tools) && request.tools.length > 0
       ? TOOL_PROMPT_ALLOWANCE_TOKENS
       : 0);
-  let usd =
-    inputTokens * price.promptUsdPerToken +
-    outputTokens * price.completionUsdPerToken +
-    price.requestUsd;
+  let reachable: AIModelRates[] = [
+    price,
+    ...(price.tiers ?? []).filter(
+      (tier) =>
+        tier.minPromptTokens === null || inputTokens >= tier.minPromptTokens,
+    ),
+  ];
+  let usd = Math.max(
+    ...reachable.map(
+      (rates) =>
+        inputTokens * rates.promptUsdPerToken +
+        outputTokens * rates.completionUsdPerToken +
+        rates.requestUsd,
+    ),
+  );
   return {
     ok: true,
     ceiling: { credits: usd * CREDITS_PER_USD, inputTokens, outputTokens },

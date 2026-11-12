@@ -37,6 +37,7 @@ interface OpenRouterApiModel {
     request?: string;
     image?: string;
     web_search?: string;
+    overrides?: OpenRouterApiPricingOverride[];
   };
   top_provider?: {
     is_moderated?: boolean;
@@ -58,6 +59,18 @@ interface OpenRouterApiModel {
     repetition_penalty?: number | null;
   };
   expiration_date?: string | null;
+}
+
+interface OpenRouterApiPricingOverride {
+  min_prompt_tokens?: number;
+  utc_days?: string[];
+  utc_start?: number;
+  utc_end?: number;
+  prompt?: string;
+  completion?: string;
+  request?: string;
+  image?: string;
+  web_search?: string;
 }
 
 function buildSlug(modelId: string): string {
@@ -86,6 +99,17 @@ function buildCardJson(model: OpenRouterApiModel) {
               request: model.pricing.request ?? null,
               image: model.pricing.image ?? null,
               webSearch: model.pricing.web_search ?? null,
+              overrides: (model.pricing.overrides ?? []).map((override) => ({
+                minPromptTokens: override.min_prompt_tokens ?? null,
+                utcDays: override.utc_days ?? [],
+                utcStart: override.utc_start ?? null,
+                utcEnd: override.utc_end ?? null,
+                prompt: override.prompt ?? null,
+                completion: override.completion ?? null,
+                request: override.request ?? null,
+                image: override.image ?? null,
+                webSearch: override.web_search ?? null,
+              })),
             }
           : null,
         architecture: model.architecture

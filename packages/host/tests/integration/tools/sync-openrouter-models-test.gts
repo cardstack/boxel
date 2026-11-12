@@ -25,7 +25,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 
 // The models the stubbed OpenRouter HTTP API returns for the test.
-let apiModels: { id: string }[];
+let apiModels: { id: string; pricing?: Record<string, unknown> }[];
 // The atomic operations the sync command derives, captured instead of written.
 let capturedOperations: AtomicOperation[];
 
@@ -184,6 +184,72 @@ module('Integration | tools | sync-openrouter-models', function (hooks) {
     assert.ok(
       result.status.includes('1 deprecated'),
       'status reports the one deprecated model discovered via search',
+    );
+  });
+
+  test('keeps a model’s pricing overrides on its card', async function (assert) {
+    apiModels = [
+      {
+        id: 'openai/gpt-4',
+        pricing: {
+          prompt: '0.0000005',
+          completion: '0.0000025',
+          overrides: [
+            {
+              min_prompt_tokens: 272000,
+              prompt: '0.000001',
+              completion: '0.00000375',
+              input_cache_read: '0.00000005',
+            },
+            {
+              utc_days: ['saturday', 'sunday'],
+              utc_start: 100,
+              utc_end: 400,
+              prompt: '0.00000025',
+            },
+          ],
+        },
+      },
+      { id: 'google/gemini-pro', pricing: { prompt: '0', completion: '0' } },
+    ];
+
+    await runSync();
+
+    let attributes = (opFor('OpenRouterModel/openai-gpt-4.json')?.data as any)
+      ?.attributes;
+    assert.deepEqual(
+      attributes?.pricing?.overrides,
+      [
+        {
+          minPromptTokens: 272000,
+          utcDays: [],
+          utcStart: null,
+          utcEnd: null,
+          prompt: '0.000001',
+          completion: '0.00000375',
+          request: null,
+          image: null,
+          webSearch: null,
+        },
+        {
+          minPromptTokens: null,
+          utcDays: ['saturday', 'sunday'],
+          utcStart: 100,
+          utcEnd: 400,
+          prompt: '0.00000025',
+          completion: null,
+          request: null,
+          image: null,
+          webSearch: null,
+        },
+      ],
+      'each override keeps its conditions and the rates it lists',
+    );
+    assert.deepEqual(
+      (opFor('OpenRouterModel/google-gemini-pro.json')?.data as any)?.attributes
+        ?.pricing?.overrides,
+      [],
+      'a model with no overrides stores none',
     );
   });
 });

@@ -27,11 +27,10 @@ const BATCH_LISTING_SUFFIX = ':batch';
 //
 // Each request is priced at its worst case (`aiRequestCostCeiling`: its body's
 // bytes as input tokens and its output-token limit) at the model's listed
-// batch price. A model OpenRouter lists no batch price for is priced at its
-// listed price, which a batch never costs more than. The listing read is the
-// model's base rates: a model whose rates rise above a prompt-length threshold
-// (OpenRouter's `pricing.overrides`, which the model sync doesn't keep) can
-// cost more than this for a request long enough to cross it.
+// batch price, at the highest of the listing's rates the request can reach
+// (its base rates and the tiers in OpenRouter's `pricing.overrides`). A model
+// OpenRouter lists no batch price for is priced at its listed price, which a
+// batch never costs more than.
 export interface AIBatchEstimate {
   usd: number;
   // The listing the requests were priced at: the model's batch listing, or

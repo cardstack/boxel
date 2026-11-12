@@ -17,6 +17,23 @@ import { on } from '@ember/modifier';
 
 // --- Compound field types ---
 
+// Rates a model charges in place of its base pricing while the override's
+// conditions hold: a prompt of at least `minPromptTokens` tokens, or a UTC
+// time of day (`utcStart` to `utcEnd`, as HHMM) on `utcDays`. A rate the
+// override doesn't list is the base rate.
+export class OpenRouterPricingOverride extends FieldDef {
+  static displayName = 'OpenRouter Pricing Override';
+  @field minPromptTokens = contains(NumberField);
+  @field utcDays = containsMany(StringField);
+  @field utcStart = contains(NumberField);
+  @field utcEnd = contains(NumberField);
+  @field prompt = contains(StringField);
+  @field completion = contains(StringField);
+  @field request = contains(StringField);
+  @field image = contains(StringField);
+  @field webSearch = contains(StringField);
+}
+
 export class OpenRouterPricing extends FieldDef {
   static displayName = 'OpenRouter Pricing';
   @field prompt = contains(StringField);
@@ -24,6 +41,7 @@ export class OpenRouterPricing extends FieldDef {
   @field request = contains(StringField);
   @field image = contains(StringField);
   @field webSearch = contains(StringField);
+  @field overrides = containsMany(OpenRouterPricingOverride);
 }
 
 export class OpenRouterArchitecture extends FieldDef {

@@ -302,6 +302,7 @@ const tests = Object.freeze({
         completionUsdPerToken: 0.0000004,
         requestUsd: 0,
         contextLength: 400000,
+        tiers: [],
       },
       'the model’s own context window, not one provider’s',
     );
@@ -330,6 +331,144 @@ const tests = Object.freeze({
       readOpenRouterModelPrice({ pricing: { prompt: '0', completion: '0' } }),
       undefined,
       'a card without a model id',
+    );
+  },
+
+  'reads a model’s tiered rates from its pricing overrides': async (assert) => {
+    let price = readOpenRouterModelPrice({
+      modelId: 'openai/gpt-6.1-terra:batch',
+      contextLength: 1_050_000,
+      pricing: {
+        prompt: '0.0000005',
+        completion: '0.0000025',
+        request: null,
+        overrides: [
+          {
+            minPromptTokens: 272000,
+            utcDays: [],
+            utcStart: null,
+            utcEnd: null,
+            prompt: '0.000001',
+            completion: '0.00000375',
+            request: null,
+          },
+          {
+            minPromptTokens: null,
+            utcDays: ['monday'],
+            utcStart: 100,
+            utcEnd: 400,
+            prompt: '0.000002',
+            completion: null,
+          },
+        ],
+      },
+    });
+    assert.deepEqual(
+      price?.tiers,
+      [
+        {
+          minPromptTokens: 272000,
+          promptUsdPerToken: 0.000001,
+          completionUsdPerToken: 0.00000375,
+          requestUsd: 0,
+        },
+        {
+          minPromptTokens: null,
+          promptUsdPerToken: 0.000002,
+          completionUsdPerToken: 0.0000025,
+          requestUsd: 0,
+        },
+      ],
+      'a rate a tier doesn’t list is the base rate',
+    );
+    assert.strictEqual(
+      readOpenRouterModelPrice({
+        modelId: 'x/y',
+        pricing: {
+          prompt: '0.000001',
+          completion: '0.000001',
+          overrides: [{ minPromptTokens: 1000, prompt: '-1' }],
+        },
+      }),
+      undefined,
+      'a tier with a variable price can’t bound a request',
+    );
+  },
+
+  'prices a request at the highest tier it can reach': async (assert) => {
+    let tiered: AIModelPrice = {
+      ...PRICE,
+      tiers: [
+        {
+          minPromptTokens: 200_000,
+          promptUsdPerToken: 0.000006,
+          completionUsdPerToken: 0.0000225,
+          requestUsd: 0,
+        },
+      ],
+    };
+    let short = ceilingOf({ max_tokens: 1000, messages: MESSAGES }, tiered);
+    close(
+      assert,
+      short.ceiling.credits,
+      ceilingOf({ max_tokens: 1000, messages: MESSAGES }).ceiling.credits,
+      'a request whose input bound is under the threshold is priced at the base rates',
+    );
+
+    let long = ceilingOf(
+      {
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: 'x'.repeat(200_000) }],
+      },
+      tiered,
+    );
+    assert.true(
+      long.ceiling.inputTokens >= 200_000,
+      'the input bound crosses the threshold',
+    );
+    close(
+      assert,
+      long.ceiling.credits,
+      (long.ceiling.inputTokens * 0.000006 + 1000 * 0.0000225) * 1000,
+      'a request that can cross the threshold is priced at the higher tier',
+    );
+
+    let cheaper: AIModelPrice = {
+      ...PRICE,
+      tiers: [
+        {
+          minPromptTokens: null,
+          promptUsdPerToken: 0.0000015,
+          completionUsdPerToken: 0.0000075,
+          requestUsd: 0,
+        },
+      ],
+    };
+    close(
+      assert,
+      ceilingOf({ max_tokens: 1000, messages: MESSAGES }, cheaper).ceiling
+        .credits,
+      short.ceiling.credits,
+      'a tier cheaper than the base rates doesn’t lower the worst case',
+    );
+
+    let offPeak: AIModelPrice = {
+      ...PRICE,
+      tiers: [
+        {
+          minPromptTokens: null,
+          promptUsdPerToken: 0.000006,
+          completionUsdPerToken: 0.00003,
+          requestUsd: 0,
+        },
+      ],
+    };
+    let anyTime = ceilingOf({ max_tokens: 1000, messages: MESSAGES }, offPeak);
+    close(
+      assert,
+      anyTime.ceiling.credits,
+      (anyTime.ceiling.inputTokens * 0.000006 + 1000 * 0.00003) * 1000,
+      'a tier that doesn’t depend on the prompt’s length is always reachable',
     );
   },
 }) as SharedTests<{}>;
