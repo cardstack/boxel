@@ -734,7 +734,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     let key = inFlightKey(args);
     let existing = this.#inFlight.get(key);
     if (existing) {
-      return await existing;
+      // The caller may hold a connection (a search's read snapshot) while the
+      // lookup it joins waits for one; the adapter counts the wait so the
+      // pool does not stay full of such holders (`waitingOnSharedWork`).
+      let joined = existing;
+      return await (this.#dbAdapter.waitingOnSharedWork?.(() => joined) ??
+        joined);
     }
     let pending: Promise<DefinitionCacheEntry | undefined>;
     // Two paths inside #inFlight:

@@ -103,13 +103,25 @@ import { performance } from 'node:perf_hooks';
 //   is at most how deep that chain nests. The pool may run up to
 //   `limit + overflow` connections for this.
 //
-//   What this cannot see is a hold waiting on work that is not nested in it:
-//   a request it made to this same server, a job it waits on, or shared work
-//   (see `withSharedWork`) another caller started outside any hold. Nor a
-//   hold waiting on a lock outside `waitingOnLock`, such as a row lock taken
-//   with `FOR UPDATE` through its own querier. Such a hold has nothing queued
-//   here, so it does not count as blocked, and a pool full of them is not
-//   unstuck by this.
+//   A hold that joins shared work (see `withSharedWork`) another caller
+//   started outside any hold, inside `waitingOnSharedWork`, counts as blocked
+//   the same way: a definition lookup a search joins may be waiting here, in
+//   a shared queue, for a connection only a finished hold could give back.
+//   Once every hold is blocked and no nested work is queued, the overflow
+//   goes to the oldest shared waiter, so the work the holds are waiting on
+//   runs. Without this a pool full of searches joined to one pending lookup
+//   stays full for good.
+//
+//   What this cannot see is a hold waiting on work that is not nested in it
+//   and that it did not join through `waitingOnSharedWork`: a request it made
+//   to this same server, or a job it waits on. Nor a hold waiting on a lock
+//   outside `waitingOnLock`, such as a row lock taken with `FOR UPDATE`
+//   through its own querier. Such a hold has nothing queued here, so it does
+//   not count as blocked, and a pool full of them is not unstuck by this.
+//   What bounds those is the timeout on nested acquisitions: a hold's nested
+//   acquisition that waits longer than `nestedAcquireTimeoutMs` fails with a
+//   `PoolWedgedError` instead of waiting for good, so the hold gives its
+//   connection back.
 //
 // Oversubscription is judged on demand — connections granted plus
 // acquisitions waiting — rather than on connections in use, because holding a
@@ -147,6 +159,7 @@ export class ConnectionScheduler {
   #waiting = 0;
   #arrivals = 0;
   #now: () => number;
+  #nestedAcquireTimeoutMs: number | undefined;
   #unsubscribe: () => void;
   #unsubscribeLockWaits: () => void;
 
@@ -162,8 +175,15 @@ export class ConnectionScheduler {
     limit: number;
     tenantShare: number;
     overflow?: number;
+    nestedAcquireTimeoutMs?: number;
     now?: () => number;
   }) {
+    this.#nestedAcquireTimeoutMs =
+      opts.nestedAcquireTimeoutMs !== undefined &&
+      Number.isFinite(opts.nestedAcquireTimeoutMs) &&
+      opts.nestedAcquireTimeoutMs > 0
+        ? opts.nestedAcquireTimeoutMs
+        : undefined;
     this.#limit = normalizeCount(opts.limit);
     this.#overflow =
       opts.overflow === undefined
@@ -270,7 +290,7 @@ export class ConnectionScheduler {
     ) {
       return Promise.resolve(this.#grant(key, ordered, hold));
     }
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       let waiter: Waiter = {
         key,
         ordered,
@@ -287,6 +307,21 @@ export class ConnectionScheduler {
         this.#noteQueued(waiter.nestedIn, 1);
         // Queued, this waiter may be what blocks the last unblocked hold.
         this.#drain();
+        // A nested acquisition waits while its caller holds a connection, so
+        // one that waits too long fails rather than keeping that connection
+        // out for good (see `PoolWedgedError`).
+        let timeoutMs = this.#nestedAcquireTimeoutMs;
+        if (timeoutMs !== undefined && this.#nested.includes(waiter)) {
+          waiter.timer = setTimeout(() => {
+            let index = this.#nested.indexOf(waiter);
+            if (index === -1) return;
+            this.#nested.splice(index, 1);
+            this.#waiting--;
+            this.#noteQueued(waiter.nestedIn, -1);
+            reject(new PoolWedgedError(timeoutMs, this.#inUse, this.#limit));
+          }, timeoutMs);
+          waiter.timer.unref?.();
+        }
       } else {
         let queues = this.#queues.get(key);
         if (!queues) {
@@ -294,6 +329,11 @@ export class ConnectionScheduler {
           this.#queues.set(key, queues);
         }
         (shared ? queues.shared : queues.capped).push(waiter);
+        // Shared work arriving at a pool already wedged on holds that joined
+        // it is served past the limit (see `#drain`).
+        if (shared) {
+          this.#drain();
+        }
       }
     });
   }
@@ -422,12 +462,18 @@ export class ConnectionScheduler {
       if (this.#inUse < this.#limit) {
         next = this.#nested.shift() ?? this.#takeNextTenantWaiter();
       } else if (this.#wedged()) {
-        next = this.#takeDeepestNestedWaiter();
+        // Nested work first; with none queued, the shared work a hold joined
+        // (`waitingOnSharedWork`) is what the holds are waiting on.
+        next =
+          this.#takeDeepestNestedWaiter() ?? this.#takeOldestSharedWaiter();
       }
       if (!next) {
         return;
       }
       this.#waiting--;
+      if (next.timer) {
+        clearTimeout(next.timer);
+      }
       if (next.nestedIn) {
         this.#noteQueued(next.nestedIn, -1);
       }
@@ -440,6 +486,27 @@ export class ConnectionScheduler {
   // tie. Within a tenant that is the earlier of its shared work, which is
   // always eligible, and its other work, which is eligible only while the
   // tenant is not held to its share.
+  #takeOldestSharedWaiter(): Waiter | undefined {
+    let oldest: { key: TenantKey; queues: TenantQueues } | undefined;
+    for (let [key, queues] of this.#queues) {
+      let head = queues.shared[0];
+      if (head && (!oldest || head.arrival < oldest.queues.shared[0].arrival)) {
+        oldest = { key, queues };
+      }
+    }
+    if (!oldest) {
+      return undefined;
+    }
+    let waiter = oldest.queues.shared.shift()!;
+    if (
+      oldest.queues.capped.length === 0 &&
+      oldest.queues.shared.length === 0
+    ) {
+      this.#queues.delete(oldest.key);
+    }
+    return waiter;
+  }
+
   #takeNextTenantWaiter(): Waiter | undefined {
     let best:
       | { key: TenantKey; queues: TenantQueues; from: Waiter[]; held: number }
@@ -590,6 +657,29 @@ export async function waitingOnLock<T>(fn: () => Promise<T>): Promise<T> {
 // share and without counting the tenant as having work open (see the policy
 // above). A `withConnectionTenant` scope inside it takes over as usual, so a
 // search reached through it is still held to its share.
+// Wait on shared work (see `withSharedWork`) that another caller started — a
+// coalesced definition lookup — while this context may hold a connection.
+// The hold counts as blocked for the wait, as a lock waiter does, so a pool
+// whose every connection belongs to a hold waiting on such work counts as
+// wedged and the shared work is granted a connection past the limit.
+export async function waitingOnSharedWork<T>(fn: () => Promise<T>): Promise<T> {
+  return await waitingOnLock(fn);
+}
+
+// Refusal of a nested acquisition that waited past the scheduler's
+// `nestedAcquireTimeoutMs`: its caller holds a connection and cannot give it
+// back until this one is granted, so waiting longer would keep the pool
+// stuck. Failing lets the caller's hold end and return its connection.
+export class PoolWedgedError extends Error {
+  readonly code = 'pool-wedged';
+  constructor(timeoutMs: number, inUse: number, limit: number) {
+    super(
+      `a database connection needed while holding another was not granted within ${timeoutMs}ms (${inUse}/${limit} connections out); the connection pool is wedged`,
+    );
+    this.name = 'PoolWedgedError';
+  }
+}
+
 export function withConnectionOrdering<T>(
   tenant: string,
   fn: () => Promise<T>,
@@ -667,6 +757,7 @@ interface Waiter {
   // When it started waiting, on the scheduler's clock.
   since: number;
   resolve: (release: () => void) => void;
+  timer?: ReturnType<typeof setTimeout>;
 }
 
 // A tenant's waiters, split by whether the share applies to them, so that

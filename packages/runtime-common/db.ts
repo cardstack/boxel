@@ -115,6 +115,13 @@ export interface DBAdapter {
   // Adapters that do not share connections out by tenant leave it undefined,
   // and callers run `fn` as it is.
   withSharedWork?: <T>(fn: () => Promise<T>) => Promise<T>;
+  // Wait on shared work another caller started (a coalesced lookup's
+  // pending result). A caller inside a read snapshot holds a connection while
+  // it waits, and the shared work may itself be waiting for one; PgAdapter
+  // counts such a wait so a pool full of those holders is recognized as stuck
+  // and the shared work is granted a connection. Adapters without a pool
+  // leave it undefined, and callers await `fn` as it is.
+  waitingOnSharedWork?: <T>(fn: () => Promise<T>) => Promise<T>;
   // Run `fn` against one read snapshot: every statement `fn` issues through
   // the adapter it is handed sees the database as it stood at the first of
   // them, whatever commits in between. A search reads its rows, its count,
