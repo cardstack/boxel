@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -637,6 +637,31 @@ module(basename(import.meta.filename), function (hooks) {
         [true, 1],
       ],
       'the two identical refusals share a row; the anonymous one has its own',
+    );
+  });
+
+  test('identical refusals of one run share a row', async function (assert) {
+    let key = await addKey();
+    let refusal = {
+      realmURL: realmURL.href,
+      operation: 'check',
+      caller: OWNER,
+      mode: 'automation' as const,
+      runId: randomUUID(),
+      url: null,
+      outcome: 'refused' as const,
+      code: 'rate-limited',
+      countsAgainst: [{ kind: 'key' as const, id: key.id }],
+    };
+    await recordKeyUses(dbAdapter, refusal);
+    await recordKeyUses(dbAdapter, refusal);
+    let rows = (await dbAdapter.execute(
+      `SELECT run_id, count FROM key_uses WHERE key_id = $1 ORDER BY id`,
+      { bind: [key.id] },
+    )) as { run_id: string; count: number }[];
+    assert.deepEqual(
+      rows.map((row) => [row.run_id, Number(row.count)]),
+      [[refusal.runId, 2]],
     );
   });
 
