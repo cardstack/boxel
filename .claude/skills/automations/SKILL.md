@@ -24,7 +24,10 @@ description: >-
   `packages/runtime-common/automation-runs.ts`, writing the run-command task or
   the `Realm.handleAutomation` checks that read the run row, adding a column to
   `automation_runs`, or diagnosing a run that is stuck, errored with
-  `commit-interrupted`, or committed twice. Also covers how an automation run
+  `commit-interrupted`, or committed twice. Also covers the run token a run's
+  calls carry (`run-token.ts`, `mintRunToken`, `verifyRunToken`), how
+  `Realm.handleAutomation` admits a call against the run row, and how to trace
+  a refused run-token call or a run's `key_uses`. Also covers how an automation run
   reaches a worker — the automation priority tier (`automationInitiatedPriority
   = 5` in runtime-common's queue.ts), the automation worker lane
   (`--automationCount` on the worker manager, `WORKER_AUTOMATION_PRIORITY_COUNT`
@@ -360,6 +363,56 @@ SELECT state, attempt, error_reason, error_message, canceled_by,
 
 The row holds run state only. A run's log (its console lines and platform
 calls) doesn't go on it.
+
+### The run token
+
+Every call a run makes carries the run's token (ADR 026 §1.2), minted per
+attempt by `mintRunToken` (`packages/realm-server/lib/run-token.ts`) once the
+attempt has started the run. It names the run (`run.id`) and the attempt
+(`run.attempt`), acts as the run's `acts_as` (`user`), and expires at the run's
+time limit. It admits read and write in the automation's realm (`realm`) and
+read in `run.readRealms`, the base and catalog realms its cards' modules load
+from. It carries no permissions; every call is checked as `acts_as`. It is
+signed under `runTokenSecret(seed)`, so no ordinary session verifier accepts it
+(the `realm-auth` skill).
+
+A realm hands any request carrying a run token to `Realm.handleAutomation`,
+which refuses it unless:
+
+- the token verifies and hasn't expired (`Token expired` once the time limit
+  passes);
+- this realm is the token's `realm`, or one of `run.readRealms` for a read
+  (a write there is 403);
+- `acts_as`'s sessions weren't revoked after the token was minted;
+- `automationRunForCall` finds the run `running`, owned by the token's attempt,
+  in the token's realm and acting as the token's user. A cancel, a pause that
+  cancels the run, its finish, or a newer attempt taking it over refuses the
+  next call with `The automation run is not running`.
+
+An admitted call takes the ACL check as `acts_as` and sets
+`requestContext.automationRun` (`{ runId, attempt, automationId, actsAs,
+readOnly }`). A `callApi` in it is an automation call: a binding approved for
+automations fills it, and its `key_uses` row carries `mode = 'automation'` and
+the run's id in `run_id`. `handleAutomation` refuses a request without a run
+token, so only a run token reaches automation mode.
+
+A realm-server route that serves run tokens verifies one with
+`verifyRunToken(token, seed)`, which answers `{ runId, attempt, actsAs, realm,
+readRealms, iat, exp }` or nothing, and then checks the run's row with
+`automationRunForCall` itself.
+
+Tracing a run-token call: every refusal logs on the realm's log as
+`run-token call <method> <url> refused: <why>`, naming the run and attempt.
+To see what a run's calls did with keys:
+
+```sql
+SELECT created_at, operation, outcome, code, status, host, count
+  FROM key_uses WHERE run_id = '<run id>' ORDER BY created_at;
+```
+
+To read a token you have in hand, decode its payload (the middle segment,
+base64url) without verifying it: `run.id` and `run.attempt` name the row to
+check, and `exp` is when the run's time limit passes.
 
 ### The AI spending cap
 

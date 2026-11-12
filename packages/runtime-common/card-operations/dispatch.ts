@@ -348,9 +348,12 @@ export interface RunOperationOptions {
   duringPrerender?: boolean;
   // How a `callApi` invocation arrived, which decides whether a binding
   // approved for automations only fills its slots. Absent is `interactive`: the
-  // realm sets `automation` only for a run it makes on its own, never for a
-  // request off the network.
+  // realm sets `automation` only for a call carrying an automation run's
+  // token.
   callApiMode?: CallApiMode;
+  // The automation run an `automation` invocation belongs to, which each use
+  // of a key it makes is recorded under.
+  automationRunId?: string;
   // Where a `callApi` invoked by a caller who isn't signed in was admitted
   // from, which the share filling its slots counts them by. A request the
   // realm admitted without a session from an address it couldn't place sets
@@ -1613,6 +1616,7 @@ async function runBaseOperation(
         realmURL: core.realmURL,
         duringPrerender: opts.duringPrerender ?? false,
         mode: opts.callApiMode ?? 'interactive',
+        ...(opts.automationRunId ? { runId: opts.automationRunId } : {}),
         sender: core.callApi,
         ...(opts.callApiAnonymous ? { anonymous: opts.callApiAnonymous } : {}),
         type: () => resolvedTypeOf(core, canonical.target, scope),

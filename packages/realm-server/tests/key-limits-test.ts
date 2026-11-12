@@ -12,6 +12,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common';
 import {
+  createAutomationRunToken,
   createJWT,
   insertUser,
   realmSecretSeed,
@@ -343,7 +344,7 @@ module(basename(import.meta.filename), function (hooks) {
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${createJWT(realm, user, ['read', 'write'])}`,
+          Authorization: `Bearer ${(await createAutomationRunToken(dbAdapter, realm, user)).token}`,
         },
         body: JSON.stringify(envelope(operation)),
       }),
