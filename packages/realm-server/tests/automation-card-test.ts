@@ -1,8 +1,21 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import type { Realm } from '@cardstack/runtime-common';
-import { internalKeyFor } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  Realm,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
+import {
+  insertPermissions,
+  internalKeyFor,
+  ri,
+  rri,
+} from '@cardstack/runtime-common';
+import {
+  getAutomation,
+  switchOnAutomation,
+} from '@cardstack/runtime-common/automations';
 import {
   automationRef,
   readAutomationDeclaration,
@@ -20,6 +33,8 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 module(basename(import.meta.filename), function (hooks) {
   let testRealm: Realm;
   let testRealmHttpServer: Server;
+  let dbAdapter: DBAdapter;
+  let virtualNetwork: VirtualNetwork;
 
   setupCatalogTestSubset(hooks);
 
@@ -30,9 +45,16 @@ module(basename(import.meta.filename), function (hooks) {
   setupPermissionedRealmCached(hooks, {
     fixture: 'blank',
     permissions: { '*': ['read'] },
-    onRealmSetup({ testRealm: realm, testRealmHttpServer: server }) {
+    onRealmSetup({
+      testRealm: realm,
+      testRealmHttpServer: server,
+      dbAdapter: adapter,
+      virtualNetwork: network,
+    }) {
       testRealm = realm;
       testRealmHttpServer = server;
+      dbAdapter = adapter;
+      virtualNetwork = network;
     },
   });
 
@@ -97,20 +119,21 @@ module(basename(import.meta.filename), function (hooks) {
     batchDeadlineMinutes: 90,
   };
 
-  async function writeAutomation(path: string, extra: object = {}) {
-    await testRealm.write(
-      `${path}.json`,
-      JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: { ...attributes, ...extra },
-          relationships: {
-            script: { links: { self: '../scripts/nightly-import.js' } },
-          },
-          meta: { adoptsFrom: automationRef },
+  function automationJSON(extra: object = {}): string {
+    return JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { ...attributes, ...extra },
+        relationships: {
+          script: { links: { self: '../scripts/nightly-import.js' } },
         },
-      }),
-    );
+        meta: { adoptsFrom: automationRef },
+      },
+    });
+  }
+
+  async function writeAutomation(path: string, extra: object = {}) {
+    await testRealm.write(`${path}.json`, automationJSON(extra));
   }
 
   test('an Automation instance indexes, and its fields round-trip', async function (assert) {
@@ -252,6 +275,106 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       result.ok ? [] : result.problems.map((p) => [p.code, p.path]),
       [['cron-too-frequent', 'triggers.0.expression']],
+    );
+  });
+
+  test("indexing a switched-on automation's card keeps its row in step, and deleting the card removes the row", async function (assert) {
+    const owner = '@automation-owner:localhost';
+    await insertPermissions(dbAdapter, new URL(testRealm.url), {
+      [owner]: ['read', 'write', 'realm-owner'],
+    });
+    await testRealm.write(
+      'scripts/nightly-import.js',
+      "await realm.fs.writeText('imported.txt', 'done');\n",
+    );
+    let nightly = {
+      ...attributes.triggers[0],
+      untilDate: null,
+      untilTime: null,
+      count: null,
+    };
+    await writeAutomation('automations/in-step', { triggers: [nightly] });
+
+    let automationId = rri(`${testRealm.url}automations/in-step`);
+    let entry = await testRealm.realmIndexQueryEngine.instance(
+      new URL(automationId),
+    );
+    if (entry?.type !== 'instance') {
+      throw new Error(`no indexed instance: ${JSON.stringify(entry)}`);
+    }
+    // Switch-on takes the declaration read from the card's own id.
+    let read = readAutomationDeclaration(
+      {
+        url: automationId,
+        realmURL: entry.realmURL,
+        types: entry.types,
+        instance: entry.instance,
+      },
+      {
+        automationTypeKey: internalKeyFor(
+          automationRef,
+          undefined,
+          virtualNetwork,
+        ),
+        virtualNetwork,
+      },
+    );
+    if (!read.ok) {
+      throw new Error(`no declaration: ${JSON.stringify(read.problems)}`);
+    }
+    let switchedOn = await switchOnAutomation(
+      dbAdapter,
+      {
+        automationId,
+        realm: ri(testRealm.url),
+        user: owner,
+        declaration: read.declaration,
+      },
+      { matrixServerName: 'localhost', virtualNetwork },
+    );
+    if (!switchedOn.ok) {
+      throw new Error(`switch-on refused: ${switchedOn.reason}`);
+    }
+    assert.strictEqual(
+      switchedOn.automation.state,
+      'active',
+      'the automation is switched on with a nightly run ahead',
+    );
+
+    // A from-scratch pass syncs every automation in the realm, whether or not
+    // it visits the card: a row knocked out of step comes back to the card's
+    // nightly run.
+    await dbAdapter.execute(
+      `UPDATE automations SET state = 'done', next_run = NULL WHERE automation_id = '${automationId}'`,
+    );
+    await testRealm.fullIndex();
+    let rearmed = await getAutomation(dbAdapter, automationId);
+    assert.strictEqual(
+      rearmed?.state,
+      'active',
+      'the from-scratch pass brings the row back in step',
+    );
+    assert.notStrictEqual(rearmed?.nextRun, null);
+
+    // The card's only trigger becomes a one-time run whose time has passed.
+    await writeAutomation('automations/in-step', {
+      triggers: [
+        {
+          ...attributes.triggers[1],
+          date: '2020-01-01',
+          time: '09:00',
+        },
+      ],
+    });
+    let done = await getAutomation(dbAdapter, automationId);
+    assert.strictEqual(done?.state, 'done', 'the spent automation is done');
+    assert.strictEqual(done?.nextRun, null);
+
+    await testRealm.delete('automations/in-step.json');
+    assert.strictEqual(
+      await getAutomation(dbAdapter, automationId),
+      undefined,
+      "deleting the card removes the automation's row",
     );
   });
 });
