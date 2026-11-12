@@ -18479,10 +18479,17 @@ export class Realm {
 
   // The realm's host routes, validated: every route form, child routes
   // included, in authored order, with the warnings for the routes that were
-  // dropped. Cached until the next index, like the routing map. Resolves to
-  // no routes when the rules can't be read, without caching that.
+  // dropped. Cached until the next index, like the routing map, once it is
+  // complete. Resolves to no routes when the rules can't be read, without
+  // caching that.
   async getHostRoutes(): Promise<HostRoutesValidation> {
-    return (await this.#validateHostRoutes()) ?? { routes: [], warnings: [] };
+    return (
+      (await this.#validateHostRoutes()) ?? {
+        routes: [],
+        warnings: [],
+        complete: false,
+      }
+    );
   }
 
   async #validateHostRoutes(): Promise<HostRoutesValidation | undefined> {
@@ -18492,25 +18499,30 @@ export class Realm {
     try {
       let rules = await this.#readRawHostRoutingRules();
       // The definitions of the types field-match routes name, read before
-      // validating so the validation itself stays synchronous. A type whose
-      // definition can't be read is not a card type to the validation, and
-      // its routes stay dropped until the next index.
-      let types = new Map<string, HostRouteTypeInfo>();
+      // validating so the validation itself stays synchronous. A host page
+      // request waits on this, so only definitions already cached are read:
+      // ADR 015 §1.1 rules out rendering a module for a routing decision
+      // while a request waits. A type that isn't cached yet, or whose read
+      // fails, is unavailable: its routes are dropped for now, and the
+      // validation isn't cached, so a later call reads again.
+      let types = new Map<string, HostRouteTypeInfo | 'unavailable'>();
       for (let ref of hostRouteTypeRefs(rules)) {
+        let info: HostRouteTypeInfo | 'unavailable';
         try {
-          let entry =
-            await this.#requestDefinitionLookup.lookupDefinitionEntry(ref);
-          types.set(
-            typeLookupKey(ref),
-            hostRouteTypeInfo(entry, (codeRef) =>
-              internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-            ),
-          );
+          let definition =
+            await this.#definitionLookup.lookupCachedDefinition(ref);
+          info = definition
+            ? hostRouteTypeInfo({ definition }, (codeRef) =>
+                internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+              )
+            : 'unavailable';
         } catch (e) {
           this.#log.warn(
             `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
           );
+          info = 'unavailable';
         }
+        types.set(typeLookupKey(ref), info);
       }
       let validation = validateHostRoutes(rules, {
         realmURL: new URL(this.url),
@@ -18521,7 +18533,10 @@ export class Realm {
           `${warning.dropped ? 'dropping' : 'warning for'} host routing rule for path "${warning.path}": ${warning.message}`,
         );
       }
-      return (this.#cachedHostRoutes = validation);
+      if (validation.complete) {
+        this.#cachedHostRoutes = validation;
+      }
+      return validation;
     } catch (e) {
       this.#log.warn(
         `failed to read host routing rules from RealmConfig card: ${e}`,
@@ -18533,10 +18548,10 @@ export class Realm {
   }
 
   // The fixed paths the realm routes: each top-level fixed card route and
-  // redirect without `:name` segments, as `{ path, id }` (an absolute card
-  // URL in this realm) or `{ path, redirectTo, statusCode }`. Built from the
+  // redirect without `:name` segments, as `{ path, id }` (the card's served
+  // URL, in this realm) or `{ path, redirectTo, statusCode }`. Built from the
   // validated routes (`getHostRoutes`), so the same checks apply; dynamic
-  // and nested routes are not in it.
+  // and nested routes are not in it. Cached only when the validation is.
   async getHostRoutingMap(): Promise<HostRoutingRule[]> {
     if (this.#cachedHostRoutingMap) {
       return this.#cachedHostRoutingMap;
@@ -18545,9 +18560,11 @@ export class Realm {
     if (!validation) {
       return [];
     }
-    return (this.#cachedHostRoutingMap = hostRoutingMapFromRoutes(
-      validation.routes,
-    ));
+    let map = hostRoutingMapFromRoutes(validation.routes);
+    if (validation.complete) {
+      this.#cachedHostRoutingMap = map;
+    }
+    return map;
   }
 
   // Memoized, and coalesced while cold. The assignment lands after the

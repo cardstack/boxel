@@ -226,6 +226,53 @@ function makeRouteFormsFixture(): Record<
   };
 }
 
+// A field-match route whose type has no cached definition: its module
+// doesn't exist, so the definition cache never holds it.
+function makeUnavailableTypeFixture(): Record<
+  string,
+  string | LooseSingleCardDocument
+> {
+  return {
+    'home.json': {
+      data: {
+        type: 'card',
+        attributes: { cardInfo: { name: 'Home' } },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/card-api'),
+            name: 'CardDef',
+          },
+        },
+      },
+    },
+    'realm.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Unavailable Type Realm' },
+          hostRoutingRules: [
+            { path: '/' },
+            {
+              path: '/later/:slug',
+              type: { module: './not-indexed', name: 'NotIndexed' },
+              match: { slug: ':slug' },
+            },
+          ],
+        },
+        relationships: {
+          'hostRoutingRules.0.instance': { links: { self: './home' } },
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/realm-config'),
+            name: 'RealmConfig',
+          },
+        },
+      },
+    },
+  };
+}
+
 module(basename(import.meta.filename), function () {
   module('Realm.getHostRoutingMap', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-unit/');
@@ -357,7 +404,7 @@ module(basename(import.meta.filename), function () {
       let [home, , person, profileRoute] = routes;
       let profile = profileRoute as HostFieldMatchRoute;
       assert.strictEqual(
-        home?.kind === 'fixed-card' ? home.id : undefined,
+        home?.kind === 'fixed-card' ? home.cardHref : undefined,
         `${realmURL.href}home`,
       );
       assert.deepEqual(
@@ -417,6 +464,46 @@ module(basename(import.meta.filename), function () {
       ]);
     });
   });
+
+  module(
+    'Realm.getHostRoutes with a type that has no cached definition',
+    function (hooks) {
+      let realmURL = new URL('http://127.0.0.1:4444/routing-unavailable/');
+      let testRealm: Realm;
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL,
+        permissions: { '*': ['read'] },
+        fileSystem: makeUnavailableTypeFixture(),
+        onRealmSetup({ testRealm: realm }) {
+          testRealm = realm;
+        },
+      });
+
+      hooks.beforeEach(async function () {
+        await testRealm.indexing();
+      });
+
+      test('drops the route for now and does not cache the validation', async function (assert) {
+        let first = await testRealm.getHostRoutes();
+        assert.false(first.complete, 'the validation is incomplete');
+        assert.deepEqual(
+          first.warnings.map((w) => [w.code, w.path, w.dropped]),
+          [['type-unavailable', '/later/:slug', true]],
+        );
+        let second = await testRealm.getHostRoutes();
+        assert.notStrictEqual(second, first, 'the next call validates again');
+
+        let map = await testRealm.getHostRoutingMap();
+        assert.deepEqual(map, [{ path: '/', id: `${realmURL.href}home` }]);
+        assert.notStrictEqual(
+          await testRealm.getHostRoutingMap(),
+          map,
+          'the map built from it is not cached either',
+        );
+      });
+    },
+  );
 
   module('resolveRealmsForFederatedRequest', function (hooks) {
     let dbAdapter: PgAdapter;

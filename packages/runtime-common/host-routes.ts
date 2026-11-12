@@ -51,28 +51,35 @@ export const MAX_DYNAMIC_HOST_ROUTES = 20;
 export interface HostRouteTypeInfo {
   // The type's own key.
   key: string;
-  // The type's key, then the key of each type it descends from.
+  // The type's key, then the key of each type it descends from, when the
+  // caller knows them; otherwise just the type's key.
   types: readonly string[];
   // Whether the type is a card type (not a field or file type).
   isCardType: boolean;
-  // The type's own fields by name. `target` is the key of the card type a
-  // `linksTo` or `linksToMany` field points to.
-  fields: Readonly<
-    Record<string, { type: FieldDefinition['type']; target?: string }>
-  >;
+  // The type's own fields by name. `isPrimitive` is false for a link or a
+  // compound field. `target` is the key of the card type a `linksTo` or
+  // `linksToMany` field points to.
+  fields: Readonly<Record<string, HostRouteTypeField>>;
 }
 
-// Builds a `HostRouteTypeInfo` from a type's indexed definition entry.
+export interface HostRouteTypeField {
+  type: FieldDefinition['type'];
+  isPrimitive: boolean;
+  target?: string;
+}
+
+// Builds a `HostRouteTypeInfo` from a type's indexed definition, and its
+// adoption chain when the caller has it (a definition entry's `types`).
 // `keyFor` spells a code ref as a key, the same way `types` spells them.
+// Without `types`, a link counts only when it names the type itself, not a
+// type it descends from.
 export function hostRouteTypeInfo(
-  entry: { definition: Definition; types: readonly string[] },
+  entry: { definition: Definition; types?: readonly string[] },
   keyFor: (ref: CodeRef) => string,
 ): HostRouteTypeInfo {
-  let { definition, types } = entry;
-  let fields: Record<
-    string,
-    { type: FieldDefinition['type']; target?: string }
-  > = {};
+  let { definition } = entry;
+  let types = entry.types ?? [];
+  let fields: Record<string, HostRouteTypeField> = {};
   for (let [name, defId] of Object.entries(definition.fields)) {
     let fieldDef = definition.fieldDefs[defId];
     if (!fieldDef) {
@@ -86,9 +93,10 @@ export function hostRouteTypeInfo(
         target = undefined;
       }
     }
+    let isPrimitive = fieldDef.isPrimitive;
     fields[name] = target
-      ? { type: fieldDef.type, target }
-      : { type: fieldDef.type };
+      ? { type: fieldDef.type, isPrimitive, target }
+      : { type: fieldDef.type, isPrimitive };
   }
   let key = types[0] ?? keyFor(definition.codeRef);
   return {
@@ -146,8 +154,10 @@ interface HostRouteBase {
 // A fixed card route: one path, one card (`instance`).
 export interface HostFixedCardRoute extends HostRouteBase {
   kind: 'fixed-card';
-  // The card's absolute URL, in this realm.
-  id: string;
+  // The served URL of the card, as an href: the URL the realm is served at
+  // and the index keys the card by, in this realm. Not an identifier
+  // (ADR 002), so it is never in prefix form.
+  cardHref: string;
   // The route's own path, parsed, with no `:name` segments. A top-level
   // fixed route's path is held to the rules it was always held to, so it
   // can be a path the parser rejects; then this is `undefined`, the route
@@ -276,6 +286,9 @@ export type HostRouteWarningCode =
   | 'invalid-type'
   // `type` isn't a card type the index knows.
   | 'not-card-type'
+  // The definition of `type` can't be read now. The validation is
+  // incomplete.
+  | 'type-unavailable'
   // `match` is missing or malformed, or doesn't match each `:name` of the
   // route's own path with exactly one field.
   | 'invalid-match'
@@ -318,15 +331,23 @@ export interface HostRouteWarning {
 export interface HostRoutesValidation {
   routes: readonly HostRoute[];
   warnings: readonly HostRouteWarning[];
+  // False when `lookupType` answered `'unavailable'` for a type: its routes
+  // were dropped for now, and a later validation may keep them. A caller
+  // must not keep an incomplete validation as final.
+  complete: boolean;
 }
 
 export interface ValidateHostRoutesOptions {
   // The URL the realm is served at, ending with `/`. A fixed route's card
   // must be in it.
   realmURL: URL;
-  // The definition of a type a field-match route names, or `undefined`
-  // when the index has none.
-  lookupType: (type: ResolvedCodeRef) => HostRouteTypeInfo | undefined;
+  // The definition of a type a field-match route names. `undefined` when
+  // there is no such type; `'unavailable'` when its definition can't be read
+  // now (it isn't cached yet, or the read failed), which drops its routes
+  // and makes the validation incomplete.
+  lookupType: (
+    type: ResolvedCodeRef,
+  ) => HostRouteTypeInfo | 'unavailable' | undefined;
   // Defaults to `MAX_DYNAMIC_HOST_ROUTES`.
   maxDynamicRoutes?: number;
 }
@@ -354,7 +375,7 @@ export function hostRoutingMapFromRoutes(
 ): HostRoutingRule[] {
   return routes.flatMap((route): HostRoutingRule[] => {
     if (route.kind === 'fixed-card') {
-      return [{ path: route.fullPath, id: route.id }];
+      return [{ path: route.fullPath, id: route.cardHref }];
     }
     if (route.kind === 'redirect' && !route.target) {
       return [
@@ -379,6 +400,7 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
 class Validator {
   private warnings: HostRouteWarning[] = [];
+  private complete = true;
   private realmPaths: RealmPaths;
   private options: ValidateHostRoutesOptions;
 
@@ -392,7 +414,7 @@ class Validator {
     routes = this.dropRedirectCycles(routes);
     routes = this.applyRealmWideRules(routes);
     this.warnNoAddressFromOneCard(routes);
-    return { routes, warnings: this.warnings };
+    return { routes, warnings: this.warnings, complete: this.complete };
   }
 
   private validateList(
@@ -604,7 +626,7 @@ class Validator {
           `Route instance ${id} is outside this realm`,
         );
       }
-      route = { ...base, kind: 'fixed-card', id, pattern };
+      route = { ...base, kind: 'fixed-card', cardHref: id, pattern };
     }
 
     if (!route && hasCard) {
@@ -666,7 +688,15 @@ class Validator {
       if (!type) {
         return drop('invalid-type', 'type must name a module and an export');
       }
-      typeInfo = this.options.lookupType(type);
+      let found = this.options.lookupType(type);
+      if (found === 'unavailable') {
+        this.complete = false;
+        return drop(
+          'type-unavailable',
+          `The definition of ${type.name} from ${type.module} is not available yet`,
+        );
+      }
+      typeInfo = found;
       if (!typeInfo || !typeInfo.isCardType) {
         return drop(
           'not-card-type',
@@ -754,12 +784,19 @@ class Validator {
       if (byParam.has(param)) {
         return invalid(`:${param} is matched by more than one field`);
       }
-      let topField = field.split('.')[0]!;
-      if (!Object.prototype.hasOwnProperty.call(typeInfo.fields, topField)) {
+      let [topField, ...rest] = field.split('.');
+      if (!Object.prototype.hasOwnProperty.call(typeInfo.fields, topField!)) {
         return {
           code: 'unknown-field',
           message: `Card type has no field ${topField}`,
         };
+      }
+      // A path value is one string, so it can only equal a primitive value:
+      // a link or a compound field is matched through a dotted path into it.
+      if (rest.length === 0 && !typeInfo.fields[topField!]!.isPrimitive) {
+        return invalid(
+          `${field} is a link or a compound field; match one of its fields with a dotted path, such as ${field}.slug`,
+        );
       }
       byParam.set(param, field);
     }
@@ -936,7 +973,11 @@ class Validator {
       ) {
         if (route.kind === 'field-match') {
           let info = this.options.lookupType(route.type);
-          if (info?.types.some((key) => standaloneTypes.has(key))) {
+          if (
+            info &&
+            info !== 'unavailable' &&
+            info.types.some((key) => standaloneTypes.has(key))
+          ) {
             return;
           }
         }

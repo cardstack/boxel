@@ -25,13 +25,16 @@ function cardType(name: string, fields: Fields): HostRouteTypeInfo {
   };
 }
 
-const contains = { type: 'contains' as const };
+const contains = { type: 'contains' as const, isPrimitive: true };
+const compound = { type: 'contains' as const, isPrimitive: false };
 const linksTo = (name: string) => ({
   type: 'linksTo' as const,
+  isPrimitive: false,
   target: `${MODULE}/${name}`,
 });
 const linksToMany = (name: string) => ({
   type: 'linksToMany' as const,
+  isPrimitive: false,
   target: `${MODULE}/${name}`,
 });
 
@@ -43,7 +46,11 @@ const TYPES: Record<string, HostRouteTypeInfo> = {
     friends: linksToMany('Person'),
   }),
   // One link to Person, on the post.
-  Post: cardType('Post', { slug: contains, author: linksTo('Person') }),
+  Post: cardType('Post', {
+    slug: contains,
+    author: linksTo('Person'),
+    place: compound,
+  }),
   // Linked both ways: two candidates.
   Category: cardType('Category', {
     slug: contains,
@@ -69,7 +76,12 @@ function validate(
 ): HostRoutesValidation {
   return validateHostRoutes(rules, {
     realmURL: new URL(REALM),
-    lookupType: (ref) => (ref.module === MODULE ? TYPES[ref.name] : undefined),
+    lookupType: (ref) =>
+      ref.module !== MODULE
+        ? undefined
+        : ref.name === 'Pending'
+          ? 'unavailable'
+          : TYPES[ref.name],
     ...options,
   });
 }
@@ -811,6 +823,49 @@ const tests: SharedTests<unknown> = Object.freeze({
       'no warning when the child links to its parent',
     );
   },
+  'validateHostRoutes: match takes primitive fields only': async (assert) => {
+    let { routes, warnings } = validate([
+      fieldMatch('/a/:author', 'Post', { 'author.slug': ':author' }),
+      fieldMatch('/b/:author', 'Post', { author: ':author' }),
+      fieldMatch('/c/:place', 'Post', { place: ':place' }),
+      fieldMatch('/d/:city', 'Post', { 'place.city': ':city' }),
+    ]);
+    assert.deepEqual(paths(routes), ['/a/:author', '/d/:city']);
+    assert.deepEqual(codes(warnings), [
+      { code: 'invalid-match', path: '/b/:author', dropped: true },
+      { code: 'invalid-match', path: '/c/:place', dropped: true },
+    ]);
+  },
+
+  'validateHostRoutes: an unavailable type makes the validation incomplete':
+    async (assert) => {
+      let complete = validate([
+        fieldMatch('/posts/:slug', 'Post', { slug: ':slug' }),
+        fieldMatch('/missing/:slug', 'Missing', { slug: ':slug' }),
+      ]);
+      assert.true(
+        complete.complete,
+        'a type that does not exist is final: the route is dropped for good',
+      );
+
+      let {
+        routes,
+        warnings,
+        complete: isComplete,
+      } = validate([
+        { path: '/', instance: instance('home') },
+        fieldMatch('/later/:slug', 'Pending', { slug: ':slug' }),
+        fieldMatch('/posts/:slug', 'Post', { slug: ':slug' }),
+      ]);
+      assert.false(isComplete, 'the validation is not final');
+      assert.deepEqual(paths(routes), ['/', '/posts/:slug']);
+      assert.deepEqual(codes(warnings), [
+        { code: 'type-unavailable', path: '/later/:slug', dropped: true },
+      ]);
+      assert.deepEqual(hostRoutingMapFromRoutes(routes), [
+        { path: '/', id: `${REALM}home` },
+      ]);
+    },
 });
 
 export default tests;

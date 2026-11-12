@@ -84,4 +84,12 @@ module(basename(import.meta.filename), function () {
   test('validateHostRoutes: warns when one card gets no address', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
+
+  test('validateHostRoutes: match takes primitive fields only', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: an unavailable type makes the validation incomplete', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
 });
