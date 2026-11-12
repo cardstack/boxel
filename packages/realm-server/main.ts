@@ -15,7 +15,6 @@ import {
   isPrefixForm,
   logger,
   Deferred,
-  CachingDefinitionLookup,
   claimHostShellGeneration,
   reportableHostShellGeneration,
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
@@ -43,6 +42,7 @@ import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
 import { PostgresChangeJournal } from './lib/change-journal.ts';
+import { SearchDefinitionLookup } from './lib/search-definition-memo.ts';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
@@ -758,7 +758,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     await moduleCacheCoordinator.start();
   }
 
-  let definitionLookup = new CachingDefinitionLookup(
+  let definitionLookup = new SearchDefinitionLookup(
     dbAdapter,
     prerenderer,
     virtualNetwork,

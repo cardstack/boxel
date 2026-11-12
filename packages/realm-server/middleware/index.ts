@@ -19,6 +19,7 @@ import {
 } from '@cardstack/postgres';
 import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
 import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
+import { withSearchDefinitionMemo } from '../lib/search-definition-memo.ts';
 import { retrieveUserSessionClaim } from '../utils/jwt.ts';
 import { getPublicInstanceId, INSTANCE_ID_HEADER } from '../lib/instance-id.ts';
 import {
@@ -438,11 +439,11 @@ export function orderConnectionsByRealm(
 // response carries the headers a cross-origin client needs to read its status
 // and Retry-After; before the body is parsed so that a shed costs nothing.
 export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
-  if (
-    !SEARCH_PATH_PATTERN.test(ctxt.path) ||
-    !SEARCH_METHODS.has(ctxt.method)
-  ) {
+  if (!SEARCH_PATH_PATTERN.test(ctxt.path)) {
     return next();
+  }
+  if (!SEARCH_METHODS.has(ctxt.method)) {
+    return ctxt.method === 'GET' ? withSearchDefinitionMemo(next) : next();
   }
   // Indexing traffic is admitted regardless of the ceiling — see the gate
   // for why. Both headers are only stamped by the worker-driven prerender
@@ -511,7 +512,7 @@ export async function searchAdmission(ctxt: Koa.Context, next: Koa.Next) {
     searchRequest = beginSearchRequest();
     ctxt.state[SEARCH_REQUEST] = searchRequest;
   }
-  return next();
+  return withSearchDefinitionMemo(next);
 }
 
 // Answer a search the admission gate turned away. Nothing about the request
