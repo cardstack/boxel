@@ -23,6 +23,7 @@ import {
   insertProxyEndpoints,
   insertUser,
   setupPermissionedRealmCached,
+  setupSecretsKeyring,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
@@ -103,6 +104,9 @@ module(basename(import.meta.filename), function (hooks) {
 
   const declared = [{ type: FEED, names: ['latest', 'large'] }];
 
+  // Proxy endpoints' keys are sealed as they are written.
+  setupSecretsKeyring(hooks);
+
   setupPermissionedRealmCached(hooks, {
     realmURL,
     permissions: {
@@ -141,7 +145,7 @@ module(basename(import.meta.filename), function (hooks) {
   async function callApi(
     token: string,
     name: string,
-    data: Record<string, unknown> = {},
+    params: Record<string, unknown> = {},
   ) {
     let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
@@ -156,16 +160,20 @@ module(basename(import.meta.filename), function (hooks) {
             {
               op: 'invoke',
               'boxel:name': name,
-              data: { meta: { adoptsFrom: FEED }, attributes: data },
+              data: { ...params, meta: { adoptsFrom: FEED } },
             },
           ],
         }),
       }),
     ))!;
-    return {
-      status: response.status,
-      body: JSON.parse(await response.text()),
-    };
+    let text = await response.text();
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text;
+    }
+    return { status: response.status, body };
   }
 
   function errorOf(body: any) {
