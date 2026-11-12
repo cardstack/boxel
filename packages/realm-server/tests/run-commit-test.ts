@@ -290,21 +290,14 @@ module(basename(import.meta.filename), function (hooks) {
       OWNER,
     );
     assert.strictEqual(await stage(token, 'aaa-first.txt', 'first'), 204);
-    // A card document past the realm's card limit, put in the overlay
-    // directly as a staging the realm's limits have since moved under would
-    // leave it. The batch's own entry checks refuse it before writing.
-    let huge = JSON.stringify({
-      data: {
-        type: 'card',
-        attributes: { padding: 'x'.repeat(600 * 1024) },
-        meta: { adoptsFrom: { module: './thing', name: 'Thing' } },
-      },
-    });
+    // A file past the realm's file limit, put in the overlay directly as a
+    // staging the realm's limits have since moved under would leave it. The
+    // batch's own entry checks refuse it before writing anything.
     await stageRunOverlayFile(
       dbAdapter,
       { runId: run.id, attempt: 1 },
-      'cards/huge.json',
-      new TextEncoder().encode(huge),
+      'data/huge.bin',
+      new Uint8Array(5 * 1024 * 1024 + 1),
       10,
     );
     let refused = await commit(token);
