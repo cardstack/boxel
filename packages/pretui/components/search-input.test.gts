@@ -140,6 +140,47 @@ module('Pretui | components/search-input', function (hooks) {
     );
   });
 
+  for (let rowWidth of [200, 480]) {
+    test(`@display 'collapsed' in a LayoutControl row opens across the ${rowWidth}px row, and Escape returns focus`, async function (assert) {
+      // the geometry rule's fixed 240px width stands in for the default; the
+      // component's inline style must override it with the row's width
+      let rowStyle = `inline-size: ${rowWidth}px; display: flex; gap: 8px; margin-inline-start: 40px`;
+      await render(
+        <template>
+          <div data-pretui-layout-control data-test-row style={{rowStyle}}>
+            <span style='flex: none; inline-size: 60px'></span>
+            <SearchInput @display='collapsed' />
+            <button type='button' data-test-primary>New</button>
+          </div>
+        </template>,
+      );
+      let row = (
+        document.querySelector('[data-test-row]') as HTMLElement
+      ).getBoundingClientRect();
+      await click(toggle() as HTMLElement);
+      assert.strictEqual(
+        document.activeElement,
+        input(),
+        'focus is in the field',
+      );
+      let box = layer().getBoundingClientRect();
+      assert.strictEqual(
+        Math.round(box.left),
+        Math.round(row.left),
+        'starts at the row start',
+      );
+      assert.strictEqual(
+        Math.round(box.width),
+        Math.round(row.width),
+        'as wide as the row',
+      );
+
+      await triggerKeyEvent(input() as HTMLInputElement, 'keydown', 'Escape');
+      await waitUntil(() => document.activeElement === toggle());
+      assert.notOk(input(), 'the row is restored');
+    });
+  }
+
   test("@display 'collapsed' stays closed when focused and opens on click only", async function (assert) {
     await render(<template><SearchInput @display='collapsed' /></template>);
     await focus(toggle() as HTMLElement);
@@ -277,20 +318,31 @@ module('Pretui | components/search-input', function (hooks) {
     // later tests read the real width.
     let original = Object.getOwnPropertyDescriptor(window, 'innerWidth');
     let setWidth = (value: number) =>
-      Object.defineProperty(window, 'innerWidth', { configurable: true, value });
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value,
+      });
     try {
       let rect = root().getBoundingClientRect();
       let wide = Math.ceil(rect.right + rect.left + 2000);
       setWidth(wide);
       let square = await openOver();
       let before = Math.max(wide - square.left, square.right) - 8;
-      assert.strictEqual(field()?.style.maxInlineSize, `${before}px`, 'capped to the wide window');
+      assert.strictEqual(
+        field()?.style.maxInlineSize,
+        `${before}px`,
+        'capped to the wide window',
+      );
       let narrow = Math.ceil(square.right + square.left + 500);
       setWidth(narrow);
       window.dispatchEvent(new Event('resize'));
       await settled();
       let room = Math.max(narrow - square.left, square.right) - 8;
-      assert.strictEqual(field()?.style.maxInlineSize, `${room}px`, 'recapped after the resize');
+      assert.strictEqual(
+        field()?.style.maxInlineSize,
+        `${room}px`,
+        'recapped after the resize',
+      );
       assert.true(room < before, 'shrank');
     } finally {
       if (original) {
