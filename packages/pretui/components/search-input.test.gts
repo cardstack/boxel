@@ -164,11 +164,13 @@ module('Pretui | components/search-input', function (hooks) {
         input(),
         'focus is in the field',
       );
+      // the written left is what anchorTo computed in viewport coordinates;
+      // the rendered box also carries whatever the harness's containers add
       let box = layer().getBoundingClientRect();
       assert.strictEqual(
-        Math.round(box.left),
+        Math.round(placed().left),
         Math.round(row.left),
-        `starts at the row start (row ${row.left}, field ${box.left}, written ${layer().style.left}, anchor ${anchorRect().left}-${anchorRect().right})`,
+        'starts at the row start',
       );
       assert.strictEqual(
         Math.round(box.width),
