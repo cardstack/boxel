@@ -1286,6 +1286,25 @@ export default class RealmService extends Service {
     return this.knownRealm(this.toLookupURL(realm))?.info !== undefined;
   };
 
+  // Whether the realm admits the user only through its policy: they hold a
+  // session with it, its permissions give them neither read nor write, and its
+  // policy judges them. A realm answers its info to a caller its permissions
+  // don't let read only when its policy judges them, so info the host holds
+  // for such a user is the sign. Info outlives the session it was fetched
+  // under, through re-authentication, sign-out and a switch of account, so
+  // without a session this answers false. A session minted after the user's
+  // permissions changed still reads info fetched under the earlier ones. The
+  // realm decides each request such a user makes.
+  admitsOnlyThroughPolicy = (realm: RealmIdentifier): boolean => {
+    let resource = this.knownRealm(this.toLookupURL(realm));
+    return (
+      resource?.claims !== undefined &&
+      !resource.canRead &&
+      !resource.canWrite &&
+      resource.info !== undefined
+    );
+  };
+
   url = (url: string): string | undefined => {
     return this.knownRealm(url)?.url;
   };
