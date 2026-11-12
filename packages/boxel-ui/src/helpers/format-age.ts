@@ -1,3 +1,4 @@
+import { cachedNumberFormat } from '../utils/intl-formatters.ts';
 export default function formatAge(
   birthdate: Date | string | null | undefined,
   options: {
@@ -38,7 +39,7 @@ export default function formatAge(
   const formatTimeUnit = (value: number, unit: 'year' | 'month' | 'day') => {
     // Use Intl.NumberFormat with unit style for proper pluralization and localization
     // This gives us just the number and unit without "ago" or directional context
-    const nf = new Intl.NumberFormat(locale, {
+    const nf = cachedNumberFormat(locale, {
       style: 'unit',
       unit: unit,
       unitDisplay: 'long', // Use full words like "years" instead of "yr"

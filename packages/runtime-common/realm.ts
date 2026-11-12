@@ -1,3 +1,4 @@
+import { isStagedFile, type StagedFile } from './staged-file.ts';
 import { Deferred } from './deferred.ts';
 import {
   DEFAULT_ANONYMOUS_RATE_LIMIT,
@@ -2429,12 +2430,10 @@ export interface CommitBatch {
   deletes?: LocalPath[];
 }
 
-// What a caller hands the commit for one file: the bytes themselves, or a
-// description of them — a list of ranges of a stored file and the text going
-// between them. The second form exists for a file too large to hold: it is
-// written by streaming the ranges straight through, so a change to a file of
-// any size costs the change rather than the file.
-export type WriteContent = string | Uint8Array | SplicedSource;
+// A write carries small content directly, describes a splice of stored bytes,
+// or owns an adapter-staged upload. Described and staged writes keep large
+// files out of memory throughout the commit.
+export type WriteContent = string | Uint8Array | SplicedSource | StagedFile;
 
 export interface CommitBatchResult {
   // One result per staged write, in the order the caller staged them. A path
@@ -2583,6 +2582,19 @@ export interface RealmAdapter {
     path: LocalPath,
     contents: string | Uint8Array,
   ): Promise<AdapterWriteResult>;
+
+  stage(
+    path: LocalPath,
+    body: ReadableStream<Uint8Array>,
+    limit: number,
+    contentLength?: number,
+  ): Promise<StagedFile>;
+  disposeStaged(content: StagedFile): Promise<void>;
+  commitStaged(
+    path: LocalPath,
+    content: StagedFile,
+  ): Promise<AdapterWriteResult>;
+  stagedContentEquals(path: LocalPath, content: StagedFile): Promise<boolean>;
 
   // Replace a file's content with a rearrangement of its own bytes plus new
   // text — the form a change to a file too large to hold takes.
@@ -5559,6 +5571,11 @@ export class Realm {
     if (content instanceof Uint8Array) {
       return new TextDecoder().decode(content);
     }
+    if (isStagedFile(content)) {
+      // Uploads of a `.json` document are held whole rather than staged
+      // (see `upsertBinaryFile`), so only non-documents reach here staged.
+      throw new Error('a staged upload cannot be read as text');
+    }
     let parts: Uint8Array[] = [];
     for (let segment of content.segments) {
       if (segment.kind === 'text') {
@@ -5853,7 +5870,10 @@ export class Realm {
         let couldMatch =
           stored !== undefined &&
           (stored.size === undefined ||
-            stored.size === computeContentSize(content));
+            stored.size ===
+              (isStagedFile(content)
+                ? content.size
+                : computeContentSize(content)));
         let unchanged: { lastModified: number } | undefined;
         if (
           stored &&
@@ -5884,9 +5904,16 @@ export class Realm {
         } else if (
           couldMatch &&
           stored &&
-          content instanceof Uint8Array &&
-          (await this.#indexDescribesFile(url, computeContentHash(content))) &&
-          (await fileContentEquals(stored, content))
+          (content instanceof Uint8Array || isStagedFile(content)) &&
+          (await this.#indexDescribesFile(
+            url,
+            isStagedFile(content)
+              ? content.contentHash
+              : computeContentHash(content),
+          )) &&
+          (await (isStagedFile(content)
+            ? this.#adapter.stagedContentEquals(path, content)
+            : fileContentEquals(stored, content)))
         ) {
           // Matching bytes are not enough on their own here. Re-sending an
           // upload is how a caller recovers from one whose bytes landed but
@@ -5897,13 +5924,10 @@ export class Realm {
           // from these bytes; otherwise the upload proceeds as a write, which
           // queues the pass the earlier attempt never got.
           //
-          // Bytes are compared as bytes and never decoded, so a match is a
-          // byte-for-byte one. The stored file is read a chunk at a time against
-          // a body already held whole, which keeps a large upload from being
-          // held twice. Not the hash recorded at the last write: only the
-          // file's length vouches for that record, so a file rewritten out of
-          // band at the same length would read as unchanged, and the bytes a
-          // caller sent to replace it would be dropped.
+          // Staged uploads compare a full SHA-256 of the current stored bytes;
+          // in-memory writes compare their bytes directly. Neither comparison
+          // trusts the persisted metadata or a sampled hash: a same-length edit
+          // made outside the realm must still be replaced by this upload.
           unchanged = stored;
         }
         if (unchanged) {
@@ -5921,7 +5945,9 @@ export class Realm {
           // has is a no-op for every file that has one. This is not what
           // makes `baseVersion` work: that is computed from the bytes read
           // inside the write lock and never consults the row.
-          let unchangedHash = computeContentHash(content);
+          let unchangedHash = isStagedFile(content)
+            ? content.contentHash
+            : computeContentHash(content);
           results.push({
             path,
             lastModified: unchanged.lastModified,
@@ -5930,7 +5956,9 @@ export class Realm {
           fileMetaRows.push({
             path,
             contentHash: unchangedHash,
-            contentSize: computeContentSize(content),
+            contentSize: isStagedFile(content)
+              ? content.size
+              : computeContentSize(content),
           });
           // The module flush above has already run for this file if it was
           // owed. Recording the file's kind keeps the next instance from
@@ -5943,18 +5971,25 @@ export class Realm {
         // From the open above rather than from a read, which a file whose
         // length already settled the comparison never had.
         let isNewFile = stored === undefined;
-        let contentHash = computeContentHash(content);
-        let contentSize = computeContentSize(content);
+        let contentHash = isStagedFile(content)
+          ? content.contentHash
+          : computeContentHash(content);
+        let contentSize = isStagedFile(content)
+          ? content.size
+          : computeContentSize(content);
         // Read before the write replaces the bytes it compares against.
         if (
           currentWriteType === 'module' &&
+          !isStagedFile(content) &&
           (await this.#writeLeavesModuleSchema(url, path, !isNewFile, content))
         ) {
           modulesWithoutSchemaChange.add(url.href);
         }
         announceIndexing(url);
         await this.trackOwnWrite(path);
-        let { lastModified } = await this.#adapter.write(path, content);
+        let { lastModified } = isStagedFile(content)
+          ? await this.#adapter.commitStaged(path, content)
+          : await this.#adapter.write(path, content);
         (isNewFile ? addedFiles : updatedFiles).push(path);
         this.invalidateCache(path);
         await this.#notifyFileChange(path);
@@ -12657,11 +12692,67 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    return await this.replaceFileContent(
-      request,
-      requestContext,
-      new Uint8Array(await request.arrayBuffer()),
-    );
+    let path = this.paths.local(new URL(request.url));
+    // A `.json` document is read as text by the write path (the policy-share
+    // audit, the card checks), and its limit is the card limit, so it stays
+    // in memory. Every other upload streams to disk.
+    if (path.endsWith('.json')) {
+      return await this.replaceFileContent(
+        request,
+        requestContext,
+        new Uint8Array(await request.arrayBuffer()),
+      );
+    }
+    let limit = fileSizeLimitFor(path, {
+      default: this.#fileSizeLimitBytes,
+      audio: this.#audioSizeLimitBytes,
+      video: this.#videoSizeLimitBytes,
+    });
+    let declared = request.headers.get('content-length');
+    let contentLength = declared === null ? undefined : Number(declared);
+    if (
+      contentLength !== undefined &&
+      (!Number.isSafeInteger(contentLength) || contentLength < 0)
+    ) {
+      throw new CardError('Invalid Content-Length', { status: 400 });
+    }
+    if (contentLength !== undefined && contentLength > limit) {
+      throw new CardError(
+        `File size (${contentLength} bytes) exceeds maximum allowed size (${limit} bytes)`,
+        {
+          status: 413,
+          title: 'Payload Too Large',
+        },
+      );
+    }
+    let staged: StagedFile;
+    try {
+      staged = await this.#adapter.stage(
+        path,
+        request.body ??
+          new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+        limit,
+        contentLength,
+      );
+    } catch (err) {
+      if (err instanceof CardError && err.status === 503) {
+        return createResponse({
+          body: err.message,
+          init: { status: 503, headers: { 'Retry-After': '1' } },
+          requestContext,
+        });
+      }
+      throw err;
+    }
+    try {
+      return await this.replaceFileContent(request, requestContext, staged);
+    } finally {
+      await this.#adapter.disposeStaged(staged);
+    }
   }
 
   // The write behind both file-content routes: one `update` entry naming the
@@ -12689,7 +12780,7 @@ export class Realm {
   private async replaceFileContent(
     request: Request,
     requestContext: RequestContext,
-    content: string | Uint8Array,
+    content: string | Uint8Array | StagedFile,
   ): Promise<Response> {
     let url = new URL(request.url);
     let result: Awaited<ReturnType<typeof commitBatch>>[number];
@@ -12779,7 +12870,7 @@ export class Realm {
     try {
       // Described content reports its byte length without being read, which is
       // the whole point of it, so the ceiling is applied to that.
-      if (isSplicedSource(content)) {
+      if (isSplicedSource(content) || isStagedFile(content)) {
         validateByteLength(content.size, limit, type);
       } else {
         validateWriteSize(content, limit, type);

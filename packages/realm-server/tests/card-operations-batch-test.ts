@@ -1,3 +1,4 @@
+import { isStagedFile } from '@cardstack/runtime-common/staged-file';
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
@@ -240,7 +241,10 @@ function stub(opts: StubOptions = {}): Stub {
     },
     assertWriteSize(localPath, content) {
       let limit = opts.sizeLimit;
-      let size = isSplicedSource(content) ? content.size : content.length;
+      let size =
+        isSplicedSource(content) || isStagedFile(content)
+          ? content.size
+          : content.length;
       if (limit !== undefined && size > limit) {
         // The shape `Realm.assertWriteSize` throws, down to the status: a
         // stub that threw a bare `Error` here could not tell whether the

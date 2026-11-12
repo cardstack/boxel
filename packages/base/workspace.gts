@@ -434,6 +434,11 @@ function toMs(value: unknown): number | undefined {
   return ms < 1e12 ? ms * 1000 : ms;
 }
 
+const MONTH_DAY_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+});
+
 function dayLabelFor(ms: number): string {
   let now = nowDate();
   let startOfToday = new Date(
@@ -447,10 +452,7 @@ function dayLabelFor(ms: number): string {
   if (ms >= startOfToday - 86400000) {
     return 'Yesterday';
   }
-  return new Date(ms).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
+  return MONTH_DAY_FORMAT.format(new Date(ms));
 }
 
 function relativeTime(value: unknown): string | undefined {
