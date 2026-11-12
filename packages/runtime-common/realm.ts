@@ -5697,7 +5697,20 @@ export class Realm {
   // resolve, isn't one.
   async #writesPolicyCard(path: LocalPath, content: string): Promise<boolean> {
     let types = await this.#adoptedTypes(path, content);
-    return !!types && this.#isPolicyCard(types);
+    return !!types && this.#isTypeOrNone(types, 'policy');
+  }
+
+  // Whether an adoption chain is a policy card's or an automation card's,
+  // and false in a deployment that maps no catalog for the type to come from:
+  // no realm there can hold one.
+  #isTypeOrNone(types: string[], kind: 'policy' | 'automation'): boolean {
+    try {
+      return kind === 'policy'
+        ? this.#isPolicyCard(types)
+        : this.#isAutomationCard(types);
+    } catch {
+      return false;
+    }
   }
 
   // The adoption chain of the card `content` would be at `path`, as the index
@@ -13484,10 +13497,10 @@ export class Realm {
         continue;
       }
       let types = await this.#adoptedTypes(path, content);
-      if (types && this.#isPolicyCard(types)) {
+      if (types && this.#isTypeOrNone(types, 'policy')) {
         return 'a RealmPolicy card';
       }
-      if (types && this.#isAutomationCard(types)) {
+      if (types && this.#isTypeOrNone(types, 'automation')) {
         return 'an automation card';
       }
     }
