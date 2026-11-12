@@ -2851,14 +2851,6 @@ async function teardownPermissionedRealmFixture(
   }
 
   try {
-    if (!testRealmServer.matrixClient.isLoggedIn()) {
-      await testRealmServer.matrixClient.login();
-    }
-  } catch (error) {
-    cleanupError ??= error;
-  }
-
-  try {
     await closeServer(testRealmServer.testRealmHttpServer);
   } catch (error) {
     cleanupError ??= error;
