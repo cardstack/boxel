@@ -1,3 +1,4 @@
+import { statSync } from 'fs';
 import { join, relative, resolve, sep, isAbsolute } from 'path';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 import type { RealmRegistryRow } from './realm-registry-reconciler.ts';
@@ -38,6 +39,29 @@ export function realmDiskPath(
     default:
       return null;
   }
+}
+
+// The directory a realm is mounted from. Throws for a row that doesn't
+// resolve, and for one whose directory isn't on disk, before any Realm is
+// built. Building one over a missing directory isn't harmless: its start
+// enqueues a boot index and broadcasts a cache clear before the file watcher
+// fails on the directory, so a row left pointing at a deleted checkout turns
+// every mount attempt into another index job, and the worker's requests for
+// that job's files into more mount attempts.
+export function mountableRealmDiskPath(
+  row: Pick<RealmRegistryRow, 'url' | 'kind' | 'disk_id'>,
+  realmsRootPath: string,
+): string {
+  let diskPath = realmDiskPath(row, realmsRootPath);
+  if (!diskPath) {
+    throw new Error(
+      `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
+    );
+  }
+  if (!statSync(diskPath, { throwIfNoEntry: false })?.isDirectory()) {
+    throw new Error(`the directory for ${row.url} does not exist: ${diskPath}`);
+  }
+  return diskPath;
 }
 
 function safeJoinUnderRoot(root: string, segment: string): string | null {
