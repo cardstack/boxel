@@ -5,7 +5,10 @@ export const DEBUG_COMMAND_PREFIX = 'boxel-debug';
 // `<!-- /feature:<name> -->`, left out of the prompt unless the room enabled
 // it. A name added to a skill file must be added here too, or no room can
 // enable it.
-export const SKILL_FEATURES = {} as const satisfies Record<string, string>;
+export const SKILL_FEATURES = {
+  'catalog-reuse':
+    'Makes the assistant search the catalog for a listing to install or remix, and for specs to reuse, before it writes any .gts file.',
+} as const satisfies Record<string, string>;
 
 // The realms a feature's skill sections send the assistant to search, by
 // realm prefix. In a room that has not enabled the feature, the host leaves
@@ -18,13 +21,8 @@ export const SKILL_FEATURE_REALMS: {
 } = {};
 
 // The realms gated behind a feature that `enabledFeatures` does not include.
-export function realmsOfDisabledFeatures(
-  enabledFeatures: string[],
-  featureRealms: {
-    [feature: string]: string[] | undefined;
-  } = SKILL_FEATURE_REALMS,
-): string[] {
-  return Object.entries(featureRealms).flatMap(([feature, realms]) =>
+export function realmsOfDisabledFeatures(enabledFeatures: string[]): string[] {
+  return Object.entries(SKILL_FEATURE_REALMS).flatMap(([feature, realms]) =>
     enabledFeatures.includes(feature) ? [] : (realms ?? []),
   );
 }
@@ -70,9 +68,8 @@ export function parseFeatureCommand(
 export function sessionSkillFeatures(
   eventList: { type: string; sender: string; content: unknown }[],
   aiBotUserId: string,
-  features: { [feature: string]: string } = SKILL_FEATURES,
 ): string[] {
-  let enabled = new Set<string>();
+  let features = new Set<string>();
   for (let event of eventList) {
     if (event.type !== 'm.room.message' || event.sender === aiBotUserId) {
       continue;
@@ -80,14 +77,14 @@ export function sessionSkillFeatures(
     let body = (event.content as { body?: unknown })?.body;
     let command =
       typeof body === 'string' ? parseFeatureCommand(body) : undefined;
-    if (!command || !(command.feature in features)) {
+    if (!command || !Object.hasOwn(SKILL_FEATURES, command.feature)) {
       continue;
     }
     if (command.enable) {
-      enabled.add(command.feature);
+      features.add(command.feature);
     } else {
-      enabled.delete(command.feature);
+      features.delete(command.feature);
     }
   }
-  return [...enabled];
+  return [...features];
 }

@@ -13,6 +13,7 @@
         "notes": "This card exists because reference-and-install look equally successful from the outside: both leave a working cellar on screen. The difference is what the user is left holding — definitions that stay wired to the catalog, or a copy that will not receive upstream fixes. Criterion 2 is the one under test; criterion 6 guards the over-correction, where the assistant refuses to copy even when asked.\n\nThis is a two-turn build, so `secondsPerPrompt` raises the time target to 450 s per prompt, against the default 200 s set on hello-world. The turn target stays at 10 per prompt.\n\nThe Wine Cellar Listing (`4b6602-wine-cellar-card-definition`) was chosen because it installs and remixes cleanly: every module it needs has a Spec, so the follow-up is completable. Its shape matches the case under test — a collection card (`WineCellar.bottles`, linksToMany) over item cards (`WineBottle`) — and the domain appears in no skill example, keeping eval vocabulary disjoint from the skill's own. Before changing the domain, check that the new Listing remixes into a fresh realm with no unresolved imports.",
         "cardThumbnailURL": null
       },
+      "skillFeatures": ["catalog-reuse"],
       "secondsPerPrompt": 450
     },
     "relationships": {

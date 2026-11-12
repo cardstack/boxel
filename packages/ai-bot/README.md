@@ -67,7 +67,7 @@ It will be able to see any cards shared in the chat and can respond using GPT4 i
 
 Send `boxel-debug` in a room the bot has joined to list the available debug commands. The bot answers these messages itself; they never reach the model.
 
-`boxel-debug:feature:enable:<name>` enables a skill feature for that room, from the next message, and `boxel-debug:feature:disable:<name>` disables it again. A skill feature is a section of a skill file between `<!-- feature:<name> -->` and `<!-- /feature:<name> -->`; the bot leaves it out of the prompt unless the room enabled it. `boxel-debug:feature` lists the features enabled in the room. The features a room can enable, with what each does, are listed in `SKILL_FEATURES` in `packages/runtime-common/ai/debug.ts`; a new marker name in a skill file must be added there too.
+`boxel-debug:feature:enable:<name>` enables a skill feature for that room, from the next message, and `boxel-debug:feature:disable:<name>` disables it again. A skill feature is a section of a skill file between `<!-- feature:<name> -->` and `<!-- /feature:<name> -->`; the bot leaves it out of the prompt unless the room enabled it. For example, `boxel-debug:feature:enable:catalog-reuse` turns on the mandatory catalog search in the skills index. `boxel-debug:feature` lists the features enabled in the room. The features a room can enable, with what each does, are listed in `SKILL_FEATURES` in `packages/runtime-common/ai/debug.ts`; a new marker name in a skill file must be added there too.
 
 A message that looks like one of the old `debug:` commands gets a reply that points to `boxel-debug`, and does not reach the model.
 

@@ -74,6 +74,7 @@ import {
   parseMarkdownSkill,
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
+  SKILL_FEATURE_REALMS,
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
   TRAILING_CONTEXT_PREAMBLE,
@@ -11653,14 +11654,12 @@ module('absolutizeSkillLinks', () => {
 
 module('skill feature sections', () => {
   const INDEX = 'https://localhost:4201/skills/index.md';
-  // No feature is registered in SKILL_FEATURES, so the tests pass a stand-in.
-  const FEATURES = { 'some-feature': 'A stand-in feature.' };
   const instructions = [
     'Before.',
     '',
-    '<!-- feature:some-feature -->',
+    '<!-- feature:catalog-reuse -->',
     'Search the catalog first.',
-    '<!-- /feature:some-feature -->',
+    '<!-- /feature:catalog-reuse -->',
     '',
     'After.',
   ].join('\n');
@@ -11678,7 +11677,7 @@ module('skill feature sections', () => {
   });
 
   test('keeps a feature section, without its markers, when its feature is enabled', () => {
-    let [message] = skillCardsToMessages([skill], ['some-feature']);
+    let [message] = skillCardsToMessages([skill], ['catalog-reuse']);
     assert.true(message.includes('Search the catalog first.'));
     assert.false(message.includes('feature:'), 'the markers are removed');
   });
@@ -11691,56 +11690,58 @@ module('skill feature sections', () => {
     });
     const bot = '@aibot:localhost';
     const user = '@user:localhost';
-    assert.deepEqual(sessionSkillFeatures([], bot, FEATURES), []);
+    assert.deepEqual(sessionSkillFeatures([], bot), []);
     assert.deepEqual(
       sessionSkillFeatures(
-        [message(user, 'boxel-debug:feature:enable:some-feature')],
+        [message(user, 'boxel-debug:feature:enable:catalog-reuse')],
         bot,
-        FEATURES,
       ),
-      ['some-feature'],
+      ['catalog-reuse'],
     );
     assert.deepEqual(
       sessionSkillFeatures(
         [
-          message(user, 'boxel-debug:feature:enable:some-feature'),
-          message(user, 'boxel-debug:feature:disable:some-feature'),
+          message(user, 'boxel-debug:feature:enable:catalog-reuse'),
+          message(user, 'boxel-debug:feature:disable:catalog-reuse'),
         ],
         bot,
-        FEATURES,
       ),
       [],
       'a later disable wins',
     );
     assert.deepEqual(
       sessionSkillFeatures(
-        [message(bot, 'boxel-debug:feature:enable:some-feature')],
+        [message(bot, 'boxel-debug:feature:enable:catalog-reuse')],
         bot,
-        FEATURES,
       ),
       [],
       'the bot cannot enable a feature',
     );
     assert.deepEqual(
       sessionSkillFeatures(
-        [message(user, 'boxel-debug:feature:enable:not-registered')],
+        [message(user, 'boxel-debug:feature:enable:constructor')],
         bot,
-        FEATURES,
       ),
       [],
-      'a name that is not registered enables nothing',
+      'a name inherited from Object.prototype is not a feature',
     );
   });
 
-  test('the catalog is searched without the room enabling anything', () => {
+  test('the catalog is searched in a room that enabled no feature', () => {
     assert.false(realmsOfDisabledFeatures([]).includes(CATALOG_REALM_PREFIX));
   });
 
-  test("a feature's realms are gated until the room enables it", () => {
-    const realms = { 'some-feature': ['@cardstack/some-realm/'] };
-    assert.deepEqual(realmsOfDisabledFeatures([], realms), [
-      '@cardstack/some-realm/',
-    ]);
-    assert.deepEqual(realmsOfDisabledFeatures(['some-feature'], realms), []);
+  test("a feature's realms are left out until the room enables it", () => {
+    // The registry is read-only by type; the test gates a stand-in realm.
+    let featureRealms = SKILL_FEATURE_REALMS as Record<string, string[]>;
+    featureRealms['catalog-reuse'] = ['@cardstack/some-realm/'];
+    try {
+      assert.deepEqual(realmsOfDisabledFeatures([]), [
+        '@cardstack/some-realm/',
+      ]);
+      assert.deepEqual(realmsOfDisabledFeatures(['catalog-reuse']), []);
+    } finally {
+      delete featureRealms['catalog-reuse'];
+    }
   });
 });

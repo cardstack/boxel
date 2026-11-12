@@ -4,7 +4,12 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { SupportedMimeType, type Realm } from '@cardstack/runtime-common';
+import {
+  CATALOG_REALM_PREFIX,
+  SupportedMimeType,
+  type Realm,
+} from '@cardstack/runtime-common';
+import { SKILL_FEATURE_REALMS } from '@cardstack/runtime-common/ai/debug';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -4590,6 +4595,469 @@ await images.generate({ prompt: 'a dot', path: 'dot.png' });`;
   });
 });
 
+// A realm gated behind a skill feature, with the catalog standing in for it:
+// no feature gates the catalog itself. The feature is read from the room's
+// messages, which reach the room resources only for a signed-in user.
+module(
+  'Integration | tools | run-realm-code | catalog-reuse',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    // The test build lists no catalog, so list one for the default realms
+    // to leave out. It must be listed before the user signs in.
+    hooks.beforeEach(function () {
+      setCatalogRealmURL(
+        getService('network').virtualNetwork.toURL('@cardstack/catalog/').href,
+      );
+      // The registry is read-only by type; the module gates the catalog.
+      (SKILL_FEATURE_REALMS as Record<string, string[]>)['catalog-reuse'] = [
+        CATALOG_REALM_PREFIX,
+      ];
+    });
+    hooks.afterEach(function () {
+      delete (SKILL_FEATURE_REALMS as Record<string, string[]>)[
+        'catalog-reuse'
+      ];
+      resetCatalogRealmURL();
+    });
+    setupLocalIndexing(hooks);
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
+    });
+    setupRealmCacheTeardown(hooks);
+
+    hooks.beforeEach(async function () {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: { 'note.md': '# Note\n' },
+      });
+    });
+
+    test('realm.entries.search leaves the catalog out unless the room enabled catalog-reuse', async function (assert) {
+      await getService('matrix-service').ready;
+      let roomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'catalog-reuse',
+      });
+      let { virtualNetwork } = getService('network');
+      let sentRealms: string[][] = [];
+      let spy = async (request: Request) => {
+        if (new URL(request.url).pathname.endsWith('/_federated-search')) {
+          sentRealms.push(JSON.parse(await request.clone().text()).realms);
+        }
+        return null;
+      };
+      virtualNetwork.mount(spy, { prepend: true });
+      let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+      try {
+        let realmServer = getService('realm-server');
+        await realmServer.ready;
+        let isCatalog = (realm: string) =>
+          realm === '@cardstack/catalog/' || realm === catalogURL;
+        assert.ok(
+          realmServer.availableRealmIdentifiers.some(isCatalog),
+          'the catalog is one of the available realms',
+        );
+        let command = new RunRealmCodeTool(
+          getService('tool-service').toolContext,
+        );
+        let search = (code: string) =>
+          command.execute({ realm: testRealmURL, roomId, code });
+
+        await search(
+          `return await realm.entries.search({}, { realms: ['@cardstack/catalog/'] });`,
+        );
+        await search(
+          `await realm.entries.search({}, { realms: ['@cardstack/catalog/', realm.current.url] });`,
+        );
+        await search(`await realm.entries.search({});`);
+        await search(
+          `await realm.entries.search({}, { realms: [${JSON.stringify(
+            `${catalogURL}components/`,
+          )}] });`,
+        );
+        assert.strictEqual(
+          sentRealms.length,
+          2,
+          'a search of the catalog alone, or of a folder in it, is answered empty, without a request',
+        );
+        assert.deepEqual(
+          sentRealms[0],
+          [testRealmURL],
+          'a named catalog is dropped',
+        );
+        assert.notOk(
+          sentRealms[1].some(isCatalog),
+          'the default realms leave the catalog out',
+        );
+
+        mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
+          msgtype: 'm.text',
+          body: 'boxel-debug:feature:enable:catalog-reuse',
+        });
+        await settled();
+        await search(
+          `await realm.entries.search({}, { realms: ['@cardstack/catalog/'] });`,
+        );
+        assert.deepEqual(
+          sentRealms[2],
+          ['@cardstack/catalog/'],
+          'with the feature on, the catalog is searched',
+        );
+      } finally {
+        virtualNetwork.unmount(spy);
+      }
+    });
+
+    test('realm.entries.search records each search that reaches the catalog in client telemetry', async function (assert) {
+      await getService('matrix-service').ready;
+      let roomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'catalog-reuse',
+      });
+      let { virtualNetwork } = getService('network');
+      let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+      // Answers every entry search with a count per realm. The catalog
+      // matches two entries for "kanban" and one for "huge", whose readMe is
+      // too large to return; the workspace matches one for "kanban" and three
+      // for "notes". The search fails for "boom", and the catalog does not
+      // answer for "silent".
+      let federatedSearch = async (request: Request) => {
+        if (!new URL(request.url).pathname.endsWith('/_federated-search')) {
+          return null;
+        }
+        let body = await request.clone().text();
+        if (body.includes('boom')) {
+          return new Response('the catalog is down', { status: 500 });
+        }
+        let { realms } = JSON.parse(body) as { realms: string[] };
+        let realmTotals: Record<string, number> = {};
+        let data: unknown[] = [];
+        let included: unknown[] = [];
+        let found = (id: string, readMe = '') => {
+          data.push({
+            type: 'entry',
+            id,
+            relationships: { item: { data: { type: 'card', id } } },
+          });
+          included.push({ type: 'card', id, attributes: { readMe } });
+        };
+        for (let realm of realms) {
+          let url = virtualNetwork.toURL(realm).href;
+          if (url === catalogURL) {
+            if (body.includes('silent')) {
+              continue;
+            }
+            let huge = body.includes('huge');
+            realmTotals[url] = body.includes('kanban') ? 2 : huge ? 1 : 0;
+            if (realmTotals[url] > 0) {
+              found(
+                `${catalogURL}Spec/board`,
+                huge ? 'x'.repeat(1_100_000) : '',
+              );
+            }
+          } else if (url === testRealmURL) {
+            realmTotals[url] = body.includes('kanban')
+              ? 1
+              : body.includes('notes')
+                ? 3
+                : 0;
+            if (realmTotals[url] > 0) {
+              found(`${testRealmURL}note`);
+            }
+          } else {
+            realmTotals[url] = 0;
+          }
+        }
+        return new Response(
+          JSON.stringify({
+            data,
+            included,
+            meta: {
+              page: {
+                total: Object.values(realmTotals).reduce((a, b) => a + b, 0),
+              },
+              realmTotals,
+              ...(Object.keys(realmTotals).length < realms.length
+                ? { incomplete: true }
+                : {}),
+            },
+          }),
+          { headers: { 'content-type': SupportedMimeType.CardJson } },
+        );
+      };
+      virtualNetwork.mount(federatedSearch, { prepend: true });
+      let telemetry = getService('client-telemetry');
+      let recorded: TelemetryEventInput[] = [];
+      let recordEvent = telemetry.recordEvent;
+      telemetry.recordEvent = (event: TelemetryEventInput) => {
+        recorded.push(event);
+      };
+      try {
+        await getService('realm-server').ready;
+        let command = new RunRealmCodeTool(
+          getService('tool-service').toolContext,
+        );
+        let search = (matches: string, realms: string) =>
+          command.execute({
+            realm: testRealmURL,
+            roomId,
+            code: `await realm.entries.search(
+  {
+    filter: {
+      on: { module: '@cardstack/base/spec', name: 'Spec' },
+      matches: ${JSON.stringify(matches)},
+    },
+  },
+  { realms: ${realms} },
+);`,
+          });
+
+        await search('kanban', `['@cardstack/catalog/']`);
+        assert.deepEqual(
+          recorded,
+          [],
+          'a search the feature gate keeps out of the catalog is not recorded',
+        );
+
+        mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
+          msgtype: 'm.text',
+          body: 'boxel-debug:feature:enable:catalog-reuse',
+        });
+        // The message reaches the room's events a tick after it is sent.
+        await waitUntil(() =>
+          getService('matrix-service')
+            .roomResources.get(roomId)
+            ?.events.some(
+              (event) =>
+                (event.content as { body?: string })?.body ===
+                'boxel-debug:feature:enable:catalog-reuse',
+            ),
+        );
+        await search('kanban board', `['@cardstack/catalog/']`);
+        await search('kanban', `['@cardstack/catalog/', realm.current.url]`);
+        await search('notes', '[]');
+        await search('kanban', '[realm.current.url]');
+        await assert.rejects(
+          search('boom', `['@cardstack/catalog/']`),
+          /the catalog is down/,
+        );
+        await search('silent', `['@cardstack/catalog/', realm.current.url]`);
+        await assert.rejects(
+          search('huge', `['@cardstack/catalog/']`),
+          /too large to return/,
+        );
+        let run = (code: string) =>
+          command.execute({ realm: testRealmURL, roomId, code });
+        await assert.rejects(
+          run(
+            `await realm.entries.search({}, { realms: ['@cardstack/catalog/'], scope: 'card' });`,
+          ),
+          /Invalid scope "card"/,
+        );
+        await assert.rejects(
+          run(
+            `await realm.entries.search({}, { realms: ['@cardstack/catalog/', '@nope/realm/'] });`,
+          ),
+          /Unknown realm identifier "@nope\/realm\/"/,
+        );
+        // An emoji, two UTF-16 units, sits where the text is cut.
+        await run(`await realm.entries.search(
+  {
+    filter: {
+      every: [
+        { matches: ${JSON.stringify(`${'x'.repeat(298)}😀${'y'.repeat(100)}`)} },
+        { not: { type: { module: '@cardstack/base/spec', name: 'Spec' } } },
+      ],
+    },
+  },
+  { realms: ['@cardstack/catalog/'] },
+);`);
+
+        type CatalogSearchInput = Extract<
+          TelemetryEventInput,
+          { event_type: 'catalog-search' }
+        >;
+        let spec = '@cardstack/base/spec#Spec';
+        let event = (
+          fields: Pick<
+            CatalogSearchInput,
+            'query_text' | 'total' | 'returned'
+          > &
+            Partial<CatalogSearchInput>,
+        ): CatalogSearchInput => ({
+          event_type: 'catalog-search',
+          tool: 'run-realm-code',
+          query_type: spec,
+          error: '',
+          realm: testRealmURL,
+          ...fields,
+        });
+        let [
+          named,
+          beside,
+          everyRealm,
+          failed,
+          unanswered,
+          tooLarge,
+          excluding,
+          ...rest
+        ] = recorded;
+        assert.deepEqual(
+          named,
+          event({ query_text: 'kanban board', total: 2, returned: 1 }),
+          'a search that names the catalog is recorded with what it found',
+        );
+        assert.deepEqual(
+          beside,
+          event({ query_text: 'kanban', total: 2, returned: 1 }),
+          'only what the catalog matched is counted, not the realm searched beside it',
+        );
+        assert.deepEqual(
+          everyRealm,
+          event({ query_text: 'notes', total: 0, returned: 0 }),
+          'a search of every realm that matched only workspace cards found nothing in the catalog',
+        );
+        let { error, ...failedRest } = failed as CatalogSearchInput;
+        assert.deepEqual(
+          { ...failedRest, error: '' },
+          event({ query_text: 'boom', total: null, returned: null }),
+          'a search that threw is recorded without counts',
+        );
+        assert.true(
+          error.includes('the catalog is down'),
+          `the error is recorded: ${error}`,
+        );
+        assert.deepEqual(
+          unanswered,
+          event({
+            query_text: 'silent',
+            total: null,
+            returned: null,
+            error: 'a catalog realm did not answer',
+          }),
+          'a catalog that did not answer is recorded as a failure, not as finding nothing',
+        );
+        assert.deepEqual(
+          tooLarge,
+          event({
+            query_text: 'huge',
+            total: 1,
+            returned: 1,
+            error: `The entry ${catalogURL}Spec/board is too large to return from a search`,
+          }),
+          'an answer too large to return keeps its counts and records why the script got nothing',
+        );
+        assert.deepEqual(
+          excluding,
+          event({
+            query_text: `${'x'.repeat(298)}😀…`,
+            query_type: '',
+            total: 0,
+            returned: 0,
+          }),
+          'a type the query excludes is not the type it searched for, and long text is cut without splitting a character',
+        );
+        assert.deepEqual(
+          rest,
+          [],
+          'a search of another realm only, or one refused before it was sent, is not recorded',
+        );
+      } finally {
+        telemetry.recordEvent = recordEvent;
+        virtualNetwork.unmount(federatedSearch);
+      }
+    });
+
+    test('realm.cards.search in the catalog finds nothing unless the room enabled catalog-reuse', async function (assert) {
+      await getService('matrix-service').ready;
+      let roomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'catalog-reuse',
+      });
+      let { virtualNetwork } = getService('network');
+      let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+      let searches = 0;
+      // Stands in for the catalog: a public realm whose searches are counted.
+      let catalog = async (request: Request) => {
+        let { pathname } = new URL(request.url);
+        if (request.url === `${catalogURL}_info`) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                id: catalogURL,
+                type: 'realm-info',
+                attributes: { name: 'Catalog' },
+              },
+            }),
+            {
+              headers: {
+                'content-type': SupportedMimeType.RealmInfo,
+                'x-boxel-realm-public-readable': 'true',
+              },
+            },
+          );
+        }
+        if (
+          pathname.endsWith('_search') ||
+          pathname.endsWith('_federated-search')
+        ) {
+          searches++;
+          return new Response(
+            JSON.stringify({ data: [], meta: { page: { total: 0 } } }),
+            { headers: { 'content-type': SupportedMimeType.CardJson } },
+          );
+        }
+        return null;
+      };
+      virtualNetwork.mount(catalog, { prepend: true });
+      try {
+        await getService('realm').ensureRealmMeta(catalogURL);
+        let command = new RunRealmCodeTool(
+          getService('tool-service').toolContext,
+        );
+        let search = async () =>
+          JSON.parse(
+            (
+              await command.execute({
+                realm: '@cardstack/catalog/',
+                roomId,
+                code: `return await realm.cards.search({});`,
+              })
+            ).scriptResult!,
+          );
+
+        assert.deepEqual(
+          await search(),
+          { cards: [], total: 0, truncated: false },
+          'the catalog answers empty',
+        );
+        assert.strictEqual(searches, 0, 'without a request');
+
+        mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
+          msgtype: 'm.text',
+          body: 'boxel-debug:feature:enable:catalog-reuse',
+        });
+        // The message reaches the room's events a tick after it is sent.
+        await waitUntil(() =>
+          getService('matrix-service')
+            .roomResources.get(roomId)
+            ?.events.some(
+              (event) =>
+                (event.content as { body?: string })?.body ===
+                'boxel-debug:feature:enable:catalog-reuse',
+            ),
+        );
+        await search();
+        assert.strictEqual(searches, 1, 'with the feature on, it is searched');
+      } finally {
+        virtualNetwork.unmount(catalog);
+      }
+    });
+  },
+);
+
 // A script's searches reach the catalog in any room, with nothing enabled
 // first.
 module('Integration | tools | run-realm-code | catalog', function (hooks) {
@@ -4665,239 +5133,6 @@ module('Integration | tools | run-realm-code | catalog', function (hooks) {
       );
     } finally {
       virtualNetwork.unmount(spy);
-    }
-  });
-
-  test('realm.entries.search records each search that reaches the catalog in client telemetry', async function (assert) {
-    await getService('matrix-service').ready;
-    let roomId = mockMatrixUtils.createAndJoinRoom({
-      sender: '@testuser:localhost',
-      name: 'catalog',
-    });
-    let { virtualNetwork } = getService('network');
-    let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
-    // Answers every entry search with a count per realm. The catalog
-    // matches two entries for "kanban" and one for "huge", whose readMe is
-    // too large to return; the workspace matches one for "kanban" and three
-    // for "notes". The search fails for "boom", and the catalog does not
-    // answer for "silent".
-    let federatedSearch = async (request: Request) => {
-      if (!new URL(request.url).pathname.endsWith('/_federated-search')) {
-        return null;
-      }
-      let body = await request.clone().text();
-      if (body.includes('boom')) {
-        return new Response('the catalog is down', { status: 500 });
-      }
-      let { realms } = JSON.parse(body) as { realms: string[] };
-      let realmTotals: Record<string, number> = {};
-      let data: unknown[] = [];
-      let included: unknown[] = [];
-      let found = (id: string, readMe = '') => {
-        data.push({
-          type: 'entry',
-          id,
-          relationships: { item: { data: { type: 'card', id } } },
-        });
-        included.push({ type: 'card', id, attributes: { readMe } });
-      };
-      for (let realm of realms) {
-        let url = virtualNetwork.toURL(realm).href;
-        if (url === catalogURL) {
-          if (body.includes('silent')) {
-            continue;
-          }
-          let huge = body.includes('huge');
-          realmTotals[url] = body.includes('kanban') ? 2 : huge ? 1 : 0;
-          if (realmTotals[url] > 0) {
-            found(`${catalogURL}Spec/board`, huge ? 'x'.repeat(1_100_000) : '');
-          }
-        } else if (url === testRealmURL) {
-          realmTotals[url] = body.includes('kanban')
-            ? 1
-            : body.includes('notes')
-              ? 3
-              : 0;
-          if (realmTotals[url] > 0) {
-            found(`${testRealmURL}note`);
-          }
-        } else {
-          realmTotals[url] = 0;
-        }
-      }
-      return new Response(
-        JSON.stringify({
-          data,
-          included,
-          meta: {
-            page: {
-              total: Object.values(realmTotals).reduce((a, b) => a + b, 0),
-            },
-            realmTotals,
-            ...(Object.keys(realmTotals).length < realms.length
-              ? { incomplete: true }
-              : {}),
-          },
-        }),
-        { headers: { 'content-type': SupportedMimeType.CardJson } },
-      );
-    };
-    virtualNetwork.mount(federatedSearch, { prepend: true });
-    let telemetry = getService('client-telemetry');
-    let recorded: TelemetryEventInput[] = [];
-    let recordEvent = telemetry.recordEvent;
-    telemetry.recordEvent = (event: TelemetryEventInput) => {
-      recorded.push(event);
-    };
-    try {
-      await getService('realm-server').ready;
-      let command = new RunRealmCodeTool(
-        getService('tool-service').toolContext,
-      );
-      let search = (matches: string, realms: string) =>
-        command.execute({
-          realm: testRealmURL,
-          roomId,
-          code: `await realm.entries.search(
-  {
-    filter: {
-      on: { module: '@cardstack/base/spec', name: 'Spec' },
-      matches: ${JSON.stringify(matches)},
-    },
-  },
-  { realms: ${realms} },
-);`,
-        });
-
-      await search('kanban board', `['@cardstack/catalog/']`);
-      await search('kanban', `['@cardstack/catalog/', realm.current.url]`);
-      await search('notes', '[]');
-      await search('kanban', '[realm.current.url]');
-      await assert.rejects(
-        search('boom', `['@cardstack/catalog/']`),
-        /the catalog is down/,
-      );
-      await search('silent', `['@cardstack/catalog/', realm.current.url]`);
-      await assert.rejects(
-        search('huge', `['@cardstack/catalog/']`),
-        /too large to return/,
-      );
-      let run = (code: string) =>
-        command.execute({ realm: testRealmURL, roomId, code });
-      await assert.rejects(
-        run(
-          `await realm.entries.search({}, { realms: ['@cardstack/catalog/'], scope: 'card' });`,
-        ),
-        /Invalid scope "card"/,
-      );
-      await assert.rejects(
-        run(
-          `await realm.entries.search({}, { realms: ['@cardstack/catalog/', '@nope/realm/'] });`,
-        ),
-        /Unknown realm identifier "@nope\/realm\/"/,
-      );
-      // An emoji, two UTF-16 units, sits where the text is cut.
-      await run(`await realm.entries.search(
-  {
-    filter: {
-      every: [
-        { matches: ${JSON.stringify(`${'x'.repeat(298)}😀${'y'.repeat(100)}`)} },
-        { not: { type: { module: '@cardstack/base/spec', name: 'Spec' } } },
-      ],
-    },
-  },
-  { realms: ['@cardstack/catalog/'] },
-);`);
-
-      type CatalogSearchInput = Extract<
-        TelemetryEventInput,
-        { event_type: 'catalog-search' }
-      >;
-      let spec = '@cardstack/base/spec#Spec';
-      let event = (
-        fields: Pick<CatalogSearchInput, 'query_text' | 'total' | 'returned'> &
-          Partial<CatalogSearchInput>,
-      ): CatalogSearchInput => ({
-        event_type: 'catalog-search',
-        tool: 'run-realm-code',
-        query_type: spec,
-        error: '',
-        realm: testRealmURL,
-        ...fields,
-      });
-      let [
-        named,
-        beside,
-        everyRealm,
-        failed,
-        unanswered,
-        tooLarge,
-        excluding,
-        ...rest
-      ] = recorded;
-      assert.deepEqual(
-        named,
-        event({ query_text: 'kanban board', total: 2, returned: 1 }),
-        'a search that names the catalog is recorded with what it found',
-      );
-      assert.deepEqual(
-        beside,
-        event({ query_text: 'kanban', total: 2, returned: 1 }),
-        'only what the catalog matched is counted, not the realm searched beside it',
-      );
-      assert.deepEqual(
-        everyRealm,
-        event({ query_text: 'notes', total: 0, returned: 0 }),
-        'a search of every realm that matched only workspace cards found nothing in the catalog',
-      );
-      let { error, ...failedRest } = failed as CatalogSearchInput;
-      assert.deepEqual(
-        { ...failedRest, error: '' },
-        event({ query_text: 'boom', total: null, returned: null }),
-        'a search that threw is recorded without counts',
-      );
-      assert.true(
-        error.includes('the catalog is down'),
-        `the error is recorded: ${error}`,
-      );
-      assert.deepEqual(
-        unanswered,
-        event({
-          query_text: 'silent',
-          total: null,
-          returned: null,
-          error: 'a catalog realm did not answer',
-        }),
-        'a catalog that did not answer is recorded as a failure, not as finding nothing',
-      );
-      assert.deepEqual(
-        tooLarge,
-        event({
-          query_text: 'huge',
-          total: 1,
-          returned: 1,
-          error: `The entry ${catalogURL}Spec/board is too large to return from a search`,
-        }),
-        'an answer too large to return keeps its counts and records why the script got nothing',
-      );
-      assert.deepEqual(
-        excluding,
-        event({
-          query_text: `${'x'.repeat(298)}😀…`,
-          query_type: '',
-          total: 0,
-          returned: 0,
-        }),
-        'a type the query excludes is not the type it searched for, and long text is cut without splitting a character',
-      );
-      assert.deepEqual(
-        rest,
-        [],
-        'a search of another realm only, or one refused before it was sent, is not recorded',
-      );
-    } finally {
-      telemetry.recordEvent = recordEvent;
-      virtualNetwork.unmount(federatedSearch);
     }
   });
 

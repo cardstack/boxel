@@ -4386,7 +4386,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Catalog searches the AI assistant made, per interval: realm.entries.search in run-realm-code, and search-entries calls, sent to a catalog realm (@cardstack/catalog/, a catalog the realm server lists, or one the user added). In run-realm-code the room's catalog-reuse feature gate keeps @cardstack/catalog/ out of rooms without the feature. found something is a search in which the catalog realms themselves matched an entry; realms searched beside them are not counted. failed is one that threw, whose catalog realm did not answer, or whose answer was too large to return to the script.",
+            "description": "Catalog searches the AI assistant made, per interval: realm.entries.search in run-realm-code, and search-entries calls, sent to a catalog realm (@cardstack/catalog/, a catalog the realm server lists, or one the user added). found something is a search in which the catalog realms themselves matched an entry; realms searched beside them are not counted. failed is one that threw, whose catalog realm did not answer, or whose answer was too large to return to the script.",
             "fieldConfig": {
               "defaults": {
                 "color": {
