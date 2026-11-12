@@ -7,7 +7,10 @@ import { PgQueuePublisher, PgQueueRunner } from '@cardstack/postgres';
 import {
   Deferred,
   userInitiatedPriority,
+  type Prerenderer,
+  type PrerenderVisitArgs,
   type QueuePublisher,
+  type RenderVisitResponse,
 } from '@cardstack/runtime-common';
 import {
   INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
@@ -16,6 +19,7 @@ import {
 } from '@cardstack/runtime-common/jobs/indexing';
 import { enqueuePrerenderHtmlJob } from '@cardstack/runtime-common/jobs/prerender-html';
 import {
+  meteredPrerenderer,
   runIndexingFor,
   type RunIndexing,
 } from '@cardstack/runtime-common/run-indexing';
@@ -202,5 +206,29 @@ module(basename(import.meta.filename), function (hooks) {
       release.fulfill();
       await worker.destroy();
     }
+  });
+
+  test('the meter counts each render’s own time, and none started while excluding', async function (assert) {
+    let renderMs = [1500, 2500, 4000];
+    let calls = 0;
+    let fake = {
+      prerenderVisit: async (_args: PrerenderVisitArgs) =>
+        ({
+          meta: { diagnostics: { renderElapsedMs: renderMs[calls++] } },
+        }) as unknown as RenderVisitResponse,
+    } as unknown as Prerenderer;
+    let meter = meteredPrerenderer(fake);
+    let args = {} as PrerenderVisitArgs;
+
+    await meter.prerenderer.prerenderVisit(args);
+    await meter.excluding(() => meter.prerenderer.prerenderVisit(args));
+    await meter.prerenderer.prerenderVisit(args);
+
+    assert.strictEqual(calls, 3, 'every render reached the prerenderer');
+    assert.strictEqual(
+      meter.tabSeconds(),
+      (1500 + 4000) / 1000,
+      'the render made while excluding is not counted',
+    );
   });
 });

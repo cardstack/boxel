@@ -200,10 +200,16 @@ commit writes a module before instances, and the `prerender_html` job that
 renders what the passes invalidated. The last of them adds its own
 measurement and charges the total, through `chargeRunIndexing`
 (`packages/runtime-common/run-indexing.ts`). So the charge is written when
-the commit's indexing is done, after the run has finished. A run's jobs never
-coalesce with another write's, so the charge holds only the run's own
-indexing, including re-indexing and re-rendering the cards that depend on
-what it wrote.
+the commit's indexing is done, after the run has finished. The charge covers
+re-indexing and re-rendering the cards that depend on what the run wrote. A
+run's jobs never coalesce with another write's, and work another writer
+causes is left out: when another writer's pass commits while the run's pass
+runs, the rounds the run's pass spends checking and re-visiting what that
+commit left stale are not measured (their worker time is the pass's
+`validationMs`, and renders started in them are not metered), and the
+follow-up pass a commit enqueues for what is still stale after them carries
+no run. The one exception is a URL such a round adds to the run's render
+set: the run's render job renders it, and that render is counted.
 
 A run that wrote nothing, or only files identical to what was stored, causes
 no index pass and no charge. Only commits made with a run id are charged;

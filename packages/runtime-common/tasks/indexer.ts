@@ -1000,6 +1000,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       auth,
       fetch: _fetch,
       prerenderer: meter?.prerenderer ?? prerenderer,
+      ...(meter ? { aroundPeerRevisit: meter.excluding } : {}),
       ignoreData: args.ignoreData,
       realmOwnerUserId: userId,
     });
@@ -1067,8 +1068,13 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       // The run's indexing so far, with this pass's: the worker process was
       // this job's from the start of the task, and the tabs for the renders
       // it made through the meter.
+      // Commit validation that another writer's commit caused is left out
+      // (see `RunIndexing`).
       let measured = addRunIndexingUsage(runIndexing, {
-        workerProcessSeconds: (Date.now() - startedAt) / 1000,
+        workerProcessSeconds: Math.max(
+          0,
+          (Date.now() - startedAt - (phaseTimings?.validationMs ?? 0)) / 1000,
+        ),
         prerenderTabSeconds: meter!.tabSeconds(),
       });
       if (deferPrerenderHtml) {
