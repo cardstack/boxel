@@ -180,10 +180,12 @@ class LayoutControlSlot extends Component<
 > {
   get spec(): LayoutControlSlotSpec {
     let { id, priority, forms, pinned } = this.args;
+    // 'menu' is always the last step, wherever the caller listed it
+    let menu = pinned ? [] : forms.filter((f) => f.name === MENU_FORM);
     return {
       id,
       priority: priority ?? 1,
-      forms: pinned ? forms.filter((f) => f.name !== MENU_FORM) : forms,
+      forms: [...forms.filter((f) => f.name !== MENU_FORM), ...menu],
     };
   }
   get label() {
