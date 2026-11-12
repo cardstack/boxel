@@ -19,7 +19,7 @@ implementation.
 | Chapter                                     | What it answers                                                             |
 | ------------------------------------------- | --------------------------------------------------------------------------- |
 | [Vocabulary](vocabulary.md)                 | What a card is: definitions, instances, documents, renderings, and realms.  |
-| [The author API](author-api.md)             | What a card author writes, and what a user sees as a result.                |
+| [The author API](author-api.md)             | What a card author writes, what a user sees, and how a card is tested.      |
 | [The runtime contract](runtime-contract.md) | What the enclosing card runtime environment must provide.                   |
 | [Conformance](conformance.md)               | What a new runtime must implement, and what it may leave out.               |
 | [Boundary findings](boundary-findings.md)   | Where the boundary is currently blurred, with proposals and open questions. |

@@ -59,6 +59,7 @@ stays here with status `fixed`, so the boundary it protects is not re-broken.
 | [B-33](#b-33) | `packages/base` is both the runtime and a card library                           | gap   | proposed |
 | [B-34](#b-34) | Tools and operations are two models of card behavior                             | gap   | open     |
 | [B-35](#b-35) | Presentation statics name one host's chrome                                      | leak  | proposed |
+| [B-36](#b-36) | Card tests are written against the host app's test harness                       | leak  | proposed |
 
 ### What the register proposes to remove
 
@@ -67,23 +68,24 @@ model, not a transcription of what the reference runtime happens to expose.
 Where a finding could be closed either by stating what exists or by removing
 part of it, the register argues for removal. Taken together:
 
-| Today                                                                      | Proposed                                                                            | Finding                      |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------- |
-| All of runtime-common and every host tool, reachable through the shim list | Platform internals out of reach; third-party packages kept until package management | [B-27](#b-27)                |
-| Three ways to read and write a card (store, host tools, operations)        | One read path, one write path                                                       | [B-28](#b-28)                |
-| Five query members on the context, plus three provide/consume getters      | One search resource, one search component                                           | [B-29](#b-29)                |
-| Two context channels (`@context` and ~11 provide/consume names)            | One                                                                                 | [B-32](#b-32)                |
-| Three permission answers (`@canEdit`, `PermissionsContext`, `canInvoke`)   | Two, with distinct jobs                                                             | [B-32](#b-32)                |
-| Six navigation functions across three routes                               | Two (`@viewCard`, `@createCard`)                                                    | [B-31](#b-31)                |
-| Two names per presentation value, three thumbnail sources                  | Four members, one stored thumbnail                                                  | [B-16](#b-16)                |
-| `captureURLs` and `capturesMeta`                                           | `captureURLs`                                                                       | [B-17](#b-17)                |
-| A file's `id`, `url`, and `sourceUrl`                                      | `id`                                                                                | [B-30](#b-30)                |
-| `instance[realmURL]` and `instanceRealmId`                                 | `instanceRealmId`                                                                   | [B-30](#b-30)                |
-| `headerColor` beside `cardTheme`                                           | `cardTheme`                                                                         | [B-35](#b-35)                |
-| Three old/new name pairs from the tool rename                              | One name each                                                                       | [B-05](#b-05)                |
-| `mode` and `submode`                                                       | Two presentation intents                                                            | [B-04](#b-04)                |
-| Synthetic `_`-prefixed search keys in card queries                         | Named concepts                                                                      | [B-11](#b-11), [B-24](#b-24) |
-| `form` in the format type; `edit` on files                                 | Neither                                                                             | [B-03](#b-03), [B-13](#b-13) |
+| Today                                                                             | Proposed                                                                            | Finding                      |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------- |
+| All of runtime-common and every host tool, reachable through the shim list        | Platform internals out of reach; third-party packages kept until package management | [B-27](#b-27)                |
+| Three ways to read and write a card (store, host tools, operations)               | One read path, one write path                                                       | [B-28](#b-28)                |
+| Five query members on the context, plus three provide/consume getters             | One search resource, one search component                                           | [B-29](#b-29)                |
+| Two context channels (`@context` and ~11 provide/consume names)                   | One                                                                                 | [B-32](#b-32)                |
+| Three permission answers (`@canEdit`, `PermissionsContext`, `canInvoke`)          | Two, with distinct jobs                                                             | [B-32](#b-32)                |
+| Six navigation functions across three routes                                      | Two (`@viewCard`, `@createCard`)                                                    | [B-31](#b-31)                |
+| Two names per presentation value, three thumbnail sources                         | Four members, one stored thumbnail                                                  | [B-16](#b-16)                |
+| `captureURLs` and `capturesMeta`                                                  | `captureURLs`                                                                       | [B-17](#b-17)                |
+| A file's `id`, `url`, and `sourceUrl`                                             | `id`                                                                                | [B-30](#b-30)                |
+| `instance[realmURL]` and `instanceRealmId`                                        | `instanceRealmId`                                                                   | [B-30](#b-30)                |
+| `headerColor` beside `cardTheme`                                                  | `cardTheme`                                                                         | [B-35](#b-35)                |
+| Card tests on the host's harness: seven setup calls, a Matrix mock, host services | One testing API module in base                                                      | [B-36](#b-36)                |
+| Three old/new name pairs from the tool rename                                     | One name each                                                                       | [B-05](#b-05)                |
+| `mode` and `submode`                                                              | Two presentation intents                                                            | [B-04](#b-04)                |
+| Synthetic `_`-prefixed search keys in card queries                                | Named concepts                                                                      | [B-11](#b-11), [B-24](#b-24) |
+| `form` in the format type; `edit` on files                                        | Neither                                                                             | [B-03](#b-03), [B-13](#b-13) |
 
 ---
 
@@ -870,9 +872,8 @@ the gaps are known and none of them gets mistaken for a decision.
    `*.test.gts` card tests load outside a test run. A card that imports one of
    them outside a test gets `undefined` instead of an error, which
    [author API §1.5](author-api.md) forbids ("fail loudly rather than
-   substitute"). Catalog modules import the host's test helpers about 140
-   times, so card tests are a real author surface this contract does not cover
-   yet.
+   substitute"). Card tests are a real author surface, and
+   [B-36](#b-36) defines the API they should use instead.
 6. **Platform internals share the mechanism.** The shim list does not tell a
    third-party package from the platform's own code. All of
    `@cardstack/runtime-common` (the index query engine, the realm, the loader,
@@ -1186,6 +1187,76 @@ its chrome in every host.
 
 ---
 
+## B-36
+
+**Card tests are written against the host app's test harness**
+
+**Class:** leak · **Status:** proposed
+
+The catalog has 59 test modules (`*.test.gts`). The host's live-test runner
+(`packages/host/tests/live-test.js`) finds them through the realm's `_mtimes`
+endpoint and runs them inside the host's own QUnit build. Every one of them is
+written against the host's test harness rather than against cards:
+
+| What tests import                                                                                                                                                       | From                                             | Test modules |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------ |
+| `setupRenderingTest`, `setupApplicationTest`                                                                                                                            | `@cardstack/host/tests/helpers/setup`            | 55           |
+| `setupMockMatrix`                                                                                                                                                       | `@cardstack/host/tests/helpers/mock-matrix`      | 30           |
+| `setupLocalIndexing`, `setupOnSave`, `setupAuthEndpoints`, `setupUserSubscription`, `setupAcceptanceTestRealm`, `visitOperatorMode`, `verifySubmode`, file-tree helpers | `@cardstack/host/tests/helpers`                  | 30           |
+| `setupBaseRealm`                                                                                                                                                        | `@cardstack/host/tests/helpers/base-realm`       | 25           |
+| `getService('store')`, `getService('tool-service')`, `getService('loader-service')`, …                                                                                  | `@universal-ember/test-support`                  | 17           |
+| `renderCard`, `renderComponent`                                                                                                                                         | `@cardstack/host/tests/helpers/render-component` | 4            |
+| `click`, `fillIn`, `settled`, `waitFor`, `waitUntil`, …                                                                                                                 | `@ember/test-helpers`                            | 23           |
+
+A typical application-style card test calls seven setup functions, mocks the
+Matrix client, mounts an in-memory realm, visits operator mode, takes the host's
+`tool-service` to build a tool context, and reads results back through the
+host's `store` service. Each of those is host implementation by the replacement
+test, and each is now load-bearing for the catalog: a change to the host's
+acceptance helpers breaks card tests, and a second runtime cannot run any of
+them.
+
+It also leaks into card loading. Test modules are realm modules like any other,
+and nothing keeps the indexer from loading them, so the host shims its test
+helpers as empty
+`fallbackShim` stubs in every build, so a test module's imports resolve during
+indexing ([B-27](#b-27), weakness 5).
+
+**Proposal.** Define the testing API in [author API §15](author-api.md) as an
+author API module, `@cardstack/base/testing`, and move card tests onto it:
+
+- **One setup** (`setupCardTest`) that gives a test realm populated from files,
+  the well-known realms, an actor with stated permissions, the card-facing
+  context, and a pinned clock. It replaces the seven host setup calls and the
+  Matrix mock.
+- **Rendering in a chosen context**, live or prerender, with each advisory
+  answer and presentation intent settable. The host's render helpers render
+  live; no catalog test renders a card the way the indexer does.
+- **Interaction helpers re-exported**, with `settled()` defined as the
+  contract's settle.
+- **Data through the card's own paths**: the card-facing store and operations,
+  and `runTool` for a tool the card offers. No `getService`.
+- **Outbound requests answered by the test**, not by the network.
+- **Nothing for the host's UI.** A test that visits operator mode or checks a
+  submode is a host test ([author API §15.13](author-api.md)).
+
+Then stop evaluating test modules outside a test run, and remove the host test
+helper stubs.
+
+**Migration.** The rendering tests (about 25) need little more than new
+imports. The application tests (about 30) are the real work: each one that
+drives operator mode either becomes a card test that renders the card and uses
+its store and operations, or moves to the host's suite if what it checks is the
+host. Their volume is a measure of [B-28](#b-28): most of them use host tools
+to read and write cards.
+
+**Open question.** Should the testing API commit to QUnit's `module` / `test` /
+`assert` shape as the contract, or define its own and adapt QUnit to it? The
+first matches every existing card test; the second keeps a runtime free to use
+another runner.
+
+---
+
 ## Clean boundaries worth imitating
 
 Recorded so a later change does not accidentally break them.
@@ -1214,8 +1285,8 @@ Recorded so a later change does not accidentally break them.
 7. **B-24** — Is `cardURL` a sort by identity or by storage order?
 8. **B-26** — Should a card's template be able to ask the environment to show
    the card's own definition at all?
-9. **B-27** — Are card tests (`*.test.gts` in a realm) part of the author
-   API, and if so, what may they import?
+9. **B-36** — Does the testing API commit to QUnit's `module` / `test` /
+   `assert` shape, or define its own?
 10. **B-28** — Are operations the one write path, and which store methods
     survive?
 11. **B-32** — Does a card need a way to pass a value to the cards it renders,

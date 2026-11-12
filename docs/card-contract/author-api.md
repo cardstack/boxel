@@ -110,7 +110,8 @@ the contract. A card MUST NOT import `@cardstack/runtime-common`, any
 `@cardstack/boxel-host/*` module, or any `@cardstack/host/*` module. A runtime
 MAY still serve them for existing cards, and MUST NOT make a new one reachable.
 A specifier a runtime cannot serve MUST fail to resolve, not resolve to an
-empty stub (§1.5). See [B-27](boundary-findings.md#b-27).
+empty stub (§1.5). This holds for a card's tests too: they import the testing
+API, not the host's test helpers (§15.2). See [B-27](boundary-findings.md#b-27).
 
 ## 2. Fields
 
@@ -676,3 +677,105 @@ store and the instance, and writes are operations
 open decision ([B-34](boundary-findings.md#b-34)). Until it is made, an author
 who wants behavior the realm can run and authorize without a browser declares an
 operation.
+
+## 15. Tests
+
+A card author writes tests beside their cards, and the environment runs them.
+This section states the testing API a card's tests are written against. It is
+an author API module like `card-api`, so a test exercises the card through the
+same contract the card itself relies on, and never through the host app's own
+test harness.
+
+The API does not exist yet. Card tests today import the host's acceptance
+helpers directly; [B-36](boundary-findings.md#b-36) records the gap and the
+migration.
+
+### Test modules
+
+**§15.1** A test module is a realm file whose name ends `.test.gts`. A runtime
+that runs card tests MUST discover test modules in a realm by that name, and
+MUST NOT require any other registration.
+
+**§15.2** A test module MUST import only what any card may import
+([§1.9](#what-a-card-may-import)) plus the testing API,
+`@cardstack/base/testing`. It MUST NOT import a host module, a host test
+helper, or a host service. A runtime MUST NOT evaluate a test module outside a
+test run, including when it indexes the realm, so nothing outside a test ever
+needs a test import to resolve, and no stub stands in for one (§1.11).
+
+**§15.3** The testing API declares tests with `module`, `test`, and `skip`, and
+asserts with the `assert` object a test receives, including `assert.dom`. These
+have QUnit's semantics; the testing API re-exports them so that which runner
+executes them stays the runtime's choice.
+
+### What a test gets
+
+**§15.4** `setupCardTest(hooks, options)` gives each test, and nothing else is
+needed:
+
+| Provided              | Meaning                                                                                                                                             |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A test realm          | A realm holding the files `options.realm` names (card source, card documents, files), indexed before the test starts. Its URL is unique to the run. |
+| The base realm        | `@cardstack/base/` and the other well-known realms, read-only.                                                                                      |
+| An actor              | A signed-in session with the permissions `options.as` states (default: may write the test realm).                                                   |
+| A card-facing context | The same `@context` services a live render gets (§10), backed by the test realm.                                                                    |
+| A pinned clock        | The clock seam (§1.7) set to `options.now`, or to a fixed default instant.                                                                          |
+
+**§15.5** A test MUST NOT write to the realm that stores it, or to any realm
+other than its test realm. A runtime MUST give each test a fresh test realm, or
+restore it between tests, so tests do not depend on order.
+
+**§15.6** The setup MUST NOT expose the host's machinery: not the Matrix client
+or a mock of it, not host services, not the loader, not index internals. What a
+test needs from those, it gets as a concept: an actor, a realm with files in
+it, a settled render.
+
+### Rendering and interacting
+
+**§15.7** `renderCard(card, format)` renders a card in a format, and
+`renderComponent(template)` renders a template that uses a card's components.
+Both render in the context a test chooses:
+
+- **live** (the default): every service §10 lists as present, and the
+  optional ones the test enables.
+- **prerender**: no interactive services, every advisory answer _unknown_, as
+  the indexer renders (runtime contract §8.3). A test MUST be able to render the
+  same card both ways.
+
+A test MAY set each advisory answer (`canInvoke`, `keyReadiness`) to _yes_, _no_,
+or _unknown_, and each presentation intent ([B-04](boundary-findings.md#b-04)),
+so a card's handling of every answer is testable.
+
+**§15.8** The testing API provides `click`, `fillIn`, `triggerEvent`,
+`triggerKeyEvent`, `waitFor`, and `waitUntil`, and `settled()`. `settled()` is
+the contract's settle (runtime contract §9.3): every load the render started has
+resolved and every invalidation it caused is applied. A test MUST NOT need a
+timer or a second `settled()` to reach that state.
+
+**§15.9** A test selects elements by `data-test-*` attributes on the card's own
+markup. A runtime MUST keep them in every rendering a test run produces
+([B-02](boundary-findings.md#b-02)).
+
+### Data, operations, and tools
+
+**§15.10** A test reads and writes cards through the card-facing store and
+operations, exactly as a card does (§11, [B-28](boundary-findings.md#b-28)). It
+MAY also read a test realm file's stored document, to assert what a write
+persisted.
+
+**§15.11** A test that exercises a tool the card offers runs it with
+`runTool(ToolClass, input)`, which supplies a tool context backed by the test
+realm (§14). A test MUST NOT construct the host's tool context.
+
+**§15.12** A request a card makes to a service outside the realm (a `callApi`
+operation, a `fetch`) MUST be answerable by the test. The testing API lets a
+test state responses by destination; a runtime MUST NOT let a test run reach the
+network unless the test allows it.
+
+### What is not a card test
+
+**§15.13** A test that drives the host's UI — operator mode, its stacks and
+submodes, its file tree, its AI assistant room — tests the host, not the card.
+It belongs in the host's own suite, and the testing API offers nothing for it.
+A card's behavior that only shows inside the host's UI is a sign the card
+depends on the host ([§10.6](#10-what-a-card-may-ask-the-environment-for)).

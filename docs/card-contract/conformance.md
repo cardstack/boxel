@@ -125,9 +125,16 @@ stated.
 | Files        | A file def created by writing bytes, not by upload.                           |
 | Errors       | A card whose render throws; a card whose link is broken.                      |
 
-**§5** Each corpus card MUST have assertions a runtime can run without a browser
-and without the reference implementation present. A runtime that passes them all
-conforms to the profiles it claims.
+**§5** Each corpus card MUST have assertions written as card tests against the
+testing API ([author API §15](author-api.md)), so the corpus and an author's own
+tests are one language. A runtime MUST be able to run them without the
+reference implementation present. Assertions for P1, P2, P4, and P5 MUST NOT
+need a DOM; P3's render assertions do. A runtime that passes them all conforms
+to the profiles it claims.
+
+**§5.1** Running card tests is not a profile of its own. A runtime MAY run no
+card tests. A runtime that runs them MUST implement author API §15 in full, so a
+card's tests pass or fail for the card's reasons, not the runner's.
 
 **§6** A corpus card MUST NOT assert an implementation detail. If an assertion
 would break when a runtime changes something §16 of the runtime contract lists,
