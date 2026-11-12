@@ -762,7 +762,7 @@ return { title: card.attributes.title, refused };`,
     await setupSchool({ enforcePermissions: true });
     await signInToSchoolAfresh();
 
-    let { title, source } = await runInSchool(
+    let { title, source, exists } = await runInSchool(
       `let card = await realm.cards.get('classrooms/room-204');
 let source;
 try {
@@ -770,13 +770,24 @@ try {
 } catch (e) {
   source = e.message;
 }
-return { title: card.attributes.title, source };`,
+let exists;
+try {
+  exists = await realm.fs.exists('classrooms/room-204.json');
+} catch (e) {
+  exists = e.message;
+}
+return { title: card.attributes.title, source, exists };`,
     );
     assert.strictEqual(title, 'Room 204', 'the read grant serves the card');
     assert.strictEqual(
       source,
       `File not found: ${ROOM_204}.json`,
       'and the realm answers its stored source as not found, since the policy grants no readSource',
+    );
+    assert.strictEqual(
+      exists,
+      "realm.fs.exists can't tell whether classrooms/room-204.json exists: the realm answers a file the user can't read as not found",
+      'asking whether the file exists gets no false answer about a file that is there',
     );
   });
 

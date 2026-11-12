@@ -1222,7 +1222,18 @@ class RealmFsSession {
       }
       case 'fs.exists': {
         let url = this.resolve(method, args[0]);
-        return (await this.lookup(url)) !== undefined;
+        let found = (await this.lookup(url)) !== undefined;
+        // The realm answers a file the user can't read, and that no grant
+        // reaches, as not found. For a user who can't read the workspace a
+        // not-found says nothing about whether the file is there, so it is
+        // not reported as one.
+        if (!found && !this.access.mayRead) {
+          throw new Error(
+            `realm.fs.exists can't tell whether ${this.relative(url)} ` +
+              `exists: the realm answers a file the user can't read as not found`,
+          );
+        }
+        return found;
       }
       // A listing reads no file content, so it does not count toward
       // MAX_FILES.
