@@ -1066,6 +1066,18 @@ module(basename(import.meta.filename), function (hooks) {
       });
     });
 
+    // Recorded: quoted, "Brand.Name" read as one field, `brandName`, which
+    // the type does not have.
+    test('a quoted label through a link names the facet by its path', async function (assert) {
+      let answer = await run(named, {
+        type: named.Item,
+        facets: [{ by: '"Brand.Name"' }],
+      });
+      assert.deepEqual(answer.meta.facets, {
+        'brand.name': [{ value: 'Xeno', count: 2 }],
+      });
+    });
+
     test('a label in select reads the column, or is refused by name', async function (assert) {
       let { answer, refused } = await outcome(() =>
         table(named, {

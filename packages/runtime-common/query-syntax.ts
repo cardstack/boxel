@@ -274,20 +274,24 @@ let quoted: Record<string, string> | undefined;
 export function barePath(path: string): string {
   let p = path.startsWith('item.') ? path.slice(5) : path;
   if (p.length > 1 && p.startsWith('"') && p.endsWith('"')) {
-    // a quoted label reads as a field name: "Units Sold 30d" → unitsSold30d
-    let words = p
-      .slice(1, -1)
-      .trim()
-      .split(/[^A-Za-z0-9]+/)
-      .filter(Boolean);
-    let name = words
-      .map((w, i) =>
-        i === 0
-          ? w.charAt(0).toLowerCase() + w.slice(1)
-          : w.charAt(0).toUpperCase() + w.slice(1),
-      )
-      .join('');
-    if (quoted) setOwn(quoted, name, p.slice(1, -1));
+    // a quoted label reads as a field name: "Units Sold 30d" → unitsSold30d,
+    // and a dot steps through a field as it does unquoted: "Brand.Name" →
+    // brand.name
+    let label = p.slice(1, -1);
+    let nameOf = (part: string) =>
+      part
+        .trim()
+        .split(/[^A-Za-z0-9]+/)
+        .filter(Boolean)
+        .map((w, i) =>
+          i === 0
+            ? w.charAt(0).toLowerCase() + w.slice(1)
+            : w.charAt(0).toUpperCase() + w.slice(1),
+        )
+        .join('');
+    let segments = label.split('.').map(nameOf);
+    let name = segments.every(Boolean) ? segments.join('.') : nameOf(label);
+    if (quoted) setOwn(quoted, name, label);
     return name;
   }
   return p;
