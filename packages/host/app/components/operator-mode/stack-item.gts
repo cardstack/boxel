@@ -527,16 +527,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }),
     );
 
-    // Bulk delete is offered only when the user can write every selected
-    // card's realm, the same check that gates a single card's Delete.
+    // Bulk delete is offered only when the user may delete every selected
+    // card, the same check that gates a single card's Delete.
     let canDeleteSelection = [...this.selectedCards].every((id) =>
-      this.realm.canWrite(id),
+      this.operatorModeStateService.canDeleteCard(id),
     );
     if (canDeleteSelection) {
       menuItems.push(new MenuDivider());
       menuItems.push(
         new MenuItem({
-          label: `Delete ${selectedCount} item${selectedCount > 1 ? 's' : ''}`,
+          label: `Delete ${pluralize('item', selectedCount, true)}`,
           action: this.confirmAndDeleteSelected,
           icon: IconTrash,
           dangerous: true,
@@ -1249,7 +1249,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         <:content>
           Delete
           {{this.numberOfCardsToDelete}}
-          {{pluralize 'card' this.numberOfCardsToDelete}}?
+          {{pluralize 'item' this.numberOfCardsToDelete}}?
         </:content>
       </DeleteModal>
     {{/if}}

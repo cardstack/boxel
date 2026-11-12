@@ -5,7 +5,11 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  rri,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -22,6 +26,7 @@ import {
   realmConfigCardJSON,
 } from '../../helpers';
 
+import { setupCatalogTestSubset } from '../../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -720,3 +725,220 @@ module('Integration | card-delete', function (hooks) {
       .containsText('1', 'the deleted card is removed from the selection');
   });
 });
+
+// A realm that judges the host's requests by its ACL and its policy, as a
+// deployed realm does. Its ACL lets the test user only read it, and its policy
+// lets them delete a pet but not a toy.
+const POLICY_REALM = testRealmURL;
+const TEST_USER = '@testuser:localhost';
+const REALM_ADMIN = '@realm-admin:localhost';
+const MANGO = `${POLICY_REALM}Pet/mango`;
+const BALL = `${POLICY_REALM}Toy/ball`;
+
+const PET_MODULE = `
+  import { contains, field, CardDef } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+
+  export class Pet extends CardDef {
+    static displayName = 'Pet';
+    @field name = contains(StringField);
+    @field cardTitle = contains(StringField, {
+      computeVia: function (this: Pet) {
+        return this.name;
+      },
+    });
+  }
+
+  export class Toy extends CardDef {
+    static displayName = 'Toy';
+    @field name = contains(StringField);
+    @field cardTitle = contains(StringField, {
+      computeVia: function (this: Toy) {
+        return this.name;
+      },
+    });
+  }
+`;
+
+const petDeletePolicy: LooseSingleCardDocument = {
+  data: {
+    type: 'card',
+    attributes: {
+      cardInfo: { name: 'Pets' },
+      rules: [
+        {
+          targetType: { module: `${POLICY_REALM}pet`, name: 'Pet' },
+          grants: [{ operation: 'delete' }],
+        },
+      ],
+    },
+    meta: {
+      adoptsFrom: {
+        module: rri('@cardstack/catalog/realm-policy/realm-policy'),
+        name: 'RealmPolicy',
+      },
+    },
+  },
+};
+
+function instanceOf(name: string, attributes: Record<string, unknown>) {
+  return {
+    data: {
+      type: 'card',
+      attributes,
+      meta: { adoptsFrom: { module: '../pet', name } },
+    },
+  };
+}
+
+module(
+  'Integration | card-delete | a realm whose policy grants deletes',
+  function (hooks) {
+    let policyAdapter: TestRealmAdapter;
+    let noop = () => {};
+
+    setupRenderingTest(hooks);
+    setupOperatorModeStateCleanup(hooks);
+    setupCatalogTestSubset(hooks);
+    setupLocalIndexing(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: TEST_USER,
+      activeRealms: [POLICY_REALM],
+      autostart: true,
+    });
+
+    hooks.beforeEach(async function () {
+      ({ adapter: policyAdapter } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: POLICY_REALM,
+        enforcePermissions: true,
+        permissions: {
+          [REALM_ADMIN]: ['read', 'write', 'realm-owner'],
+          [TEST_USER]: ['read'],
+        },
+        contents: {
+          'realm.json': realmConfigCardJSON({
+            name: 'Pet Shelter',
+            policy: `${POLICY_REALM}policies/pets`,
+          }),
+          'pet.gts': PET_MODULE,
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+          'Pet/mango.json': instanceOf('Pet', { name: 'Mango' }),
+          'Toy/ball.json': instanceOf('Toy', { name: 'Ball' }),
+          'policies/pets.json': petDeletePolicy,
+        },
+      }));
+      await getService('realm').login(POLICY_REALM);
+      getService('operator-mode-state-service').restore({
+        stacks: [
+          [{ type: 'card', id: `${POLICY_REALM}index`, format: 'isolated' }],
+        ],
+      });
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      await waitFor(`[data-test-cards-grid-item="${MANGO}"]`);
+      await waitFor(`[data-test-cards-grid-item="${BALL}"]`);
+    });
+
+    function hoverTarget(cardId: string) {
+      return `[data-test-cards-grid-item="${cardId}"] .field-component-card`;
+    }
+
+    async function selectCard(cardId: string) {
+      await triggerEvent(hoverTarget(cardId), 'mouseenter');
+      await click(
+        `[data-test-overlay-card="${cardId}"] [data-test-overlay-select]`,
+      );
+      await triggerEvent(hoverTarget(cardId), 'mouseleave');
+    }
+
+    test('bulk Delete is offered while every selected card is one the policy lets the user delete', async function (assert) {
+      await selectCard(MANGO);
+      await click('[data-test-selection-dropdown-trigger]');
+      await waitFor('[data-test-boxel-menu-item-text="Delete 1 item"]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Delete 1 item"]')
+        .exists('the policy lets the user delete the pet they can only read');
+
+      await selectCard(BALL);
+      assert.dom('[data-test-selection-dropdown-trigger]').containsText('2');
+      await click('[data-test-selection-dropdown-trigger]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Deselect All"]')
+        .exists('the selection menu is open');
+      assert
+        .dom('[data-test-boxel-menu-item-text^="Delete"]')
+        .doesNotExist(
+          'nothing grants deleting the toy, so the selection offers no Delete',
+        );
+    });
+
+    test('a selection of only cards the user may not delete offers no Delete', async function (assert) {
+      await selectCard(BALL);
+      await click('[data-test-selection-dropdown-trigger]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Deselect All"]')
+        .exists('the selection menu is open');
+      assert
+        .dom('[data-test-boxel-menu-item-text^="Delete"]')
+        .doesNotExist('the toy is offered no Delete');
+    });
+
+    test("a card's own menu offers Delete where the policy grants it, and not where it does not", async function (assert) {
+      await triggerEvent(hoverTarget(MANGO), 'mouseenter');
+      await click(
+        `[data-test-overlay-card="${MANGO}"] [data-test-overlay-more-options]`,
+      );
+      await waitFor('[data-test-boxel-menu-item-text="Delete"]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Delete"]')
+        .exists("the pet's menu offers Delete");
+      await triggerEvent(hoverTarget(MANGO), 'mouseleave');
+
+      await triggerEvent(hoverTarget(BALL), 'mouseenter');
+      await click(
+        `[data-test-overlay-card="${BALL}"] [data-test-overlay-more-options]`,
+      );
+      assert
+        .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
+        .exists("the toy's menu is open");
+      assert
+        .dom('[data-test-boxel-menu-item-text="Delete"]')
+        .doesNotExist("the toy's menu offers no Delete");
+    });
+
+    test('bulk delete deletes a card the policy lets the user delete', async function (assert) {
+      await selectCard(MANGO);
+      await click('[data-test-selection-dropdown-trigger]');
+      await click('[data-test-boxel-menu-item-text="Delete 1 item"]');
+      await click('[data-test-confirm-delete-button]');
+
+      await waitUntil(
+        () => !document.querySelector(`[data-test-cards-grid-item="${MANGO}"]`),
+      );
+      assert.strictEqual(
+        await policyAdapter.openFile('Pet/mango.json'),
+        undefined,
+        'the realm admitted the delete its policy grants',
+      );
+      assert
+        .dom(`[data-test-cards-grid-item="${BALL}"]`)
+        .exists('the card that was not selected stays');
+    });
+  },
+);
