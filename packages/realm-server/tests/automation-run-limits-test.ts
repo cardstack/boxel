@@ -299,7 +299,11 @@ module(basename(import.meta.filename), function (hooks) {
           supportsStreaming: true,
         },
       ]);
-      await insertUser(dbAdapter, OWNER, 'cus_limits', 'limits@example.com');
+      // The realm's permissions gave the owner a user row; it needs a plan and
+      // credits to be billed for a forward.
+      if (!(await getUserByMatrixUserId(dbAdapter, OWNER))) {
+        await insertUser(dbAdapter, OWNER, 'cus_limits', 'limits@example.com');
+      }
       await insertPlan(dbAdapter, 'Test Plan', 1000, 100, 'price_limits');
       let user = await getUserByMatrixUserId(dbAdapter, OWNER);
       await addToCreditsLedger(dbAdapter, {
