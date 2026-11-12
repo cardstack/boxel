@@ -512,38 +512,47 @@ AND path = …`.
 
 When the script finishes, the run commits its overlay with a `POST` to the
 realm's `/_run-commit` (`RUN_COMMIT_PATH` in `run-overlay.ts`), carrying the
-run's token and no body (ADR 027 §1.4). `Realm.commitRunOverlay`:
+run's token and no body (ADR 027 §1.4). `Realm.commitRunOverlay` refuses
+anything but the run's own call in its own realm (403 `not-a-run`); the call
+was admitted as the run's identity under their current permissions. It reads
+the attempt's staged files and sends them as one `commitBatch` of `rawSource`
+updates, one per file. Inside the batch's write lock, before anything is
+staged, its precondition:
 
-1. refuses anything but the run's own call in its own realm (403
-   `not-a-run`); the call was admitted as the run's identity under their
-   current permissions;
-2. re-confirms that the identity is a **direct writer** of the realm
+1. re-confirms that the identity is a **direct writer** of the realm
    (`isDirectWriter`), so a person who lost direct write but keeps a policy
-   or wildcard grant can't write through it (403 `not-a-direct-writer`,
-   nothing claimed);
-3. checks the overlay again: no more files than `run.writesCap` (403
-   `writes-cap`) and no `realm.json` (403 `forbidden-path`). Paths are
-   realm-local, so every file is in the run's realm, and the batch is built
-   from staged files alone, so it has no `callApi` entry;
-4. claims the commit with `claimAutomationRunCommit` (409 `commit-refused`
-   when the run isn't running under this attempt or has claimed one before);
-5. sends one `commitBatch` of `rawSource` updates, one per staged file: all
-   land or none, under one write lock and one index pass, which the commit
-   doesn't wait for. A file whose bytes match the stored file changes nothing
-   and enqueues no indexing;
-6. records the landing with `recordAutomationRunCommitted`, adds the files
-   written to the run's `writes` count, and discards the overlay. It answers
-   `200` with `data.attributes.files`, the paths it saved.
+   or wildcard grant can't write through it (403 `not-a-direct-writer`);
+2. checks the files again: no more than `run.writesCap` (403 `writes-cap`);
+   none at a reserved path, `realm.json`, the policy card, a RealmPolicy card
+   or an automation card (403 `forbidden-path`); none where the realm holds a
+   directory, or under a path it holds as a file (409 `path-clash`). Paths
+   are realm-local, so every file is in the run's realm, and the batch has no
+   `callApi` entry;
+3. claims the commit with `claimRunOverlayCommit`, which locks the run row,
+   checks the run is running under this attempt and has never claimed one,
+   and checks the overlay still holds exactly the files read (409
+   `overlay-changed` when a write was staged in between). Staging refuses a
+   run whose commit is claimed.
+
+The batch then writes every file or none for any entry it refuses, under one
+index pass the commit doesn't wait for. A file whose text matches the stored
+file's is left alone and enqueues no indexing. Once it lands, the commit
+records it (`recordAutomationRunCommitted`), adds the files committed to the
+run's `writes` count (an unchanged file included), discards the overlay, and
+answers `200` with `data.attributes.files`.
 
 Failure modes, and what the caller does:
 
-| Answer                             | Claimed?                       | What happened                                       | Finish the run as                                                                                           |
-| ---------------------------------- | ------------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| 403 `not-a-direct-writer`          | no                             | the identity lost direct write                      | error                                                                                                       |
-| 403 `writes-cap`, `forbidden-path` | no                             | the overlay breaks the run's limits                 | error                                                                                                       |
-| 409 `commit-refused`               | by another attempt, or earlier | the run was taken over, canceled, or committed      | nothing: this attempt no longer owns the run                                                                |
-| 401                                | no                             | the token's run isn't running, or the token expired | nothing                                                                                                     |
-| a batch refusal (4xx/5xx)          | yes                            | an entry failed, so no file landed                  | error; a retry finds `commit-interrupted` (the claim never recorded a landing) and finishes as an error too |
+| Answer                                                    | Claim                        | What happened                                                                    | Next                                                                                             |
+| --------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 403 `not-a-direct-writer`, `writes-cap`, `forbidden-path` | none                         | the identity or the overlay breaks the run's limits                              | finish the run as an error                                                                       |
+| 409 `path-clash`                                          | none                         | the realm holds a file or directory in the way                                   | finish as an error; the next run compares and catches up                                         |
+| 409 `overlay-changed`                                     | none                         | a write was staged while the commit started                                      | commit again                                                                                     |
+| a batch refusal of an entry (4xx)                         | released                     | nothing was written                                                              | finish as an error                                                                               |
+| 409 `commit-refused`                                      | earlier, unrecorded, or none | this attempt's earlier commit hasn't landed, or the run isn't under this attempt | finish as an error, or stop when another attempt owns the run                                    |
+| 401                                                       | none                         | the token's run isn't running, or the token expired                              | stop                                                                                             |
+| 5xx from a failure while writing                          | kept, unrecorded             | some files may have landed                                                       | finish as an error; a retry finds `commit-interrupted`, and the next run compares and catches up |
+| 200 again                                                 | recorded                     | the commit landed earlier (a repeat after a lost answer)                         | finish complete                                                                                  |
 
 A Preview never commits: it finishes complete, and the finish discards its
 overlay. A run with nothing staged commits an empty batch, which claims and

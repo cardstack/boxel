@@ -203,13 +203,15 @@ import { automationRef } from './automation-declaration.ts';
 import {
   addAutomationRunCounts,
   automationRunForCall,
-  claimAutomationRunCommit,
+  getAutomationRun,
   recordAutomationRunCommitted,
 } from './automation-runs.ts';
 import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import {
   RUN_COMMIT_PATH,
+  claimRunOverlayCommit,
   discardRunOverlay,
+  releaseRunOverlayCommitClaim,
   readRunOverlayFile,
   runOverlayFiles,
   runOverlayPathClash,
@@ -13173,23 +13175,32 @@ export class Realm {
   // Commits a run's overlay to the realm as one all-or-nothing batch (ADR
   // 027 §1.4): every file the attempt staged lands, or none does, under one
   // write lock and one index pass that the commit doesn't wait for. A file
-  // whose bytes match the stored file changes nothing and causes no indexing.
+  // whose text matches the stored file's changes nothing and causes no
+  // indexing.
   //
   // Only the run's own call, carrying its token, commits, and it was
-  // admitted as the run's identity under their current permissions. Before
-  // anything is claimed, the identity must still be a direct writer of the
+  // admitted as the run's identity under their current permissions. Inside
+  // the batch's write lock, before anything is staged, the commit checks
+  // again what staging checked: the identity is still a direct writer of the
   // realm (ADR 026 §1.5), so someone who lost direct write but keeps a policy
-  // grant can't write through the grant, and the overlay is checked again:
-  // every file is in this realm (its paths are realm-local), within the
-  // `writes` cap, and none is `realm.json`. The batch is built from staged
-  // files alone, so it carries no `callApi` entry.
+  // grant can't write through it; the files are within the run's `writes`
+  // cap; none is at a reserved path, `realm.json`, the realm's policy card, a
+  // RealmPolicy card or an automation card (ADR 026 §1.4); and none would be
+  // a file where the realm holds a directory, or under a path it holds as a
+  // file. Paths are realm-local, so every file is in the run's realm, and the
+  // batch is built from staged files alone, so it carries no `callApi` entry.
   //
-  // The commit is claimed on the run's row before the batch goes out, which
-  // succeeds only while the run is running, owned by this attempt, and has
-  // never claimed one, so a run commits at most once however many times it
-  // is retried. Once the batch lands the run row records it, counts the
-  // files it wrote in the run's `writes`, and the overlay is discarded. A batch that fails lands nothing; its commit stays
-  // claimed, and the run finishes as an error.
+  // Then it claims the commit on the run's row, which succeeds only while the
+  // run is running, owned by this attempt, has never claimed one, and its
+  // overlay still holds exactly the files read. Staging refuses a run whose
+  // commit is claimed, so those are the files the batch sends, and a run
+  // commits at most once however many times it is retried. A batch that
+  // refuses an entry writes nothing, and its claim is released. A batch that
+  // fails while writing (a file system error) may have written some files,
+  // so its claim stays, unrecorded, and the run finishes as an error. Once
+  // the batch lands, the run row records it, the files committed are added to
+  // the run's `writes`, and the overlay is discarded. Asking again after the
+  // batch landed answers the same success.
   private async commitRunOverlay(
     _request: Request,
     requestContext: RequestContext,
@@ -13210,6 +13221,17 @@ export class Realm {
         },
         requestContext,
       });
+    let committed = (files: string[]) =>
+      createResponse({
+        body: JSON.stringify({
+          data: { type: 'run-commit', id: runId, attributes: { files } },
+        }),
+        init: {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
     let call = requestContext.automationRun;
     if (!call || call.readOnly) {
       return refuse(
@@ -13220,125 +13242,161 @@ export class Realm {
       );
     }
     let { runId, attempt, actsAs, writesCap } = call;
-    if (
-      !(await isDirectWriter(
-        this.#dbAdapter,
-        new URL(this.url),
-        actsAs,
-        this.#matrixClient.serverName,
-      ))
-    ) {
-      this.#log.warn(
-        `run ${runId} commit refused: ${actsAs} is no longer a direct writer of ${this.url}`,
-      );
-      return refuse(
-        403,
-        'not-a-direct-writer',
-        'Forbidden',
-        `The person this run acts as is no longer a direct writer of this workspace, so the run's writes were not saved`,
-      );
-    }
-    let files = await runOverlayFiles(this.#dbAdapter, { runId, attempt });
-    if (files.length > writesCap) {
-      return refuse(
-        403,
-        'writes-cap',
-        'Writes cap reached',
-        `This run staged ${files.length} files, more than the ${writesCap} it may write; nothing was saved`,
-      );
-    }
-    // The staging checks, again: a file staged under them can still meet a
-    // realm that changed since, such as a policy pointer moved onto it or a
-    // file the realm now holds where the run staged a directory.
-    for (let { path, content } of files) {
-      let reserved = reservedWriteDestination(path);
-      let protectedTarget =
-        reserved === undefined
-          ? await this.#runMayNotWrite(
-              path,
-              path.endsWith('.json') ? utf8OrUndefined(content) : undefined,
-            )
-          : undefined;
-      if (reserved || protectedTarget) {
-        return refuse(
-          403,
-          'forbidden-path',
-          'Forbidden',
-          `${reserved ?? `An automation run may not write ${protectedTarget}`}; nothing was saved`,
-        );
-      }
-      let clash = await this.#realmPathClash(path);
-      if (clash) {
-        return refuse(
-          409,
-          'path-clash',
-          'Conflict',
-          `The run staged ${path}, but the workspace holds ${clash}, so one of them would have to be both a file and a directory; nothing was saved`,
-        );
-      }
-    }
-    if (!(await claimAutomationRunCommit(this.#dbAdapter, runId, attempt))) {
-      return refuse(
-        409,
-        'commit-refused',
-        'Conflict',
-        'The run is not running under this attempt, or has already committed',
-      );
-    }
-    if (files.length > 0) {
-      try {
-        await commitBatch(
-          this.batchCore,
-          // Text goes as text, as the card+source write sends it, so a file
-          // whose text matches the stored file's is left alone.
-          files.map(({ path, content }) => ({
-            op: 'update' as const,
-            href: this.paths.fileURL(path).href,
-            content: utf8OrUndefined(content) ?? content,
-            rawSource: true,
-          })),
-          {
-            actor: actsAs,
-            waitForIndex: false,
-            broadcastRealmEvents: true,
-          },
-        );
-      } catch (err: unknown) {
+    let key = { runId, attempt };
+    let files = await runOverlayFiles(this.#dbAdapter, key);
+    let claimed = false;
+    let refusal = (
+      status: number,
+      code: string,
+      title: string,
+      detail: string,
+    ) => new OperationFailure({ status, code, title, detail });
+    let precondition = async () => {
+      if (
+        !(await isDirectWriter(
+          this.#dbAdapter,
+          new URL(this.url),
+          actsAs,
+          this.#matrixClient.serverName,
+        ))
+      ) {
         this.#log.warn(
-          `run ${runId} commit of ${files.length} files failed, and none landed: ${err instanceof Error ? err.message : String(err)}`,
+          `run ${runId} commit refused: ${actsAs} is no longer a direct writer of ${this.url}`,
         );
-        if (isOperationFailure(err)) {
-          return refuse(
-            err.error.status ?? 422,
-            err.error.code ?? 'commit-failed',
-            err.error.title ?? 'Commit failed',
-            `${err.error.detail ?? err.message}; nothing was saved`,
+        throw refusal(
+          403,
+          'not-a-direct-writer',
+          'Forbidden',
+          "The person this run acts as is no longer a direct writer of this workspace, so the run's writes were not saved",
+        );
+      }
+      if (files.length > writesCap) {
+        throw refusal(
+          403,
+          'writes-cap',
+          'Writes cap reached',
+          `This run staged ${files.length} files, more than the ${writesCap} it may write; nothing was saved`,
+        );
+      }
+      for (let { path, content } of files) {
+        let reserved = reservedWriteDestination(path);
+        let protectedTarget =
+          reserved === undefined
+            ? await this.#runMayNotWrite(
+                path,
+                path.endsWith('.json') ? utf8OrUndefined(content) : undefined,
+              )
+            : undefined;
+        if (reserved || protectedTarget) {
+          throw refusal(
+            403,
+            'forbidden-path',
+            'Forbidden',
+            `${reserved ?? `An automation run may not write ${protectedTarget}`}; nothing was saved`,
           );
         }
-        throw err;
+        let clash = await this.#realmPathClash(path);
+        if (clash) {
+          throw refusal(
+            409,
+            'path-clash',
+            'Conflict',
+            `The run staged ${path}, but the workspace holds ${clash}, so one of them would have to be both a file and a directory; nothing was saved`,
+          );
+        }
       }
+      let claim = await claimRunOverlayCommit(this.#dbAdapter, key, files);
+      if (claim.kind === 'overlay-changed') {
+        throw refusal(
+          409,
+          'overlay-changed',
+          'Conflict',
+          'The run staged another write while its commit was starting; nothing was saved, and the commit can be asked for again',
+        );
+      }
+      if (claim.kind === 'refused') {
+        throw refusal(
+          409,
+          'commit-refused',
+          'Conflict',
+          claim.claimedByThisAttempt
+            ? 'This attempt has already started its commit, and it has not landed'
+            : 'The run is not running under this attempt',
+        );
+      }
+      claimed = true;
+    };
+
+    // A repeat of a commit that landed, such as one whose answer was lost,
+    // gets the same success.
+    let run = await getAutomationRun(this.#dbAdapter, runId);
+    if (run?.committedAt && run.attempt === attempt) {
+      return committed([]);
+    }
+
+    try {
+      await commitBatch(
+        this.batchCore,
+        // Text goes as text, as the card+source write sends it, so a file
+        // whose text matches the stored file's is left alone.
+        files.map(({ path, content }) => ({
+          op: 'update' as const,
+          href: this.paths.fileURL(path).href,
+          content: utf8OrUndefined(content) ?? content,
+          rawSource: true,
+        })),
+        {
+          actor: actsAs,
+          waitForIndex: false,
+          broadcastRealmEvents: true,
+          precondition,
+        },
+      );
+    } catch (err: unknown) {
+      if (isOperationFailure(err)) {
+        // Refused before any file was written: by the precondition, with
+        // nothing claimed, or by the batch's own entry checks, which run
+        // before it writes anything, so a claim it holds can go.
+        if (claimed) {
+          await releaseRunOverlayCommitClaim(this.#dbAdapter, key);
+        }
+        this.#log.warn(
+          `run ${runId} commit refused before any file was written: ${err.error.code ?? err.message}`,
+        );
+        return refuse(
+          err.error.status ?? 422,
+          err.error.code ?? 'commit-failed',
+          err.error.title ?? 'Commit failed',
+          claimed
+            ? `${err.error.detail ?? err.message}; nothing was saved`
+            : (err.error.detail ?? err.message),
+        );
+      }
+      // A failure while writing can leave the files written before it on
+      // disk. The claim stays, unrecorded, so the run reads as an
+      // interrupted commit, and the next run catches up from the realm.
+      this.#log.warn(
+        `run ${runId} commit of ${files.length} files failed while writing, so some may have landed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw err;
     }
     await recordAutomationRunCommitted(this.#dbAdapter, runId);
-    // The run's `writes` count is the files its commit wrote to the realm,
-    // metered here where the realm did the work.
-    await addAutomationRunCounts(this.#dbAdapter, runId, {
-      writes: files.length,
-    });
-    await discardRunOverlay(this.#dbAdapter, runId);
-    return createResponse({
-      body: JSON.stringify({
-        data: {
-          type: 'run-commit',
-          id: runId,
-          attributes: { files: files.map((f) => f.path) },
-        },
-      }),
-      init: {
-        status: 200,
-        headers: { 'content-type': SupportedMimeType.JSONAPI },
-      },
-      requestContext,
-    });
+    // The batch has landed, so the answer is a success from here on: the
+    // count and the discard are bookkeeping, and the run's finish discards
+    // the overlay again.
+    try {
+      // The run's `writes` count is the files its commit saved, an unchanged
+      // file included, metered here where the realm did the work.
+      await addAutomationRunCounts(this.#dbAdapter, runId, {
+        writes: files.length,
+      });
+      await discardRunOverlay(this.#dbAdapter, runId);
+    } catch (err: unknown) {
+      this.#log.warn(
+        `run ${runId} committed, but counting its writes or discarding its overlay failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return committed(files.map((f) => f.path));
   }
 
   // A file or directory the realm holds that `path` can't be written beside:
@@ -13357,8 +13415,12 @@ export class Realm {
       isDirectory = !!(await this.directoryEntries(
         this.paths.directoryURL(path),
       ));
-    } catch {
+    } catch (err: unknown) {
       // Listing a path that holds a file, or nothing, finds no directory.
+      let code = (err as { code?: unknown } | null)?.code;
+      if (code !== 'ENOTDIR' && code !== 'ENOENT') {
+        throw err;
+      }
       isDirectory = false;
     }
     if (isDirectory) {

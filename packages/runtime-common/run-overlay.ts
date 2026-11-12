@@ -41,13 +41,16 @@ export type RunOverlayStageResult =
   | { kind: 'staged'; created: boolean }
   // Staging another file would pass the run's `writes` cap.
   | { kind: 'over-cap'; cap: number }
-  // The run isn't running, or another attempt owns it.
+  // The run isn't running, another attempt owns it, or its commit is claimed.
   | { kind: 'not-running' };
 
 // One staged file, as the overlay holds it.
 export interface RunOverlayFile {
   path: string;
   content: Uint8Array<ArrayBuffer>;
+  // The MD5 of the content, as Postgres computes it, which a commit's claim
+  // compares to the files it read.
+  md5: string;
 }
 
 // Stages `content` at `path` in the attempt's overlay. The run's row is
@@ -65,14 +68,17 @@ export async function stageRunOverlayFile(
 ): Promise<RunOverlayStageResult> {
   return await dbAdapter.withTransaction(async (txQuery) => {
     let [run] = await txQuery([
-      'SELECT state, attempt FROM automation_runs WHERE id =',
+      'SELECT state, attempt, commit_started_at FROM automation_runs WHERE id =',
       param(key.runId),
       'FOR UPDATE',
     ]);
+    // A run whose commit is claimed has its files read for the batch; a file
+    // staged after that would be acknowledged and never land.
     if (
       !run ||
       run.state !== 'running' ||
-      Number(run.attempt) !== key.attempt
+      Number(run.attempt) !== key.attempt ||
+      run.commit_started_at != null
     ) {
       return { kind: 'not-running' } as const;
     }
@@ -175,7 +181,7 @@ export async function runOverlayFiles(
   key: RunOverlayKey,
 ): Promise<RunOverlayFile[]> {
   let rows = await query(dbAdapter, [
-    "SELECT path, encode(content, 'base64') AS content FROM run_overlay_files WHERE run_id =",
+    "SELECT path, encode(content, 'base64') AS content, md5(content) AS md5 FROM run_overlay_files WHERE run_id =",
     param(key.runId),
     'AND attempt =',
     param(key.attempt),
@@ -184,7 +190,88 @@ export async function runOverlayFiles(
   return rows.map((row) => ({
     path: String(row.path),
     content: fromBase64(String(row.content)),
+    md5: String(row.md5),
   }));
+}
+
+export type RunOverlayCommitClaim =
+  // The commit is claimed, and the overlay holds exactly the files read.
+  | { kind: 'claimed' }
+  // The overlay changed since the files were read. Nothing is claimed.
+  | { kind: 'overlay-changed' }
+  // The run isn't running under this attempt, or its commit was claimed
+  // before. `committed` says whether that earlier claim's batch landed.
+  | { kind: 'refused'; committed: boolean; claimedByThisAttempt: boolean };
+
+// Claims the attempt's one commit (`commit_started_at`), only while the run
+// is running, owned by `key.attempt` and has never claimed one, and only when
+// the attempt's overlay still holds exactly `files`, compared by path and
+// content hash. The run's row is locked for both checks and the claim, and
+// staging refuses a run whose commit is claimed, so the files read are the
+// files the batch sends.
+export async function claimRunOverlayCommit(
+  dbAdapter: DBAdapter,
+  key: RunOverlayKey,
+  files: { path: string; md5: string }[],
+): Promise<RunOverlayCommitClaim> {
+  return await dbAdapter.withTransaction(async (txQuery) => {
+    let [run] = await txQuery([
+      'SELECT state, attempt, commit_started_at, committed_at FROM automation_runs WHERE id =',
+      param(key.runId),
+      'FOR UPDATE',
+    ]);
+    if (
+      !run ||
+      run.state !== 'running' ||
+      Number(run.attempt) !== key.attempt ||
+      run.commit_started_at != null
+    ) {
+      return {
+        kind: 'refused',
+        committed: run?.committed_at != null,
+        claimedByThisAttempt:
+          run?.commit_started_at != null &&
+          Number(run?.attempt) === key.attempt,
+      } as const;
+    }
+    let rows = await txQuery([
+      'SELECT path, md5(content) AS md5 FROM run_overlay_files WHERE run_id =',
+      param(key.runId),
+      'AND attempt =',
+      param(key.attempt),
+      'ORDER BY path',
+    ]);
+    let now = rows.map((r) => `${r.path}\u0000${r.md5}`).join('\n');
+    let read = [...files]
+      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+      .map((f) => `${f.path}\u0000${f.md5}`)
+      .join('\n');
+    if (now !== read) {
+      return { kind: 'overlay-changed' } as const;
+    }
+    await txQuery([
+      'UPDATE automation_runs SET commit_started_at = now() WHERE id =',
+      param(key.runId),
+    ]);
+    return { kind: 'claimed' } as const;
+  });
+}
+
+// Releases a commit claim whose batch is known to have written nothing: the
+// batch refused an entry before writing any file. The run can then claim
+// again, and a retry doesn't read the claim as an interrupted commit. A claim
+// whose batch landed, or may have landed in part, is never released.
+export async function releaseRunOverlayCommitClaim(
+  dbAdapter: DBAdapter,
+  key: RunOverlayKey,
+): Promise<void> {
+  await query(dbAdapter, [
+    'UPDATE automation_runs SET commit_started_at = NULL WHERE id =',
+    param(key.runId),
+    "AND state = 'running' AND attempt =",
+    param(key.attempt),
+    'AND committed_at IS NULL',
+  ]);
 }
 
 // Discards every file any attempt of the run staged. Returns how many were

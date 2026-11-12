@@ -12,6 +12,8 @@ import {
 import type { Realm } from '@cardstack/runtime-common';
 import {
   RUN_COMMIT_PATH,
+  claimRunOverlayCommit,
+  runOverlayFiles,
   stageRunOverlayFile,
 } from '@cardstack/runtime-common/run-overlay';
 import {
@@ -167,7 +169,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a batch with a file that can’t be written lands none of its files', async function (assert) {
+  test('a file in the way of the realm’s own files is refused before anything is claimed', async function (assert) {
     let { token, run } = await createAutomationRunToken(
       dbAdapter,
       realm,
@@ -263,24 +265,134 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a run commits at most once', async function (assert) {
-    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+  test('a run commits at most once, and asking again after it landed answers the same success', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
     assert.strictEqual(await stage(token, 'once.txt', 'once'), 204);
     assert.strictEqual((await commit(token)).status, 200);
+    let committedAt = (await getAutomationRun(dbAdapter, run.id))?.committedAt;
     let again = await commit(token);
-    assert.strictEqual(again.status, 409);
-    assert.strictEqual(again.json.errors[0].code, 'commit-refused');
+    assert.strictEqual(again.status, 200, JSON.stringify(again.json));
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, run.id))?.committedAt,
+      committedAt,
+      'nothing was committed a second time',
+    );
   });
 
-  test('an unchanged file causes no index pass', async function (assert) {
+  test('a batch that refuses an entry writes nothing and releases its claim', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    assert.strictEqual(await stage(token, 'aaa-first.txt', 'first'), 204);
+    // A card document past the realm's card limit, put in the overlay
+    // directly as a staging the realm's limits have since moved under would
+    // leave it. The batch's own entry checks refuse it before writing.
+    let huge = JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { padding: 'x'.repeat(600 * 1024) },
+        meta: { adoptsFrom: { module: './thing', name: 'Thing' } },
+      },
+    });
+    await stageRunOverlayFile(
+      dbAdapter,
+      { runId: run.id, attempt: 1 },
+      'cards/huge.json',
+      new TextEncoder().encode(huge),
+      10,
+    );
+    let refused = await commit(token);
+    assert.true(
+      refused.status >= 400 && refused.status < 500,
+      `refused with a client error: ${JSON.stringify(refused.json)}`,
+    );
+    assert.strictEqual((await read(session(), 'aaa-first.txt')).status, 404);
+    let row = await getAutomationRun(dbAdapter, run.id);
+    assert.strictEqual(row?.commitStartedAt, null, 'the claim was released');
+    assert.strictEqual(row?.committedAt, null);
+  });
+
+  test('a run’s staging is refused once its commit is claimed, and a changed overlay refuses the claim', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let key = { runId: run.id, attempt: 1 };
+    assert.strictEqual(await stage(token, 'a.txt', 'a'), 204);
+    let read1 = await runOverlayFiles(dbAdapter, key);
+    assert.strictEqual(await stage(token, 'b.txt', 'b'), 204);
+    assert.deepEqual(
+      await claimRunOverlayCommit(dbAdapter, key, read1),
+      { kind: 'overlay-changed' },
+      'files staged after the read refuse the claim',
+    );
+    assert.deepEqual(
+      await claimRunOverlayCommit(
+        dbAdapter,
+        key,
+        await runOverlayFiles(dbAdapter, key),
+      ),
+      { kind: 'claimed' },
+    );
+    assert.strictEqual(
+      await stage(token, 'c.txt', 'c'),
+      401,
+      'a write after the claim is refused, not acknowledged and lost',
+    );
+  });
+
+  test('the writes cap is checked again at commit', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+      {
+        writesCap: 1,
+      },
+    );
+    assert.strictEqual(await stage(token, 'one.txt', '1'), 204);
+    await stageRunOverlayFile(
+      dbAdapter,
+      { runId: run.id, attempt: 1 },
+      'two.txt',
+      new TextEncoder().encode('2'),
+      10,
+    );
+    let refused = await commit(token);
+    assert.strictEqual(refused.status, 403);
+    assert.strictEqual(refused.json.errors[0].code, 'writes-cap');
+    assert.strictEqual((await read(session(), 'one.txt')).status, 404);
+  });
+
+  test('an unchanged file causes no index pass, and a changed one does', async function (assert) {
     let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
     assert.strictEqual(await stage(token, 'notes.txt', 'in the realm'), 204);
+    await realm.indexing();
     let before = await latestIndexJobId();
     assert.strictEqual((await commit(token)).status, 200);
     assert.strictEqual(
       await latestIndexJobId(),
       before,
       'committing bytes identical to the stored file enqueued no index job',
+    );
+
+    let { token: second } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    assert.strictEqual(await stage(second, 'notes.txt', 'changed'), 204);
+    assert.strictEqual((await commit(second)).status, 200);
+    assert.true(
+      (await latestIndexJobId()) > before,
+      'a changed file enqueues an index job, so the count above is live',
     );
   });
 
