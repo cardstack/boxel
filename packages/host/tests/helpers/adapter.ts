@@ -16,6 +16,8 @@ import {
   unixTime,
   type LintResult,
 } from '@cardstack/runtime-common';
+import { computeContentHash } from '@cardstack/runtime-common/content-hash';
+import { CardError } from '@cardstack/runtime-common/error';
 
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -28,6 +30,7 @@ import type {
   AdapterWriteResult,
   TokenClaims,
 } from '@cardstack/runtime-common/realm';
+import { StagedFile } from '@cardstack/runtime-common/staged-file';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
 import { createFixtureMtimeSequence } from './test-clock';
@@ -303,6 +306,88 @@ export class TestRealmAdapter implements RealmAdapter {
     }
 
     return fileRef;
+  }
+
+  #stagedUploads = new Map<StagedFile, Uint8Array>();
+
+  // This adapter stores its whole fixture filesystem in memory. Production
+  // adapters stage on disk; tests retain the same stream/limit contract.
+  async stage(
+    _path: LocalPath,
+    body: ReadableStream<Uint8Array>,
+    limit: number,
+    contentLength?: number,
+  ): Promise<StagedFile> {
+    if (contentLength !== undefined && contentLength > limit) {
+      throw new CardError(
+        `File size (${contentLength} bytes) exceeds maximum allowed size (${limit} bytes)`,
+        { status: 413 },
+      );
+    }
+    let reader = body.getReader();
+    let chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        let { done, value } = await reader.read();
+        if (done || value === undefined) break;
+        size += value.length;
+        if (size > limit)
+          throw new CardError(
+            `File exceeds maximum allowed size (${limit} bytes)`,
+            {
+              status: 413,
+            },
+          );
+        chunks.push(value);
+      }
+    } finally {
+      await reader.cancel();
+      reader.releaseLock();
+    }
+    let bytes = new Uint8Array(size);
+    let offset = 0;
+    for (let chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+    let sha = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    let content = new StagedFile(
+      crypto.randomUUID(),
+      size,
+      Array.from(sha, (b) => b.toString(16).padStart(2, '0')).join(''),
+      computeContentHash(bytes),
+    );
+    this.#stagedUploads.set(content, bytes);
+    return content;
+  }
+
+  async disposeStaged(content: StagedFile): Promise<void> {
+    this.#stagedUploads.delete(content);
+  }
+
+  async stagedContentEquals(
+    path: LocalPath,
+    content: StagedFile,
+  ): Promise<boolean> {
+    let bytes = this.#stagedUploads.get(content)!;
+    let offset = 0;
+    for await (let chunk of this.readRange(path, 0, content.size)) {
+      for (let byte of chunk) {
+        if (bytes[offset++] !== byte) return false;
+      }
+    }
+    return offset === bytes.length;
+  }
+
+  async commitStaged(
+    path: LocalPath,
+    content: StagedFile,
+  ): Promise<AdapterWriteResult> {
+    let bytes = this.#stagedUploads.get(content);
+    if (!bytes) throw new Error('Unknown staged upload');
+    return this.write(path, bytes);
   }
 
   async write(
