@@ -28,9 +28,10 @@ const BATCH_LISTING_SUFFIX = ':batch';
 // Each request is priced at its worst case (`aiRequestCostCeiling`: its body's
 // bytes as input tokens and its output-token limit) at the model's listed
 // batch price. A model OpenRouter lists no batch price for is priced at its
-// listed price, which a batch never costs more than. Either way the estimate
-// is at least what the batch can cost, so billing it never bills less than
-// OpenRouter charged.
+// listed price, which a batch never costs more than. The listing read is the
+// model's base rates: a model whose rates rise above a prompt-length threshold
+// (OpenRouter's `pricing.overrides`, which the model sync doesn't keep) can
+// cost more than this for a request long enough to cross it.
 export interface AIBatchEstimate {
   usd: number;
   // The listing the requests were priced at: the model's batch listing, or
@@ -39,10 +40,16 @@ export interface AIBatchEstimate {
 }
 
 export type AIBatchEstimateResult =
-  | { ok: true; estimate: AIBatchEstimate }
+  | {
+      ok: true;
+      estimate: AIBatchEstimate;
+      // The model's own listed price, which a run's AI spending cap counts
+      // batched requests against (ADR 030 §1.4).
+      listedPrice: AIModelPrice;
+    }
   | {
       ok: false;
-      // `unknown-model`: no listing for the model, or one whose price can't
+      // `unknown-model`: the model has no listing, or one whose price can't
       // be read. An `AIRequestCostRefusal`: a request whose worst case can't
       // be priced.
       reason: 'unknown-model' | AIRequestCostRefusal;
@@ -55,8 +62,10 @@ export async function estimateAIBatch(
   model: string,
   requestBodies: string[],
 ): Promise<AIBatchEstimateResult> {
-  let listing = await listedPrice(dbAdapter, modelsRealmURL, model);
-  if (!listing) {
+  let { listed, batch } = await listedPrices(dbAdapter, modelsRealmURL, model);
+  // The model's own listing is required even when it has a batch listing:
+  // the run's cap counts each batched request at the normal price.
+  if (!listed) {
     return {
       ok: false,
       reason: 'unknown-model',
@@ -65,7 +74,7 @@ export async function estimateAIBatch(
   }
   // A request names the model itself, never its batch listing, so the batch
   // listing's rates are priced under the model's own id.
-  let price: AIModelPrice = { ...listing.price, modelId: model };
+  let price: AIModelPrice = batch ? { ...batch, modelId: model } : listed;
   let usd = 0;
   for (let [index, body] of requestBodies.entries()) {
     let priced = aiRequestCostCeiling(body, price);
@@ -79,17 +88,21 @@ export async function estimateAIBatch(
     // The record keeps USD, the unit OpenRouter reports a batch's cost in.
     usd += priced.ceiling.credits / CREDITS_PER_USD;
   }
-  return { ok: true, estimate: { usd, pricedAs: listing.modelId } };
+  return {
+    ok: true,
+    estimate: { usd, pricedAs: batch ? batch.modelId : model },
+    listedPrice: listed,
+  };
 }
 
-// The model's batch listing when OpenRouter has one, or else the model's own
-// listing, read from the indexed OpenRouter model cards. A listing whose
-// price can't be read counts as no listing.
-async function listedPrice(
+// The model's own listing and its batch listing, read from the indexed
+// OpenRouter model cards. A listing whose price can't be read counts as no
+// listing.
+async function listedPrices(
   dbAdapter: DBAdapter,
   modelsRealmURL: string,
   model: string,
-): Promise<{ modelId: string; price: AIModelPrice } | undefined> {
+): Promise<{ listed?: AIModelPrice; batch?: AIModelPrice }> {
   let batchListing = `${model}${BATCH_LISTING_SUFFIX}`;
   let rows = await query(dbAdapter, [
     "SELECT pristine_doc FROM boxel_index WHERE type = 'instance' AND is_deleted IS NOT TRUE AND realm_url =",
@@ -112,13 +125,7 @@ async function listedPrice(
       prices.set(price.modelId, price);
     }
   }
-  for (let modelId of [batchListing, model]) {
-    let price = prices.get(modelId);
-    if (price) {
-      return { modelId, price };
-    }
-  }
-  return undefined;
+  return { listed: prices.get(model), batch: prices.get(batchListing) };
 }
 
 // The URL the OpenRouter model cards are indexed under on this server, or

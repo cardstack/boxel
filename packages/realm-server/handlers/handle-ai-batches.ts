@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import {
   automationRunForCall,
   getAIBatch,
+  isSessionRevoked,
   logger,
   recordAIBatch,
   recordAIBatchState,
@@ -9,7 +10,11 @@ import {
   type DBAdapter,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { getAutomation } from '@cardstack/runtime-common/automations';
+import {
+  getAutomation,
+  type AutomationRow,
+} from '@cardstack/runtime-common/automations';
+import type { AIModelPrice } from '@cardstack/runtime-common/automation-ai-cost';
 import * as Sentry from '@sentry/node';
 import {
   fetchRequestFromContext,
@@ -27,10 +32,18 @@ import {
   outboundLogContext,
   systemKeyCredential,
 } from '../lib/proxy-forward.ts';
-import { outboundFetch, sendContext } from '../lib/outbound/client.ts';
+import {
+  OutboundRefusedError,
+  outboundFetch,
+  sendContext,
+} from '../lib/outbound/client.ts';
 import { scrubError } from '../lib/outbound/scrub-error.ts';
 import { CredentialScrubber } from '../lib/outbound/scrubber.ts';
 import { currentPricing } from '../lib/pricing.ts';
+import {
+  admitAutomationRunAIRequest,
+  settleAutomationRunAIRequest,
+} from '../lib/automation-ai-spending.ts';
 import {
   estimateAIBatch,
   openRouterModelsRealmURL,
@@ -50,16 +63,23 @@ const log = logger('ai-batches');
 // The batch path: an automation run's submit and status calls to
 // OpenRouter's Batch API, sent with the platform's OpenRouter key (ADR 030).
 //
-// Only a run token reaches it, and only from a running run of an automation
-// whose payer turned on `batchedAI` when they switched it on or last resumed
-// it (the automation row's caps snapshot). An interactive session is refused:
-// someone waiting for an answer gains nothing from a batch.
+// Only a run token reaches it, from a running run that its token's attempt
+// still owns, whose identity's sessions haven't been revoked since the token
+// was minted. An interactive session is refused: someone waiting for an
+// answer gains nothing from a batch. A submit also needs the automation's
+// payer to have turned on `batchedAI` when they switched it on or last
+// resumed it (the automation row's caps snapshot); a status read doesn't, so
+// a follow-up run can always read a batch that is already paid for.
 //
 // A submit charges nothing. OpenRouter reports a batch's cost only once it
 // ends, so the submit records the batch (its run, the person that run acts
 // as, its request count, the most it can cost, its deadline and its status)
 // for the settle job to bill. A batch can't be canceled, so a recorded batch
-// is always billed.
+// is always billed. Before it is sent, each request reserves twice its worst
+// case at the model's listed price on the run's AI spending cap (ADR 030
+// §1.4), and a batch that would pass the cap is refused. The reservations
+// are released when the batch isn't submitted, and otherwise held on the
+// batch's row for the settle job to settle.
 
 interface SubmitBody {
   model?: unknown;
@@ -86,7 +106,14 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
     if (!caller) {
       return;
     }
-    let { run } = caller;
+    let { run, automation } = caller;
+    if (!automation.capsSnapshot.batchedAI) {
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        "This automation hasn't turned on batched AI, so its runs can't submit batches",
+      );
+      return;
+    }
 
     if (!currentPricing()) {
       await sendResponseForError(
@@ -125,20 +152,52 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
       return;
     }
 
+    let reserved = await reserveBatch(ctxt, dbAdapter, {
+      run,
+      aiCreditsCap: automation.capsSnapshot.aiCredits,
+      requests,
+      price: estimated.listedPrice,
+    });
+    if (!reserved) {
+      return;
+    }
+    let release = () => releaseReservations(dbAdapter, run.id, reserved!);
+    // What an operator needs to bill a batch by hand when it may have been
+    // submitted with no row recording it.
+    let unrecorded = {
+      runId: run.id,
+      actsAs: run.actsAs,
+      automationId: run.automationId,
+      model,
+      requestCount: requests.length,
+      estimatedUsd: estimated.estimate.usd,
+      runAIReservations: reserved,
+    };
+
     let deadline = new Date(Date.now() + deadlineSeconds * 1000);
     let answer = await sendToOpenRouter(ctxt, dbAdapter, {
       url: OPENROUTER_BATCHES_URL,
       method: 'POST',
       body: openRouterBatchSubmitBody({ model, requests }),
     });
-    if (!answer) {
+    if (answer.kind === 'not-sent') {
+      await release();
+      return;
+    }
+    if (answer.kind === 'unknown') {
+      // The submit went out and its outcome is unknown, so a batch may exist
+      // that is paid for and recorded nowhere. The reservations stay held.
+      let message = `batch submit outcome unknown for run ${run.id} (acting as ${run.actsAs}, ${requests.length} requests to ${model}, estimated at ${estimated.estimate.usd} USD): OpenRouter may have accepted a batch that nothing records`;
+      log.error(message, answer.error);
+      Sentry.captureException(answer.error, { extra: unrecorded });
       return;
     }
     let { status, json, text } = answer;
     if (status < 200 || status >= 300) {
       // OpenRouter refused the batch (a 402 when the platform's OpenRouter
       // balance can't cover it, a 400 for a body it won't take): nothing was
-      // submitted, so nothing is recorded.
+      // submitted, so nothing is recorded or reserved.
+      await release();
       log.warn(
         `OpenRouter refused a batch for run ${run.id} with status ${status}`,
       );
@@ -149,9 +208,9 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
     if (!batch) {
       // OpenRouter accepted something and answered with no batch id, so the
       // batch, if one exists, can't be recorded or billed.
-      let message = `OpenRouter accepted a batch for run ${run.id} but its answer names no batch, so it can't be recorded for billing`;
+      let message = `batch submit outcome unknown for run ${run.id}: OpenRouter accepted the submit but its answer names no batch, so it can't be recorded for billing`;
       log.error(message);
-      Sentry.captureMessage(message, 'error');
+      Sentry.captureMessage(message, { level: 'error', extra: unrecorded });
       await sendResponseForSystemError(
         ctxt,
         'OpenRouter answered the batch submit with no batch',
@@ -168,16 +227,20 @@ export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
         model,
         requestCount: requests.length,
         estimatedUsd: estimated.estimate.usd,
+        runAIReservations: reserved,
         deadline,
         expiresAt: batch.expiresAt,
         state: batch.status,
       });
     } catch (error) {
       // The batch is submitted and will be charged to the platform, but
-      // nothing records it to bill. Reported so an operator bills it by hand.
+      // nothing records it to bill. Reported with everything needed to bill
+      // it by hand.
       let message = `OpenRouter batch ${batch.id} for run ${run.id} (acting as ${run.actsAs}, estimated at ${estimated.estimate.usd} USD) was submitted but could not be recorded for billing`;
       log.error(message, error);
-      Sentry.captureException(error, { extra: { batchId: batch.id } });
+      Sentry.captureException(error, {
+        extra: { batchId: batch.id, ...unrecorded },
+      });
       await sendResponseForSystemError(
         ctxt,
         'The batch was submitted but could not be recorded',
@@ -212,7 +275,12 @@ export function handleAIBatchStatus(args: AIBatchHandlerArgs) {
       url: openRouterBatchURL(batch.batchId),
       method: 'GET',
     });
-    if (!answer) {
+    if (answer.kind !== 'answered') {
+      if (answer.kind === 'unknown') {
+        Sentry.captureException(answer.error, {
+          extra: { batchId: batch.batchId, runId: run.id },
+        });
+      }
       return;
     }
     let { status, json, text } = answer;
@@ -229,13 +297,15 @@ export function handleAIBatchStatus(args: AIBatchHandlerArgs) {
   };
 }
 
-// The run a batch call comes from, after checking that it carries a run
-// token, that its run is still running, and that its automation turned on
-// batched AI. Answers the refusal itself and returns undefined otherwise.
+// The run a batch call comes from, and its automation, after checking that
+// the call carries a run token whose identity's sessions weren't revoked
+// since it was minted, and that its run is still running and owned by the
+// token's attempt. Answers the refusal itself and returns undefined
+// otherwise.
 async function batchCaller(
   ctxt: Koa.Context,
   { dbAdapter, realmSecretSeed }: AIBatchHandlerArgs,
-): Promise<{ run: AutomationRun } | undefined> {
+): Promise<{ run: AutomationRun; automation: AutomationRow } | undefined> {
   let authorization = ctxt.req.headers['authorization'] ?? null;
   if (!authorization) {
     await sendResponseForUnauthorizedRequest(
@@ -262,6 +332,15 @@ async function batchCaller(
     );
     return undefined;
   }
+  // As `Realm.handleAutomation` does: a person whose sessions were revoked
+  // after the token was minted makes no more calls through it.
+  if (await isSessionRevoked(dbAdapter, token.actsAs, token.iat)) {
+    await sendResponseForUnauthorizedRequest(
+      ctxt,
+      'The automation run token has been revoked',
+    );
+    return undefined;
+  }
   // The signature says only that this server minted the token; the run's
   // row says whether the run is still going and this attempt still owns it.
   let call = await automationRunForCall(dbAdapter, token.runId, token.attempt);
@@ -278,14 +357,80 @@ async function batchCaller(
   }
   let { run } = call;
   let automation = await getAutomation(dbAdapter, run.automationId);
-  if (!automation?.capsSnapshot.batchedAI) {
+  if (!automation) {
     await sendResponseForForbiddenRequest(
       ctxt,
-      "This automation hasn't turned on batched AI, so its runs can't make batch calls",
+      "The run's automation isn't switched on, so its runs can't make batch calls",
     );
     return undefined;
   }
-  return { run };
+  return { run, automation };
+}
+
+// Reserves each request of a batch on the run's AI spending cap, at twice
+// its worst case at the model's listed price: once for the batch, and once
+// for the normal-price request it falls back to when the batch misses its
+// deadline. Returns the reservation ids, or answers the refusal itself and
+// returns undefined, releasing whatever it had reserved, when any request
+// would pass the cap or the run can no longer make AI requests.
+async function reserveBatch(
+  ctxt: Koa.Context,
+  dbAdapter: DBAdapter,
+  {
+    run,
+    aiCreditsCap,
+    requests,
+    price,
+  }: {
+    run: AutomationRun;
+    aiCreditsCap: number;
+    requests: BatchRequest[];
+    price: AIModelPrice;
+  },
+): Promise<string[] | undefined> {
+  let reserved: string[] = [];
+  for (let [index, { body }] of requests.entries()) {
+    let admission = await admitAutomationRunAIRequest(dbAdapter, {
+      runId: run.id,
+      aiCreditsCap,
+      body: JSON.stringify(body),
+      price,
+      batched: true,
+    });
+    if (admission.kind === 'admitted') {
+      reserved.push(admission.reservationId);
+      continue;
+    }
+    await releaseReservations(dbAdapter, run.id, reserved);
+    let message = `Request ${index + 1} of the batch: ${admission.message}`;
+    if (admission.reason === 'over-cap') {
+      await sendResponseForForbiddenRequest(ctxt, message);
+    } else if (
+      admission.reason === 'run-not-running' ||
+      admission.reason === 'missing-run'
+    ) {
+      await sendResponseForForbiddenRequest(ctxt, admission.message);
+    } else {
+      await sendResponseForUnprocessableEntity(ctxt, message);
+    }
+    return undefined;
+  }
+  return reserved;
+}
+
+// Releases reservations for requests that were never sent.
+async function releaseReservations(
+  dbAdapter: DBAdapter,
+  runId: string,
+  reservationIds: string[],
+) {
+  for (let reservationId of reservationIds) {
+    await settleAutomationRunAIRequest(dbAdapter, {
+      runId,
+      reservationId,
+      costInUsd: 0,
+    });
+  }
 }
 
 async function readSubmit(
@@ -373,13 +518,21 @@ async function readSubmit(
 }
 
 // Sends one call to OpenRouter's Batch API with the platform's OpenRouter
-// key, and reads the whole answer. Answers the failure itself and returns
-// undefined when the call can't be made or fails.
+// key, and reads the whole answer. A call that was never sent (no key covers
+// the URL, or the outbound guard refused it before sending) is `not-sent`,
+// and its refusal is answered here. A call that went out and failed before
+// its answer was read is `unknown`: OpenRouter may have acted on it. Either
+// way the failure is answered here, and the caller reports an `unknown` one.
+type OpenRouterAnswer =
+  | { kind: 'answered'; status: number; json: unknown; text: string }
+  | { kind: 'not-sent' }
+  | { kind: 'unknown'; error: unknown };
+
 async function sendToOpenRouter(
   ctxt: Koa.Context,
   dbAdapter: DBAdapter,
   { url, method, body }: { url: string; method: string; body?: string },
-): Promise<{ status: number; json: unknown; text: string } | undefined> {
+): Promise<OpenRouterAnswer> {
   let destination =
     await AllowedProxyDestinations.getInstance(dbAdapter).getDestinationConfig(
       url,
@@ -391,7 +544,7 @@ async function sendToOpenRouter(
       'Service Unavailable',
       'The realm server has no OpenRouter key for batches',
     );
-    return undefined;
+    return { kind: 'not-sent' };
   }
   let scrubber = new CredentialScrubber();
   let credential = systemKeyCredential(destination);
@@ -415,7 +568,7 @@ async function sendToOpenRouter(
     } catch {
       json = undefined;
     }
-    return { status: response.status, json, text };
+    return { kind: 'answered', status: response.status, json, text };
   } catch (error) {
     scrubError(error, scrubber);
     let failure = outboundFailureResponse(error);
@@ -429,15 +582,17 @@ async function sendToOpenRouter(
         failure.statusText,
         failure.message,
       );
-      return undefined;
+      return error instanceof OutboundRefusedError
+        ? { kind: 'not-sent' }
+        : { kind: 'unknown', error };
     }
+    // The caller reports it, with what it knows about the call.
     log.error(`Error in batch call${outboundLogContext(error, call)}:`, error);
-    Sentry.captureException(error);
     await sendResponseForSystemError(
       ctxt,
       'An error occurred while calling the batch API',
     );
-    return undefined;
+    return { kind: 'unknown', error };
   }
 }
 

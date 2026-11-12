@@ -16,6 +16,7 @@ import {
   rri,
   startAutomationRunAttempt,
   finishAutomationRun,
+  revokeUserSessions,
   VirtualNetwork,
   type AutomationRun,
 } from '@cardstack/runtime-common';
@@ -47,6 +48,7 @@ import {
   type PricingReporter,
 } from '../lib/pricing.ts';
 import { mintRunToken } from '../lib/run-token.ts';
+import { BATCHED_AI_RESERVE_FACTOR } from '../lib/automation-ai-spending.ts';
 import { OPENROUTER_MODELS_REALM } from '../lib/ai-batch-estimate.ts';
 
 const SERVER_URL = 'http://127.0.0.1:4445/';
@@ -96,6 +98,7 @@ function pricingEnv(): Record<string, string> {
 function declaration(
   automationId = AUTOMATION,
   batchedAI = true,
+  aiCredits = 100,
 ): AutomationDeclaration {
   return {
     url: automationId,
@@ -114,7 +117,7 @@ function declaration(
       callApiCalls: 20,
       responseBytes: 1_000_000,
       resolveCalls: 5,
-      aiCredits: 100,
+      aiCredits,
       writes: 50,
       seconds: 300,
       dailyCredits: 100,
@@ -155,7 +158,7 @@ module(basename(import.meta.filename), function () {
     // What the stubbed OpenRouter received, and what it answers next.
     let sent: { url: string; method: string; body: string; auth: string }[];
     let fetchStub: sinon.SinonStub;
-    let submitAnswer: { status: number; body: unknown };
+    let submitAnswer: { status: number; body: unknown } | 'network-error';
     let statusAnswer: { status: number; body: unknown };
 
     async function startRealmServer(
@@ -297,6 +300,9 @@ module(basename(import.meta.filename), function () {
                 auth: headers.get('authorization') ?? '',
               });
               let answer = method === 'POST' ? submitAnswer : statusAnswer;
+              if (answer === 'network-error') {
+                throw new TypeError('fetch failed');
+              }
               return new Response(JSON.stringify(answer.body), {
                 status: answer.status,
                 headers: { 'content-type': 'application/json' },
@@ -343,14 +349,18 @@ module(basename(import.meta.filename), function () {
       );
     }
 
-    async function switchOn(automationId = AUTOMATION, batchedAI = true) {
+    async function switchOn(
+      automationId = AUTOMATION,
+      batchedAI = true,
+      aiCredits = 100,
+    ) {
       let result = await switchOnAutomation(
         dbAdapter,
         {
           automationId,
           realm: REALM,
           user: PAYER,
-          declaration: declaration(automationId, batchedAI),
+          declaration: declaration(automationId, batchedAI, aiCredits),
         },
         { matrixServerName: 'localhost', virtualNetwork: new VirtualNetwork() },
       );
@@ -488,6 +498,30 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         Math.abs(batch!.estimatedUsd - expected) < 1e-12,
         `the estimate is each request's worst case at the batch price (${batch!.estimatedUsd} vs ${expected})`,
+      );
+
+      assert.strictEqual(
+        batch!.runAIReservations.length,
+        2,
+        'each request holds a reservation on the run’s AI cap',
+      );
+      let reservedCredits =
+        (requestCeilingUsd(
+          chatBody('Classify ticket one'),
+          PROMPT_USD,
+          COMPLETION_USD,
+        ) +
+          requestCeilingUsd(
+            chatBody('Classify ticket two'),
+            PROMPT_USD,
+            COMPLETION_USD,
+          )) *
+        1000 *
+        BATCHED_AI_RESERVE_FACTOR;
+      let held = (await getAutomationRun(dbAdapter, run.id))!.aiCreditsReserved;
+      assert.ok(
+        Math.abs(held - reservedCredits) < 1e-9,
+        `the run holds twice each request's worst case at the listed price (${held} vs ${reservedCredits})`,
       );
 
       assert.strictEqual(
@@ -640,6 +674,98 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
     });
 
+    test('a batch that would pass the run’s AI cap is refused before anything is sent', async function (assert) {
+      // Each request's worst case at the listed price is about 1.2 credits,
+      // so two of them reserved at twice that pass a 4-credit cap.
+      await switchOn(AUTOMATION, true, 4);
+      let { run, token } = await runningRun();
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(response.status, 403);
+      assert.ok(
+        response.body.errors[0].startsWith('Request 2 of the batch'),
+        response.body.errors[0],
+      );
+      assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, run.id))!.aiCreditsReserved,
+        0,
+        'the first request’s reservation is released',
+      );
+    });
+
+    test('a batch OpenRouter refuses releases its reservations', async function (assert) {
+      await switchOn();
+      let { run, token } = await runningRun();
+      submitAnswer = {
+        status: 402,
+        body: { error: { message: 'Insufficient balance.' } },
+      };
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(response.status, 402);
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, run.id))!.aiCreditsReserved,
+        0,
+      );
+    });
+
+    test('a submit whose outcome is unknown keeps its reservations and records nothing', async function (assert) {
+      await switchOn();
+      let { run, token } = await runningRun();
+      submitAnswer = 'network-error';
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(response.status, 500);
+      assert.strictEqual(sent.length, 1, 'the submit went out');
+      let [{ count }] = await dbAdapter.execute(
+        'SELECT COUNT(*) AS count FROM ai_batches',
+      );
+      assert.strictEqual(Number(count), 0, 'nothing is recorded');
+      assert.ok(
+        (await getAutomationRun(dbAdapter, run.id))!.aiCreditsReserved > 0,
+        'the reservations stay held, since a batch may exist',
+      );
+    });
+
+    test('a run token whose person’s sessions were revoked is refused', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+      await revokeUserSessions(dbAdapter, PAYER);
+      // A revocation counts against tokens minted before it, by the second.
+      await dbAdapter.execute(
+        `UPDATE users SET sessions_revoked_at = sessions_revoked_at + 5 WHERE matrix_user_id = $1`,
+        { bind: [PAYER] },
+      );
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(response.status, 401);
+      assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
+    });
+
+    test('a status read needs no batched AI opt-in, so a follow-up can read a paid batch', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+      await submit(token, twoRequests());
+      await dbAdapter.execute(
+        `UPDATE automations SET caps_snapshot = jsonb_set(caps_snapshot, '{batchedAI}', 'false') WHERE automation_id = $1`,
+        { bind: [AUTOMATION] },
+      );
+
+      let refused = await submit(token, twoRequests());
+      assert.strictEqual(refused.status, 403, 'a submit still needs it');
+
+      let response = await request
+        .get('/_ai-batches/batch_123')
+        .set('Authorization', `Bearer ${token}`);
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(response.body.status, 'in_progress');
+    });
+
     test('a deadline over 24 hours is refused', async function (assert) {
       await switchOn();
       let { token } = await runningRun();
@@ -768,6 +894,9 @@ module(basename(import.meta.filename), function () {
       for (let url of [
         'https://openrouter.ai/api/v1/batches',
         'https://openrouter.ai/api/v1/batches/batch_123',
+        'https://openrouter.ai/api/v1/%62atches',
+        'https://openrouter.ai/api/v1/batche%73/batch_123',
+        'https://openrouter.ai/api/v1/%E0%A4%A',
       ]) {
         let response = await request
           .post('/_request-forward')
@@ -780,6 +909,14 @@ module(basename(import.meta.filename), function () {
             requestBody: JSON.stringify(twoRequests()),
           });
         assert.strictEqual(response.status, 403, url);
+        // The payer has no credits, so the per-call path would refuse with
+        // a 403 too; the message says the batch guard refused it.
+        assert.ok(
+          response.body.errors[0].includes(
+            'accepted only from automation runs',
+          ),
+          `${url}: ${response.body.errors[0]}`,
+        );
       }
       assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
     });

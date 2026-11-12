@@ -255,12 +255,16 @@ whatever happens to its run.
 `POST /_ai-batches` and `GET /_ai-batches/<batch id>`
 (`packages/realm-server/handlers/handle-ai-batches.ts`), which call
 `https://openrouter.ai/api/v1/batches` with the platform's OpenRouter key.
-That key is the system key for that destination in `proxy_endpoints` (see
-the `system-keys` skill), with credit strategy `none`, since nothing is
-charged per call. Only a run token reaches the path, only from a running run
-of an automation whose caps snapshot has `batchedAI` on. `_request-forward`
-refuses OpenRouter batch URLs, so no batch can be submitted without being
-recorded.
+That key is the system key whose destination covers that URL in
+`proxy_endpoints` (see the `system-keys` skill). Add it with
+`--credit-strategy none`, which the server stores as `no-credit`, since
+nothing is charged per call. Only a run token reaches the path, from a
+running run that its token's attempt still owns, for a person whose sessions
+weren't revoked since the token was minted. A submit also needs the
+automation's caps snapshot to have `batchedAI` on; a status read doesn't, so
+a follow-up run can read a batch that is already paid for.
+`_request-forward` refuses OpenRouter batch URLs, percent-encoded spellings
+included, so a batch goes out only through the batch path.
 
 **The record.** Each accepted submit writes one `ai_batches` row:
 
@@ -271,6 +275,7 @@ recorded.
 | `realm`, `automation_id` | the automation's realm and card. Copied, not joined: a batch still settles after its realm and runs are gone |
 | `model`, `request_count` | the model every request names, and how many requests the batch holds                                         |
 | `estimated_usd`          | the most the batch can cost, in USD (below)                                                                  |
+| `run_ai_reservations`    | the ids of the reservations its requests hold on the submitting run's AI spending cap (below)                |
 | `deadline`               | how long the submitting script waits for the results, at most 24 hours                                       |
 | `expires_at`             | when OpenRouter says the provider stops working on the batch                                                 |
 | `state`, `state_read_at` | OpenRouter's status as last read, and when. A final status is never overwritten                              |
@@ -291,8 +296,22 @@ as an `OpenRouterModel` card in the `@cardstack/openrouter/` realm like any
 other model. A model with no batch listing is priced at its own listed price,
 which a batch never costs more than. A request whose worst case can't be
 priced, or a model with no listing, is refused before anything is sent. The
-estimate is what a batch that ends with no reported cost is billed at, so
-billing it never bills less than OpenRouter charged.
+estimate is what a batch that ends with no reported cost is billed at. It is
+an upper bound at a model's base rates, but the model sync doesn't keep the
+higher rates some models list above a prompt-length threshold (OpenRouter's
+`pricing.overrides`), so for those models a request long enough to cross the
+threshold can cost more than its estimate.
+
+**The run's AI spending cap.** Before a batch is sent, each request reserves
+twice its worst case at the model's listed (normal) price on the submitting
+run's `aiCredits` cap (`admitAutomationRunAIRequest` with `batched`, ADR 030
+§1.4): once for the batch, and once for the normal-price request it falls
+back to when the batch misses its deadline. A batch any of whose requests
+would pass the cap is refused whole, with a 403. When the batch isn't
+submitted (OpenRouter refuses it, or no key covers the URL), the
+reservations are released. Otherwise they stay held, listed in
+`run_ai_reservations`, until the settle job settles them with what the batch
+cost.
 
 A batch carries no margin, like any AI charge (ADR 029 §1.1).
 
@@ -316,10 +335,26 @@ GROUP BY b.batch_id, b.estimated_usd, b.state;
 ```
 
 The submit logs one line on the `ai-batches` channel naming the run, the
-batch, its request count, the estimate and the listing it was priced at. A
-batch OpenRouter accepted that couldn't then be recorded logs an error and
-goes to Sentry with its batch id, run, identity and estimate: it is paid for
-and nothing will bill it, so bill it by hand from that message.
+batch, its request count, the estimate and the listing it was priced at.
+
+**A batch that may exist with no row.** A batch is recorded only after
+OpenRouter answers its submit. Two cases can leave a batch that is paid for
+and recorded nowhere, and both log an error and go to Sentry with the run,
+identity, automation, model, request count, estimate and reservations in the
+event's extras:
+
+- OpenRouter accepted the batch and the row couldn't be written. The event
+  names the batch id.
+- The submit went out and its outcome is unknown: it timed out, its answer
+  couldn't be read, or OpenRouter accepted it and named no batch. The log
+  line reads `batch submit outcome unknown`. Find the batch in OpenRouter's
+  batch list (`GET https://openrouter.ai/api/v1/batches`, newest first) by
+  its model, request count and submission time.
+
+Either way, bill the batch by hand from that event. A process that stops
+between OpenRouter's answer and the insert leaves no event at all, and
+nothing yet reconciles OpenRouter's batch list against `ai_batches` (ADR 030
+remediation).
 
 ## Reading the ledger by kind and reference
 

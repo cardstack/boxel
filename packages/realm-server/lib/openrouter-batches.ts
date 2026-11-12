@@ -20,7 +20,10 @@ export const OPENROUTER_BATCH_COMPLETION_WINDOW = '24h';
 // The longest a script may wait for a batch's results.
 export const MAX_AI_BATCH_DEADLINE_SECONDS = 24 * 60 * 60;
 
-// Whether `url` is OpenRouter's batch API or under it.
+// Whether `url` is OpenRouter's batch API or under it. OpenRouter decodes a
+// path before routing it, so `/api/v1/%62atches` reaches the batch API too:
+// the path is compared decoded, and one that can't be decoded counts as a
+// batch URL rather than slipping past.
 export function isOpenRouterBatchURL(url: string): boolean {
   let parsed: URL;
   let batches = new URL(OPENROUTER_BATCHES_URL);
@@ -29,11 +32,16 @@ export function isOpenRouterBatchURL(url: string): boolean {
   } catch {
     return false;
   }
-  return (
-    parsed.origin === batches.origin &&
-    (parsed.pathname === batches.pathname ||
-      parsed.pathname.startsWith(`${batches.pathname}/`))
-  );
+  if (parsed.origin !== batches.origin) {
+    return false;
+  }
+  let path: string;
+  try {
+    path = decodeURIComponent(parsed.pathname);
+  } catch {
+    return true;
+  }
+  return path === batches.pathname || path.startsWith(`${batches.pathname}/`);
 }
 
 export function openRouterBatchURL(batchId: string): string {
