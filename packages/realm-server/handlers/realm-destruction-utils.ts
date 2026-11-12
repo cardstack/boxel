@@ -150,4 +150,7 @@ export async function removeRealmDatabaseArtifacts(args: {
   // And its switched-on automations, so a realm later made at the same URL
   // starts with none on, paid for by no one.
   await q([`DELETE FROM automations WHERE realm =`, param(realmURL)]);
+  // And the record of the files its automations created, whose files went
+  // with the realm.
+  await q([`DELETE FROM automation_files WHERE realm_url =`, param(realmURL)]);
 }

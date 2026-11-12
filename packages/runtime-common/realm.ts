@@ -215,6 +215,11 @@ import {
   type WriteContext,
 } from './realm-history.ts';
 import {
+  forgetAutomationFiles,
+  recordAutomationFiles,
+  type AutomationRunWrite,
+} from './automation-files.ts';
+import {
   systemError,
   notFound,
   notIndexedYet,
@@ -2597,6 +2602,10 @@ export interface WriteOptions {
   // write that restores an earlier revision. Absent, the write is recorded
   // as `api`. It never decides the author, which is `initiatingUser`.
   history?: WriteContext;
+  // The automation run whose batch this write commits. The files the write
+  // creates are recorded as the run's automation's, which its storage charge
+  // prices. Set only by the commit of a run's batch.
+  automationRun?: AutomationRunWrite;
   // Where a caller reporting where its write's time went wants this commit's
   // stages stamped. The commit drains prior indexing, makes the bytes
   // durable, queues an index job, waits for a worker to run it and then
@@ -6249,6 +6258,7 @@ export class Realm {
             appendedPaths,
             initiatingUser,
             history: options?.history,
+            automationRun: options?.automationRun,
             partial: true,
           });
         } catch (persistErr: unknown) {
@@ -6298,6 +6308,7 @@ export class Realm {
       appendedPaths,
       initiatingUser,
       history: options?.history,
+      automationRun: options?.automationRun,
       partial: false,
     });
     // Everything the caller asked for is durable at this point: the bytes, the
@@ -6672,6 +6683,7 @@ export class Realm {
     appendedPaths,
     initiatingUser,
     history,
+    automationRun,
     partial,
   }: {
     fileMetaRows: {
@@ -6685,6 +6697,7 @@ export class Realm {
     appendedPaths: Set<LocalPath>;
     initiatingUser: string | null;
     history: WriteContext | undefined;
+    automationRun?: AutomationRunWrite;
     partial: boolean;
   }): Promise<
     Map<
@@ -6718,6 +6731,16 @@ export class Realm {
       // records nothing never opens a transaction here.
       let createdMap = await this.persistFileMeta(fileMetaRows);
       await this.removeFileMeta(removedFiles);
+      // The automation files record is server-only: the in-browser realm's
+      // database has no such table, and no automation writes there.
+      if (this.#dbAdapter.kind === 'pg') {
+        await this.#persistAutomationFiles(
+          dbAdapterQuerier(this.#dbAdapter),
+          addedFiles,
+          removedFiles,
+          automationRun,
+        );
+      }
       return createdMap;
     }
     // How the write was made, checked here whoever set it. A write that
@@ -6741,6 +6764,12 @@ export class Realm {
       async (querier) => {
         let createdMap = await this.persistFileMeta(fileMetaRows, querier);
         await this.removeFileMeta(removedFiles, querier);
+        await this.#persistAutomationFiles(
+          querier,
+          addedFiles,
+          removedFiles,
+          automationRun,
+        );
         if (event) {
           let started = performance.now();
           await querier(['SAVEPOINT change_journal']);
@@ -6772,6 +6801,21 @@ export class Realm {
       },
       { label: 'realm write outcome' },
     );
+  }
+
+  // Keeps the record of the files automations' runs created in step with a
+  // write: the files a run's commit created become its automation's, and a
+  // deleted file stops being anyone's, whoever deleted it.
+  async #persistAutomationFiles(
+    querier: Querier,
+    addedFiles: LocalPath[],
+    removedFiles: LocalPath[],
+    automationRun: AutomationRunWrite | undefined,
+  ): Promise<void> {
+    await forgetAutomationFiles(querier, this.url, removedFiles);
+    if (automationRun) {
+      await recordAutomationFiles(querier, this.url, automationRun, addedFiles);
+    }
   }
 
   private lowestStatusCode(errors: AtomicPayloadValidationError[]): number {
