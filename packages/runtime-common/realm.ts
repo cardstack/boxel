@@ -158,15 +158,16 @@ import type {
   HtmlResource,
 } from './resource-types.ts';
 import { HtmlResourceType } from './resource-types.ts';
+import type { HostRoutingRule } from './host-routing-validation.ts';
 import {
-  DEFAULT_REDIRECT_STATUS,
-  findRedirectCycles,
-  isRedirectRoutingRule,
-  normalizeRoutingPath,
-  parseRedirectStatusCode,
-  validateRedirectTarget,
-  type HostRoutingRule,
-} from './host-routing-validation.ts';
+  hostRouteTypeInfo,
+  hostRouteTypeRefs,
+  hostRoutingMapFromRoutes,
+  typeLookupKey,
+  validateHostRoutes,
+  type HostRouteTypeInfo,
+  type HostRoutesValidation,
+} from './host-routes.ts';
 import type { LocalPath } from './paths.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -3337,6 +3338,9 @@ export class Realm {
   // replicas via the realm_index_updated broadcast. `null` means "not yet
   // computed"; an empty array is a valid cached result (no routing rules).
   #cachedHostRoutingMap: HostRoutingRule[] | null = null;
+  // The validated host routes the map is built from, cached and dropped
+  // with it.
+  #cachedHostRoutes: HostRoutesValidation | null = null;
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -5023,6 +5027,7 @@ export class Realm {
       );
     });
     this.#cachedHostRoutingMap = null;
+    this.#cachedHostRoutes = null;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
@@ -18457,9 +18462,10 @@ export class Realm {
   }
 
   // The realm's routing rules exactly as the indexed RealmConfig card's search
-  // document holds them, child routes included and nothing validated. Not
-  // cached: `getHostRoutingMap` caches what it builds from this.
-  async getRawHostRoutingRules(): Promise<RawHostRoutingRule[]> {
+  // document holds them, child routes included and nothing validated. Only
+  // the validation in `#validateHostRoutes` reads them: the server routes on
+  // validated routes alone.
+  async #readRawHostRoutingRules(): Promise<RawHostRoutingRule[]> {
     let realmConfigCardURL = new URL(
       this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
     );
@@ -18471,112 +18477,77 @@ export class Realm {
     return readRawHostRoutingRules(indexEntry.searchDoc);
   }
 
-  // CS-10054: read host routing rules from the indexed RealmConfig card.
-  // The `instance` field is `linksTo(CardDef)`, so the indexed
-  // searchDoc flattens each rule's link as `{ id, ...flattened
-  // linked-card attrs }`. We only need the absolute `id` here.
-  // Returns absolute URLs. A rule may instead declare a redirect
-  // (`redirectTo` + optional `statusCode`); those surface as redirect
-  // entries in the map.
+  // The realm's host routes, validated: every route form, child routes
+  // included, in authored order, with the warnings for the routes that were
+  // dropped. Cached until the next index, like the routing map. Resolves to
+  // no routes when the rules can't be read, without caching that.
+  async getHostRoutes(): Promise<HostRoutesValidation> {
+    return (await this.#validateHostRoutes()) ?? { routes: [], warnings: [] };
+  }
+
+  async #validateHostRoutes(): Promise<HostRoutesValidation | undefined> {
+    if (this.#cachedHostRoutes) {
+      return this.#cachedHostRoutes;
+    }
+    try {
+      let rules = await this.#readRawHostRoutingRules();
+      // The definitions of the types field-match routes name, read before
+      // validating so the validation itself stays synchronous. A type whose
+      // definition can't be read is not a card type to the validation, and
+      // its routes stay dropped until the next index.
+      let types = new Map<string, HostRouteTypeInfo>();
+      for (let ref of hostRouteTypeRefs(rules)) {
+        try {
+          let entry =
+            await this.#requestDefinitionLookup.lookupDefinitionEntry(ref);
+          types.set(
+            typeLookupKey(ref),
+            hostRouteTypeInfo(entry, (codeRef) =>
+              internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+            ),
+          );
+        } catch (e) {
+          this.#log.warn(
+            `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
+          );
+        }
+      }
+      let validation = validateHostRoutes(rules, {
+        realmURL: new URL(this.url),
+        lookupType: (ref) => types.get(typeLookupKey(ref)),
+      });
+      for (let warning of validation.warnings) {
+        this.#log.warn(
+          `${warning.dropped ? 'dropping' : 'warning for'} host routing rule for path "${warning.path}": ${warning.message}`,
+        );
+      }
+      return (this.#cachedHostRoutes = validation);
+    } catch (e) {
+      this.#log.warn(
+        `failed to read host routing rules from RealmConfig card: ${e}`,
+      );
+      // Don't cache a transient read failure — leave `null` so the next
+      // call retries the index query.
+      return undefined;
+    }
+  }
+
+  // The fixed paths the realm routes: each top-level fixed card route and
+  // redirect without `:name` segments, as `{ path, id }` (an absolute card
+  // URL in this realm) or `{ path, redirectTo, statusCode }`. Built from the
+  // validated routes (`getHostRoutes`), so the same checks apply; dynamic
+  // and nested routes are not in it.
   async getHostRoutingMap(): Promise<HostRoutingRule[]> {
     if (this.#cachedHostRoutingMap) {
       return this.#cachedHostRoutingMap;
     }
-    try {
-      let rules = await this.getRawHostRoutingRules();
-      let map = rules.flatMap((rule): HostRoutingRule[] => {
-        let { path, instance } = rule;
-        if (typeof path !== 'string') return [];
-        // Normalize a rule authored with a trailing slash ('/pricing/') to
-        // its canonical slash-free form ('/pricing'). Request paths are
-        // matched slash-insensitively (RealmPaths.local strips trailing
-        // slashes), so an un-normalized '/pricing/' rule would never match;
-        // normalizing here also feeds the correct canonical form to the
-        // serve-index redirect and the client-side routing map. Shared with
-        // the editor's duplicate detection so a '/pricing' + '/pricing/'
-        // collision is flagged there. The realm-root rule '/' is preserved.
-        let normalizedPath = normalizeRoutingPath(path);
-        let redirectTo = rule.redirectTo;
-        if (typeof redirectTo === 'string' && redirectTo.trim()) {
-          // A redirect rule. A rule carrying both `redirectTo` and
-          // `instance` is only reachable by hand-editing realm.json —
-          // the editor clears one when the other is chosen — and the
-          // redirect wins as the more explicit declaration.
-          //
-          // Unless it doesn't hold up: an unusable target falls through
-          // to the instance below rather than taking the rule down with
-          // it, so a typo in a hand-added `redirectTo` leaves a route
-          // that was serving a card still serving it. With no usable
-          // instance either, the rule drops and the path resolves as if
-          // unrouted.
-          let target = redirectTo.trim();
-          let warning = validateRedirectTarget(target);
-          if (warning) {
-            this.#log.warn(
-              `ignoring invalid redirect target ${JSON.stringify(
-                target,
-              )} on host routing rule for path "${normalizedPath}": ${warning}`,
-            );
-          } else {
-            let statusCode =
-              parseRedirectStatusCode(rule.statusCode) ??
-              DEFAULT_REDIRECT_STATUS;
-            return [{ path: normalizedPath, redirectTo: target, statusCode }];
-          }
-        }
-        if (!instance || typeof instance !== 'object') return [];
-        let id = (instance as Record<string, unknown>).id;
-        if (typeof id !== 'string') return [];
-        let idURL: URL;
-        try {
-          idURL = new URL(id);
-        } catch {
-          return [];
-        }
-        // Defensive same-realm guard. The project spec restricts
-        // routing rules to cards within the same realm; CS-10052
-        // enforces that in the UI but the file is hand-editable, so
-        // the read path filters too. Without this guard a realm owner
-        // could point `instance` at a private realm's card and the
-        // serve-index cardURL rewrite would surface its prerendered
-        // HTML through their public realm's routed path. `inRealm`
-        // is URL-aware, so neighbouring realms with shared prefixes
-        // (`/realm-evil/` vs `/realm/`) and trailing-slash variance
-        // are handled correctly.
-        if (!this.paths.inRealm(idURL)) {
-          this.#log.warn(
-            `dropping host routing rule for path "${normalizedPath}" — target ${id} is outside this realm`,
-          );
-          return [];
-        }
-        return [{ path: normalizedPath, id }];
-      });
-      // Drop redirect rules that chain back on themselves. Serving them
-      // would bounce the client between URLs until it gives up, and a
-      // permanent 301 would keep doing so from cache after the config is
-      // fixed. Dropped, the path resolves like any unrouted one. Only
-      // the rules forming the ring go — a rule pointing INTO it resolves
-      // once the ring is gone.
-      let looping = new Set(findRedirectCycles(map));
-      if (looping.size > 0) {
-        for (let path of looping) {
-          this.#log.warn(
-            `dropping host routing rule for path "${path}" — its redirect target loops back to itself`,
-          );
-        }
-        map = map.filter(
-          (rule) => !(isRedirectRoutingRule(rule) && looping.has(rule.path)),
-        );
-      }
-      return (this.#cachedHostRoutingMap = map);
-    } catch (e) {
-      this.#log.warn(
-        `failed to read host routing map from RealmConfig card: ${e}`,
-      );
-      // Don't cache a transient read failure — leave `null` so the next
-      // call retries the index query.
+    let validation = await this.#validateHostRoutes();
+    if (!validation) {
       return [];
     }
+    return (this.#cachedHostRoutingMap = hostRoutingMapFromRoutes(
+      validation.routes,
+    ));
   }
 
   // Memoized, and coalesced while cold. The assignment lands after the

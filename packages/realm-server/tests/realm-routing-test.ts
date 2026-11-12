@@ -3,8 +3,8 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
 import type {
+  HostFieldMatchRoute,
   LooseSingleCardDocument,
-  RawHostRoutingRule,
   Realm,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -140,11 +140,22 @@ function makeRouteFormsFixture(): Record<
 > {
   return {
     'person.gts': `
-      import { CardDef, field, contains } from "@cardstack/base/card-api";
+      import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
       export class Person extends CardDef {
         static displayName = 'Person';
         @field slug = contains(StringField);
+        @field friendOf = linksTo(() => Person);
+      }
+    `,
+    'post.gts': `
+      import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import { Person } from "./person";
+      export class Post extends CardDef {
+        static displayName = 'Post';
+        @field slug = contains(StringField);
+        @field author = linksTo(Person);
       }
     `,
     'home.json': {
@@ -187,6 +198,12 @@ function makeRouteFormsFixture(): Record<
                   match: { slug: ':friend_slug' },
                   routes: [{ path: '/about', name: 'about' }],
                 },
+                {
+                  path: '/posts/:post_slug',
+                  name: 'post',
+                  type: { module: './post', name: 'Post' },
+                  match: { slug: ':post_slug' },
+                },
                 { path: '/card', name: 'profile-card' },
               ],
             },
@@ -207,21 +224,6 @@ function makeRouteFormsFixture(): Record<
       },
     },
   };
-}
-
-// The search document flattens a linked card into `instance`; keep only its
-// id, which is all a routing rule needs of it.
-function withInstanceIds(rules: RawHostRoutingRule[]): RawHostRoutingRule[] {
-  return rules.map((rule) => {
-    let result: RawHostRoutingRule = { ...rule };
-    if (rule.instance) {
-      result.instance = { id: (rule.instance as { id: unknown }).id };
-    }
-    if (rule.routes) {
-      result.routes = withInstanceIds(rule.routes);
-    }
-    return result;
-  });
 }
 
 module(basename(import.meta.filename), function () {
@@ -322,7 +324,7 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('Realm.getRawHostRoutingRules', function (hooks) {
+  module('Realm.getHostRoutes', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-forms/');
     let testRealm: Realm;
 
@@ -339,47 +341,71 @@ module(basename(import.meta.filename), function () {
       await testRealm.indexing();
     });
 
-    test('reads every route form and its child routes back from the search document', async function (assert) {
-      let rules = await testRealm.getRawHostRoutingRules();
+    test('validates every route form and its child routes from the search document', async function (assert) {
+      let { routes, warnings } = await testRealm.getHostRoutes();
       let personType = { module: `${realmURL.href}person`, name: 'Person' };
 
-      assert.deepEqual(withInstanceIds(rules), [
-        {
-          path: '/',
-          name: 'home',
-          instance: { id: `${realmURL.href}home` },
-        },
-        { path: '/old', redirectTo: '/', statusCode: 301 },
-        {
-          path: '/people/:person_id',
-          name: 'person',
-          card: './Person/:person_id',
-        },
-        {
-          path: '/:person_slug',
-          name: 'profile',
-          type: personType,
-          match: { slug: ':person_slug' },
-          where: POST_WHERE,
-          routes: [
-            {
-              path: '/friends/:friend_slug',
-              name: 'friend',
-              type: personType,
-              parent: 'friendOf',
-              match: { slug: ':friend_slug' },
-              routes: [
-                {
-                  path: '/about',
-                  name: 'about',
-                  instance: { id: `${realmURL.href}home` },
-                },
-              ],
-            },
-            { path: '/card', name: 'profile-card' },
-          ],
-        },
+      assert.deepEqual(
+        routes.map((route) => [route.kind, route.fullPath, route.name]),
+        [
+          ['fixed-card', '/', 'home'],
+          ['redirect', '/old', undefined],
+          ['card-id', '/people/:person_id', 'person'],
+          ['field-match', '/:person_slug', 'profile'],
+        ],
+      );
+      let [home, , person, profileRoute] = routes;
+      let profile = profileRoute as HostFieldMatchRoute;
+      assert.strictEqual(
+        home?.kind === 'fixed-card' ? home.id : undefined,
+        `${realmURL.href}home`,
+      );
+      assert.deepEqual(
+        person?.kind === 'card-id' ? person.card.paramNames : undefined,
+        ['person_id'],
+      );
+      assert.deepEqual(profile.type, personType);
+      assert.deepEqual(profile.where, POST_WHERE, 'where is kept as authored');
+      assert.deepEqual(profile.match, [
+        { field: 'slug', param: 'person_slug' },
       ]);
+
+      let [friend, post] = profile.routes;
+      assert.strictEqual(
+        friend?.fullPath,
+        '/:person_slug/friends/:friend_slug',
+      );
+      assert.deepEqual(
+        friend?.kind === 'field-match' ? friend.parentLink : undefined,
+        { field: 'friendOf', side: 'child', kind: 'linksTo', inferred: false },
+        'the named parent link is checked against the indexed definition',
+      );
+      assert.deepEqual(
+        post?.kind === 'field-match' ? post.parentLink : undefined,
+        { field: 'author', side: 'child', kind: 'linksTo', inferred: true },
+        'the parent link is inferred from the indexed definitions',
+      );
+      assert.deepEqual(
+        warnings.map((w) => [w.code, w.path, w.dropped]),
+        [
+          [
+            'fixed-route-with-params',
+            '/:person_slug/friends/:friend_slug/about',
+            true,
+          ],
+          ['missing-form', '/:person_slug/card', true],
+        ],
+        'a fixed route under a dynamic route is dropped, and so is a route with no form',
+      );
+    });
+
+    test('caches the validated routes until the index caches clear', async function (assert) {
+      let first = await testRealm.getHostRoutes();
+      assert.strictEqual(await testRealm.getHostRoutes(), first);
+      testRealm.clearRealmIndexCaches();
+      let second = await testRealm.getHostRoutes();
+      assert.notStrictEqual(second, first);
+      assert.deepEqual(second, first);
     });
 
     test('the routing map still serves the fixed card and redirect rules', async function (assert) {
