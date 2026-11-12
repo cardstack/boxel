@@ -119,6 +119,10 @@ export async function maintainRepo(
       '-d',
       ...(consolidated ? ['-a'] : []),
       '-q',
+      // Repack runs `update-server-info` itself unless told not to. Only the
+      // pass's last step may write `info/refs`, so it names a HEAD only once
+      // every step has run.
+      '-n',
       // A bare repo writes a bitmap with every `-a` repack by default. It
       // speeds up serving fetches, which history doesn't do, and adds a file.
       '--no-write-bitmap-index',

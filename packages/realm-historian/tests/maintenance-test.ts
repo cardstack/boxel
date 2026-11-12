@@ -571,6 +571,34 @@ module('maintenance', (hooks) => {
     );
   });
 
+  test('a pass that fails after its repack leaves the repo unmaintained', async (assert) => {
+    let [first] = await writeLooseHistory(gitDir, 1);
+    await maintainRepo(gitDir);
+    await writeLooseHistory(gitDir, 3, { from: 1, parent: first });
+    // A lock another git holds fails the commit-graph step, which follows
+    // the repack.
+    let lock = join(
+      gitDir,
+      'objects',
+      'info',
+      'commit-graphs',
+      'commit-graph-chain.lock',
+    );
+    await writeFile(lock, '');
+    await assert.rejects(maintainRepo(gitDir), /File exists/);
+    assert.strictEqual(
+      (await countObjects(gitDir)).packs,
+      2,
+      'the repack step ran',
+    );
+    assert.strictEqual(
+      await maintainedHead(gitDir),
+      first,
+      'info/refs still names the HEAD of the last complete pass',
+    );
+    assert.false(await isMaintained(gitDir));
+  });
+
   test('counting objects reports loose and packed objects', async (assert) => {
     await writeLooseHistory(gitDir, 2);
     let loose = await countObjects(gitDir);
