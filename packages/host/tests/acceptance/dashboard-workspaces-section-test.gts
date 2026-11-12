@@ -33,6 +33,7 @@ import {
   setupDashboardTest,
   operatorModeState,
 } from '../helpers/dashboard';
+import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 import { stubWindowOpen } from '../helpers/window-open';
 
 const RECENT_TILES = '[data-test-workspace-recent-list] [data-test-workspace]';
@@ -341,7 +342,7 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
         .filter((name) => name !== 'Workspace A')
         .at(-1)!;
       let tileNames = workspaceNames(RECENT_TILES);
-      markUpdated(urlFor(rowName), new Date());
+      markUpdated(urlFor(rowName), new Date(TEST_CLOCK_INSTANT));
       await settled();
 
       assert.strictEqual(
@@ -473,7 +474,7 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
       let rowName = workspaceNames(ROWS).find(
         (name) => name !== 'Workspace A',
       )!;
-      let now = Date.now();
+      let now = TEST_CLOCK_INSTANT;
       markHosted(urlFor(rowName), {
         'https://older.example.com/': String(now - 60_000),
         'https://newer.example.com/': String(now),
@@ -519,7 +520,7 @@ module('Acceptance | dashboard workspaces section', function (hooks) {
       await visitDashboard(assert, 2);
       let hour = 60 * 60 * 1000;
       for (let [i, url] of [realmURL, ...moreRealmURLs].entries()) {
-        markUpdated(url, new Date(Date.now() - (i + 1) * hour));
+        markUpdated(url, new Date(TEST_CLOCK_INSTANT - (i + 1) * hour));
       }
       await settled();
       let rowName = workspaceNames(ROWS).at(-1)!;
