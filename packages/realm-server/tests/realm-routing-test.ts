@@ -388,6 +388,19 @@ function makeOtherRealmTypeFixture(): Record<
   };
 }
 
+// The definition lookup the test realm server and its realm read through.
+// The server keeps it private; tests need it to fill the definition cache and
+// to record a definition change.
+function serverDefinitionLookup(testRealmServer: {
+  testRealmServer: unknown;
+}): CachingDefinitionLookup {
+  return (
+    testRealmServer.testRealmServer as {
+      definitionLookup: CachingDefinitionLookup;
+    }
+  ).definitionLookup;
+}
+
 module(basename(import.meta.filename), function () {
   module('Realm.getHostRoutingMap', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-unit/');
@@ -586,14 +599,20 @@ module(basename(import.meta.filename), function () {
       let realmURL = new URL('http://127.0.0.1:4444/routing-unavailable/');
       let testRealm: Realm;
       let dbAdapter: PgAdapter;
+      let definitionLookup: CachingDefinitionLookup;
 
       setupPermissionedRealmCached(hooks, {
         realmURL,
         permissions: { '*': ['read'] },
         fileSystem: makeUnavailableTypeFixture(),
-        onRealmSetup({ testRealm: realm, dbAdapter: adapter }) {
+        onRealmSetup({
+          testRealm: realm,
+          dbAdapter: adapter,
+          testRealmServer,
+        }) {
           testRealm = realm;
           dbAdapter = adapter;
+          definitionLookup = serverDefinitionLookup(testRealmServer);
         },
       });
 
@@ -624,6 +643,24 @@ module(basename(import.meta.filename), function () {
       });
 
       test('a module whose cached render failed is not final', async function (assert) {
+        // Read the type the way a request may not: rendering the module,
+        // which fails and leaves an error row in the definition cache.
+        let ref = {
+          module: rri(`${realmURL.href}broken`),
+          name: 'Broken',
+        };
+        let scoped = definitionLookup.forRealm(testRealm);
+        try {
+          await scoped.lookupDefinition(ref);
+          assert.ok(false, 'the module was expected to fail');
+        } catch {
+          assert.ok(true, 'the module fails to render');
+        }
+        assert.deepEqual(
+          await scoped.lookupCachedDefinitionEntry(ref),
+          { status: 'module-error' },
+          'the cache-only read reports the failed render',
+        );
         let rows = (await dbAdapter.execute(
           `SELECT error_doc IS NOT NULL AS has_error FROM modules WHERE url = ANY($1) OR file_alias = ANY($1)`,
           { bind: [[`${realmURL.href}broken`, `${realmURL.href}broken.gts`]] },
@@ -704,13 +741,7 @@ module(basename(import.meta.filename), function () {
         fileSystem: makeOtherRealmTypeFixture(),
         onRealmSetup({ testRealm: realm, testRealmServer }) {
           testRealm = realm;
-          // The lookup the realm reads definitions through. The server keeps
-          // it private; the test needs it to record a definition change.
-          definitionLookup = (
-            testRealmServer.testRealmServer as unknown as {
-              definitionLookup: CachingDefinitionLookup;
-            }
-          ).definitionLookup;
+          definitionLookup = serverDefinitionLookup(testRealmServer);
         },
       });
 
@@ -719,6 +750,13 @@ module(basename(import.meta.filename), function () {
       });
 
       test('reuses the validation only while the definition generation holds', async function (assert) {
+        // Cache the base type's definition for this realm first: a host
+        // route reads only cached definitions, and indexing this realm
+        // doesn't have to leave this one in its cache.
+        await definitionLookup.forRealm(testRealm).lookupDefinition({
+          module: rri('@cardstack/base/card-api'),
+          name: 'CardDef',
+        });
         let first = await testRealm.getHostRoutes();
         assert.true(first.complete, 'the base type definition is cached');
         assert.deepEqual(
