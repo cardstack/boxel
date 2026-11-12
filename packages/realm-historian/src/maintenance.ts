@@ -12,6 +12,11 @@
 //    packed and history is never rewritten, so `-a` drops nothing.
 //    `--geometric` would bound the pack count too, but it packs loose objects
 //    whether or not anything reaches them, where prune never removes them.
+//    A `git pack-objects` that outlives its `git repack`, as one does when
+//    the repack is killed, leaves its pack under a temporary name
+//    (`objects/pack/.tmp-*`). Git reads that pack, but a dumb HTTP clone
+//    doesn't. Once the pack is an hour old, the next pass repacks with `-a`,
+//    which puts its objects in a pack of a regular name, then removes it.
 // 2. `git commit-graph write --reachable --split --changed-paths` adds the
 //    commits since the last write to the commit-graph, with changed-path
 //    Bloom filters, so a path-filtered `git log` reads one file instead of a
@@ -34,7 +39,7 @@
 // repack removed them finds the object missing, and git looks for its packs
 // again before it gives up.
 
-import { readFile, stat, unlink } from 'node:fs/promises';
+import { readdir, readFile, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { logger } from '@cardstack/runtime-common';
@@ -52,10 +57,11 @@ export const COMMIT_GRAPH_EVERY = 100;
 // The pack count at which a pass repacks everything into one pack.
 export const DEFAULT_CONSOLIDATE_AT_PACKS = 32;
 
-// Git holds the commit-graph's lock for the length of one write. A lock
-// older than this was left by a git that was killed mid-write, and would
-// fail every later write.
-const STALE_LOCK_MS = 60 * 60_000;
+// Git holds the commit-graph's lock for the length of one write, and a
+// pack's temporary name for the length of one repack. A lock or a temporary
+// pack older than this was left by a git that was killed, or that outlived
+// the git that ran it. A lock left behind would fail every later write.
+const STALE_AFTER_MS = 60 * 60_000;
 
 const COMMIT_GRAPH_LOCK = [
   'objects',
@@ -65,8 +71,10 @@ const COMMIT_GRAPH_LOCK = [
 ];
 
 export interface MaintenanceOptions {
-  // Aborting it stops the git process in progress; the pass rejects with an
-  // `AbortError` and leaves a repo the next pass maintains.
+  // Aborting it ends the pass with an `AbortError`, and leaves a repo the
+  // next pass maintains. The step in progress stops, unless it is the
+  // repack, which runs to its end first: SIGTERM stops `git repack` but not
+  // the `git pack-objects` it runs.
   signal?: AbortSignal;
   pruneExpiryMs?: number;
   consolidateAtPacks?: number;
@@ -109,27 +117,40 @@ export async function maintainRepo(
 ): Promise<MaintenanceResult> {
   let started = performance.now();
   let before = await countObjects(gitDir, signal);
-  let consolidated = before.packs >= consolidateAtPacks;
+  let leftBehind = await staleTemporaryPackFiles(gitDir);
+  // A temporary pack with its index is one git reads, and it may hold the
+  // only copy of objects HEAD reaches: `-a` copies them into the new pack
+  // before the temporary one is removed.
+  let consolidated =
+    before.packs >= consolidateAtPacks ||
+    leftBehind.some((name) => name.endsWith('.idx'));
 
   let step = performance.now();
-  await runGit(
-    gitDir,
-    [
-      'repack',
-      '-d',
-      ...(consolidated ? ['-a'] : []),
-      '-q',
-      // Repack runs `update-server-info` itself unless told not to. Only the
-      // pass's last step may write `info/refs`, so it names a HEAD only once
-      // every step has run.
-      '-n',
-      // A bare repo writes a bitmap with every `-a` repack by default. It
-      // speeds up serving fetches, which history doesn't do, and adds a file.
-      '--no-write-bitmap-index',
-    ],
-    { signal },
-  );
+  await runGit(gitDir, [
+    'repack',
+    '-d',
+    ...(consolidated ? ['-a'] : []),
+    '-q',
+    // Repack runs `update-server-info` itself unless told not to. Only the
+    // pass's last step may write `info/refs`, so it names a HEAD only once
+    // every step has run.
+    '-n',
+    // A bare repo writes a bitmap with every `-a` repack by default. It
+    // speeds up serving fetches, which history doesn't do, and adds a file.
+    '--no-write-bitmap-index',
+  ]);
   let repack = performance.now() - step;
+  signal?.throwIfAborted();
+  for (let name of leftBehind) {
+    log.warn(
+      `removing ${join(gitDir, 'objects', 'pack', name)}, left by a git that didn't finish`,
+    );
+    await unlink(join(gitDir, 'objects', 'pack', name)).catch((error) => {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+    });
+  }
 
   step = performance.now();
   await writeCommitGraph(gitDir, { signal });
@@ -262,7 +283,7 @@ async function removeStaleLock(path: string): Promise<void> {
     }
     throw error;
   }
-  if (Date.now() - modified < STALE_LOCK_MS) {
+  if (Date.now() - modified < STALE_AFTER_MS) {
     return;
   }
   log.warn(
@@ -273,6 +294,35 @@ async function removeStaleLock(path: string): Promise<void> {
       throw error;
     }
   });
+}
+
+// The files in `objects/pack` with git's temporary pack name that are older
+// than `STALE_AFTER_MS`.
+async function staleTemporaryPackFiles(gitDir: string): Promise<string[]> {
+  let directory = join(gitDir, 'objects', 'pack');
+  let names: string[];
+  try {
+    names = await readdir(directory);
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+  let stale: string[] = [];
+  for (let name of names.filter((name) => name.startsWith('.tmp-'))) {
+    try {
+      let { mtimeMs } = await stat(join(directory, name));
+      if (Date.now() - mtimeMs >= STALE_AFTER_MS) {
+        stale.push(name);
+      }
+    } catch (error: any) {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+  return stale;
 }
 
 async function exists(path: string): Promise<boolean> {

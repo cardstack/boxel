@@ -5,7 +5,9 @@ import { createReadStream } from 'node:fs';
 import {
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
+  rename,
   rm,
   stat,
   utimes,
@@ -49,6 +51,7 @@ import {
   appendEvent,
   insertRealm,
   setupTestDatabase,
+  sleep,
   type TestRealm,
 } from './helpers.ts';
 import { fsck, git } from './git-objects-test.ts';
@@ -579,17 +582,98 @@ module('maintenance', (hooks) => {
     await assert.rejects(stat(lock), 'the stale lock is gone');
   });
 
-  test('an aborted pass stops git, and the next pass completes', async (assert) => {
+  test('a pass aborted while git pack-objects writes ends after the repack, and leaves no pack a dumb HTTP clone misses', async (assert) => {
     await writeLooseHistory(gitDir, 300);
+    let packDir = join(gitDir, 'objects', 'pack');
     let controller = new AbortController();
     let pass = maintainRepo(gitDir, { signal: controller.signal });
-    setTimeout(() => controller.abort(), 20);
+    // Abort once pack-objects has started writing the pack.
+    let writing = false;
+    while (!writing) {
+      writing = (await readdir(packDir)).length > 0;
+      if (!writing) {
+        await sleep(1);
+      }
+    }
+    controller.abort();
     await assert.rejects(pass, (error: any) => error?.name === 'AbortError');
+    // Any git the abort left running has time to finish.
+    await sleep(500);
+    assert.deepEqual(
+      (await readdir(packDir)).filter((name) => !name.startsWith('pack-')),
+      [],
+      'every pack has a regular name',
+    );
+    assert.deepEqual(
+      await missingObjects(gitDir, await reachableObjects(gitDir)),
+      [],
+    );
     assert.false(await isMaintained(gitDir));
 
     let result = await maintainRepo(gitDir);
     assert.strictEqual(result.after.looseObjects, 0);
     assert.true(await isMaintained(gitDir));
+    let server = await serveFiles(root);
+    try {
+      assert.strictEqual(
+        await cloneBare(`${server.url}/realm.git`, join(root, 'clone.git')),
+        await readMain(gitDir),
+      );
+    } finally {
+      await server.close();
+    }
+    assert.strictEqual(await fsck(gitDir), '');
+  });
+
+  test('a pass replaces a temporary pack left by a killed repack, once it is an hour old', async (assert) => {
+    let ids = await writeLooseHistory(gitDir, 5);
+    await maintainRepo(gitDir);
+    // The pack as a `git pack-objects` that outlived its repack leaves it:
+    // under a temporary name, with the objects' loose copies gone.
+    let packDir = join(gitDir, 'objects', 'pack');
+    let temporary: string[] = [];
+    for (let name of await readdir(packDir)) {
+      let renamed = name.replace(/^pack-/, '.tmp-99999-pack-');
+      await rename(join(packDir, name), join(packDir, renamed));
+      temporary.push(renamed);
+    }
+    await writeLooseHistory(gitDir, 2, { from: 5, parent: ids[4] });
+
+    let recent = await maintainRepo(gitDir);
+    assert.false(
+      recent.consolidated,
+      'a recent temporary pack may be a running git, so it is left alone',
+    );
+    assert.deepEqual(
+      (await readdir(packDir)).filter((name) => name.startsWith('.tmp-')),
+      temporary.sort(),
+    );
+
+    let twoHoursAgo = new Date(Date.now() - 2 * 60 * 60_000);
+    for (let name of temporary) {
+      await utimes(join(packDir, name), twoHoursAgo, twoHoursAgo);
+    }
+    let stale = await maintainRepo(gitDir);
+    assert.true(stale.consolidated, 'the pass repacks everything into one');
+    assert.deepEqual(
+      (await readdir(packDir)).filter((name) => !name.startsWith('pack-')),
+      [],
+      'the temporary pack is gone',
+    );
+    assert.strictEqual(stale.after.packs, 1);
+    assert.deepEqual(
+      await missingObjects(gitDir, await reachableObjects(gitDir)),
+      [],
+    );
+    let server = await serveFiles(root);
+    try {
+      assert.strictEqual(
+        await cloneBare(`${server.url}/realm.git`, join(root, 'clone.git')),
+        await readMain(gitDir),
+      );
+    } finally {
+      await server.close();
+    }
     assert.strictEqual(await fsck(gitDir), '');
   });
 
