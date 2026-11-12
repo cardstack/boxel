@@ -193,21 +193,31 @@ export class SearchInput extends Component<SearchInputSignature> {
     // than that always fits on one side, so a narrow screen never cuts it
     this.openRoom = Math.max(window.innerWidth - rect.left, rect.right) - 8;
   }
-  // while the field is open, the cap follows viewport resizes; the wrapper
-  // keeps the square's box, so it stands in for the swapped-out square.
-  // Popup's anchorTo measures the layer in its own resize listener, so this
-  // handler must stay synchronous and on the field (registered before
-  // anchorTo's): a throttle or requestAnimationFrame would cap it too late
-  // and the field would be placed at its old width.
+  // while the field is open, its placement follows viewport resizes and, in a
+  // LayoutControl row, the row's own resizes (a resizable pane or a sidebar
+  // changes the row without a window resize); the wrapper keeps the square's
+  // box, so it stands in for the swapped-out square. Popup's anchorTo
+  // measures the layer in its own resize listener, so the window handler must
+  // stay synchronous and on the field (registered before anchorTo's): a
+  // throttle or requestAnimationFrame would cap it too late and the field
+  // would be placed at its old width.
   capOnResize = modifier((field: HTMLElement) => {
-    let resize = () => {
-      let root = field.closest<HTMLElement>('[data-pretui-search-collapse]');
+    let root = field.closest<HTMLElement>('[data-pretui-search-collapse]');
+    let remeasure = () => {
       if (root) {
         this.measureOpen(root.getBoundingClientRect(), root);
       }
     };
-    window.addEventListener('resize', resize);
-    return () => window.removeEventListener('resize', resize);
+    window.addEventListener('resize', remeasure);
+    let row = root?.closest('[data-pretui-layout-control]');
+    let observer = row ? new ResizeObserver(remeasure) : undefined;
+    if (row) {
+      observer?.observe(row);
+    }
+    return () => {
+      window.removeEventListener('resize', remeasure);
+      observer?.disconnect();
+    };
   });
   get openStyle() {
     // --pretui-search-open-w overrides the row width

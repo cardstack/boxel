@@ -184,6 +184,31 @@ module('Pretui | components/search-input', function (hooks) {
     });
   }
 
+  test("@display 'collapsed' in a LayoutControl row follows the row when it resizes without the window", async function (assert) {
+    await render(
+      <template>
+        <div data-pretui-layout-control data-test-row>
+          <SearchInput @display='collapsed' />
+        </div>
+      </template>,
+    );
+    let row = document.querySelector('[data-test-row]') as HTMLElement;
+    row.style.setProperty('inline-size', '480px');
+    await click(toggle() as HTMLElement);
+    await waitUntil(
+      () =>
+        Math.round(layer().getBoundingClientRect().width) ===
+        Math.round(row.getBoundingClientRect().width),
+    );
+    row.style.setProperty('inline-size', '300px');
+    await waitUntil(() => Math.round(layer().getBoundingClientRect().width) === 300);
+    assert.strictEqual(
+      Math.round(layer().getBoundingClientRect().width),
+      300,
+      "the open field takes the row's new width",
+    );
+  });
+
   test("@display 'collapsed' stays closed when focused and opens on click only", async function (assert) {
     await render(<template><SearchInput @display='collapsed' /></template>);
     await focus(toggle() as HTMLElement);
