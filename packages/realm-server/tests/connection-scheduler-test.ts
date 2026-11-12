@@ -6,7 +6,9 @@ import {
   currentConnectionTenant,
   markConnectionHeld,
   isSharedWork,
+  PoolWedgedError,
   waitingOnLock,
+  waitingOnSharedWork,
   withConnectionOrdering,
   withConnectionTenant,
   withSharedWork,
@@ -1064,6 +1066,85 @@ module(basename(import.meta.filename), function () {
     let scheduler = new ConnectionScheduler({ limit: 1, tenantShare: 1 });
     assert.strictEqual(await waitingOnLock(async () => 7), 7);
     assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
+  test('holds joined to shared work started outside any hold count as blocked, so the shared work gets a connection', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 2 });
+    let resume!: () => void;
+    let gate = new Promise<void>((resolve) => (resume = resolve));
+    // A coalesced lookup started by a caller holding nothing, the way a
+    // search starts a definition lookup before its snapshot opens.
+    let shared = withSharedWork(async () => {
+      await gate;
+      await statement(scheduler);
+      return 'definition';
+    });
+    let holds = Array.from({ length: 2 }, () =>
+      hold(scheduler, () => waitingOnSharedWork(() => shared)),
+    );
+    await wait(5);
+    assert.strictEqual(scheduler.holds, 2, 'the joined holds fill the pool');
+    resume();
+    let finished = await settledWithin(Promise.all(holds), 1000);
+    assert.true(
+      finished.settled,
+      'the shared work went past the limit, and every hold that joined it finished',
+    );
+    assert.deepEqual((finished as { value: string[] }).value, [
+      'definition',
+      'definition',
+    ]);
+    assert.strictEqual(scheduler.inUse, 0, 'every connection came back');
+    scheduler.dispose();
+  });
+
+  test('shared work arriving after its joiners filled the pool still gets a connection', async function (assert) {
+    let scheduler = new ConnectionScheduler({ limit: 2, tenantShare: 2 });
+    let resume!: () => void;
+    let gate = new Promise<void>((resolve) => (resume = resolve));
+    let shared = (async () => {
+      await gate;
+      return await withSharedWork(async () => {
+        await statement(scheduler);
+        return 1;
+      });
+    })();
+    let holds = Array.from({ length: 2 }, () =>
+      hold(scheduler, () => waitingOnSharedWork(() => shared)),
+    );
+    await wait(5);
+    resume();
+    assert.true(
+      (await settledWithin(Promise.all(holds), 1000)).settled,
+      'the holds finished',
+    );
+    scheduler.dispose();
+  });
+
+  test('a nested acquisition that waits past its timeout fails with a coded error, and its hold gives its connection back', async function (assert) {
+    let scheduler = new ConnectionScheduler({
+      limit: 1,
+      tenantShare: 1,
+      overflow: 0,
+      nestedAcquireTimeoutMs: 30,
+    });
+    let error: unknown;
+    let holding = hold(scheduler, async () => {
+      try {
+        await statement(scheduler);
+      } catch (e) {
+        error = e;
+      }
+    });
+    assert.true(
+      (await settledWithin(holding, 1000)).settled,
+      'the hold finished instead of waiting for good',
+    );
+    assert.true(error instanceof PoolWedgedError, 'refused as a wedge');
+    assert.strictEqual((error as PoolWedgedError).code, 'pool-wedged');
+    assert.strictEqual(scheduler.inUse, 0, 'the held connection came back');
+    assert.strictEqual(scheduler.waiting, 0, 'nothing is left queued');
     scheduler.dispose();
   });
 

@@ -23,6 +23,7 @@ import {
   markConnectionHeld,
   type ConnectionHold,
   waitingOnLock,
+  waitingOnSharedWork,
   withSharedWork,
 } from './connection-scheduler.ts';
 import { boxelDatabaseConfig, postgresConfig } from './pg-config.ts';
@@ -234,6 +235,22 @@ function configuredPoolOverflow(): number | undefined {
   let value = Number(rawValue);
   return Number.isInteger(value) && value >= 0 ? value : undefined;
 }
+
+// How long a nested acquisition — one made while its caller holds a
+// connection, as a search's definition lookup does inside its read snapshot —
+// may wait before it fails with `PoolWedgedError` (see `ConnectionScheduler`).
+// It is a backstop for a wedge the scheduler cannot see: no healthy nested
+// acquisition waits this long, since nested work is granted ahead of the
+// queue. PG_POOL_NESTED_ACQUIRE_TIMEOUT_MS overrides it.
+export const NESTED_ACQUIRE_TIMEOUT_MS = 60_000;
+
+// How long a read snapshot's transaction may sit idle between statements
+// before Postgres ends its session (`idle_in_transaction_session_timeout`).
+// A search is idle in its snapshot while it waits on work outside the
+// database, such as a definition lookup that prerenders a module; past this,
+// the snapshot is given up rather than held. PG_READ_SNAPSHOT_IDLE_TIMEOUT_MS
+// overrides it.
+export const READ_SNAPSHOT_IDLE_TIMEOUT_MS = 300_000;
 
 // The margin a read snapshot's statement timeout allows past its search's
 // deadline (`withReadSnapshot`): the signal cancels a statement first, and
@@ -462,6 +479,9 @@ export class PgAdapter implements DBAdapter {
       limit: max,
       tenantShare: configuredPoolTenantShare(),
       overflow: configuredPoolOverflow(),
+      nestedAcquireTimeoutMs:
+        positiveIntegerEnv('PG_POOL_NESTED_ACQUIRE_TIMEOUT_MS') ??
+        NESTED_ACQUIRE_TIMEOUT_MS,
     });
     log.debug(`connecting to DB ${this.url}`);
     this.pool = new Pool({
@@ -529,6 +549,11 @@ export class PgAdapter implements DBAdapter {
   // See `DBAdapter.withSharedWork`.
   withSharedWork<T>(fn: () => Promise<T>): Promise<T> {
     return withSharedWork(fn);
+  }
+
+  // See `DBAdapter.waitingOnSharedWork`.
+  waitingOnSharedWork<T>(fn: () => Promise<T>): Promise<T> {
+    return waitingOnSharedWork(fn);
   }
 
   get url() {
@@ -1836,6 +1861,10 @@ export class PgAdapter implements DBAdapter {
             'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
             `SET LOCAL jit_above_cost = ${jitAboveCost}`,
             `SET LOCAL work_mem = ${workMemKb}`,
+            `SET LOCAL idle_in_transaction_session_timeout = ${
+              positiveIntegerEnv('PG_READ_SNAPSHOT_IDLE_TIMEOUT_MS') ??
+              READ_SNAPSHOT_IDLE_TIMEOUT_MS
+            }`,
           ];
           let withTimeout = deadline !== undefined && Number.isFinite(deadline);
           if (withTimeout) {
@@ -1958,6 +1987,7 @@ export class PgAdapter implements DBAdapter {
       withUserCostLock: (matrixUserId, body) =>
         this.withUserCostLock(matrixUserId, body),
       withSharedWork: (body) => this.withSharedWork(body),
+      waitingOnSharedWork: (body) => this.waitingOnSharedWork(body),
     };
     let failed = false;
     try {
