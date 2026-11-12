@@ -239,14 +239,14 @@ export async function claimRunOverlayCommit(
       param(key.runId),
       'AND attempt =',
       param(key.attempt),
-      'ORDER BY path',
     ]);
-    let now = rows.map((r) => `${r.path}\u0000${r.md5}`).join('\n');
-    let read = [...files]
-      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
-      .map((f) => `${f.path}\u0000${f.md5}`)
-      .join('\n');
-    if (now !== read) {
+    // Compared as maps of path to hash, so no ordering (the database's
+    // collation or the script's) can make one set of files read as two.
+    let now = new Map(rows.map((r) => [String(r.path), String(r.md5)]));
+    let unchanged =
+      now.size === files.length &&
+      files.every(({ path, md5 }) => now.get(path) === md5);
+    if (!unchanged) {
       return { kind: 'overlay-changed' } as const;
     }
     await txQuery([

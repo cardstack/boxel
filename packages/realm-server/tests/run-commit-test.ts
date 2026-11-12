@@ -169,6 +169,18 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a run whose paths mix cases commits', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    assert.strictEqual(await stage(token, 'index.json', '{"a":1}'), 204);
+    assert.strictEqual(await stage(token, 'Invoice/1.json', '{"b":2}'), 204);
+    assert.strictEqual(await stage(token, 'apple.txt', 'a'), 204);
+    assert.strictEqual(await stage(token, 'Zebra.txt', 'z'), 204);
+    let committed = await commit(token);
+    assert.strictEqual(committed.status, 200, JSON.stringify(committed.json));
+    assert.deepEqual((await read(session(), 'Invoice/1.json')).text, '{"b":2}');
+    assert.deepEqual((await read(session(), 'Zebra.txt')).text, 'z');
+  });
+
   test('a file in the way of the realm’s own files is refused before anything is claimed', async function (assert) {
     let { token, run } = await createAutomationRunToken(
       dbAdapter,
