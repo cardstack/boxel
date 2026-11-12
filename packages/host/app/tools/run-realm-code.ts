@@ -784,8 +784,9 @@ class RealmFsSession {
     private generateImage: GenerateImage,
     private namedCalls: Set<ClickRequiredCall>,
     private index: IndexActions,
-    private mayWrite: boolean,
-    private mayRead: boolean,
+    // What the user's own permissions on the run's workspace let them do,
+    // before any policy grant.
+    private access: { mayRead: boolean; mayWrite: boolean },
     // The most bytes a card file may hold, as the realm enforces it.
     private cardSizeLimitBytes: number,
     readonly room: RoomActions,
@@ -852,17 +853,17 @@ class RealmFsSession {
   // realm as an operation: the write calls send bytes or whole documents,
   // which only the realm's own write permission admits.
   private refusalFor(method: RealmRunnerCallMethod): string | undefined {
-    if (REQUIRES_WRITE[method] && !this.mayWrite) {
-      return this.mayRead
+    if (REQUIRES_WRITE[method] && !this.access.mayWrite) {
+      return this.access.mayRead
         ? `You can only read this workspace; realm.${method} was not run`
         : `You can't write this workspace directly; realm.${method} was ` +
             `not run. A change the realm's policy grants runs as an ` +
             `operation, with realm.operations.invoke`;
     }
-    if (REQUIRES_READ[method] && !this.mayRead) {
+    if (REQUIRES_READ[method] && !this.access.mayRead) {
       return (
         `You can't read this workspace directly; realm.${method} was not run` +
-        (this.mayWrite
+        (this.access.mayWrite
           ? ''
           : `. Read what the realm's policy grants with realm.cards.get ` +
             `(a read grant), realm.cards.search (a query grant) or ` +
@@ -2462,7 +2463,7 @@ class RealmFsSession {
         return (
           `Card is not indexed yet: ${id}; read it again in a moment. If it ` +
           `is still not indexed after a few reads, ` +
-          (this.mayWrite
+          (this.access.mayWrite
             ? `index the file with realm.index.invalidate('${path}')`
             : `tell the user that ${path} needs indexing again by someone ` +
               `who can write to it`)
@@ -2472,7 +2473,7 @@ class RealmFsSession {
           `Card is not indexed: ${id}. Its file ${path} is in the workspace, ` +
           `and the workspace is not indexing, so reading the card again ` +
           `will not find it. ` +
-          (this.mayWrite
+          (this.access.mayWrite
             ? `Index the file with realm.index.invalidate('${path}'), then ` +
               `read the card again. Do not edit the card to make the ` +
               `workspace index it`
@@ -3339,8 +3340,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
           fullReindex: () => this.realm.fullReindex(realmURL),
           cancelJob: () => this.realm.cancelIndexingJob(realmURL),
         },
-        this.realm.canWrite(realmURL),
-        this.realm.canRead(realmURL),
+        {
+          mayRead: this.realm.canRead(realmURL),
+          mayWrite: this.realm.canWrite(realmURL),
+        },
         this.environmentService.cardSizeLimitBytes,
         new RoomActions({
           checkSkill: (id) => this.checkSkill(id),
