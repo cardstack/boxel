@@ -42,7 +42,7 @@ Requires P1. Must provide:
 - Broken links as broken links.
 - Sparse and withheld documents marked, and never deposited as instances.
 - The identity boundary (§7).
-- The store contract (§6).
+- The instance store and the card-facing store (§6).
 - Reactivity and settle (§9).
 
 May omit: rendering, search, operations beyond read.
@@ -104,7 +104,10 @@ full.
 
 **§3** Conformance MUST be checked with a corpus of cards, not with a description
 of them. The corpus MUST be portable: no card in it may name a deployment URL, a
-host component, or a runtime-internal name.
+host component, or a runtime-internal name. It imports only realm modules, the
+author API, the component model, and icons ([author API §1.9](author-api.md)
+items 1–4): no third-party package, since how a runtime obtains one is not yet
+stated.
 
 **§4** The corpus MUST cover, at minimum:
 
@@ -133,10 +136,10 @@ the assertion is wrong, not the runtime.
 ## Non-conformance
 
 **§7** A runtime MUST NOT extend the contract by adding a name a card can depend
-on — a format, a field name, a context member, an operation name — without
-adding it here first.
+on without adding it here first, and a name a card can reach that this contract
+does not list is a leak. [ADR 032 §1.2 and §1.8](../adr/032-define-the-card-contract-as-the-boundary-between-card-code-and-its-runtime.md)
+state both rules; this chapter does not restate them.
 
-**§8** A runtime MAY add a name it will not let cards use. Platform-only members
-are how a runtime keeps its own surface out of the contract. A name a card can
-reach and this contract does not list is a leak, and finding it is a review
-finding.
+**§8** A runtime MAY add a name it will not let cards use, on a type a card
+cannot import (ADR 032 §1.5). That is how a runtime keeps its own surface out of
+the contract.

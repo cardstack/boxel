@@ -26,15 +26,24 @@ that already adopted it.
 ### The source language
 
 **§1.4** Card source MUST be TypeScript that is erasable — syntax that vanishes
-once type annotations are stripped — with the exception of the decorators this
-API provides (`@field`, `@operation`). A runtime MAY compile card source, but a
-card MUST NOT need a compiler to be understood.
+once type annotations are stripped — with two exceptions, both of which a
+runtime MUST compile:
+
+- **`<template>` tags**, in `.gts` modules ([§5.11](#the-component-model-is-interface)).
+  They are the component model's syntax, and the reason a card module is `.gts`
+  rather than `.ts`.
+- **Decorators**: `@field` and `@operation` from the author API, and the
+  decorators the platform modules in §1.9 export (`@tracked`, `@action`, and
+  ember-concurrency's task decorators).
+
+Nothing else may need a compiler. A runtime MAY compile card source further.
 
 This is a portability requirement, not a build preference. Card source is read
-by tools that do not run the card pipeline: Node directly, editors, linters,
-the AI assistant's file tools, and anyone's `tsc`. Non-erasable TypeScript
-(`enum`, `import =`, `export =`, a value `namespace`) is source those tools
-cannot read.
+by tools that do not run the card pipeline: editors, linters, the AI
+assistant's file tools, and anyone's `tsc`. Those tools already understand the
+two exceptions, through `content-tag` and the decorators proposal; they do not
+understand non-erasable TypeScript (`enum`, `import =`, `export =`, a value
+`namespace`), and no card needs it.
 
 **§1.5** Card source MUST be ordinary ES modules. A card MAY use static imports,
 dynamic `import()`, and top-level `await` where the runtime supports them. A
@@ -58,6 +67,50 @@ styles or in code. `data-test-*` is a test hook. A runtime strips it from what
 it serves in some contexts and keeps it in others, so a card that selects on it
 behaves differently in two runtimes. A card that selects on something at runtime
 uses a plain `data-*` attribute. See finding [B-02](boundary-findings.md#b-02).
+
+### What a card may import
+
+**§1.9** A card MAY import these, and a runtime MUST serve them:
+
+1. **Realm modules**, by RRI: modules in its own realm, in another realm, or in
+   a well-known realm (`@cardstack/base/`, `@cardstack/catalog/`,
+   `@cardstack/pretui/`). A runtime serves them through the module channel and
+   nothing else.
+2. **The author API**: `@cardstack/base/card-api`, `@cardstack/base/operations`,
+   `@cardstack/base/helpers/*`, and the field defs and file defs in
+   `@cardstack/base` a card contains or links to. [B-33](boundary-findings.md#b-33)
+   separates these from the base realm's library cards, which are realm modules
+   like any other.
+3. **The component model** ([§5.11](#the-component-model-is-interface)):
+   `@glimmer/component`, `@glimmer/tracking`, `@ember/helper`,
+   `@ember/modifier`, `ember-modifier`, `@ember/template`,
+   `@ember/component/template-only`, `@ember/destroyable`, `action` from
+   `@ember/object`, `guidFor` from `@ember/object/internals`, and types from
+   `@ember/owner`.
+4. **Icons**: `@cardstack/boxel-icons/*` (see [B-23](boundary-findings.md#b-23)).
+5. **Third-party packages** (§1.10).
+
+**§1.10** A card MAY import a third-party package. The contract does not limit
+cards to a fixed set of packages, and it does not yet say how a card obtains
+one: that is package management, a separate project
+([B-27](boundary-findings.md#b-27)). Until it exists, the packages available
+are the ones the reference runtime's host shims, at the host's version, and:
+
+- A runtime that runs existing cards MUST serve the shimmed packages they
+  import.
+- A card MUST NOT rely on a particular version of a shimmed package, or on
+  module state it shares with the host or with other cards.
+- `@cardstack/boxel-ui` is leaving for Pret UI under
+  [ADR 009](../adr/009-build-new-ui-with-pret-ui-not-boxel-ui.md), and
+  `ember-provide-consume-context` is used to reach a channel that is closing
+  ([B-32](boundary-findings.md#b-32)). A new card SHOULD NOT import either.
+
+**§1.11** Platform internals are not third-party packages, and are not part of
+the contract. A card MUST NOT import `@cardstack/runtime-common`, any
+`@cardstack/boxel-host/*` module, or any `@cardstack/host/*` module. A runtime
+MAY still serve them for existing cards, and MUST NOT make a new one reachable.
+A specifier a runtime cannot serve MUST fail to resolve, not resolve to an
+empty stub (§1.5). See [B-27](boundary-findings.md#b-27).
 
 ## 2. Fields
 
@@ -179,9 +232,10 @@ MUST NOT serve its resolved value from an index.
 owner's search document. Its membership is recorded; its field values are not.
 
 **§4.3** `eager` states when the query runs: with the owner by default, or on
-first read when `eager: false`. A runtime MUST honor the author's choice, and
-where it cannot, MUST fall back to the author's default rather than to the
-runtime's convenience. See finding [B-14](boundary-findings.md#b-14).
+first read when `eager: false`. A store that cannot run a query with its owner
+MUST say so, and a settled render ([runtime contract §9.3](runtime-contract.md))
+MUST still include every eager field resolved, so a rendering never captures an
+eager field's empty state. See finding [B-14](boundary-findings.md#b-14).
 
 **§4.4** A query-backed relationship's page ceiling is the runtime's, and the
 fact that it clamped is the author's to see. A runtime MUST expose the total
@@ -240,16 +294,18 @@ whatever the field kind.
 
 A format component receives a fixed set of arguments.
 
-| Argument                                             | Meaning                                                                   |
-| ---------------------------------------------------- | ------------------------------------------------------------------------- |
-| `@model`                                             | The instance being rendered.                                              |
-| `@fields`                                            | The instance's fields, each renderable as `<@fields.name />`.             |
-| `@set`                                               | Writes a field's value.                                                   |
-| `@fieldName`                                         | The name this instance is being rendered under, when it is a field value. |
-| `@context`                                           | The environment's services. See §10.                                      |
-| `@canEdit`                                           | Whether this viewer may edit.                                             |
-| `@configuration`                                     | This usage's configuration.                                               |
-| `@createCard`, `@viewCard`, `@editCard`, `@saveCard` | Ask the environment to move the person to another card.                   |
+| Argument                 | Meaning                                                                   | Status                                             |
+| ------------------------ | ------------------------------------------------------------------------- | -------------------------------------------------- |
+| `@model`                 | The instance being rendered.                                              | Contract.                                          |
+| `@fields`                | The instance's fields, each renderable as `<@fields.name />`.             | Contract.                                          |
+| `@set`                   | Writes a field's value.                                                   | Contract.                                          |
+| `@fieldName`             | The name this instance is being rendered under, when it is a field value. | Contract.                                          |
+| `@context`               | The environment's services. See §10.                                      | Contract.                                          |
+| `@canEdit`               | Whether this viewer may change this card here.                            | Contract.                                          |
+| `@configuration`         | This usage's configuration.                                               | Contract.                                          |
+| `@viewCard`              | Ask the environment to show a card.                                       | Contract.                                          |
+| `@createCard`            | Ask the environment to start creating a card of a type.                   | Contract.                                          |
+| `@editCard`, `@saveCard` | Open an editor; save a card.                                              | To be removed ([B-31](boundary-findings.md#b-31)). |
 
 **§5.6** A template MUST reach its data through `@model` or `@fields`, and MUST
 write through `@set`. A runtime MUST NOT require a template to use a runtime-
@@ -267,6 +323,32 @@ selector that names a runtime-generated class.
 MUST NOT depend on its own class names surviving, and MUST NOT depend on them
 being rewritten. Selectors a card relies on for behavior use the card's own
 `data-*` attributes.
+
+**§5.10** A template argument MUST have one job, and a job MUST reach a template
+one way. Saving is a write and belongs to the write path
+([B-28](boundary-findings.md#b-28)); whether a card is being edited is a
+presentation intent ([§10.6](#10-what-a-card-may-ask-the-environment-for)).
+Neither is a navigation request, and neither is also delivered through a
+provide/consume context ([B-32](boundary-findings.md#b-32)).
+
+### The component model is interface
+
+**§5.11** A format template is a Glimmer component: a class extending
+`Component` from the author API (or a template-only component), whose markup is
+a `<template>` tag, whose reactive state is `@tracked`, and whose behavior
+attaches through helpers and modifiers. A runtime MUST run Glimmer components
+with their documented semantics.
+
+The replacement test ([README](README.md#the-replacement-test)) puts this on the
+interface side, and this contract says so rather than pretending otherwise:
+every card's templates are written in it, so a runtime with a different renderer
+cannot run them. What a runtime may still replace is everything around the
+component model: how it compiles templates, how it schedules renders, how it
+scopes styles, and which host UI surrounds the result.
+
+The component model's surface is the modules in §1.9 item 3. A part of Ember a
+card can reach that is not on that list, such as services, the run loop, or the
+owner's registry, is not the component model and is not contract.
 
 ## 6. Editing
 
@@ -310,6 +392,48 @@ carried it, and MUST give the resulting instance the same base.
 have. A runtime MUST distinguish "no link authored" from "a link to something
 that could not be found", and MUST show a broken link as broken rather than as
 empty.
+
+**§7.7** The author API answers §7.2–§7.4 with three functions on an instance,
+and a card needs no other route to them:
+
+| Function                            | Answers                                           |
+| ----------------------------------- | ------------------------------------------------- |
+| `openableURLOf(instance)`           | The URL a browser can open for the instance.      |
+| `resolveInstanceURL(instance, ref)` | A fetchable URL for a reference, relative to it.  |
+| `instanceRealmId(instance)`         | The instance's realm, in the same form as its id. |
+
+The `realmURL` symbol (`instance[realmURL]`, which catalog cards import from
+`@cardstack/runtime-common` about 36 times) gives the same realm as a URL in
+this deployment, and so fails §7.1. It becomes platform-only; a card uses
+`instanceRealmId`. See [B-30](boundary-findings.md#b-30).
+
+### The instance surface
+
+**§7.8** A card instance provides these string-named members, beyond the fields
+its definition declares. A field MUST NOT take one of these names, and a runtime
+MUST reject such a field when the definition is loaded:
+
+| Member             | Meaning                                                    |
+| ------------------ | ---------------------------------------------------------- |
+| `id`               | The instance's RRI, or `undefined` when unsaved.           |
+| `cardTitle`        | Its title.                                                 |
+| `cardDescription`  | Its one-line summary.                                      |
+| `cardTheme`        | The theme card it renders with.                            |
+| `cardThumbnailURL` | Its thumbnail.                                             |
+| `captureURLs`      | The URL of each declared capture, or `undefined` per slot. |
+
+That list is short on purpose. Today the instance also carries `cardInfo`,
+which repeats four of these under other names, and `capturesMeta`, which
+repeats the capture declaration; [B-16](boundary-findings.md#b-16) and
+[B-17](boundary-findings.md#b-17) propose removing both rather than reserving
+them. A file instance provides `id` and `captureURLs`, plus its family's
+content-derived metadata fields; [B-30](boundary-findings.md#b-30) proposes
+removing its `url` and `sourceUrl`.
+
+**§7.9** A runtime MUST NOT add a string-named member to the instance surface.
+A new platform member is symbol-keyed, or it is a contract change that first
+checks that no existing card declares a field by that name.
+See [B-20](boundary-findings.md#b-20).
 
 ## 8. What a card exposes to search
 
@@ -363,16 +487,17 @@ finding [B-01](boundary-findings.md#b-01).
 
 ## 9. Presentation an author declares
 
-| Declaration                | Meaning                                                             |
-| -------------------------- | ------------------------------------------------------------------- |
-| `static displayName`       | The type's friendly name, shown wherever the type is named.         |
-| `static icon`              | The type's icon, shown wherever a card of the type appears.         |
-| `static prefersWideFormat` | The card wants a full-width container in a stack.                   |
-| `static headerColor`       | The color of the card's container header.                           |
-| `cardTitle`                | The instance's title. Defaults from `cardInfo.name`, else the type. |
-| `cardDescription`          | The instance's one-line summary.                                    |
-| `cardThumbnailURL`         | The instance's thumbnail.                                           |
-| `static captures`          | Named images the runtime renders of each instance at index time.    |
+| Declaration                | Meaning                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `static displayName`       | The type's friendly name, shown wherever the type is named.                                         |
+| `static icon`              | The type's icon, shown wherever a card of the type appears.                                         |
+| `static prefersWideFormat` | The card's isolated rendering wants all the width it can be given.                                  |
+| `static captures`          | Named images the runtime renders of each instance at index time.                                    |
+| The presentation members   | `cardTitle`, `cardDescription`, `cardTheme`, `cardThumbnailURL` (§7.8), overridden with a computed. |
+
+`static headerColor` is not on this list: it colors one host's stack chrome, and
+the only reader is that host. [B-35](boundary-findings.md#b-35) proposes
+expressing it through the card's theme instead.
 
 **§9.1** A runtime MUST show a card's declared presentation consistently across
 contexts. A presentation static that one context ignores is a defect.
@@ -381,10 +506,11 @@ contexts. A presentation static that one context ignores is a defect.
 instance. A runtime MUST give the same URL for the same declaration and
 instance, and MUST signal absence with `undefined` rather than a placeholder.
 
-**§9.3** A capture's dimensions are the rendered image's intrinsic size. A
-runtime MUST NOT expose a capture pipeline's internals (device scale factor,
-render format, pool identity) as the author-facing meaning of a capture. See
-finding [B-17](boundary-findings.md#b-17).
+**§9.3** A capture's dimensions are the ones its declaration states, in CSS
+pixels. The declaration is the only place an author reads them; the instance
+repeats only the URLs. A runtime MUST NOT expose a capture pipeline's internals
+(device scale factor, render format, pool identity) as the author-facing
+meaning of a capture. See finding [B-17](boundary-findings.md#b-17).
 
 **§9.4** An icon MUST be declared as something the environment renders, not as
 a component an author imports from one icon package. Today `static icon` is a
@@ -395,6 +521,29 @@ library. See finding [B-23](boundary-findings.md#b-23).
 
 `@context` carries the environment's services. The contract splits them by
 whether a card is entitled to them.
+
+`@context` is the only way a card asks the environment for a service. The
+provide/consume contexts the host also threads through a render are
+platform-only ([B-32](boundary-findings.md#b-32)).
+
+| Member                         | Status                                                                     | What a card does without it                               |
+| ------------------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `store`                        | Contract, always present.                                                  | —                                                         |
+| `searchResultsComponent`       | Contract, always present.                                                  | —                                                         |
+| A search resource              | Contract, always present. Today `getCards`.                                | —                                                         |
+| `canInvoke`                    | Contract, optional.                                                        | Shows the control; the invocation is decided anyway.      |
+| `keyReadiness`                 | Contract, optional.                                                        | Shows nothing for the credential state.                   |
+| `toolContext`                  | Contract, optional: present where host tools can run.                      | Does not offer the tool.                                  |
+| Presentation intents           | Contract, optional ([B-04](boundary-findings.md#b-04)).                    | Renders as if not editing and not showing its definition. |
+| `getCard`, `getCardCollection` | To be folded into the search resource ([B-29](boundary-findings.md#b-29)). | —                                                         |
+| `commandContext`               | Alias of `toolContext`, to be removed ([B-05](boundary-findings.md#b-05)). | —                                                         |
+| `mode`, `submode`              | To be removed ([B-04](boundary-findings.md#b-04)).                         | —                                                         |
+| `cardComponentModifier`        | Platform-only: the host tracks card elements with it.                      | —                                                         |
+| `markdownEmbedChooser`         | Platform-only: one base editor's host bridge.                              | —                                                         |
+| `loadRoomMedia`                | Platform-only: the assistant's chat rendering.                             | —                                                         |
+
+A platform-only member moves to a type a card cannot import (ADR 032 §1.5). The
+three listed have no catalog users except one use of `cardComponentModifier`.
 
 **§10.1** A service a card MUST have in every render — the store, the search
 results component — MUST be present, not optional.
@@ -486,6 +635,10 @@ one MUST still render an honest generic pane rather than a broken one.
 **§12.4** A file def MUST NOT be `edit`-rendered. It has no editable value, only
 bytes. See finding [B-13](boundary-findings.md#b-13).
 
+**§12.5** A file instance has one address, its `id`, an RRI like a card's. A
+card that needs a URL for a file's bytes asks for one with `openableURLOf`
+(§7.7). See finding [B-30](boundary-findings.md#b-30).
+
 ## 13. What an author may not rely on
 
 These are implementation, and a card that depends on them is not portable:
@@ -499,3 +652,27 @@ These are implementation, and a card that depends on them is not portable:
 - A stored document's field ordering, key ordering, or which optional keys it
   chose to omit.
 - That a value the runtime did not track has not changed since the last read.
+- Which provide/consume contexts the host threads through a render, or which
+  host layout provided one.
+- Which version of a shimmed third-party package it gets, or that the version
+  will not change.
+
+## 14. Tools
+
+A **tool** (the `Tool` class, still exported as `Command`) is a unit of
+imperative behavior that runs in a host, with the host's tool context: the AI
+assistant's tools, and host automation. The catalog defines many.
+
+**§14.1** Tools are a host API, not part of this contract. A runtime that runs
+cards MAY run no tools at all, and a card MUST still render and work there,
+offering no tool.
+
+**§14.2** A card MAY offer a person a tool to run, through `@context.toolContext`
+(§10). A card MUST NOT need a tool to read or write a card: reads go through the
+store and the instance, and writes are operations
+([B-28](boundary-findings.md#b-28)).
+
+**§14.3** Whether behavior a card author defines is an operation or a tool is an
+open decision ([B-34](boundary-findings.md#b-34)). Until it is made, an author
+who wants behavior the realm can run and authorize without a browser declares an
+operation.

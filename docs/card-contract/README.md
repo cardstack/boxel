@@ -30,12 +30,23 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD",
 "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" are to be interpreted as
 described in BCP 14 (RFC 2119, RFC 8174) when, and only when, they appear in
 all capitals. This is the same convention [ADR 001 §1](../adr/001-record-architecture-decisions.md)
-uses, so a requirement here can be cited as "Card Contract §4.2" the way an ADR
-requirement is cited as "ADR 004 §1.2".
+uses. Each chapter numbers its own requirements, so a citation names the
+chapter: "Card Contract author API §4.2", "Card Contract runtime §6.5",
+"Card Contract conformance §3", the way an ADR requirement is cited as
+"ADR 004 §1.2".
 
 A requirement here is binding on new code in the same way a `proposed` ADR's
 is. [ADR 032](../adr/032-define-the-card-contract-as-the-boundary-between-card-code-and-its-runtime.md)
 records that decision and names the code this document governs.
+
+### Requirement status
+
+The contract states the boundary as it is meant to be, which the reference
+runtime does not yet fully meet. A requirement that links a finding in the
+[register](boundary-findings.md) is not met today; the finding says how far off
+it is. Every other requirement is believed to hold of the reference runtime,
+and a counterexample is a new finding. [remediation/032.md](../adr/remediation/032.md)
+lists, by file, the code that does not meet the contract yet.
 
 ## The boundary test
 
@@ -54,6 +65,14 @@ card can do.
   is free to change it.
 - If something they wrote changes, it was **interface**, whether or not anyone
   wrote it down.
+
+Apply it honestly and some pieces come out as interface even though they feel
+like implementation. The clearest is the component model: every card's
+templates are Glimmer components, so a runtime with a different renderer cannot
+run them, and the contract says so ([author API §5.11](author-api.md)) rather
+than listing "the renderer" as replaceable. What stays replaceable is
+everything around it: template compilation, render scheduling, style scoping,
+and the host UI.
 
 ### The promise test
 
@@ -83,6 +102,43 @@ that depends on its own realm's URL is affected when that realm moves, and that
 is fine — the contract says which identities are durable and which are not. The
 test asks whether the thing a card depends on is a **decision the runtime makes
 on purpose** or an **accident of how it currently works**.
+
+## Shrink, then state
+
+The contract is the smallest surface that makes a coherent card model. It is
+not a transcription of what the reference runtime exposes today, and where the
+two differ, the contract argues for removal before it codifies anything.
+
+- **One route per job.** Where a card can get one answer two ways, such as a
+  permission, a query, a write, or a realm's address, the contract keeps one
+  and the register records the other for removal
+  ([runtime contract §1.4](runtime-contract.md)).
+- **Use earns a place.** A member no card uses is the cheapest one to remove,
+  and the register looks for those first. A member that only one host reads
+  belongs to that host.
+- **Aliases end.** A renamed member keeps its old name only with a sunset: a
+  date, and a count of the realms still reading it.
+- **The lists are the contract.** The modules a card may import
+  ([author API §1.9](author-api.md); third-party packages are open-ended, and
+  wait on package management), the instance surface (§7.8), the template
+  arguments (§5), and the context members (§10) are enumerated. A name a card
+  can reach that is not on a list is a leak (ADR 032 §1.2).
+
+[The register's summary table](boundary-findings.md#what-the-register-proposes-to-remove)
+collects what this stance removes.
+
+## The base realm
+
+`@cardstack/base` holds two kinds of module, and the contract treats them
+differently ([B-33](boundary-findings.md#b-33)):
+
+- **Author API modules** are part of the runtime: `card-api`, `operations`,
+  `helpers/`, the primitive field defs and file-def families, and the default
+  templates. They implement the contract, so they MAY use platform-only
+  members. They MUST NOT depend on one host, because every runtime ships them.
+- **Library cards** (`cards-grid`, `workspace`, `spec`, `skill`, `theme`, and
+  the rest) are cards. They get exactly what any card gets. A library card that
+  reaches past the contract is a finding, not a precedent.
 
 ## What this document is not
 

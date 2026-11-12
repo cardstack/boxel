@@ -27,6 +27,17 @@ become interface.
 **§1.3** A runtime MUST make each channel complete. A card that stays inside a
 channel MUST NOT need a second, undocumented way to finish the job.
 
+The reference runtime has a sixth channel today: the provide/consume contexts it
+threads through a render, which cards also read
+([B-32](boundary-findings.md#b-32)). This section states the boundary as it is
+to be, with that channel closed to cards.
+
+**§1.4** A channel MUST carry each kind of request one way. Two routes to one
+answer (a permission, a query, a write) are two contracts, and a runtime
+implementing one cannot tell whether a card needs the other. Where the reference
+runtime has two, the contract names one and the register records the other for
+removal.
+
 ## 2. The module contract
 
 A card's source is loaded as an ES module. [ADR 010](../adr/010-give-loaded-modules-native-esm-semantics.md)
@@ -58,6 +69,13 @@ finding [B-07](boundary-findings.md#b-07).
 
 **§2.8** The loader is not a security boundary. A runtime MUST NOT claim that a
 card is isolated because the loader ran it.
+
+**§2.9** The modules a card may import are listed in [author API §1.9](author-api.md).
+A runtime MUST serve those, including the third-party packages existing cards
+import (author API §1.10), and MUST NOT make a platform internal reachable by
+bare specifier from card code (author API §1.11). How a runtime obtains a
+third-party package, and which version it serves, is not yet part of this
+contract. See finding [B-27](boundary-findings.md#b-27).
 
 ## 3. Definition identity contract
 
@@ -196,39 +214,60 @@ detect it and MUST be able to show the reference.
 ## 6. The store contract
 
 The store is the environment's answer to "what cards are there, and what do they
-say?". A card reaches it through the context, never through a network object.
+say?". There are two interfaces, with different readers, and a runtime MUST keep
+them apart.
 
-### What a store MUST provide
+| Interface             | Reached by                                      | Reader                                  |
+| --------------------- | ----------------------------------------------- | --------------------------------------- |
+| The card-facing store | `@context.store`, and the search resource       | Card code.                              |
+| The instance store    | The instance itself, through author API helpers | The author API (`card-api`), not cards. |
 
-**§6.1** A store MUST resolve a reference to a fetchable URL, canonicalize an
-id to its portable form, name the realm a reference belongs to, and give the
-URL a browser can open. These four complete the identity boundary described in
-§7.
+### The card-facing store
 
-**§6.2** A store MUST load a card document and a file-meta document by
-reference, and MUST return an error resource rather than throwing when the
-reference cannot be fetched.
+**§6.1** The card-facing store MUST load a card or file by reference, and MUST
+return an error resource rather than throwing when the reference cannot be
+fetched.
 
-**§6.3** A store MUST let a card ask whether it is done: whether every load the
-card started has resolved. A card MUST be able to await that.
+**§6.2** The card-facing store MUST run a query and return the matching cards,
+with the same completeness reporting as any search (§10.7).
 
-**§6.4** A store MUST track a load a card started, including one the card starts
-and abandons, so "the card is up to date" has one meaning.
+**§6.3** The card-facing store's writes MUST be invocations of the card family's
+implied operations (`create`, `update`, `delete`), and MUST say which they
+invoke. A runtime MUST NOT give the store a write with semantics no operation
+has. See finding [B-28](boundary-findings.md#b-28).
 
-**§6.5** A store MAY hand back an instance it already holds in place of a fresh
-load. It MUST do so only when it can promise that what it holds still reflects
-the realm — because it drops what it holds when its view moves, or reloads it
-when the realm says the file changed. A store with no opinion MUST say so, and
-the caller loads.
+**§6.4** The card-facing store MUST be small. The reference runtime's has
+twelve methods, eight of which no catalog card calls; deciding §6.3 decides
+which remain, and the rest leave the interface.
 
-**§6.6** A store MUST honor a caller's request not to be tracked, and MUST treat
-declining as harmless — an extra settle pass, nothing else.
+### The instance store
 
-### What a store MAY add
+**§6.5** Every instance is bound to the store that deserialized it. That store
+MUST resolve a reference to a fetchable URL, canonicalize an id to its portable
+form, name the realm a reference belongs to, and give the URL a browser can
+open. The author API exposes these to cards as functions on an instance
+([author API §7.7](author-api.md)), never as the store object. These complete
+the identity boundary described in §7.
 
-**§6.7** A store's diagnostic surface — what is in flight, what was slow, which
-queries are outstanding — is platform-facing, not card-facing. A runtime MUST NOT
-require a card to read it, and a card MUST NOT depend on it being there. See
+**§6.6** The instance store MUST let a caller ask whether it is done: whether
+every load the instance's render started has resolved. A caller MUST be able to
+await that.
+
+**§6.7** The instance store MUST track a load a render started, including one
+the card starts and abandons, so "the card is up to date" has one meaning.
+
+**§6.8** The instance store MAY hand back an instance it already holds in place
+of a fresh load. It MUST do so only when it can promise that what it holds still
+reflects the realm — because it drops what it holds when its view moves, or
+reloads it when the realm says the file changed. A store with no opinion MUST
+say so, and the caller loads.
+
+**§6.9** The instance store MUST honor a caller's request not to be tracked,
+and MUST treat declining as harmless — an extra settle pass, nothing else.
+
+**§6.10** The instance store's diagnostic surface — what is in flight, what was
+slow, which queries are outstanding — is platform-facing. It MUST be on a
+separate type from the members above, and a card MUST NOT depend on it. See
 finding [B-10](boundary-findings.md#b-10).
 
 ## 7. The identity boundary
@@ -417,8 +456,8 @@ request is going.
 **§14.3** A runtime MUST keep the secrets a card declares unreachable from the
 card's code, including from a template and a computed.
 
-**§14.4** A card MAY be told whether a person may act, and MUST be told that the
-answer is advisory. A runtime MUST decide again at invocation.
+**§14.4** A card MAY be told whether a person may act. That answer is advisory
+under §11.4, and a runtime decides again at invocation (§11.3).
 
 ## 15. The determinism contract
 

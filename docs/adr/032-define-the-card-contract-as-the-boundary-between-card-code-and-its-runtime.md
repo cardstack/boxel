@@ -4,7 +4,12 @@ date: 2026-11-11
 scope:
   - packages/base/**
   - packages/runtime-common/**
-  - packages/host/app/**
+  - packages/host/app/lib/externals.ts
+  - packages/host/app/tools/index.ts
+  - packages/host/app/services/store.ts
+  - packages/host/app/components/operator-mode/container.gts
+  - packages/host/app/components/operator-mode/stack-item.gts
+  - packages/host/app/templates/render/**
   - eslint/**
 ---
 
@@ -29,7 +34,9 @@ A card and its environment communicate through five channels: modules,
 definitions, instances, documents, and context. Card Contract
 [runtime contract §1.1](../card-contract/runtime-contract.md) states them.
 
-A runtime MUST make each channel complete. A card MUST NOT need a sixth.
+A runtime MUST make each channel complete. A card MUST NOT need a sixth. The
+reference runtime has one today, the provide/consume contexts cards read; the
+boundary findings register records it for removal.
 
 ### 1.2. Anything else is a leak
 
@@ -83,7 +90,15 @@ name, or an instance member that a card can use MUST add it to Card Contract in
 the same change. A name a runtime adds for itself, which a card may not use, is
 not covered by this requirement.
 
-### 1.9. Each finding gets a decision
+### 1.9. Remove before codifying
+
+Where the current code gives a card two routes to one answer, Card Contract
+MUST name one, and the other MUST be recorded for removal rather than stated.
+A renamed author-facing name MUST NOT be kept as an alias without a sunset: a
+date, and a measurement of the realms still using it. An author-facing name no
+card uses SHOULD be removed rather than given semantics.
+
+### 1.10. Each finding gets a decision
 
 Each entry in the [boundary findings register](../card-contract/boundary-findings.md)
 SHOULD end as a contract edit, an ADR, or a code change that closes it. An entry
@@ -109,6 +124,14 @@ or a second index has to honor it. The boundary test in Card Contract decides
 each case once, in writing, so the next person does not decide it again by
 accident.
 
+The surface is also larger than any card needs. A card can read another card
+three ways and write one three ways, ask for permission three ways, and import
+the platform's own internal library because the mechanism that serves
+third-party packages does not tell the two apart. Stating all of that would make
+every one of those routes a promise a second runtime must keep.
+§1.9 makes the contract argue for the smaller surface first, while most of the
+extra routes have few or no card users and removing them is cheap.
+
 The five channels are the ones that already exist. Nothing here adds a channel;
 the decision is that they are the only ones, which is what makes §1.2 checkable.
 
@@ -117,8 +140,11 @@ the decision is that they are the only ones, which is what makes §1.2 checkable
 - **Fix each leak as it is found, with no boundary document (rejected).** Each
   fix is defensible alone and the set has no shape. A later change re-introduces
   a fixed leak because nothing records why it was hidden.
-- **Make the current `packages/base/card-api.gts` exports the contract (rejected).**
-  That is the interface we have, including the parts that are mechanism: `Box`,
+- **Make the current surface the contract (rejected).** This means the
+  `packages/base/card-api.gts` exports, the context members, and the host's shim
+  list.
+  That is the interface we have, including duplicates and parts that are
+  mechanism: `Box`,
   the store's diagnostics, `import.meta.loader`, host mode names. It freezes the
   implementation.
 - **Freeze the contract now and version it (rejected for now).** The boundary is
