@@ -46,7 +46,7 @@ const POST: HostRouteTypeInfo = {
   key: `${POST_MODULE}/Post`,
   types: [`${POST_MODULE}/Post`],
   isCardType: true,
-  fields: { slug: { type: 'contains' } },
+  fields: { slug: { type: 'contains', isPrimitive: true } },
 };
 const postType = { module: POST_MODULE, name: 'Post' } as ResolvedCodeRef;
 

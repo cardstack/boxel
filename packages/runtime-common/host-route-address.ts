@@ -52,7 +52,8 @@ import {
   type RouteParams,
 } from './route-pattern.ts';
 
-// A loaded card, or a card's id (its served URL).
+// A loaded card, or a card's id: an identifier in prefix or URL form, as
+// `CardDef.id` holds it, which the lookup resolves to the served URL itself.
 export type HostRouteCardRef = BaseDef | string;
 
 // What a link points to.
@@ -212,7 +213,10 @@ class Lookup {
         continue;
       }
       if (route.kind === 'fixed-card') {
-        if (cards.length === 1 && this.sameId(cardId(cards[0]!), route.id)) {
+        if (
+          cards.length === 1 &&
+          this.sameId(cardId(cards[0]!), route.cardHref)
+        ) {
           return { ok: true, address: fixedAddress(route), route };
         }
         continue;

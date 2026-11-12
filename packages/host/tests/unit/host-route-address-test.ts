@@ -181,24 +181,32 @@ module('Unit | host-route-address', function (hooks) {
       isCardType: true,
       fields,
     });
-    let contained = { type: 'contains' as const };
+    let contained = { type: 'contains' as const, isPrimitive: true };
     typeInfo = {
       Post: info('Post', {
         slug: contained,
         status: contained,
         number: contained,
-        info: contained,
+        info: { type: 'contains', isPrimitive: false },
       }),
       Tag: info('Tag', { name: contained }),
       Category: info('Category', { slug: contained }),
       Product: info('Product', {
         slug: contained,
-        category: { type: 'linksTo', target: key('Category') },
+        category: {
+          type: 'linksTo',
+          isPrimitive: false,
+          target: key('Category'),
+        },
       }),
       Item: info('Item', { slug: contained }),
       Shelf: info('Shelf', {
         slug: contained,
-        items: { type: 'linksToMany', target: key('Item') },
+        items: {
+          type: 'linksToMany',
+          isPrimitive: false,
+          target: key('Item'),
+        },
       }),
     };
   });
