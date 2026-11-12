@@ -8,8 +8,14 @@ const {
   copySync,
 } = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
+import { mintRunToken } from '../../lib/run-token.ts';
+import {
+  createAutomationRun,
+  startAutomationRunAttempt,
+  type AutomationRun,
+} from '@cardstack/runtime-common/automation-runs';
 import { dirname, join } from 'path';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import type {
   LooseSingleCardDocument,
   RealmPermissions,
@@ -30,6 +36,7 @@ import type {
 import {
   Realm,
   ri,
+  rri,
   searchEntryWireQueryFromQuery,
   parseSearchEntryQueryFromPayload,
   baseRealm,
@@ -3853,6 +3860,46 @@ export function createJWT(
     },
     '7d',
   );
+}
+
+// The run token of a new run of an automation in `realm`, acting as
+// `actsAs`: what an automation run's calls carry. The run is started by
+// `attempt` and is running, so the token is admitted until the run's row
+// changes or `timeLimitSeconds` pass.
+export async function createAutomationRunToken(
+  dbAdapter: DBAdapter,
+  realm: Realm,
+  actsAs: string,
+  {
+    attempt = 1,
+    readRealms = [],
+    timeLimitSeconds = 600,
+  }: {
+    attempt?: number;
+    readRealms?: string[];
+    timeLimitSeconds?: number;
+  } = {},
+): Promise<{ token: string; run: AutomationRun }> {
+  let created = await createAutomationRun(dbAdapter, {
+    automationId: rri(`${realm.url}Automation/test-${randomUUID()}`),
+    realm: ri(realm.url),
+    trigger: 'test',
+    slot: randomUUID(),
+    actsAs,
+  });
+  let start = await startAutomationRunAttempt(dbAdapter, created.id, attempt);
+  if (start.kind !== 'run') {
+    throw new Error(`expected the test run to start, got ${start.kind}`);
+  }
+  let token = mintRunToken({
+    realmSecretSeed,
+    run: start.run,
+    realmURL: realm.url,
+    readRealms,
+    realmServerURL: realm.realmServerURL,
+    timeLimitSeconds,
+  });
+  return { token, run: start.run };
 }
 
 // Variant that builds a realm JWT from URL + seed instead of a Realm

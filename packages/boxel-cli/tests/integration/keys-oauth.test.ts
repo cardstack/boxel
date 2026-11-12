@@ -19,7 +19,7 @@ import {
 import { addPlatformClient } from '#realm-server/lib/oauth';
 // Signing in on the secure origin drives Synapse's admin API.
 import {
-  createJWT,
+  createAutomationRunToken,
   ensureMatrixAdminUser,
   getTestPrerenderer,
   stopTestPrerenderServer,
@@ -388,7 +388,7 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${createJWT(testRealm, matrixId, ['read', 'write'])}`,
+          Authorization: `Bearer ${(await createAutomationRunToken(getTestDbAdapter()!, testRealm, matrixId)).token}`,
         },
         body: invokeBody,
       }),

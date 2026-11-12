@@ -59,6 +59,7 @@ module(basename(import.meta.filename), function () {
     assert.deepEqual(
       registered.sort(),
       [
+        'automation-storage-charge',
         'capture',
         'capture-card',
         'daily-credit-grant',
