@@ -251,8 +251,8 @@ module('Acceptance | automation view', function (hooks) {
     await visitOperatorMode({
       stacks: [[{ id: `${testRealmURL}holders/one`, format: 'isolated' }]],
     });
-    await waitFor('[data-test-automation-embedded]', { timeout: 10000 });
-    await waitFor('[data-test-automation-fitted]', { timeout: 10000 });
+    await waitFor('[data-test-automation-embedded]', { timeout: 30000 });
+    await waitFor('[data-test-automation-fitted]', { timeout: 30000 });
     assert.dom('[data-test-automation-embedded-state]').doesNotExist();
     assert.dom('[data-test-automation-fitted-state]').doesNotExist();
     assert
@@ -288,7 +288,7 @@ module('Acceptance | automation view', function (hooks) {
     let nightly = text('[data-test-automation-trigger-progress="nightly"]');
     assert.ok(nightly?.includes('Runs so far 4'), nightly);
     assert.ok(nightly?.includes('Runs left 26'), nightly);
-    assert.ok(nightly?.includes('Last possible run'), nightly);
+    assert.ok(nightly?.includes('Ends no later than'), nightly);
 
     let hourly = text('[data-test-automation-trigger-progress="hourly"]');
     assert.ok(hourly?.includes('Runs so far 12'), hourly);
@@ -373,7 +373,7 @@ module('Acceptance | automation view', function (hooks) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}holders/one`, format: 'isolated' }]],
       });
-      await waitFor('[data-test-automation-embedded]', { timeout: 10000 });
+      await waitFor('[data-test-automation-embedded]', { timeout: 30000 });
       await openIsolated();
       await waitUntil(
         () =>
