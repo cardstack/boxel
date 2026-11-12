@@ -10,6 +10,7 @@ import {
 } from '@cardstack/runtime-common';
 import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
 import type { BotTriggerContent as BotTriggerEventContent } from '@cardstack/base/matrix-event';
+import { isSubmissionRejection } from './submission-rejected-error.ts';
 
 const log = logger('bot-runner');
 
@@ -128,7 +129,8 @@ export class CommandRunner {
         commandInput: eventContent.input as Record<string, unknown>,
       });
     } catch (error) {
-      log.error('error in maybeEnqueueCommand', {
+      let logAt = isSubmissionRejection(error) ? log.warn : log.error;
+      logAt.call(log, 'error in maybeEnqueueCommand', {
         runAs,
         eventType: eventContent.type,
         error,

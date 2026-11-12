@@ -13,6 +13,7 @@ import {
   PrListingWorkflowHandler,
   type LintSubmissionFilesFn,
 } from '../lib/pr-listing/pr-listing-workflow-handler.ts';
+import { isSubmissionRejection } from '../lib/submission-rejected-error.ts';
 
 const passThroughLint: LintSubmissionFilesFn = async (files) => ({
   passed: true,
@@ -853,8 +854,11 @@ module('command runner', () => {
         },
         'bot-registration-5',
       ),
-      /boom: submissions realm worker exploded/,
-      'original create-pr-card error bubbles up',
+      (err: unknown) =>
+        err instanceof Error &&
+        /boom: submissions realm worker exploded/.test(err.message) &&
+        !isSubmissionRejection(err),
+      'original create-pr-card error bubbles up as a bot-runner fault',
     );
 
     // Expect 5 jobs: collect-files, lintStatus=in-progress, lintStatus=passed,
@@ -1605,8 +1609,11 @@ module('command runner', () => {
         },
         'bot-registration-lint-fail',
       ),
-      /Lint failed with 1 unfixable error/,
-      'lint failure bubbles up',
+      (err: unknown) =>
+        err instanceof Error &&
+        /Lint failed with 1 unfixable error/.test(err.message) &&
+        isSubmissionRejection(err),
+      'lint failure bubbles up as a rejection of the submission',
     );
 
     let commands = publishedJobs.map((j) => j.args.command as string);

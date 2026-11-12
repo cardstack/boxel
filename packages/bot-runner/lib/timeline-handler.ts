@@ -8,6 +8,7 @@ import * as Sentry from '@sentry/node';
 import { CommandRunner, makeEnqueueRunCommand } from './command-runner.ts';
 import { makeLintSubmissionFiles } from './pr-listing/lint-submission-files.ts';
 import { PrListingWorkflowHandler } from './pr-listing/pr-listing-workflow-handler.ts';
+import { isSubmissionRejection } from './submission-rejected-error.ts';
 import type { GitHubClient } from './github.ts';
 import type { DBAdapter, QueuePublisher } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
@@ -115,6 +116,13 @@ export function onTimelineEvent({
         );
       }
     } catch (error) {
+      if (isSubmissionRejection(error)) {
+        // The handler has already shown the reason to the user.
+        log.warn('bot command rejected the submission', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
       log.error('error handling timeline event', error);
       Sentry.captureException(error);
     }

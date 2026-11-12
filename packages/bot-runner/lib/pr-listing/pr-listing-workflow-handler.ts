@@ -17,6 +17,7 @@ import type {
   EnqueueRunCommandFn,
 } from '../command-runner.ts';
 import type { GitHubClient } from '../github.ts';
+import { SubmissionRejectedError } from '../submission-rejected-error.ts';
 
 export type LintSubmissionFilesFn = (
   files: SubmissionFile[],
@@ -365,7 +366,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     }
 
     if (!outcome.passed) {
-      log.error('pr-listing-create: lint found unfixable errors', {
+      log.warn('pr-listing-create: lint found unfixable errors', {
         errorCount: outcome.lintErrors.length,
       });
       await this.patchWorkflowCard(ctx, {
@@ -373,7 +374,9 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       });
       // The individual errors are already persisted in lintErrors above;
       // keep the thrown message short so prCreationError doesn't repeat them.
-      throw new Error(
+      // The errors are in the user's code, so this is a rejection of the
+      // submission, not a bot-runner fault.
+      throw new SubmissionRejectedError(
         `Lint failed with ${outcome.lintErrors.length} unfixable error(s)`,
       );
     }
