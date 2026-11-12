@@ -1210,15 +1210,15 @@ module('recorder', (hooks) => {
     assert.false(contexts[0].signal.aborted);
   });
 
-  test('a background job queued during a commit runs after its cursor update', async (assert) => {
-    let job: Promise<BackgroundOutcome> | undefined;
-    let seen: { cursorSeq: number; head: string | null }[] = [];
+  test('a background job asked for during a commit is skipped, and one asked for after it sees the new cursor', async (assert) => {
+    let during: Promise<BackgroundOutcome> | undefined;
+    let ran = false;
     let target: Recorder = recorder({
       before: async (step) => {
-        if (step === 'cursor' && !job) {
-          job = target.runBackground({
-            kind: 'test',
-            run: async () => void seen.push(await state()),
+        if (step === 'cursor' && !during) {
+          during = target.runBackground({
+            kind: 'during',
+            run: async () => void (ran = true),
           });
         }
       },
@@ -1230,7 +1230,16 @@ module('recorder', (hooks) => {
     });
     await feed(target, [edit], T0 + quietPeriodMs);
 
-    assert.strictEqual(await job, 'ran');
+    assert.strictEqual(await during, 'skipped');
+    assert.false(ran);
+    let seen: { cursorSeq: number; head: string | null }[] = [];
+    assert.strictEqual(
+      await target.runBackground({
+        kind: 'after',
+        run: async () => void seen.push(await state()),
+      }),
+      'ran',
+    );
     let [revision] = await history();
     assert.deepEqual(seen, [{ cursorSeq: edit.seq, head: revision.id }]);
   });
@@ -1267,6 +1276,46 @@ module('recorder', (hooks) => {
     target.tick(T0 + quietPeriodMs);
     await target.settled();
     assert.deepEqual(await coveredSeqs(await history()), [[edit.seq]]);
+  });
+
+  test('a background job asked for while the realm has an event in hand is skipped at once', async (assert) => {
+    let release!: () => void;
+    let released = new Promise<void>((resolve) => (release = resolve));
+    let capturing = false;
+    let target = recorder({
+      before: async (step) => {
+        if (step === 'capture') {
+          capturing = true;
+          await released;
+        }
+      },
+    });
+    let edit = await event({
+      author: ALICE,
+      changes: [await put('a.json', '{"a":1}', 'A')],
+      occurredAt: at(0),
+    });
+    await target.record(edit);
+    await waitUntil(() => capturing, { what: 'the capture to start' });
+    let ran = false;
+    let job = () =>
+      target.runBackground({
+        kind: 'test',
+        run: async () => void (ran = true),
+      });
+
+    assert.strictEqual(await job(), 'skipped', 'while the event is captured');
+    release();
+    await target.settled();
+    assert.strictEqual(
+      await job(),
+      'skipped',
+      'while the event waits in the open group',
+    );
+    target.tick(T0 + quietPeriodMs);
+    await target.settled();
+    assert.strictEqual(await job(), 'ran', 'once the event is committed');
+    assert.true(ran);
   });
 
   test('a background job holds no I/O permit, so other realms record beside it', async (assert) => {

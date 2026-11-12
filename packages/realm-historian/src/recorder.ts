@@ -66,11 +66,12 @@
 // Background work on the realm, such as a reconcile pass or maintenance,
 // runs in the same queue as the events (`runBackground`), so it never runs
 // between a commit and its cursor update, and never while the realm has
-// anything captured: a job that reaches the front of the queue with events
-// captured, or with events queued behind it, is skipped and left for a later
-// turn, so it doesn't hold up a realm that has woken. A job holds no I/O
-// permit: the task limits background work with its own concurrency, so a
-// long job doesn't take a permit recording needs. Stopping the recorder
+// events in hand: a job asked for while the realm has events captured, being
+// handled or queued is skipped at once, and one that reaches the front of
+// the queue with events queued behind it is skipped then, so a job neither
+// waits out a backlog nor holds up a realm that has woken. A job holds no
+// I/O permit: the task limits background work with its own concurrency, so
+// a long job doesn't take a permit recording needs. Stopping the recorder
 // aborts the job's signal.
 
 import { constants } from 'node:fs';
@@ -318,6 +319,8 @@ export class Recorder implements ManagedRecorder {
   #lastActiveAt = -Infinity;
   // Aborts the background job in progress.
   #backgroundAbort: AbortController | undefined;
+  // Set while an event is handled, before its capture is in `#captured`.
+  #handlingEvent = false;
 
   #loaded = false;
   // The last event recorded, as Postgres holds it.
@@ -420,6 +423,12 @@ export class Recorder implements ManagedRecorder {
     if (this.#state !== 'running') {
       return Promise.resolve('unavailable');
     }
+    // A job queued behind the realm's events would be skipped once they are
+    // handled, so it is skipped now, rather than hold its place in the
+    // task's background work while it waits for them.
+    if (this.#hasEventsInHand()) {
+      return Promise.resolve('skipped');
+    }
     return new Promise((resolve, reject) => {
       this.#queue.push({ kind: 'background', job, resolve, reject });
       this.#kick();
@@ -459,7 +468,12 @@ export class Recorder implements ManagedRecorder {
         }
         if (work.kind === 'event') {
           this.#lastActiveAt = Date.now();
-          await this.#handleEvent(work.event);
+          this.#handlingEvent = true;
+          try {
+            await this.#handleEvent(work.event);
+          } finally {
+            this.#handlingEvent = false;
+          }
         } else if (work.kind === 'tick') {
           await this.#handleTick(work.at);
         }
@@ -497,10 +511,7 @@ export class Recorder implements ManagedRecorder {
     }
     let work = this.#queue.shift() as BackgroundWork;
     this.#wakeSpaceWaiters();
-    if (
-      this.#captured.length > 0 ||
-      this.#queue.some((next) => next.kind === 'event')
-    ) {
+    if (this.#hasEventsInHand()) {
       work.resolve('skipped');
       return;
     }
@@ -527,6 +538,16 @@ export class Recorder implements ManagedRecorder {
     } finally {
       this.#backgroundAbort = undefined;
     }
+  }
+
+  // Whether the realm has events captured and not yet committed, being
+  // handled, or queued.
+  #hasEventsInHand(): boolean {
+    return (
+      this.#handlingEvent ||
+      this.#captured.length > 0 ||
+      this.#queue.some((work) => work.kind === 'event')
+    );
   }
 
   // Drops everything not yet committed. A later recorder reads it again from

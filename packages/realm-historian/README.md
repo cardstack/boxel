@@ -83,9 +83,10 @@ on each realm. A kind's `isDue` check, if it has one, runs first, so a realm
 that needs nothing doesn't get a recorder.
 
 Each job runs in its realm's recorder queue, so it never runs between a commit
-and its cursor update. It runs only when the realm has nothing captured.
-A job that reaches the front of the queue with events queued behind it is
-skipped and tried again a moment later. A job holds no recording permit.
+and its cursor update. It runs only when the realm has no events in hand. A job
+asked for while the realm has events captured, being handled or queued is
+skipped at once, and one that reaches the front of the queue with events queued
+behind it is skipped then. A skipped job is tried again a moment later. A job holds no recording permit.
 Stopping the recorder aborts the job's signal and waits for it. A realm with
 work due and no recorder gets one, which is dropped once idle again. A job that
 fails is logged and tried again after its kind's retry delay. The realm records
