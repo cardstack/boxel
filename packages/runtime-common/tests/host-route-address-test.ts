@@ -3,7 +3,11 @@ import {
   type HostRouteAddressResult,
   type HostRouteAddressTarget,
 } from '../host-route-address.ts';
-import { validateHostRoutes, type HostRoute } from '../host-routes.ts';
+import {
+  validateHostRoutes,
+  type HostRoute,
+  type HostRouteTypeInfo,
+} from '../host-routes.ts';
 import type { CardAPIForMatching } from '../instance-filter-matcher.ts';
 import type { RawHostRoutingRule } from '../realm.ts';
 import {
@@ -13,22 +17,43 @@ import {
   parseRoutePathPattern,
 } from '../route-pattern.ts';
 import type { SharedTests } from '../helpers/index.ts';
+import type { ResolvedCodeRef } from '../code-ref.ts';
+import { VirtualNetwork } from '../virtual-network.ts';
 import type { BaseDef } from '@cardstack/base/card-api';
 
 // These tests use card id templates, fixed routes and redirects, which read
-// only card ids. Field-match routes read loaded cards and are tested in the
-// host's `host-route-address` unit test.
+// only card ids, and field matches given only ids. Field matches that read
+// loaded cards are tested in the host's `host-route-address` unit test.
 
 const REALM = 'http://realm.test/site/';
+// The realm is also named by a prefix, as a well-known realm is.
+const PREFIX = '@example/site/';
+const OTHER_REALM = 'http://other.test/site/';
+const OTHER_PREFIX = '@example/other/';
 
-// The card API is only read for field-match routes, which these tests have
-// none of.
-const NO_API = {} as CardAPIForMatching;
+function network(): VirtualNetwork {
+  let virtualNetwork = new VirtualNetwork();
+  virtualNetwork.addRealmMapping(PREFIX, REALM);
+  virtualNetwork.addRealmMapping(OTHER_PREFIX, OTHER_REALM);
+  return virtualNetwork;
+}
+
+// Only the virtual network is read: these tests have no loaded cards.
+const API = { virtualNetwork: network() } as CardAPIForMatching;
+
+const POST_MODULE = `${REALM}post`;
+const POST: HostRouteTypeInfo = {
+  key: `${POST_MODULE}/Post`,
+  types: [`${POST_MODULE}/Post`],
+  isCardType: true,
+  fields: { slug: { type: 'contains' } },
+};
+const postType = { module: POST_MODULE, name: 'Post' } as ResolvedCodeRef;
 
 function routesFor(rules: RawHostRoutingRule[]): readonly HostRoute[] {
   let { routes, warnings } = validateHostRoutes(rules, {
     realmURL: new URL(REALM),
-    lookupType: () => undefined,
+    lookupType: (type) => (type.name === 'Post' ? POST : undefined),
   });
   if (warnings.length > 0) {
     throw new Error(
@@ -45,7 +70,7 @@ function lookup(
   return hostRouteAddress(target, {
     routes: routesFor(rules),
     realmURL: new URL(REALM),
-    api: NO_API,
+    api: API,
   });
 }
 
@@ -118,6 +143,61 @@ const tests: SharedTests<unknown> = Object.freeze({
       outcome(lookup(PEOPLE, cards('Pet/rex'))),
       { reason: 'no-route', route: undefined },
       'an id that differs in a literal does not fit',
+    );
+  },
+
+  'hostRouteAddress: a card id in prefix form': async (assert) => {
+    let rules: RawHostRoutingRule[] = [
+      { path: '/about', instance: instance('Page/about') },
+      ...PEOPLE,
+    ];
+    let prefixed = (local: string): HostRouteAddressTarget => ({
+      kind: 'cards',
+      cards: [`${PREFIX}${local}`],
+    });
+    assert.deepEqual(outcome(lookup(rules, prefixed('Person/robin'))), {
+      address: '/people/robin',
+      route: '/people/:person_id',
+    });
+    assert.deepEqual(
+      outcome(lookup(rules, prefixed('Page/about'))),
+      { address: '/about', route: '/about' },
+      'a fixed route matches its card in either form',
+    );
+    assert.deepEqual(
+      outcome(
+        lookup(rules, {
+          kind: 'cards',
+          cards: [`${OTHER_PREFIX}Person/robin`],
+        }),
+      ),
+      { reason: 'other-realm', route: undefined },
+      "another realm's prefix",
+    );
+    assert.deepEqual(
+      outcome(
+        lookup(rules, { kind: 'cards', cards: ['@example/unknown/Person/x'] }),
+      ),
+      { reason: 'other-realm', route: undefined },
+      'a prefix the network does not know',
+    );
+  },
+
+  'hostRouteAddress: an undecided route ends the search': async (assert) => {
+    let rules: RawHostRoutingRule[] = [
+      { path: '/posts/:slug', type: postType, match: { slug: ':slug' } },
+      { path: '/p/:id', card: './Post/:id' },
+    ];
+    assert.deepEqual(
+      outcome(lookup(rules, cards('Post/1'))),
+      { reason: 'card-not-loaded', route: '/posts/:slug' },
+      'a bare id does not fall through to the later card id template',
+    );
+    let reversed = [rules[1]!, rules[0]!];
+    assert.deepEqual(
+      outcome(lookup(reversed, cards('Post/1'))),
+      { address: '/p/1', route: '/p/:id' },
+      'a card id template ahead of the field match decides with the id',
     );
   },
 
@@ -371,7 +451,7 @@ const tests: SharedTests<unknown> = Object.freeze({
       }
       let result = hostRouteAddress(
         { kind: 'cards', cards: [id] },
-        { routes, realmURL, api: NO_API },
+        { routes, realmURL, api: API },
       );
       if (!result.ok) {
         assert.ok(false, `no address for ${value}: ${result.reason}`);

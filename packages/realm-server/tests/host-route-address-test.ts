@@ -9,6 +9,14 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRouteAddressTests, assert, {});
   });
 
+  test('hostRouteAddress: a card id in prefix form', async function (assert) {
+    await runSharedTest(hostRouteAddressTests, assert, {});
+  });
+
+  test('hostRouteAddress: an undecided route ends the search', async function (assert) {
+    await runSharedTest(hostRouteAddressTests, assert, {});
+  });
+
   test('hostRouteAddress: a fixed route gives its card its path', async function (assert) {
     await runSharedTest(hostRouteAddressTests, assert, {});
   });

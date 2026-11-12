@@ -62,11 +62,12 @@ module('Unit | host-route-address', function (hooks) {
   function lookup(
     rules: RawHostRoutingRule[],
     target: HostRouteAddressTarget,
+    withAPI: CardAPIForMatching = api,
   ): HostRouteAddressResult {
     return hostRouteAddress(target, {
       routes: routes(rules),
       realmURL,
-      api,
+      api: withAPI,
     });
   }
 
@@ -123,14 +124,24 @@ module('Unit | host-route-address', function (hooks) {
       virtualNetwork,
     };
 
-    let { field, contains, linksTo, linksToMany, CardDef } = cardApi;
+    let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
 
+    class PostInfo extends FieldDef {
+      @field status = contains(StringField);
+    }
     class Post extends CardDef {
       @field slug = contains(StringField);
       @field status = contains(StringField);
       @field number = contains(NumberField);
+      // A computed field, which a test reads as if it came from a query the
+      // index can't hold, so a `where` through it can't be evaluated.
+      @field info = contains(PostInfo, {
+        computeVia: function (this: Post) {
+          return new PostInfo({ status: this.status });
+        },
+      });
     }
     class Tag extends CardDef {
       @field name = contains(StringField);
@@ -176,6 +187,7 @@ module('Unit | host-route-address', function (hooks) {
         slug: contained,
         status: contained,
         number: contained,
+        info: contained,
       }),
       Tag: info('Tag', { name: contained }),
       Category: info('Category', { slug: contained }),
@@ -310,6 +322,57 @@ module('Unit | host-route-address', function (hooks) {
     );
   });
 
+  test('a bare id and the loaded card give no conflicting addresses', function (assert) {
+    let rules: RawHostRoutingRule[] = [
+      ...POSTS(),
+      { path: '/p/:id', card: './Post/:id' },
+    ];
+    let post = make('Post', 'Post/1', {
+      slug: 'hello-world',
+      status: 'published',
+    });
+    assert.deepEqual(
+      outcome(lookup(rules, { kind: 'cards', cards: [post.id!] })),
+      { reason: 'card-not-loaded', route: '/posts/:slug' },
+      'the bare id waits for the card instead of taking the later route',
+    );
+    assert.deepEqual(
+      outcome(lookup(rules, { kind: 'cards', cards: [post] })),
+      { address: '/posts/hello-world', route: '/posts/:slug' },
+      'the loaded card gets the canonical address',
+    );
+    let draft = make('Post', 'Post/2', { slug: 'wip', status: 'draft' });
+    assert.deepEqual(
+      outcome(lookup(rules, { kind: 'cards', cards: [draft] })),
+      { address: '/p/2', route: '/p/:id' },
+      'a loaded card that fails the where takes the next route',
+    );
+  });
+
+  test('a where that cannot be evaluated ends the search', function (assert) {
+    let rules: RawHostRoutingRule[] = [
+      {
+        path: '/posts/:slug',
+        type: ref('Post'),
+        where: { eq: { 'info.status': 'published' } },
+        match: { slug: ':slug' },
+      },
+      { path: '/p/:id', card: './Post/:id' },
+    ];
+    let post = make('Post', 'Post/1', { slug: 'hi', status: 'published' });
+    assert.deepEqual(
+      outcome(lookup(rules, { kind: 'cards', cards: [post] })),
+      { address: '/posts/hi', route: '/posts/:slug' },
+      'the where passes when it can be read',
+    );
+    let tainted = { ...api, isQueryTaintedField: () => true };
+    assert.deepEqual(
+      outcome(lookup(rules, { kind: 'cards', cards: [post] }, tainted)),
+      { reason: 'where-unresolvable', route: '/posts/:slug' },
+      'the later route is not tried',
+    );
+  });
+
   test('a type and field values', function (assert) {
     let rules: RawHostRoutingRule[] = [
       { path: '/tags/:name', type: ref('Tag'), match: { name: ':name' } },
@@ -388,8 +451,58 @@ module('Unit | host-route-address', function (hooks) {
     let orphan = make('Product', 'Product/orphan', { slug: 'orphan' });
     assert.deepEqual(
       outcome(lookup(rules, { kind: 'cards', cards: [orphan] })),
-      { reason: 'parent-not-loaded', route: '/c/:category/:product' },
+      { reason: 'no-parent', route: '/c/:category/:product' },
       'a child with no parent',
+    );
+    let withOwnRoute: RawHostRoutingRule[] = [
+      ...rules,
+      {
+        path: '/products/:slug',
+        type: ref('Product'),
+        match: { slug: ':slug' },
+      },
+    ];
+    assert.deepEqual(
+      outcome(lookup(withOwnRoute, { kind: 'cards', cards: [orphan] })),
+      { address: '/products/orphan', route: '/products/:slug' },
+      'a child with no parent takes a later route',
+    );
+
+    // A link that isn't loaded gives only its target's id.
+    let lazy = make('Product', 'Product/lazy', { slug: 'lazy' });
+    let unloaded = { type: 'not-loaded', reference: '../Category/shoes' };
+    let lazyAPI: CardAPIForMatching = {
+      ...api,
+      peekAtField: (card, name) =>
+        card === lazy && name === 'category'
+          ? unloaded
+          : api.peekAtField(card, name),
+      isNonPresentLink: (value) =>
+        value === unloaded || api.isNonPresentLink(value),
+    };
+    assert.deepEqual(
+      outcome(lookup(withOwnRoute, { kind: 'cards', cards: [lazy] }, lazyAPI)),
+      { reason: 'parent-not-loaded', route: '/c/:category/:product' },
+      'a child whose parent is not loaded does not take a later route',
+    );
+    let byId: RawHostRoutingRule[] = [
+      {
+        path: '/cat/:category',
+        card: './Category/:category',
+        routes: [
+          {
+            path: '/:product',
+            type: ref('Product'),
+            match: { slug: ':product' },
+            parent: 'category',
+          },
+        ],
+      },
+    ];
+    assert.deepEqual(
+      outcome(lookup(byId, { kind: 'cards', cards: [lazy] }, lazyAPI)),
+      { address: '/cat/shoes/lazy', route: '/cat/:category/:product' },
+      "the unloaded link's id is enough for a card id template parent",
     );
   });
 
