@@ -187,7 +187,9 @@ identity (`automation_runs.acts_as`), referencing the run:
 
 ```
 usage   = worker_process_seconds: each job's wall clock, start of task to its charge
-          prerender_tab_seconds:  each render's renderElapsedMs, summed
+          prerender_tab_seconds:  each render's renderElapsedMs, summed over the renders
+                                  the jobs make (not the definition-cache fills, which
+                                  the shared definition lookup makes)
 credits = ceil((worker seconds × workerProcessUsdPerSecond
                + tab seconds × prerenderTabUsdPerSecond) × PRICING_MARGIN × 1000)
 ```

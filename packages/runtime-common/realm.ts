@@ -39,7 +39,11 @@ import {
   prerenderSpawnedPriority,
   unbuiltIndexFailure,
 } from './jobs/indexing.ts';
-import { runIndexingFor, type RunIndexing } from './run-indexing.ts';
+import {
+  runIndexingFor,
+  withRunIndexingRetries,
+  type RunIndexing,
+} from './run-indexing.ts';
 import {
   awaitPublishedHtmlReady,
   enqueuePrerenderHtmlJob,
@@ -6599,7 +6603,9 @@ export class Realm {
   //
   // A set carrying an automation run's indexing is enqueued even with nothing
   // to render: its job is then the last the run's commit causes, and all it
-  // does is charge the run.
+  // does is charge the run. Being the only holder of the run's measurement,
+  // that enqueue is retried a few times before it is given up (see
+  // `withRunIndexingRetries`).
   private async enqueueDeferredPrerenderHtml(
     deferred: DeferredPrerenderHtml | undefined,
     initiatingUser: string | null,
@@ -6609,7 +6615,7 @@ export class Realm {
     if (!deferred || (deferred.changes.length === 0 && !deferred.runIndexing)) {
       return;
     }
-    try {
+    let enqueue = async () => {
       await enqueuePrerenderHtmlJob(this.#queue, {
         realmURL: this.url,
         realmUsername: await this.getRealmOwnerUsername(),
@@ -6632,10 +6638,23 @@ export class Realm {
         lane: prerenderHtmlWriterLane(this.url, initiatingUser),
         runIndexing: deferred.runIndexing,
       });
+    };
+    try {
+      await (deferred.runIndexing
+        ? withRunIndexingRetries(enqueue)
+        : enqueue());
     } catch (e: any) {
-      this.#log.warn(
-        `failed to enqueue deferred prerender_html job for ${this.url}: ${e?.message}`,
-      );
+      if (deferred.runIndexing) {
+        // The job was the only holder of the run's measurement, so the log
+        // line carries it, for the run to be charged by hand.
+        this.#log.error(
+          `failed to enqueue deferred prerender_html job for ${this.url}, which would have charged the indexing of run ${deferred.runIndexing.runId} (${JSON.stringify(deferred.runIndexing)}): ${e?.message}`,
+        );
+      } else {
+        this.#log.warn(
+          `failed to enqueue deferred prerender_html job for ${this.url}: ${e?.message}`,
+        );
+      }
     }
   }
 

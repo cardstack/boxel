@@ -2086,6 +2086,7 @@ A run's jobs never coalesce with another write's, in either direction, so every 
 -- Every job a run's commit caused, oldest first, with what each was handed.
 SELECT j.id, j.job_type, j.status, j.created_at,
        j.args->'runIndexing' AS run_indexing,
+       j.result->'chargedRunIndexing' AS charged,
        jsonb_array_length(j.args->'changes') AS changes,
        j.result->'phaseTimings' AS phase_timings
 FROM jobs j
@@ -2093,12 +2094,13 @@ WHERE j.args->'runIndexing'->>'runId' = '<run id>'
 ORDER BY j.id;
 ```
 
-The job ids lead to everything else in this skill: the rows each pass wrote (`boxel_index.diagnostics->>'jobId'`, Mode B), its phase breakdown (Mode K) and its queue wait (Mode P). The `run_indexing` the last job carried, plus what it measured itself, is what the charge priced. To check it against the charge, read the charge's usage as the `pricing` skill shows: `worker_process_seconds` should exceed the last job's carried `workerProcessSeconds`, and `prerender_tab_seconds` its carried `prerenderTabSeconds`.
+The job ids lead to everything else in this skill: the rows each pass wrote (`boxel_index.diagnostics->>'jobId'`, Mode B), its phase breakdown (Mode K) and its queue wait (Mode P). The last job's `charged` is exactly what its charge priced: what it was handed plus what it measured itself. To check it against the charge, read the charge's usage as the `pricing` skill shows: `worker_process_seconds` should exceed the last job's carried `workerProcessSeconds`, and `prerender_tab_seconds` its carried `prerenderTabSeconds`.
 
 ### What the measurement covers
 
 - **Worker time** is each job's wall clock from the start of its task to its charge or hand-off, including the wait on its permissions read and, for a render job, the wait on its spawning pass's commit.
-- **Tab time** is each render's own measure, `renderElapsedMs` from the render's diagnostics, summed over every render the job made, module renders included. A render without one counts its `totalElapsedMs` (which includes the wait for a tab), and one without that counts the time its call took.
+- **Tab time** is each render's own measure, `renderElapsedMs` from the render's diagnostics, summed over every render the job made through its own prerenderer: the card and file visits, and the module renders the pass asks for itself. A render without one counts its `totalElapsedMs` (which includes the wait for a tab), and one without that counts the time its call took.
+- **Not counted:** the module renders that fill the shared definition cache when a pass or a render looks up a type it hasn't cached. Those are made by the definition lookup, or by the prerender server for a render in progress, on prerenderers the job doesn't own, and the cache they fill serves every later reader. A run that writes modules is charged for the worker time it spent waiting on them, but not their tab time.
 
 ### When a run has no `run_indexing` charge
 
@@ -2108,7 +2110,8 @@ The worker logs every outcome on the `worker` channel:
 - `… nothing-to-charge`: the payer's balance held nothing to draw on, so no row was written.
 - `could not charge the indexing of run <id> …: no-prices`: the worker's pricing check failed (see the `pricing` skill); `no-payer`: the run's `acts_as` has no `users` row.
 - `not charging the indexing of run <id> …: the run no longer exists`: the run row was deleted, with its realm, before the commit's indexing finished.
-- `failed to charge the indexing of run <id>`: the charge itself threw. The index pass is not retried for it.
+- `failed to charge the indexing of run <id>`: the charge kept throwing through its retries. The index pass is not run again for it. The job's `charged` result still holds the usage, so the run can be charged by hand at the pricing version the worker logged.
+- `failed to enqueue deferred prerender_html job … which would have charged the indexing of run <id>` (realm server, `realm` channel): a commit whose index passes left nothing to render couldn't queue the job that charges the run. The line carries the run's measurement.
 
 A run whose last job failed or never ran has no charge either: check the jobs query above for a job that isn't `resolved`.
 
