@@ -1218,7 +1218,10 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // grant admits them to shows (see `realmInfo`). The policy's own pointer is
 // kept out of it. Since it runs nothing a grant admits, an archived realm
 // answers such a caller as it does while active, so the answer does not say
-// the realm is archived (see `APPLIES_ARCHIVED_SEAL`).
+// the realm is archived (see `APPLIES_ARCHIVED_SEAL`). The host reads info a
+// realm answered a caller its permissions don't let read as the sign that its
+// policy judges them, and runs the assistant's scripts for such a caller
+// (ADR 022 §1.8), so a change to whom `_info` answers changes that too.
 //
 // No other route does, but for the byte routes and the hashed scoped-CSS
 // serve described below. Each of the rest is marked `ACL_ONLY` where it is
@@ -1257,7 +1260,9 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //
 // So they keep the ACL's refusal, which a realm with a policy words
 // differently on some of them (see `#refusalUnderPolicy`), as does the
-// directory listing.
+// directory listing. The Realm Runner refuses the calls that reach these
+// routes before it asks the realm (ADR 022 §1.4), so a route a grant comes to
+// reach changes the runner's tables in the same change.
 //
 // The card+source read and the realm's fallback file and module serve consume
 // it path by path instead: for a file or a card's document, whose bytes a
