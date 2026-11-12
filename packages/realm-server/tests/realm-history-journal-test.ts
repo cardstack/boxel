@@ -14,6 +14,10 @@ import {
 } from '@cardstack/runtime-common';
 import { commitBatch } from '@cardstack/runtime-common/card-operations';
 import {
+  setChangeJournalSink,
+  type ChangeJournalEvent,
+} from '@cardstack/runtime-common/card-operations/telemetry';
+import {
   setupPermissionedRealmCached,
   createJWT,
   waitUntil,
@@ -24,7 +28,9 @@ import { FailableChangeJournal } from './helpers/failable-change-journal.ts';
 
 // The change journal: every change to a recording realm's files leaves one
 // `realm_change_events` row, committed with the write's `realm_file_meta`
-// update, and a journal failure never fails the write.
+// update, and a journal failure never fails the write. Each append is
+// reported on `boxel:change-journal` once the write's transaction has
+// finished, so `written` means the event committed.
 
 interface JournalRow {
   seq: number;
@@ -52,7 +58,21 @@ module(basename(import.meta.filename), function () {
     testRealm = args.testRealm;
     request = withRealmPath(args.request, realmURL);
     dbAdapter = args.dbAdapter;
-    journal.failNext = false;
+    journal.reset();
+  }
+
+  // The `boxel:change-journal` records the test realm's writes reported,
+  // without their timings.
+  let reported: ChangeJournalEvent[] = [];
+  function reports() {
+    return reported
+      .filter((record) => record.realm === realmHref)
+      .map(({ outcome, paths, partial, error }) => ({
+        outcome,
+        paths,
+        partial,
+        ...(error !== undefined ? { error } : {}),
+      }));
   }
 
   // Registers the realm the way the realm server's registry would, and turns
@@ -154,6 +174,12 @@ module(basename(import.meta.filename), function () {
 
     hooks.beforeEach(async function () {
       await setRecording(true);
+      reported = [];
+      setChangeJournalSink((record) => reported.push(record));
+    });
+
+    hooks.afterEach(function () {
+      setChangeJournalSink(undefined);
     });
 
     test('a source write leaves one event that matches the file meta', async function (assert) {
@@ -176,6 +202,9 @@ module(basename(import.meta.filename), function () {
         },
       ]);
       assert.deepEqual(await pathsOf(event.seq), ['hello.txt']);
+      assert.deepEqual(reports(), [
+        { outcome: 'written', paths: 1, partial: false },
+      ]);
     });
 
     test('a write that replaces a file records M, and identical bytes record nothing', async function (assert) {
@@ -322,6 +351,70 @@ module(basename(import.meta.filename), function () {
         1,
         'the next write is journaled as usual',
       );
+      assert.deepEqual(reports(), [
+        {
+          outcome: 'failed',
+          paths: 1,
+          partial: false,
+          error: 'the change journal is unavailable',
+        },
+        { outcome: 'written', paths: 1, partial: false },
+      ]);
+    });
+
+    test('a write whose transaction fails to commit after the append reports no written event', async function (assert) {
+      journal.failCommitNext = true;
+      let response = await postSource('uncommitted.txt', 'never recorded');
+      assert.strictEqual(response.status, 500, 'the write fails');
+      assert.strictEqual(
+        await fileMeta('uncommitted.txt'),
+        undefined,
+        'the file meta rolled back',
+      );
+      assert.strictEqual(
+        (await events()).length,
+        0,
+        'the event rolled back with it',
+      );
+      let [report, ...rest] = reports();
+      assert.strictEqual(rest.length, 0, 'one record for the one append');
+      assert.strictEqual(report?.outcome, 'failed', 'reported failed');
+      assert.true(
+        report?.error?.includes('commit_refused'),
+        `with the commit's error: ${report?.error}`,
+      );
+    });
+
+    test("a write whose append can't be rolled back to its savepoint fails, rather than answering for file meta that never committed", async function (assert) {
+      journal.failRollbackNext = true;
+      let response = await postSource('unsaved.txt', 'lost');
+      assert.strictEqual(response.status, 500, 'the write fails');
+      assert.strictEqual(
+        await fileMeta('unsaved.txt'),
+        undefined,
+        'no file meta committed',
+      );
+      assert.strictEqual((await events()).length, 0, 'no event was written');
+
+      assert.strictEqual(
+        (await postSource('after.txt', 'recorded again')).status,
+        204,
+        'the next write lands',
+      );
+      assert.strictEqual(
+        (await events()).length,
+        1,
+        'the next write is journaled as usual',
+      );
+      assert.deepEqual(reports(), [
+        {
+          outcome: 'failed',
+          paths: 1,
+          partial: false,
+          error: 'the change journal is unavailable',
+        },
+        { outcome: 'written', paths: 1, partial: false },
+      ]);
     });
 
     // realm-historian hashes the payload to a shard the same way it hashes a
@@ -356,6 +449,9 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual((await postSource('quiet.txt', 'shh')).status, 204);
       assert.ok(await fileMeta('quiet.txt'), 'the file meta row is written');
       assert.strictEqual((await events()).length, 0);
+      assert.deepEqual(reports(), [
+        { outcome: 'skipped', paths: 1, partial: false },
+      ]);
     });
 
     test('every primitive that changes a file leaves exactly one event', async function (assert) {

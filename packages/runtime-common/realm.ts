@@ -212,6 +212,7 @@ import {
   getFileMetaForPaths,
 } from './file-meta.ts';
 import {
+  withChangeEvent,
   writeContextForEvent,
   writeContextFromHeaders,
   type ChangeEventChange,
@@ -340,7 +341,6 @@ import {
 } from './card-operations/capabilities.ts';
 import {
   emitCapabilityCheck,
-  emitChangeJournal,
   type CapabilityCheckEvent,
   type PolicyRoute,
 } from './card-operations/telemetry.ts';
@@ -6723,11 +6723,11 @@ export class Realm {
   // The rows that describe what a write left on disk, and the change event
   // that records it, committed together. `realm_file_meta` is written and
   // trimmed on one transaction, and the event is appended on the same one
-  // under a savepoint: if the journal insert fails, only the insert rolls
-  // back, the file meta still commits, and the write still succeeds, with the
-  // failure recorded so reconciliation can attribute the change to no one.
-  // Reconciliation therefore never sees a file-meta change whose event is
-  // still on its way.
+  // through `withChangeEvent`, under a savepoint: if the journal insert fails,
+  // only the insert rolls back, the file meta still commits, and the write
+  // still succeeds, with the failure recorded so reconciliation can attribute
+  // the change to no one. Reconciliation therefore never sees a file-meta
+  // change whose event is still on its way.
   //
   // Called for a commit that completed and for one that failed partway, with
   // whatever paths had landed by then; the `partial` event records them,
@@ -6807,40 +6807,16 @@ export class Realm {
             changes,
           }
         : undefined;
-    return await this.#dbAdapter.withTransaction(
-      async (querier) => {
-        let createdMap = await this.persistFileMeta(fileMetaRows, querier);
-        await this.removeFileMeta(removedFiles, querier);
-        if (event) {
-          let started = performance.now();
-          await querier(['SAVEPOINT change_journal']);
-          try {
-            let written = await journal.append(querier, event);
-            emitChangeJournal({
-              realm: this.url,
-              outcome: written ? 'written' : 'skipped',
-              durationMs: Math.round(performance.now() - started),
-              paths: changes.length,
-              partial,
-            });
-          } catch (err: unknown) {
-            await querier(['ROLLBACK TO SAVEPOINT change_journal']);
-            this.#log.error(
-              `could not append the change event for ${changes.length} path(s) in ${this.url} to the change journal; reconciliation will record the change unattributed: ${stringifyErrorForLog(err)}`,
-            );
-            emitChangeJournal({
-              realm: this.url,
-              outcome: 'failed',
-              durationMs: Math.round(performance.now() - started),
-              paths: changes.length,
-              partial,
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
-        }
-        return createdMap;
-      },
-      { label: 'realm write outcome' },
+    return await withChangeEvent(journal, event, (appendChangeEvent) =>
+      this.#dbAdapter.withTransaction(
+        async (querier) => {
+          let createdMap = await this.persistFileMeta(fileMetaRows, querier);
+          await this.removeFileMeta(removedFiles, querier);
+          await appendChangeEvent(querier);
+          return createdMap;
+        },
+        { label: 'realm write outcome' },
+      ),
     );
   }
 

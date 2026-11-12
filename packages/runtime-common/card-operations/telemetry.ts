@@ -722,11 +722,16 @@ export function emitKeyUse(event: KeyUseEvent): void {
 // Change journal
 // ---------------------------------------------------------------------------
 
-// One record per change-journal insert the write path attempted: how long it
-// took and whether it wrote a row, wrote none because the realm records no
-// history, or failed. A failure never fails the write; it rolls back to the
-// journal's savepoint and the write's file meta still commits, and this
-// record is what shows the realm's history is missing the change.
+// One record per change-journal insert a writer attempted: how long it took
+// and whether it wrote a row, wrote none because the realm records no history,
+// or failed. `withChangeEvent` and `appendStandaloneChangeEvent`, in
+// `realm-history.ts`, write them. A writer whose event commits with
+// its own write is reported once its transaction has finished, so `written`
+// means the event committed. `failed` is an insert that failed, which rolls
+// back to the journal's savepoint while the write's own rows still commit, or
+// a written event whose transaction then failed to commit, with that
+// transaction's error. Either way this record is what shows the realm's
+// history is missing the change's attribution.
 export const CHANGE_JOURNAL_CHANNEL = 'boxel:change-journal';
 
 export type ChangeJournalOutcome = 'written' | 'skipped' | 'failed';

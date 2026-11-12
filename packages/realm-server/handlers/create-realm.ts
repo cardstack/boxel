@@ -4,9 +4,9 @@ import fsExtra from 'fs-extra';
 const { ensureDirSync, writeFileSync, writeJSONSync } = fsExtra;
 import * as Sentry from '@sentry/node';
 import type {
+  ChangeEventInput,
   ChangeJournal,
   DBAdapter,
-  Querier,
   Realm,
   RealmInfo,
   VirtualNetwork,
@@ -18,11 +18,10 @@ import {
   logger,
   param,
   query,
-  stringifyErrorForLog,
   SupportedMimeType,
   userInitiatedPriority,
+  withChangeEvent,
 } from '@cardstack/runtime-common';
-import { emitChangeJournal } from '@cardstack/runtime-common/card-operations/telemetry';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
@@ -170,114 +169,131 @@ export async function createRealm(
     publishable: true,
   };
 
+  // The `scan` event that asks realm-historian to record the new realm's
+  // seed files as its first revision, by the realm's creator.
+  //
+  // The journal writes the event only for a realm whose `realm_history_state`
+  // row is already enabled. The realm's registry row is inserted on this same
+  // transaction, so recording for a new realm has to be turned on there too,
+  // before the append. A realm whose recording is turned on any later, such
+  // as from the registry's NOTIFY, gets no scan, and its first revision isn't
+  // its creator's.
+  let seedScan: ChangeEventInput = {
+    realmURL: url,
+    author: ownerUserId,
+    channel: 'system',
+    intent: { kind: 'scan' },
+    changes: [],
+  };
+
   // Serialize against any other caller of withWriteLock for this
   // same URL (concurrent createRealm for the same endpoint, or a
   // concurrent publish/unpublish/delete). This is almost never a real
   // concurrency concern — the endpoint was already checked above for
   // collision.
-  await dbAdapter.withWriteLock(url, async (txQuerier) => {
-    // The registry row and the realm's scan event commit on the lock's
-    // transaction (below). Only an adapter with no cross-connection locking
-    // passes none, and the realm server never runs on one.
-    if (!txQuerier) {
-      throw new Error(
-        `cannot create the realm ${url}: the database adapter's write lock has no transaction to register it on`,
-      );
-    }
-    await insertPermissions(dbAdapter, new URL(url), {
-      [ownerUserId]: DEFAULT_PERMISSIONS,
-    });
-
-    // publishable lives in realm_metadata. A fresh realm has no
-    // hostRoutingRules to seed (host mode picks them up from the
-    // realm.json card once an operator edits one). Reset
-    // all mutable metadata columns on conflict so a stale row (e.g.
-    // left over from a previous realm at the same URL whose delete
-    // didn't clean up) doesn't bleed into the new realm.
-    await query(dbAdapter, [
-      `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
-      param(url),
-      `,`,
-      param(true),
-      `,`,
-      param(null),
-      `) ON CONFLICT (url) DO UPDATE SET publishable = true, show_as_catalog = NULL, updated_at = now()`,
-    ]);
-    writeJSONSync(join(realmPath, 'realm.json'), {
-      data: {
-        type: 'card',
-        attributes: {
-          cardInfo: { name },
-          ...(iconURL ? { iconURL } : {}),
-          ...(backgroundURL ? { backgroundURL } : {}),
-        },
-        meta: {
-          adoptsFrom: {
-            module: '@cardstack/base/realm-config',
-            name: 'RealmConfig',
-          },
-        },
-      },
-    });
-    let indexCard: Record<string, any> = {
-      data: {
-        type: 'card',
-        meta: {
-          adoptsFrom: {
-            module: '@cardstack/base/workspace',
-            name: 'Workspace',
-          },
-        },
-      },
-    };
-    // Seed a Home README into the user's personal (first) realm. Best-effort:
-    // a template read/write hiccup must not fail realm creation, so on error we
-    // fall back to a README-less index card. When it succeeds, link the file via
-    // the Workspace card's `readme` field so it renders on Home.
-    if (shouldSeedRealmReadme(endpoint)) {
-      try {
-        writeFileSync(
-          join(realmPath, REALM_README_FILENAME),
-          realmReadmeTemplate(),
+  await withChangeEvent(changeJournal, seedScan, (appendChangeEvent) =>
+    dbAdapter.withWriteLock(url, async (txQuerier) => {
+      // The registry row and the realm's scan event commit on the lock's
+      // transaction (below). Only an adapter with no cross-connection locking
+      // passes none, and the realm server never runs on one.
+      if (!txQuerier) {
+        throw new Error(
+          `cannot create the realm ${url}: the database adapter's write lock has no transaction to register it on`,
         );
-        indexCard.data.relationships = {
-          readme: {
-            links: { self: `./${REALM_README_FILENAME}` },
-            data: { type: 'file-meta', id: `./${REALM_README_FILENAME}` },
-          },
-        };
-      } catch (err) {
-        log.error(`failed to seed README for realm ${url}: ${err}`);
-        Sentry.captureException(err);
       }
-    }
-    writeJSONSync(join(realmPath, 'index.json'), indexCard);
-
-    // Register the source realm in realm_registry. The INSERT emits
-    // NOTIFY realm_registry; the reconciler on every instance picks
-    // up the row, and the realm is lazy-mounted on first request.
-    //
-    // The seed files were written straight to disk, outside the realm, so
-    // the realm's history learns of them from a `scan` event by the creator,
-    // appended on the same transaction as the registry row: the write lock's
-    // own. No instance can mount the realm before both commit, so the scan
-    // comes before any write to it.
-    await insertSourceRealmInRegistry(
-      dbAdapter,
-      {
-        url,
-        diskId: `${ownerUsername}/${endpoint}`,
-        ownerUsername,
-      },
-      txQuerier,
-    );
-    if (changeJournal) {
-      await appendSeedScan(txQuerier, changeJournal, {
-        realmURL: url,
-        author: ownerUserId,
+      await insertPermissions(dbAdapter, new URL(url), {
+        [ownerUserId]: DEFAULT_PERMISSIONS,
       });
-    }
-  });
+
+      // publishable lives in realm_metadata. A fresh realm has no
+      // hostRoutingRules to seed (host mode picks them up from the
+      // realm.json card once an operator edits one). Reset
+      // all mutable metadata columns on conflict so a stale row (e.g.
+      // left over from a previous realm at the same URL whose delete
+      // didn't clean up) doesn't bleed into the new realm.
+      await query(dbAdapter, [
+        `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
+        param(url),
+        `,`,
+        param(true),
+        `,`,
+        param(null),
+        `) ON CONFLICT (url) DO UPDATE SET publishable = true, show_as_catalog = NULL, updated_at = now()`,
+      ]);
+      writeJSONSync(join(realmPath, 'realm.json'), {
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name },
+            ...(iconURL ? { iconURL } : {}),
+            ...(backgroundURL ? { backgroundURL } : {}),
+          },
+          meta: {
+            adoptsFrom: {
+              module: '@cardstack/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      });
+      let indexCard: Record<string, any> = {
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: '@cardstack/base/workspace',
+              name: 'Workspace',
+            },
+          },
+        },
+      };
+      // Seed a Home README into the user's personal (first) realm. Best-effort:
+      // a template read/write hiccup must not fail realm creation, so on error we
+      // fall back to a README-less index card. When it succeeds, link the file via
+      // the Workspace card's `readme` field so it renders on Home.
+      if (shouldSeedRealmReadme(endpoint)) {
+        try {
+          writeFileSync(
+            join(realmPath, REALM_README_FILENAME),
+            realmReadmeTemplate(),
+          );
+          indexCard.data.relationships = {
+            readme: {
+              links: { self: `./${REALM_README_FILENAME}` },
+              data: { type: 'file-meta', id: `./${REALM_README_FILENAME}` },
+            },
+          };
+        } catch (err) {
+          log.error(`failed to seed README for realm ${url}: ${err}`);
+          Sentry.captureException(err);
+        }
+      }
+      writeJSONSync(join(realmPath, 'index.json'), indexCard);
+
+      // Register the source realm in realm_registry. The INSERT emits
+      // NOTIFY realm_registry; the reconciler on every instance picks
+      // up the row, and the realm is lazy-mounted on first request.
+      //
+      // The seed files were written straight to disk, outside the realm, so
+      // the realm's history learns of them from the `scan` event by the
+      // creator, appended on the same transaction as the registry row: the
+      // write lock's own. No instance can mount the realm before both commit,
+      // so the scan comes before any write to it. A journal failure rolls back
+      // only the event: the registry row still commits and creating the realm
+      // still succeeds, and the realm's first revision is then not attributed
+      // to its creator.
+      await insertSourceRealmInRegistry(
+        dbAdapter,
+        {
+          url,
+          diskId: `${ownerUsername}/${endpoint}`,
+          ownerUsername,
+        },
+        txQuerier,
+      );
+      await appendChangeEvent(txQuerier);
+    }),
+  );
 
   // virtualNetwork URL mapping was historically bridged here so a
   // virtual realm URL (e.g. cardstack.com/base/) routed to the
@@ -316,56 +332,6 @@ export async function createRealm(
   }
 
   return { url, realm, info };
-}
-
-// Appends the `scan` event that asks realm-historian to record a new realm's
-// seed files, as its first revision, by the realm's creator. The append runs
-// under a savepoint, so a journal failure rolls back only the event: the
-// registry row still commits and creating the realm still succeeds, and the
-// realm's first revision is then not attributed to its creator.
-//
-// The journal writes the event only for a realm whose `realm_history_state`
-// row is already enabled. The realm's registry row is inserted on this same
-// transaction, so recording for a new realm has to be turned on there too,
-// before this append. A realm whose recording is turned on any later, such as
-// from the registry's NOTIFY, gets no scan, and its first revision isn't its
-// creator's.
-async function appendSeedScan(
-  querier: Querier,
-  journal: ChangeJournal,
-  { realmURL, author }: { realmURL: string; author: string },
-): Promise<void> {
-  let started = performance.now();
-  await querier(['SAVEPOINT change_journal']);
-  try {
-    let written = await journal.append(querier, {
-      realmURL,
-      author,
-      channel: 'system',
-      intent: { kind: 'scan' },
-      changes: [],
-    });
-    emitChangeJournal({
-      realm: realmURL,
-      outcome: written ? 'written' : 'skipped',
-      durationMs: Math.round(performance.now() - started),
-      paths: 0,
-      partial: false,
-    });
-  } catch (err: unknown) {
-    await querier(['ROLLBACK TO SAVEPOINT change_journal']);
-    log.error(
-      `could not append the scan event for the new realm ${realmURL} to the change journal: ${stringifyErrorForLog(err)}`,
-    );
-    emitChangeJournal({
-      realm: realmURL,
-      outcome: 'failed',
-      durationMs: Math.round(performance.now() - started),
-      paths: 0,
-      partial: false,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
 }
 
 export default function handleCreateRealmRequest(
