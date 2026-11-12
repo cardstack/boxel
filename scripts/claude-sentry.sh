@@ -49,7 +49,11 @@ shift
 command -v aws >/dev/null || fail "aws CLI not found"
 command -v curl >/dev/null || fail "curl not found"
 
+err_file="$(mktemp)"
+trap 'rm -f "$err_file"' EXIT
+
 token=""
+errors=""
 for env in "${envs[@]}"; do
   ssm_env="$env"
   [[ "$env" == "prod" ]] && ssm_env="production"
@@ -58,14 +62,16 @@ for env in "${envs[@]}"; do
   region="$(aws configure get region --profile "claude-${env}" 2>/dev/null || true)"
   if token="$(aws --profile "claude-${env}" --region "${region:-us-east-1}" ssm get-parameter \
     --name "/${ssm_env}/sentry/claude_readonly_token" \
-    --with-decryption --query Parameter.Value --output text 2>/dev/null)"; then
+    --with-decryption --query Parameter.Value --output text 2>"$err_file")"; then
     break
   fi
   token=""
+  errors+="  claude-${env}: $(tr -s '\n' ' ' <"$err_file")"$'\n'
 done
 
 [[ -n "$token" ]] ||
-  fail "couldn't read the Sentry token from SSM with the claude-${envs[*]} profile(s). The AWS session may have expired: ask the user to run 'mise run claude-aws <env> <MFA_TOKEN>'."
+  fail "couldn't read the Sentry token from SSM:
+${errors}An expired session needs 'mise run claude-aws <env> <MFA_TOKEN>'. AccessDenied means the infra change isn't applied in that account."
 [[ "$token" != "unset" ]] ||
   fail "the SSM parameter still holds its placeholder. A Sentry org owner must create the internal integration and store its token (see configs/boxel-claude-access in the infra repo)."
 
