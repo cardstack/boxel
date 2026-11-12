@@ -10,6 +10,8 @@ import { CardsGrid } from '@cardstack/base/cards-grid';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { rri } from '@cardstack/runtime-common';
+
 import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
@@ -400,3 +402,159 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       .containsText('2', 'Selection remains active after cancel');
   });
 });
+
+const readOnlyRealmURL = 'http://test-realm/test2/';
+
+module(
+  'Acceptance | workspace-delete-multiple | cards the user cannot write',
+  function (hooks) {
+    setupApplicationTest(hooks);
+    setupLocalIndexing(hooks);
+    setupRealmCacheTeardown(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL, readOnlyRealmURL],
+    });
+
+    hooks.beforeEach(async function () {
+      mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
+      setupUserSubscription();
+
+      let loader = getService('loader-service').loader;
+      let { field, contains, CardDef, Component } = await loader.import<
+        typeof import('@cardstack/base/card-api')
+      >('@cardstack/base/card-api');
+      let { default: StringField } = await loader.import<
+        typeof import('@cardstack/base/string')
+      >('@cardstack/base/string');
+      let { default: CardList } = await loader.import<
+        typeof import('@cardstack/base/components/card-list')
+      >('@cardstack/base/components/card-list');
+
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+        @field name = contains(StringField);
+        @field cardTitle = contains(StringField, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+      }
+
+      // Lists the pets of both realms, as search results the user can select,
+      // so one stack item can hold a selection that spans a writable and a
+      // read-only realm.
+      let petQuery = {
+        filter: { type: { module: rri(`${testRealmURL}pet`), name: 'Pet' } },
+      };
+      let petRealms = [testRealmURL, readOnlyRealmURL];
+      class PetBoard extends CardDef {
+        static displayName = 'Pet Board';
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <CardList
+              @context={{@context}}
+              @query={{petQuery}}
+              @realms={{petRealms}}
+              @format='fitted'
+            />
+          </template>
+        };
+      }
+
+      await withCachedRealmSetup(async () => {
+        // The writable realm, which holds the definitions, is set up first,
+        // so the read-only realm's pet can adopt from it.
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            'pet.gts': { Pet },
+            'pet-board.gts': { PetBoard },
+            'Pet/fluffy.json': new Pet({ name: 'Fluffy' }),
+            'PetBoard/1.json': new PetBoard(),
+            'realm.json': realmConfigCardJSON({ name: 'Writable Realm' }),
+          },
+        });
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: readOnlyRealmURL,
+          permissions: { '@testuser:localhost': ['read'] },
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            'Pet/mango.json': new Pet({ name: 'Mango' }),
+            'realm.json': realmConfigCardJSON({ name: 'Read-only Realm' }),
+          },
+        });
+      });
+
+      mockMatrixUtils.setRealmPermissions({
+        [testRealmURL]: ['read', 'write'],
+        [readOnlyRealmURL]: ['read'],
+      });
+    });
+
+    async function selectCard(cardId: string) {
+      let hoverTarget = `[data-test-cards-grid-item="${cardId}"] .field-component-card`;
+      await triggerEvent(hoverTarget, 'mouseenter');
+      let selectButton = `[data-test-overlay-card="${cardId}"] [data-test-overlay-select="${cardId}"]`;
+      await waitFor(selectButton);
+      await click(selectButton);
+      await triggerEvent(hoverTarget, 'mouseleave');
+    }
+
+    test('a read-only workspace does not offer bulk delete', async function (assert) {
+      let mangoId = `${readOnlyRealmURL}Pet/mango`;
+      await visitOperatorMode({
+        stacks: [[{ id: `${readOnlyRealmURL}index`, format: 'isolated' }]],
+      });
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      await waitFor(`[data-test-cards-grid-item="${mangoId}"]`);
+
+      await selectCard(mangoId);
+      assert.dom('[data-test-selection-dropdown-trigger]').containsText('1');
+
+      await click('[data-test-selection-dropdown-trigger]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Deselect All"]')
+        .exists('the selection menu is open');
+      assert
+        .dom('[data-test-boxel-menu-item-text^="Delete"]')
+        .doesNotExist('delete is not offered for a card the user cannot write');
+    });
+
+    test('bulk delete is offered only while every selected card is writable', async function (assert) {
+      let fluffyId = `${testRealmURL}Pet/fluffy`;
+      let mangoId = `${readOnlyRealmURL}Pet/mango`;
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}PetBoard/1`, format: 'isolated' }]],
+      });
+      await waitFor(`[data-test-cards-grid-item="${fluffyId}"]`);
+      await waitFor(`[data-test-cards-grid-item="${mangoId}"]`);
+
+      await selectCard(fluffyId);
+      await click('[data-test-selection-dropdown-trigger]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Delete 1 item"]')
+        .exists('delete is offered when the only selected card is writable');
+
+      await selectCard(mangoId);
+      assert.dom('[data-test-selection-dropdown-trigger]').containsText('2');
+      await click('[data-test-selection-dropdown-trigger]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Deselect All"]')
+        .exists('the selection menu is open');
+      assert
+        .dom('[data-test-boxel-menu-item-text^="Delete"]')
+        .doesNotExist(
+          'delete is not offered once a read-only card joins the selection',
+        );
+    });
+  },
+);

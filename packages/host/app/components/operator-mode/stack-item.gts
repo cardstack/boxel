@@ -473,7 +473,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         // Keep modal open for retry option
       } else {
         // All deletions failed
-        this.deleteError = `Failed to delete ${selectedIds.length} items. Please try again.`;
+        this.deleteError = `Failed to delete ${pluralize('item', selectedIds.length, true)}. Please try again.`;
       }
     } catch (error) {
       console.error('Bulk delete operation failed:', error);
@@ -527,17 +527,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }),
     );
 
-    menuItems.push(new MenuDivider());
-
-    // Add "Delete N items" option
-    menuItems.push(
-      new MenuItem({
-        label: `Delete ${selectedCount} item${selectedCount > 1 ? 's' : ''}`,
-        action: this.confirmAndDeleteSelected,
-        icon: IconTrash,
-        dangerous: true,
-      }),
+    // Bulk delete is offered only when the user can write every selected
+    // card's realm, the same check that gates a single card's Delete.
+    let canDeleteSelection = [...this.selectedCards].every((id) =>
+      this.realm.canWrite(id),
     );
+    if (canDeleteSelection) {
+      menuItems.push(new MenuDivider());
+      menuItems.push(
+        new MenuItem({
+          label: `Delete ${selectedCount} item${selectedCount > 1 ? 's' : ''}`,
+          action: this.confirmAndDeleteSelected,
+          icon: IconTrash,
+          dangerous: true,
+        }),
+      );
+    }
 
     return {
       selectedCount,
