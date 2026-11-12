@@ -346,3 +346,37 @@ describe('composeMixedScopeDedup — invariant mixed-scope output', () => {
     expect(body.filter).toEqual({ eq: { 'item._isCardInstanceFile': false } });
   });
 });
+
+describe('searchEntryRequestBody — a query in the newer spelling goes whole', () => {
+  it('keeps a top-level type and its unprefixed filter', () => {
+    let body = searchEntryRequestBody(
+      { type: SkillRef, filter: { eq: { status: 'passing' } } },
+      ['https://realm/a/'],
+    );
+    expect(body).toEqual({
+      type: SkillRef,
+      filter: { eq: { status: 'passing' } },
+      realms: ['https://realm/a/'],
+      fields: { entry: ['item'] },
+    });
+  });
+
+  it('keeps let, facets and select', () => {
+    let query = {
+      type: SkillRef,
+      let: { $a: { type: SkillRef, page: { size: 1 } } },
+      facets: [{ by: 'title' }],
+      select: ['title'],
+    };
+    let body = searchEntryRequestBody(query) as Record<string, unknown>;
+    expect(body.let).toEqual(query.let);
+    expect(body.facets).toEqual(query.facets);
+    expect(body.select).toEqual(query.select);
+    expect(body.realms).toBeUndefined();
+  });
+
+  it('still rewrites an older-spelling query under item.', () => {
+    let body = searchEntryRequestBody({ filter: { type: SkillRef } });
+    expect(body.filter).toEqual({ 'item.on': SkillRef });
+  });
+});
