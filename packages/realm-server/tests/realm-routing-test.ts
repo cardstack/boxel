@@ -226,13 +226,19 @@ function makeRouteFormsFixture(): Record<
   };
 }
 
-// A field-match route whose type has no cached definition: its module
-// doesn't exist, so the definition cache never holds it.
+// Field-match routes whose types have no usable cached definition: one
+// module doesn't exist, so the definition cache never holds it, and one
+// fails when it runs, so the cache holds an error row for it.
 function makeUnavailableTypeFixture(): Record<
   string,
   string | LooseSingleCardDocument
 > {
   return {
+    'broken.gts': `
+      import { CardDef } from "@cardstack/base/card-api";
+      throw new Error('this module fails on purpose');
+      export class Broken extends CardDef {}
+    `,
     'home.json': {
       data: {
         type: 'card',
@@ -255,6 +261,11 @@ function makeUnavailableTypeFixture(): Record<
             {
               path: '/later/:slug',
               type: { module: './not-indexed', name: 'NotIndexed' },
+              match: { slug: ':slug' },
+            },
+            {
+              path: '/broken/:slug',
+              type: { module: './broken', name: 'Broken' },
               match: { slug: ':slug' },
             },
           ],
@@ -530,13 +541,15 @@ module(basename(import.meta.filename), function () {
     function (hooks) {
       let realmURL = new URL('http://127.0.0.1:4444/routing-unavailable/');
       let testRealm: Realm;
+      let dbAdapter: PgAdapter;
 
       setupPermissionedRealmCached(hooks, {
         realmURL,
         permissions: { '*': ['read'] },
         fileSystem: makeUnavailableTypeFixture(),
-        onRealmSetup({ testRealm: realm }) {
+        onRealmSetup({ testRealm: realm, dbAdapter: adapter }) {
           testRealm = realm;
+          dbAdapter = adapter;
         },
       });
 
@@ -549,7 +562,10 @@ module(basename(import.meta.filename), function () {
         assert.false(first.complete, 'the validation is incomplete');
         assert.deepEqual(
           first.warnings.map((w) => [w.code, w.path, w.dropped]),
-          [['type-unavailable', '/later/:slug', true]],
+          [
+            ['type-unavailable', '/later/:slug', true],
+            ['type-unavailable', '/broken/:slug', true],
+          ],
         );
         let second = await testRealm.getHostRoutes();
         assert.notStrictEqual(second, first, 'the next call validates again');
@@ -560,6 +576,30 @@ module(basename(import.meta.filename), function () {
           await testRealm.getHostRoutingMap(),
           map,
           'the map built from it is not cached either',
+        );
+      });
+
+      test('a module whose cached render failed is not final', async function (assert) {
+        let rows = (await dbAdapter.execute(
+          `SELECT error_doc IS NOT NULL AS has_error FROM modules WHERE url = ANY($1) OR file_alias = ANY($1)`,
+          { bind: [[`${realmURL.href}broken`, `${realmURL.href}broken.gts`]] },
+        )) as { has_error: boolean }[];
+        assert.ok(rows.length > 0, 'the definition cache holds the module');
+        assert.true(
+          rows.every((row) => row.has_error),
+          'its row is an error row',
+        );
+        let { complete, warnings } = await testRealm.getHostRoutes();
+        assert.false(
+          complete,
+          'an error row does not make the validation final',
+        );
+        assert.deepEqual(
+          warnings
+            .filter((w) => w.path === '/broken/:slug')
+            .map((w) => [w.code, w.dropped]),
+          [['type-unavailable', true]],
+          'the route is dropped for now, not as a missing export',
         );
       });
     },

@@ -386,6 +386,7 @@ export interface PopulateDefinitionCacheEntryArgs {
 export type CachedDefinitionEntryResult =
   | { status: 'not-cached' }
   | { status: 'missing-export' }
+  | { status: 'module-error' }
   | { status: 'found'; entry: ModuleDefinitionResult };
 
 export interface DefinitionLookup {
@@ -409,11 +410,13 @@ export interface DefinitionLookup {
   lookupCachedDefinition(
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined>;
-  // Like lookupCachedDefinition, never rendering a module, but it tells a
-  // module the cache doesn't hold yet (`not-cached`) apart from a cached
-  // module that has no usable definition for the export (`missing-export`:
-  // no such export, or one whose definition failed to build), and it
-  // answers with the whole entry, the type's adoption chain included.
+  // Like lookupCachedDefinition, never rendering a module, but it says why
+  // there is no definition: the cache doesn't hold the module yet
+  // (`not-cached`), the cached module has no such export
+  // (`missing-export`), or the cached render of the module, or of the
+  // export's definition, failed (`module-error`; an error row expires, so the
+  // module renders again later). It answers with the whole entry, the type's
+  // adoption chain included.
   lookupCachedDefinitionEntry(
     codeRef: ResolvedCodeRef,
   ): Promise<CachedDefinitionEntryResult>;
@@ -641,15 +644,20 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       );
       if (cached) {
+        if (cached.error) {
+          return { status: 'module-error' };
+        }
         let entry = this.definitionEntryFor(
           cached.definitions,
           codeRef,
           canonicalModuleURL,
         );
-        if (entry && 'definition' in entry) {
-          return { status: 'found', entry };
+        if (!entry) {
+          return { status: 'missing-export' };
         }
-        return { status: 'missing-export' };
+        return 'definition' in entry
+          ? { status: 'found', entry }
+          : { status: 'module-error' };
       }
     }
     return { status: 'not-cached' };
