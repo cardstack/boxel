@@ -40,6 +40,11 @@ import {
   unbuiltIndexFailure,
 } from './jobs/indexing.ts';
 import {
+  runIndexingFor,
+  withRunIndexingRetries,
+  type RunIndexing,
+} from './run-indexing.ts';
+import {
   awaitPublishedHtmlReady,
   enqueuePrerenderHtmlJob,
   prerenderHtmlWriterLane,
@@ -2626,6 +2631,12 @@ export interface WriteOptions {
   // Called at most once, and not at all by a write that failed before reaching
   // durability.
   onDurable?: () => void;
+  // The `automation_runs` id of the automation run whose commit this write
+  // is. The indexing the write causes is charged to the run's identity once
+  // it is done (see `RunIndexing`), and its index passes and renders run on
+  // their own, never shared with another write's. A write that changes
+  // nothing on disk causes no indexing and no charge.
+  runId?: string;
 }
 
 // Who a realm event is delivered to. By default it goes to every session room
@@ -4397,6 +4408,8 @@ export class Realm {
       broadcastRealmEvents?: boolean;
       // See `IncrementalIndexOptions.modulesWithoutSchemaChange`.
       modulesWithoutSchemaChange?: string[];
+      // See `IncrementalIndexOptions.runIndexing`.
+      runIndexing?: RunIndexing | null;
     },
   ): Promise<
     IndexPassResult & { deferredPrerenderHtml?: DeferredPrerenderHtml }
@@ -4428,6 +4441,7 @@ export class Realm {
       ...(opts?.modulesWithoutSchemaChange?.length
         ? { modulesWithoutSchemaChange: opts.modulesWithoutSchemaChange }
         : {}),
+      ...(opts?.runIndexing ? { runIndexing: opts.runIndexing } : {}),
       onEnqueued: () => stageCursor?.mark('enqueue'),
       onDeferredPrerenderHtml: (deferred) => {
         deferredPrerenderHtml = deferred;
@@ -4498,6 +4512,8 @@ export class Realm {
       carriedPrerenderHtmlChanges?: IncrementalChange[];
       // See `IncrementalIndexOptions.modulesWithoutSchemaChange`.
       modulesWithoutSchemaChange?: string[];
+      // See `IncrementalIndexOptions.runIndexing`.
+      runIndexing?: RunIndexing | null;
       onSettled?: (
         invalidations: string[],
         meta: IncrementalIndexMeta,
@@ -4527,6 +4543,7 @@ export class Realm {
       ...(opts?.modulesWithoutSchemaChange?.length
         ? { modulesWithoutSchemaChange: opts.modulesWithoutSchemaChange }
         : {}),
+      ...(opts?.runIndexing ? { runIndexing: opts.runIndexing } : {}),
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
         await this.touchSourceRealmUpdatedAt();
@@ -5690,6 +5707,12 @@ export class Realm {
     let files = batch.writes ?? new Map<LocalPath, WriteContent>();
     let appends = batch.appends ?? new Map<LocalPath, string | Uint8Array>();
     let deletes = batch.deletes ?? [];
+    // The run's indexing so far, carried from pass to pass of this commit
+    // like the deferred render set below, and handed with it to the job that
+    // ends the commit's indexing, which charges it.
+    let runIndexing: RunIndexing | null = options?.runId
+      ? runIndexingFor(options.runId)
+      : null;
     // The /_atomic endpoint (and any other writeMany caller that opts
     // out of post-write indexing via waitForIndex:false) does not read
     // its response from the index, so it has no reason to wait for
@@ -5823,6 +5846,7 @@ export class Realm {
         // it spawns, and a pass that defers folds it into the set it returns.
         carriedPrerenderHtmlChanges: carriedPrerenderHtmlChanges(),
         modulesWithoutSchemaChange: [...modulesWithoutSchemaChange],
+        runIndexing,
       });
       // A deferring pass returns the set it declined to render, already
       // unioned with whatever it was handed. A non-deferring pass normally
@@ -5831,6 +5855,11 @@ export class Realm {
       // running pass that was itself deferring, in which case no job was
       // spawned and the set is ours again.
       deferredPrerenderHtml = deferred;
+      // A run's deferring pass hands back the run's indexing with its set;
+      // any other pass took the run's indexing on and charges it.
+      if (runIndexing) {
+        runIndexing = deferred?.runIndexing ?? null;
+      }
       // Whatever the pass did not attribute to the enqueue or the wait is the
       // invalidation that followed it: dropping the realm's index caches,
       // touching the realm's updated-at, and re-resolving the executables the
@@ -6440,8 +6469,11 @@ export class Realm {
         let priorTypes = invalidatedTypes.value;
         let priorPasses = [...passes];
         let carried = carriedPrerenderHtmlChanges();
-        // Handed off: this pass's prerender job renders the deferred set too.
+        let carriedRunIndexing = runIndexing;
+        // Handed off: this pass's prerender job renders the deferred set too,
+        // and charges the run's indexing.
         deferredPrerenderHtml = undefined;
+        runIndexing = null;
         let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
           changes,
           {
@@ -6451,6 +6483,7 @@ export class Realm {
             initiatedBy: initiatingUser,
             ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
             modulesWithoutSchemaChange: [...modulesWithoutSchemaChange],
+            runIndexing: carriedRunIndexing,
             // Route the post-worker broadcast through onSettled so it runs
             // INSIDE the indexing deferred lifecycle. Without this, the
             // broadcast would fire from an outer .then() after the deferred
@@ -6584,16 +6617,22 @@ export class Realm {
   // best-effort, for the same reason the in-worker enqueue is: an index pass
   // must never fail on its prerender enqueue, and a missed one self-heals on
   // the next pass.
+  //
+  // A set carrying an automation run's indexing is enqueued even with nothing
+  // to render: its job is then the last the run's commit causes, and all it
+  // does is charge the run. Being the only holder of the run's measurement,
+  // that enqueue is retried a few times before it is given up (see
+  // `withRunIndexingRetries`).
   private async enqueueDeferredPrerenderHtml(
     deferred: DeferredPrerenderHtml | undefined,
     initiatingUser: string | null,
     // False when the write asked for no realm events.
     announce = true,
   ): Promise<void> {
-    if (!deferred || deferred.changes.length === 0) {
+    if (!deferred || (deferred.changes.length === 0 && !deferred.runIndexing)) {
       return;
     }
-    try {
+    let enqueue = async () => {
       await enqueuePrerenderHtmlJob(this.#queue, {
         realmURL: this.url,
         realmUsername: await this.getRealmOwnerUsername(),
@@ -6614,11 +6653,25 @@ export class Realm {
         preWarm: false,
         announce,
         lane: prerenderHtmlWriterLane(this.url, initiatingUser),
+        runIndexing: deferred.runIndexing,
       });
+    };
+    try {
+      await (deferred.runIndexing
+        ? withRunIndexingRetries(enqueue)
+        : enqueue());
     } catch (e: any) {
-      this.#log.warn(
-        `failed to enqueue deferred prerender_html job for ${this.url}: ${e?.message}`,
-      );
+      if (deferred.runIndexing) {
+        // The job was the only holder of the run's measurement, so the log
+        // line carries it, for the run to be charged by hand.
+        this.#log.error(
+          `failed to enqueue deferred prerender_html job for ${this.url}, which would have charged the indexing of run ${deferred.runIndexing.runId} (${JSON.stringify(deferred.runIndexing)}): ${e?.message}`,
+        );
+      } else {
+        this.#log.warn(
+          `failed to enqueue deferred prerender_html job for ${this.url}: ${e?.message}`,
+        );
+      }
     }
   }
 
@@ -18579,6 +18632,7 @@ export class Realm {
       carriedPrerenderHtmlChanges: [],
       readsOwnWrite: false,
       realmEvents: true,
+      runIndexing: null,
     };
     let job = await this.#queue.publish({
       jobType: 'incremental-index',
