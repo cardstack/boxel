@@ -1011,7 +1011,46 @@ export interface CallApiSender {
   send(
     request: CallApiRequest,
     credentials: CallApiCredential[],
+    options?: CallApiSendOptions,
   ): Promise<CallApiResponse>;
+}
+
+// How an automation run's call is sent. `responseByteBudget` is the most of
+// the response the call may read, besides the path's own size cap: what is
+// left of the run's `responseBytes` cap. `onResponseBytes` is told how many
+// bytes of the response were read, once, whether the call answered or its
+// response was refused for its size, and whether it was the budget that
+// refused it.
+export interface CallApiSendOptions {
+  responseByteBudget?: number;
+  onResponseBytes?: (bytes: number, budgetReached: boolean) => void;
+}
+
+// What an automation run's admitted call may read of its response.
+export interface CallApiRunAdmission {
+  responseByteBudget: number;
+}
+
+// Holds an automation run's `callApi` to the automation's declaration and the
+// run's caps. `checkDeclared` refuses an operation the automation doesn't
+// declare on the type it was resolved on (or one whose type can't be
+// resolved). `admitCall` counts the call against the run's `callApiCalls`
+// cap just before it is sent, and answers what is left of its
+// `responseBytes` cap; a call past either cap ends the run and is refused.
+// `recordResponse` adds the bytes the call read to the run, and when the
+// budget refused the response, ends the run and answers the refusal to raise
+// in place of the size refusal. Each refusal is thrown as an
+// `OperationFailure`.
+export interface CallApiRunMeter {
+  checkDeclared(
+    type: { module: string; name: string } | undefined,
+    operation: string,
+  ): Promise<void>;
+  admitCall(): Promise<CallApiRunAdmission>;
+  recordResponse(
+    bytes: number,
+    budgetReached: boolean,
+  ): Promise<ConstructorParameters<typeof OperationFailure>[0] | undefined>;
 }
 
 // What the request's values are filled from.
@@ -1308,6 +1347,9 @@ export interface CallApiInvocation {
   mode: CallApiMode;
   // The automation run an `automation` invocation belongs to.
   runId?: string;
+  // Holds an `automation` invocation to its automation's declaration and its
+  // run's caps. Every `automation` invocation carries one.
+  runMeter?: CallApiRunMeter;
   sender: CallApiSender | undefined;
   // Set for a request that authenticated nobody, which the realm's policy
   // admitted from this address.
@@ -1386,6 +1428,27 @@ export async function callApiOperation(
       title: 'Operation not implemented',
       detail: `this realm sends no request to an outside service, so operation "${request.name}" cannot be carried out here`,
     });
+  }
+  // An automation's run may call only what the automation declares, so an
+  // undeclared operation is refused before any key is looked for.
+  let runMeter = invocation.runMeter;
+  if (invocation.mode === 'automation') {
+    if (!runMeter) {
+      return refuse({
+        status: 500,
+        code: 'internal-error',
+        title: 'Run not metered',
+        detail: `operation "${request.name}" was invoked by an automation run that nothing holds to its declaration`,
+      });
+    }
+    try {
+      await runMeter.checkDeclared(await invocation.type(), request.name);
+    } catch (error) {
+      if (error instanceof OperationFailure) {
+        return refuse(error.error);
+      }
+      throw error;
+    }
   }
   // A slot is filled only by the key a binding names: one its owner approved
   // for this operation in this realm. The binding is found before anything is
@@ -1472,10 +1535,42 @@ export async function callApiOperation(
       ...(fill.grant ? { grant: fill.grant } : {}),
     });
   }
+  // A run's call counts against its caps just before it is sent, so a call
+  // refused before here never counts.
+  let sendOptions: CallApiSendOptions | undefined;
+  let responseBytes: { bytes: number; budgetReached: boolean } | undefined;
+  if (runMeter) {
+    let admission: CallApiRunAdmission;
+    try {
+      admission = await runMeter.admitCall();
+    } catch (error) {
+      if (error instanceof OperationFailure) {
+        return refuse(error.error, built.url);
+      }
+      throw error;
+    }
+    sendOptions = {
+      responseByteBudget: admission.responseByteBudget,
+      onResponseBytes: (bytes, budgetReached) => {
+        responseBytes = { bytes, budgetReached };
+      },
+    };
+  }
+  let recordResponseBytes = async () =>
+    runMeter && responseBytes
+      ? await runMeter.recordResponse(
+          responseBytes.bytes,
+          responseBytes.budgetReached,
+        )
+      : undefined;
   let response: CallApiResponse;
   try {
-    response = await invocation.sender.send(built, credentials);
+    response = await invocation.sender.send(built, credentials, sendOptions);
   } catch (error) {
+    let capReached = await recordResponseBytes();
+    if (capReached) {
+      return refuse(capReached, built.url);
+    }
     if (error instanceof OperationFailure) {
       return refuse(error.error, built.url);
     }
@@ -1484,6 +1579,7 @@ export async function callApiOperation(
     });
     throw error;
   }
+  await recordResponseBytes();
   await recordKeyUse(request, invocation, built.url, filled, {
     outcome: 'sent',
     status: response.status,

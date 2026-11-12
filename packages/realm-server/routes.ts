@@ -49,6 +49,7 @@ import {
   operatorAuthorization,
 } from './middleware/index.ts';
 import type Koa from 'koa';
+import { carriesRunToken } from '@cardstack/runtime-common/run-token';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
 import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
 import handleQueueStatusRequest from './handlers/handle-queue-status.ts';
@@ -610,11 +611,24 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSecureWindowCards(args),
   );
+  // A request carrying an automation run's token skips the session check,
+  // which refuses it on its signature; the handler checks the run token
+  // itself.
+  let requestForwardSession = jwtMiddleware(
+    args.realmSecretSeed,
+    args.dbAdapter,
+  );
   router.post(
     REQUEST_FORWARD_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    async (ctxt: Koa.Context, next: Koa.Next) =>
+      carriesRunToken(ctxt.req.headers['authorization'] ?? null)
+        ? await next()
+        : await requestForwardSession(ctxt, next),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
+      definitionLookup: args.definitionLookup,
+      virtualNetwork: args.virtualNetwork,
+      realmSecretSeed: args.realmSecretSeed,
     }),
   );
   // Batched client performance beacons. The host sends its server session
