@@ -23,6 +23,11 @@
 import type { DBAdapter } from './db.ts';
 import { param, query } from './expression.ts';
 
+// The realm route a run commits its overlay at: a `POST` carrying the run's
+// token, with no body. It answers the files it saved, or a refusal that says
+// why nothing was saved.
+export const RUN_COMMIT_PATH = '/_run-commit';
+
 // The attempt of a run whose overlay is read or written: the token's run and
 // attempt.
 export interface RunOverlayKey {

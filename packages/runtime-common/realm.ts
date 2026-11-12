@@ -199,9 +199,18 @@ import {
   runTokenSecret,
   type RunTokenClaim,
 } from './run-token.ts';
-import { automationRunForCall } from './automation-runs.ts';
 import {
+  addAutomationRunCounts,
+  automationRunForCall,
+  claimAutomationRunCommit,
+  recordAutomationRunCommitted,
+} from './automation-runs.ts';
+import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
+import {
+  RUN_COMMIT_PATH,
+  discardRunOverlay,
   readRunOverlayFile,
+  runOverlayFiles,
   runOverlayPathsUnder,
   stageRunOverlayFile,
   type RunOverlayKey,
@@ -3698,6 +3707,14 @@ export class Realm {
         '/_atomic',
         SupportedMimeType.JSONAPI,
         this.handleAtomicOperations.bind(this),
+        ACL_ONLY,
+      )
+      // An automation run's commit of its overlay. It is answered on the
+      // realm ACL alone, like the verbatim writes it is made of.
+      .post(
+        RUN_COMMIT_PATH,
+        SupportedMimeType.JSONAPI,
+        this.commitRunOverlay.bind(this),
         ACL_ONLY,
       )
       // The operations envelope, under the media type that carries its
@@ -13032,6 +13049,153 @@ export class Realm {
           requestContext,
         });
     }
+  }
+
+  // Commits a run's overlay to the realm as one all-or-nothing batch (ADR
+  // 027 §1.4): every file the attempt staged lands, or none does, under one
+  // write lock and one index pass that the commit doesn't wait for. A file
+  // whose bytes match the stored file changes nothing and causes no indexing.
+  //
+  // Only the run's own call, carrying its token, commits, and it was
+  // admitted as the run's identity under their current permissions. Before
+  // anything is claimed, the identity must still be a direct writer of the
+  // realm (ADR 026 §1.5), so someone who lost direct write but keeps a policy
+  // grant can't write through the grant, and the overlay is checked again:
+  // every file is in this realm (its paths are realm-local), within the
+  // `writes` cap, and none is `realm.json`. The batch is built from staged
+  // files alone, so it carries no `callApi` entry.
+  //
+  // The commit is claimed on the run's row before the batch goes out, which
+  // succeeds only while the run is running, owned by this attempt, and has
+  // never claimed one, so a run commits at most once however many times it
+  // is retried. Once the batch lands the run row records it, counts the
+  // files it wrote in the run's `writes`, and the overlay is discarded. A batch that fails lands nothing; its commit stays
+  // claimed, and the run finishes as an error.
+  private async commitRunOverlay(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let refuse = (
+      status: number,
+      code: string,
+      title: string,
+      detail: string,
+    ) =>
+      createResponse({
+        body: JSON.stringify({
+          errors: [{ status: String(status), code, title, detail }],
+        }),
+        init: {
+          status,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    let call = requestContext.automationRun;
+    if (!call || call.readOnly) {
+      return refuse(
+        403,
+        'not-a-run',
+        'Forbidden',
+        "Only an automation run commits its overlay, in the run's own realm",
+      );
+    }
+    let { runId, attempt, actsAs, writesCap } = call;
+    if (
+      !(await isDirectWriter(
+        this.#dbAdapter,
+        new URL(this.url),
+        actsAs,
+        this.#matrixClient.serverName,
+      ))
+    ) {
+      this.#log.warn(
+        `run ${runId} commit refused: ${actsAs} is no longer a direct writer of ${this.url}`,
+      );
+      return refuse(
+        403,
+        'not-a-direct-writer',
+        'Forbidden',
+        `The person this run acts as is no longer a direct writer of this workspace, so the run's writes were not saved`,
+      );
+    }
+    let files = await runOverlayFiles(this.#dbAdapter, { runId, attempt });
+    if (files.length > writesCap) {
+      return refuse(
+        403,
+        'writes-cap',
+        'Writes cap reached',
+        `This run staged ${files.length} files, more than the ${writesCap} it may write; nothing was saved`,
+      );
+    }
+    if (files.some((file) => file.path === 'realm.json')) {
+      return refuse(
+        403,
+        'forbidden-path',
+        'Forbidden',
+        'An automation run may not write realm.json; nothing was saved',
+      );
+    }
+    if (!(await claimAutomationRunCommit(this.#dbAdapter, runId, attempt))) {
+      return refuse(
+        409,
+        'commit-refused',
+        'Conflict',
+        'The run is not running under this attempt, or has already committed',
+      );
+    }
+    if (files.length > 0) {
+      try {
+        await commitBatch(
+          this.batchCore,
+          files.map(({ path, content }) => ({
+            op: 'update' as const,
+            href: this.paths.fileURL(path).href,
+            content,
+            rawSource: true,
+          })),
+          {
+            actor: actsAs,
+            waitForIndex: false,
+            broadcastRealmEvents: true,
+          },
+        );
+      } catch (err: unknown) {
+        this.#log.warn(
+          `run ${runId} commit of ${files.length} files failed, and none landed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        if (isOperationFailure(err)) {
+          return refuse(
+            err.error.status ?? 422,
+            err.error.code ?? 'commit-failed',
+            err.error.title ?? 'Commit failed',
+            `${err.error.detail ?? err.message}; nothing was saved`,
+          );
+        }
+        throw err;
+      }
+    }
+    await recordAutomationRunCommitted(this.#dbAdapter, runId);
+    // The run's `writes` count is the files its commit wrote to the realm,
+    // metered here where the realm did the work.
+    await addAutomationRunCounts(this.#dbAdapter, runId, {
+      writes: files.length,
+    });
+    await discardRunOverlay(this.#dbAdapter, runId);
+    return createResponse({
+      body: JSON.stringify({
+        data: {
+          type: 'run-commit',
+          id: runId,
+          attributes: { files: files.map((f) => f.path) },
+        },
+      }),
+      init: {
+        status: 200,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
   }
 
   // A file the run staged, served as the source route serves the realm's

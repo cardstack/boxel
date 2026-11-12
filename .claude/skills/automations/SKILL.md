@@ -35,7 +35,8 @@ description: >-
   a refused run-token call or a run's `key_uses`. Also covers the run
   overlay (`run-overlay.ts`, `run_overlay_files`): how a run's writes are
   staged, how its reads and listings read through them, the `writes` cap, and
-  how to inspect a run's staged files. Also covers how an automation run
+  how to inspect a run's staged files; and the commit (`/_run-commit`), its
+  checks and its failure modes. Also covers how an automation run
   reaches a worker — the automation priority tier (`automationInitiatedPriority
   = 5` in runtime-common's queue.ts), the automation worker lane
   (`--automationCount` on the worker manager, `WORKER_AUTOMATION_PRIORITY_COUNT`
@@ -497,6 +498,47 @@ A finished run has no rows. Rows from more than one attempt would mean a
 start that didn't drop its predecessors' files. To read a staged file's text:
 `SELECT convert_from(content, 'UTF8') FROM run_overlay_files WHERE run_id = …
 AND path = …`.
+
+### Committing the overlay
+
+When the script finishes, the run commits its overlay with a `POST` to the
+realm's `/_run-commit` (`RUN_COMMIT_PATH` in `run-overlay.ts`), carrying the
+run's token and no body (ADR 027 §1.4). `Realm.commitRunOverlay`:
+
+1. refuses anything but the run's own call in its own realm (403
+   `not-a-run`); the call was admitted as the run's identity under their
+   current permissions;
+2. re-confirms that the identity is a **direct writer** of the realm
+   (`isDirectWriter`), so a person who lost direct write but keeps a policy
+   or wildcard grant can't write through it (403 `not-a-direct-writer`,
+   nothing claimed);
+3. checks the overlay again: no more files than `run.writesCap` (403
+   `writes-cap`) and no `realm.json` (403 `forbidden-path`). Paths are
+   realm-local, so every file is in the run's realm, and the batch is built
+   from staged files alone, so it has no `callApi` entry;
+4. claims the commit with `claimAutomationRunCommit` (409 `commit-refused`
+   when the run isn't running under this attempt or has claimed one before);
+5. sends one `commitBatch` of `rawSource` updates, one per staged file: all
+   land or none, under one write lock and one index pass, which the commit
+   doesn't wait for. A file whose bytes match the stored file changes nothing
+   and enqueues no indexing;
+6. records the landing with `recordAutomationRunCommitted`, adds the files
+   written to the run's `writes` count, and discards the overlay. It answers
+   `200` with `data.attributes.files`, the paths it saved.
+
+Failure modes, and what the caller does:
+
+| Answer                             | Claimed?                       | What happened                                       | Finish the run as                                                                                           |
+| ---------------------------------- | ------------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 403 `not-a-direct-writer`          | no                             | the identity lost direct write                      | error                                                                                                       |
+| 403 `writes-cap`, `forbidden-path` | no                             | the overlay breaks the run's limits                 | error                                                                                                       |
+| 409 `commit-refused`               | by another attempt, or earlier | the run was taken over, canceled, or committed      | nothing: this attempt no longer owns the run                                                                |
+| 401                                | no                             | the token's run isn't running, or the token expired | nothing                                                                                                     |
+| a batch refusal (4xx/5xx)          | yes                            | an entry failed, so no file landed                  | error; a retry finds `commit-interrupted` (the claim never recorded a landing) and finishes as an error too |
+
+A Preview never commits: it finishes complete, and the finish discards its
+overlay. A run with nothing staged commits an empty batch, which claims and
+records the commit and writes nothing.
 
 ### The AI spending cap
 
