@@ -87,16 +87,16 @@ interface Due {
   // When the kind's timer makes it due: at load, `everyMs` after the last
   // run, or as a run's `againAfterMs` asked.
   timerAt: number;
-  // When a request made it due, and when a request made while the kind ran
-  // on the realm makes it due once that run ends.
+  // When the earliest request not yet met makes it due. A run takes the
+  // request that had come due when it started, and gives it back unless it
+  // ran, so a request made during a run, or one still in the future, waits
+  // for a run of its own.
   requestedAt: number;
-  requestedDuringRun: number;
   // Revisions committed since the kind last ran, and when the last was.
   commits: number;
   lastCommitAt: number;
   // Not before this, after a skip or a failure.
   notBefore: number;
-  running: boolean;
 }
 
 type Ending =
@@ -163,11 +163,9 @@ export class BackgroundScheduler {
               ? now + kind.everyMs
               : Infinity,
           requestedAt: Infinity,
-          requestedDuringRun: Infinity,
           commits: 0,
           lastCommitAt: -Infinity,
           notBefore: -Infinity,
-          running: false,
         });
       }
       this.#schedule.set(id, kinds);
@@ -189,7 +187,7 @@ export class BackgroundScheduler {
   }
 
   // Makes a kind due on the realm, now or after `delayMs`. A request made
-  // while the kind runs on the realm is kept for after that run.
+  // while the kind runs on the realm is met by a later run.
   request(
     realmId: string,
     kindName: string,
@@ -199,12 +197,7 @@ export class BackgroundScheduler {
     if (!due) {
       return;
     }
-    let at = this.#now() + delayMs;
-    if (due.running) {
-      due.requestedDuringRun = Math.min(due.requestedDuringRun, at);
-    } else {
-      due.requestedAt = Math.min(due.requestedAt, at);
-    }
+    due.requestedAt = Math.min(due.requestedAt, this.#now() + delayMs);
   }
 
   // Starts the due jobs that the concurrency allows, in the order they came
@@ -260,13 +253,17 @@ export class BackgroundScheduler {
   }
 
   #start(realm: RecordedRealm, kind: BackgroundKind, due: Due): void {
-    due.running = true;
     this.#busyRealms.add(realm.id);
-    let commitsAtStart = due.commits;
+    let started = {
+      commits: due.commits,
+      request: due.requestedAt <= this.#now() ? due.requestedAt : Infinity,
+    };
+    if (started.request !== Infinity) {
+      due.requestedAt = Infinity;
+    }
     let job: Promise<void> = this.#run(realm, kind)
-      .then((ending) => this.#finish(realm, kind, due, ending, commitsAtStart))
+      .then((ending) => this.#finish(realm, kind, due, ending, started))
       .finally(() => {
-        due.running = false;
         this.#busyRealms.delete(realm.id);
         this.#jobs.delete(job);
         this.dispatch();
@@ -302,13 +299,14 @@ export class BackgroundScheduler {
     kind: BackgroundKind,
     due: Due,
     ending: Ending,
-    commitsAtStart: number,
+    // The commits counted and the request taken when the job started.
+    started: { commits: number; request: number },
   ): void {
     let now = this.#now();
     let retryAfterMs = kind.retryAfterMs ?? DEFAULT_RETRY_AFTER_MS;
-    // A request made during the run is still to be met, whatever the run did.
-    let requestedDuringRun = due.requestedDuringRun;
-    due.requestedDuringRun = Infinity;
+    if (ending.outcome !== 'ran') {
+      due.requestedAt = Math.min(due.requestedAt, started.request);
+    }
     switch (ending.outcome) {
       case 'ran': {
         due.timerAt =
@@ -317,28 +315,24 @@ export class BackgroundScheduler {
         if (againAfterMs !== undefined) {
           due.timerAt = Math.min(due.timerAt, now + againAfterMs);
         }
-        due.requestedAt = requestedDuringRun;
-        due.commits = Math.max(0, due.commits - commitsAtStart);
+        due.commits = Math.max(0, due.commits - started.commits);
         due.notBefore = -Infinity;
         log.debug(`${kind.name} ran on ${realm.url}`);
         return;
       }
       case 'skipped':
-        due.requestedAt = Math.min(due.requestedAt, requestedDuringRun);
         due.notBefore = now + SKIPPED_RETRY_AFTER_MS;
         log.debug(
           `${kind.name} on ${realm.url} was skipped: the realm has events in hand`,
         );
         return;
       case 'unavailable':
-        due.requestedAt = Math.min(due.requestedAt, requestedDuringRun);
         due.notBefore = now + retryAfterMs;
         log.debug(
           `${kind.name} on ${realm.url} didn't run: its recorder has stalled or stopped`,
         );
         return;
       case 'failed':
-        due.requestedAt = Math.min(due.requestedAt, requestedDuringRun);
         due.notBefore = now + retryAfterMs;
         log.warn(
           `${kind.name} on ${realm.url} failed; trying again in ${Math.round(retryAfterMs / 1000)}s: ${String(ending.error)}`,

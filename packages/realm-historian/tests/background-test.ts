@@ -304,6 +304,65 @@ module('background scheduler', (hooks) => {
     assert.strictEqual(held.ran.length, 2, 'a met request is gone');
   });
 
+  test('a delayed request outlives a run the kind made for another reason', async (assert) => {
+    let target = scheduler([
+      { name: 'both', atStart: true, run: async () => {} },
+    ]);
+    let realm = realmNamed('a');
+    target.setRealms(realmsOf(realm));
+    target.request(realm.id, 'both', { delayMs: 30_000 });
+
+    target.dispatch();
+    await drained(target);
+    assert.deepEqual(ran(), { 'id-a': ['both'] }, 'the run at load');
+
+    clock += 30_000 - 1;
+    target.dispatch();
+    await drained(target);
+    assert.deepEqual(ran(), { 'id-a': ['both'] });
+
+    clock += 1;
+    target.dispatch();
+    await drained(target);
+    assert.deepEqual(ran(), { 'id-a': ['both', 'both'] }, 'the request');
+  });
+
+  test('a request made as a run ends is met by a later run', async (assert) => {
+    let realm = realmNamed('a');
+    let runs = 0;
+    // Set by the run, so the scheduler's next look at the clock is the one
+    // it makes as it settles the run; the request lands just after that.
+    let requestAfterNextLook = false;
+    let target: BackgroundScheduler = new BackgroundScheduler({
+      kinds: [
+        {
+          name: 'on-request',
+          run: async () => {
+            runs++;
+            requestAfterNextLook = runs === 1;
+          },
+        },
+      ],
+      recorderFor: recorderOf,
+      now: () => {
+        if (requestAfterNextLook) {
+          requestAfterNextLook = false;
+          queueMicrotask(() => target.request(realm.id, 'on-request'));
+        }
+        return clock;
+      },
+    });
+    schedulers.push(target);
+    target.setRealms(realmsOf(realm));
+    target.request(realm.id, 'on-request');
+
+    target.dispatch();
+    await drained(target);
+    target.dispatch();
+    await drained(target);
+    assert.strictEqual(runs, 2);
+  });
+
   test('a run that asks to run again comes due again then', async (assert) => {
     let results: (BackgroundResult | void)[] = [{ againAfterMs: MINUTE }];
     let runs = 0;
