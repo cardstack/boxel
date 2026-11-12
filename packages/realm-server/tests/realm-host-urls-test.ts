@@ -2,12 +2,16 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
-import type { Realm } from '@cardstack/runtime-common';
+import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import { param, query, SupportedMimeType } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmHttpServer as Server } from '../server.ts';
 import { closeServer, setupPermissionedRealmCached } from './helpers/index.ts';
-import { notifyHostURLsChanged, toRealmURL } from '../lib/realm-host-urls.ts';
+import {
+  HostURLResolver,
+  notifyHostURLsChanged,
+  toRealmURL,
+} from '../lib/realm-host-urls.ts';
 
 module(basename(import.meta.filename), function () {
   module('toRealmURL', function () {
@@ -31,6 +35,111 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         toRealmURL(new URL('https://site.example.test/shop'), match).href,
         'https://realms.example.test/owner/store',
+      );
+    });
+  });
+
+  module('HostURLResolver', function () {
+    // An adapter that records the host each query asks for, and answers with
+    // one host URL at the root of that host. `hold` makes the next query wait
+    // until the returned function is called.
+    function fakeAdapter() {
+      let queriedHosts: string[] = [];
+      let held: Promise<void> | undefined;
+      let adapter = {
+        kind: 'pg',
+        async execute(_sql: string, opts?: { bind?: unknown[] }) {
+          let host = String(opts?.bind?.[0]);
+          queriedHosts.push(host);
+          if (held) {
+            let waitFor = held;
+            held = undefined;
+            await waitFor;
+          }
+          return [
+            {
+              path_prefix: '/',
+              is_canonical: true,
+              url: `https://realms.example.test/${host}/`,
+            },
+          ];
+        },
+      } as unknown as DBAdapter;
+      return {
+        adapter,
+        queriedHosts,
+        hold(): () => void {
+          let release!: () => void;
+          held = new Promise<void>((resolve) => (release = resolve));
+          return release;
+        },
+      };
+    }
+
+    function url(host: string) {
+      return new URL(`https://${host}/page`);
+    }
+
+    test('caches a host until its entry expires', async function (assert) {
+      let now = 0;
+      let { adapter, queriedHosts } = fakeAdapter();
+      let resolver = new HostURLResolver(adapter, {
+        ttlMs: 1000,
+        now: () => now,
+      });
+
+      await resolver.resolve(url('a.example.test'));
+      await resolver.resolve(url('a.example.test'));
+      assert.deepEqual(
+        queriedHosts,
+        ['a.example.test'],
+        'the second resolve is cached',
+      );
+
+      now = 1001;
+      await resolver.resolve(url('a.example.test'));
+      assert.deepEqual(
+        queriedHosts,
+        ['a.example.test', 'a.example.test'],
+        'an expired entry is read again',
+      );
+    });
+
+    test('a host forgotten while its query runs is not cached', async function (assert) {
+      let { adapter, queriedHosts, hold } = fakeAdapter();
+      let resolver = new HostURLResolver(adapter);
+
+      let release = hold();
+      let inFlight = resolver.resolve(url('a.example.test'));
+      resolver.forget('a.example.test');
+      release();
+      await inFlight;
+
+      await resolver.resolve(url('a.example.test'));
+      assert.deepEqual(
+        queriedHosts,
+        ['a.example.test', 'a.example.test'],
+        'the result read before the change is not kept',
+      );
+    });
+
+    test('holds at most maxHosts hosts, dropping the least recently used', async function (assert) {
+      let { adapter, queriedHosts } = fakeAdapter();
+      let resolver = new HostURLResolver(adapter, { maxHosts: 2 });
+
+      await resolver.resolve(url('a.example.test'));
+      await resolver.resolve(url('b.example.test'));
+      await resolver.resolve(url('a.example.test')); // a is now the most recent
+      await resolver.resolve(url('c.example.test')); // drops b
+      queriedHosts.length = 0;
+
+      await resolver.resolve(url('a.example.test'));
+      await resolver.resolve(url('c.example.test'));
+      await resolver.resolve(url('b.example.test'));
+      assert.deepEqual(
+        queriedHosts,
+        ['b.example.test'],
+        'only the dropped host is read again',
       );
     });
   });

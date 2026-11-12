@@ -22,6 +22,11 @@ export const HOST_URLS_CHANNEL = 'realm_host_urls';
 // bounds how long a process can serve from a stale entry.
 const DEFAULT_TTL_MS = 30_000;
 
+// How many hosts a process caches. A request can name any host, so without a
+// bound a stream of unknown hosts would grow the cache without limit. The
+// least recently used host is dropped first.
+const DEFAULT_MAX_HOSTS = 10_000;
+
 // What a request on a host URL resolved to. `hostURL` is the host URL itself,
 // with the request's protocol, ending in `/`.
 export interface HostURLMatch {
@@ -56,16 +61,24 @@ export function hostKey(url: URL): string {
 export class HostURLResolver {
   #dbAdapter: DBAdapter;
   #ttlMs: number;
+  #maxHosts: number;
   #now: () => number;
+  // In least-recently-used order: a `Map` iterates in insertion order, and a
+  // host is re-inserted each time it is used.
   #entries = new Map<string, { entries: HostEntry[]; expiresAt: number }>();
+  // Counts every forget. A load caches its result only when nothing was
+  // forgotten while its query ran, since the change that was announced may
+  // have committed after the query read the table.
+  #invalidations = 0;
   #subscribing: Promise<void> | undefined;
 
   constructor(
     dbAdapter: DBAdapter,
-    opts: { ttlMs?: number; now?: () => number } = {},
+    opts: { ttlMs?: number; maxHosts?: number; now?: () => number } = {},
   ) {
     this.#dbAdapter = dbAdapter;
     this.#ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
+    this.#maxHosts = opts.maxHosts ?? DEFAULT_MAX_HOSTS;
     this.#now = opts.now ?? Date.now;
   }
 
@@ -94,14 +107,25 @@ export class HostURLResolver {
   // well as `notifyHostURLsChanged`, so its own change takes effect before
   // its response is sent (ADR 033 §1.3).
   forget(host: string): void {
+    this.#invalidations++;
     this.#entries.delete(host.toLowerCase());
+  }
+
+  #forgetAll(): void {
+    this.#invalidations++;
+    this.#entries.clear();
   }
 
   async #entriesFor(host: string): Promise<HostEntry[]> {
     let cached = this.#entries.get(host);
-    if (cached && cached.expiresAt > this.#now()) {
-      return cached.entries;
+    if (cached) {
+      this.#entries.delete(host);
+      if (cached.expiresAt > this.#now()) {
+        this.#entries.set(host, cached);
+        return cached.entries;
+      }
     }
+    let invalidationsBefore = this.#invalidations;
     let rows = (await query(this.#dbAdapter, [
       `SELECT h.path_prefix, h.is_canonical, r.url`,
       `FROM realm_host_urls h JOIN realm_registry r ON r.id = h.realm_id`,
@@ -114,10 +138,19 @@ export class HostURLResolver {
       realmURL: row.url,
       isCanonical: Boolean(row.is_canonical),
     }));
-    this.#entries.set(host, {
-      entries,
-      expiresAt: this.#now() + this.#ttlMs,
-    });
+    if (this.#invalidations === invalidationsBefore) {
+      this.#entries.delete(host);
+      this.#entries.set(host, {
+        entries,
+        expiresAt: this.#now() + this.#ttlMs,
+      });
+      for (let oldest of this.#entries.keys()) {
+        if (this.#entries.size <= this.#maxHosts) {
+          break;
+        }
+        this.#entries.delete(oldest);
+      }
+    }
     return entries;
   }
 
@@ -133,12 +166,12 @@ export class HostURLResolver {
           if (payload) {
             this.forget(payload);
           } else {
-            this.#entries.clear();
+            this.#forgetAll();
           }
         },
         {
           // Changes made while the connection was down notified no one.
-          onReconnect: () => this.#entries.clear(),
+          onReconnect: () => this.#forgetAll(),
         },
       )
       .then(
