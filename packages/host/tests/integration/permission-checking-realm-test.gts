@@ -780,6 +780,51 @@ return { title: card.attributes.title, source };`,
     );
   });
 
+  test('neither the Realm Runner nor the AI context reads realm info as the sign of a policy once the session it came with is gone', async function (assert) {
+    await setupSchool({ enforcePermissions: true });
+    await signInToSchoolAfresh();
+    let realmService = getService('realm');
+    assert.true(
+      realmService.admitsOnlyThroughPolicy(ri(SCHOOL)),
+      'while the user holds a session, the info the school answered says its policy judges them',
+    );
+
+    // Signing out ends the realm session and keeps the realm's info, as
+    // re-authentication and a switch of account do.
+    realmService.logout();
+    assert.true(
+      realmService.isInfoLoaded(ri(SCHOOL)),
+      'the host still holds the school’s info',
+    );
+    assert.false(
+      realmService.admitsOnlyThroughPolicy(ri(SCHOOL)),
+      'but no session backs it',
+    );
+
+    let toolService = getService('tool-service');
+    await assert.rejects(
+      new RunRealmCodeTool(toolService.toolContext).execute({
+        realm: SCHOOL,
+        roomId: '!room:example.com',
+        code: `return 'ran';`,
+      }),
+      (error: Error) =>
+        error.message === `The current user cannot read or write ${SCHOOL}`,
+      'the run is refused before it starts',
+    );
+
+    let operatorModeState = getService('operator-mode-state-service');
+    operatorModeState.restore({
+      stacks: [[{ id: ROOM_204, format: 'isolated' }]],
+    });
+    let context = await operatorModeState.getSummaryForAIBot();
+    assert.strictEqual(
+      context.realmPolicy,
+      undefined,
+      'and the AI context claims no policy',
+    );
+  });
+
   test('a Realm Runner script does not run for a user a realm without a policy does not let read', async function (assert) {
     await setupSchool({ enforcePermissions: true, policy: null });
     let realmService = getService('realm');

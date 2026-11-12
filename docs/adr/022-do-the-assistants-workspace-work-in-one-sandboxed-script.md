@@ -159,7 +159,9 @@ operations-only run would refuse reads a grant admits, and
 `realm.operations.invoke` reads its target card before it invokes. The host
 knows such a user by the realm's info: a realm answers its info to a caller
 its permissions don't let read only when its policy judges them
-(`packages/runtime-common/realm.ts`). The runner's own refusals only say
+(`packages/runtime-common/realm.ts`). The host caches info longer than a
+session, so it reads that sign only while the user holds a session with the
+realm. The runner's own refusals only say
 early what the realm will answer. One the realm would not make leaves the
 runner, not the realm, deciding (§1.4), so the tables follow the realm's
 routes. The AI context and the gate are kept together (§1.8) because they
