@@ -153,4 +153,8 @@ export async function removeRealmDatabaseArtifacts(args: {
   // And the record of the files its automations created, whose files went
   // with the realm.
   await q([`DELETE FROM automation_files WHERE realm_url =`, param(realmURL)]);
+  await q([
+    `DELETE FROM automation_storage_days WHERE realm =`,
+    param(realmURL),
+  ]);
 }

@@ -13,7 +13,15 @@
 // automation's `automations` row: removing the automation stops its charge,
 // and switching it on again charges for its files again.
 //
-// The table is server-only, and excluded from the SQLite schema dump.
+// One `automation_storage_days` row per switched-on automation and UTC day:
+// the bytes its files took on disk and in the index that day, measured by the
+// daily storage charge just after the day ends. A storage charge prices the
+// days it covers from their own rows, so a file is never billed for a day
+// before it existed. The first measurement of a day stands, so a duplicate or
+// retried job measures nothing twice. `realm` is the automation's realm's canonical
+// identifier, so a deleted realm's rows are deleted with it.
+//
+// Both tables are server-only, and excluded from the SQLite schema dump.
 
 exports.up = (pgm) => {
   pgm.sql(`
@@ -30,8 +38,24 @@ exports.up = (pgm) => {
     CREATE INDEX IF NOT EXISTS automation_files_automation_idx
       ON automation_files (automation_id)
   `);
+  pgm.sql(`
+    CREATE TABLE IF NOT EXISTS automation_storage_days (
+      automation_id text NOT NULL,
+      day date NOT NULL,
+      realm text NOT NULL,
+      file_bytes bigint NOT NULL,
+      index_bytes bigint NOT NULL,
+      measured_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (automation_id, day)
+    )
+  `);
+  pgm.sql(`
+    CREATE INDEX IF NOT EXISTS automation_storage_days_realm_idx
+      ON automation_storage_days (realm)
+  `);
 };
 
 exports.down = (pgm) => {
+  pgm.sql(`DROP TABLE IF EXISTS automation_storage_days`);
   pgm.sql(`DROP TABLE IF EXISTS automation_files`);
 };

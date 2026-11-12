@@ -4,10 +4,11 @@
 //
 // A run's batch commits through the realm's own write path, which records the
 // files the batch created in the same transaction as their `realm_file_meta`
-// rows, and forgets a file in the same transaction as its `realm_file_meta`
-// row when anyone deletes it. So a file counts from the commit that created it
-// until whoever deletes it, and a file the run only changed counts for no
-// automation.
+// rows. Every write forgets the files it deletes or creates in that same
+// transaction, before recording any, so a file counts from the commit that
+// created it until whoever deletes it, a file the run only changed counts for
+// no automation, and a file someone else creates at a path never inherits an
+// earlier file's automation.
 //
 // Files are spelled as `realm_file_meta` spells them, the realm's URL and the
 // file's realm-local path, so the measurement below reads each file's size by
@@ -34,8 +35,8 @@ export interface AutomationRunWrite {
 }
 
 // Records `paths`, files a run's commit just created in `realmURL`, as the
-// run's automation's. A file already recorded keeps the automation that
-// created it.
+// run's automation's. The write forgets these paths first (see
+// `forgetAutomationFiles`), so no row is in the way.
 export async function recordAutomationFiles(
   querier: Querier,
   realmURL: string,
@@ -63,8 +64,8 @@ export async function recordAutomationFiles(
   ] as Expression);
 }
 
-// Forgets `paths`, files just deleted from `realmURL`, whichever automation
-// created them.
+// Forgets `paths`, files just deleted from or created in `realmURL`, whichever
+// automation created them.
 export async function forgetAutomationFiles(
   querier: Querier,
   realmURL: string,
@@ -86,9 +87,10 @@ export async function forgetAutomationFiles(
 // One file an automation's runs created, and the bytes it takes:
 //
 // - `fileBytes`: its size on disk, as its write recorded it.
-// - `indexBytes`: the size of its rows in the index, when it is a card: its
-//   `boxel_index` row and its `prerendered_html` row, as Postgres stores them.
-//   A file that isn't a card, or isn't indexed yet, has none.
+// - `indexBytes`: the size of its rows in the index, as Postgres stores them:
+//   every `boxel_index` and `prerendered_html` row for it, such as a card's
+//   `instance` row and every file's `file` row. A file that isn't indexed yet
+//   has none.
 export interface AutomationFile {
   realmURL: string;
   path: string;
@@ -116,10 +118,10 @@ export async function getAutomationStorage(
        COALESCE(m.content_size, 0) AS file_bytes,
        COALESCE((SELECT SUM(pg_column_size(i.*)) FROM boxel_index i
          WHERE i.realm_url = f.realm_url AND i.url = f.realm_url || f.file_path
-           AND i.type = 'instance' AND i.is_deleted IS NOT TRUE), 0)
+           AND i.is_deleted IS NOT TRUE), 0)
        + COALESCE((SELECT SUM(pg_column_size(h.*)) FROM prerendered_html h
          WHERE h.realm_url = f.realm_url AND h.url = f.realm_url || f.file_path
-           AND h.type = 'instance' AND h.is_deleted IS NOT TRUE), 0)
+           AND h.is_deleted IS NOT TRUE), 0)
          AS index_bytes
      FROM automation_files f
      JOIN realm_file_meta m

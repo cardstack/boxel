@@ -6759,23 +6759,32 @@ export class Realm {
     ];
     let journal = this.#history?.journal;
     if (!journal) {
-      // No history, so nothing to commit together: the rows are written as
-      // the adapter's own statements. The in-browser realm's SQLite adapter
-      // runs one connection with no transaction nesting, so a realm that
-      // records nothing never opens a transaction here.
-      let createdMap = await this.persistFileMeta(fileMetaRows);
-      await this.removeFileMeta(removedFiles);
-      // The automation files record is server-only: the in-browser realm's
-      // database has no such table, and no automation writes there.
-      if (this.#dbAdapter.kind === 'pg') {
-        await this.#persistAutomationFiles(
-          dbAdapterQuerier(this.#dbAdapter),
-          addedFiles,
-          removedFiles,
-          automationRun,
-        );
+      // No history. The in-browser realm's SQLite adapter runs one
+      // connection with no transaction nesting, so there the rows are written
+      // as the adapter's own statements and no transaction is opened.
+      if (this.#dbAdapter.kind !== 'pg') {
+        let createdMap = await this.persistFileMeta(fileMetaRows);
+        await this.removeFileMeta(removedFiles);
+        return createdMap;
       }
-      return createdMap;
+      // A server realm with history switched off still keeps the record of
+      // the files automations' runs created (server-only: the in-browser
+      // realm's database has no such table), in one transaction with the
+      // file meta.
+      return await this.#dbAdapter.withTransaction(
+        async (querier) => {
+          let createdMap = await this.persistFileMeta(fileMetaRows, querier);
+          await this.removeFileMeta(removedFiles, querier);
+          await this.#persistAutomationFiles(
+            querier,
+            addedFiles,
+            removedFiles,
+            automationRun,
+          );
+          return createdMap;
+        },
+        { label: 'realm write outcome' },
+      );
     }
     // How the write was made, checked here whoever set it. A write that
     // names nothing is `api`.
@@ -6838,15 +6847,19 @@ export class Realm {
   }
 
   // Keeps the record of the files automations' runs created in step with a
-  // write: the files a run's commit created become its automation's, and a
-  // deleted file stops being anyone's, whoever deleted it.
+  // write: a file the write deleted or created stops being any automation's,
+  // whoever wrote it, and the files a run's commit created become its
+  // automation's.
   async #persistAutomationFiles(
     querier: Querier,
     addedFiles: LocalPath[],
     removedFiles: LocalPath[],
     automationRun: AutomationRunWrite | undefined,
   ): Promise<void> {
-    await forgetAutomationFiles(querier, this.url, removedFiles);
+    await forgetAutomationFiles(querier, this.url, [
+      ...removedFiles,
+      ...addedFiles,
+    ]);
     if (automationRun) {
       await recordAutomationFiles(querier, this.url, automationRun, addedFiles);
     }

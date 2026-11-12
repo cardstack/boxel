@@ -1,9 +1,9 @@
 import '../instrument.ts';
 import '../setup-logger.ts'; // This should be first
 import {
-  automationInitiatedPriority,
   logger,
   previousUTCDay,
+  systemInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import * as Sentry from '@sentry/node';
@@ -11,10 +11,10 @@ import * as Sentry from '@sentry/node';
 const log = logger('automation-storage-charge');
 const AUTOMATION_STORAGE_CHARGE_JOB_TIMEOUT_SEC = 30 * 60;
 
-// Enqueues the charge for the most recent UTC day that has ended. The job
-// runs at the automation tier, which the automation worker lane claims, so
-// a system-tier reindex backlog doesn't hold it. Every worker manager fires
-// the cron; the duplicate jobs find each charge already made.
+// Enqueues the charge for the most recent UTC day that has ended, at the
+// system tier. A system-tier backlog only delays it: the job names its day,
+// and a late day's charge covers the same days. Every worker manager fires
+// the cron; the duplicate jobs find each day already measured and charged.
 export async function enqueueAutomationStorageCharge({
   day = previousUTCDay(),
   migrateDB,
@@ -30,7 +30,7 @@ export async function enqueueAutomationStorageCharge({
       jobType: 'automation-storage-charge',
       concurrencyGroup: 'automation-storage-charge',
       timeout: AUTOMATION_STORAGE_CHARGE_JOB_TIMEOUT_SEC,
-      priority: automationInitiatedPriority,
+      priority: systemInitiatedPriority,
       args: { day },
     });
     log.info(`enqueued automation-storage-charge job for ${day}`);

@@ -294,53 +294,64 @@ per trigger, so the screen can show where the number comes from.
 ## The daily storage charge
 
 An automation's payer pays, every day the automation is switched on, for the
-files its runs created and for those cards' rows in the index:
+files its runs created and for their rows in the index. Each day is priced at
+what existed that day:
 
 ```
-file GB-months     = file bytes  / BYTES_PER_GB × days / (1461/48)
-database GB-months = index bytes / BYTES_PER_GB × days / (1461/48)
+file GB-months     = Σ over the days charged of that day's file bytes  / BYTES_PER_GB / (1461/48)
+database GB-months = Σ over the days charged of that day's index bytes / BYTES_PER_GB / (1461/48)
 credits = (file GB-months × PRICING_USD_PER_FILE_STORAGE_GB_MONTH
            + database GB-months × PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH)
           × PRICING_MARGIN × 1000, rounded up
 ```
 
-A month is the average month the estimate uses, 1461/48 days.
+A month is the average month the estimate uses, 1461/48 days. The charge is
+written through the worker's `MeteredCharges` (see "Writing a metered
+charge").
 
 **Which files.** `automation_files` holds one row per file an automation's
 run created: the realm's URL and the file's path, spelled as
 `realm_file_meta` spells them, plus the automation and the run. The realm
 writes the row in the same transaction as the file's `realm_file_meta` row,
-when the run's batch commits (`WriteOptions.automationRun`). A file the run
-only changed was created by someone else and has no row. Whoever deletes the
-file, its row goes in the same transaction as its `realm_file_meta` row, so
-the file stops counting. Deleting a realm deletes its rows.
+when the run's batch commits (`WriteOptions.automationRun`), whether or not
+the realm keeps history. A file the run only changed was created by someone
+else and has no row. Every write forgets the files it deletes or creates in
+that transaction before recording any, so a deleted file stops counting,
+and a file someone else later creates at the same path is not the
+automation's. Deleting a realm deletes its rows.
 
 **How big.** `getAutomationStorage` (`packages/runtime-common/automation-files.ts`)
-measures an automation's files when the charge is made. A file's bytes are
-`realm_file_meta.content_size`, the size its write recorded. A card's index
-bytes are its `boxel_index` and `prerendered_html` instance rows, as Postgres
-stores them (`pg_column_size`). The console's storage view reads the same
-function.
+measures an automation's files that still exist. A file's bytes are
+`realm_file_meta.content_size`, the size its write recorded. Its index bytes
+are every `boxel_index` and `prerendered_html` row for it, as Postgres stores
+them (`pg_column_size`): a card's `instance` rows and every file's `file`
+rows. The console's storage view reads the same function.
 
 **When.** A cron on every worker manager enqueues an
 `automation-storage-charge` job at 00:15 UTC. `AUTOMATION_STORAGE_CHARGE_CRON_SCHEDULE`
 and `AUTOMATION_STORAGE_CHARGE_CRON_TZ` override the schedule. The job names
-the UTC day that just ended and runs at the automation tier. Its task
-(`packages/runtime-common/automation-storage-charge.ts`) charges every
+the UTC day that just ended and runs at the system tier. A backlog only
+delays it, since the day is in its arguments. Its task
+(`packages/runtime-common/automation-storage-charge.ts`) handles every
 automation switched on before that day ended, whatever its state. A paused
 automation still exists, so it is still charged. Removing an automation
-deletes its `automations` row, so it stops being charged.
+deletes its `automations` row, so it is no longer measured or charged.
+
+**A day is measured once.** For each automation, the job first records the
+day's measurement as an `automation_storage_days` row (automation, day, file
+bytes, index bytes). The first measurement of a day stands. A day the job
+never measured, because no job ran for it, is not charged.
 
 **A charge covers a span of days.** A day of a few small files costs a tiny
 fraction of a credit, and credits are whole numbers. So a charge covers every
-day since the automation's last storage charge, or since it was switched on
-when that is later, and is written only once the span costs at least one
-whole credit. Until then the job counts the automation as `under-a-credit`
-and charges nothing. The charge is named by the span's last day
-(`charge_day`), so an automation is charged at most once a day, and a
+measured day since the automation's last storage charge, or since it was
+switched on when that is later, and is written only once those days cost at
+least one whole credit. Until then the job counts the automation as
+`under-a-credit` and charges nothing. The charge is named by the span's last
+day (`charge_day`), so an automation is charged at most once a day, and a
 duplicate or retried job finds the day already charged and writes nothing.
-Its usage rows hold the GB-months of the whole span. Switching an automation
-on again after removing it starts a new span on that day.
+Its usage rows hold the GB-months of every day it covers. Switching an
+automation on again after removing it starts a new span on that day.
 
 The job logs one line per day on the worker: `automation-storage-charge
 through <day>: N charged, N not charged, N failed`. It logs each failure with
@@ -354,6 +365,15 @@ FROM automation_files f
 JOIN realm_file_meta m ON m.realm_url = f.realm_url AND m.file_path = f.file_path
 WHERE f.automation_id = '<automation identifier>'
 ORDER BY f.file_path;
+
+-- An automation's daily measurements, and the charge each day fell under.
+SELECT d.day, d.file_bytes, d.index_bytes,
+  (SELECT MIN(l.charge_day) FROM credits_ledger l
+   WHERE l.charge_kind = 'storage' AND l.run_id IS NULL AND l.batch_id IS NULL
+     AND l.automation_id = d.automation_id AND l.charge_day >= d.day) AS charged_by
+FROM automation_storage_days d
+WHERE d.automation_id = '<automation identifier>'
+ORDER BY d.day DESC;
 ```
 
 ## Reading the ledger by kind and reference

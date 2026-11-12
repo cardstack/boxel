@@ -223,6 +223,61 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a file is charged only for the days it existed', async function (assert) {
+    await switchOn('2026-11-01');
+    for (let day of [
+      '2026-11-01',
+      '2026-11-02',
+      '2026-11-03',
+      '2026-11-04',
+      '2026-11-05',
+    ]) {
+      let [result] = await charge(day);
+      assert.strictEqual(
+        result.outcome,
+        'under-a-credit',
+        `${day} costs nothing`,
+      );
+    }
+    await createdFile('logs/sync.jsonl', BYTES_PER_GB);
+
+    let [result] = await charge('2026-11-06');
+
+    assert.strictEqual(result.outcome, 'charged');
+    assert.strictEqual(result.firstDay, '2026-11-01');
+    assert.strictEqual(result.lastDay, '2026-11-06');
+    assert.strictEqual(
+      result.fileStorageGbMonths,
+      1 / DAYS_PER_AVERAGE_MONTH,
+      'one GB for the one day it existed',
+    );
+    assert.deepEqual(
+      (await storageCharges()).map(({ day, credits }) => [day, credits]),
+      [['2026-11-06', 20]],
+    );
+  });
+
+  test('each day is charged at the size measured for it', async function (assert) {
+    await switchOn('2026-11-10');
+    // 40 MB, then 80 MB: about 0.77 and then 1.54 credits.
+    await createdFile('logs/sync.jsonl', 40 * 1024 * 1024);
+    let [first] = await charge('2026-11-10');
+    assert.strictEqual(first.outcome, 'under-a-credit');
+    await dbAdapter.execute(
+      `UPDATE realm_file_meta SET content_size = $1 WHERE realm_url = $2 AND file_path = $3`,
+      { bind: [80 * 1024 * 1024, REALM_URL, 'logs/sync.jsonl'] },
+    );
+
+    let [second] = await charge('2026-11-11');
+
+    assert.strictEqual(second.outcome, 'charged');
+    assert.strictEqual(
+      second.fileStorageGbMonths,
+      (40 / 1024 + 80 / 1024) / DAYS_PER_AVERAGE_MONTH,
+      'the first day at 40 MB and the second at 80 MB',
+    );
+  });
+
   test('an automation is charged once a day, however often the job runs', async function (assert) {
     await switchOn('2026-11-10');
     await createdFile('logs/sync.jsonl', BYTES_PER_GB);

@@ -1,19 +1,23 @@
 // The daily storage charge (ADR 029): each switched-on automation's payer
 // pays for the files its runs created, at the file storage rate, and for
-// those cards' rows in the index, at the database storage rate, for every day
-// the automation is switched on. The files are the automation's
-// `automation_files` rows that still exist (see `getAutomationStorage`),
-// measured when the charge is made.
+// their rows in the index, at the database storage rate, for every day the
+// automation is switched on.
+//
+// Each day is priced at what existed that day. Just after a UTC day ends, the
+// job measures each automation's files (see `getAutomationStorage`) and keeps
+// the measurement as that day's `automation_storage_days` row. A day the job
+// never measured is not charged.
 //
 // A day of a few small files costs a tiny fraction of a credit, and credits
-// are whole numbers, so a charge covers every day since the automation's last
-// storage charge (or since it was switched on), and is written only once that
-// span costs at least a whole credit. The charge is named by its last day, so
-// an automation is charged at most once a day, and a retried job writes
-// nothing twice. Its usage records the GB-months of the whole span.
+// are whole numbers, so a charge covers every measured day since the
+// automation's last storage charge (or since it was switched on), and is
+// written only once those days cost at least a whole credit. The charge is
+// named by its last day, so an automation is charged at most once a day, and
+// a retried job writes nothing twice. Its usage records the GB-months of all
+// the days it covers.
 //
 // Removing an automation deletes its `automations` row, so it is no longer
-// charged. Switching it on again starts a new span from that day.
+// measured or charged. Switching it on again starts from that day.
 
 import { getAutomationStorage } from './automation-files.ts';
 import type { DBAdapter } from './db.ts';
@@ -72,8 +76,10 @@ export async function chargeAutomationStorage(
   let automations = (await query(dbAdapter, [
     `SELECT a.automation_id, a.realm, a.payer,
        to_char(a.switched_on_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS switched_on_day,
+       -- The null run and batch let the charge-once index serve this.
        (SELECT to_char(MAX(l.charge_day), 'YYYY-MM-DD') FROM credits_ledger l
-        WHERE l.charge_kind = 'storage' AND l.automation_id = a.automation_id)
+        WHERE l.charge_kind = 'storage' AND l.run_id IS NULL
+          AND l.batch_id IS NULL AND l.automation_id = a.automation_id)
          AS last_charged_day
      FROM automations a WHERE a.switched_on_at <`,
     param(`${addDays(day, 1)}T00:00:00Z`),
@@ -111,10 +117,37 @@ async function chargeOne(
   if (firstDay > day) {
     return { automationId, outcome: 'not-due' };
   }
-  let months = (daysBetween(firstDay, day) + 1) / DAYS_PER_AVERAGE_MONTH;
   let storage = await getAutomationStorage(dbAdapter, automationId);
-  let fileStorageGbMonths = (storage.fileBytes / BYTES_PER_GB) * months;
-  let databaseStorageGbMonths = (storage.indexBytes / BYTES_PER_GB) * months;
+  await query(dbAdapter, [
+    'INSERT INTO automation_storage_days (automation_id, day, realm, file_bytes, index_bytes) VALUES (',
+    param(automationId),
+    ',',
+    param(day),
+    '::date,',
+    param(automation.realm),
+    ',',
+    param(storage.fileBytes),
+    ',',
+    param(storage.indexBytes),
+    ') ON CONFLICT (automation_id, day) DO NOTHING',
+  ]);
+  // Each covered day at its own measurement: bytes summed over days are
+  // byte-days.
+  let [measured] = (await query(dbAdapter, [
+    `SELECT COALESCE(SUM(file_bytes), 0) AS file_byte_days,
+       COALESCE(SUM(index_bytes), 0) AS index_byte_days
+     FROM automation_storage_days WHERE automation_id =`,
+    param(automationId),
+    'AND day BETWEEN',
+    param(firstDay),
+    '::date AND',
+    param(day),
+    '::date',
+  ])) as unknown as { file_byte_days: string; index_byte_days: string }[];
+  let fileStorageGbMonths =
+    Number(measured.file_byte_days) / BYTES_PER_GB / DAYS_PER_AVERAGE_MONTH;
+  let databaseStorageGbMonths =
+    Number(measured.index_byte_days) / BYTES_PER_GB / DAYS_PER_AVERAGE_MONTH;
   let usage = {
     file_storage_gb_months: fileStorageGbMonths,
     database_storage_gb_months: databaseStorageGbMonths,
@@ -155,11 +188,4 @@ function addDays(day: string, count: number): string {
   let date = new Date(`${day}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + count);
   return date.toISOString().slice(0, 10);
-}
-
-function daysBetween(from: string, to: string): number {
-  return Math.round(
-    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
-      86_400_000,
-  );
 }
