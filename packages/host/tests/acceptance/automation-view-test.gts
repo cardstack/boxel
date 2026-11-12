@@ -341,7 +341,7 @@ module('Acceptance | automation view', function (hooks) {
           })),
         },
         'Done',
-        "Every trigger has used up the trigger's runs or passed the trigger's end, so Boxel runs nothing more. Boxel runs the automation again when someone who can edit this workspace adds a trigger.",
+        'The automation has no runs left on any trigger, so Boxel runs nothing more. Boxel runs the automation again when someone who can edit this workspace adds a trigger.',
       ],
     ];
     for (let [change, label, sentence] of cases) {
