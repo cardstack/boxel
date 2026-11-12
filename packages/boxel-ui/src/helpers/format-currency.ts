@@ -1,3 +1,5 @@
+import { cachedNumberFormat } from '../utils/intl-formatters.ts';
+
 export default function formatCurrency(
   amount: number | null | undefined,
   options: {
@@ -22,7 +24,7 @@ export default function formatCurrency(
   if (size === 'tiny') {
     const absAmount = Math.abs(amount);
     if (absAmount >= 1000000) {
-      const formatter = new Intl.NumberFormat(locale, {
+      const formatter = cachedNumberFormat(locale, {
         style: 'currency',
         currency,
         notation: 'compact',
@@ -32,7 +34,7 @@ export default function formatCurrency(
       return formatter.format(amount);
     }
     if (absAmount >= 1000) {
-      const formatter = new Intl.NumberFormat(locale, {
+      const formatter = cachedNumberFormat(locale, {
         style: 'currency',
         currency,
         notation: 'compact',
@@ -41,7 +43,7 @@ export default function formatCurrency(
       });
       return formatter.format(amount);
     }
-    const formatter = new Intl.NumberFormat(locale, {
+    const formatter = cachedNumberFormat(locale, {
       style: 'currency',
       currency,
       minimumFractionDigits: 0,
@@ -52,7 +54,7 @@ export default function formatCurrency(
 
   // Handle long format with spelled out currency
   if (size === 'long') {
-    const formatter = new Intl.NumberFormat(locale, {
+    const formatter = cachedNumberFormat(locale, {
       style: 'decimal',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
@@ -71,7 +73,7 @@ export default function formatCurrency(
 
   // Handle short format (no decimals)
   if (size === 'short') {
-    const formatter = new Intl.NumberFormat(locale, {
+    const formatter = cachedNumberFormat(locale, {
       style: 'currency',
       currency,
       minimumFractionDigits: 0,
@@ -84,7 +86,7 @@ export default function formatCurrency(
   const minimumFractionDigits = currency === 'JPY' ? 0 : 2;
   const maximumFractionDigits = currency === 'JPY' ? 0 : 2;
 
-  const formatter = new Intl.NumberFormat(locale, {
+  const formatter = cachedNumberFormat(locale, {
     style: 'currency',
     currency,
     minimumFractionDigits,

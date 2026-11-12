@@ -1,5 +1,7 @@
 import { helper } from '@ember/component/helper';
 
+import { cachedNumberFormat } from '../utils/intl-formatters.ts';
+
 const DEFAULT_CURRENCY = 'USD';
 
 export interface Signature {
@@ -13,7 +15,7 @@ export function currencyFormat(
   value: number,
   currency: string = DEFAULT_CURRENCY,
 ) {
-  const formatter = new Intl.NumberFormat('en-US', {
+  const formatter = cachedNumberFormat('en-US', {
     style: 'currency',
     currency: currency,
   });

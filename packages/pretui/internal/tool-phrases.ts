@@ -3,6 +3,7 @@
 // queries, and edited 1 file" instead of "Used 6 tools · Read, Search,
 // Patch". While the run is still going, the phrase for the newest call reads
 // in the present tense ("editing 1 file"); the rest are past.
+import { cachedListFormat } from './intl-cache';
 
 export type ToolKind =
   | 'read'
@@ -117,7 +118,7 @@ const LIST_LOCALE = 'en';
 
 function formatter(): Intl.ListFormat | undefined {
   return typeof Intl !== 'undefined' && 'ListFormat' in Intl
-    ? new Intl.ListFormat(LIST_LOCALE, { style: 'long', type: 'conjunction' })
+    ? cachedListFormat(LIST_LOCALE, { style: 'long', type: 'conjunction' })
     : undefined;
 }
 
