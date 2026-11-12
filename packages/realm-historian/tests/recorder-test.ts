@@ -1279,6 +1279,8 @@ module('recorder', (hooks) => {
   });
 
   test('a background job asked for while the realm has an event in hand is skipped at once', async (assert) => {
+    // Without the fix this waits forever rather than failing.
+    assert.timeout(10_000);
     let release!: () => void;
     let released = new Promise<void>((resolve) => (release = resolve));
     let capturing = false;
@@ -1400,12 +1402,53 @@ module('recorder', (hooks) => {
 
     await target.stop();
     assert.true(finished, 'the stop waited for the job');
-    assert.strictEqual(await job, 'ran');
+    assert.strictEqual(await job, 'unavailable', 'it was cut short');
     assert.strictEqual(await queued, 'unavailable');
     assert.strictEqual(
       await target.runBackground({ kind: 'late', run: async () => {} }),
       'unavailable',
     );
+  });
+
+  test("a background job gives way when its realm's queue fills, and counts as skipped", async (assert) => {
+    // Without the fix this waits forever rather than failing.
+    assert.timeout(10_000);
+    let target = recorder({ maxQueuedEvents: 2 });
+    let started = false;
+    let job = target.runBackground({
+      kind: 'long',
+      stallOnFailure: true,
+      run: async ({ signal }) => {
+        started = true;
+        await new Promise((resolve) =>
+          signal.addEventListener('abort', resolve),
+        );
+        throw signal.reason;
+      },
+    });
+    await waitUntil(() => started, { what: 'the job to start' });
+    let events: ChangeEvent[] = [];
+    for (let i = 0; i < 3; i++) {
+      events.push(
+        await event({
+          author: ALICE,
+          changes: [await put(`card-${i}.json`, `{"i":${i}}`, 'A')],
+          occurredAt: at(i * 100),
+        }),
+      );
+    }
+    for (let next of events) {
+      await target.record(next);
+    }
+
+    assert.strictEqual(await job, 'skipped');
+    assert.strictEqual(target.state, 'running', 'the realm did not stall');
+    target.tick(T0 + 200 + quietPeriodMs);
+    await target.settled();
+    assert.deepEqual(await coveredSeqs(await history()), [
+      events.map(({ seq }) => seq),
+    ]);
+    assert.deepEqual(fatals, []);
   });
 
   test('a failing background job fails alone, unless its kind stalls the realm', async (assert) => {

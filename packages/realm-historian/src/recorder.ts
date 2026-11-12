@@ -71,8 +71,10 @@
 // the queue with events queued behind it is skipped then, so a job neither
 // waits out a backlog nor holds up a realm that has woken. A job holds no
 // I/O permit: the task limits background work with its own concurrency, so
-// a long job doesn't take a permit recording needs. Stopping the recorder
-// aborts the job's signal.
+// a long job doesn't take a permit recording needs. Its signal fires when the
+// recorder stops, and when the realm's events fill the queue behind it,
+// since a full queue holds up every realm the task records; either way the
+// job counts as not having run.
 
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
@@ -195,9 +197,9 @@ export interface BackgroundJob {
 }
 
 // How a background job ended, when it didn't throw: it ran; it was skipped,
-// because the realm had events captured or queued behind it, and is for a
-// later turn; or the recorder couldn't run it, because it had stalled or
-// stopped.
+// because the realm had events in hand, or cut short because its queue
+// filled, and is for a later turn; or the recorder couldn't run it, or
+// stopped it, because it had stalled or stopped.
 export type BackgroundOutcome = 'ran' | 'skipped' | 'unavailable';
 
 export interface RecorderOptions {
@@ -228,6 +230,15 @@ export class RecorderFatalError extends Error {
   constructor(message: string, options?: { cause: unknown }) {
     super(message, options);
     this.name = 'RecorderFatalError';
+  }
+}
+
+// Why a background job's signal fired when its realm's queue filled: the
+// realm's events need the queue back.
+class BackgroundPreemptedError extends Error {
+  constructor(realmURL: string) {
+    super(`the events of ${realmURL} need the recorder back`);
+    this.name = 'BackgroundPreemptedError';
   }
 }
 
@@ -358,6 +369,12 @@ export class Recorder implements ManagedRecorder {
 
   async record(event: ChangeEvent): Promise<void> {
     while (this.#state === 'running' && this.#queue.length >= this.#maxQueued) {
+      // A background job in progress holds the queue until it ends, and a
+      // full queue holds up the consumer and every other realm with it, so
+      // the job is asked to give way.
+      this.#backgroundAbort?.abort(
+        new BackgroundPreemptedError(this.#options.realm.url),
+      );
       await new Promise<void>((resolve) => this.#spaceWaiters.push(resolve));
     }
     if (this.#state !== 'running') {
@@ -523,15 +540,19 @@ export class Recorder implements ManagedRecorder {
         head: this.#head,
         signal: abort.signal,
       });
-      work.resolve('ran');
+      work.resolve(abortedOutcome(abort.signal) ?? 'ran');
     } catch (error) {
-      // A failure that stalls the realm or ends the task takes effect before
-      // the job's caller hears of it.
-      if (
-        work.job.stallOnFailure ||
-        error instanceof LeaseLostError ||
-        error instanceof RecorderFatalError
-      ) {
+      // A failure that ends the task, or that stalls the realm, takes effect
+      // before the job's caller hears of it. A job that ends however it
+      // likes once its signal fires has only been cut short.
+      let fatal =
+        error instanceof LeaseLostError || error instanceof RecorderFatalError;
+      let aborted = fatal ? undefined : abortedOutcome(abort.signal);
+      if (aborted) {
+        work.resolve(aborted);
+        return;
+      }
+      if (fatal || work.job.stallOnFailure) {
         await this.#failed(error);
       }
       work.reject(error);
@@ -1459,6 +1480,18 @@ export class Recorder implements ManagedRecorder {
       (captured) => !covered.has(captured),
     );
   }
+}
+
+// How a background job whose signal fired ended: cut short for the realm's
+// events, so it is tried again soon, or by the recorder stopping. Either way
+// it may not have done its work. Undefined when the signal didn't fire.
+function abortedOutcome(signal: AbortSignal): BackgroundOutcome | undefined {
+  if (!signal.aborted) {
+    return undefined;
+  }
+  return signal.reason instanceof BackgroundPreemptedError
+    ? 'skipped'
+    : 'unavailable';
 }
 
 function positionOf(event: ChangeEvent): ReadPosition {
