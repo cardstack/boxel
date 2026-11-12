@@ -1,11 +1,13 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import PowerCalendarRange from 'ember-power-calendar/components/power-calendar-range';
 import { type TPowerCalendarRangeOnSelect } from 'ember-power-calendar/components/power-calendar-range';
 import powerCalendarFormatDate from 'ember-power-calendar/helpers/power-calendar-format-date';
+import type PowerCalendarService from 'ember-power-calendar/services/power-calendar';
 import {
   type SelectedPowerCalendarRange,
   add,
@@ -19,11 +21,11 @@ import { setupDateLibrary } from './setup.gts';
 interface Signature {
   Args: {
     // The day the calendars initially open on when neither `start` nor `end`
-    // is set; read once, like `start` and `end`. Absent, it is today by the
-    // real clock. A caller that reads "today" from a clock of its own passes
-    // that day, so the month shown and any bound computed from "today" agree.
-    // The today marker on a day cell still comes from ember-power-calendar's
-    // own clock, which this does not move.
+    // is set; read once, like `start` and `end`. Absent, it is today by
+    // `service:power-calendar`, which also marks today on a day cell. An app
+    // that reads "today" from a clock of its own overrides that service (see
+    // `power-calendar-service.gts`), so the month shown, the today marker and
+    // any bound computed from "today" agree.
     defaultCenter?: Date;
     disabled?: boolean;
     end?: Date | null;
@@ -40,6 +42,7 @@ const dateFormat = 'MMM yyyy';
 const weekdayFormat = 'min';
 
 export default class DateRangePicker extends Component<Signature> {
+  @service('power-calendar') declare powerCalendar: PowerCalendarService;
   @tracked leftCenter: Date;
   @tracked rightCenter: Date;
 
@@ -77,7 +80,7 @@ export default class DateRangePicker extends Component<Signature> {
     // If neither is provided, use the default center (today unless given)
     // and the month after it
     else {
-      const center = this.args.defaultCenter ?? new Date();
+      const center = this.args.defaultCenter ?? this.powerCalendar.getDate();
       this.leftCenter = center;
       this.rightCenter = add(center, 1, 'month');
     }

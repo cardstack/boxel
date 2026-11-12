@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/ai-batch-estimate.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -409,6 +409,91 @@ between OpenRouter's answer and the insert leaves no event at all, and
 nothing yet reconciles OpenRouter's batch list against `ai_batches` (ADR 030
 remediation).
 
+## The daily storage charge
+
+An automation's payer pays, every day the automation is switched on, for the
+files its runs created and for their rows in the index. Each day is priced at
+what existed that day:
+
+```
+file GB-months     = Σ over the days charged of that day's file bytes  / BYTES_PER_GB / (1461/48)
+database GB-months = Σ over the days charged of that day's index bytes / BYTES_PER_GB / (1461/48)
+credits = (file GB-months × PRICING_USD_PER_FILE_STORAGE_GB_MONTH
+           + database GB-months × PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH)
+          × PRICING_MARGIN × 1000, rounded up
+```
+
+A month is the average month the estimate uses, 1461/48 days. The charge is
+written through the worker's `MeteredCharges` (see "Writing a metered
+charge").
+
+**Which files.** `automation_files` holds one row per file an automation's
+run created: the realm's URL and the file's path, spelled as
+`realm_file_meta` spells them, plus the automation and the run. The realm
+writes the row in the same transaction as the file's `realm_file_meta` row,
+when the run's batch commits (`WriteOptions.automationRun`), whether or not
+the realm keeps history. A file the run only changed was created by someone
+else and has no row. Every write forgets the files it deletes or creates in
+that transaction before recording any, so a deleted file stops counting,
+and a file someone else later creates at the same path is not the
+automation's. Deleting a realm deletes its rows.
+
+**How big.** `getAutomationStorage` (`packages/runtime-common/automation-files.ts`)
+measures an automation's files that still exist. A file's bytes are
+`realm_file_meta.content_size`, the size its write recorded. Its index bytes
+are every `boxel_index` and `prerendered_html` row for it, as Postgres stores
+them (`pg_column_size`): a card's `instance` rows and every file's `file`
+rows. The console's storage view reads the same function.
+
+**When.** A cron on every worker manager enqueues an
+`automation-storage-charge` job at 00:15 UTC. `AUTOMATION_STORAGE_CHARGE_CRON_SCHEDULE`
+and `AUTOMATION_STORAGE_CHARGE_CRON_TZ` override the schedule. The job names
+the UTC day that just ended and runs at the system tier. A backlog only
+delays it, since the day is in its arguments. Its task
+(`packages/runtime-common/automation-storage-charge.ts`) handles every
+automation switched on before that day ended, whatever its state. A paused
+automation still exists, so it is still charged. Removing an automation
+deletes its `automations` row, so it is no longer measured or charged.
+
+**A day is measured once.** For each automation, the job first records the
+day's measurement as an `automation_storage_days` row (automation, day, file
+bytes, index bytes). The first measurement of a day stands. A day the job
+never measured, because no job ran for it, is not charged.
+
+**A charge covers a span of days.** A day of a few small files costs a tiny
+fraction of a credit, and credits are whole numbers. So a charge covers every
+measured day since the automation's last storage charge, or since it was
+switched on when that is later, and is written only once those days cost at
+least one whole credit. Until then the job counts the automation as
+`under-a-credit` and charges nothing. The charge is named by the span's last
+day (`charge_day`), so an automation is charged at most once a day, and a
+duplicate or retried job finds the day already charged and writes nothing.
+Its usage rows hold the GB-months of every day it covers. Switching an
+automation on again after removing it starts a new span on that day.
+
+The job logs one line per day on the worker: `automation-storage-charge
+through <day>: N charged, N not charged, N failed`. It logs each failure with
+its automation. A failed automation is charged by the next day's job, whose
+span still starts after its last charge.
+
+```sql
+-- The files an automation's runs created that still exist, with their sizes.
+SELECT f.file_path, f.run_id, m.content_size
+FROM automation_files f
+JOIN realm_file_meta m ON m.realm_url = f.realm_url AND m.file_path = f.file_path
+WHERE f.automation_id = '<automation identifier>'
+ORDER BY f.file_path;
+
+-- An automation's daily measurements, and the charge each day fell under.
+SELECT d.day, d.file_bytes, d.index_bytes,
+  (SELECT MIN(l.charge_day) FROM credits_ledger l
+   WHERE l.charge_kind = 'storage' AND l.run_id IS NULL AND l.batch_id IS NULL
+     AND l.automation_id = d.automation_id AND l.charge_day >= d.day) AS charged_by
+FROM automation_storage_days d
+WHERE d.automation_id = '<automation identifier>'
+ORDER BY d.day DESC;
+```
+
 ## Reading the ledger by kind and reference
 
 Every charge lands in `credits_ledger`, one row per credit bucket it draws
@@ -484,7 +569,7 @@ FROM credits_ledger
 WHERE user_id = '<users.id>' AND credit_type IN ('plan_allowance_used', 'extra_credit_used', 'daily_credit_used')
 GROUP BY 1;
 
--- An automation's storage charges, a day at a time.
+-- An automation's storage charges, each named by the last day it covers.
 SELECT charge_day, -SUM(credit_amount) AS credits, MAX(pricing_version) AS pricing_version
 FROM credits_ledger
 WHERE charge_kind = 'storage' AND automation_id = '<automation identifier>'
