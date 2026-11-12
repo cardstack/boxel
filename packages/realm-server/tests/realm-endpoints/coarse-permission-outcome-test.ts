@@ -540,6 +540,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.OctetStream} /.*`,
           `DELETE ${SupportedMimeType.CardSource} /.+`,
           `POST ${SupportedMimeType.JSONAPI} /_atomic`,
+          `GET ${SupportedMimeType.JSON} /_automation-status`,
           `GET ${SupportedMimeType.Permissions} /_permissions`,
           `PATCH ${SupportedMimeType.Permissions} /_permissions`,
           `POST ${SupportedMimeType.JSON} /_cancel-indexing-job`,

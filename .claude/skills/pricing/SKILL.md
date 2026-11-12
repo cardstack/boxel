@@ -160,6 +160,62 @@ parameter and task wiring in the infra repo before the release that reads it
 reaches an environment, since a process without it fails its check. Name it
 for the resource and unit it prices, not a provider's product (ADR 029 §1.2).
 
+## Writing a metered charge
+
+A charge is priced and written by `chargeMetered`
+(`packages/realm-server/lib/metered-charge.ts`): it sums each unit's
+quantity times its rate (`meteredUsd`), times the margin, at
+`CREDITS_PER_USD` (`exactMeteredCredits`), and rounds up to a whole credit
+(`meteredCredits`), so any usage costs at least one credit and a charge never
+rounds down to less than its cost. It resolves the payer's `users` row, holds
+their `withUserCostLock` and calls `spendCredits` with the usage and the
+pricing version.
+
+Worker tasks run in runtime-common, which reads no prices, so a worker hands
+its tasks `TaskArgs.meteredCharges` (`MeteredCharges`, in
+`packages/runtime-common/metered-charges.ts`), built by `meteredChargesFor`
+over the process's current prices. A worker whose pricing check failed
+answers `no-prices` and writes nothing. `MeteredUsage` is keyed by the usage
+unit names below, and `BYTES_PER_GB` lives beside it, so a task measures GB
+the way the prices quote them.
+
+## The indexing a run's writes cause
+
+A run's writes land as one commit (`WriteOptions.runId` on the realm's write),
+and the indexing that commit causes is one `run_indexing` charge, to the run's
+identity (`automation_runs.acts_as`), referencing the run:
+
+```
+usage   = worker_process_seconds: each job's wall clock, start of task to its charge
+          prerender_tab_seconds:  each render's renderElapsedMs, summed over the renders
+                                  the jobs make (not the definition-cache fills, which
+                                  the shared definition lookup makes)
+credits = ceil((worker seconds × workerProcessUsdPerSecond
+               + tab seconds × prerenderTabUsdPerSecond) × PRICING_MARGIN × 1000)
+```
+
+Each job the commit causes carries the run and what the jobs before it
+measured (`runIndexing` in its args): the index pass, a second pass when the
+commit writes a module before instances, and the `prerender_html` job that
+renders what the passes invalidated. The last of them adds its own
+measurement and charges the total, through `chargeRunIndexing`
+(`packages/runtime-common/run-indexing.ts`). So the charge is written when
+the commit's indexing is done, after the run has finished. The charge covers
+re-indexing and re-rendering the cards that depend on what the run wrote. A
+run's jobs never coalesce with another write's, and work another writer
+causes is left out: when another writer's pass commits while the run's pass
+runs, the rounds the run's pass spends checking and re-visiting what that
+commit left stale are not measured (their worker time is the pass's
+`validationMs`, and renders started in them are not metered), and the
+follow-up pass a commit enqueues for what is still stale after them carries
+no run. The one exception is a URL such a round adds to the run's render
+set: the run's render job renders it, and that render is counted.
+
+A run that wrote nothing, or only files identical to what was stored, causes
+no index pass and no charge. Only commits made with a run id are charged;
+no other write's indexing is. The `indexing-diagnostics`
+skill shows how to find a run's jobs and what each measured.
+
 ## The estimate shown at switch-on
 
 Switching an automation on shows what it is likely to cost a month and asks
@@ -177,7 +233,7 @@ network = response-bytes cap / 2^30 × PRICING_USD_PER_DOWNLOADED_GB × PRICING_
 AI      = the run's AI spending cap, already in credits, no margin
 ```
 
-A GB is 2^30 bytes (`BYTES_PER_GB` in `pricing.ts`), the unit AWS bills
+A GB is 2^30 bytes (`BYTES_PER_GB` in `runtime-common/metered-charges.ts`), the unit AWS bills
 transfer and storage in. Every per-GB quantity in this skill, `downloaded_gb`
 and the GB-months included, is in that unit, and code that meters bytes into
 GB divides by `BYTES_PER_GB` rather than its own constant, or the estimate and
