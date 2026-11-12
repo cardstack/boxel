@@ -5,27 +5,18 @@ import {
   formatUpdatedTime,
 } from '@cardstack/host/lib/workspace-actions';
 
-// Both formatters are relative to "now", so every case is expressed as an
-// offset from a fixed instant that stands in for the current time.
-const NOW = new Date('2026-08-03T12:00:00.000Z');
+import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
+
+// Both formatters measure from the clock seam, which the suite pins, so every
+// case is expressed as an offset from the pinned instant.
+const NOW = new Date(TEST_CLOCK_INSTANT);
 
 function ago(amount: number, unit: 'sec' | 'min' | 'hr' | 'day'): Date {
   const perUnit = { sec: 1e3, min: 60e3, hr: 3600e3, day: 86400e3 };
   return new Date(NOW.getTime() - amount * perUnit[unit]);
 }
 
-module('Unit | workspace timestamp labels', function (hooks) {
-  let realNow: () => number;
-
-  hooks.beforeEach(function () {
-    realNow = Date.now;
-    Date.now = () => NOW.getTime();
-  });
-
-  hooks.afterEach(function () {
-    Date.now = realNow;
-  });
-
+module('Unit | workspace timestamp labels', function () {
   module('formatRelativeTime', function () {
     test('renders a clock time under a minute old', function (assert) {
       // Local-time formatting, so assert the shape rather than a fixed hour.

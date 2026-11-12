@@ -9,6 +9,7 @@ scope:
   - packages/realm-server/lib/metered-charge.ts
   - packages/runtime-common/metered-charges.ts
   - packages/runtime-common/run-indexing.ts
+  - packages/runtime-common/**/automation-storage-charge.ts
   - packages/runtime-common/**/*pricing*
   - packages/runtime-common/tasks/daily-credit-grant.ts
   - packages/realm-server/handlers/handle-add-credit.ts

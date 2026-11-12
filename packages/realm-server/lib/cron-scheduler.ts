@@ -26,6 +26,12 @@ import {
   createMediaCacheGcCronJob,
 } from './media-cache-gc-config.ts';
 import { enqueueScopedCssGc } from '../scripts/scoped-css-gc.ts';
+import { enqueueAutomationStorageCharge } from '../scripts/automation-storage-charge.ts';
+import {
+  AUTOMATION_STORAGE_CHARGE_CRON_SCHEDULE,
+  AUTOMATION_STORAGE_CHARGE_CRON_TZ,
+  createAutomationStorageChargeCronJob,
+} from './automation-storage-charge-config.ts';
 import {
   SCOPED_CSS_GC_CRON_SCHEDULE,
   SCOPED_CSS_GC_CRON_TZ,
@@ -61,6 +67,8 @@ export function startCronJobs(): void {
   if (scopedCssGcJob) {
     jobs.push(scopedCssGcJob);
   }
+
+  jobs.push(startAutomationStorageChargeCron());
 }
 
 export function stopCronJobs(): void {
@@ -177,6 +185,29 @@ function startScopedCssGcCron(): CronJob | undefined {
   job.start();
   log.info(
     `scoped-css-gc cron scheduled for ${SCOPED_CSS_GC_CRON_SCHEDULE} ${SCOPED_CSS_GC_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startAutomationStorageChargeCron(): CronJob {
+  let job = createAutomationStorageChargeCronJob(
+    async () => {
+      try {
+        await enqueueAutomationStorageCharge();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error(
+          'automation-storage-charge cron failed to enqueue job',
+          error,
+        );
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `automation-storage-charge cron scheduled for ${AUTOMATION_STORAGE_CHARGE_CRON_SCHEDULE} ${AUTOMATION_STORAGE_CHARGE_CRON_TZ}`,
   );
   return job;
 }
