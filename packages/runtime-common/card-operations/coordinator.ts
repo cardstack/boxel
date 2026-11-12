@@ -1,9 +1,11 @@
+import { isStagedFile } from '../staged-file.ts';
 import {
   computeContentHash,
   computeContentHashFromRanges,
 } from '../content-hash.ts';
 import { isCardError } from '../error.ts';
 import type { PolicyAuditOptions } from '../policy-share-audit.ts';
+import type { WriteContext } from '../realm-history.ts';
 import { isCardResource } from '../resource-types.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -172,7 +174,7 @@ export interface BatchCore {
   // is held, which it is.
   commitUnlocked(
     batch: {
-      writes?: Map<LocalPath, string | Uint8Array | SplicedSource>;
+      writes?: Map<LocalPath, StagedContent>;
       appends?: Map<LocalPath, string | Uint8Array>;
       deletes?: LocalPath[];
     },
@@ -185,6 +187,8 @@ export interface BatchCore {
       // See `CommitBatchOptions.broadcastRealmEvents`.
       broadcastRealmEvents?: boolean;
       initiatingUser?: string | null;
+      // See `CommitBatchOptions.history`.
+      history?: WriteContext;
       // See `CommitBatchOptions.policyAudit`.
       policyAudit?: PolicyAuditOptions;
       // Where the commit stamps the stages it owns. The durable write, the
@@ -261,6 +265,16 @@ export interface CommitBatchOptions {
   // The invoking actor, as the identity `actor()` resolves to. It comes from
   // the authenticated realm user the request's permission check verified.
   actor?: string;
+  // How the batch was made, recorded on its one change event: the channel
+  // the request's headers name, the AI agent, room and tool call, the push it
+  // belongs to. A caller that commits a batch of its own names the batch's
+  // intent here: a revert passes its `revert` intent, so realm-historian
+  // records the batch as its own revision. Such a caller makes its own
+  // `commitBatch` call. An entry in an `/_operations` envelope cannot name an
+  // intent: the envelope's one batch carries only what its request's headers
+  // say. It never decides the author, which is the actor (see
+  // `WriteOptions.history`).
+  history?: WriteContext;
   // Who a batch by a caller who isn't signed in is made as, once its entries
   // are admitted: the acting user the first admitted write's grant names
   // (see `AnonymousRequest`). It is who the batch's index job is initiated
@@ -346,9 +360,9 @@ export interface CommitBatchOptions {
   // would describe a payload it did not send, and the remedy — name the card
   // by URL, or stop claiming a realm for it — is one only the caller can
   // apply. The card endpoints ask for `leave`, because a `POST` or `PATCH`
-  // carrying such a payload has always stored the card with the edge empty
-  // and answered success: serialization records a link it cannot resolve as
-  // an explicit null.
+  // carrying such a payload has always answered success: serialization
+  // records a link it cannot resolve as an explicit null, and a `PATCH` keeps
+  // a `linksTo` the card already stores there.
   foreignSideLoadLink?: 'refuse' | 'leave';
   // Whether the realm names the cards this batch mints. By default a card the
   // caller names with a `lid` is stored under that id, which is what lets a
@@ -812,7 +826,9 @@ function compose(
     // batch started from — which is what a `baseVersion` on it is compared
     // against.
     storedMeta.set(write.path, {
-      contentHash: computeContentHash(write.content),
+      contentHash: isStagedFile(write.content)
+        ? write.content.contentHash
+        : computeContentHash(write.content),
     });
     if (typeof write.content !== 'string') {
       // Bytes rather than text: the content a file was replaced with, which
@@ -2295,7 +2311,7 @@ async function commitStaged(
   // bytes the first staged — so the file is written once holding the last of
   // them rather than twice, and a removal that follows drops the write
   // entirely instead of writing bytes the same commit then unlinks.
-  let writes = new Map<LocalPath, string | Uint8Array | SplicedSource>();
+  let writes = new Map<LocalPath, StagedContent>();
   // Everything bound for the end of a file, joined in batch order so two
   // entries adding a line to one log both land, in the order they were sent,
   // and the file is reached once.
@@ -2461,6 +2477,7 @@ async function commitStaged(
       // it, the same as every other write path, so a reader draining its own
       // writes waits for this job rather than returning ahead of it.
       initiatingUser: opts.actor ?? opts.actingUser?.() ?? null,
+      ...(opts.history ? { history: opts.history } : {}),
       ...(opts.policyAudit ? { policyAudit: opts.policyAudit } : {}),
       ...(stageCursor ? { stageCursor } : {}),
       onDurable: releaseLocks,

@@ -143,4 +143,11 @@ export async function removeRealmDatabaseArtifacts(args: {
   // Its bindings too, for the same reason: a realm later made at the same URL
   // starts with no operation approved. A share's bindings went with the share.
   await q([`DELETE FROM key_bindings WHERE realm_url =`, param(realmURL)]);
+  // Its automation runs too: a run is found by its automation, trigger and
+  // slot, so a realm later made at the same URL would otherwise find the
+  // deleted realm's finished run where it means to start a new one.
+  await q([`DELETE FROM automation_runs WHERE realm =`, param(realmURL)]);
+  // And its switched-on automations, so a realm later made at the same URL
+  // starts with none on, paid for by no one.
+  await q([`DELETE FROM automations WHERE realm =`, param(realmURL)]);
 }

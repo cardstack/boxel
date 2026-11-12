@@ -82,6 +82,7 @@ const BOOTSTRAP = `
         invoke: (path, name, payload) =>
           call('operations.invoke', [path, name, payload]),
         invokeBatchOperation: (entries) => call('operations.invokeBatchOperation', [entries]),
+        capabilities: (checks) => call('operations.capabilities', [checks]),
       }),
       entries: Object.freeze({
         search: (query, options) =>
@@ -114,6 +115,8 @@ const BOOTSTRAP = `
         read: (url, options) => call('web.read', [url, options ?? {}]),
       }),
       resolve: (request) => call('resolve', [request ?? {}]),
+      transform: (input, source, options) =>
+        call('transform', [input ?? null, source, options ?? {}]),
       activity: (details) => call('activity', [details ?? {}]),
       plan: (steps) => call('plan', [steps]),
       ask: (request) => call('ask', [request ?? {}]),
@@ -122,6 +125,7 @@ const BOOTSTRAP = `
       enableSkills: (ids) => call('room.enableSkills', [ids]),
       disableSkills: (ids) => call('room.disableSkills', [ids]),
       setModel: (model) => call('room.setModel', [model]),
+      credits: () => call('room.credits', []),
     });
     delete globalThis.__realmURL;
   })();
@@ -179,6 +183,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'cards.update',
   'operations.invoke',
   'operations.invokeBatchOperation',
+  'operations.capabilities',
   'entries.search',
   'fs.delete',
   'capture',
@@ -188,6 +193,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'room.enableSkills',
   'room.disableSkills',
   'room.setModel',
+  'room.credits',
   'ui.switchSubmode',
   'ui.openFile',
   'ui.previewFormat',
@@ -199,6 +205,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'web.search',
   'web.read',
   'resolve',
+  'transform',
   'activity',
   'plan',
   'ask',

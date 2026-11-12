@@ -136,6 +136,32 @@ aws --profile $PROFILE logs filter-log-events \
 
 The output is a histogram: how many snapshots saw each `(totalTabs, totalPending)` combination. The mode is the typical state during the peak; the max `totalTabs` is what the pool actually grew to.
 
+#### Per-process memory — which part of the task holds it?
+
+CloudWatch's `MemoryUtilization` is the whole task. The prerender server's own lines split it. `prerender-heap` (every 30 s) is Node. `prerender-chrome-memory` (every 30 s) is Chrome's processes, read from `/proc`, plus the container's cgroup:
+
+```
+prerender-chrome-memory chromeBrowserMB=… chromeGpuMB=… chromeOtherMB=… chromeRenderers=N chromeRendererSumMB=… chromeRendererMaxMB=… chromeRendererMaxPid=… cgroupWorkingSetMB=… cgroupAnonMB=… cgroupFileMB=…
+```
+
+Every `visit prerendered` line carries the same fields, plus the visit's tab heap (`tabJsHeapUsedMB`, `tabDomHeapMB`, `tabBuffersMB`).
+
+```sh
+aws --profile $PROFILE logs filter-log-events \
+  --log-group-name ecs-boxel-prerender-server-${ENV} \
+  --start-time $(date -u -d "$PEAK_START" +%s)000 \
+  --end-time $(date -u -d "$PEAK_END" +%s)000 \
+  --filter-pattern '"prerender-chrome-memory"' \
+  --query 'events[*].message' --output text \
+| tr '\t' '\n' | grep -oE 'chromeRenderers=[0-9]+ chromeRendererSumMB=[0-9]+ chromeRendererMaxMB=[0-9]+|cgroupWorkingSetMB=[0-9]+'
+```
+
+Read it before resizing:
+
+- **Memory spread across renderers** (`chromeRendererSumMB` grows with `chromeRenderers`, and `chromeRendererMaxMB` stays near the per-tab average) is pool size. The marginal cost below applies, and sizing is the right lever.
+- **One renderer holding most of it** (`chromeRendererMaxMB` near `cgroupWorkingSetMB`) is a single render, usually one that also logs a render timeout with `mainThreadResponsive=false`. More memory only moves that card's ceiling. Chase it with the `indexing-diagnostics` skill (Mode I) instead of resizing.
+- **A large `cgroupFileMB` beside small process figures** is shared memory Chrome passes between its processes. It lives in the temp dir under `--disable-dev-shm-usage`, so it counts against the task but belongs to no single process.
+
 #### DB — render-timing distribution
 
 Confirms whether the system held under pressure (zero render-timeouts) or was at the edge. Queries the `boxel_index.diagnostics` JSONB column via the `aws-access` skill's port-forward + `claude_readonly_user` flow.
@@ -192,7 +218,7 @@ marginal_per_tab = (peak_memory_bytes − baseline_bytes) / N_at_peak
 
 `peak_memory_bytes` = `peak_memory_pct × allocated_memory`. If the task is 8 GB and peak is 98 %, that's 7.84 GB used.
 
-`baseline_bytes` is approximately 2 GB on the current boxel prerender. If the workload changes substantially (Node major version, Chrome major version, observability instrumentation), measure it directly: tail the prerender server logs at idle and capture the `RSS` of the process after standby refresh has settled and the pool has 0 active tabs.
+`baseline_bytes` is approximately 2 GB on the current boxel prerender. If the workload changes substantially (Node major version, Chrome major version, observability instrumentation), measure it directly: at idle, after standby refresh has settled and the pool has 0 active tabs, add `prerender-heap`'s `rssMB` to `prerender-chrome-memory`'s `chromeBrowserMB + chromeGpuMB + chromeOtherMB`. `chromeRendererSumMB / chromeRenderers` at a busy moment is a direct reading of `marginal_per_tab` to check the derivation below against.
 
 `N_at_peak` is the max `totalTabs` from the queue-snapshot histogram above. Note that this includes standby (the standby contexts also pin memory).
 
@@ -227,7 +253,7 @@ Now apply the projection plus operational judgment:
 - **`MIN`** — the idle floor. From queue-snapshot data: what's the typical low-load tab count? Pick `MIN` slightly above that so the manager's warm-vacancy routing has cached affinities to route to. On boxel today, MIN=2 covers the steady state.
 - **`MAX`** — the any-priority burst ceiling. From queue-snapshot data: what's the observed peak `totalTabs`? Pick `MAX` at-or-just-above that. Values above the 80 % memory line are undersized; values below the observed peak will throttle under existing workload. On boxel today, MAX=6 covers all 7 d observations.
 - **`HP_MAX`** — the high-priority ceiling. Should give priority-10 traffic 1–2 reserved expansion slots beyond `MAX` for the worst-case "low-priority workload has saturated MAX, user comes in" scenario. Has to fit memory at 80 %. On boxel today, HP_MAX=8 fits 16 GB at 55 %.
-- **`HIGH_PRIORITY_THRESHOLD`** — the bar that unlocks HP tier. Above the system-initiated tiers (`systemInitiatedPriority = 1`, `systemInitiatedPrerenderHtmlPriority = 0`), at-or-below the user-initiated tiers (`userInitiatedPriority = 10`, `userInitiatedPrerenderHtmlPriority = 9`). Default 5 leaves room for an intermediate priority level (e.g. live-refresh) to also benefit without re-tuning.
+- **`HIGH_PRIORITY_THRESHOLD`** — the bar that unlocks HP tier. Set it to `userInitiatedPrerenderHtmlPriority` (9), so that only user-initiated work (`userInitiatedPriority = 10`, `userInitiatedPrerenderHtmlPriority = 9`) can reach the reserved headroom. A run-command job carries its job priority into the render, so any value from 2 to 5 also admits automation runs (`automationInitiatedPriority = 5`) to the HP tier. Scheduled work then competes for the slots held for a user who is waiting, and `HP_MAX` has to cover every concurrent automation run as well as the user burst. The system-initiated tiers (`systemInitiatedPriority = 1`, `systemInitiatedPrerenderHtmlPriority = 0`) sit below any sensible value.
 - **`IDLE_CONTRACTION_MS`** — the hysteresis window. Long enough to absorb sequential render trains from a typical fan-out; short enough that contraction reaches MIN within a few minutes. Default 60 000 ms (1 minute) works for most workloads.
 - **`SHARED_CONTEXT_CAP`** — the absolute LRU cap on cached BrowserContexts. Default `HP_MAX × 1.5` keeps the LRU stable across expansion + contraction cycles.
 
@@ -309,7 +335,7 @@ The 16 GB resize is what makes HP_MAX=8 safe. On the existing 8 GB task, MAX=6 i
 - `MIN = 2`
 - `MAX = 6`
 - `HP_MAX = 8`
-- `HIGH_PRIORITY_THRESHOLD = 5`
+- `HIGH_PRIORITY_THRESHOLD = 9`
 - `IDLE_CONTRACTION_MS = 60_000`
 - `SHARED_CONTEXT_CAP = 12` (HP_MAX × 1.5)
 
@@ -324,6 +350,7 @@ The 16 GB resize is what makes HP_MAX=8 safe. On the existing 8 GB task, MAX=6 i
 - **CPU < memory in priority for prerender.** If you're tempted to bump CPU, check the simultaneous-rendering count first. Almost always you can shrink CPU and grow memory for net wins.
 - **80 % is the working ceiling, not the maximum.** Reserve the last 20 % for LRU growth, standby refresh churn, runtime-exception capture buffers, and Node V8 retained-heap overhead.
 - **`HP_MAX` is the memory invariant, not `MAX`.** The pool can reach `HP_MAX` under any priority-10 burst; size memory for that worst case.
+- **Every automation worker is a tab of demand.** An automation run is a run-command job, and a run-command job runs its command in a prerender tab (`prerenderer.runCommand`) at its job priority, holding the tab until the command returns. The workers that can claim one are the automation lane (`--automationCount`, `WORKER_AUTOMATION_PRIORITY_COUNT`) and the all-priority lane, and the automation lane also claims user-initiated work when no run is due. Raising `WORKER_AUTOMATION_PRIORITY_COUNT` raises the number of tabs the workers can hold at once across every worker task that the prerender manager routes here. Re-run the projection in Step 3 with that many more concurrent tabs before raising it. On the worker side, the worker manager divides its own task memory across every worker it starts, automation workers included (`workerHeapLimitMb`), so each added worker also shrinks every other worker's heap in that task.
 - **Validate with a synthetic stress test before promoting to prod.** Concurrent catalog full reindex + simulated user reindex; pass criteria: high-priority p95 `tabQueueMs` < 1 s, memory peak < 80 %, CPU peak < 80 %, zero 145 s timeouts.
 
 ## Where to set the values

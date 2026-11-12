@@ -335,14 +335,20 @@ export const BUNDLED_BASE_MODULES: Record<
   'components/countdown': () => import('@cardstack/base/components/countdown'),
   'components/expiration-warning': () =>
     import('@cardstack/base/components/expiration-warning'),
+  'components/icon-button': () =>
+    import('@cardstack/base/components/icon-button'),
   'components/password-managers': () =>
     import('@cardstack/base/components/password-managers'),
   'components/resize-handle': () =>
     import('@cardstack/base/components/resize-handle'),
+  'components/sidebar': () => import('@cardstack/base/components/sidebar'),
   'components/time-ago': () => import('@cardstack/base/components/time-ago'),
   'components/timeline': () => import('@cardstack/base/components/timeline'),
+  'components/tooltip': () => import('@cardstack/base/components/tooltip'),
   'frontmatter-field': () => import('@cardstack/base/frontmatter-field'),
   'helpers/country': () => import('@cardstack/base/helpers/country'),
+  'helpers/currency-symbols': () =>
+    import('@cardstack/base/helpers/currency-symbols'),
   'join-the-community': () => import('@cardstack/base/join-the-community'),
   'llm-model': () => import('@cardstack/base/llm-model'),
   'matrix-event': () => import('@cardstack/base/matrix-event'),

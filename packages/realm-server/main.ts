@@ -29,6 +29,7 @@ import * as Sentry from '@sentry/node';
 import {
   PgAdapter,
   PgQueuePublisher,
+  PostgresChangeJournal,
   SessionProbe,
   startSessionSampling,
 } from '@cardstack/postgres';
@@ -38,7 +39,6 @@ import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
-import { PostgresChangeJournal } from './lib/change-journal.ts';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
@@ -52,7 +52,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler.ts';
-import { realmDiskPath } from './lib/realm-disk-path.ts';
+import { mountableRealmDiskPath } from './lib/realm-disk-path.ts';
 import { findRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
@@ -94,6 +94,7 @@ import {
   matrixServerNameFromEnv,
 } from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
+import { checkPricingAtStartup } from './lib/pricing.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -108,6 +109,7 @@ writeSync(
 );
 
 let log = logger('main');
+checkPricingAtStartup('realm-server');
 const runtimeMetadataFile = process.env.TEST_HARNESS_REALM_SERVER_METADATA_FILE;
 
 function writeRuntimeMetadata(payload: unknown): void {
@@ -140,6 +142,16 @@ if (!GRAFANA_SECRET) {
     `The GRAFANA_SECRET environment variable is not set. Please make sure this env var has a value`,
   );
   process.exit(-1);
+}
+
+// The Grafana whose signing keys verify operator actions proxied through it.
+// Local and test runs work without it, so its absence is a warning, not a
+// startup failure.
+const GRAFANA_URL = process.env.GRAFANA_URL || undefined;
+if (!GRAFANA_URL) {
+  console.warn(
+    `GRAFANA_URL is not set: operator actions proxied through Grafana will be refused`,
+  );
 }
 
 const MATRIX_URL = process.env.MATRIX_URL;
@@ -746,8 +758,9 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
   // One journal shared by every realm this server mounts. Each write appends
   // its change event through it, on the write's own transaction, for the
-  // realms whose recording is on. `REALM_HISTORY_JOURNAL=off` is the kill
-  // switch: no realm gets a journal, so no write touches it.
+  // realms whose recording is on, and create-realm appends a new realm's
+  // `scan` event through it. `REALM_HISTORY_JOURNAL=off` is the kill switch:
+  // no realm and no create-realm gets a journal, so nothing touches it.
   let changeJournal =
     process.env.REALM_HISTORY_JOURNAL === 'off'
       ? undefined
@@ -861,17 +874,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // has finished its first reconcile pass.
   reconciler = new RealmRegistryReconciler({
     dbAdapter,
-    bootstrapOrder: hrefs.map(([url]) => url),
+    bootstrapRealms: hrefs.map(([url]) => url),
     prepareRealmFromRow: (row: RealmRegistryRow) => {
       // The directory `mayNameRealmPolicy` reads a realm's `realm.json` from
       // to decide whether to mount it, so the file it reads is the one the
       // mounted realm reads its policy pointer from.
-      let diskPath = realmDiskPath(row, realmsRootPath);
-      if (!diskPath) {
-        throw new Error(
-          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
-        );
-      }
+      let diskPath = mountableRealmDiskPath(row, realmsRootPath);
       const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
       let publishedMount = publishedMountOf(row);
       let fullIndexOnStartup = resolveFullIndexOnStartup(
@@ -971,12 +979,14 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     realms,
     reconciler,
     mediaCacheAdapter,
+    ...(changeJournal ? { changeJournal } : {}),
     virtualNetwork,
     matrixClient,
     realmsRootPath,
     realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
     realmSecretSeed: REALM_SECRET_SEED,
     grafanaSecret: GRAFANA_SECRET,
+    grafanaURL: GRAFANA_URL,
     aiBotDelegationSecret: AI_BOT_DELEGATION_SECRET,
     matrixInviteCheckSecret: MATRIX_INVITE_CHECK_SECRET,
     dbAdapter,

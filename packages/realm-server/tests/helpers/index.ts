@@ -73,7 +73,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler.ts';
-import { realmDiskPath } from '../../lib/realm-disk-path.ts';
+import { mountableRealmDiskPath } from '../../lib/realm-disk-path.ts';
 import {
   installSecretsKeyring,
   LocalKeyProvider,
@@ -570,12 +570,10 @@ export function makeTestReconciler(
         );
       }
       // Resolved as the production mount resolves it.
-      let diskPath = realmDiskPath(row, dynamicMountDeps.realmsRootPath);
-      if (!diskPath) {
-        throw new Error(
-          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
-        );
-      }
+      let diskPath = mountableRealmDiskPath(
+        row,
+        dynamicMountDeps.realmsRootPath,
+      );
       let adapter = new NodeAdapter(
         diskPath,
         dynamicMountDeps.enableFileWatcher,
@@ -1958,6 +1956,10 @@ export async function runTestRealmServer({
     domainsForPublishedRealms,
     definitionLookup,
     prerenderer,
+    // The server shares the realm's journal, as the production server shares
+    // one with every realm it mounts, so a realm it creates appends its
+    // `scan` event there.
+    ...(history ? { changeJournal: history.journal } : {}),
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
     ...(secureOriginURL ? { secureOriginURL } : {}),
     ...(googleSignIn ? { googleSignIn } : {}),

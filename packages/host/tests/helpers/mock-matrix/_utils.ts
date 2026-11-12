@@ -121,9 +121,14 @@ export class MockUtils {
     this.testState.opts!.dashboardStateReadError = error;
   };
 
+  // Makes the server's writes of the dashboard key fail, until cleared.
+  setDashboardStateWriteError = (error?: Error) => {
+    this.testState.opts!.dashboardStateWriteError = error;
+  };
+
   // Holds the sync echoes of this tab's dashboard writes until
   // releaseDashboardEcho delivers them, so a test can deliver them late or
-  // out of order.
+  // out of order. Opening a card writes the key too, the first time.
   holdDashboardEchoes = () => {
     this.testState.opts!.heldDashboardEchoes = [];
   };

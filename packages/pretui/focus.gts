@@ -464,3 +464,49 @@ export const OWNS_KEYS =
  *  presses that start inside one. */
 export const OWNS_PRESS =
   'a[href], button, input, select, textarea, label, summary, [role="button"], [role="link"], [contenteditable=""], [contenteditable="true"]';
+
+/** What keeps its own clicks inside a clickable container: every control the
+ * kit treats as owning a press, plus native media, embeds and inline
+ * overlays. The walk runs over the composed path, so the controls inside an
+ * open shadow root (media-chrome's buttons) count too. */
+const KEEPS_ITS_CLICK = [
+  OWNS_PRESS,
+  '[tabindex]',
+  'video',
+  'audio',
+  'iframe',
+  'object',
+  'embed',
+  'dialog',
+  '[popover]',
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+  '[role="tooltip"]',
+  '[role="slider"]',
+].join(', ');
+
+/** Whether a click inside `root` is the content's own rather than a click on
+ * `root` itself: it landed on, or inside, something that keeps its click, or
+ * it ends a text selection that began in `root`. The walk stops at `root`, so
+ * a `tabindex` on `root` itself does not count. A container that acts on a
+ * click (a selectable card, an activatable row) returns early when this is
+ * true, so its content stays fully interactive. */
+export function clickIsContents(event: Event, root: HTMLElement): boolean {
+  for (let node of event.composedPath()) {
+    if (node === root) {
+      break;
+    }
+    let el = node as Element;
+    if (typeof el.matches === 'function' && el.matches(KEEPS_ITS_CLICK)) {
+      return true;
+    }
+  }
+  let selection = root.ownerDocument.getSelection();
+  return (
+    !!selection &&
+    !selection.isCollapsed &&
+    !!selection.anchorNode &&
+    root.contains(selection.anchorNode)
+  );
+}

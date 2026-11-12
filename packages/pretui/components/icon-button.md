@@ -32,7 +32,7 @@ Element: HTMLButtonElement | HTMLAnchorElement
 
 The default treatment is `neutral` / `outlined`, not `primary` / `accent` — icon buttons are almost always secondary chrome, and defaulting the other way would fill toolbars with accent fills.
 
-Sizing is one rule: `padding: 0; width: var(--pretui-button-h, 2.24em)`, the same em-scaled metric Button uses for its height, so the result is a square at every `@size`; at `xs` the width takes the same 24px floor as Button's height. The rules sit in `@layer PretComposite`, above Button's `PretComponent` layer, so they win by layer order rather than by stylesheet order. The rule targets `.pretui-iconbtn` directly: the class and this template's scope attribute both ride `...attributes` onto the composed Button's root element, so a plain compound selector is what matches it.
+Sizing is one rule: `padding: 0; width: var(--pretui-row-h, var(--pretui-button-h, 2.24em))`, the same metric Button uses for its height (the row height a LayoutControl sets first, then `--pretui-button-h`, then `2.24em`), so the result is a square at every `@size`; at `xs` the width takes the same 24px floor as Button's height. The rules sit in `@layer PretComposite`, above Button's `PretComponent` layer, so they win by layer order rather than by stylesheet order. The rule targets `.pretui-iconbtn` directly: the class and this template's scope attribute both ride `...attributes` onto the composed Button's root element, so a plain compound selector is what matches it.
 
 ## Prior art
 
@@ -48,7 +48,7 @@ Pretui's improvement over both is small and real: **the label cannot be forgotte
 - **`@round` is `@shape='pill'`.** The button is square, so a pill is a circle.
 - **boxel-ui's `@kind` becomes `@tone` × `@appearance`.** `primary-dark` and `text-only` have no single equivalent; pick the pair that matches.
 - **`@size` is Pret UI's scale** (`xs`…`xl`, em-scaled), not boxel-ui's fixed `extra-small` / `small` / `base` / `tall` / `touch` heights.
-- **No `--boxel-icon-button-*` knobs.** Size follows `--pretui-button-h`, and color follows Button's tone and appearance tokens.
+- **No `--boxel-icon-button-*` knobs.** Size follows `--pretui-row-h`, then `--pretui-button-h`, and color follows Button's tone and appearance tokens.
 - **`title` is set**, so a sighted mouse user gets a native tooltip that boxel-ui's IconButton does not show. With `@tooltip`, a styled **Tooltip** shows in its place.
 
 ## Accessibility
@@ -74,4 +74,4 @@ Gaps and cautions:
 
 Everything comes from **Button**: `--pretui-tone`/`--pretui-tone-on` per tone, `--radius`, `--hover`, `--border`, `--pretui-edge-highlight`, `--shadow-ink-mid` — plus `--pretui-button-h` (default `2.24em`) for the square width.
 
-A theme retuning `--pretui-button-h` moves IconButton's width and Button's height together, so icon buttons stay square.
+A theme retuning `--pretui-button-h`, or a LayoutControl setting `--pretui-row-h`, moves IconButton's width and Button's height together, so icon buttons stay square.

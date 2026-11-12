@@ -108,6 +108,9 @@ jobs:
               - 'packages/boxel-ui/**'
               - 'packages/bxl/**'
               - 'packages/host/**'
+              # The realm server, the worker and realm-historian run this
+              # package's code, and the deploy migrates its schema.
+              - 'packages/postgres/**'
               - 'packages/realm-historian/**'
               - 'packages/realm-server/**'
               - 'packages/secure-origin/**'
@@ -609,8 +612,23 @@ jobs:
       # The browser revision must match the CLI's own @playwright/test pin,
       # so install through the CLI's nested playwright binary.
       - name: Install Chromium
+        # Browser only, with no apt step. `--with-deps` apt-installs Chromium's
+        # shared libraries, xvfb and fonts (CJK and emoji among them) from
+        # Ubuntu's archive mirror, so a mirror outage fails the job before any
+        # test runs. The runner image already carries the libraries Chromium
+        # links against. Some tests type non-Latin text or mount <audio> and
+        # <video>, but none asserts on how a glyph is drawn; a test that comes
+        # to depend on the fonts would see tofu glyphs, not a browser that
+        # cannot launch, and would want a cached deps install.
+        #
+        # `boxel test` launches headless with no channel, which Playwright
+        # resolves to `chromium-headless-shell`, the one binary `--only-shell`
+        # fetches. The download comes from Playwright's CDN; a healthy one
+        # takes well under a minute, and the ceiling makes a wedged download
+        # fail the job instead of holding a runner.
+        timeout-minutes: 5
         run: |
-          "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --with-deps chromium
+          "$(npm root -g)/@cardstack/boxel-cli/node_modules/.bin/playwright" install --only-shell chromium
       # `boxel test` caps a whole QUnit run at 300 s, so each job keeps a
       # deterministic slice of the test files, balanced by the per-file run
       # times in scripts/test-timings.json (refresh them with
@@ -705,7 +723,11 @@ jobs:
       # The browser revision must match the CLI's own @playwright/test pin,
       # so install through the CLI's playwright binary.
       - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        # Headless shell only, with no apt step, for the reasons the Pret UI
+        # job's "Install Chromium" step gives. The ceiling bounds the download
+        # from Playwright's CDN so a wedged one fails the job.
+        timeout-minutes: 5
+        run: pnpm exec playwright install --only-shell chromium
         working-directory: packages/boxel-cli
       - name: Run tests
         run: node ../boxel-cli/bin/boxel.js test realm

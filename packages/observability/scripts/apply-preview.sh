@@ -23,7 +23,7 @@
 #
 # Prereqs (staging/production): AWS creds with ssm:GetParameter on
 # /<env>/grafana/grafanactl_token plus the same SSM paths apply.sh reads
-# (REALM_SERVER_URL, GRAFANA_SECRET). Local mode uses admin/admin against
+# (REALM_SERVER_URL). Local mode uses admin/admin against
 # the docker-compose Grafana — no AWS creds needed.
 set -eo pipefail
 

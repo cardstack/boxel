@@ -136,6 +136,35 @@ module('Acceptance | prerender | file-extract', function (hooks) {
             }
           }
         `,
+          'filedef-stream-retry.gts': `
+          import { FileDef as BaseFileDef } from '@cardstack/base/file-api';
+          const attempts = [];
+          async function failAfterPrefix(getStream) {
+            const stream = await getStream();
+            if (!(stream instanceof ReadableStream)) throw new Error('Expected stream');
+            attempts.push(stream);
+            await stream.getReader().read();
+            throw new Error('Try parent after reading a prefix');
+          }
+          export class RetryParent extends BaseFileDef {
+            static async extractAttributes(url, getStream) {
+              const stream = await getStream();
+              if (!(stream instanceof ReadableStream)) throw new Error('Retry was buffered');
+              if (attempts.includes(stream)) throw new Error('Retry reused a consumed stream');
+              const reader = stream.getReader();
+              const { value } = await reader.read();
+              await reader.cancel();
+              reader.releaseLock();
+              return { url, name: 'streamed-retry', contentType: 'text/plain', retryCount: attempts.length, firstByte: value[0] };
+            }
+          }
+          export class RetryMiddle extends RetryParent {
+            static async extractAttributes(url, getStream) { return failAfterPrefix(getStream); }
+          }
+          export class RetryLeaf extends RetryMiddle {
+            static async extractAttributes(url, getStream) { return failAfterPrefix(getStream); }
+          }
+        `,
           'filedef-missing.gts': `
           export const NotFileDef = {};
         `,
@@ -362,6 +391,27 @@ boxel:
     assert.strictEqual(result.status, 'ready');
     assert.strictEqual(result.searchDoc?.name, 'sample.txt');
     assert.ok(result.error, 'includes the original extraction error');
+  });
+
+  test('each extraction fallback receives a fresh stream after a partial read', async function (assert) {
+    await visit(
+      renderPath(fileURL('sample.txt'), {
+        fileExtract: true,
+        fileDefCodeRef: fileDefCodeRef('filedef-stream-retry', 'RetryLeaf'),
+      }),
+    );
+    let result = await captureFileExtractResult('ready');
+    assert.strictEqual(result.searchDoc?.name, 'streamed-retry');
+    assert.strictEqual(
+      result.searchDoc?.retryCount,
+      2,
+      'both fallbacks stayed streamed',
+    );
+    assert.strictEqual(
+      result.searchDoc?.firstByte,
+      104,
+      'each stream starts at the first byte',
+    );
   });
 
   test('falls back and marks mismatch when the extractor signals a content mismatch', async function (assert) {

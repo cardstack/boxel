@@ -190,6 +190,7 @@ jobs:
       platforms: "linux/amd64,linux/arm64"
       build-args: |
         "realm_server_script=scripts/start-${{ inputs.environment }}.sh"
+        "boxel_commit=${{ github.sha }}"
 
   build-prerender-manager:
     name: Build prerender manager Docker image

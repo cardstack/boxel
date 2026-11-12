@@ -2,7 +2,7 @@
 
 A toolbar row that fits its controls to its own width. Each control sits in a `Slot` that lists the forms it can take, richest first (a search field → a shorter field → an icon). The bar measures its inline size with a `ResizeObserver`, picks one form per slot, and renders only that form. A slot whose last form is `'menu'` can fold into one ⋯ overflow menu at the end of the row.
 
-It lays out and chooses; it paints nothing. It is not a page header (no title slot) and not a selection bar. `ActionBar` also has an overflow menu, but it keeps a fixed number of actions visible (`maxVisible`); LayoutControl decides from the measured width, and steps each control down through its own forms before folding anything.
+It lays out and chooses; it paints nothing. It is not a page header (no title slot) and not a selection bar. `ActionBar` also has an overflow menu, but it keeps a fixed number of actions visible (`maxVisible`); LayoutControl decides from the measured width, and steps every control down through its own non-menu forms before folding anything.
 
 ## The contract
 
@@ -14,28 +14,31 @@ It lays out and chooses; it paints nothing. It is not a page header (no title sl
 </LayoutControl>
 ```
 
-| Arg              | On   | Meaning                                                                                                                                                                                                                                                          |
-| ---------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@label`         | bar  | accessible name of the `role='group'` row (default `'Toolbar'`)                                                                                                                                                                                                  |
-| `@controlHeight` | bar  | any CSS length; sets `--control-height` on the bar so every control shares one height (default: inherited from an ancestor, else the row's own height)                                                                                                           |
-| `@overflowLabel` | bar  | name of the ⋯ button (default `'More options'`)                                                                                                                                                                                                                  |
-| `@id`            | Slot | stable id, unique in the bar                                                                                                                                                                                                                                     |
-| `@priority`      | Slot | 0 = most important; larger steps down sooner (default 1)                                                                                                                                                                                                         |
-| `@forms`         | Slot | `{ name, minWidth }[]`, richest first. **`minWidth` is in rem**, converted with the root font size, so the chooser follows the user's text size                                                                                                                  |
-| `@label`         | Slot | the slot's name: its ⋯ section heading, the `'@label…'` item text, and the fallback panel's accessible name (default `@id`)                                                                                                                                      |
-| `@menuItems`     | Slot | native ⋯ items while folded: `LayoutControlChoice[]` — `{ label, value, checked?, group?, onSelect? }`, a `menuitemradio` when `group` is set, a `menuitemcheckbox` otherwise — or kit `MenuEntry[]` (passed through, the earlier shape). Grouped under `@label` |
-| `@pinned`        | Slot | never folds into ⋯ (its `'menu'` form is ignored); still steps down its other forms. The primary action is `@pinned`                                                                                                                                             |
+| Arg              | On   | Meaning                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@label`         | bar  | accessible name of the `role='group'` row (default `'Toolbar'`)                                                                                                                                                                                                                                                                                                           |
+| `@controlHeight` | bar  | any CSS length; sets `--pretui-row-h` (and `--control-height`) on the bar so every control that reads it shares one height (default: none set, so each control keeps its own height, unless an ancestor sets one)                                                                                                                                                         |
+| `@overflowLabel` | bar  | name of the ⋯ button (default `'More options'`)                                                                                                                                                                                                                                                                                                                           |
+| `@id`            | Slot | stable id, unique in the bar                                                                                                                                                                                                                                                                                                                                              |
+| `@priority`      | Slot | 0 = most important; larger steps down sooner (default 1)                                                                                                                                                                                                                                                                                                                  |
+| `@forms`         | Slot | `{ name, minWidth }[]`, richest first. **`minWidth` is in rem**, converted with the root font size, so the chooser follows the user's text size                                                                                                                                                                                                                           |
+| `@label`         | Slot | the slot's name: its ⋯ section heading, the `'@label…'` item text, and the fallback panel's accessible name (default `@id`)                                                                                                                                                                                                                                               |
+| `@menuItems`     | Slot | native ⋯ items while folded: `LayoutControlChoice[]` — `{ label, value, checked?, group?, onSelect? }`, a `menuitemradio` when `group` is set, a `menuitemcheckbox` otherwise — or kit `MenuEntry[]` (passed through, the earlier shape). Grouped under `@label`                                                                                                          |
+| `@align`         | Slot | `'end'` puts the slot in the row's end group (default: the start group). The first end-aligned slot in the row takes the free space before it, and ⋯ follows it, so a row is a start group and an end group and nothing is centred. Without an end-aligned slot, ⋯ takes the free space itself and sits at the end. Apps need no `margin-inline-start: auto` of their own |
+| `@pinned`        | Slot | never folds into ⋯ (its `'menu'` form is ignored); still steps down its other forms. The primary action is `@pinned`                                                                                                                                                                                                                                                      |
 
 **Folding.** A folded slot with `@menuItems` becomes a labelled section of native items in the ⋯ `Menu`. Without them it becomes one item, `'@label…'`; choosing it opens the slot's richest form in the kit `Popover`, anchored to ⋯. When the viewport is under 40rem (640px) it opens in the kit `Drawer` at `placement='bottom'` (a bottom sheet) instead. Focus moves to the first control inside; Esc or a click outside closes it, and focus returns to ⋯. The content is the slot's own block, moved with `in-element`, so it keeps its state and wiring. A resize that unfolds the slot closes the panel.
 
 **LayoutControl-ready checklist.** A component is ready to sit in a slot when:
 
-- [ ] it reads `--control-height`, or LayoutControl maps it onto a height knob the component has (see Equal height);
+- [ ] it reads `--pretui-row-h`, or LayoutControl maps it onto a height knob the component has (see Equal height);
 - [ ] it has a `@display`-style arg for its smaller forms, or the author swaps components per form in the slot block;
 - [ ] every form the slot lists declares a `minWidth` (rem) that covers its widest real content;
 - [ ] it supplies `@menuItems` when it should fold to native menu items; otherwise it folds to the `'@label…'` fallback, so its full form must work inside a popover or sheet;
 - [ ] the primary action is `@pinned`.
 - [ ] a kit `Menu` placed in a slot wires its trigger: `<:trigger as |open toggle|>` and `{{on 'click' toggle}}` on the button. Menu adds `aria-haspopup`, `aria-expanded` and arrow keys, but does not open on click by itself.
+
+With a filter slot `[chips, menu]` and a pinned action `[label, short, icon]`, narrowing goes: action label, action short, action icon, and only then the chips fold into ⋯.
 
 The bar yields `{ Slot, overflow: { active, folded } }`; each Slot yields the chosen form name.
 
@@ -43,11 +46,10 @@ The bar yields `{ Slot, overflow: { active, folded } }`; each Slot yields the ch
 
 1. Every slot starts at its richest form.
 2. While the summed `minWidth`s plus gaps (plus the ⋯ button, once anything folds) exceed the width, step one slot down.
-3. The slot that steps is the one that has stepped least, so the row degrades evenly.
-4. Ties go to the least important slot (highest `@priority`, then the later one).
-5. `'menu'` is the last form: the slot leaves the row and its `@menuItems` appear in the ⋯ menu.
-6. A slot without a `'menu'` form, or with `@pinned`, never folds. That is how the primary action stays visible.
-7. Stepping down happens at the exact width; stepping back up needs 16px of spare room (`HYSTERESIS_PX`), so a boundary width doesn't flicker.
+3. Phase one, shorter forms: only non-menu steps are taken. The slot that steps is the one that has stepped least, so the row degrades evenly. Ties go to the least important slot (highest `@priority`, then the later one).
+4. Phase two, folding: only once every slot is at its last non-menu form and the row still overflows, slots fold, least important first (highest `@priority`, then the later one). `'menu'` is the last form: the slot leaves the row and its `@menuItems` appear in the ⋯ menu.
+5. A slot without a `'menu'` form, or with `@pinned`, never folds. That is how the primary action stays visible.
+6. Stepping down happens at the exact width; stepping back up needs 16px of spare room (`HYSTERESIS_PX`), so a boundary width doesn't flicker.
 
 **Measuring: the row never wraps.** The bar is `flex-wrap: nowrap` and each slot `white-space: nowrap`. A declared `minWidth` is only the first guess. One animation frame after each choice renders, the bar measures every visible slot (the boxes of its rendered children, since a slot is `display: contents`):
 
@@ -59,9 +61,7 @@ Real widths (from renders that fit) are cached per slot + form and replace `minW
 
 Only the chosen form is rendered. Alternatives are never hidden with CSS, so they never reach the accessibility tree or the tab order.
 
-An `icon` form must still do the job of the richer form. For a search slot that means `<SearchInput @display='collapsed' />`: the square opens the field over the row with focus in it, and Escape or leaving collapses it and returns focus. Hold the text in your own state (`@value` + `@onInput`), since changing form remounts the control and an uncontrolled field would lose it.
-
-Limit: the opened field is 15rem wide (`--pretui-search-open-w`) and lies over the row, but the row clips its overflow. When the bar is narrower than the field, or the slot sits within 15rem of the bar's inline end, the field is partly or wholly clipped.
+An `icon` form must still do the job of the richer form. For a search slot that means `<SearchInput @display='collapsed' />`: the square opens the field across the whole row, from its start, with focus in it (`--pretui-search-open-w` overrides the width), and Escape or leaving collapses it and returns focus. Hold the text in your own state (`@value` + `@onInput`), since changing form remounts the control and an uncontrolled field would lose it.
 
 ## Prior art
 
@@ -84,16 +84,17 @@ What we leave out: no per-item `isHidden` breakpoints, no CSS `display: none` va
 
 ## Theming
 
-| Knob                                                              | Default                      | Effect                                                      |
-| ----------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------- |
-| `--control-height` (via `@controlHeight`, or set by any ancestor) | unset (the row's own height) | row min-height; also the ⋯ button size the chooser reserves |
-| `--pretui-lc-gap`                                                 | `var(--boxel-sp-xs)`         | gap between slots; the chooser reads the computed gap       |
+| Knob                                                              | Default                                            | Effect                                                      |
+| ----------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
+| `--control-height` (via `@controlHeight`, or set by any ancestor) | the theme's `2.5rem` in a themed scope, else unset | row min-height; also the ⋯ button size the chooser reserves |
+| `--pretui-row-h` (via `@controlHeight`)                           | unset                                              | the height a control that reads it takes                    |
+| `--pretui-lc-gap`                                                 | `var(--boxel-sp-xs)`                               | gap between slots; the chooser reads the computed gap       |
 
-**Equal height.** LayoutControl sets `--control-height` on its root. Each child maps it onto its own height knob from the bar's style block (custom properties inherit, so no `:deep()` or `!important`). Today no Pret UI control has such a knob, so children keep their own height and render their default form; the bar still measures them, so the chooser works either way.
+**Equal height.** `@controlHeight` sets `--pretui-row-h` on the root, beside `--control-height`. The theme defines `--control-height` for every themed scope, so a control reads the row-scoped `--pretui-row-h`, which only a sized row sets. SegmentedControl, FilterChips, Select, Button, IconButton, Input and the typed inputs built on it (not Textarea), SearchInput and InputGroup take it as the first link of their height chain (`--pretui-row-h`, then the control's own knob, then its default), so custom properties inherit and no `:deep()` or `!important` is needed. A control that doesn't read it keeps its own height and renders its default form; the bar still measures it, so the chooser works either way. The contract is for single-line controls.
 
 A control joins by adding, in its own component:
 
-- a height knob read as `var(--pretui-<name>-h, <current height>)`, and the matching line in `.pretui-lc` here;
+- its height read as `var(--pretui-row-h, var(--pretui-<name>-h, <current height>))`, so a sized row sets it;
 - a `@display` arg for its smaller forms (so a slot block can pass `@display={{form}}` instead of swapping components);
 - a documented `minWidth` (rem) per form.
 

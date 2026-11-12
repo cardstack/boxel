@@ -1009,6 +1009,9 @@ export class Autocomplete extends Component<AutocompleteSignature> {
         }
         /* a square 1.5rem target: Button's xs height, with no inline padding */
         .pretui-ac-clear {
+          /* the field doesn't take the row height, so its clear button
+             doesn't either */
+          --pretui-row-h: initial;
           --pretui-button-px: 0;
           --pretui-button-min-w: 1.5rem;
 

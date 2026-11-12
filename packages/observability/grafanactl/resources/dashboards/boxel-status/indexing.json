@@ -79,7 +79,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "System-wide operator action: queue a full reindex across every realm. The button disables itself while a `full-reindex` orchestration job is already pending or running. Per-realm reindex moved to the Realms dashboard. Click POSTs with `Authorization: Bearer ${grafana_secret}` (substituted from SSM at apply time, CS-10929).",
+        "description": "System-wide operator action: queue a full reindex across every realm. The button disables itself while a `full-reindex` orchestration job is already pending or running. Per-realm reindex moved to the Realms dashboard. Click POSTs through the Grafana datasource proxy, which adds the realm-server credential.",
         "fieldConfig": {
           "defaults": {},
           "overrides": []
@@ -139,7 +139,7 @@
               "variant": "destructive",
               "value": "",
               "disableIf": "return Number((context.panel.elements.find(function(e){return e.id==='pending_full_reindex';})||{}).value || 0) > 0;",
-              "customCode": "const pendingFull = Number((context.panel.elements.find(function(e){return e.id==='pending_full_reindex';})||{}).value || 0);\nif (pendingFull > 0) {\n  context.grafana.notifyWarning(['Full reindex blocked', 'A full-reindex job is already pending or running. Wait for it to finish before triggering another.']);\n  return;\n}\nif (!window.confirm('Reindex ALL realms?\\n\\nThis kicks off an indexing job for every realm on the server and can take a long time.')) { return; }\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-full-reindex', { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Full reindex queued', 'Started reindex of all realms.']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Full reindex failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Full reindex failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+              "customCode": "const pendingFull = Number((context.panel.elements.find(function(e){return e.id==='pending_full_reindex';})||{}).value || 0);\nif (pendingFull > 0) {\n  context.grafana.notifyWarning(['Full reindex blocked', 'A full-reindex job is already pending or running. Wait for it to finish before triggering another.']);\n  return;\n}\nif (!window.confirm('Reindex ALL realms?\\n\\nThis kicks off an indexing job for every realm on the server and can take a long time.')) { return; }\n(async () => {\ntry {\n  const r = await fetch('/api/datasources/proxy/uid/realm-server-operator/_grafana-full-reindex', { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Full reindex queued', 'Started reindex of all realms.']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Full reindex failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Full reindex failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
             }
           ],
           "initial": {
@@ -736,19 +736,14 @@
                       "title": "Delete reservation ${__value.raw}",
                       "fetch": {
                         "method": "POST",
-                        "url": "${realm_server}_grafana-complete-job",
+                        "url": "/api/datasources/proxy/uid/realm-server-operator/_grafana-complete-job",
                         "queryParams": [
                           [
                             "reservation_id",
                             "${__value.raw}"
                           ]
                         ],
-                        "headers": [
-                          [
-                            "Authorization",
-                            "Bearer ${grafana_secret}"
-                          ]
-                        ],
+                        "headers": [],
                         "body": ""
                       },
                       "confirmation": "Cancel running reservation ${__value.raw}? The worker will stop processing it.",
@@ -1082,19 +1077,14 @@
                       "title": "Delete job ${__value.raw}",
                       "fetch": {
                         "method": "POST",
-                        "url": "${realm_server}_grafana-complete-job",
+                        "url": "/api/datasources/proxy/uid/realm-server-operator/_grafana-complete-job",
                         "queryParams": [
                           [
                             "job_id",
                             "${__value.raw}"
                           ]
                         ],
-                        "headers": [
-                          [
-                            "Authorization",
-                            "Bearer ${grafana_secret}"
-                          ]
-                        ],
+                        "headers": [],
                         "body": ""
                       },
                       "confirmation": "Delete waiting job ${__value.raw}? This marks it as completed without running it.",
@@ -1684,20 +1674,6 @@
           "skipUrlSync": false,
           "sort": 1,
           "type": "query"
-        },
-        {
-          "hide": 2,
-          "name": "realm_server",
-          "query": "__REALM_SERVER_URL__",
-          "skipUrlSync": false,
-          "type": "constant"
-        },
-        {
-          "hide": 2,
-          "name": "grafana_secret",
-          "query": "REPLACE_AT_APPLY_TIME",
-          "skipUrlSync": true,
-          "type": "constant"
         },
         {
           "current": {

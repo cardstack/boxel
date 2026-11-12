@@ -246,16 +246,18 @@ function toDate(value?: Date | string | number | null): Date | undefined {
   return new Date(value);
 }
 
+const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});
+
 export function shortDate(value?: Date | string | number | null): string {
   let d = toDate(value);
   if (!d || Number.isNaN(d.getTime())) {
     return '';
   }
-  return d.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
+  return SHORT_DATE_FORMAT.format(d);
 }
 
 export function relativeDate(value?: Date | string | number | null): string {

@@ -2,6 +2,7 @@
 import Component from '@glimmer/component';
 import { nowDate } from '@cardstack/runtime-common';
 import { ABS_FMT } from '../internal/reading-extras';
+import { cachedRelativeTimeFormat } from '../internal/intl-cache';
 
 // ── RelativeTime ─────────────────────────────────────────────────────────
 // webawesome relative-time semantics, realm-adapted: the phrase is computed
@@ -56,7 +57,7 @@ export class RelativeTime extends Component<RelativeTimeSignature> {
     let match = RELATIVE_UNITS.find((u) => Math.abs(diff) >= u.ms);
     let unit: Intl.RelativeTimeFormatUnit = match?.unit ?? 'second';
     let ms = match?.ms ?? 1e3;
-    let fmt = new Intl.RelativeTimeFormat('en-US', {
+    let fmt = cachedRelativeTimeFormat('en-US', {
       style: this.args.format ?? 'long',
       numeric: this.args.numeric ?? 'auto',
     });

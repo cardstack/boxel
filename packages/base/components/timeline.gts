@@ -2,6 +2,13 @@ import GlimmerComponent from '@glimmer/component';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 
+const EVENT_TIME_FORMAT = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
 interface TimelineConfiguration {
   timelineOptions?: {
     eventName?: string;
@@ -49,12 +56,7 @@ export class Timeline extends GlimmerComponent<TimelineSignature> {
     if (!this.eventTime) return 'Pending';
 
     try {
-      return new Date(this.eventTime).toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      });
+      return EVENT_TIME_FORMAT.format(new Date(this.eventTime));
     } catch {
       return 'Pending';
     }

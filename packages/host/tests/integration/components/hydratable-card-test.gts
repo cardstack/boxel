@@ -560,6 +560,83 @@ module('Integration | Component | hydratable-card', function (hooks) {
     }
   });
 
+  // A host tab that indexes its own realm sets the render context only while
+  // one index render runs, scoped to the element that render mounts into. A
+  // row elsewhere in the tab is someone's view, so it resolves off
+  // residency even when it first renders while that index render is running.
+  test('residency — a row outside a host tab’s scoped index render is live', async function (assert) {
+    await storeService.get(HASSAN);
+    assert.ok(
+      isCardInstance(storeService.peek(HASSAN)),
+      'precondition: resident',
+    );
+
+    let inert = htmlComponent(INERT_HTML);
+    (globalThis as any).__boxelRenderContext = true;
+    (globalThis as any).__boxelRenderContextScope = 'test-index-render';
+    try {
+      await render(
+        <template>
+          <div id='test-index-render'></div>
+          <TestContext>
+            <HydratableCard
+              @cardId={{HASSAN}}
+              @component={{inert}}
+              @mode='hover'
+            />
+          </TestContext>
+        </template>,
+      );
+
+      assert
+        .dom('[data-test-live-card]')
+        .hasText('Live: Hassan', 'the row outside the index render is live');
+      assert
+        .dom('[data-test-inert-card]')
+        .doesNotExist('the inert HTML is gone');
+    } finally {
+      (globalThis as any).__boxelRenderContext = undefined;
+      (globalThis as any).__boxelRenderContextScope = undefined;
+    }
+  });
+
+  test('residency — a row inside a host tab’s scoped index render stays inert', async function (assert) {
+    await storeService.get(HASSAN);
+    assert.ok(
+      isCardInstance(storeService.peek(HASSAN)),
+      'precondition: resident',
+    );
+
+    let inert = htmlComponent(INERT_HTML);
+    (globalThis as any).__boxelRenderContext = true;
+    (globalThis as any).__boxelRenderContextScope = 'test-index-render';
+    try {
+      await render(
+        <template>
+          <div id='test-index-render'>
+            <TestContext>
+              <HydratableCard
+                @cardId={{HASSAN}}
+                @component={{inert}}
+                @mode='hover'
+              />
+            </TestContext>
+          </div>
+        </template>,
+      );
+
+      assert
+        .dom('[data-test-inert-card]')
+        .exists('the row the index render mounts stays inert');
+      assert
+        .dom('[data-test-live-card]')
+        .doesNotExist('residency does not flip it to live');
+    } finally {
+      (globalThis as any).__boxelRenderContext = undefined;
+      (globalThis as any).__boxelRenderContextScope = undefined;
+    }
+  });
+
   // `none` is an explicit "stay inert" opt-out (e.g. create-listing-modal's
   // deliberately cheap prerendered atoms), so residency must NOT flip a `none`
   // row to live even when its instance is already resident — residency only

@@ -371,13 +371,30 @@ class _FileResource extends Resource<Args> {
       event.eventName !== 'index' ||
       // we wait specifically for the index complete event ("incremental") so
       // that the subsequent index read retrieves the latest contents of the file
-      event.indexType !== 'incremental' ||
-      !Array.isArray(event.invalidations)
+      event.indexType !== 'incremental'
     ) {
       return;
     }
-
-    let { invalidations } = event as { invalidations: string[] };
+    let normalize = (raw: string) =>
+      raw.endsWith('.json') ? raw.replace(/\.json$/, '') : raw;
+    // A pass too large to list what it invalidated may have changed any file
+    // of the realm, so it names this resource's file — this subscription is
+    // to the file's own realm — unless the file is a module and the event's
+    // list of invalidated modules leaves it out.
+    let invalidations: string[];
+    if ('realmWide' in event) {
+      let url = normalize(this._url);
+      let unchangedModule =
+        hasExecutableExtension(url) &&
+        event.invalidatedModules !== undefined &&
+        !event.invalidatedModules.includes(url);
+      invalidations = unchangedModule ? [] : [url];
+    } else {
+      invalidations = event.invalidations;
+    }
+    if (!Array.isArray(invalidations)) {
+      return;
+    }
     // Match invalidations against both the currently-requested URL
     // (`this._url`, kept current by `modify`) and the URL the resource
     // most recently loaded into `innerState`. Both are necessary
@@ -389,8 +406,6 @@ class _FileResource extends Resource<Args> {
     //     innerState still holds a prior file), `innerState.url` is
     //     stale; only `_url` reflects what the caller is asking for —
     //     dropping the event here would orphan the new file.
-    let normalize = (raw: string) =>
-      raw.endsWith('.json') ? raw.replace(/\.json$/, '') : raw;
     let candidates = new Set<string>([normalize(this._url)]);
     if (this.innerState.state !== 'loading') {
       candidates.add(normalize(this.innerState.url));

@@ -3,7 +3,9 @@
 // password, and the password set. They hold no state and send nothing; the
 // caller decides what each control does. The new password fields are the
 // caller's, in the reset form's block: on the secure origin its own inputs, in
-// the app the credential frame.
+// the app the credential frame. Each form's method is `post`, as a password
+// manager expects, so a submit the caller doesn't prevent puts no field in the
+// address.
 //
 // Each control carries the test attributes of both origins' suites.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
@@ -33,6 +35,7 @@ export const ForgotPasswordForm: TemplateOnlyComponent<ForgotPasswordFormSignatu
   <template>
     <form
       class='step'
+      method='post'
       novalidate
       data-test-forgot-password-form
       {{on 'submit' @onSubmit}}
@@ -171,6 +174,7 @@ export const ResetPasswordForm: TemplateOnlyComponent<ResetPasswordFormSignature
   <template>
     <form
       class='step'
+      method='post'
       novalidate
       data-test-reset-password-form
       {{on 'submit' @onSubmit}}

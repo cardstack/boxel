@@ -1798,10 +1798,17 @@ module('Acceptance | operator mode tests', function (hooks) {
     let signOuts: { method: string; url: string; user?: string }[];
     let answerSignOut: (response: Response) => void;
     let signOutAnswered: Promise<Response>;
+    let answered: boolean;
 
     hooks.beforeEach(function () {
       signOuts = [];
-      signOutAnswered = new Promise((resolve) => (answerSignOut = resolve));
+      answered = false;
+      signOutAnswered = new Promise((resolve) => {
+        answerSignOut = (response) => {
+          answered = true;
+          resolve(response);
+        };
+      });
       getService('network').mount(
         async (req: Request) => {
           if (new URL(req.url).pathname !== '/_secure-sessions') {
@@ -1819,21 +1826,43 @@ module('Acceptance | operator mode tests', function (hooks) {
       );
     });
 
-    async function signOut() {
+    // The request to the realm server is a test waiter until it is answered,
+    // so a test that fails before answering it would leave every later test's
+    // `settled()` (this one's teardown included) waiting on it forever.
+    // Answering an already-answered request does nothing.
+    hooks.afterEach(function () {
+      if (!answered) {
+        console.warn(
+          `[signing-out] the test ended without answering the realm server's sign-out; answering it in teardown. Sign-out requests seen: ${JSON.stringify(
+            signOuts.map(({ method, url }) => ({ method, url })),
+          )}; signed-out landing shown: ${
+            document
+              .querySelector('[data-test-secure-sign-in-landing]')
+              ?.getAttribute('data-test-secure-sign-in-landing') ?? 'no'
+          }`,
+        );
+      }
+      answerSignOut(new Response(null, { status: 204 }));
+    });
+
+    // Resolves once the signed-out landing shows. `signedOut` is wrapped in an
+    // object so awaiting this doesn't also await the click: `click` waits for
+    // every test waiter to settle, and the request to the realm server is one
+    // of them until it is answered.
+    async function signOut(): Promise<{ signedOut: Promise<void> }> {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
       });
       await click('[data-test-profile-icon-button]');
-      // Not awaited: `click` waits for every test waiter to settle, and the
-      // request to the realm server is one of them until it is answered.
       let signedOut = click('[data-test-signout-button]');
       await waitFor('[data-test-secure-sign-in-landing]');
-      return signedOut;
+      return { signedOut };
     }
 
     test("signing out signs the user's secure windows out", async function (assert) {
       answerSignOut(new Response(null, { status: 204 }));
-      await signOut();
+      let { signedOut } = await signOut();
+      await signedOut;
 
       assert.dom('[data-test-secure-sign-in-landing]').exists();
       assert.strictEqual(signOuts.length, 1, 'the realm server is told once');
@@ -1852,8 +1881,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     test("a realm server that doesn't answer doesn't hold sign-out up", async function (assert) {
-      let signedOut = signOut();
-      await waitFor('[data-test-secure-sign-in-landing]');
+      let { signedOut } = await signOut();
 
       assert.dom('[data-test-secure-sign-in-landing]').exists('signed out');
       assert.strictEqual(signOuts.length, 1, 'still waiting on the server');
@@ -1863,7 +1891,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     test("a realm server that refuses doesn't stop sign-out", async function (assert) {
       answerSignOut(new Response('unavailable', { status: 503 }));
-      await signOut();
+      let { signedOut } = await signOut();
+      await signedOut;
 
       assert.dom('[data-test-secure-sign-in-landing]').exists('signed out');
       assert.strictEqual(signOuts.length, 1);

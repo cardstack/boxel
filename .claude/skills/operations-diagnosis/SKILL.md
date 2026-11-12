@@ -1,6 +1,50 @@
 ---
 name: operations-diagnosis
-description: Diagnose card operations and operation-permission policies from the realm server's own telemetry — the `boxel:operations` JSON channel (`kind`-less execution lines for operations that run a program, plus `policy-decision`, `policy-search-scope`, `policy-compile`, `policy-snapshot-read`, `capability-check` and `anonymous-request` records), the `realm:policy` warnings (compile issues, predicate faults, withheld policy-card visits), and the "Policy Decisions" Grafana dashboard (uid `boxel-policy-decisions`). Answers the operator's questions rather than a realm owner's: (1) why did this user get a 403, a 404 or a 500 from a realm that has a policy — go from the account's Matrix id to its decision lines and read `outcome` / `reason` / `rules` / `grants` / `coarseDeclined`; (2) "the policy denied" versus "the policy couldn't be evaluated" — a predicate that threw answers a caller who may read the realm 500 `policy-predicate-failed` but a caller who may not the same 404 a denial gets, so the `realm:policy` fault line is the only signal there, and an unloadable policy is 500 `internal-error` for everyone; (3) which realm's policy won't compile and why, by issue code and `rules[i].grants[j].where` path, including a withheld index visit of the policy card that reads as `policy-card-unloadable` until the card is visited again; (4) a realm's grants stopped working after an edit — which `policy-compile` lines show the new policy live, read against the moment the policy card's index visit committed (each task revalidates in the background on that index move, and within five seconds for a move it never hears about); (5) is the gate being reached more than it should be — gate reach, with capability checks excluded on `kind`; (6) which grant is matching everything — allows by grant, unconditional grants, distinct actors per grant, contributing search-lane grants; (7) a federated search silently missing a realm's rows (`meta.incomplete`, search-lane `failed`); (8) an operation built on `transform` refused, slow, or reading nothing — `outcome` / `code` / `totalMs` / read counts by tier / `missing[]`. Carries the traps: the `realm:policy` channel name is not on the line, no policy record carries a correlation id, a policy refusal never writes an execution line, a pending gate record is not a backlog, and the fault warning is rate-limited. For staging/prod this layers on `aws-access` and `tail-logs`; hand off to `policy-performance` for what a policy costs, to the boxel-skills `realm-policy-authoring` skill (explain / validate) for why one actor may or may not act on one card, to `realm-auth` for a 401 or 403 the gate never saw, and to `indexing-diagnostics` when the policy card itself won't index. Use when someone reports an unexpected 403/404/500 from a realm with a policy, a policy edit that "didn't take", a realm whose grants stopped working, a policy suspected of being wider than intended, a search missing rows, a transform operation that refused or read stale values, or a caller who isn't signed in being refused, rate-limited (429) or blocked — a public form whose submissions fail, a visitor told "Too many requests", spam to trace to its addresses and block.
+description: >-
+  Diagnose card operations and operation-permission policies from the realm
+  server's own telemetry — the `boxel:operations` JSON channel (`kind`-less
+  execution lines for operations that run a program, plus `policy-decision`,
+  `policy-search-scope`, `policy-compile`, `policy-snapshot-read`,
+  `capability-check` and `anonymous-request` records), the `realm:policy`
+  warnings (compile issues, predicate faults, withheld policy-card visits),
+  and the "Policy Decisions" Grafana dashboard (uid `boxel-policy-decisions`).
+  Answers the operator's questions rather than a realm owner's: (1) why did
+  this user get a 403, a 404 or a 500 from a realm that has a policy — go from
+  the account's Matrix id to its decision lines and read `outcome` / `reason`
+  / `rules` / `grants` / `coarseDeclined`; (2) "the policy denied" versus "the
+  policy couldn't be evaluated" — a predicate that threw answers a caller who
+  may read the realm 500 `policy-predicate-failed` but a caller who may not
+  the same 404 a denial gets, so the `realm:policy` fault line is the only
+  signal there, and an unloadable policy is 500 `internal-error` for everyone;
+  (3) which realm's policy won't compile and why, by issue code and
+  `rules[i].grants[j].where` path, including a withheld index visit of the
+  policy card that reads as `policy-card-unloadable` until the card is visited
+  again; (4) a realm's grants stopped working after an edit — which
+  `policy-compile` lines show the new policy live, read against the moment the
+  policy card's index visit committed (each task revalidates in the background
+  on that index move, and within five seconds for a move it never hears
+  about); (5) is the gate being reached more than it should be — gate reach,
+  with capability checks excluded on `kind`; (6) which grant is matching
+  everything — allows by grant, unconditional grants, distinct actors per
+  grant, contributing search-lane grants; (7) a federated search silently
+  missing a realm's rows (`meta.incomplete`, search-lane `failed`); (8) an
+  operation built on `transform` refused, slow, or reading nothing — `outcome`
+  / `code` / `totalMs` / read counts by tier / `missing[]`. Carries the traps:
+  the `realm:policy` channel name is not on the line, no policy record carries
+  a correlation id, a policy refusal never writes an execution line, a pending
+  gate record is not a backlog, and the fault warning is rate-limited. For
+  staging/prod this layers on `aws-access` and `tail-logs`; hand off to
+  `policy-performance` for what a policy costs, to the boxel-skills
+  `realm-policy-authoring` skill (explain / validate) for why one actor may or
+  may not act on one card, to `realm-auth` for a 401 or 403 the gate never
+  saw, and to `indexing-diagnostics` when the policy card itself won't index.
+  Use when someone reports an unexpected 403/404/500 from a realm with a
+  policy, a policy edit that "didn't take", a realm whose grants stopped
+  working, a policy suspected of being wider than intended, a search missing
+  rows, a transform operation that refused or read stale values, or a caller
+  who isn't signed in being refused, rate-limited (429) or blocked — a public
+  form whose submissions fail, a visitor told "Too many requests", spam to
+  trace to its addresses and block.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 

@@ -5,6 +5,7 @@ import http2 from 'http2';
 import net from 'net';
 import { readFileSync } from 'fs';
 import type {
+  ChangeJournal,
   DefinitionLookup,
   LinkShapePolicy,
   Realm,
@@ -20,6 +21,7 @@ import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
+  WRITE_CONTEXT_HEADERS,
 } from '@cardstack/runtime-common';
 import fsExtra from 'fs-extra';
 const { ensureDirSync } = fsExtra;
@@ -61,6 +63,7 @@ import {
 } from './lib/secure-origin.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
 const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
@@ -699,6 +702,7 @@ export class RealmServer {
   private realmServerSecretSeed: string;
   private realmSecretSeed: string;
   private grafanaSecret: string;
+  private grafanaIdentity: GrafanaIdentityVerifier | undefined;
   private aiBotDelegationSecret: string | undefined;
   private matrixInviteCheckSecret: string | undefined;
 
@@ -707,6 +711,7 @@ export class RealmServer {
   private queue: QueuePublisher;
   private definitionLookup: DefinitionLookup;
   private mediaCacheAdapter: MediaCacheAdapter | undefined;
+  private changeJournal: ChangeJournal | undefined;
   private assetsURL: URL;
   private hostURL: URL;
   private getIndexHTML: () => Promise<string>;
@@ -748,6 +753,7 @@ export class RealmServer {
     realmServerSecretSeed,
     realmSecretSeed,
     grafanaSecret,
+    grafanaURL,
     aiBotDelegationSecret,
     matrixInviteCheckSecret,
     realmsRootPath,
@@ -755,6 +761,7 @@ export class RealmServer {
     queue,
     definitionLookup,
     mediaCacheAdapter,
+    changeJournal,
     assetsURL,
     hostURL,
     getIndexHTML,
@@ -783,6 +790,8 @@ export class RealmServer {
     realmServerSecretSeed: string;
     realmSecretSeed: string;
     grafanaSecret: string;
+    // The Grafana whose ID tokens operator actions are checked against.
+    grafanaURL?: string;
     aiBotDelegationSecret?: string;
     matrixInviteCheckSecret?: string;
     realmsRootPath: string;
@@ -792,6 +801,10 @@ export class RealmServer {
     // MediaCache object store shared with the realms this server mounts;
     // absent means the POST capture endpoint captures without persisting.
     mediaCacheAdapter?: MediaCacheAdapter;
+    // The change journal shared with the realms this server mounts, which
+    // create-realm also appends a new realm's `scan` event to. Absent, this
+    // server records no history.
+    changeJournal?: ChangeJournal;
     assetsURL: URL;
     // The host app's origin, where the render route is served. Defaults to
     // `assetsURL`, which is the host app unless its assets are served from
@@ -875,11 +888,15 @@ export class RealmServer {
     this.matrixInviteCheckSecret = matrixInviteCheckSecret;
     this.realmServerSecretSeed = realmServerSecretSeed;
     this.grafanaSecret = grafanaSecret;
+    this.grafanaIdentity = grafanaURL
+      ? new GrafanaIdentityVerifier(grafanaURL)
+      : undefined;
     this.realmsRootPath = realmsRootPath;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
     this.definitionLookup = definitionLookup;
     this.mediaCacheAdapter = mediaCacheAdapter;
+    this.changeJournal = changeJournal;
     this.assetsURL = assetsURL;
     this.hostURL = hostURL ?? assetsURL;
     this.getIndexHTML = getIndexHTML;
@@ -991,8 +1008,15 @@ export class RealmServer {
           // request after initialization, discovery included; a browser-based
           // client (MCP Inspector) needs it allowed to reach the server at
           // all.
-          allowHeaders:
+          //
+          // The write context headers (`WRITE_CONTEXT_HEADERS`) name how a
+          // write was made, for its change event. A browser write that
+          // carries them cross-origin fails its preflight unless they are
+          // allowed here.
+          allowHeaders: [
             'Accept, Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Policy-Audit-Confirmation, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Realm-Events, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Boxel-Link-Shape, X-Grafana-Device-Id, X-Grafana-Action, MCP-Protocol-Version',
+            ...WRITE_CONTEXT_HEADERS,
+          ].join(', '),
           // Without an explicit expose list, @koa/cors only emits the
           // CORS-safelisted response headers (cache-control, content-*,
           // expires, last-modified, pragma). ETag is not on that list,
@@ -1054,11 +1078,13 @@ export class RealmServer {
           dbAdapter: this.dbAdapter,
           definitionLookup: this.definitionLookup,
           mediaCacheAdapter: this.mediaCacheAdapter,
+          changeJournal: this.changeJournal,
           serverURL: this.serverURL.href,
           matrixClient: this.matrixClient,
           realmServerSecretSeed: this.realmServerSecretSeed,
           realmSecretSeed: this.realmSecretSeed,
           grafanaSecret: this.grafanaSecret,
+          grafanaIdentity: this.grafanaIdentity,
           aiBotDelegationSecret: this.aiBotDelegationSecret,
           matrixInviteCheckSecret: this.matrixInviteCheckSecret,
           virtualNetwork: this.virtualNetwork,
@@ -1172,12 +1198,14 @@ export class RealmServer {
     //    insertion order — realms[] is empty in production main.ts, so
     //    this is a no-op there.
     // 2. Reconciler-driven boot — reconciler.reconcile() reads
-    //    realm_registry into knownByUrl and eager-mounts every pinned
-    //    row via mountFromRow (the main.ts factory), which constructs
-    //    a Realm, publishes into realms[] + virtualNetwork, then
-    //    awaits realm.start() so each pinned realm is fully indexed
-    //    before this method returns. Non-pinned rows are deferred to
-    //    findOrMountRealm() on first request.
+    //    realm_registry into knownByUrl and eager-mounts the pinned
+    //    rows this process was started with (the reconciler's
+    //    `bootstrapRealms`; every pinned row when that is omitted) via
+    //    mountFromRow (the main.ts factory), which constructs a Realm,
+    //    publishes into realms[] + virtualNetwork, then awaits
+    //    realm.start() so each of those realms is fully indexed before
+    //    this method returns. Every other row, pinned or not, is
+    //    deferred to findOrMountRealm() on first request.
     //
     // The reconciler's background poll loop (LISTEN realm_registry +
     // 30s safety poll) starts in main.ts after this method returns.

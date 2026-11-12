@@ -42,7 +42,11 @@ import {
 const SELF = '@realm_server:localhost';
 
 // A matrix client that keeps room memberships in memory and records what it
-// was asked to do.
+// was asked to do. Each call is recorded the moment it is made, so `calls`
+// follows the order the dispatcher starts its sends in. A test that wraps a
+// method and awaits something before passing the call on loses that order,
+// since the dispatcher runs a job's sends concurrently, and has to assert
+// those calls as a set.
 function fakeMatrixClient() {
   let rooms = new Map<string, Map<string, string>>();
   let calls: string[] = [];
@@ -140,14 +144,20 @@ module(basename(import.meta.filename), function () {
       );
 
       assert.strictEqual(roomId, '!created-1:localhost');
+      // The dispatcher runs a job's invites as concurrent sends, and the
+      // wrapper above reads the database before each invite is recorded, so
+      // the invites can be recorded in either order. Only the room's creation
+      // comes first, and every grantee is invited before the room is answered.
+      let callOrder = `calls in order: ${JSON.stringify(calls)}`;
+      assert.strictEqual(
+        calls[0],
+        'create !created-1:localhost',
+        `the room is created before any grantee is invited (${callOrder})`,
+      );
       assert.deepEqual(
-        calls,
-        [
-          'create !created-1:localhost',
-          'invite @alice:localhost',
-          'invite @bob:localhost',
-        ],
-        'the grantees are invited before the room is answered',
+        calls.slice(1).sort(),
+        ['invite @alice:localhost', 'invite @bob:localhost'],
+        `the grantees are invited before the room is answered (${callOrder})`,
       );
       assert.deepEqual(
         storedAtInvite,

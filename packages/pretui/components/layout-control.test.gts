@@ -41,6 +41,21 @@ module('Pretui | components/layout-control | chooseForms', function () {
     assert.deepEqual(names([A, B, P], 1 * REM), ['menu', 'menu', 'icon']);
   });
 
+  test('every slot steps through its shorter forms before any slot folds', function (assert) {
+    let F = slot('f', 1, ['chips', 22], ['menu', 0]);
+    let add = slot('add', 0, ['label', 9], ['short', 5], ['icon', 2]);
+    assert.deepEqual(names([F, add], 31 * REM), ['chips', 'label'], 'fits');
+    assert.deepEqual(names([F, add], 27 * REM), ['chips', 'short'], 'the action shortens, the filter stays');
+    assert.deepEqual(names([F, add], 24 * REM), ['chips', 'icon'], 'the action is an icon, no filter fold yet');
+    assert.deepEqual(names([F, add], 23 * REM), ['menu', 'icon'], 'only then the filter folds');
+  });
+
+  test('folding goes least important first, and only after every slot is at its last non-menu form', function (assert) {
+    // A: 10, 5, menu; B: 10, 5, menu; total at last non-menu form is 10 + 2 gaps
+    assert.deepEqual(names([A, B], 8 * REM), ['small', 'menu'], 'b folds first (higher @priority), a keeps its short form');
+    assert.deepEqual(names([A, B], 3 * REM), ['menu', 'menu']);
+  });
+
   test('stepping back up is guarded by HYSTERESIS_PX', function (assert) {
     assert.strictEqual(HYSTERESIS_PX, 16);
     let lv = (a: number, b: number) => new Map([['a', a], ['b', b]]);
@@ -76,6 +91,31 @@ module('Pretui | components/layout-control | folding', function (hooks) {
     { label: 'Board', value: 'board', group: 'view', checked: true },
     { label: 'List', value: 'list', group: 'view' },
   ];
+
+  test('@controlHeight sets --pretui-row-h on the bar, and none without it', async function (assert) {
+    // Scoped CSS is inert in this harness, so only the value LayoutControl
+    // sets is pinned here; the controls' height chains have no test.
+    await render(
+      <template>
+        <LayoutControl @label='Sized' @controlHeight='2rem' data-test-sized as |lc|>
+          <lc.Slot @id='sized-add' @forms={{PIN}} @pinned={{true}}>
+            <button type='button'>Add</button>
+          </lc.Slot>
+        </LayoutControl>
+        <LayoutControl @label='Plain' data-test-plain as |lc|>
+          <lc.Slot @id='plain-add' @forms={{PIN}} @pinned={{true}}>
+            <button type='button'>Add</button>
+          </lc.Slot>
+        </LayoutControl>
+      </template>,
+    );
+    let sized = document.querySelector<HTMLElement>('[data-test-sized]')!;
+    assert.strictEqual(sized.style.getPropertyValue('--pretui-row-h'), '2rem');
+    assert.strictEqual(sized.style.getPropertyValue('--control-height'), '2rem');
+    assert
+      .dom('[data-test-plain]')
+      .doesNotHaveAttribute('style', 'a row with no @controlHeight sets no height');
+  });
 
   test('folded slots become ⋯ menu items, the pinned slot stays, the fallback opens the slot', async function (assert) {
     await render(

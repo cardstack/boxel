@@ -5,11 +5,13 @@ scope:
   - packages/billing/**
   - packages/realm-server/lib/billable-call.ts
   - packages/realm-server/**/*pricing*
+  - packages/realm-server/lib/automation-estimate.ts
   - packages/runtime-common/**/*pricing*
   - packages/runtime-common/tasks/daily-credit-grant.ts
   - packages/realm-server/handlers/handle-add-credit.ts
   - packages/postgres/migrations/*billing*
   - packages/postgres/migrations/*credit*
+  - packages/postgres/migrations/*ledger*
 ---
 
 # 029. Charge metered usage at hosting unit cost times a configured margin, with a pricing version on every charge
@@ -65,7 +67,7 @@ Each process MUST log its prices and a pricing version, a hash of them, at
 startup. Every metered charge (§1.1) MUST record the pricing version it was
 priced at.
 
-### 1.5. The minimum balance covers a run
+### 1.5. The minimum balance covers a run's compute, network and AI
 
 An automation's caps MUST include a cap on its runs' AI spending, in credits.
 Before it sends an AI request for a run, the server MUST compute the most the
@@ -79,6 +81,14 @@ the current prices: the most one of its runs can cost, counting its AI
 spending cap in full. It MUST NOT be lower than the configured floor. A run
 MUST NOT start when its payer's balance, less their runs in flight and their
 unsettled batches, is below that minimum.
+
+The most one run can cost covers its compute, network and AI. It MUST NOT
+include the indexing the run's writes cause, and an automation's caps MUST
+NOT include a cap on that indexing. The minimum balance and the estimate
+shown when an automation is switched on MUST both use that one per-run cost,
+so neither covers indexing. A run's indexing MUST be charged as measured when
+its index pass completes (§1.1), against whatever the balance it is charged to
+holds then.
 
 ### 1.6. A ledger entry says what it paid for, once
 
@@ -95,6 +105,11 @@ A charge's identity MUST be its kind and reference. All the ledger rows one
 charge writes, one per credit bucket it draws from, MUST share that identity
 and be written in one transaction. A retry that finds the identity already
 present MUST write nothing.
+
+A consumption charge MUST record how much of each unit it priced: the
+metered units the pricing variables price (§1.2), or for AI the cost the
+provider reported. The usage MUST be written with the charge's ledger rows,
+under an id they share, so it lands exactly when they do.
 
 ## 2. Rationale
 
@@ -122,9 +137,10 @@ every entry, across redeploys.
 
 `spendCredits` charges only what the balance holds, so a run that costs more
 than the balance leaves the rest unpaid. A minimum balance at least as large
-as the most one run can cost makes every admitted run fully payable. Caps on
-calls, writes and time hold no price, and one AI request can cost a fraction
-of a cent or several dollars, so AI gets a cap of its own, in credits. The
+as the most one run can cost makes every admitted run's compute, network and
+AI fully payable. Caps on calls, writes and time hold no price, and one AI
+request can cost a fraction of a cent or several dollars, so AI gets a cap of
+its own, in credits. The
 server checks each request's worst case before sending it, so a run's AI
 can't pass the cap, and the minimum balance can count the cap as the most a
 run's AI costs. Caps are set per automation, so the minimum is computed per
@@ -133,6 +149,25 @@ must never ship a tenfold discount. Fallback prices in code would be lower
 than the live ones the moment an operator raised a rate, so a bad value stops
 new runs instead. Interactive work and runs already going are unaffected, and
 the alert names the value.
+
+Indexing is left out of that cost because nothing an author sets can bound
+it. The `writes` cap limits the files a run writes, not the index and
+prerender time they cause, and that time includes re-indexing every card that
+depends on what the run wrote. How many cards that is depends on how the
+realm's cards link to each other, which other people's edits change, and how
+long each takes depends on its template. A cap on indexing time, on
+dependents re-indexed, or a per-write allowance would make an author choose a
+number about the index's internals that they can neither see nor predict.
+The index pass also can't be cut short once it starts: the run's writes are
+already committed, and a realm whose index stops partway serves stale cards
+to everyone who reads it. So a run's indexing is charged as measured, and an
+index pass that costs more than the balance holds goes partly unpaid. The
+pass completes after its run ends, so it can also draw down the balance a
+later run was admitted against, and that run's own charges can then go partly
+unpaid as well. When the balance holds anything, the charge records all the
+usage it priced (§1.6), so the unpaid part is that usage at its pricing
+version less the credits the charge drew. When the balance holds nothing, no
+charge is written, and that pass leaves no ledger entry and no usage.
 
 The margin pays for the infrastructure the platform runs and operates. AI is
 already priced by its provider, and plain AI calls carry no margin, so AI
@@ -148,10 +183,35 @@ kind and reference, shared by every row it writes. Grants, purchases and
 expiries belong to a user, not a realm, so only consumption entries carry
 one.
 
+Credits alone can't answer how much a user or realm used, only what it cost,
+and they can't be checked against the hosting bill they are meant to
+recover. Recording the quantities with the charge answers both, and with the
+pricing version a charge's credits can be recomputed from its usage. Usage
+is kept with the charge rather than on the run, because deleting a realm
+deletes its runs while their charges stay, and storage has no run. It is
+keyed by the charge, not by ledger row, because one charge spans several
+rows and some charges price two units.
+
 ## 3. Considered options
 
 - **Hosting unit cost times a margin, prices in deployment configuration, a
   pricing version on every charge (chosen).**
+- **A cap on a run's indexing, as worker-seconds or dependents re-indexed.**
+  Either asks an author for a number about the index's internals. A
+  worker-seconds cap can't stop a pass that has started without leaving the
+  index stale, and a dependents cap would refuse a run's commit because of
+  links other people made.
+- **A reserve for indexing the server estimates on its own**, such as the
+  realm's recent indexing cost per run or the dependents of what the run
+  will write counted at admission. Neither bounds the charge: a run can write
+  a card that more cards link to than any recent run did, and at admission
+  the server doesn't know what the run will write. The minimum balance would
+  also move with other people's edits, so a payer couldn't tell from the
+  automation's caps whether a run will start.
+- **A per-write indexing allowance in the per-run cost.** It doesn't cover
+  dependents, so it under-covers a run that writes a card many others
+  link to, and it adds a price that has to be re-measured as rendering
+  changes.
 - **A margin on batched AI.** Plain AI calls carry none, and at a margin of
   2 or more it would make batching cost as much as not batching, or more.
 - **Bound AI only by a cap on calls.** A call cap holds no price, so the

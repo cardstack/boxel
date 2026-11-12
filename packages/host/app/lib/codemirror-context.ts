@@ -26,23 +26,35 @@ import {
   undo,
   redo,
 } from '@codemirror/commands';
+import { javascript } from '@codemirror/lang-javascript';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { syntaxTree } from '@codemirror/language';
+import {
+  bracketMatching,
+  indentOnInput,
+  syntaxHighlighting,
+  syntaxTree,
+} from '@codemirror/language';
 import {
   EditorState,
   StateEffect,
   StateField,
+  Transaction,
   type Extension,
 } from '@codemirror/state';
 import {
   EditorView,
   Decoration,
+  drawSelection,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  lineNumbers,
   type DecorationSet,
   ViewPlugin,
   type ViewUpdate,
   WidgetType,
   keymap,
 } from '@codemirror/view';
+import { classHighlighter } from '@lezer/highlight';
 
 import {
   type BfmRefFormat,
@@ -1292,10 +1304,135 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
 
 // ── Exported context ────────────────────────────────────────────────────────
 
+// ── Code editor ─────────────────────────────────────────────────────────────
+
+export type CodeEditorLanguage = 'javascript' | 'typescript' | 'json' | 'plain';
+
+export interface CreateCodeEditorStateOptions {
+  doc: string;
+  language?: CodeEditorLanguage;
+  readOnly?: boolean;
+  lineNumbers?: boolean;
+  // An id for the editable element, so other elements can point at it.
+  controlId?: string;
+  // The accessible name, when no element on the page names the editor.
+  label?: string;
+  // The id of the element that names the editor. A `<label for>` can't: the
+  // editable element is a contenteditable, which isn't labelable.
+  labelledBy?: string;
+  // The id(s) of elements that describe the editor.
+  describedBy?: string;
+  // An `EditorView.theme` spec from the component hosting the editor, so it
+  // styles CodeMirror's DOM from its own tokens. A theme takes precedence
+  // over CodeMirror's base theme, which a stylesheet in a cascade layer
+  // can't, since CodeMirror injects its base theme unlayered. Pass the same
+  // object each time: each spec becomes one theme, made once and reused, as
+  // every theme CodeMirror makes adds a stylesheet to the page for good.
+  theme?: Parameters<typeof EditorView.theme>[0];
+  // The theme is for a dark surface, so CodeMirror's own base styles (the
+  // cursor, the selection, panels) take their dark variants under it.
+  dark?: boolean;
+  onDocChange?: (text: string) => void;
+}
+
+function languageExtension(language: CodeEditorLanguage | undefined) {
+  switch (language) {
+    case 'javascript':
+      return [javascript()];
+    case 'typescript':
+      return [javascript({ typescript: true })];
+    // JSON is a JavaScript expression, so the JavaScript grammar highlights
+    // its strings, numbers and literals.
+    case 'json':
+      return [javascript()];
+    default:
+      return [];
+  }
+}
+
+// An editor state for source code. Tokens are tagged with `tok-*` classes
+// (`classHighlighter`) rather than coloured here, so the component that hosts
+// the editor colours them from its theme. Tab is left to move focus, so the
+// editor is never a keyboard trap.
+const codeEditorThemes = {
+  light: new WeakMap<object, Extension>(),
+  dark: new WeakMap<object, Extension>(),
+};
+
+function codeEditorTheme(
+  spec: Parameters<typeof EditorView.theme>[0],
+  dark: boolean,
+) {
+  let themes = dark ? codeEditorThemes.dark : codeEditorThemes.light;
+  let theme = themes.get(spec);
+  if (!theme) {
+    theme = EditorView.theme(spec, { dark });
+    themes.set(spec, theme);
+  }
+  return theme;
+}
+
+function createCodeEditorState(
+  options: CreateCodeEditorStateOptions,
+): EditorState {
+  let readOnly = options.readOnly ?? false;
+  let attributes: Record<string, string> = { 'aria-multiline': 'true' };
+  if (options.controlId) {
+    attributes.id = options.controlId;
+  }
+  if (options.label) {
+    attributes['aria-label'] = options.label;
+  }
+  if (options.labelledBy) {
+    attributes['aria-labelledby'] = options.labelledBy;
+  }
+  if (options.describedBy) {
+    attributes['aria-describedby'] = options.describedBy;
+  }
+  if (readOnly) {
+    attributes['aria-readonly'] = 'true';
+  }
+  let onDocChange = options.onDocChange;
+  let extensions: Extension[] = [
+    ...(options.lineNumbers === false
+      ? []
+      : [lineNumbers(), highlightActiveLineGutter()]),
+    history(),
+    drawSelection(),
+    indentOnInput(),
+    bracketMatching(),
+    highlightActiveLine(),
+    syntaxHighlighting(classHighlighter),
+    keymap.of([...defaultKeymap, ...historyKeymap]),
+    ...languageExtension(options.language),
+    ...(options.theme
+      ? [codeEditorTheme(options.theme, options.dark ?? false)]
+      : []),
+    EditorState.tabSize.of(2),
+    // Read-only refuses edits through the state but leaves the content
+    // editable, so it still takes keyboard focus: a reader can move through
+    // the code, scroll past the editor's height, and select and copy it.
+    EditorState.readOnly.of(readOnly),
+    EditorView.contentAttributes.of(attributes),
+    ...(onDocChange
+      ? [
+          EditorView.updateListener.of((update: ViewUpdate) => {
+            if (update.docChanged) {
+              onDocChange(update.state.doc.toString());
+            }
+          }),
+        ]
+      : []),
+  ];
+  return EditorState.create({ doc: options.doc, extensions });
+}
+
 export interface CodeMirrorContext {
   EditorState: typeof EditorState;
   EditorView: typeof EditorView;
+  Transaction: typeof Transaction;
   createEditorState: typeof createEditorState;
+  createCodeEditorState: typeof createCodeEditorState;
   undo: typeof undo;
   redo: typeof redo;
   openCardSearchEffect: typeof openCardSearchEffect;
@@ -1307,7 +1444,9 @@ export interface CodeMirrorContext {
 const codemirrorContext: CodeMirrorContext = {
   EditorState,
   EditorView,
+  Transaction,
   createEditorState,
+  createCodeEditorState,
   undo,
   redo,
   openCardSearchEffect,

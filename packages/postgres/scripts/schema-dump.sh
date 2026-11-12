@@ -35,6 +35,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=users \
   --exclude-table-and-children=plans \
   --exclude-table-and-children=credits_ledger \
+  --exclude-table-and-children=credit_charge_usage \
   --exclude-table-and-children=stripe_events \
   --exclude-table-and-children=ai_bot_event_processing \
   --exclude-table-and-children=proxy_endpoints \
@@ -49,6 +50,8 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=user_key_grant_notices \
   --exclude-table-and-children=key_limit_notices \
   --exclude-table-and-children=key_uses \
+  --exclude-table-and-children=automation_runs \
+  --exclude-table-and-children=automations \
   --exclude-table-and-children=key_policy_notices \
   --exclude-table-and-children=oauth_clients \
   --exclude-table-and-children=platform_oauth_clients \

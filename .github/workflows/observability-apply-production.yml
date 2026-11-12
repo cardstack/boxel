@@ -58,11 +58,9 @@ jobs:
       # in cardstack/infra. Permissions are ssm:GetParameter on:
       #   /production/grafana/grafanactl_token  (added in cardstack/infra#666)
       #   /production/loki/internal_url         (added in cardstack/infra#674, CS-10968)
-      #   /production/boxel/GRAFANA_SECRET      (CS-10929 — used by operator-action
-      #                                         button panels for `Authorization:
-      #                                         Bearer ${grafana_secret}`; matches
-      #                                         the realm-server task's existing
-      #                                         shared secret)
+      #   /production/boxel/GRAFANA_SECRET      (the realm-server's shared secret;
+      #                                         the realm-server-operator datasource
+      #                                         attaches it to operator actions)
       AWS_ROLE_ARN: arn:aws:iam::120317779495:role/boxel-observability-apply
       # Server URL is NOT set here — single source of truth is
       # packages/observability/grafanactl/config.yaml (see staging workflow

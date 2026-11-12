@@ -2,14 +2,13 @@
 status: proposed
 date: 2026-11-10
 scope:
-  - packages/base/automation*
-  - packages/base/automation*/**
   - packages/runtime-common/**/*automation*
   - packages/runtime-common/**/*automation*/**
   - packages/realm-server/**/*automation*
   - packages/realm-server/**/*automation*/**
   - packages/realm-server/lib/cron-scheduler.ts
   - packages/postgres/migrations/*automation*
+  - packages/catalog/test-subset.json
 ---
 
 # 028. Define an automation in a card, and keep its payer and status in a server row
@@ -24,14 +23,20 @@ tick enqueues the runs that are due.
 
 ### 1.1. The definition is a card
 
-An automation's definition MUST be an instance of the base `Automation` card
-type: its script, triggers, declared operations, caps, params, run milestones
-and `batchedAI`. The definition MUST NOT live in a non-card file or only in a
+An automation's definition MUST be an instance of the catalog's `Automation`
+card type: its script, triggers, declared operations, caps, params and
+`batchedAI`. The definition MUST NOT live in a non-card file or only in a
 server table.
 
+The `Automation` type MUST be a system card in the catalog realm, in the
+catalog test subset, as `RealmPolicy` is. Server code MUST name it by a
+catalog code ref, as `realmPolicyRef` names `RealmPolicy`.
+
 The server MUST read the definition from the index, as data. It MUST NOT run
-card code to learn what an automation says. It MUST accept only instances of
-the base `Automation` type.
+card code to learn what an automation says. It MUST accept only instances of the
+catalog `Automation` type or of a type that descends from it. It MUST decide
+that from the adoption chain the index records for the instance, as
+`realmPolicyRef`'s key is matched in a policy card's chain.
 
 ### 1.2. Only administrators edit what an automation does
 
@@ -88,8 +93,14 @@ The assistant writes, tests and changes automations, and people read them.
 A card gives both the same tools they use for everything else in a realm:
 editing, history, permissions, and a view that shows the schedule, the runs
 left and the payer. A card is code as well as data, so the server reads only
-the stored fields of the base type and never renders or runs it to learn what
-it may spend.
+the stored fields of the catalog type and never renders or runs it to learn
+what it may spend.
+
+`Automation` is a system-level card that platform code reads, as
+`RealmPolicy` is, not a primitive that every realm is built from. So it lives
+in the catalog beside the policy cards. The server needs only its code ref and
+the stored fields its reader knows, and tests reach the catalog's one copy
+through the test subset.
 
 A run acts as its payer, who is an administrator. So whoever can change what
 a run does acts with an administrator's authority. A policy grant can give
@@ -130,6 +141,9 @@ make-up run catches up on everything it missed.
   history and permissions, and the assistant couldn't edit it like a card.
 - **The payer as a card field.** Anyone who can write the card could make
   someone else pay.
+- **The type in the base realm.** Base holds the card and field primitives
+  that every realm is built from. `Automation` is a system card that platform
+  code reads, like the policy cards, which live in the catalog.
 
 ## 4. Remediation
 

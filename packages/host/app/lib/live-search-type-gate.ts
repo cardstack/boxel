@@ -134,6 +134,13 @@ export class LiveSearchTypeGate {
   // Whether an incremental index event provably left this query's membership
   // alone.
   indexEventCannotMatch(event: RealmEventContent): boolean {
+    // A pass too large to list what it invalidated says nothing about which
+    // types or modules it touched: anything resolved or judged before it may
+    // be stale, and nothing can be ruled out.
+    if ('realmWide' in event) {
+      this.forget();
+      return false;
+    }
     let { invalidatedTypes, invalidations } =
       event as IncrementalIndexEventContent;
     let cannotMatch = this.#judgeIndexEvent(invalidatedTypes, invalidations);

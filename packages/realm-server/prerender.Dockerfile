@@ -16,7 +16,7 @@ WORKDIR /realm-server
 # Chrome for Testing pin in the repo-root `.puppeteerrc.cjs` along with it:
 # that pin is the browser Puppeteer launches on machines with no installed
 # Chrome, and it must not fall below this value.
-ARG CHROME_MIN_VERSION=156.0.8078.79
+ARG CHROME_MIN_VERSION=157.0.8103.50
 
 # Install Chrome dependencies required by Puppeteer; the google-chrome package
 # drags in the shared libraries that Chromium needs at runtime.

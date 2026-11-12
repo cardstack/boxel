@@ -17,7 +17,7 @@ import {
   withConnectionOrdering,
   withConnectionTenant,
 } from '@cardstack/postgres';
-import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
+import { nodeStreamToText } from '../stream.ts';
 import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
 import { retrieveUserSessionClaim } from '../utils/jwt.ts';
 import { getPublicInstanceId, INSTANCE_ID_HEADER } from '../lib/instance-id.ts';
@@ -26,6 +26,12 @@ import {
   type OperatorScope,
 } from '../utils/operator-token.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
+import {
+  GRAFANA_ID_HEADER,
+  GRAFANA_PROXY_HEADER,
+  GrafanaIdentityError,
+  type GrafanaIdentityVerifier,
+} from '../lib/grafana-identity.ts';
 import {
   isKeyRoutePath,
   keepsMethodAndPathOnly,
@@ -591,18 +597,41 @@ export function fullRequestURL(ctxt: Koa.Context): URL {
 export async function fetchRequestFromContext(
   ctxt: Koa.Context,
 ): Promise<Request> {
-  let reqBody: string | Buffer | undefined;
+  let reqBody: string | Buffer | ReadableStream<Uint8Array> | undefined;
   if (['POST', 'PATCH', 'PUT', 'QUERY', 'DELETE'].includes(ctxt.method)) {
     let state = ctxt.state as Record<string, unknown>;
     if (REQUEST_BODY_STATE in state) {
       reqBody = state[REQUEST_BODY_STATE] as string | Buffer;
     } else {
       let isBinary =
-        ctxt.req.headers['content-type'] === 'application/octet-stream';
-      reqBody = isBinary
-        ? await nodeStreamToBuffer(ctxt.req)
-        : await nodeStreamToText(ctxt.req);
-      state[REQUEST_BODY_STATE] = reqBody;
+        ctxt.req.headers['content-type']?.split(';')[0].trim() ===
+        'application/octet-stream';
+      if (isBinary) {
+        // One owner consumes this body. Text-only middleware may construct a
+        // second request, but a binary upload must never be cached or tee'd.
+        let iterator = ctxt.req.iterator({ destroyOnReturn: false });
+        reqBody = new ReadableStream<Uint8Array>(
+          {
+            async pull(controller) {
+              try {
+                let result = await iterator.next();
+                if (result.done) controller.close();
+                else controller.enqueue(result.value);
+              } catch (err) {
+                controller.error(err);
+              }
+            },
+            async cancel() {
+              void iterator.return?.().catch(() => {});
+              ctxt.req.pause();
+            },
+          },
+          { highWaterMark: 0 },
+        );
+      } else {
+        reqBody = await nodeStreamToText(ctxt.req);
+        state[REQUEST_BODY_STATE] = reqBody;
+      }
     }
   }
 
@@ -625,7 +654,9 @@ export async function fetchRequestFromContext(
   return new Request(url, {
     method: ctxt.method,
     headers,
-    ...(reqBody !== undefined ? { body: reqBody as BodyInit } : {}),
+    ...(reqBody !== undefined
+      ? { body: reqBody as BodyInit, duplex: 'half' }
+      : {}),
   });
 }
 
@@ -705,8 +736,53 @@ export function sharedSecretAuthorization(
   };
 }
 
-// The Grafana operator-action endpoints share one secret with Grafana.
-export const grafanaAuthorization = sharedSecretAuthorization;
+// Operator actions (`/_grafana-*`) need the shared secret. A request that came
+// through the Grafana datasource proxy (it carries the proxy header, which the
+// datasource adds) must also carry a Grafana ID token for a signed-in user with
+// the Editor or Admin role. Every Grafana identity can reach the datasource
+// proxy, including the read-only preview service account, so the secret alone
+// would let any of them act. A request sent straight to the realm server with
+// the secret, as an operator holding it does from a shell, needs no token.
+export function grafanaAuthorization(
+  grafanaSecret: string,
+  grafanaIdentity: GrafanaIdentityVerifier | undefined,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let secretAuthorization = sharedSecretAuthorization(grafanaSecret);
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    await secretAuthorization(ctxt, async () => {
+      if (ctxt.req.headers[GRAFANA_PROXY_HEADER] !== undefined) {
+        let idToken = ctxt.req.headers[GRAFANA_ID_HEADER];
+        if (!grafanaIdentity) {
+          await sendResponseForForbiddenRequest(
+            ctxt,
+            'Operator actions through Grafana are not available: GRAFANA_URL is not configured on the realm server',
+          );
+          return;
+        }
+        if (typeof idToken !== 'string' || !idToken) {
+          await sendResponseForForbiddenRequest(
+            ctxt,
+            'Operator actions through Grafana need a Grafana ID token',
+          );
+          return;
+        }
+        try {
+          let identity = await grafanaIdentity.verify(idToken);
+          getLogger('realm:grafana-identity').info(
+            `operator action ${ctxt.method} ${ctxt.path} by ${identity.username ?? '(no username)'} (${identity.subject}, ${identity.role})`,
+          );
+        } catch (e) {
+          if (e instanceof GrafanaIdentityError) {
+            await sendResponseForForbiddenRequest(ctxt, e.message);
+            return;
+          }
+          throw e;
+        }
+      }
+      await next();
+    });
+  };
+}
 
 export async function sendResponseForBadRequest(
   ctxt: Koa.Context,

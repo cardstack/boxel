@@ -12,6 +12,7 @@ import {
   GetCardContextName,
   isCardInstance,
   isFileDefInstance,
+  logger,
   type ErrorEntry,
   type Format,
   type HydrationMode,
@@ -19,6 +20,10 @@ import {
   type StoreReadType,
   type getCard,
 } from '@cardstack/runtime-common';
+import {
+  isLiveRender,
+  scopedRenderContext,
+} from '@cardstack/runtime-common/render-context';
 
 import type { HTMLComponent } from '@cardstack/host/lib/html-component';
 import type StoreService from '@cardstack/host/services/store';
@@ -28,6 +33,8 @@ import CardRenderer from '../card-renderer';
 import SearchResultError from './search-result-error';
 
 import type { BaseDef, CardContext } from '@cardstack/base/card-api';
+
+const log = logger('component:search/hydratable-card');
 
 // `HydrationMode` is the card-facing contract (it rides the `@context`
 // search surface), so it lives in runtime-common; re-exported here because this
@@ -125,6 +132,11 @@ export default class HydratableCard extends Component<Signature> {
   // whose `@cardId` changes resolves the new card, never a stale captured one.
   @tracked private hydrated = false;
 
+  // Whether this row renders for someone looking at it rather than for an
+  // index render, as its inert element answers once it is in the DOM (see
+  // `placeRender`). Undefined while the row has no element.
+  @tracked private live: boolean | undefined;
+
   // One `getCard` resource per component instance — `@cached` so reading it
   // from several getters doesn't spin up a resource each time, and a getter
   // (not a field initializer) so the consumed `getCard` provider is injected
@@ -188,9 +200,52 @@ export default class HydratableCard extends Component<Signature> {
   // instances land in the Store constantly as a normal part of building the
   // index, and a render must be deterministic and emit prerendered HTML — so
   // residency must never flip a row to live there.
+  //
+  // A host tab that indexes its own realm sets that same flag only while one of
+  // its index renders runs, and scopes it to the element the render mounts
+  // into. A row anywhere else in the tab is live even while the flag is set, so
+  // once the row's element can be placed, `isLiveRender` answers for it.
+  // Before that the row reads the flag as it stands, which keeps a row inside an
+  // index render inert from its first frame. The answer is tracked, so a row that
+  // first rendered during one of those index renders re-resolves as soon as its
+  // element says it is live, instead of staying on the answer it was given
+  // mid-render.
   private get inPrerender(): boolean {
+    if (this.live !== undefined) {
+      return !this.live;
+    }
     return Boolean((globalThis as any).__boxelRenderContext);
   }
+
+  // Placed on whichever element the row renders, inert or live, so a row has
+  // its element's answer whichever it rendered first. A row that went straight
+  // to live would otherwise fall back to the raw flag the next time it
+  // re-resolves, and drop back to inert if that happened during an index
+  // render.
+  private placeRender = modifier((element: Element) => {
+    let live = isLiveRender(element);
+    if (live === this.live) {
+      return;
+    }
+    // A host tab's own index render is the only time the flag and the element
+    // can disagree, so that is the only placement worth recording.
+    let scope = scopedRenderContext();
+    if (scope) {
+      log.info(
+        `placing ${this.args.cardId} during the tab's index render (scope ${scope}): live=${live} resident=${this.isResident} mode=${this.mode}`,
+      );
+    }
+    let cancelled = false;
+    // After the render that installed this modifier, which read `live`.
+    queueMicrotask(() => {
+      if (!cancelled && !isDestroying(this) && !isDestroyed(this)) {
+        this.live = live;
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
 
   private get mode(): HydrationMode {
     // An error rendering never hydrates, so no gesture is wired regardless of
@@ -291,6 +346,7 @@ export default class HydratableCard extends Component<Signature> {
           wrapper element (which would perturb grid/child-selector styling) is
           needed. }}
       <CardRenderer
+        {{this.placeRender}}
         @card={{this.liveCard}}
         @format={{this.format}}
         @codeRef={{@renderType}}
@@ -301,6 +357,7 @@ export default class HydratableCard extends Component<Signature> {
       />
     {{else if @component}}
       <@component
+        {{this.placeRender}}
         {{hydrationTrigger this.mode this.hydrate}}
         {{this.trackElement
           cardId=@cardId

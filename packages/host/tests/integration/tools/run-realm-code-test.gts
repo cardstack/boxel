@@ -3943,6 +3943,20 @@ const PATIENT_MODULE = `
       query: { filter: { on: () => Patient, eq: { ward: 'north' } } },
     };
   }
+
+  // A type the clinic holds no card of. Its own create opens the first one,
+  // reached through the type rather than through a ward that exists.
+  export class Ward extends CardDef {
+    static displayName = 'Ward';
+    @field name = contains(StringField);
+
+    @operation static open = {
+      base: 'create',
+      of: () => Ward,
+      params: { name: StringField },
+      fill: { name: params('name') },
+    };
+  }
 `;
 
 function patientFile(name: string, ward: string) {
@@ -5483,6 +5497,122 @@ return 1;`);
     );
   });
 
+  test('realm.transform reshapes JSON with a jq-spelled BXL program and its params', async function (assert) {
+    let result = await run(`
+const posts = [
+  { title: 'A', points: 10, url: 'https://a.example' },
+  { title: 'B', points: 40, url: 'https://b.example' },
+  { title: 'B again', points: 25, url: 'https://b.example' },
+];
+const top = await realm.transform(
+  posts,
+  'group_by(.url) | map(max_by(.points)) | sort_by(-.points) | .[0:params("keep")] | map({title, score: ROUND(.points / 3; 1)})',
+  { params: { keep: 1 } },
+);
+const lines = await realm.transform(
+  { site: 'North', punches: [{ staffId: 's1' }, { staffId: 's2' }] },
+  '.site as $s | .punches | map({staffId, site: $s} | tojson)',
+);
+const phrase = await realm.transform(
+  { productName: 'Linen overshirt', productDescription: 'Light and loose. Made in Portugal.' },
+  '.productName + " " + (.productDescription | split(". ")[0])',
+);
+return { top, lines, phrase };`);
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      top: [{ title: 'B', score: 13.3 }],
+      lines: [
+        '{"staffId":"s1","site":"North"}',
+        '{"staffId":"s2","site":"North"}',
+      ],
+      phrase: 'Linen overshirt Light and loose',
+    });
+  });
+
+  test('realm.transform refuses what the transform profile bans, and a bad call, with the reason', async function (assert) {
+    let result = await run(`
+const reasons = [];
+for (const [input, source, options] of [
+  [[1, 2], 'reduce .[] as $x (0; . + $x)'],
+  [{}, '.a |'],
+  [{}, '.', { spelling: 'yaml' }],
+  [{}, '.', { schema: {} }],
+  [{}, '.[] '],
+  [{}, '.', { spelling: 'toString' }],
+]) {
+  try {
+    await realm.transform(input, source, options);
+    reasons.push('ran');
+  } catch (e) {
+    reasons.push(e.message);
+  }
+}
+return reasons;`);
+
+    let [loop, parse, spelling, option, many, inherited] = JSON.parse(
+      result.scriptResult!,
+    ) as string[];
+    assert.true(
+      loop.includes('transform-loop-banned'),
+      `a loop is refused with its code: ${loop}`,
+    );
+    assert.true(
+      parse.startsWith('realm.transform: the program does not parse'),
+      `a program that does not parse says so: ${parse}`,
+    );
+    assert.true(
+      spelling.includes('"jq" (the default) or "readable"'),
+      `an unknown spelling names the ones there are: ${spelling}`,
+    );
+    assert.true(
+      option.includes('schema is not one'),
+      `an unknown option is named: ${option}`,
+    );
+    assert.true(
+      many.includes('produces one value'),
+      `a program with several values is refused: ${many}`,
+    );
+    assert.true(
+      inherited.includes('"jq" (the default) or "readable"'),
+      `a name every object inherits is not a spelling: ${inherited}`,
+    );
+  });
+
+  test('realm.transform refuses input and params over its size limit', async function (assert) {
+    await assert.rejects(
+      run(`await realm.transform('x'.repeat(1_100_000), '.');`),
+      /realm.transform takes at most 1000000 bytes of input and params/,
+    );
+    await assert.rejects(
+      run(
+        `await realm.transform({}, 'params("big")', { params: { big: 'x'.repeat(1_100_000) } });`,
+      ),
+      /realm.transform takes at most 1000000 bytes of input and params/,
+    );
+  });
+
+  test('realm.transform maps over thousands of objects and loads the formula families a program names', async function (assert) {
+    let result = await run(`
+const rows = Array.from({ length: 40000 }, (_, a) => ({ a }));
+const out = await realm.transform(rows, 'map({b: .a + 1})');
+const gauss = await realm.transform({}, 'ROUND(GAUSS(1); 4)');
+return [out.length, out[39999].b, gauss];`);
+    assert.deepEqual(JSON.parse(result.scriptResult!), [40000, 40000, 0.3413]);
+  });
+
+  test('realm.transform refuses output over its size limit', async function (assert) {
+    await assert.rejects(
+      run(`await realm.transform('x'.repeat(600_000), '[., .]');`),
+      /1000000 byte/,
+    );
+    // Non-ASCII output that BXL counts under the limit is still over it in
+    // bytes, and the worker refuses it.
+    await assert.rejects(
+      run(`await realm.transform('é'.repeat(300_000), '[., .]');`),
+      /realm.transform returns at most 1000000 bytes/,
+    );
+  });
+
   // Auto-fix answers come from the same proxy. `fix` turns the code the
   // runner sent into the code the model answers with.
   function answerFixes(fix: (code: string) => string) {
@@ -5662,6 +5792,106 @@ return await realm.operations.invoke('Patient/ana', 'transferTo', { ward: 'ICU' 
       assert.strictEqual((await attributesOf('Patient/ana.json')).ward, 'ICU');
     });
 
+    test('realm.operations.invoke runs an operation on a type the workspace holds no card of', async function (assert) {
+      let result = await run(`
+return await realm.operations.invoke({ module: './patient', name: 'Ward' }, 'open', { name: 'North' });`);
+
+      let answer = JSON.parse(result.scriptResult!);
+      assert.strictEqual(answer.operation, 'open');
+      assert.deepEqual(
+        answer.type,
+        { module: './patient', name: 'Ward' },
+        'the answer names the type as the script did',
+      );
+      assert.true(
+        String(answer.path).endsWith('.json'),
+        `the answer names the card the operation made: ${answer.path}`,
+      );
+      assert.strictEqual(
+        answer.id,
+        `${testRealmURL}${answer.path.replace(/\.json$/, '')}`,
+        "in the run's realm",
+      );
+      assert.strictEqual(
+        (await attributesOf(answer.path)).name,
+        'North',
+        'and the declaration filled it from the payload',
+      );
+    });
+
+    test('an operation that acts on a card is refused when named on its type', async function (assert) {
+      let result = await run(`
+try {
+  await realm.operations.invoke({ module: './patient', name: 'Patient' }, 'transferTo', { ward: 'ICU' });
+  return 'ran';
+} catch (e) {
+  return e.message;
+}`);
+
+      assert.strictEqual(
+        JSON.parse(result.scriptResult!),
+        '"transferTo" is not an operation Patient carries on the type itself: it acts on one of its cards, so it is invoked on that card. On the type it carries: create',
+      );
+    });
+
+    test('a batch entry names a card rather than a type, however the type is spelled', async function (assert) {
+      let result = await run(`
+let refusals = [];
+for (let entry of [
+  { type: { module: './patient', name: 'Ward' }, operation: 'open', payload: { name: 'South' } },
+  { path: { module: './patient', name: 'Ward' }, operation: 'open', payload: { name: 'East' } },
+]) {
+  try {
+    await realm.operations.invokeBatchOperation([entry]);
+    refusals.push('ran');
+  } catch (e) {
+    refusals.push(e.message);
+  }
+}
+return refusals;`);
+
+      let refusal =
+        'a realm.operations.invokeBatchOperation entry names a card by its path; run an operation on a type with realm.operations.invoke(type, operation, payload)';
+      assert.deepEqual(
+        JSON.parse(result.scriptResult!),
+        [refusal, refusal],
+        'a type as its own member and a type where the path goes are both refused',
+      );
+    });
+
+    // A search answers each card with its type beside its path, so a batch
+    // built by spreading the results carries both.
+    test('a batch entry spread from a search result runs on the card at its path', async function (assert) {
+      let result = await run(`
+let found = await realm.cards.search({
+  filter: {
+    on: { module: ${JSON.stringify(`${testRealmURL}patient`)}, name: 'Patient' },
+    eq: { ward: 'Oncology' },
+  },
+});
+let answers = await realm.operations.invokeBatchOperation(
+  found.cards.map((patient) => ({
+    ...patient,
+    operation: 'recordVitals',
+    payload: { reading: 'HR 70' },
+  })),
+);
+return {
+  carriedType: found.cards.every((patient) => patient.type !== undefined),
+  paths: answers.map((answer) => answer.path),
+};`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        carriedType: true,
+        paths: ['Patient/dev.json'],
+      });
+      assert.strictEqual(
+        (await attributesOf('Patient/dev.json')).lastVitals,
+        'HR 70',
+        'the operation ran on the card at the path',
+      );
+    });
+
     // The example the realm runner is for: find the patients of a ward, then
     // record their vitals in one batch that the realm carries out whole.
     test('realm.operations.invokeBatchOperation updates many patients in one batch', async function (assert) {
@@ -5796,6 +6026,193 @@ try {
         message.includes('realm.cards.search'),
         `and where results are read instead: ${message}`,
       );
+    });
+  },
+);
+
+// The realm in this module answers the host as its own dispatch, so no ACL
+// declines the test user and every operation the type declares is allowed:
+// what the realm decides for a user it does decline is pinned in
+// `permission-checking-realm-test`. What this module pins is the call itself.
+module(
+  'Integration | tools | run-realm-code | realm.operations.capabilities',
+  function (hooks) {
+    setupRenderingTest(hooks);
+    setupLocalIndexing(hooks);
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
+    });
+    setupRealmCacheTeardown(hooks);
+
+    let adapter: any;
+    hooks.beforeEach(async function () {
+      ({ adapter } = await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'patient.gts': PATIENT_MODULE,
+          'Patient/ana.json': patientFile('Ana', 'Cardiology'),
+        },
+      }));
+      await getService('realm').login(testRealmURL);
+    });
+
+    async function run(code: string) {
+      let toolService = getService('tool-service');
+      return await new RunRealmCodeTool(toolService.toolContext).execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+    }
+
+    test('answers each check in order, and runs none of them', async function (assert) {
+      let result = await run(`
+return await realm.operations.capabilities([
+  { path: 'Patient/ana', operation: 'transferTo' },
+  { path: 'Patient/ana.json', operation: 'discharge' },
+  { type: { module: './patient', name: 'Patient' }, operation: 'create' },
+]);`);
+
+      let [transfer, discharge, create] = JSON.parse(result.scriptResult!);
+      assert.deepEqual(
+        transfer,
+        { path: 'Patient/ana.json', operation: 'transferTo', allowed: true },
+        'a card is named by its path, as the other calls answer it',
+      );
+      assert.deepEqual(
+        { ...discharge, reason: typeof discharge.reason },
+        {
+          path: 'Patient/ana.json',
+          operation: 'discharge',
+          allowed: false,
+          reason: 'string',
+        },
+        'an operation the type does not declare is refused, with why',
+      );
+      assert.deepEqual(
+        create,
+        {
+          type: { module: './patient', name: 'Patient' },
+          operation: 'create',
+          allowed: true,
+        },
+        'a type is echoed as the script named it',
+      );
+      let file = await adapter.openFile('Patient/ana.json');
+      assert.strictEqual(
+        JSON.parse(file.content as string).data.attributes.ward,
+        'Cardiology',
+        'nothing was transferred',
+      );
+      assert.deepEqual(result.files, [], 'and nothing was saved');
+    });
+
+    test('refuses a malformed check before asking the realm', async function (assert) {
+      let result = await run(`
+let refused = [];
+for (let checks of [
+  [],
+  'Patient/ana',
+  [{ path: 'Patient/ana' }],
+  [{ operation: 'chart' }],
+  [{ path: 'Patient/ana', type: { module: './patient', name: 'Patient' }, operation: 'chart' }],
+  [{ type: { module: 'patient', name: 'Patient' }, operation: 'create' }],
+  [{ path: '../elsewhere/card', operation: 'chart' }],
+]) {
+  try {
+    await realm.operations.capabilities(checks);
+    refused.push('asked');
+  } catch (e) {
+    refused.push(e.message);
+  }
+}
+return refused;`);
+
+      let refused = JSON.parse(result.scriptResult!) as string[];
+      assert.notOk(
+        refused.includes('asked'),
+        `each is refused: ${JSON.stringify(refused)}`,
+      );
+      assert.true(
+        refused[0]!.startsWith(
+          'realm.operations.capabilities expects a non-empty array of checks',
+        ),
+        `an empty list: ${refused[0]}`,
+      );
+      assert.true(
+        refused[2]!.startsWith(
+          'each realm.operations.capabilities check names an operation',
+        ),
+        `a check with no operation: ${refused[2]}`,
+      );
+      assert.true(
+        refused[3]!.includes('names a card by path or a type, one of them'),
+        `a check with neither: ${refused[3]}`,
+      );
+      assert.true(
+        refused[4]!.includes('names a card by path or a type, one of them'),
+        `a check with both: ${refused[4]}`,
+      );
+      assert.true(
+        refused[5]!.includes('a path from the realm root that starts with ./'),
+        `a bare module: ${refused[5]}`,
+      );
+    });
+
+    // Past the realm's cap on one request, so the checks go out as more than
+    // one, and up to the run's own limit.
+    test('asks about up to 500 operations in a run', async function (assert) {
+      let result = await run(`
+let check = { path: 'Patient/ana', operation: 'chart' };
+let answered = await realm.operations.capabilities(Array(500).fill(check));
+let refused;
+try {
+  await realm.operations.capabilities([check]);
+} catch (e) {
+  refused = e.message;
+}
+return { answered: answered.length, allowed: answered.every((a) => a.allowed), refused };`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        answered: 500,
+        allowed: true,
+        refused: 'Realm code may ask about at most 500 operations per run',
+      });
+    });
+
+    test('a list past the limit is refused whole, and leaves the run its limit', async function (assert) {
+      let result = await run(`
+let check = { path: 'Patient/ana', operation: 'chart' };
+let refused;
+try {
+  await realm.operations.capabilities(Array(501).fill(check));
+} catch (e) {
+  refused = e.message;
+}
+let answered = await realm.operations.capabilities([check]);
+return { refused, answered: answered.length };`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        refused: 'Realm code may ask about at most 500 operations per run',
+        answered: 1,
+      });
+    });
+
+    test('lists asked at once share the run limit', async function (assert) {
+      let result = await run(`
+let check = { path: 'Patient/ana', operation: 'chart' };
+let settled = await Promise.allSettled([
+  realm.operations.capabilities(Array(300).fill(check)),
+  realm.operations.capabilities(Array(300).fill(check)),
+]);
+return settled.map((s) => (s.status === 'fulfilled' ? s.value.length : s.reason.message));`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), [
+        300,
+        'Realm code may ask about at most 500 operations per run',
+      ]);
     });
   },
 );

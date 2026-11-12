@@ -31,6 +31,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
   CardMessageContent,
+  RealmPolicyForContext,
 } from '@cardstack/base/matrix-event';
 import { EventStatus } from 'matrix-js-sdk';
 import type { CardDef } from '@cardstack/base/card-api';
@@ -53,6 +54,7 @@ import {
   absolutizeSkillLinks,
   ATTACHED_MEDIA_NOT_IN_HISTORY_NOTE,
   attachedFilesToMessage,
+  buildContextMessage,
   buildPromptForModel,
   CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
   constructHistory,
@@ -329,6 +331,240 @@ Current date and time: 2025-06-11T11:43:00.533Z
       ),
       'the open file keeps its prefix form',
     );
+  });
+
+  module('a workspace the user can only read', function () {
+    const WORKSPACE = 'http://localhost:4201/example-library/';
+    const POLICY = rri(
+      'http://localhost:4201/example-library/policies/lending',
+    );
+    const LIBRARY = rri('http://localhost:4201/example-library/library');
+
+    async function contextFor(
+      realmPolicy?: RealmPolicyForContext,
+      { canRead = true }: { canRead?: boolean } = {},
+    ): Promise<string> {
+      const history: DiscreteMatrixEvent[] = [
+        {
+          type: 'm.room.message',
+          event_id: '1',
+          origin_server_ts: 1234567890,
+          content: {
+            msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+            format: 'org.matrix.custom.html',
+            body: 'What can I do here?',
+            isStreamingFinished: true,
+            data: {
+              context: {
+                submode: 'interact',
+                realmUrl: WORKSPACE,
+                realmPermissions: { canRead, canWrite: false },
+                ...(realmPolicy ? { realmPolicy } : {}),
+              },
+            },
+          },
+          sender: '@reader:localhost',
+          room_id: 'room1',
+          unsigned: { age: 1000, transaction_id: '1' },
+          status: EventStatus.SENT,
+        },
+      ];
+      return await buildContextMessage(history, '@aibot:localhost', []);
+    }
+
+    test('lists the operations its policy grants, with their conditions', async () => {
+      let context = await contextFor({
+        card: POLICY,
+        rules: [
+          {
+            targetType: { module: LIBRARY, name: 'Book' },
+            grants: [
+              { operation: 'borrow' },
+              { operation: 'renew', where: '.borrowerId == actor()' },
+            ],
+          },
+          {
+            targetType: { module: LIBRARY, name: 'Shelf' },
+            grants: [{ operation: 'addBook' }],
+          },
+        ],
+      });
+
+      assert.false(
+        context.includes('edits to its cards and files will be rejected'),
+        'the workspace is not described as refusing every change',
+      );
+      assert.true(
+        context.includes(
+          `its policy, ${POLICY}, grants them these operations.`,
+        ),
+        'the policy is named as granting operations',
+      );
+      assert.true(
+        context.includes(
+          ` - Book from ${LIBRARY}: \`borrow\`; \`renew\` when \`.borrowerId == actor()\`\n` +
+            ` - Shelf from ${LIBRARY}: \`addBook\`\n`,
+        ),
+        'each type lists its grants, each with its condition',
+      );
+      assert.true(
+        context.includes('actor() is the user (@reader:localhost)'),
+        'the condition says who actor() is',
+      );
+      assert.true(
+        context.includes(
+          'offer that operation and run it with invoke-card-operation',
+        ),
+        'the assistant is told to offer the granted operations',
+      );
+      assert.true(
+        context.includes(
+          'An operation on a type, such as a create, needs no card of that type: name the type by its module and export',
+        ),
+        'and that a create runs on its type where no card of it exists',
+      );
+    });
+
+    test('says its policy may grant operations when the policy card could not be read', async () => {
+      let context = await contextFor({ card: POLICY });
+
+      assert.true(
+        context.includes(
+          `Its policy, ${POLICY}, can still grant them operations a card's type declares, but the policy couldn't be read, so which ones is unknown.`,
+        ),
+        'the policy is named, with its grants unknown',
+      );
+      assert.true(
+        context.includes(
+          'offer that operation and run it with invoke-card-operation',
+        ),
+        'the assistant is told to offer operations rather than refuse',
+      );
+      assert.false(
+        context.includes('edits to its cards and files will be rejected'),
+        'the workspace is not described as refusing every change',
+      );
+    });
+
+    test('names a policy too large to list, and points at its card', async () => {
+      let context = await contextFor({ card: POLICY, tooLarge: true });
+
+      assert.true(
+        context.includes(
+          `its policy, ${POLICY}, grants them operations here: more than the context can list. Read that card to see which.`,
+        ),
+        'the policy is named, with the card to read for its grants',
+      );
+      assert.false(
+        context.includes('edits to its cards and files will be rejected'),
+        'the workspace is not described as refusing every change',
+      );
+    });
+
+    test('says a policy may grant operations to a user the realm admits only through it', async () => {
+      let context = await contextFor({}, { canRead: false });
+
+      assert.true(
+        context.includes(
+          "Its policy can still grant them operations a card's type declares, but the policy couldn't be read",
+        ),
+        'the policy is unknown rather than absent',
+      );
+      assert.true(
+        context.includes(
+          'offer that operation and run it with invoke-card-operation',
+        ),
+        'the assistant is told to offer operations rather than refuse',
+      );
+      assert.false(
+        context.includes('edits to its cards and files will be rejected'),
+        'the workspace is not described as refusing every change',
+      );
+    });
+
+    test('keeps a condition on its own list line, in a code span its backticks cannot close', async () => {
+      let context = await contextFor({
+        card: POLICY,
+        rules: [
+          {
+            targetType: { module: LIBRARY, name: 'Book' },
+            grants: [
+              {
+                operation: 'renew',
+                where: '.shelf == `new`\n  || .borrowerId == actor()',
+              },
+            ],
+          },
+        ],
+      });
+
+      assert.true(
+        context.includes(
+          ` - Book from ${LIBRARY}: \`renew\` when \`\`.shelf == \`new\` || .borrowerId == actor()\`\`\n` +
+            'In a condition, actor() is the user',
+        ),
+        'the condition is on one line, fenced past its own backticks',
+      );
+    });
+
+    test('points at realm.operations.capabilities to ask the realm whether it allows an operation', async () => {
+      const ASKS =
+        'To learn whether the realm allows the user an operation now, on a given card or as a create of a given type, ask it with realm.operations.capabilities in run-realm-code, which runs nothing.';
+      let notes = {
+        'a policy whose grants are listed': await contextFor({
+          card: POLICY,
+          rules: [
+            {
+              targetType: { module: LIBRARY, name: 'Book' },
+              grants: [{ operation: 'renew', where: '.borrowerId == actor()' }],
+            },
+          ],
+        }),
+        'a policy that could not be read': await contextFor({ card: POLICY }),
+        'a policy too large to list': await contextFor({
+          card: POLICY,
+          tooLarge: true,
+        }),
+      };
+      for (let [policy, context] of Object.entries(notes)) {
+        assert.true(context.includes(ASKS), `the note for ${policy} names it`);
+      }
+      assert.false(
+        (await contextFor()).includes('realm.operations.capabilities'),
+        'a workspace whose realm names no policy has nothing to ask about',
+      );
+      assert.false(
+        (await contextFor({}, { canRead: false })).includes(
+          'realm.operations.capabilities',
+        ),
+        'nor is it named to a user the realm admits only through its policy, whom run-realm-code does not run for',
+      );
+    });
+
+    test('refuses every edit when the realm names no policy', async () => {
+      let context = await contextFor();
+
+      assert.true(
+        context.includes(
+          'This workspace is read-only for the user: edits to its cards and files will be rejected.\n',
+        ),
+      );
+    });
+
+    test('refuses every edit for a user who cannot read it, where no policy is known', async () => {
+      let context = await contextFor(undefined, { canRead: false });
+
+      assert.true(
+        context.includes(
+          'This workspace is read-only for the user: edits to its cards and files will be rejected.\n',
+        ),
+        'a realm that may name no policy is not said to grant anything',
+      );
+      assert.false(
+        context.includes('invoke-card-operation'),
+        'and the assistant is not told to offer operations',
+      );
+    });
   });
 
   test('should generate a prompt from the user (viewing CardDef in code mode)', async () => {
@@ -11311,19 +11547,19 @@ module('absolutizeSkillLinks', () => {
   const INDEX = 'https://localhost:4201/skills/index.md';
 
   test('resolves a document-relative link against the skill url', () => {
-    // The skills realm is itself named `skills`, so a link relative to the
-    // index (which lives at the realm root) doubles the segment — the exact
-    // shape the ai-bot used to flatten to a 404.
     assert.strictEqual(
-      absolutizeSkillLinks('See [boxel](skills/boxel/SKILL.md).', INDEX),
-      'See [boxel](https://localhost:4201/skills/skills/boxel/SKILL.md).',
+      absolutizeSkillLinks('See [boxel](boxel/SKILL.md).', INDEX),
+      'See [boxel](https://localhost:4201/skills/boxel/SKILL.md).',
     );
   });
 
-  test('resolves against the skill url, not a shorter prefix', () => {
+  test('resolves a parent-relative link against the skill url', () => {
     assert.strictEqual(
-      absolutizeSkillLinks('[g](skills/glossary.md)', INDEX),
-      '[g](https://localhost:4201/skills/skills/glossary.md)',
+      absolutizeSkillLinks(
+        '[g](../glossary.md)',
+        'https://localhost:4201/skills/boxel/SKILL.md',
+      ),
+      '[g](https://localhost:4201/skills/glossary.md)',
     );
   });
 
@@ -11380,7 +11616,7 @@ module('absolutizeSkillLinks', () => {
   });
 
   test('leaves the body untouched when the id is not an absolute url', () => {
-    let body = '[boxel](skills/boxel/SKILL.md)';
+    let body = '[boxel](boxel/SKILL.md)';
     assert.strictEqual(
       absolutizeSkillLinks(body, '@cardstack/skills/index.md'),
       body,
@@ -11394,14 +11630,12 @@ module('absolutizeSkillLinks', () => {
         id: INDEX,
         attributes: {
           title: 'Index',
-          instructions: 'Read [boxel](skills/boxel/SKILL.md).',
+          instructions: 'Read [boxel](boxel/SKILL.md).',
         },
       },
     ]);
     assert.true(
-      message.includes(
-        '[boxel](https://localhost:4201/skills/skills/boxel/SKILL.md)',
-      ),
+      message.includes('[boxel](https://localhost:4201/skills/boxel/SKILL.md)'),
       'the prompt carries a copy-ready absolute url',
     );
   });
