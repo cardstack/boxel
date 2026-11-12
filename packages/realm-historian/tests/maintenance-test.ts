@@ -40,9 +40,14 @@ import {
   countObjects,
   isMaintained,
   maintainedHead,
+  maintenanceKinds,
   maintainRepo,
+  passLogLine,
   writeCommitGraph,
 } from '../src/maintenance.ts';
+import { BackgroundScheduler } from '../src/background.ts';
+import { JOURNAL_START } from '../src/consumer.ts';
+import type { RecordedRealm } from '../src/realms.ts';
 import { probeGit } from '../src/git-capabilities.ts';
 import { Recorder } from '../src/recorder.ts';
 import { Semaphore } from '../src/semaphore.ts';
@@ -52,6 +57,7 @@ import {
   insertRealm,
   setupTestDatabase,
   sleep,
+  waitUntil,
   type TestRealm,
 } from './helpers.ts';
 import { fsck, git } from './git-objects-test.ts';
@@ -723,6 +729,70 @@ module('maintenance', (hooks) => {
     assert.false(await isMaintained(gitDir));
   });
 
+  test("a pass's log line carries its realm, trigger, outcome, durations and object counts", async (assert) => {
+    let [head] = await writeLooseHistory(gitDir, 1);
+    let result = await maintainRepo(gitDir);
+    let fields = Object.fromEntries(
+      passLogLine({
+        realm: 'http://localhost:4201/test-user/realm/',
+        head,
+        trigger: 'head-moved',
+        outcome: 'done',
+        result,
+      })
+        .split(' ')
+        .slice(2)
+        .map((pair) => pair.split('=')),
+    );
+    assert.deepEqual(Object.keys(fields), [
+      'realm',
+      'head',
+      'trigger',
+      'outcome',
+      'totalMs',
+      'repackMs',
+      'commitGraphMs',
+      'pruneMs',
+      'updateServerInfoMs',
+      'looseBefore',
+      'looseAfter',
+      'looseBytesBefore',
+      'looseBytesAfter',
+      'packsBefore',
+      'packsAfter',
+      'packBytesBefore',
+      'packBytesAfter',
+      'consolidated',
+      'pruned',
+    ]);
+    assert.strictEqual(fields.realm, 'http://localhost:4201/test-user/realm/');
+    assert.strictEqual(fields.head, head);
+    assert.strictEqual(fields.trigger, 'head-moved');
+    assert.strictEqual(fields.outcome, 'done');
+    assert.strictEqual(fields.looseBefore, String(result.before.looseObjects));
+    assert.strictEqual(fields.looseAfter, '0');
+    assert.strictEqual(fields.packsAfter, '1');
+    assert.strictEqual(fields.consolidated, 'false');
+    assert.strictEqual(fields.pruned, '0');
+    assert.true(
+      /^\d+$/.test(fields.totalMs),
+      'durations are whole milliseconds',
+    );
+
+    assert.true(
+      passLogLine({
+        realm: 'http://localhost:4201/test-user/realm/',
+        head,
+        trigger: 'prune-rerun',
+        outcome: 'failed',
+        error: new Error('fatal: Unable to create lock'),
+      }).endsWith(
+        'trigger=prune-rerun outcome=failed error="fatal: Unable to create lock"',
+      ),
+      'a value with spaces is quoted',
+    );
+  });
+
   test('counting objects reports loose and packed objects', async (assert) => {
     await writeLooseHistory(gitDir, 2);
     let loose = await countObjects(gitDir);
@@ -871,5 +941,289 @@ module('maintenance of a recorded repo', (hooks) => {
       'every object the revision uses remains',
     );
     assert.strictEqual(await fsck(gitDir), '');
+  });
+});
+
+module('maintenance as background work', (hooks) => {
+  let database = setupTestDatabase(hooks);
+  let root: string;
+  let historyRoot: string;
+  let realm: TestRealm;
+  let realmDir: string;
+  let gitDir: string;
+  let recorders: Recorder[];
+  let schedulers: BackgroundScheduler[];
+  let fatals: Error[];
+  const AUTHOR = '@test-author:localhost';
+  const PATH = 'Author/jane.json';
+  const T0 = Date.parse('2026-11-11T10:00:00.000Z');
+  const { quietPeriodMs } = DEFAULT_GROUPING_LIMITS;
+
+  hooks.beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'realm-maintenance-'));
+    historyRoot = join(root, 'history');
+    realmDir = join(root, 'realm');
+    await mkdir(realmDir, { recursive: true });
+    realm = await insertRealm(database.db, {
+      url: 'http://localhost:4201/test-user/realm/',
+    });
+    gitDir = repoPath(historyRoot, realm.id);
+    await database.db.execute(
+      `INSERT INTO realm_historian_leases (shard, holder, expires_at)
+       VALUES ('0', 'maintenance-test-task', now() + interval '1 hour')`,
+    );
+    recorders = [];
+    schedulers = [];
+    fatals = [];
+  });
+
+  hooks.afterEach(async (assert) => {
+    for (let scheduler of schedulers.splice(0)) {
+      await scheduler.stop();
+    }
+    for (let recorder of recorders.splice(0)) {
+      await recorder.stop();
+    }
+    assert.deepEqual(fatals, [], 'no recorder failed');
+    for (let repo of await readdir(historyRoot).catch(() => [] as string[])) {
+      assert.strictEqual(await fsck(join(historyRoot, repo)), '');
+    }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  function recordedRealm(
+    target: TestRealm = realm,
+    directory = realmDir,
+  ): RecordedRealm {
+    return {
+      id: target.id,
+      url: target.url,
+      kind: 'source',
+      shard: 0,
+      directory,
+      cursor: JOURNAL_START,
+      head: undefined,
+    };
+  }
+
+  function recorderFor(
+    target: RecordedRealm,
+    onCommits?: (count: number) => void,
+  ): Recorder {
+    let created = new Recorder({
+      db: database.db,
+      realm: target,
+      historyRoot,
+      holder: 'maintenance-test-task',
+      io: new Semaphore(4),
+      onFatal: (error) => fatals.push(error),
+      onCommits,
+    });
+    recorders.push(created);
+    return created;
+  }
+
+  // A scheduler of the maintenance kinds over the test's realm, whose one
+  // recorder reports its revisions to it, as the task's recorders do.
+  function schedule(options: { quietMs?: number; pruneExpiryMs?: number }): {
+    scheduler: BackgroundScheduler;
+    recorder: Recorder;
+  } {
+    let scheduler: BackgroundScheduler;
+    let target = recordedRealm();
+    let recorder = recorderFor(target, (count) =>
+      scheduler.commitsRecorded(realm.id, count),
+    );
+    scheduler = new BackgroundScheduler({
+      kinds: maintenanceKinds({ historyRoot, ...options }),
+      recorderFor: () => recorder,
+    });
+    scheduler.setRealms(new Map([[realm.id, target]]));
+    schedulers.push(scheduler);
+    return { scheduler, recorder };
+  }
+
+  // Dispatches due work, as the task's loop does on every turn, until
+  // `condition` holds.
+  async function dispatchUntil(
+    scheduler: BackgroundScheduler,
+    condition: () => Promise<boolean>,
+    what: string,
+  ): Promise<void> {
+    await waitUntil(
+      async () => {
+        scheduler.dispatch();
+        return scheduler.running === 0 && (await condition());
+      },
+      { timeoutMs: 15_000, intervalMs: 20, what },
+    );
+  }
+
+  async function save(content: string, offsetMs: number): Promise<ChangeEvent> {
+    let full = join(realmDir, PATH);
+    await mkdir(dirname(full), { recursive: true });
+    await writeFile(full, content);
+    let change: ChangeEventChange = {
+      path: PATH,
+      status: 'M',
+      contentHash: computeContentHash(Buffer.from(content)),
+      size: Buffer.byteLength(content),
+    };
+    return appendEvent(database.db, realm, {
+      author: AUTHOR,
+      changes: [change],
+      occurredAt: new Date(T0 + offsetMs),
+    });
+  }
+
+  // Records one revision of `content`, its group closed by the clock.
+  async function revision(
+    recorder: Recorder,
+    content: string,
+    offsetMs: number,
+  ): Promise<void> {
+    await recorder.record(await save(content, offsetMs));
+    recorder.tick(T0 + offsetMs + quietPeriodMs);
+    await recorder.settled();
+  }
+
+  test('a pass never runs while the recorder holds a group open, and runs once the group commits', async (assert) => {
+    let { scheduler, recorder } = schedule({ quietMs: 0, pruneExpiryMs: 0 });
+    await revision(recorder, '{"v":0}', 0);
+    // A save captured into a group the clock hasn't closed.
+    await recorder.record(await save('{"v":1}', 60_000));
+    await recorder.settled();
+
+    scheduler.dispatch();
+    await waitUntil(() => scheduler.running === 0, { what: 'the job to end' });
+    assert.strictEqual(
+      await maintainedHead(gitDir),
+      undefined,
+      'no pass has completed',
+    );
+    assert.strictEqual(
+      (await countObjects(gitDir)).packs,
+      0,
+      'nothing was packed',
+    );
+
+    recorder.tick(T0 + 60_000 + quietPeriodMs);
+    await recorder.settled();
+    let head = await readMain(gitDir);
+    await dispatchUntil(
+      scheduler,
+      async () => (await maintainedHead(gitDir)) === head,
+      'a pass at the new HEAD',
+    );
+    assert.strictEqual(
+      (await git(gitDir, 'rev-list', '--count', MAIN_REF)).trim(),
+      '2',
+    );
+    assert.strictEqual((await countObjects(gitDir)).looseObjects, 0);
+  });
+
+  test('after every 100 revisions the commit-graph covers them all, without waiting for a pass', async (assert) => {
+    let { scheduler, recorder } = schedule({});
+    // The realm is loaded before it has a repo, so the pass due at load
+    // finds nothing to do.
+    await dispatchUntil(scheduler, async () => true, 'the load check');
+
+    for (let i = 0; i < 99; i++) {
+      await revision(recorder, `{"v":${i}}`, i * 60_000);
+    }
+    scheduler.dispatch();
+    await waitUntil(() => scheduler.running === 0, { what: 'no job' });
+    assert.strictEqual((await graphCommits(gitDir)).size, 0, 'no graph yet');
+
+    await revision(recorder, '{"v":99}', 99 * 60_000);
+    let commits = (await git(gitDir, 'rev-list', MAIN_REF)).trim().split('\n');
+    assert.strictEqual(commits.length, 100);
+    await dispatchUntil(
+      scheduler,
+      async () => (await graphCommits(gitDir)).size > 0,
+      'the commit-graph',
+    );
+    assert.deepEqual(
+      [...(await graphCommits(gitDir))].sort(),
+      commits.sort(),
+      'the graph covers every revision',
+    );
+    assert.strictEqual(
+      await maintainedHead(gitDir),
+      undefined,
+      'no pass ran: the realm has not been quiet long enough',
+    );
+  });
+
+  test('a pass that leaves captures younger than the prune expiry runs again once they have passed it', async (assert) => {
+    let { scheduler, recorder } = schedule({ quietMs: 0, pruneExpiryMs: 1500 });
+    let saves = ['{"v":0}', '{"v":1}', '{"v":2}', '{"v":3}'];
+    for (let [i, content] of saves.entries()) {
+      await recorder.record(await save(content, i * 1000));
+      await recorder.settled();
+    }
+    recorder.tick(T0 + 3000 + quietPeriodMs);
+    await recorder.settled();
+    let head = await readMain(gitDir);
+    let intermediates = saves
+      .slice(0, -1)
+      .map((content) => hashObject('blob', blobBody(content)));
+
+    await dispatchUntil(
+      scheduler,
+      async () => (await maintainedHead(gitDir)) === head,
+      'the first pass',
+    );
+    assert.strictEqual(
+      (await countObjects(gitDir)).looseObjects,
+      intermediates.length,
+      'the first pass keeps captures younger than the expiry',
+    );
+
+    await dispatchUntil(
+      scheduler,
+      async () => (await countObjects(gitDir)).looseObjects === 0,
+      'the pass after the expiry',
+    );
+    assert.deepEqual(
+      await missingObjects(gitDir, intermediates),
+      intermediates,
+      'the captures are pruned',
+    );
+  });
+
+  test('a loaded realm whose repo a crash left unmaintained gets a pass, and one with nothing to maintain gets no recorder', async (assert) => {
+    let first = recorderFor(recordedRealm());
+    await revision(first, '{"v":0}', 0);
+    await first.stop();
+    let other = await insertRealm(database.db, {
+      url: 'http://localhost:4201/test-user/other/',
+      diskId: 'test-user/other',
+    });
+    let otherDir = join(root, 'other');
+    await mkdir(otherDir, { recursive: true });
+
+    let started: string[] = [];
+    let scheduler = new BackgroundScheduler({
+      kinds: maintenanceKinds({ historyRoot }),
+      recorderFor: (target) => {
+        started.push(target.id);
+        return recorderFor(target);
+      },
+    });
+    schedulers.push(scheduler);
+    scheduler.setRealms(
+      new Map([
+        [realm.id, recordedRealm()],
+        [other.id, recordedRealm(other, otherDir)],
+      ]),
+    );
+    let head = await readMain(gitDir);
+    await dispatchUntil(
+      scheduler,
+      async () => (await maintainedHead(gitDir)) === head,
+      'the pass on the unmaintained repo',
+    );
+    assert.deepEqual(started, [realm.id], 'only that realm got a recorder');
   });
 });

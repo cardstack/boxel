@@ -41,12 +41,31 @@
 // directory, or a pack that a `-a` repack removed, for as long as its client
 // caches them. Whether reads there stay whole through a pass is measured on
 // the deployed file system, not assumed here.
+//
+// `maintenanceKinds` schedules the work as background work on each realm
+// (`background.ts`):
+//
+// * `maintain` runs a pass once a realm has committed nothing for `quietMs`
+//   after committing a revision, and when the task loads the realm, so a
+//   repo a crash left unmaintained gets its pass. Its check skips a realm
+//   whose `info/refs` already names HEAD. A pass that leaves loose objects
+//   younger than the prune expiry runs again once they have passed it, so a
+//   realm that goes quiet after a burst doesn't keep its captures. The
+//   service forgets that rerun when it restarts.
+// * `commit-graph` writes the commit-graph after every `COMMIT_GRAPH_EVERY`
+//   revisions, so a busy realm's path-filtered reads stay fast between
+//   passes.
+//
+// Each pass logs one line of `key=value` fields (`passLogLine`): the realm,
+// what made it due, how it ended, each step's duration, and the object
+// counts before and after.
 
 import { readdir, readFile, stat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { logger } from '@cardstack/runtime-common';
-import { MAIN_REF, readMain, runGit } from './repo-format.ts';
+import { MAIN_REF, readMain, repoPath, runGit } from './repo-format.ts';
+import type { BackgroundKind } from './background.ts';
 
 const log = logger('realm-historian:maintenance');
 
@@ -59,6 +78,10 @@ export const COMMIT_GRAPH_EVERY = 100;
 
 // The pack count at which a pass repacks everything into one pack.
 export const DEFAULT_CONSOLIDATE_AT_PACKS = 32;
+
+// How long a realm commits nothing, after committing a revision, before a
+// pass runs on it.
+export const DEFAULT_MAINTAIN_AFTER_QUIET_MS = 5 * 60_000;
 
 // Git holds the commit-graph's lock for the length of one write, and a
 // pack's temporary name for the length of one repack. A lock or a temporary
@@ -107,6 +130,163 @@ export interface MaintenanceResult {
     updateServerInfo: number;
     total: number;
   };
+}
+
+export interface MaintenanceKindsOptions {
+  historyRoot: string;
+  pruneExpiryMs?: number;
+  consolidateAtPacks?: number;
+  quietMs?: number;
+  commitGraphEvery?: number;
+}
+
+// What made a pass due: HEAD has moved since the last complete pass, or the
+// last pass left loose objects the prune expiry kept.
+export type PassTrigger = 'head-moved' | 'prune-rerun';
+
+export type PassOutcome = 'done' | 'failed' | 'aborted';
+
+// The background work that maintains each realm's repo.
+export function maintenanceKinds({
+  historyRoot,
+  pruneExpiryMs = DEFAULT_PRUNE_EXPIRY_MS,
+  consolidateAtPacks = DEFAULT_CONSOLIDATE_AT_PACKS,
+  quietMs = DEFAULT_MAINTAIN_AFTER_QUIET_MS,
+  commitGraphEvery = COMMIT_GRAPH_EVERY,
+}: MaintenanceKindsOptions): BackgroundKind[] {
+  // The realms whose last pass left loose objects younger than the prune
+  // expiry, by registry id.
+  let rerunsDue = new Set<string>();
+  return [
+    {
+      name: 'maintain',
+      atStart: true,
+      afterCommits: 1,
+      quietMs,
+      isDue: async (realm) =>
+        rerunsDue.has(realm.id) ||
+        !(await isMaintained(repoPath(historyRoot, realm.id))),
+      run: async (realm, { gitDir, head, signal }) => {
+        let trigger: PassTrigger =
+          head !== undefined && head === (await maintainedHead(gitDir))
+            ? 'prune-rerun'
+            : 'head-moved';
+        let result: MaintenanceResult;
+        try {
+          result = await maintainRepo(gitDir, {
+            signal,
+            pruneExpiryMs,
+            consolidateAtPacks,
+          });
+        } catch (error) {
+          log.warn(
+            passLogLine({
+              realm: realm.url,
+              head,
+              trigger,
+              outcome: signal.aborted ? 'aborted' : 'failed',
+              error,
+            }),
+          );
+          throw error;
+        }
+        log.info(
+          passLogLine({
+            realm: realm.url,
+            head,
+            trigger,
+            outcome: 'done',
+            result,
+          }),
+        );
+        if (result.after.looseObjects > 0) {
+          rerunsDue.add(realm.id);
+          return { againAfterMs: pruneExpiryMs };
+        }
+        rerunsDue.delete(realm.id);
+        return undefined;
+      },
+    },
+    {
+      name: 'commit-graph',
+      afterCommits: commitGraphEvery,
+      run: async (realm, { gitDir, head, signal }) => {
+        let started = performance.now();
+        await writeCommitGraph(gitDir, { signal });
+        log.info(
+          logfmt('commit-graph written', {
+            realm: realm.url,
+            head,
+            totalMs: performance.now() - started,
+          }),
+        );
+      },
+    },
+  ];
+}
+
+// One pass as a line of `key=value` fields: sizes in bytes, durations in
+// whole milliseconds, and `before`/`after` the object counts either side of
+// the pass.
+export function passLogLine({
+  realm,
+  head,
+  trigger,
+  outcome,
+  result,
+  error,
+}: {
+  realm: string;
+  head: string | undefined;
+  trigger: PassTrigger;
+  outcome: PassOutcome;
+  result?: MaintenanceResult;
+  error?: unknown;
+}): string {
+  let fields: Record<string, string | number | boolean | undefined> = {
+    realm,
+    head,
+    trigger,
+    outcome,
+  };
+  if (result) {
+    let { before, after, durations } = result;
+    Object.assign(fields, {
+      totalMs: durations.total,
+      repackMs: durations.repack,
+      commitGraphMs: durations.commitGraph,
+      pruneMs: durations.prune,
+      updateServerInfoMs: durations.updateServerInfo,
+      looseBefore: before.looseObjects,
+      looseAfter: after.looseObjects,
+      looseBytesBefore: before.looseBytes,
+      looseBytesAfter: after.looseBytes,
+      packsBefore: before.packs,
+      packsAfter: after.packs,
+      packBytesBefore: before.packBytes,
+      packBytesAfter: after.packBytes,
+      consolidated: result.consolidated,
+      pruned: result.pruned,
+    });
+  }
+  if (error !== undefined) {
+    fields.error = error instanceof Error ? error.message : String(error);
+  }
+  return logfmt('maintenance pass', fields);
+}
+
+function logfmt(
+  message: string,
+  fields: Record<string, string | number | boolean | undefined>,
+): string {
+  let pairs = Object.entries(fields)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => {
+      let text =
+        typeof value === 'number' ? String(Math.round(value)) : String(value);
+      return `${key}=${/^[^\s="]+$/.test(text) ? text : JSON.stringify(text)}`;
+    });
+  return [message, ...pairs].join(' ');
 }
 
 // Runs one maintenance pass over the repo.

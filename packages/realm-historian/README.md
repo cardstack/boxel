@@ -103,8 +103,16 @@ unless the kind stalls the realm on failure.
 
 The recorder writes every object loose, and captures every write, including
 intermediate states that no revision keeps. `src/maintenance.ts` keeps each
-repo small and fast to read. A pass runs only while the realm's recorder holds
-nothing captured, and it runs four steps:
+repo small and fast to read, as two kinds of background work:
+
+- `maintain` runs a pass once a realm has committed nothing for 5 minutes
+  after committing a revision. It also runs when the task loads the realm,
+  so a repo a crash left unmaintained gets its pass. It skips a realm whose
+  `info/refs` already names HEAD.
+- `commit-graph` writes the commit-graph after every 100 revisions, so a busy
+  realm's path-filtered reads stay fast between passes.
+
+A pass runs four steps:
 
 1. `git repack -d` packs the loose objects HEAD reaches. Once a repo has 32
    packs, the pass uses `git repack -a -d` instead and merges them into one.
@@ -114,6 +122,7 @@ nothing captured, and it runs four steps:
    revisions.
 3. `git prune --expire=1.hour.ago` removes captured objects no revision uses.
    The hour protects objects another task is writing during a lease handover.
+   A pass that leaves younger ones runs again an hour later.
 4. `git update-server-info` writes `info/refs` and `objects/info/packs`, so a
    repo can be cloned read-only over git's dumb HTTP protocol from a static
    file server. `info/refs` also names the HEAD the last complete pass saw.
@@ -129,6 +138,12 @@ HEAD doesn't reach. A reader on another host of the shared file system can
 go on seeing a cached listing of the pack directory, or a pack that a `-a`
 repack removed, for as long as its client caches them. Whether reads there
 stay whole through a pass is measured on the deployed file system.
+
+Each pass logs one line of `key=value` fields: the realm, its HEAD, what made
+the pass due (`head-moved` or `prune-rerun`), how it ended (`done`, `failed`
+or `aborted`), each step's duration, the loose and packed object counts and
+sizes before and after, whether the packs were put into one, and the objects
+pruned.
 
 The commit-graph's Bloom filters serve `git log` with one path filter from
 git 2.27, and with several path filters only from git 2.51.

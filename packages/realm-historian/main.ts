@@ -18,6 +18,7 @@ import { Historian } from './src/historian.ts';
 import { Heartbeat, startHealthServer } from './src/health.ts';
 import { DEFAULT_BACKGROUND_CONCURRENCY } from './src/background.ts';
 import { probeGit } from './src/git-capabilities.ts';
+import { maintenanceKinds } from './src/maintenance.ts';
 
 const log = logger('realm-historian');
 
@@ -97,7 +98,10 @@ let historian = new Historian({
     expiryMs: leaseExpiryMs,
     holder,
   },
-  background: { concurrency: backgroundConcurrency },
+  background: {
+    concurrency: backgroundConcurrency,
+    kinds: maintenanceKinds({ historyRoot }),
+  },
 });
 
 let health = await startHealthServer({
