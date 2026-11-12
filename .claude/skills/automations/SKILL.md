@@ -11,9 +11,14 @@ description: >-
   done), caps snapshot, per-trigger run counts and next run, and the functions
   in `packages/runtime-common/automations.ts` that switch an automation on,
   pause, resume and remove it, pause it when a card edit raises a cap or turns
-  on `batchedAI`, and pause it when its payer loses direct write. Use when
-  calling or changing those functions, adding a column to `automations`, or
-  diagnosing why an automation is paused, has no next run, or isn't running.
+  on `batchedAI`, and pause it when its payer loses direct write. Also covers
+  the card's index hook, which recomputes the row's next run and *done* when
+  the card is indexed and removes the row when the card is deleted or stops
+  being an automation, and archiving a realm, which pauses its automations.
+  Use when calling or changing those functions, adding a column to
+  `automations`, changing the indexer tasks or the realm archive handler, or
+  diagnosing why an automation is paused, has no next run, isn't running, or
+  lost its row.
   Also covers how an automation's runs are tracked on the server — the
   `automation_runs` table (the run row), its states (pending, running, complete,
   error, canceled), which queue attempt owns a run, how a commit is claimed and
@@ -173,7 +178,7 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 | `payer`                                                                  | The Matrix user id of the direct writer who switched it on or last resumed it. Only switch-on and resume set it                                                                                    |
 | `state`, `pause_reason`, `paused_by`                                     | `active`, `paused`, `waiting-for-credits` or `done`. A paused row has a reason, and no other row does; `paused_by` names the person, when a person paused it                                       |
 | `caps_snapshot`                                                          | JSON: every cap in `AUTOMATION_CAP_NAMES` as the card set it, plus `batchedAI`, when the payer switched it on or resumed it                                                                        |
-| `trigger_runs`                                                           | JSON keyed by trigger label: `{ runs, lastSlot?, since? }`, the `runState` `computeAutomationSchedule` reads (see _The cursor_)                                                                    |
+| `trigger_runs`                                                           | JSON keyed by trigger label: `{ runs, lastSlot?, since?, timing? }`, the `runState` `computeAutomationSchedule` reads (see _The cursor_), plus the trigger's `timing` as the row last saw it       |
 | `scheduled_since`                                                        | When it was switched on or last resumed: the schedule's `since`. Slots at or before it never run                                                                                                   |
 | `next_run`                                                               | The earliest next run across unspent cron and one-time triggers; null when none is left. The `automations_due_idx` partial index serves the tick's search over active and waiting-for-credits rows |
 | `last_enqueued_at`, `last_started_at`, `last_finished_at`, `last_result` | The most recent run: when it was enqueued, started and finished, and whether it ended `complete`, `error` or `canceled`                                                                            |
@@ -187,11 +192,29 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 | `caps-raised`            | `checkAutomationCaps`: the card, as indexed, sets a cap above the snapshot, or leaves unset a credit cap the snapshot set |
 | `batched-ai-enabled`     | `checkAutomationCaps`: the card turned on `batchedAI` and the snapshot had it off                                         |
 | `payer-lost-access`      | `checkAutomationPayer`: the payer is no longer a direct writer of the realm                                               |
+| `realm-archived`         | `pauseRealmAutomations`: the realm was archived (`handlers/handle-archive-realm.ts`)                                      |
 
 - **`switchOnAutomation`** makes the row for a direct writer, who becomes the payer, snapshots the caps the declaration sets, and starts the schedule now. A row whose triggers are all spent starts `done`. A second switch-on is refused (`already-switched-on`).
-- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on.
+- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending runs; restoring the realm leaves them paused until a direct writer resumes each one.
 - **`checkAutomationCaps`** and **`checkAutomationPayer`** pause without a person. A row already paused keeps its reason, since a resume takes a new snapshot whatever paused it. A cap the snapshot doesn't limit (an unset credit cap, or a cap added to the card type after the snapshot) is never "raised"; `capsRaisedAbove` is the comparison.
-- The tick, the card's index hook and the run task own `next_run`, `trigger_runs`, `waiting-for-credits`, `done` and the `last_*` columns once the row exists. The lifecycle functions set the next run and `done` only where they start a schedule.
+- The tick, the card's index hook and the run task own `next_run`, `trigger_runs`, `waiting-for-credits`, `done` and the `last_*` columns once the row exists. The lifecycle functions set the next run and `done` only where they start a schedule. Whatever writes `trigger_runs` keeps each entry's `timing`.
+
+### When the row is recomputed: the card's index hook
+
+`syncAutomationsAfterIndex` (`packages/runtime-common/automation-index-hook.ts`) runs in the worker's `from-scratch-index` and `incremental-index` tasks (`tasks/indexer.ts`) once the pass has committed, so it reads the committed index. A from-scratch pass syncs every automation in the realm; an incremental pass syncs those whose card file it visited or deleted. For each, `syncAutomationWithCard` in `automations.ts` reads the card's index row (`IndexQueryEngine.getInstanceSource`) and, in one transaction holding the automation's row:
+
+| The card as indexed                                                                | The row                                                                                                                                                      |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| No live instance (deleted)                                                         | Removed, pending run canceled with `error_reason` `card-deleted`                                                                                             |
+| Doesn't adopt from the catalog `Automation` type                                   | Removed, pending run canceled with `not-an-automation`                                                                                                       |
+| Failed to index, or doesn't read as a declaration (an invalid cron, a missing cap) | Unchanged: the next index that reads it recomputes                                                                                                           |
+| Row is paused                                                                      | Unchanged, whatever paused it: a resume restarts the schedule                                                                                                |
+| Raises a cap or turns on `batchedAI` (`capsRaisedAbove`)                           | Paused with `caps-raised` or `batched-ai-enabled`                                                                                                            |
+| Anything else                                                                      | `next_run` recomputed from the triggers and `trigger_runs` with `now`; _done_ when every trigger is spent, active again when a _done_ one has a trigger left |
+
+Run counts are keyed by label, so editing the card keeps them. Each trigger's `timing` (kind, expression, time zone, `at`, `until`; not `count`) is recorded at switch-on and resume and compared on every sync: a trigger whose timing changed, or whose label is new, gets `since` = now, so a slot that passed before the edit never comes due (see _The cursor_). Raising a spent trigger's `count` brings a _done_ automation back to active with its runs so far counted.
+
+The hook only logs a failure (`failed to sync automations with their cards`); the index pass still succeeds, and the next pass over the card syncs again. A row stuck on an old schedule after an edit is worth checking against that log line and the card's index row (`has_error`, `types`).
 
 Every direct-writer check is `isDirectWriterLocked`, asked inside the change's transaction against the served URL `virtualNetwork.toURL(realm)` resolves the realm to, since permission rows are keyed by served URLs. A wildcard (`*`, `users`) row, a bot account and a policy grant never make a direct writer. A refusal returns `{ ok: false, reason }` (`not-a-direct-writer`, `missing`, `outside-realm`, `other-card`, `already-switched-on`, `not-paused`, `not-pausable`) rather than throwing.
 
@@ -208,7 +231,8 @@ SELECT state, pause_reason, paused_by, payer, next_run, scheduled_since,
  WHERE automation_id = '<automation card id>';
 ```
 
-- No row: it isn't switched on (or was removed). Nothing runs it.
+- No row: it isn't switched on, or was removed: by a person, by deleting the realm, or by the index hook when the card was deleted or stopped adopting from `Automation` (a run canceled with `card-deleted` or `not-an-automation` says which). Nothing runs it.
+- `paused` with `realm-archived`: the realm was archived. Restoring it doesn't resume the automation; a direct writer does.
 - `paused` with `caps-raised` or `batched-ai-enabled`: compare `caps_snapshot` with the card's `caps` and `batchedAI`. A direct writer resumes it to agree to the new caps and pay for them.
 - `paused` with `payer-lost-access`: the payer's own permission row no longer grants write. Another direct writer resumes it and becomes the payer.
 - `active` with a null `next_run`: only webhook triggers, or none left that the schedule can place.

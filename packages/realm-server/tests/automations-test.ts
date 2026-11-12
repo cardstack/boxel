@@ -5,6 +5,7 @@ import {
   createAutomationRun,
   getAutomationRun,
   insertPermissions,
+  internalKeyFor,
   ri,
   rri,
   startAutomationRunAttempt,
@@ -17,15 +18,20 @@ import {
   checkAutomationPayer,
   getAutomation,
   pauseAutomation,
+  pauseRealmAutomations,
   removeAutomation,
   resumeAutomation,
   switchOnAutomation,
+  syncAutomationWithCard,
   type AutomationActorOptions,
   type AutomationRow,
+  type AutomationSync,
 } from '@cardstack/runtime-common/automations';
-import type {
-  AutomationCaps,
-  AutomationDeclaration,
+import {
+  automationRef,
+  type AutomationCaps,
+  type AutomationDeclaration,
+  type AutomationIndexEntry,
 } from '@cardstack/runtime-common/automation-declaration';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
 import { setupDB } from './helpers/index.ts';
@@ -78,6 +84,16 @@ function declaration(
     batchDeadlineMinutes: 60,
     ...overrides,
   };
+}
+
+// Each trigger's run count, last slot and cursor, without the timing record
+// the index hook compares.
+function runCounts(automation: AutomationRow) {
+  return Object.fromEntries(
+    Object.entries(automation.triggerRuns).map(
+      ([label, { timing: _timing, ...counts }]) => [label, counts],
+    ),
+  );
 }
 
 module(basename(import.meta.filename), function () {
@@ -138,7 +154,11 @@ module(basename(import.meta.filename), function () {
           ...CAPS,
           batchedAI: false,
         });
-        assert.deepEqual(automation.triggerRuns, {});
+        assert.deepEqual(
+          runCounts(automation),
+          { daily: { runs: 0 } },
+          'each trigger starts with no runs',
+        );
         assert.strictEqual(automation.scheduledSince, NOW);
         assert.strictEqual(
           automation.nextRun,
@@ -464,7 +484,7 @@ module(basename(import.meta.filename), function () {
           'the slots that passed while paused do not run',
         );
         assert.deepEqual(
-          automation.triggerRuns,
+          runCounts(automation),
           { daily: { runs: 3, lastSlot: NOW - 86400 } },
           'each trigger keeps its run count',
         );
@@ -759,6 +779,349 @@ module(basename(import.meta.filename), function () {
           options,
         );
         assert.deepEqual(result, { ok: false, reason: 'not-a-direct-writer' });
+      });
+    });
+
+    module("the card's index hook", function () {
+      // The automation card's committed index row, as the hook reads it,
+      // with `triggers`, `caps` or `batchedAI` as the card sets them.
+      function indexed(
+        overrides: {
+          triggers?: Record<string, unknown>[];
+          caps?: AutomationCaps;
+          batchedAI?: boolean;
+          types?: string[];
+        } = {},
+      ): AutomationIndexEntry {
+        return {
+          url: `${AUTOMATION}.json`,
+          realmURL: REALM_URL,
+          types: overrides.types ?? [automationTypeKey()],
+          instance: {
+            id: AUTOMATION,
+            type: 'card',
+            attributes: {
+              triggers: overrides.triggers ?? [cronTrigger()],
+              operations: [],
+              caps: overrides.caps ?? CAPS,
+              params: [],
+              batchedAI: overrides.batchedAI ?? false,
+              batchDeadlineMinutes: null,
+            },
+            relationships: {
+              script: { links: { self: '../scripts/nightly-sync.js' } },
+            },
+            meta: { adoptsFrom: automationRef },
+          },
+        };
+      }
+
+      function cronTrigger(
+        fields: Record<string, unknown> = {},
+      ): Record<string, unknown> {
+        return {
+          kind: 'cron',
+          label: 'daily',
+          expression: '30 5 * * *',
+          timeZone: 'America/Chicago',
+          untilDate: null,
+          untilTime: null,
+          count: null,
+          date: null,
+          time: null,
+          webhookPath: null,
+          ...fields,
+        };
+      }
+
+      // The catalog type as the index spells it here, where no realm maps the
+      // catalog's prefix.
+      function automationTypeKey() {
+        return internalKeyFor(automationRef, undefined, new VirtualNetwork());
+      }
+
+      async function sync(
+        card: AutomationIndexEntry | undefined,
+        now = NOW,
+      ): Promise<AutomationSync | undefined> {
+        return await syncAutomationWithCard(dbAdapter, AUTOMATION, card, {
+          automationTypeKey: automationTypeKey(),
+          virtualNetwork: options.virtualNetwork,
+          now,
+        });
+      }
+
+      async function setRuns(label: string, runs: number, lastSlot?: number) {
+        await dbAdapter.execute(
+          `UPDATE automations SET trigger_runs = jsonb_set(trigger_runs, '{${label}}', trigger_runs->'${label}' || '${JSON.stringify(
+            { runs, ...(lastSlot !== undefined ? { lastSlot } : {}) },
+          )}'::jsonb)`,
+        );
+      }
+
+      test('a card indexed unchanged keeps its next run', async function (assert) {
+        await switchOn();
+        let result = await sync(indexed());
+        assert.strictEqual(result?.kind, 'recomputed');
+        assert.strictEqual(result?.automation.state, 'active');
+        assert.strictEqual(result?.automation.nextRun, NEXT_DAILY);
+      });
+
+      test('an edited trigger keeps its run count, and a slot that passed before the edit does not come due', async function (assert) {
+        // Switched on three days ago; the daily 05:30 run went this morning.
+        let switchedOn = NOW - 3 * 86400;
+        await switchOnAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            realm: REALM,
+            user: OWNER,
+            declaration: declaration(),
+          },
+          { ...options, now: switchedOn },
+        );
+        await setRuns('daily', 3, NEXT_DAILY - 86400);
+
+        // At 12:00 the card moves the run to 11:00, which passed this
+        // morning after the last run.
+        let result = await sync(
+          indexed({ triggers: [cronTrigger({ expression: '0 11 * * *' })] }),
+        );
+        assert.strictEqual(result?.kind, 'recomputed');
+        assert.strictEqual(
+          result?.automation.nextRun,
+          zonedDateTimeToUnixSeconds('2026-11-11T11:00', 'America/Chicago'),
+          "the next run is tomorrow's 11:00, not a make-up run for today's",
+        );
+        assert.deepEqual(
+          runCounts(result!.automation),
+          { daily: { runs: 3, lastSlot: NEXT_DAILY - 86400, since: NOW } },
+          'the count stays, and the cursor moves up to the edit',
+        );
+
+        let again = await sync(
+          indexed({ triggers: [cronTrigger({ expression: '0 11 * * *' })] }),
+          NOW + 600,
+        );
+        assert.strictEqual(
+          runCounts(again!.automation).daily.since,
+          NOW,
+          'indexing the card again without a timing change keeps the cursor',
+        );
+      });
+
+      test('a trigger the card adds starts at the edit', async function (assert) {
+        let switchedOn = NOW - 3 * 86400;
+        await switchOnAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            realm: REALM,
+            user: OWNER,
+            declaration: declaration({ triggers: [] }),
+          },
+          { ...options, now: switchedOn },
+        );
+        let result = await sync(indexed());
+        assert.strictEqual(result?.automation.state, 'active');
+        assert.strictEqual(
+          result?.automation.nextRun,
+          NEXT_DAILY,
+          'the slots between switch-on and the edit do not come due',
+        );
+      });
+
+      test('an automation whose triggers are all spent becomes done, and one with a trigger left again becomes active', async function (assert) {
+        await switchOn(
+          OWNER,
+          declaration({
+            triggers: [
+              {
+                kind: 'cron',
+                label: 'daily',
+                expression: '30 5 * * *',
+                timeZone: 'America/Chicago',
+                count: 3,
+              },
+            ],
+          }),
+        );
+        await setRuns('daily', 3, NEXT_DAILY - 86400);
+
+        let spent = await sync(
+          indexed({ triggers: [cronTrigger({ count: 3 })] }),
+        );
+        assert.strictEqual(spent?.automation.state, 'done');
+        assert.strictEqual(spent?.automation.nextRun, null);
+
+        let raised = await sync(
+          indexed({ triggers: [cronTrigger({ count: 5 })] }),
+        );
+        assert.strictEqual(raised?.automation.state, 'active');
+        assert.strictEqual(raised?.automation.nextRun, NEXT_DAILY);
+        assert.strictEqual(
+          runCounts(raised!.automation).daily.runs,
+          3,
+          'raising the count keeps the runs already started',
+        );
+      });
+
+      test('a one-time trigger whose time has passed leaves the automation done', async function (assert) {
+        await switchOn();
+        let result = await sync(
+          indexed({
+            triggers: [
+              {
+                ...cronTrigger(),
+                kind: 'once',
+                label: 'backfill',
+                expression: null,
+                date: '2026-11-10',
+                time: '09:00',
+              },
+            ],
+          }),
+        );
+        assert.strictEqual(result?.automation.state, 'done');
+        assert.strictEqual(result?.automation.nextRun, null);
+      });
+
+      test('a deleted card removes the row and cancels its pending run', async function (assert) {
+        await switchOn();
+        let run = await pendingRun();
+        let result = await sync(undefined);
+        assert.strictEqual(result?.kind, 'removed');
+        assert.strictEqual(
+          (result as Extract<AutomationSync, { kind: 'removed' }>).reason,
+          'card-deleted',
+        );
+        assert.strictEqual(
+          await getAutomation(dbAdapter, AUTOMATION),
+          undefined,
+        );
+        let canceled = await getAutomationRun(dbAdapter, run.id);
+        assert.strictEqual(canceled?.state, 'canceled');
+        assert.strictEqual(canceled?.canceledBy, null);
+        assert.strictEqual(canceled?.errorReason, 'card-deleted');
+      });
+
+      test('a card that no longer adopts from the catalog Automation type removes the row', async function (assert) {
+        await switchOn();
+        let result = await sync(
+          indexed({ types: ['http://example/other/Thing'] }),
+        );
+        assert.strictEqual(result?.kind, 'removed');
+        assert.strictEqual(
+          (result as Extract<AutomationSync, { kind: 'removed' }>).reason,
+          'not-an-automation',
+        );
+        assert.strictEqual(
+          await getAutomation(dbAdapter, AUTOMATION),
+          undefined,
+        );
+      });
+
+      test('a card that failed to index, or does not read, leaves the row as it was', async function (assert) {
+        let before = await switchOn();
+        let failed = await sync({ ...indexed(), instance: null });
+        assert.strictEqual(failed?.kind, 'unchanged');
+        let invalid = await sync(
+          indexed({ triggers: [cronTrigger({ expression: 'not cron' })] }),
+        );
+        assert.strictEqual(invalid?.kind, 'unchanged');
+        assert.deepEqual(await getAutomation(dbAdapter, AUTOMATION), before);
+      });
+
+      test('a card that raises a cap pauses the automation', async function (assert) {
+        await switchOn();
+        let result = await sync(indexed({ caps: { ...CAPS, writes: 500 } }));
+        assert.strictEqual(result?.kind, 'paused');
+        assert.strictEqual(result?.automation.pauseReason, 'caps-raised');
+      });
+
+      test('a paused automation keeps its reason and its schedule', async function (assert) {
+        await switchOn();
+        let paused = await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        let result = await sync(
+          indexed({ triggers: [cronTrigger({ count: 0 })] }),
+        );
+        assert.strictEqual(result?.kind, 'unchanged');
+        assert.deepEqual(
+          await getAutomation(dbAdapter, AUTOMATION),
+          (paused as { automation: AutomationRow }).automation,
+        );
+      });
+
+      test('a card whose automation is not switched on is left alone', async function (assert) {
+        assert.strictEqual(await sync(indexed()), undefined);
+        assert.strictEqual(await sync(undefined), undefined);
+      });
+    });
+
+    module('archiving the realm', function () {
+      test('pauses every automation in the realm that is not paused, and cancels their pending runs', async function (assert) {
+        await switchOn();
+        let run = await pendingRun();
+        let paused = await pauseRealmAutomations(dbAdapter, REALM);
+        assert.deepEqual(
+          paused.map((a) => [a.automationId, a.state, a.pauseReason]),
+          [[AUTOMATION, 'paused', 'realm-archived']],
+        );
+        let canceled = await getAutomationRun(dbAdapter, run.id);
+        assert.strictEqual(canceled?.state, 'canceled');
+        assert.strictEqual(canceled?.errorReason, 'realm-archived');
+
+        let resumed = await resumeAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            user: ADMIN,
+            declaration: declaration(),
+          },
+          options,
+        );
+        assert.true(resumed.ok, 'a direct writer resumes it');
+      });
+
+      test('an automation paused already keeps its reason, and another realm is untouched', async function (assert) {
+        await switchOn();
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        let otherRealmURL = 'http://127.0.0.1:4444/other/';
+        await insertPermissions(dbAdapter, new URL(otherRealmURL), {
+          [OWNER]: ['read', 'write', 'realm-owner'],
+        });
+        let other = rri(`${otherRealmURL}Automation/other`);
+        await switchOnAutomation(
+          dbAdapter,
+          {
+            automationId: other,
+            realm: ri(otherRealmURL),
+            user: OWNER,
+            declaration: declaration({
+              url: other,
+              realmURL: otherRealmURL,
+              script: rri(`${otherRealmURL}scripts/nightly-sync.js`),
+            }),
+          },
+          options,
+        );
+
+        assert.deepEqual(await pauseRealmAutomations(dbAdapter, REALM), []);
+        let automation = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(automation?.pauseReason, 'requested');
+        assert.strictEqual(automation?.pausedBy, OWNER);
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, other))?.state,
+          'active',
+        );
       });
     });
   });
