@@ -608,7 +608,7 @@ jobs:
       # so no workspace install or realm-server is needed. The pin decides
       # which host harness the tests run against; bump it deliberately.
       - name: Install Boxel CLI
-        run: npm install -g @cardstack/boxel-cli@0.5.0
+        run: npm install -g @cardstack/boxel-cli@0.12.0
       # The browser revision must match the CLI's own @playwright/test pin,
       # so install through the CLI's nested playwright binary.
       - name: Install Chromium

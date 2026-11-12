@@ -3,12 +3,14 @@ import { hash } from '@ember/helper';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistance } from 'date-fns';
 import { didCancel, task } from 'ember-concurrency';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { cn, formatNumber } from '@cardstack/boxel-ui/helpers';
 import { IconHexagon } from '@cardstack/boxel-ui/icons';
+
+import { nowDate } from '@cardstack/runtime-common';
 
 import {
   awaitsDailyGrant,
@@ -176,8 +178,9 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
       if (!this.nextDailyCreditGrantAt) {
         return null;
       }
-      let distance = formatDistanceToNow(
+      let distance = formatDistance(
         new Date(this.nextDailyCreditGrantAt * 1000),
+        nowDate(),
       );
       let timestampLocal = formatLocalTimestamp(
         new Date(this.nextDailyCreditGrantAt * 1000),
@@ -194,8 +197,9 @@ export default class WithSubscriptionData extends Component<WithSubscriptionData
       return null;
     }
 
-    let distance = formatDistanceToNow(
+    let distance = formatDistance(
       new Date(this.lastDailyCreditGrantAt * 1000),
+      nowDate(),
       {
         addSuffix: true,
       },
