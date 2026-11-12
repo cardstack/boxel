@@ -569,6 +569,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
       @field name = contains(StringField);
     }
     class TreeNodeField extends FieldDef {
+      static displayName = 'Tree Node';
       @field label = contains(StringField);
       @field pet = linksTo(PetCard);
       // A thunk, because the field contains itself.
@@ -592,7 +593,11 @@ module('Unit | ai-function-generation-test', function (hooks) {
             label: { type: 'string' },
             children: {
               type: 'array',
-              items: { type: 'object', properties: {} },
+              items: {
+                type: 'object',
+                properties: {},
+                description: 'Same fields as the enclosing Tree Node',
+              },
             },
           },
         },

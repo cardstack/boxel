@@ -466,7 +466,11 @@ function generateJsonSchemaForContainsFields(
 
     let fieldSchemaForSingleItem = (
       nextExpanding.includes(field.card)
-        ? { type: 'object', properties: {} }
+        ? {
+            type: 'object',
+            properties: {},
+            description: `Same fields as the enclosing ${field.card.displayName}`,
+          }
         : generateJsonSchemaForContainsFields(
             field.card,
             cardApi,
