@@ -8,6 +8,7 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
+import type { CachingDefinitionLookup } from '@cardstack/runtime-common';
 import { setupDB, setupPermissionedRealmCached } from './helpers/index.ts';
 import {
   RealmRegistryReconciler,
@@ -344,6 +345,49 @@ function makeCachedTypesFixture(): Record<
   };
 }
 
+// A field-match route over a type from another realm, the base realm's
+// CardDef, whose definition this realm's indexing reads through home.json.
+function makeOtherRealmTypeFixture(): Record<
+  string,
+  string | LooseSingleCardDocument
+> {
+  return {
+    'home.json': {
+      data: {
+        type: 'card',
+        attributes: { cardInfo: { name: 'Home' } },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/card-api'),
+            name: 'CardDef',
+          },
+        },
+      },
+    },
+    'realm.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Other Realm Type Realm' },
+          hostRoutingRules: [
+            {
+              path: '/cards/:name',
+              type: { module: '@cardstack/base/card-api', name: 'CardDef' },
+              match: { 'cardInfo.name': ':name' },
+            },
+          ],
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/realm-config'),
+            name: 'RealmConfig',
+          },
+        },
+      },
+    },
+  };
+}
+
 module(basename(import.meta.filename), function () {
   module('Realm.getHostRoutingMap', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-unit/');
@@ -646,6 +690,62 @@ module(basename(import.meta.filename), function () {
       );
     });
   });
+
+  module(
+    'Realm.getHostRoutes with a type from another realm',
+    function (hooks) {
+      let realmURL = new URL('http://127.0.0.1:4444/routing-other-realm-type/');
+      let testRealm: Realm;
+      let definitionLookup: CachingDefinitionLookup;
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL,
+        permissions: { '*': ['read'] },
+        fileSystem: makeOtherRealmTypeFixture(),
+        onRealmSetup({ testRealm: realm, testRealmServer }) {
+          testRealm = realm;
+          // The lookup the realm reads definitions through. The server keeps
+          // it private; the test needs it to record a definition change.
+          definitionLookup = (
+            testRealmServer.testRealmServer as unknown as {
+              definitionLookup: CachingDefinitionLookup;
+            }
+          ).definitionLookup;
+        },
+      });
+
+      hooks.beforeEach(async function () {
+        await testRealm.indexing();
+      });
+
+      test('reuses the validation only while the definition generation holds', async function (assert) {
+        let first = await testRealm.getHostRoutes();
+        assert.true(first.complete, 'the base type definition is cached');
+        assert.deepEqual(
+          first.routes.map((route) => [route.kind, route.fullPath]),
+          [['field-match', '/cards/:name']],
+        );
+        assert.strictEqual(
+          await testRealm.getHostRoutes(),
+          first,
+          'reused while no definition changed',
+        );
+
+        // A change to another realm's module doesn't reindex this realm; it
+        // only moves the definition generation.
+        definitionLookup.bumpGlobalGeneration();
+
+        let second = await testRealm.getHostRoutes();
+        assert.notStrictEqual(second, first, 'validated again');
+        assert.deepEqual(second.routes, first.routes);
+        assert.strictEqual(
+          await testRealm.getHostRoutes(),
+          second,
+          'the new validation is reused in turn',
+        );
+      });
+    },
+  );
 
   module('resolveRealmsForFederatedRequest', function (hooks) {
     let dbAdapter: PgAdapter;
