@@ -114,6 +114,7 @@ export class BackgroundScheduler {
   #busyRealms = new Set<string>();
   #jobs = new Set<Promise<void>>();
   #stopped = false;
+  #dispatchQueued = false;
 
   constructor(options: BackgroundSchedulerOptions) {
     this.#kinds = options.kinds ?? [];
@@ -206,32 +207,64 @@ export class BackgroundScheduler {
     if (this.#stopped) {
       return;
     }
+    let free = this.#concurrency - this.#jobs.size;
+    if (free <= 0) {
+      return;
+    }
+    // The earliest due kind on each idle realm, keeping only the `free`
+    // earliest of those, in the order they came due.
     let now = this.#now();
-    let ready: { realm: RecordedRealm; kind: BackgroundKind; due: Due }[] = [];
-    let dueAt = new Map<Due, number>();
+    let chosen: {
+      realmId: string;
+      kind: BackgroundKind;
+      due: Due;
+      at: number;
+    }[] = [];
     for (let [realmId, kinds] of this.#schedule) {
       if (this.#busyRealms.has(realmId)) {
         continue;
       }
-      let realm = this.#realms.get(realmId)!;
+      let earliest: { kind: BackgroundKind; due: Due; at: number } | undefined;
       for (let kind of this.#kinds) {
         let due = kinds.get(kind.name)!;
         let at = this.#dueAt(kind, due);
-        if (at <= now) {
-          ready.push({ realm, kind, due });
-          dueAt.set(due, at);
+        if (at <= now && (!earliest || at < earliest.at)) {
+          earliest = { kind, due, at };
         }
       }
-    }
-    ready.sort((a, b) => dueAt.get(a.due)! - dueAt.get(b.due)!);
-    for (let { realm, kind, due } of ready) {
-      if (this.#jobs.size >= this.#concurrency) {
-        break;
+      if (!earliest) {
+        continue;
       }
-      if (!this.#busyRealms.has(realm.id)) {
-        this.#start(realm, kind, due);
+      if (chosen.length === free) {
+        if (earliest.at >= chosen[free - 1].at) {
+          continue;
+        }
+        chosen.pop();
       }
+      let index = chosen.findIndex((other) => other.at > earliest.at);
+      chosen.splice(index === -1 ? chosen.length : index, 0, {
+        realmId,
+        ...earliest,
+      });
     }
+    for (let { realmId, kind, due } of chosen) {
+      this.#start(this.#realms.get(realmId)!, kind, due);
+    }
+  }
+
+  // Dispatches again on a later turn of the event loop, once however many
+  // jobs end meanwhile, so jobs that end without I/O don't chain into one
+  // another and hold the loop: the heartbeat, the lease renewals and the
+  // health endpoint all need it.
+  #dispatchSoon(): void {
+    if (this.#dispatchQueued) {
+      return;
+    }
+    this.#dispatchQueued = true;
+    setImmediate(() => {
+      this.#dispatchQueued = false;
+      this.dispatch();
+    });
   }
 
   // Starts nothing more, and resolves once the running jobs have ended.
@@ -266,7 +299,7 @@ export class BackgroundScheduler {
       .finally(() => {
         this.#busyRealms.delete(realm.id);
         this.#jobs.delete(job);
-        this.dispatch();
+        this.#dispatchSoon();
       });
     this.#jobs.add(job);
   }

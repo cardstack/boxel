@@ -189,6 +189,38 @@ module('background scheduler', (hooks) => {
     );
   });
 
+  test('jobs that end without I/O leave the event loop free between them', async (assert) => {
+    let count = 2000;
+    let checks = 0;
+    let target = scheduler([
+      {
+        name: 'checked',
+        atStart: true,
+        isDue: async () => {
+          checks++;
+          return false;
+        },
+        run: async () => {},
+      },
+    ]);
+    target.setRealms(
+      realmsOf(...Array.from({ length: count }, (_, i) => realmNamed(`r${i}`))),
+    );
+    let checksWhenTimerFired: number | undefined;
+    setTimeout(() => (checksWhenTimerFired = checks), 0);
+
+    target.dispatch();
+    await waitUntil(() => checks === count && target.running === 0, {
+      timeoutMs: 30_000,
+      what: 'every realm to be checked',
+    });
+    assert.notStrictEqual(checksWhenTimerFired, undefined);
+    assert.true(
+      checksWhenTimerFired! < count,
+      `a timer ran before the last check (after ${checksWhenTimerFired} of ${count})`,
+    );
+  });
+
   test('a kind with `everyMs` comes due again that long after it last ran', async (assert) => {
     let target = scheduler([
       {
