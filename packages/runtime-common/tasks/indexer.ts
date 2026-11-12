@@ -30,6 +30,14 @@ import {
 } from '../jobs/prerender-html.ts';
 import type { JobInfo, Stats, IndexPhaseTimings } from '../worker.ts';
 import { queueClaimOf, type QueueClaim } from '../jobs/queue-claim.ts';
+import {
+  addRunIndexingUsage,
+  chargeRunIndexing,
+  meteredPrerenderer,
+  parseRunIndexing,
+  sameRunIndexing,
+  type RunIndexing,
+} from '../run-indexing.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
@@ -118,6 +126,12 @@ export interface IncrementalArgs extends WorkerArgs {
   // job asked for no realm events, so OR-merged. Read as true when absent, as
   // on a job enqueued by a realm server predating the field.
   realmEvents: boolean;
+  // The automation run whose commit this pass indexes, with the usage earlier
+  // passes of the same commit measured, or null for any other write (see
+  // `RunIndexing`). A pass carrying a run indexes nothing but that run's
+  // commit: it neither joins another publish's job nor is joined. Read as null
+  // when absent, as on a job enqueued by a realm server predating the field.
+  runIndexing: RunIndexing | null;
 }
 
 // An invalidation set an index pass computed but deliberately did not enqueue
@@ -133,6 +147,12 @@ export interface DeferredPrerenderHtml extends JSONTypes.Object {
   // predating the field.
   spawningIndexPass: SpawningIndexPass | null;
   generation: number;
+  // The run's indexing so far, when the deferring pass indexed an automation
+  // run's commit, including what that pass measured. Whoever takes the set on
+  // takes this on too, so the run is charged once, by the last job its commit
+  // causes. Null for any other write, and on a set from a worker predating
+  // the field.
+  runIndexing: RunIndexing | null;
 }
 
 export interface IncrementalResult {
@@ -304,6 +324,7 @@ function parseIncrementalArgsForCoalesce(
     carriedPrerenderHtmlChanges,
     readsOwnWrite,
     realmEvents,
+    runIndexing,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -329,6 +350,7 @@ function parseIncrementalArgsForCoalesce(
       : [],
     readsOwnWrite: readsOwnWrite === true,
     realmEvents: realmEvents !== false,
+    runIndexing: parseRunIndexing(runIndexing),
   };
 }
 
@@ -356,6 +378,15 @@ function chooseIncrementalCoalesceDecision(
   let sameTypeCandidate = candidates.find(
     (candidate) => candidate.jobType === incoming.jobType,
   );
+  if (
+    sameTypeCandidate &&
+    !sameRunIndexing(sameTypeCandidate.args, incoming.args)
+  ) {
+    // One of the two indexes an automation run's commit, whose pass must
+    // index nothing else (see `RunIndexing`). Inserted, it runs after the
+    // pending job, since its lane runs one job at a time.
+    return { type: 'insert' };
+  }
   if (sameTypeCandidate) {
     let existingArgs = parseIncrementalArgsForCoalesce(sameTypeCandidate.args);
     let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
@@ -449,7 +480,8 @@ function chooseIncrementalCoalesceDecision(
         incrementalChangesCover(existingArgs.changes, incomingArgs.changes) &&
         // A running job's args can no longer change, so a publish that
         // announces cannot ride on one whose render job won't.
-        (existingArgs.realmEvents || !incomingArgs.realmEvents)
+        (existingArgs.realmEvents || !incomingArgs.realmEvents) &&
+        sameRunIndexing(candidate.args, incoming.args)
       ) {
         return { type: 'join', jobId: candidate.id };
       }
@@ -629,6 +661,7 @@ function followUpIncrementalArgs(
     carriedPrerenderHtmlChanges: [],
     readsOwnWrite: false,
     realmEvents,
+    runIndexing: null,
   });
 }
 
@@ -814,9 +847,15 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   queuePublisher,
   createPrerenderAuth,
   reportRealmEvent,
+  meteredCharges,
 }) =>
   async function (args) {
+    let startedAt = Date.now();
     let { jobInfo, realmUsername, changes, realmURL } = args;
+    let runIndexing = parseRunIndexing(args.runIndexing);
+    // A pass indexing a run's commit measures the tab time of every render it
+    // makes, for the charge (see `RunIndexing`).
+    let meter = runIndexing ? meteredPrerenderer(prerenderer) : undefined;
 
     log.debug(
       `${jobIdentity(jobInfo)} starting incremental indexing for job: ${JSON.stringify(args)}`,
@@ -842,6 +881,43 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ? args.carriedPrerenderHtmlChanges
       : [];
     let deferredPrerenderHtml: DeferredPrerenderHtml | undefined;
+    // A pass indexing a run's commit holds its render set until the pass is
+    // done, as a deferring pass does, and enqueues the render then: the job
+    // that renders it charges the run, so it has to carry what this pass
+    // measured, which is known only once the pass ends.
+    let holdsPrerenderHtml = deferPrerenderHtml || runIndexing !== null;
+    let enqueueRender = (
+      set: Pick<
+        DeferredPrerenderHtml,
+        'changes' | 'loaderEpoch' | 'spawningIndexPass' | 'generation'
+      >,
+      renderRunIndexing: RunIndexing | null,
+    ) =>
+      enqueuePrerenderHtmlJob(queuePublisher, {
+        realmURL,
+        realmUsername,
+        changes: set.changes,
+        spawningIndexPasses: set.spawningIndexPass
+          ? [set.spawningIndexPass]
+          : [],
+        generation: set.generation,
+        loaderEpoch: set.loaderEpoch,
+        spawningJobId: jobInfo?.jobId ?? null,
+        spawningPriority: prerenderSpawnedPriority({
+          realmURL,
+          indexPriority: jobInfo?.priority ?? systemInitiatedPriority,
+        }),
+        timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        // Incremental: no realm-wide sweep — its cost is O(realm module
+        // count), deliberately not paid on incrementals.
+        preWarm: false,
+        announce: args.realmEvents !== false,
+        // The writer's own render lane, the one the bulk-write render hold
+        // names, so another writer's render work neither waits behind this
+        // one nor merges into it.
+        lane: prerenderHtmlLaneFollowing(realmURL, jobInfo),
+        runIndexing: renderRunIndexing,
+      });
 
     let _fetch = await getAuthedFetch(args);
     let reader = getReader(_fetch, realmURL);
@@ -866,14 +942,15 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           url,
           operation,
         }));
-        if (deferPrerenderHtml) {
-          // The caller owns this set now — either it carries it into a later
-          // pass of the same write, or it enqueues the job itself. Anything
-          // an earlier pass handed us rides along rather than being dropped
-          // on the floor by a pass that enqueues nothing. A pass announces
-          // more than once when its commit re-visits for a peer, so each
-          // announcement adds to what the earlier ones deferred, and the
-          // latest loader epoch is the one the set renders under.
+        if (holdsPrerenderHtml) {
+          // For a deferring pass, the caller owns this set now — either it
+          // carries it into a later pass of the same write, or it enqueues
+          // the job itself. Anything an earlier pass handed us rides along
+          // rather than being dropped on the floor by a pass that enqueues
+          // nothing. A pass announces more than once when its commit
+          // re-visits for a peer, so each announcement adds to what the
+          // earlier ones deferred, and the latest loader epoch is the one the
+          // set renders under.
           deferredPrerenderHtml = {
             changes: mergePrerenderHtmlChanges(
               deferredPrerenderHtml?.changes ?? carriedPrerenderHtmlChanges,
@@ -882,36 +959,22 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
             loaderEpoch,
             spawningIndexPass: spawningIndexPassFor(jobInfo, passId),
             generation: provisionalGeneration,
+            runIndexing: null,
           };
           return;
         }
-        enqueuePrerenderHtmlJob(queuePublisher, {
-          realmURL,
-          realmUsername,
-          changes: mergePrerenderHtmlChanges(
-            carriedPrerenderHtmlChanges,
-            changes,
-          ),
-          spawningIndexPasses: [spawningIndexPassFor(jobInfo, passId)].filter(
-            (pass) => pass !== null,
-          ),
-          generation: provisionalGeneration,
-          loaderEpoch,
-          spawningJobId: jobInfo?.jobId ?? null,
-          spawningPriority: prerenderSpawnedPriority({
-            realmURL,
-            indexPriority: jobInfo?.priority ?? systemInitiatedPriority,
-          }),
-          timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
-          // Incremental: no realm-wide sweep — its cost is O(realm module
-          // count), deliberately not paid on incrementals.
-          preWarm: false,
-          announce: args.realmEvents !== false,
-          // The writer's own render lane, the one the bulk-write render hold
-          // names, so another writer's render work neither waits behind this
-          // one nor merges into it.
-          lane: prerenderHtmlLaneFollowing(realmURL, jobInfo),
-        }).catch((e) => {
+        enqueueRender(
+          {
+            changes: mergePrerenderHtmlChanges(
+              carriedPrerenderHtmlChanges,
+              changes,
+            ),
+            loaderEpoch,
+            spawningIndexPass: spawningIndexPassFor(jobInfo, passId),
+            generation: provisionalGeneration,
+          },
+          null,
+        ).catch((e) => {
           log.warn(
             `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
           );
@@ -924,7 +987,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       ),
       auth,
       fetch: _fetch,
-      prerenderer,
+      prerenderer: meter?.prerenderer ?? prerenderer,
       ignoreData: args.ignoreData,
       realmOwnerUserId: userId,
     });
@@ -977,6 +1040,54 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         reportRealmEvent?.(event);
       }
       await notifyRealmIndexUpdated(dbAdapter, realmURL);
+    }
+    if (runIndexing) {
+      // The run's indexing so far, with this pass's: the worker process was
+      // this job's from the start of the task, and the tabs for the renders
+      // it made through the meter.
+      let measured = addRunIndexingUsage(runIndexing, {
+        workerProcessSeconds: (Date.now() - startedAt) / 1000,
+        prerenderTabSeconds: meter!.tabSeconds(),
+      });
+      if (deferPrerenderHtml) {
+        // The write's later pass takes this on with the render set. A pass
+        // that announced no render set still hands the run's indexing over,
+        // with nothing to render.
+        deferredPrerenderHtml = deferredPrerenderHtml
+          ? { ...deferredPrerenderHtml, runIndexing: measured }
+          : {
+              changes: [],
+              loaderEpoch: '',
+              spawningIndexPass: null,
+              generation: generation ?? 0,
+              runIndexing: measured,
+            };
+      } else {
+        let set = deferredPrerenderHtml;
+        // Held for this pass's own render, not the caller's to carry.
+        deferredPrerenderHtml = undefined;
+        let enqueued = false;
+        if (set && set.changes.length > 0) {
+          try {
+            await enqueueRender(set, measured);
+            enqueued = true;
+          } catch (e) {
+            log.warn(
+              `${jobIdentity(jobInfo)} failed to enqueue prerender_html job for ${realmURL}: ${(e as Error)?.message}`,
+            );
+          }
+        }
+        if (!enqueued) {
+          // Nothing left to render, so this pass is the last job the run's
+          // commit causes.
+          await chargeRunIndexing({
+            dbAdapter,
+            meteredCharges,
+            runIndexing: measured,
+            log,
+          });
+        }
+      }
     }
     reportStatus(jobInfo, 'finish');
     let queueClaim = queueClaimOf(jobInfo);
