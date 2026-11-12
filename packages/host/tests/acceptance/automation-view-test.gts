@@ -187,7 +187,7 @@ module('Acceptance | automation view', function (hooks) {
     await visitOperatorMode({
       stacks: [[{ id: AUTOMATION, format: 'isolated' }]],
     });
-    await waitFor('[data-test-automation-trigger-icon], .automation', {
+    await waitFor('[data-test-automation]', {
       timeout: 10000,
     });
   }
@@ -223,7 +223,7 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-header-state]').doesNotExist();
     assert.dom('[data-test-automation-trigger-progress]').doesNotExist();
     assert
-      .dom('.automation')
+      .dom('[data-test-automation]')
       .includesText(
         'This trigger stops after 30 runs or at the end of Jan 15, 2030, whichever comes first.',
         "the card's own bounds still read",
