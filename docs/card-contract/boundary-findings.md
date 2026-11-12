@@ -13,7 +13,8 @@ each is a decision the code has already made without recording it.
 | Gap   | Cards need to know something and nothing states it either way.                 | Decide, then state it.                       |
 | Note  | The boundary is currently clean. Recorded so a later change does not break it. | Nothing.                                     |
 
-**Status**: `open` (needs a decision), `proposed` (a recommendation is written,
+**Status**: `open` (needs a decision, asked as an open question; see
+[Open questions](#open-questions)), `proposed` (a recommendation is written,
 awaiting review), `accepted` (an ADR records the decision), `fixed`.
 
 An entry that becomes a decision gets an ADR and a ticket, and its status here
@@ -146,7 +147,7 @@ acceptance tests and the Playwright suite select on hooks inside card
 renderings, some of them served from the index. Then the ban is a consequence
 of the contract rather than a lint rule with two justifications.
 
-**Open question.** Prerendered HTML is produced once and served to both kinds of
+**Open question Q-01.** Prerendered HTML is produced once and served to both kinds of
 build in a shared environment. Does the strip happen when the HTML is produced
 (so the index differs by build) or when it is served (so one index serves
 both)? The second keeps the index build-independent.
@@ -231,7 +232,7 @@ A service whose presence depends on where the host laid the card out is the
 same leak by another route: [author API §10.2](author-api.md) requires such a
 service to be named in this contract, with what a card does without it.
 
-**Open question.** Is there a card outside `packages/base` that branches on
+**Open question Q-02.** Is there a card outside `packages/base` that branches on
 `mode` or `submode` for a reason the two intents do not cover?
 
 ---
@@ -360,6 +361,10 @@ code comment, with nothing stating it as a contract.
 Then state the rule for a value crossing universes: it carries its own
 provenance, or it is a code ref.
 
+**Open question Q-03.** What is the rule for a value crossing two loader
+universes? The recommendation above: it carries its own provenance, or it
+crosses as a code ref.
+
 ---
 
 ## B-09
@@ -451,10 +456,8 @@ one URL having two rows — visible to a card author writing a filter.
   synthetic key. Reject it at definition time rather than resolving it
   ambiguously at query time.
 
-**Open question.** `cardURL` as a sort key sorts by a URL that is not durable
-across deployments ([ADR 002](../adr/002-keep-identifiers-canonical-resolve-at-network-boundary.md)).
-Is it sorting by identity or by storage order? If the latter, it should not be
-author-facing.
+Whether `cardURL` belongs in the author-facing sort set is open question Q-08,
+in [B-24](#b-24).
 
 ---
 
@@ -506,6 +509,9 @@ will find and wonder about.
 is not edited; its bytes are replaced. Delete `FileDef.edit` and
 `FileDefEditTemplate`, and state in [author API §12](author-api.md) that a file
 def has no edit format.
+
+**Open question Q-04.** Is a file ever edited in place? The recommendation
+above: no, its bytes are replaced.
 
 ---
 
@@ -606,6 +612,11 @@ runtime fills in, not as a third thing an author chooses. Then state the
 fallback chain, including whether an untitled card is a real state or a
 convenience.
 
+**Open question Q-05.** Is `cardInfo` the author's data or the platform's,
+and is an untitled card a real state or a convenience? The recommendation above:
+neither owner — `cardInfo` leaves the contract and becomes the default card's
+storage for the four presentation members.
+
 ---
 
 ## B-17
@@ -703,6 +714,11 @@ lists them. Reserve exactly that list, checked at definition time. Add a rule: a
 surface that collides with an existing card's field. New platform members take a
 name that is already reserved, or take a symbol.
 
+**Open question Q-06.** Is [author API §7.8](author-api.md)'s list the
+whole reserved set, and is §7.9's rule (no new string-named instance members)
+the right one, or may the platform ever add a member that collides with an
+existing field?
+
 ---
 
 ## B-21
@@ -755,7 +771,7 @@ environment decides how to render it and what to show when it cannot. Keep the
 current spelling working by resolving a component to a rendered asset, so no
 existing card breaks.
 
-**Open question.** Does an icon need to be a component for any card today — an
+**Open question Q-07.** Does an icon need to be a component for any card today — an
 animated or themed icon — or is every icon in use a static glyph?
 
 ---
@@ -778,6 +794,9 @@ by `cardURL` sorts by storage order in one deployment.
 promise: when the realm last stored this card, and when it first stored it. Drop
 `cardURL` from the author-facing sort set, or rename it to what it means and say
 it is not portable.
+
+**Open question Q-08.** Is a `cardURL` sort a sort by identity or by storage
+order? If storage order, it leaves the author-facing sort set.
 
 ---
 
@@ -824,9 +843,13 @@ environment decides what that means and whether it can. A host that has a code
 submode implements it as a submode switch; a runtime without one renders the card
 without the affordance. Then a default template imports nothing from the host.
 
-**Open question.** Is `switch-submode` reachable from a realm-sourced card in a
+**Open question Q-09.** Is `switch-submode` reachable from a realm-sourced card in a
 deployed realm today, or only in the local host? That decides whether this is a
 portability fix or a live bug.
+
+**Open question Q-10.** Should a card's template be able to ask the
+environment to show the card's own definition at all, or does that affordance
+belong only to the host?
 
 ---
 
@@ -967,6 +990,10 @@ contract, and the expectation is that most are not.
 operations of the target's family, plus its declared ones, inferred from the
 definition.
 
+**Open question Q-11.** Are operations the one write path, and which of the
+card-facing store's methods survive? The recommendation above: yes, and the
+store's writes become named invocations of the implied operations.
+
 ---
 
 ## B-29
@@ -1090,7 +1117,7 @@ viewer change this card here) and `canInvoke` (may this session invoke this
 operation). `PermissionsContext` goes; a card that needs `canRead` on another
 card asks whether it can invoke `read`.
 
-**Open question.** A card that provides a context to its own descendants
+**Open question Q-12.** A card that provides a context to its own descendants
 (`PermissionsContextName` and `DefaultFormatsContextName` are provided in
 `base/spec.gts` and `base/field-component.gts`) is using the channel for composition, not to reach the environment.
 Does the author API need a way for a card to pass a value to the cards it
@@ -1157,6 +1184,9 @@ card, because the realm can run and authorize them without a browser. Tools are
 the host's automation API, a separate surface the contract names and does not
 govern, which a card may offer through the context but does not need to define
 its own behavior.
+
+**Open question Q-13.** Is the operation or the tool the card author's unit of
+behavior? The recommendation above: the operation.
 
 ---
 
@@ -1250,7 +1280,7 @@ its store and operations, or moves to the host's suite if what it checks is the
 host. Their volume is a measure of [B-28](#b-28): most of them use host tools
 to read and write cards.
 
-**Open question.** Should the testing API commit to QUnit's `module` / `test` /
+**Open question Q-14.** Should the testing API commit to QUnit's `module` / `test` /
 `assert` shape as the contract, or define its own and adapt QUnit to it? The
 first matches every existing card test; the second keeps a runtime free to use
 another runner.
@@ -1272,23 +1302,35 @@ Recorded so a later change does not accidentally break them.
 
 ---
 
-## Decisions this register needs from people
+## Open questions
 
-1. **B-04** — Do "editing" and "definition-visible" cover every card that
-   branches on host mode today?
-2. **B-08** — What is the rule for a value crossing two loader universes?
-3. **B-13** — Is a file ever edited in place?
-4. **B-16** — Is `cardInfo` the author's data or the platform's?
-5. **B-20** — Which instance members are reserved, and may the platform ever add
-   one that collides?
-6. **B-23** — Must a card's icon ever be a component?
-7. **B-24** — Is `cardURL` a sort by identity or by storage order?
-8. **B-26** — Should a card's template be able to ask the environment to show
-   the card's own definition at all?
-9. **B-36** — Does the testing API commit to QUnit's `module` / `test` /
-   `assert` shape, or define its own?
-10. **B-28** — Are operations the one write path, and which store methods
-    survive?
-11. **B-32** — Does a card need a way to pass a value to the cards it renders,
-    beyond a component argument?
-12. **B-34** — Is the operation or the tool the card author's unit of behavior?
+Every open question in the Card Contract is here, and nowhere else asks one.
+Each also appears once, in the finding it belongs to, as a paragraph beginning
+**Open question Q-NN.** To list them all with their context:
+
+```sh
+grep -rn "Open question Q-[0-9]" docs/card-contract
+```
+
+| ID   | Finding       | Question                                                                                              |
+| ---- | ------------- | ----------------------------------------------------------------------------------------------------- |
+| Q-01 | [B-02](#b-02) | Is `data-test-*` stripped when prerendered HTML is produced, or when it is served?                    |
+| Q-02 | [B-04](#b-04) | Does a card outside base branch on `mode` / `submode` for a reason the two presentation intents miss? |
+| Q-03 | [B-08](#b-08) | What is the rule for a value crossing two loader universes?                                           |
+| Q-04 | [B-13](#b-13) | Is a file ever edited in place?                                                                       |
+| Q-05 | [B-16](#b-16) | Is `cardInfo` the author's data or the platform's, and is "untitled" a real state?                    |
+| Q-06 | [B-20](#b-20) | Is author API §7.8 the whole reserved set, and may the platform ever add a colliding member?          |
+| Q-07 | [B-23](#b-23) | Must a card's icon ever be a component?                                                               |
+| Q-08 | [B-24](#b-24) | Is a `cardURL` sort by identity or by storage order?                                                  |
+| Q-09 | [B-26](#b-26) | Can a deployed realm's card reach `switch-submode` today, making B-26 a live bug?                     |
+| Q-10 | [B-26](#b-26) | Should a card's template be able to ask to show its own definition at all?                            |
+| Q-11 | [B-28](#b-28) | Are operations the one write path, and which store methods survive?                                   |
+| Q-12 | [B-32](#b-32) | Does a card need a way to pass a value to the cards it renders, beyond a component argument?          |
+| Q-13 | [B-34](#b-34) | Is the operation or the tool the card author's unit of behavior?                                      |
+| Q-14 | [B-36](#b-36) | Does the testing API commit to QUnit's `module` / `test` / `assert` shape, or define its own?         |
+
+**Rules.** A new open question takes the next unused ID, gets a paragraph in its
+finding and a row here, in the same change. A chapter that depends on one cites
+it by ID rather than asking it again. When a question is decided, its paragraph
+and row are removed, the finding states the decision (or links the ADR that
+records it), and the ID is not reused.

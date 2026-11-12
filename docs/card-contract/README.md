@@ -16,13 +16,18 @@ implementation.
 
 ## Chapters
 
-| Chapter                                     | What it answers                                                             |
-| ------------------------------------------- | --------------------------------------------------------------------------- |
-| [Vocabulary](vocabulary.md)                 | What a card is: definitions, instances, documents, renderings, and realms.  |
-| [The author API](author-api.md)             | What a card author writes, what a user sees, and how a card is tested.      |
-| [The runtime contract](runtime-contract.md) | What the enclosing card runtime environment must provide.                   |
-| [Conformance](conformance.md)               | What a new runtime must implement, and what it may leave out.               |
-| [Boundary findings](boundary-findings.md)   | Where the boundary is currently blurred, with proposals and open questions. |
+| Chapter                                     | What it answers                                                                   |
+| ------------------------------------------- | --------------------------------------------------------------------------------- |
+| [Vocabulary](vocabulary.md)                 | What a card is: definitions, instances, documents, renderings, and realms.        |
+| [The author API](author-api.md)             | What a card author writes, what a user sees, and how a card is tested.            |
+| [The runtime contract](runtime-contract.md) | What the enclosing card runtime environment must provide.                         |
+| [Conformance](conformance.md)               | What a new runtime must implement, and what it may leave out.                     |
+| [Boundary findings](boundary-findings.md)   | Where the boundary is currently blurred, with proposals, and every open question. |
+
+Every open question in the contract has an ID (`Q-01`, …) and is listed in
+[Open questions](boundary-findings.md#open-questions). Each is also tagged in
+place, so `grep -rn "Open question Q-[0-9]" docs/card-contract` finds them all.
+No other chapter asks a question; a chapter that depends on one cites its ID.
 
 ## Normative language
 

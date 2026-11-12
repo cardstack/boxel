@@ -674,7 +674,7 @@ store and the instance, and writes are operations
 ([B-28](boundary-findings.md#b-28)).
 
 **§14.3** Whether behavior a card author defines is an operation or a tool is an
-open decision ([B-34](boundary-findings.md#b-34)). Until it is made, an author
+open question (Q-13, in [B-34](boundary-findings.md#b-34)). Until it is made, an author
 who wants behavior the realm can run and authorize without a browser declares an
 operation.
 
