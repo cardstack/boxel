@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger, param, query } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
 import { fullRequestURL } from '../middleware/index.ts';
 
 // Host URLs: the addresses a realm is served at besides its own URL
@@ -35,13 +36,10 @@ interface HostEntry {
   isCanonical: boolean;
 }
 
-interface Subscribable {
-  subscribe(
-    channel: string,
-    handler: (payload: string) => void,
-    opts?: { onReconnect?: () => void },
-  ): Promise<{ unsubscribe(): Promise<void> }>;
-}
+// The part of PgAdapter this module uses, taken from its type so the two can't
+// drift apart. The handler gets the `pg` notification, whose `payload` is the
+// string `notify` sent.
+type Subscribable = Pick<PgAdapter, 'subscribe'>;
 
 function canSubscribe(
   dbAdapter: DBAdapter,
@@ -128,10 +126,21 @@ export class HostURLResolver {
       return;
     }
     this.#subscribing = this.#dbAdapter
-      .subscribe(HOST_URLS_CHANNEL, (host) => this.forget(host), {
-        // Changes made while the connection was down notified no one.
-        onReconnect: () => this.#entries.clear(),
-      })
+      .subscribe(
+        HOST_URLS_CHANNEL,
+        ({ payload }) => {
+          // An announcement that names no host drops every cached host.
+          if (payload) {
+            this.forget(payload);
+          } else {
+            this.#entries.clear();
+          }
+        },
+        {
+          // Changes made while the connection was down notified no one.
+          onReconnect: () => this.#entries.clear(),
+        },
+      )
       .then(
         () => undefined,
         (err: unknown) => {
