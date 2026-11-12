@@ -80,8 +80,9 @@ git commands against the repo, and never calls realm-historian:
 - `readTreeAtRevision` lists every file under a path, with size-only entries
   flagged.
 
-At most 8 git processes run at once across every read, and each is killed
-after 30 s. Git uses the commit-graph's Bloom filters for several path filters
+A reader runs at most 8 git processes at once across every read, and kills
+each after 30 s. The cap is per reader, so a realm-server task builds one
+reader and gives it to every realm it serves. Git uses the commit-graph's Bloom filters for several path filters
 only from 2.51 on, and `bloomWithSeveralPaths` says whether the git in use
 does. With it off, the default, the reader runs one `git log` per filter and
 merges the results in history order, which is correct on any git.

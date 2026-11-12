@@ -142,6 +142,10 @@ interface ListingQuery {
   correlationId?: string;
 }
 
+// One reader serves every realm a realm-server task reads: its cap on git
+// processes is the task's, so the task builds one and gives the same reader
+// to each realm's `history` option. A reader per realm would allow that
+// many processes per realm.
 export class GitRealmHistoryReader implements RealmHistoryReader {
   #historyRoot: string;
   #git: GitProcesses;
