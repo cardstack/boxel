@@ -13191,7 +13191,7 @@ export class Realm {
   // files it wrote in the run's `writes`, and the overlay is discarded. A batch that fails lands nothing; its commit stays
   // claimed, and the run finishes as an error.
   private async commitRunOverlay(
-    request: Request,
+    _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
     let refuse = (
@@ -13352,7 +13352,16 @@ export class Realm {
         return `a file at ${parent}`;
       }
     }
-    if (await this.directoryEntries(this.paths.directoryURL(path))) {
+    let isDirectory: boolean;
+    try {
+      isDirectory = !!(await this.directoryEntries(
+        this.paths.directoryURL(path),
+      ));
+    } catch {
+      // Listing a path that holds a file, or nothing, finds no directory.
+      isDirectory = false;
+    }
+    if (isDirectory) {
       return `a directory at ${path}`;
     }
     return undefined;
