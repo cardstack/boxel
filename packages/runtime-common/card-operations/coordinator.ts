@@ -6,6 +6,7 @@ import {
 import { isCardError } from '../error.ts';
 import type { PolicyAuditOptions } from '../policy-share-audit.ts';
 import type { WriteContext } from '../realm-history.ts';
+import type { AutomationRunWrite } from '../automation-files.ts';
 import { isCardResource } from '../resource-types.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -189,6 +190,8 @@ export interface BatchCore {
       initiatingUser?: string | null;
       // See `CommitBatchOptions.history`.
       history?: WriteContext;
+      // See `CommitBatchOptions.automationRun`.
+      automationRun?: AutomationRunWrite;
       // See `CommitBatchOptions.policyAudit`.
       policyAudit?: PolicyAuditOptions;
       // Where the commit stamps the stages it owns. The durable write, the
@@ -275,6 +278,10 @@ export interface CommitBatchOptions {
   // say. It never decides the author, which is the actor (see
   // `WriteOptions.history`).
   history?: WriteContext;
+  // The automation run this batch commits for, set only by the commit of a
+  // run's batch: the files the batch creates are recorded as the run's
+  // automation's (see `WriteOptions.automationRun`).
+  automationRun?: AutomationRunWrite;
   // Who a batch by a caller who isn't signed in is made as, once its entries
   // are admitted: the acting user the first admitted write's grant names
   // (see `AnonymousRequest`). It is who the batch's index job is initiated
@@ -2478,6 +2485,7 @@ async function commitStaged(
       // writes waits for this job rather than returning ahead of it.
       initiatingUser: opts.actor ?? opts.actingUser?.() ?? null,
       ...(opts.history ? { history: opts.history } : {}),
+      ...(opts.automationRun ? { automationRun: opts.automationRun } : {}),
       ...(opts.policyAudit ? { policyAudit: opts.policyAudit } : {}),
       ...(stageCursor ? { stageCursor } : {}),
       onDurable: releaseLocks,
