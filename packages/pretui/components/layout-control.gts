@@ -110,7 +110,10 @@ export function applyHysteresis(
   return new Map(
     [...next].map(([id, n]) => {
       let l = last.get(id);
-      return [id, l !== undefined && n < l ? Math.min(guarded.get(id) ?? l, l) : n];
+      return [
+        id,
+        l !== undefined && n < l ? Math.min(guarded.get(id) ?? l, l) : n,
+      ];
     }),
   );
 }
@@ -416,7 +419,8 @@ export class LayoutControl extends Component<LayoutControlSignature> {
     // Client rects keep subpixels but shrink under an ancestor's transform
     // (a card stack's opening scale); dividing by the bar's own scale undoes it.
     let scale =
-      (bar.offsetWidth && bar.getBoundingClientRect().width / bar.offsetWidth) ||
+      (bar.offsetWidth &&
+        bar.getBoundingClientRect().width / bar.offsetWidth) ||
       1;
     let wrapLimit = this.controlPx * WRAP_RATIO;
     let changed = false;
@@ -610,6 +614,7 @@ export class LayoutControl extends Component<LayoutControlSignature> {
       aria-label={{this.label}}
       style={{this.style}}
       data-overflow={{if this.overflow.active 'true'}}
+      data-pretui-layout-control
       data-end-anchored={{if this.endAnchor 'true'}}
       {{this.measure}}
       data-test-pretui-layout-control
