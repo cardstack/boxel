@@ -121,6 +121,9 @@ export class BackgroundScheduler {
     if (names.size !== this.#kinds.length) {
       throw new Error('each background kind needs a name of its own');
     }
+    for (let kind of this.#kinds) {
+      checkKind(kind);
+    }
     this.#concurrency = options.concurrency ?? DEFAULT_BACKGROUND_CONCURRENCY;
     if (!Number.isInteger(this.#concurrency) || this.#concurrency < 1) {
       throw new Error(
@@ -342,5 +345,37 @@ export class BackgroundScheduler {
         );
         return;
     }
+  }
+}
+
+// Refuses timings that would make a kind due on every turn: a kind due after
+// no commits, or due again, or retried, after no time at all.
+function checkKind(kind: BackgroundKind): void {
+  let positive = (name: 'everyMs' | 'retryAfterMs') => {
+    let value = kind[name];
+    if (value !== undefined && !(value > 0)) {
+      throw new Error(
+        `background kind ${kind.name}: ${name} must be above 0, not ${value}`,
+      );
+    }
+  };
+  positive('everyMs');
+  positive('retryAfterMs');
+  let { afterCommits, quietMs } = kind;
+  if (
+    afterCommits !== undefined &&
+    !(Number.isInteger(afterCommits) && afterCommits >= 1)
+  ) {
+    throw new Error(
+      `background kind ${kind.name}: afterCommits must be a whole number of at least 1, not ${afterCommits}`,
+    );
+  }
+  if (
+    quietMs !== undefined &&
+    (afterCommits === undefined || !(quietMs >= 0))
+  ) {
+    throw new Error(
+      `background kind ${kind.name}: quietMs must be at least 0, and goes with afterCommits`,
+    );
   }
 }

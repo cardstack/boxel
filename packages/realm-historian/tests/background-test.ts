@@ -451,6 +451,22 @@ module('background scheduler', (hooks) => {
     assert.deepEqual(ran(), { 'id-a': ['every'], 'id-b': ['every', 'every'] });
   });
 
+  test('a kind whose timings would make it due on every turn is refused', (assert) => {
+    let run = async () => {};
+    for (let [kind, problem] of [
+      [{ name: 'k', afterCommits: 0, run }, /afterCommits/],
+      [{ name: 'k', afterCommits: 1.5, run }, /afterCommits/],
+      [{ name: 'k', everyMs: 0, run }, /everyMs/],
+      [{ name: 'k', retryAfterMs: 0, run }, /retryAfterMs/],
+      [{ name: 'k', quietMs: MINUTE, run }, /quietMs/],
+      [{ name: 'k', afterCommits: 1, quietMs: -1, run }, /quietMs/],
+    ] as [BackgroundKind, RegExp][]) {
+      assert.throws(() => scheduler([kind]), problem);
+    }
+    scheduler([{ name: 'k', afterCommits: 1, quietMs: 0, everyMs: 1, run }]);
+    assert.true(true, 'sound timings are accepted');
+  });
+
   test('a stopped scheduler starts nothing more and waits for the jobs running', async (assert) => {
     let held = gate();
     let target = scheduler([
