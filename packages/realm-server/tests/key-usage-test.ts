@@ -400,6 +400,7 @@ module(basename(import.meta.filename), function (hooks) {
       dbAdapter,
       realm,
       OWNER,
+      { automation: TEST_AUTOMATION_PATH },
     );
     assert.strictEqual(
       (await automationCall('check', OWNER, token)).status,
