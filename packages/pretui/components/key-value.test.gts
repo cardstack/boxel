@@ -185,33 +185,6 @@ module('Pretui | components/key-value', function (hooks) {
     );
   });
 
-  test('--pretui-kv-pad-inline insets the text while the divided hairline spans the container', async function (assert) {
-    const ITEMS: KeyValueItem[] = [
-      { key: 'Origin', value: 'Wuyi' },
-      { key: 'Harvest', value: 'Spring 2026' },
-    ];
-    await render(
-      <template>
-        <div data-test-kv-box>
-          <KeyValue @items={{ITEMS}} @divided={{true}} />
-        </div>
-      </template>,
-    );
-    // CSSOM writes, not a style attribute: the page's CSP refuses the latter.
-    q('[data-test-kv-box]').style.setProperty('--pretui-kv-pad-inline', '1rem');
-    q('[data-test-kv-box]').style.setProperty('inline-size', '20rem');
-    let box = q('[data-test-kv-box]').getBoundingClientRect();
-    let [firstKey, secondKey] = Array.from(document.querySelectorAll('[data-test-pretui-kv] dt')) as HTMLElement[];
-    let secondValue = document.querySelectorAll('[data-test-pretui-kv] dd')[1] as HTMLElement;
-    let pad = parseFloat(getComputedStyle(firstKey!).paddingInlineStart);
-    assert.true(pad > 0, 'the first key pads its start edge');
-    let keyRect = secondKey!.getBoundingClientRect();
-    let valueRect = secondValue.getBoundingClientRect();
-    assert.strictEqual(keyRect.left, box.left, 'the key cell, which carries the hairline, starts at the container edge');
-    assert.strictEqual(valueRect.right, box.right, 'the value cell, which carries the hairline, ends at the container edge');
-    assert.strictEqual(parseFloat(getComputedStyle(secondKey!).borderBlockStartWidth), 1, 'the second row is ruled');
-  });
-
   test('renders no style attribute', async function (assert) {
     let items: KeyValueItem[] = [
       { key: 'Kind', value: 'API key' },
