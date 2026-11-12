@@ -36,6 +36,7 @@ import {
   getComponent,
 } from '../card-api';
 import { CardContextConsumer } from '../field-component';
+import { isLiveRender } from '../render-context';
 function wrapTablesHtml(html: string | null | undefined): string {
   if (!html) return '';
   // Fast path when there are no tables to wrap.
@@ -115,11 +116,39 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   // navigation where linkedCards is already cached, we detect this by
   // checking linkedCards.length > 0 on the first run.
   private _modifierHasRun = false;
-  get isPrerenderContext() {
-    return Boolean((globalThis as any).__boxelRenderContext);
+
+  // Whether this markdown renders for someone looking at it rather than for
+  // the indexer. Only a live render loads Monaco, KaTeX and Mermaid. Until the
+  // element is placed, the render context answers as it stands, so a render
+  // that starts while the host tab runs its own index render reads as not
+  // live. `placeRender` then records the element's own answer, so a live
+  // render outside the index render's element re-renders with highlighting,
+  // math and diagrams instead of keeping the raw markup.
+  @tracked private placedLive: boolean | undefined;
+
+  get isLive(): boolean {
+    return this.placedLive ?? isLiveRender();
   }
+
+  placeRender = modifier((element: HTMLElement) => {
+    let live = isLiveRender(element);
+    if (live === this.isLive) {
+      return;
+    }
+    let cancelled = false;
+    // After the render that installed this modifier, which read `isLive`.
+    queueMicrotask(() => {
+      if (!cancelled) {
+        this.placedLive = live;
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+
   get monacoContext() {
-    if (this.isPrerenderContext) {
+    if (!this.isLive) {
       return undefined;
     }
     if (!this.monacoContextInternal && this.prepareMonacoContextTask) {
@@ -128,7 +157,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     return this.monacoContextInternal;
   }
   prepareMonacoContextTask = task({ drop: true }, async () => {
-    if (this.isPrerenderContext) {
+    if (!this.isLive) {
       return;
     }
     let loadMonacoForMarkdown = (globalThis as any).__loadMonacoForMarkdown;
@@ -415,7 +444,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   @tracked _katex: any = null;
 
   get katexModule() {
-    if (this.isPrerenderContext) {
+    if (!this.isLive) {
       return null;
     }
     if (!this._katex) {
@@ -442,7 +471,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   private _mermaidIdCounter = 0;
 
   get mermaidSvgs() {
-    if (this.isPrerenderContext) {
+    if (!this.isLive) {
       return this._mermaidSvgs;
     }
     if (!this._mermaidSvgs.size) {
@@ -496,6 +525,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   <template>
     <MarkdownContentShell
       class='monaco-code-surface'
+      {{this.placeRender}}
       {{this.captureCardSlots this.renderedHtml @linkedCards @linkedFiles}}
     >
       {{this.renderedHtml}}
