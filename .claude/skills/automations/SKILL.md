@@ -465,7 +465,12 @@ check, and `exp` is when the run's time limit passes.
 ### The run overlay
 
 A run's card+source writes, and their octet-stream spelling, don't reach the
-realm while it runs (ADR 027 §1.2; the other write routes are listed in
+realm while it runs (ADR 027 §1.2). They are the only writes a run makes: a
+run-token write (any `PUT`, `PATCH`, `POST` or `DELETE`) to a route without
+`takesRunWrites` is refused with 403 before the route runs, and logged as
+`run-token call <method> <url> refused: … wrote through a route that doesn't
+stage its writes`. So `fs.delete`, `cards.update`, `operations.*`, `_atomic`
+and the card+json writes are refused for a run until they stage (see
 `docs/adr/remediation/027.md`). Each one is staged in the run's **overlay**, `run_overlay_files` in Postgres, one row per
 file keyed by run, attempt and realm-local path, with the bytes inline. The
 functions are in `packages/runtime-common/run-overlay.ts`. Every realm-server
@@ -480,11 +485,15 @@ What goes through it, for a run-token call in the run's own realm
   staged, card instance or not. The realm's size limit for the file's kind
   applies (the card limit for a card document, the file limit otherwise,
   checked before the body is buffered), as do the realm's reserved paths. A
-  run may not stage `realm.json`, the realm's policy card, a RealmPolicy card
-  or an automation card, whether the realm holds one at the path or the
-  run's bytes would make one (403). A path can't be staged as both a file and
+  run may not stage `realm.json`, a module (`.gts`, `.ts`, `.gjs`, `.js`), the
+  realm's policy card, a RealmPolicy card or an automation card, whether the
+  realm holds one at the path or the run's bytes would make one (403). Modules
+  are refused because the module a card's class comes from decides whether
+  it's a RealmPolicy or an automation, and the type check reads modules from
+  the index, which never sees a staged one. A path can't be staged as both a file and
   a directory (409). The token's `run.writesCap` bounds how many files the
-  attempt stages (403 `Writes cap reached`). Rewriting a staged
+  attempt stages (403 `Writes cap reached`), and `RUN_OVERLAY_MAX_BYTES`
+  (100 MiB) bounds their bytes together (413). Rewriting a staged
   path replaces it and doesn't count again. The run's row is locked for the
   check, so racing writes can't pass the cap, and a write after the run
   stopped running is refused.
@@ -509,8 +518,11 @@ on the run's row lock. Deleting a run row deletes its overlay
 (`ON DELETE CASCADE`).
 
 The bound on a run's overlay is `writesCap` files, each within the realm's
-limit for its kind. Binary content is stored inline rather than as a
-reference, since the overlay lives only as long as its run.
+limit for its kind, and `RUN_OVERLAY_MAX_BYTES` together. Binary content is
+stored inline rather than as a reference, since the overlay lives only as
+long as its run and stays within that byte bound. A row holds a file's bytes
+and nothing else, so the overlay can't record a delete. A run's deletes are
+refused rather than staged.
 
 Inspecting what a run has staged:
 

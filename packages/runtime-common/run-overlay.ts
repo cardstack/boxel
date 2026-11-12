@@ -36,6 +36,9 @@ export type RunOverlayStageResult =
   | { kind: 'staged'; created: boolean }
   // Staging another file would pass the run's `writes` cap.
   | { kind: 'over-cap'; cap: number }
+  // The attempt's staged files would come to more than
+  // `RUN_OVERLAY_MAX_BYTES`.
+  | { kind: 'over-bytes'; limit: number }
   // The run isn't running, or another attempt owns it.
   | { kind: 'not-running' };
 
@@ -45,18 +48,26 @@ export interface RunOverlayFile {
   content: Uint8Array<ArrayBuffer>;
 }
 
+// The most bytes an attempt's overlay holds, all its staged files together.
+// The overlay is stored inline and its commit reads every staged file into
+// memory at once, so this bound is one the server can hold, whatever a run's
+// `writes` cap and the realm's per-file limits allow.
+export const RUN_OVERLAY_MAX_BYTES = 100 * 1024 * 1024;
+
 // Stages `content` at `path` in the attempt's overlay. The run's row is
 // locked for the check, so two calls racing to stage the run's last file
 // under its cap can't both win, and the call is refused once the run has
 // stopped running or another attempt owns it. Rewriting a path the attempt
 // already staged replaces it and doesn't count against the cap again: the cap
-// counts files written, not writes made.
+// counts files written, not writes made. The overlay's bytes, with this file
+// in place of any the attempt staged at its path, stay within `maxBytes`.
 export async function stageRunOverlayFile(
   dbAdapter: DBAdapter,
   key: RunOverlayKey,
   path: string,
   content: Uint8Array,
   writesCap: number,
+  maxBytes = RUN_OVERLAY_MAX_BYTES,
 ): Promise<RunOverlayStageResult> {
   return await dbAdapter.withTransaction(async (txQuery) => {
     let [run] = await txQuery([
@@ -71,17 +82,22 @@ export async function stageRunOverlayFile(
     ) {
       return { kind: 'not-running' } as const;
     }
-    let [{ files, staged }] = (await txQuery([
+    let [{ files, staged, others }] = (await txQuery([
       'SELECT count(*)::int AS files, count(*) FILTER (WHERE path =',
       param(path),
-      ')::int AS staged FROM run_overlay_files WHERE run_id =',
+      ')::int AS staged, coalesce(sum(size) FILTER (WHERE path <>',
+      param(path),
+      '), 0)::bigint AS others FROM run_overlay_files WHERE run_id =',
       param(key.runId),
       'AND attempt =',
       param(key.attempt),
-    ])) as { files: number; staged: number }[];
+    ])) as { files: number; staged: number; others: number | string }[];
     let created = Number(staged) === 0;
     if (created && Number(files) >= writesCap) {
       return { kind: 'over-cap', cap: writesCap } as const;
+    }
+    if (Number(others) + content.byteLength > maxBytes) {
+      return { kind: 'over-bytes', limit: maxBytes } as const;
     }
     await txQuery([
       'INSERT INTO run_overlay_files (run_id, attempt, path, content, size) VALUES (',

@@ -8,7 +8,9 @@ import {
   cancelAutomationRun,
   finishAutomationRun,
   startAutomationRunAttempt,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   createAutomationRunToken,
@@ -250,6 +252,100 @@ module(basename(import.meta.filename), function (hooks) {
       403,
     );
     assert.deepEqual(await overlayRows(run.id), []);
+  });
+
+  test('a run may not write a module', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    for (let path of ['mine.gts', 'mine.ts', 'mine.gjs', 'mine.js']) {
+      let refused = await writeText(token, path, `export class Mine {}`);
+      assert.strictEqual(refused.status, 403, `${path}: ${refused.text}`);
+    }
+    assert.deepEqual(await overlayRows(run.id), []);
+  });
+
+  test('a run’s write through a route that doesn’t stage it is refused, and the realm keeps its file', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let removal = (await realm.handle(
+      new Request(`${realmURL.href}notes.txt`, {
+        method: 'DELETE',
+        headers: { Accept: SOURCE, Authorization: `Bearer ${token}` },
+      }),
+    ))!;
+    assert.strictEqual(removal.status, 403, await removal.text());
+
+    let batch = (await realm.handle(
+      new Request(`${realmURL.href}_operations`, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.BoxelOperations,
+          'Content-Type': SupportedMimeType.BoxelOperations,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          'boxel:operations': [
+            {
+              op: 'invoke',
+              'boxel:name': 'create',
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
+                  },
+                },
+              },
+            },
+          ],
+        }),
+      }),
+    ))!;
+    let answer = await batch.text();
+    assert.strictEqual(batch.status, 403, answer);
+    assert.strictEqual(
+      JSON.parse(answer).errors?.[0]?.code,
+      'run-write-not-staged',
+    );
+
+    assert.deepEqual(await readText(session(), 'notes.txt'), {
+      status: 200,
+      text: 'in the realm',
+    });
+    assert.deepEqual(await overlayRows(run.id), []);
+  });
+
+  test('a run’s staged files are bounded in bytes together, and a rewrite counts once', async function (assert) {
+    let { run } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let key = { runId: run.id, attempt: run.attempt! };
+    let bytes = (n: number) => new Uint8Array(n);
+    assert.strictEqual(
+      (await stageRunOverlayFile(dbAdapter, key, 'a.bin', bytes(6), 10, 10))
+        .kind,
+      'staged',
+    );
+    assert.deepEqual(
+      await stageRunOverlayFile(dbAdapter, key, 'b.bin', bytes(5), 10, 10),
+      { kind: 'over-bytes', limit: 10 },
+    );
+    assert.strictEqual(
+      (await stageRunOverlayFile(dbAdapter, key, 'a.bin', bytes(10), 10, 10))
+        .kind,
+      'staged',
+      'a rewrite replaces its own bytes rather than adding to them',
+    );
+    assert.deepEqual(
+      (await overlayRows(run.id)).map((row) => [row.path, Number(row.size)]),
+      [['a.bin', 10]],
+    );
   });
 
   test('a run cannot stage in a realm it may only read', async function (assert) {
