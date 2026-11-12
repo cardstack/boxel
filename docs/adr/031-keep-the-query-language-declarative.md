@@ -20,7 +20,7 @@ scope:
   - docs/search.md
 ---
 
-# Keep the query language declarative, so the order a query is written in never changes its answer
+# 031. Keep the query language declarative, so the order a query is written in never changes its answer
 
 A Boxel query says what it wants, never how to get it. The engine applies a
 query's parts in one fixed order that the query cannot change, and the order
@@ -145,4 +145,4 @@ statement, and it is the only way to rank across realms exactly.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/proposed-keep-the-query-language-declarative.md](remediation/proposed-keep-the-query-language-declarative.md).
+Known gaps are listed in [remediation/031.md](remediation/031.md).

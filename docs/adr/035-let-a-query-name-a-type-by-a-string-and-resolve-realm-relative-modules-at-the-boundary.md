@@ -15,7 +15,7 @@ scope:
   - docs/search.md
 ---
 
-# Let a query name a type by a string, and resolve a realm-relative module where the request arrives
+# 035. Let a query name a type by a string, and resolve a realm-relative module where the request arrives
 
 Queries are written where there is no JavaScript to hand them a class: a
 query-backed field's options, a query saved in card JSON, an HTTP body, the
@@ -83,8 +83,8 @@ wrong module.
 A string where a type goes was refused before Query V2 in both query
 spellings (`type is not valid`, and a top-level `type` was an unknown
 member), so the shorthand changes no saved query's answer and is read in
-both spellings ([ADR keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was](proposed-keep-a-saved-querys-answer-and-read-the-older-spelling-as-it-always-was.md) §1.6).
+both spellings (ADR 032 §1.6).
 
 ## 5. Remediation
 
-Known gaps are listed in [remediation/proposed-let-a-query-name-a-type-by-a-string-and-resolve-realm-relative-modules-at-the-boundary.md](remediation/proposed-let-a-query-name-a-type-by-a-string-and-resolve-realm-relative-modules-at-the-boundary.md).
+Known gaps are listed in [remediation/035.md](remediation/035.md).

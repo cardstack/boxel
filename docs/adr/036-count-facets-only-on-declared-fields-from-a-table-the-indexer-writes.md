@@ -17,7 +17,7 @@ scope:
   - docs/search-intent.md
 ---
 
-# Count facets only on fields a type declares, from a table the indexer writes
+# 036. Count facets only on fields a type declares, from a table the indexer writes
 
 A facet counts the matches of a search by a field's values. Counting by
 reading every match's search doc scales with the number of matches and
@@ -95,4 +95,4 @@ facets once, and the engine has no exceptions to keep in step.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/proposed-count-facets-only-on-declared-fields-from-a-table-the-indexer-writes.md](remediation/proposed-count-facets-only-on-declared-fields-from-a-table-the-indexer-writes.md).
+Known gaps are listed in [remediation/036.md](remediation/036.md).

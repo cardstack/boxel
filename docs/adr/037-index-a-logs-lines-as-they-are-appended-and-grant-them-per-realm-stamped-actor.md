@@ -17,7 +17,7 @@ scope:
   - docs/search.md
 ---
 
-# Index a log's lines as they are appended, and grant them per realm-stamped actor
+# 037. Index a log's lines as they are appended, and grant them per realm-stamped actor
 
 An append-only log (a `.jsonl` or `.log` file) holds the events a realm
 records: a feed's reactions, a class's attendance. A query filters, sorts,
@@ -109,4 +109,4 @@ trust.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/proposed-index-a-logs-lines-as-they-are-appended-and-grant-them-per-realm-stamped-actor.md](remediation/proposed-index-a-logs-lines-as-they-are-appended-and-grant-them-per-realm-stamped-actor.md).
+Known gaps are listed in [remediation/037.md](remediation/037.md).
