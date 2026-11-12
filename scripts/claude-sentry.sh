@@ -53,7 +53,10 @@ token=""
 for env in "${envs[@]}"; do
   ssm_env="$env"
   [[ "$env" == "prod" ]] && ssm_env="production"
-  if token="$(aws --profile "claude-${env}" ssm get-parameter \
+  # A profile made by an older claude-aws has no region. Both accounts are
+  # in us-east-1.
+  region="$(aws configure get region --profile "claude-${env}" 2>/dev/null || true)"
+  if token="$(aws --profile "claude-${env}" --region "${region:-us-east-1}" ssm get-parameter \
     --name "/${ssm_env}/sentry/claude_readonly_token" \
     --with-decryption --query Parameter.Value --output text 2>/dev/null)"; then
     break
