@@ -476,9 +476,28 @@ module(basename(import.meta.filename), function (hooks) {
       let status = attributesOf(
         (await statusOf(ADMIN, ['read', 'write'])).body,
       );
-      assert.deepEqual(status.switchedOn ? status.triggers : [], [
-        { label: 'nightly', runs: 4 },
+      // Without a declaration the route reports each trigger the row has
+      // counted. Switch-on records every trigger the card declared, and an
+      // edit that fails to read leaves the row as it was, so all four
+      // triggers report, with only their run counts. The row keeps its
+      // labels in jsonb's key order, so they are compared by label.
+      let [row] = await query(dbAdapter, [
+        'SELECT trigger_runs FROM automations WHERE automation_id =',
+        param(automationURL()),
       ]);
+      let triggers = status.switchedOn
+        ? [...status.triggers].sort((a, b) => a.label.localeCompare(b.label))
+        : [];
+      assert.deepEqual(
+        triggers,
+        [
+          { label: 'hourly', runs: 0 },
+          { label: 'launch', runs: 0 },
+          { label: 'nightly', runs: 4 },
+          { label: 'push', runs: 0 },
+        ],
+        `each trigger the row counted reports its runs; the row's trigger_runs: ${JSON.stringify(row?.trigger_runs)}`,
+      );
     });
   });
 
