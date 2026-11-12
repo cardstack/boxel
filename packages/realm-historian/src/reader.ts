@@ -493,8 +493,15 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     return { start: record.parent, pending: [] };
   }
 
-  // The revisions the listing shows from `start` down: up to `count` that
-  // change a path under the filters, each with its changes there.
+  // The revisions the listing shows from `start` down: `count` that change a
+  // path under the filters, each with its changes there, or every one left.
+  //
+  // `git log -n` counts revisions the listing then drops: with `-t`, a
+  // directory's tree is an entry of its own, so `--diff-filter=M` matches a
+  // revision that only adds a file to a directory, and either half of a
+  // size-only conversion matches `A` or `D`. So the walk goes on below the
+  // oldest revision git printed until `count` are listed or git has no
+  // more, and `more` says git may have more.
   async #list(
     gitDir: string,
     start: string,
@@ -502,26 +509,31 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     query: ListingQuery,
   ): Promise<{ listed: Listed[]; more: boolean }> {
     let { filters } = query;
-    let records: LogRecord[];
-    if (
-      filters !== 'all' &&
-      filters.length > 1 &&
-      !this.#bloomWithSeveralPaths
-    ) {
-      records = await this.#listOneFilterAtATime(gitDir, start, count, query);
-    } else {
-      records = await this.#log(gitDir, start, count, query, filters);
-    }
-    let more = records.length >= count;
     let listed: Listed[] = [];
-    for (let record of records.slice(0, count)) {
-      let changes = listedChanges(record, query);
-      if (changes) {
-        listed.push({ record, changes });
+    let from: string | undefined = start;
+    let more = false;
+    while (from && listed.length < count) {
+      let records: LogRecord[] =
+        filters !== 'all' && filters.length > 1 && !this.#bloomWithSeveralPaths
+          ? await this.#listOneFilterAtATime(gitDir, from, count, query)
+          : await this.#log(gitDir, from, count, query, filters);
+      let below: string | undefined =
+        records.length >= count
+          ? records[records.length - 1].parent
+          : undefined;
+      more = below !== undefined;
+      let batch: Listed[] = [];
+      for (let record of records) {
+        let changes = listedChanges(record, query);
+        if (changes) {
+          batch.push({ record, changes });
+        }
       }
-    }
-    if (query.status) {
-      listed = await this.#withoutConversions(gitDir, listed, query.status);
+      if (query.status) {
+        batch = await this.#withoutConversions(gitDir, batch, query.status);
+      }
+      listed.push(...batch);
+      from = below;
     }
     return { listed, more };
   }

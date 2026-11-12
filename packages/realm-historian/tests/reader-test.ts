@@ -770,6 +770,36 @@ module('reader', (hooks) => {
     );
   });
 
+  test('a status listing walks on past revisions git counts but the listing drops, so a page is empty only at the end', async (assert) => {
+    await record([await put('Author/jane.json', '{"v":1}', 'A')]);
+    let updated = await record([await put('Author/jane.json', '{"v":2}')]);
+    // Each adds a file to a directory that exists, which git lists under
+    // `--diff-filter=M` for the directory's tree, and changes no file.
+    for (let name of ['bob', 'carol', 'dave']) {
+      await record([await put(`Author/${name}.json`, '{}', 'A')]);
+    }
+    for (let paths of [undefined, ['Author/']]) {
+      let seen: string[] = [];
+      let before: string | undefined;
+      let ended = false;
+      for (let pages = 0; pages < 5 && !ended; pages++) {
+        let page = await history({ paths, status: 'M', limit: 1, before });
+        seen.push(...ids(page));
+        ended = !page.hasMore;
+        if (!ended) {
+          assert.strictEqual(
+            page.revisions.length,
+            1,
+            'a page with more after it is full',
+          );
+          before = ids(page)[0];
+        }
+      }
+      assert.true(ended, 'the listing ends');
+      assert.deepEqual(seen, [updated], `${paths ?? 'whole realm'}`);
+    }
+  });
+
   test('readAtRevision answers every outcome', async (assert) => {
     let first = await record([
       await put('Author/jane.json', '{"v":1}', 'A'),
