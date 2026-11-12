@@ -188,7 +188,7 @@ module('git objects', (hooks) => {
     assert.strictEqual(await fsck(gitDir), '');
   });
 
-  test('an object that exists is not written again', async (assert) => {
+  test('an object that exists is not written again, and its time is refreshed', async (assert) => {
     let { id, written } = await store.writeBlob('same bytes');
     assert.true(written);
     let before = await stat(store.pathOf(id));
@@ -197,7 +197,11 @@ module('git objects', (hooks) => {
     assert.strictEqual(again.id, id);
     assert.false(again.written);
     let after = await stat(store.pathOf(id));
-    assert.strictEqual(after.mtimeMs, before.mtimeMs, 'the file is untouched');
+    assert.strictEqual(after.ino, before.ino, 'the file is not replaced');
+    assert.true(
+      after.mtimeMs > before.mtimeMs,
+      "its modification time is refreshed, which git prune's expiry reads",
+    );
     assert.strictEqual(after.mode & 0o777, 0o444, 'objects are read-only');
   });
 

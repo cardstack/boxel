@@ -6,12 +6,14 @@
 // Each object goes to a temp file beside its final path, is fsynced, then
 // renamed into place, so a reader never sees a partial object and a crash
 // leaves at most a temp file. An object whose file exists is not written
-// again: its name is its content, so the file is already right.
+// again: its name is its content, so the file is already right. Its
+// modification time is set to now instead, so `git prune`'s expiry counts
+// from the object's latest use.
 
 import { createHash } from 'node:crypto';
 import { deflate } from 'node:zlib';
 import { promisify } from 'node:util';
-import { mkdir, open, rename, stat, unlink } from 'node:fs/promises';
+import { mkdir, open, rename, unlink, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 
 // Deflating runs on the thread pool, so a large blob doesn't hold the event
@@ -174,11 +176,15 @@ export class ObjectStore {
     return this.write('commit', commitBody(commit));
   }
 
-  // Writes the object unless its file exists, and returns its id.
+  // Writes the object unless its file exists, and returns its id. An
+  // existing file's modification time is set to now, as git sets it when it
+  // would write an object it already has: `git prune` removes an object HEAD
+  // doesn't reach once that time is older than its expiry, and the object
+  // is about to be used.
   async write(type: ObjectType, body: Uint8Array): Promise<WriteResult> {
     let id = hashObject(type, body);
     let path = this.pathOf(id);
-    if (await exists(path)) {
+    if (await freshen(path)) {
       return { id, written: false };
     }
     let directory = join(this.#gitDir, 'objects', id.slice(0, 2));
@@ -208,9 +214,12 @@ export class ObjectStore {
   }
 }
 
-async function exists(path: string): Promise<boolean> {
+// Sets the file's access and modification times to now. False when there is
+// no file.
+async function freshen(path: string): Promise<boolean> {
   try {
-    await stat(path);
+    let now = new Date();
+    await utimes(path, now, now);
     return true;
   } catch (error: any) {
     if (error?.code === 'ENOENT') {

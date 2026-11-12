@@ -384,6 +384,34 @@ module('maintenance', (hooks) => {
     assert.strictEqual(await fsck(gitDir), '');
   });
 
+  test('an object captured again is kept past the expiry its first capture passed', async (assert) => {
+    let [first] = await writeLooseHistory(gitDir, 1);
+    let store = new ObjectStore(gitDir);
+    let content = 'captured two hours ago, never committed';
+    let { id } = await store.writeBlob(content);
+    let twoHoursAgo = new Date(Date.now() - 2 * 60 * 60_000);
+    await utimes(store.pathOf(id), twoHoursAgo, twoHoursAgo);
+
+    // The same bytes captured again, for a revision about to commit.
+    let again = await store.writeBlob(content);
+    assert.false(again.written, 'the object is not written twice');
+    let result = await maintainRepo(gitDir);
+    assert.strictEqual(result.pruned, 0, 'nothing is old enough to prune');
+
+    let tree = new TreeBuilder();
+    tree.set('card.json', { mode: BLOB_MODE, id });
+    let { id: commit } = await store.writeCommit({
+      tree: await tree.write(store),
+      parents: [first],
+      author: IDENTITY,
+      committer: IDENTITY,
+      message: 'uses the object captured again',
+    });
+    await updateMain(gitDir, commit, first);
+    assert.deepEqual(await missingObjects(gitDir, [id]), []);
+    assert.strictEqual(await fsck(gitDir), '');
+  });
+
   test('a reader keeps answering while a pass repacks the repo', async (assert) => {
     await writeLooseHistory(gitDir, 300);
     let reachable = await reachableObjects(gitDir);
