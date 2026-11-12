@@ -5,7 +5,7 @@ import {
   runTokenSecret,
   type RunTokenContext,
 } from '@cardstack/runtime-common/run-token';
-import { createJWT } from '../jwt.ts';
+import { assertNoSecureSessionClaim } from '../utils/jwt.ts';
 
 // Minting and verifying the run token (ADR 026 §1.2): the session an
 // automation run's calls carry. See `runtime-common/run-token.ts` for what it
@@ -64,26 +64,26 @@ export function mintRunToken({
     );
   }
   let deadlineMs = Date.parse(run.startedAt) + timeLimitSeconds * 1000;
-  let lifetimeSeconds = Math.floor((deadlineMs - now) / 1000);
-  if (lifetimeSeconds <= 0) {
+  if (deadlineMs <= now) {
     throw new Error(
       `run ${run.id}'s time limit passed at ${new Date(deadlineMs).toISOString()}, so no token is minted for it`,
     );
   }
-  return createJWT(
-    {
-      user: run.actsAs,
-      realm: realmURL,
-      // A run token carries no permissions: every call's permissions are the
-      // run's identity's, read fresh where the call is checked.
-      permissions: [],
-      sessionRoom: undefined,
-      realmServerURL,
-      run: { id: run.id, attempt: run.attempt, readRealms, writesCap },
-    },
-    lifetimeSeconds,
-    runTokenSecret(realmSecretSeed),
-  );
+  let claims = {
+    user: run.actsAs,
+    realm: realmURL,
+    // A run token carries no permissions: every call's permissions are the
+    // run's identity's, read fresh where the call is checked.
+    permissions: [],
+    sessionRoom: undefined,
+    realmServerURL,
+    run: { id: run.id, attempt: run.attempt, readRealms, writesCap },
+    // The deadline itself, not a lifetime counted from the signing clock.
+    iat: Math.floor(now / 1000),
+    exp: Math.floor(deadlineMs / 1000),
+  };
+  assertNoSecureSessionClaim(claims);
+  return jwt.sign(claims, runTokenSecret(realmSecretSeed));
 }
 
 // What a run token says, when it verifies under the run-token key, within

@@ -331,6 +331,7 @@ module(basename(import.meta.filename), function (hooks) {
       run,
       realmURL: realmURL.href,
       readRealms: [],
+      writesCap: 100,
       realmServerURL: realm.realmServerURL,
       timeLimitSeconds: 600,
     });
@@ -373,6 +374,7 @@ module(basename(import.meta.filename), function (hooks) {
       run: { ...run, attempt: 2 },
       realmURL: realmURL.href,
       readRealms: [],
+      writesCap: 100,
       realmServerURL: realm.realmServerURL,
       timeLimitSeconds: 600,
       now: started + 400_000,
@@ -389,6 +391,7 @@ module(basename(import.meta.filename), function (hooks) {
           run,
           realmURL: realmURL.href,
           readRealms: [],
+          writesCap: 100,
           realmServerURL: realm.realmServerURL,
           timeLimitSeconds: 600,
           now: started + 601_000,

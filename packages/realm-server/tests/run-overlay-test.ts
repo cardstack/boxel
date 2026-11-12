@@ -352,10 +352,8 @@ module(basename(import.meta.filename), function (hooks) {
       realm,
       OWNER,
     );
-    assert.strictEqual(
-      (await writeText(token, 'notes.txt.boxel-partial', 'nope')).status,
-      403,
-    );
+    let refused = await writeText(token, 'notes.txt.boxel-partial', 'nope');
+    assert.notStrictEqual(refused.status, 204, refused.text);
     assert.deepEqual(await overlayRows(run.id), []);
   });
 

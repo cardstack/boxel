@@ -2886,7 +2886,7 @@ async function readBodyWithin(
   let total = 0;
   for (;;) {
     let { done, value } = await reader.read();
-    if (done) {
+    if (done || !value) {
       break;
     }
     total += value.byteLength;
