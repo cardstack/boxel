@@ -1,0 +1,237 @@
+---
+status: proposed
+date: 2026-11-10
+scope:
+  - packages/billing/**
+  - packages/realm-server/lib/billable-call.ts
+  - packages/realm-server/**/*pricing*
+  - packages/realm-server/lib/automation-estimate.ts
+  - packages/realm-server/lib/metered-charge.ts
+  - packages/runtime-common/metered-charges.ts
+  - packages/runtime-common/run-indexing.ts
+  - packages/runtime-common/**/*pricing*
+  - packages/runtime-common/tasks/daily-credit-grant.ts
+  - packages/realm-server/handlers/handle-add-credit.ts
+  - packages/postgres/migrations/*billing*
+  - packages/postgres/migrations/*credit*
+  - packages/postgres/migrations/*ledger*
+---
+
+# 029. Charge metered usage at hosting unit cost times a configured margin, with a pricing version on every charge
+
+Automation runs cost the host compute, indexing, network and storage. A realm
+server recovers what its hosting provider charges for that usage, times one
+margin. A run's AI is billed at the AI provider's cost, like any other AI
+call. The prices and the margin are deployment configuration, so changing one
+is a configuration edit and a redeploy, never a release, and a realm server
+on any provider prices at its own costs. Every charge records the pricing
+version it used and what it paid for, and a bad price never makes us charge
+less.
+
+## 1. Decision
+
+### 1.1. Cost times one margin
+
+A metered charge MUST be its hosting unit cost, what the deployment's
+provider charges for one unit of that usage, times one margin multiplier, at
+1,000 credits to the dollar (`CREDITS_PER_USD`). Metered charges are a run's
+compute, the indexing its writes cause, the network bytes it downloads, and
+storage. A metered charge MUST NOT be a flat price per run.
+
+AI is not a metered charge. A run's AI, plain or batched, MUST be billed at
+the cost the AI provider reports, times `CREDITS_PER_USD`, the same as a plain
+AI call, with no margin.
+
+### 1.2. Prices are deployment configuration
+
+The unit rates, the CPU and memory of the processes they are spread over, the
+margin and the floor of the minimum balance MUST be deployment configuration.
+They MUST reach the realm-server, worker and prerender processes as
+environment variables, and runtime code MUST read them only from its
+environment. It MUST NOT read them from a provider's parameter store or from
+the database, and code MUST hold no prices. Each variable's name MUST
+describe the resource and unit it prices, such as a vCPU-hour or a GB-month,
+not a provider's product.
+
+Our AWS deployment MUST hold these values as SSM parameters under
+`/${env}/boxel/`. The Terraform for each parameter MUST ignore changes to its
+value, so that a change needs only a console edit and a redeploy.
+
+### 1.3. A bad value stops new runs, never under-charges
+
+Each process MUST check the values at startup. A missing or malformed value,
+or a margin below 1.0, MUST fail the check for the whole set and raise an
+alert. While its check has failed, a process MUST NOT admit a new run or
+submit a new batch. It MUST NOT fall back to other prices.
+
+### 1.4. A pricing version on every charge
+
+Each process MUST log its prices and a pricing version, a hash of them, at
+startup. Every metered charge (§1.1) MUST record the pricing version it was
+priced at.
+
+### 1.5. The minimum balance covers a run's compute, network and AI
+
+An automation's caps MUST include a cap on its runs' AI spending, in credits.
+Before it sends an AI request for a run, the server MUST compute the most the
+request can cost: its input and its output-token limit at the model's listed
+price. The server MUST refuse the request when the run's AI spending, plus
+that amount, would pass the cap. The amount MUST count against the cap until
+the request's actual cost replaces it.
+
+An automation's minimum balance MUST be computed from its caps snapshot at
+the current prices: the most one of its runs can cost, counting its AI
+spending cap in full. It MUST NOT be lower than the configured floor. A run
+MUST NOT start when its payer's balance, less their runs in flight and their
+unsettled batches, is below that minimum.
+
+The most one run can cost covers its compute, network and AI. It MUST NOT
+include the indexing the run's writes cause, and an automation's caps MUST
+NOT include a cap on that indexing. The minimum balance and the estimate
+shown when an automation is switched on MUST both use that one per-run cost,
+so neither covers indexing. A run's indexing MUST be charged as measured when
+its index pass completes (§1.1), against whatever the balance it is charged to
+holds then.
+
+### 1.6. A ledger entry says what it paid for, once
+
+Every ledger entry MUST record its charge kind: run, run indexing, storage,
+AI, batched AI, grant, purchase or expiry. A consumption entry (run, run
+indexing, storage, batched AI) MUST also record its realm and a reference to
+what it paid for: the run, the batch, or the automation and day. An AI entry
+MUST record its realm when it has one. An entry written before kinds existed
+MUST read its kind from its credit type: a `*_used` row is AI, a
+`daily_credit` or `plan_allowance` row is a grant, an `extra_credit` row is a
+purchase, and a `*_expired` row is an expiry.
+
+A charge's identity MUST be its kind and reference. All the ledger rows one
+charge writes, one per credit bucket it draws from, MUST share that identity
+and be written in one transaction. A retry that finds the identity already
+present MUST write nothing.
+
+A consumption charge MUST record how much of each unit it priced: the
+metered units the pricing variables price (§1.2), or for AI the cost the
+provider reported. The usage MUST be written with the charge's ledger rows,
+under an id they share, so it lands exactly when they do.
+
+## 2. Rationale
+
+Cost times a margin keeps every price tied to what the usage costs the host.
+When the provider's rates or a process's size change, the host changes a
+number, and the margin stays the
+one lever for what we earn. A flat per-run price would over-charge small runs
+and under-charge large ones, and it would drift from cost as runs change.
+
+Realm servers federate (ADR 004), and a host on other infrastructure pays
+other prices. Billing reads named rates from its environment and never calls
+a provider, so that host sets its own rates and margin, with no adapter and
+no code change. Where the values are stored is deploy configuration, which
+ADR 003 §1.1 leaves to each provider.
+
+Prices change more often than code ships, and a release to change a price
+would couple billing to the release train. Configuration makes a change an
+operator's edit plus a redeploy. In our deployment, SSM with `ignore_changes`
+leaves Terraform owning only the starting value. SSM keeps a version history
+of each parameter and limits edits to the IAM roles allowed to make them, and
+each process reads its environment once, at start. Prices in the database
+would be one more mutable store with its own access and audit, read on the
+hot path. The pricing version answers "what price was this charged at?" for
+every entry, across redeploys.
+
+`spendCredits` charges only what the balance holds, so a run that costs more
+than the balance leaves the rest unpaid. A minimum balance at least as large
+as the most one run can cost makes every admitted run's compute, network and
+AI fully payable. Caps on calls, writes and time hold no price, and one AI
+request can cost a fraction of a cent or several dollars, so AI gets a cap of
+its own, in credits. The
+server checks each request's worst case before sending it, so a run's AI
+can't pass the cap, and the minimum balance can count the cap as the most a
+run's AI costs. Caps are set per automation, so the minimum is computed per
+automation, and configuration holds only a floor. A mistyped margin of 0.1
+must never ship a tenfold discount. Fallback prices in code would be lower
+than the live ones the moment an operator raised a rate, so a bad value stops
+new runs instead. Interactive work and runs already going are unaffected, and
+the alert names the value.
+
+Indexing is left out of that cost because nothing an author sets can bound
+it. The `writes` cap limits the files a run writes, not the index and
+prerender time they cause, and that time includes re-indexing every card that
+depends on what the run wrote. How many cards that is depends on how the
+realm's cards link to each other, which other people's edits change, and how
+long each takes depends on its template. A cap on indexing time, on
+dependents re-indexed, or a per-write allowance would make an author choose a
+number about the index's internals that they can neither see nor predict.
+The index pass also can't be cut short once it starts: the run's writes are
+already committed, and a realm whose index stops partway serves stale cards
+to everyone who reads it. So a run's indexing is charged as measured, and an
+index pass that costs more than the balance holds goes partly unpaid. The
+pass completes after its run ends, so it can also draw down the balance a
+later run was admitted against, and that run's own charges can then go partly
+unpaid as well. When the balance holds anything, the charge records all the
+usage it priced (§1.6), so the unpaid part is that usage at its pricing
+version less the credits the charge drew. When the balance holds nothing, no
+charge is written, and that pass leaves no ledger entry and no usage.
+
+The margin pays for the infrastructure the platform runs and operates. AI is
+already priced by its provider, and plain AI calls carry no margin, so AI
+from an automation doesn't either. A margin on batched AI alone would also
+take back the batch discount the author opted in for.
+
+A ledger that says only how much was spent can't answer what a charge was
+for, can't show a charge on its run, and can't tell a retry from a second
+charge. The kind, realm and reference answer the first two. One run makes
+several charges of different kinds against the same reference, and one
+charge can draw from several credit buckets, so a charge's identity is its
+kind and reference, shared by every row it writes. Grants, purchases and
+expiries belong to a user, not a realm, so only consumption entries carry
+one.
+
+Credits alone can't answer how much a user or realm used, only what it cost,
+and they can't be checked against the hosting bill they are meant to
+recover. Recording the quantities with the charge answers both, and with the
+pricing version a charge's credits can be recomputed from its usage. Usage
+is kept with the charge rather than on the run, because deleting a realm
+deletes its runs while their charges stay, and storage has no run. It is
+keyed by the charge, not by ledger row, because one charge spans several
+rows and some charges price two units.
+
+## 3. Considered options
+
+- **Hosting unit cost times a margin, prices in deployment configuration, a
+  pricing version on every charge (chosen).**
+- **A cap on a run's indexing, as worker-seconds or dependents re-indexed.**
+  Either asks an author for a number about the index's internals. A
+  worker-seconds cap can't stop a pass that has started without leaving the
+  index stale, and a dependents cap would refuse a run's commit because of
+  links other people made.
+- **A reserve for indexing the server estimates on its own**, such as the
+  realm's recent indexing cost per run or the dependents of what the run
+  will write counted at admission. Neither bounds the charge: a run can write
+  a card that more cards link to than any recent run did, and at admission
+  the server doesn't know what the run will write. The minimum balance would
+  also move with other people's edits, so a payer couldn't tell from the
+  automation's caps whether a run will start.
+- **A per-write indexing allowance in the per-run cost.** It doesn't cover
+  dependents, so it under-covers a run that writes a card many others
+  link to, and it adds a price that has to be re-measured as rendering
+  changes.
+- **A margin on batched AI.** Plain AI calls carry none, and at a margin of
+  2 or more it would make batching cost as much as not batching, or more.
+- **Bound AI only by a cap on calls.** A call cap holds no price, so the
+  minimum balance couldn't cover a run's AI.
+- **Flat prices per run.** They drift from cost and over- or under-charge by
+  run size.
+- **Prices in code.** Every change needs a release.
+- **Read prices from SSM at runtime.** Billing would depend on one provider
+  (ADR 003), for nothing the environment doesn't already give.
+- **Prices in the database.** It is another mutable store to secure and
+  audit, read on every charge, without the version history a parameter store keeps.
+- **Fallback prices in code.** A raised price makes the fallback an
+  under-charge, unless every increase also ships a release.
+- **Billing from the provider's bill after the fact.** The bill comes monthly and
+  per account, so it can't be tied to a run, shown when the run ends, or
+  checked against a balance before the run starts.
+
+## 4. Remediation
+
+Known gaps are listed in [remediation/029.md](remediation/029.md).

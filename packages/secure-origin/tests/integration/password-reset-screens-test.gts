@@ -31,4 +31,24 @@ module('Integration | password reset screens', function (hooks) {
     assert.dom('h1[data-test-secure-title]').exists({ count: 4 });
     assert.dom('[role="heading"]').doesNotExist();
   });
+
+  test('the forms post', async function (assert) {
+    await render(
+      <template>
+        <ForgotPasswordForm
+          @onEmailInput={{noop}}
+          @onSubmit={{noop}}
+          @onSignIn={{noop}}
+        />
+        <ResetPasswordForm @forgotPasswordURL='#' @onSubmit={{noop}} />
+      </template>,
+    );
+
+    assert
+      .dom('[data-test-forgot-password-form]')
+      .hasAttribute('method', 'post');
+    assert
+      .dom('[data-test-reset-password-form]')
+      .hasAttribute('method', 'post');
+  });
 });

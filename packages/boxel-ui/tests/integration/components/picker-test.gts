@@ -359,6 +359,30 @@ module('Integration | Component | picker', function (hooks) {
       .hasAttribute('placeholder', 'Search...');
   });
 
+  test('picker search input tells password managers to skip it', async function (assert) {
+    const selected: PickerOption[] = [];
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{selected}}
+          @onChange={{noop}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-before-options]');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+    assert.dom(searchInput).hasAttribute('data-1p-ignore', '');
+    assert.dom(searchInput).hasAttribute('data-lpignore', 'true');
+    assert.dom(searchInput).hasAttribute('data-form-type', 'other');
+    assert.dom(searchInput).hasAttribute('data-bwignore', '');
+  });
+
   test('picker filters main list by search term while summary stays visible', async function (assert) {
     const selected = [testOptionsWithSelectAll[2]!]; // Option 2
 

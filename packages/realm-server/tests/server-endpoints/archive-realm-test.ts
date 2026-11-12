@@ -9,9 +9,15 @@ import {
   isRealmArchived,
   param,
   query,
+  ri,
+  rri,
   systemInitiatedPriority,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
+import {
+  getAutomation,
+  switchOnAutomation,
+} from '@cardstack/runtime-common/automations';
 import { realmSecretSeed } from '../helpers/index.ts';
 import {
   insertSourceRealmInRegistry,
@@ -78,6 +84,67 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         await isRealmArchived(context.dbAdapter, new URL(realmURL)),
         'realm is archived in the database',
       );
+    });
+
+    test("POST /_archive-realm pauses the realm's automations", async function (assert) {
+      const owner = '@archive-owner:localhost';
+      const realmURL = makeRealmURL();
+      await seedSourceRealm(realmURL, {
+        [owner]: ['read', 'write', 'realm-owner'],
+      });
+      let automationId = rri(`${realmURL}Automation/nightly`);
+      let switchedOn = await switchOnAutomation(
+        context.dbAdapter,
+        {
+          automationId,
+          realm: ri(realmURL),
+          user: owner,
+          declaration: {
+            url: automationId,
+            realmURL,
+            script: rri(`${realmURL}scripts/nightly.js`),
+            triggers: [
+              {
+                kind: 'cron',
+                label: 'daily',
+                expression: '30 5 * * *',
+                timeZone: 'America/Chicago',
+              },
+            ],
+            operations: [],
+            caps: {
+              callApiCalls: 1,
+              responseBytes: 1000,
+              resolveCalls: 1,
+              writes: 1,
+              seconds: 60,
+              aiCredits: 0,
+              dailyCredits: 10,
+              monthlyCredits: null,
+            },
+            params: {},
+            batchedAI: false,
+            batchDeadlineMinutes: 60,
+          },
+        },
+        {
+          matrixServerName: 'localhost',
+          virtualNetwork: context.virtualNetwork,
+        },
+      );
+      assert.true(switchedOn.ok, 'the automation is switched on');
+
+      let response = await context.request
+        .post('/_archive-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', authHeader(owner))
+        .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let automation = await getAutomation(context.dbAdapter, automationId);
+      assert.strictEqual(automation?.state, 'paused');
+      assert.strictEqual(automation?.pauseReason, 'realm-archived');
     });
 
     test('POST /_unarchive-realm lets an owner restore a realm and enqueues a full reindex', async function (assert) {
@@ -162,7 +229,51 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
-    test('POST /_archive-realm returns 403 for a non-owner', async function (assert) {
+    test('POST /_archive-realm lets an administrator who does not own the realm archive it', async function (assert) {
+      const owner = '@archive-owner:localhost';
+      const administrator = '@archive-admin:localhost';
+      const realmURL = makeRealmURL();
+      await seedSourceRealm(realmURL, {
+        [owner]: ['read', 'write', 'realm-owner'],
+        [administrator]: ['read', 'write'],
+      });
+
+      let response = await context.request
+        .post('/_archive-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', authHeader(administrator))
+        .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.true(
+        await isRealmArchived(context.dbAdapter, new URL(realmURL)),
+        'realm is archived in the database',
+      );
+    });
+
+    test('POST /_archive-realm refuses the owner once their write is removed', async function (assert) {
+      const owner = '@archive-owner:localhost';
+      const realmURL = makeRealmURL();
+      await seedSourceRealm(realmURL, {
+        [owner]: ['read', 'realm-owner'],
+      });
+
+      let response = await context.request
+        .post('/_archive-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', authHeader(owner))
+        .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+
+      assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      assert.false(
+        await isRealmArchived(context.dbAdapter, new URL(realmURL)),
+        'realm is not archived',
+      );
+    });
+
+    test('POST /_archive-realm returns 403 for a reader', async function (assert) {
       const owner = '@archive-owner:localhost';
       const intruder = '@intruder:localhost';
       const realmURL = makeRealmURL();
@@ -386,13 +497,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
-    test('does not leak archived realms the caller does not own', async function (assert) {
+    test('does not leak archived realms the caller does not administer', async function (assert) {
       const owner = '@archive-owner:localhost';
       const otherOwner = '@other-owner:localhost';
       const ownedURL = makeRealmURL();
       const otherURL = makeRealmURL();
       await seedArchivedRealm(ownedURL, owner);
-      // owner can read otherURL but is not its owner
+      // owner can read otherURL but does not administer it
       await seedArchivedRealm(otherURL, otherOwner, {
         [owner]: ['read'],
       });
@@ -407,6 +518,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.notOk(
         findEntry(response.body, otherURL),
         "another owner's archived realm is not leaked",
+      );
+    });
+
+    test('lists archived realms the caller administers but does not own', async function (assert) {
+      const caller = '@archive-admin:localhost';
+      const otherOwner = '@other-owner:localhost';
+      const sharedURL = makeRealmURL();
+      await seedArchivedRealm(sharedURL, otherOwner, {
+        [caller]: ['read', 'write'],
+      });
+
+      let response = await context.request
+        .get('/_archived-realms')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', authHeader(caller));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.ok(
+        findEntry(response.body, sharedURL),
+        'the realm the caller administers is listed',
       );
     });
 

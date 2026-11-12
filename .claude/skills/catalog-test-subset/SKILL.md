@@ -55,8 +55,8 @@ Don't copy a catalog definition into this repo, whether as a base module, a test
 - **Only import what a subset-only stack can serve.** Every import must be one of:
   - another subset file;
   - a base module;
-  - `@cardstack/boxel-ui/*` or `@cardstack/boxel-icons/*`;
-  - a module the host shims (`packages/host/app/lib/externals.ts`).
+  - `@cardstack/pretui/*`, `@cardstack/boxel-ui/*` or `@cardstack/boxel-icons/*` (base imports Pret UI, so every stack that serves base serves it);
+  - a module the host shims (`packages/host/app/lib/externals.ts`), or a host tool (`@cardstack/boxel-host/tools/*`, as `packages/host/app/tools/index.ts` shims them).
 
   The sync's closure check fails otherwise. Adding a file to the subset means adding its catalog imports too.
 

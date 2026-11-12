@@ -169,7 +169,10 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           /* --pretui-seg-h: opt-in knob for the whole control; a segment is
              that less the inset on both sides */
           height: calc(
-            var(--pretui-seg-h, calc(1.5rem + 2 * var(--pretui-seg-inset))) -
+            var(
+              --pretui-row-h,
+              var(--pretui-seg-h, calc(1.5rem + 2 * var(--pretui-seg-inset)))
+            ) -
               2 * var(--pretui-seg-inset)
           );
           /* --pretui-seg-px: opt-in knob for a segment's side padding */
@@ -239,12 +242,17 @@ export class SegmentedControl extends Component<SegmentedControlSignature> {
           font-weight: var(--pretui-seg-active-weight);
         }
         /* coarse pointers get a real hit target without moving the fine one;
-           a control sized by its knobs keeps that size */
+           a control sized by its knobs or a LayoutControl row keeps that size */
         @media (any-pointer: coarse) {
           .pretui-seg-item {
             height: calc(
-              var(--pretui-seg-h, calc(2.125rem + 2 * var(--pretui-seg-inset))) -
-                2 * var(--pretui-seg-inset)
+              var(
+                  --pretui-row-h,
+                  var(
+                    --pretui-seg-h,
+                    calc(2.125rem + 2 * var(--pretui-seg-inset))
+                  )
+                ) - 2 * var(--pretui-seg-inset)
             );
             padding: 0 var(--pretui-seg-px, var(--boxel-sp));
           }

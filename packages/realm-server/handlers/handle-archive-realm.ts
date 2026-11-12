@@ -6,35 +6,52 @@ import {
   logger,
   SupportedMimeType,
   type Realm,
+  namedRealmUsers,
+  ri,
 } from '@cardstack/runtime-common';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
+import { pauseRealmAutomations } from '@cardstack/runtime-common/automations';
 import * as Sentry from '@sentry/node';
-import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import { resolveAndAuthorizeArchiveTarget } from './archive-realm-utils.ts';
+import {
+  notifyRealmsListUpdated,
+  resolveAndAuthorizeArchiveTarget,
+} from './archive-realm-utils.ts';
 
 const log = logger('handle-archive');
 
 export default function handleArchiveRealm({
   dbAdapter,
+  matrixClient,
   sendEvent,
+  virtualNetwork,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let target = await resolveAndAuthorizeArchiveTarget(
       ctxt,
       dbAdapter,
       'archive',
+      matrixClient.serverName,
     );
     if (!target) {
       return;
     }
-    let { realmURL, permissions, ownerUserId } = target;
+    let { realmURL, permissions } = target;
 
     try {
+      // An archived realm's automations stop with it: each is paused, and its
+      // pending run canceled, until a direct writer resumes it. They pause
+      // before the realm is marked archived, so a failure in between leaves
+      // the realm visible with its automations stopped, never archived with
+      // them running, and a retry archives it.
+      await pauseRealmAutomations(
+        dbAdapter,
+        ri(virtualNetwork.unresolveURL(realmURL)),
+      );
       await archiveRealm(dbAdapter, new URL(realmURL));
       // Stop the realm's indexer: cancel any in-flight from-scratch /
       // incremental-index job and drop the pending queue in every lane of
@@ -73,14 +90,14 @@ export default function handleArchiveRealm({
       });
       await setContextResponse(ctxt, response);
 
-      // Tell the owner's other sessions their realm list changed so a session
+      // Tell everyone the realm names that their realm list changed so a session
       // viewing the workspace chooser drops the realm from Your Workspaces —
       // and, if that session already has the Archived section open, moves it
       // into Archived — without a reload. Best-effort: the realm is already
       // archived, so a failed notify must not turn a successful archive into an
       // error.
       try {
-        await sendEvent(ownerUserId, REALMS_LIST_UPDATED_EVENT_TYPE);
+        await notifyRealmsListUpdated(sendEvent, namedRealmUsers(permissions));
       } catch (error) {
         Sentry.captureException(error);
       }

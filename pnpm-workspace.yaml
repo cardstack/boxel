@@ -27,6 +27,7 @@ catalog:
   "@cardstack/view-transitions": ^0.2.0
   "@codemirror/autocomplete": ^6.20.1
   "@codemirror/commands": ^6.10.3
+  "@codemirror/lang-javascript": ^6.2.5
   "@codemirror/lang-markdown": ^6.5.0
   "@codemirror/language": ^6.12.3
   "@codemirror/state": ^6.6.0
@@ -41,6 +42,7 @@ catalog:
   "@glint/ember-tsc": 1.5.0
   "@glint/template": ^1.7.7
 
+  "@lezer/highlight": ^1.2.3
   "@lezer/markdown": ^1.6.3
   "@koa/cors": ^5.0.0
   "@koa/router": ^14.0.0
@@ -51,7 +53,7 @@ catalog:
   "@opentelemetry/api": ^1.9.0
   "@percy/cli": ^1.32.11
   "@percy/ember": ^5.0.0
-  "@playwright/test": ^1.54.0
+  "@playwright/test": ^1.65.0
   "@rollup/plugin-babel": ^6.0.4
   "@sentry/node": ^8.31.0
   "@simple-dom/interface": ^1.4.0

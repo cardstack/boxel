@@ -25,6 +25,14 @@ import {
 } from './indexer.ts';
 import type { Stats } from '../worker.ts';
 import { queueClaimOf, type QueueClaim } from '../jobs/queue-claim.ts';
+import {
+  addRunIndexingUsage,
+  chargeRunIndexing,
+  meteredPrerenderer,
+  parseRunIndexing,
+  sameRunIndexing,
+  type RunIndexing,
+} from '../run-indexing.ts';
 
 export { prerenderHtml };
 
@@ -80,6 +88,13 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
   // so one announcing publish makes the merged job announce. Absent from the
   // args of a job enqueued by a worker predating the field, which announces.
   announce: boolean;
+  // The automation run whose commit's index pass spawned this job, with the
+  // usage that pass and any before it measured, or null for any other job
+  // (see `RunIndexing`). The job is the last one the commit causes, so it
+  // charges the run once its renders are done. It neither joins another
+  // publish's job nor is joined. Read as null when absent, as on a job
+  // enqueued by a worker predating the field.
+  runIndexing: RunIndexing | null;
 }
 
 export interface PrerenderHtmlResult extends JSONTypes.Object {
@@ -104,6 +119,10 @@ export interface PrerenderHtmlResult extends JSONTypes.Object {
   // How the queue claimed this job, as on an index job's result (see
   // `IncrementalResult.queueClaim`); null when no queue claimed it.
   queueClaim: QueueClaim | null;
+  // The automation run's indexing the job charged, every earlier job's usage
+  // included, or null when it charged no run (see
+  // `IncrementalResult.chargedRunIndexing`).
+  chargedRunIndexing: RunIndexing | null;
 }
 
 // The measured phases only, or null when none was measured.
@@ -139,6 +158,7 @@ function parsePrerenderHtmlArgsForCoalesce(
     coalescedPublishes,
     preWarm,
     announce,
+    runIndexing,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -162,6 +182,7 @@ function parsePrerenderHtmlArgsForCoalesce(
       typeof coalescedPublishes === 'number' ? coalescedPublishes : null,
     preWarm: preWarm === true,
     announce: announce !== false,
+    runIndexing: parseRunIndexing(runIndexing),
     legacy: passes === undefined,
   };
 }
@@ -243,8 +264,13 @@ function choosePrerenderHtmlCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
+  // A pending job rendering an automation run's commit renders nothing else,
+  // and a run's publish joins nothing (see `RunIndexing`), so the candidate is
+  // the first pending job neither of them rules out.
   let sameTypeCandidate = candidates.find(
-    (candidate) => candidate.jobType === incoming.jobType,
+    (candidate) =>
+      candidate.jobType === incoming.jobType &&
+      sameRunIndexing(candidate.args, incoming.args),
   );
   if (sameTypeCandidate) {
     let existingArgs = parsePrerenderHtmlArgsForCoalesce(
@@ -321,7 +347,8 @@ function choosePrerenderHtmlCoalesceDecision(
         incrementalChangesCover(existingArgs.changes, incomingArgs.changes) &&
         // A running job's args can no longer change, so a publish that
         // announces cannot ride on one that won't.
-        (existingArgs.announce || !incomingArgs.announce)
+        (existingArgs.announce || !incomingArgs.announce) &&
+        sameRunIndexing(candidate.args, incoming.args)
       ) {
         return { type: 'join', jobId: candidate.id };
       }
@@ -373,8 +400,11 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
   virtualNetwork,
   createPrerenderAuth,
   mediaCacheAdapter,
+  meteredCharges,
 }) =>
   async function (args) {
+    let startedAt = Date.now();
+    let runIndexing = parseRunIndexing(args.runIndexing);
     let {
       jobInfo,
       realmUsername,
@@ -394,6 +424,38 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     let spawningIndexJobIds = [
       ...new Set(spawningIndexPasses.map((pass) => pass.jobId)),
     ];
+    if (runIndexing && changes.length === 0) {
+      // Enqueued only to charge a run whose commit's index passes left
+      // nothing to render; see `Realm.enqueueDeferredPrerenderHtml`.
+      let chargedRunIndexing = addRunIndexingUsage(runIndexing, {
+        workerProcessSeconds: (Date.now() - startedAt) / 1000,
+        prerenderTabSeconds: 0,
+      });
+      await chargeRunIndexing({
+        dbAdapter,
+        meteredCharges,
+        runIndexing: chargedRunIndexing,
+        log,
+      });
+      return {
+        invalidations: [],
+        generation,
+        spawningIndexJobIds,
+        stats: {
+          instancesIndexed: 0,
+          filesIndexed: 0,
+          instanceErrors: 0,
+          fileErrors: 0,
+          totalIndexEntries: 0,
+        },
+        phaseTimings: null,
+        queueClaim: queueClaimOf(jobInfo) ?? null,
+        chargedRunIndexing,
+      };
+    }
+    // A job rendering a run's commit measures the tab time of every render it
+    // makes, for the charge.
+    let meter = runIndexing ? meteredPrerenderer(prerenderer) : undefined;
     log.debug(
       `${jobIdentity(jobInfo)} starting prerender-html for realm ${realmURL} (${changes.length} changes, spawning index jobs [${spawningIndexJobIds.join(', ')}], generation ${generation}, preWarm ${preWarm})`,
     );
@@ -427,7 +489,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       reader,
       fetch: _fetch,
       realmOwnerUserId: userId,
-      prerenderer,
+      prerenderer: meter?.prerenderer ?? prerenderer,
       auth,
       // `-1` keeps the logging shape when the queue supplies no job (it always
       // does in production). It must not reach the render scope, though:
@@ -467,6 +529,20 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       });
     }
 
+    let chargedRunIndexing: RunIndexing | null = null;
+    if (runIndexing) {
+      chargedRunIndexing = addRunIndexingUsage(runIndexing, {
+        workerProcessSeconds: (Date.now() - startedAt) / 1000,
+        prerenderTabSeconds: meter!.tabSeconds(),
+      });
+      await chargeRunIndexing({
+        dbAdapter,
+        meteredCharges,
+        runIndexing: chargedRunIndexing,
+        log,
+      });
+    }
+
     reportStatus(jobInfo, 'finish');
     log.debug(
       `${jobIdentity(jobInfo)} completed prerender-html for realm ${realmURL} at generation ${pass.generation}:\n${JSON.stringify(stats, null, 2)}`,
@@ -487,5 +563,6 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         janitorStagingsCleared: pass.janitorStagingsCleared,
       }),
       queueClaim: queueClaimOf(jobInfo) ?? null,
+      chargedRunIndexing,
     };
   };

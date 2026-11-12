@@ -115,7 +115,7 @@ export default function handleDelegateSession({
 
     // Mirror the realm's own authorizer (RealmPermissionChecker): the user can
     // read if an exact permission row, the public `*` grant, or the `users`
-    // grant (any user with a Matrix profile) gives them read. Using the raw
+    // grant (any user with a Boxel account) gives them read. Using the raw
     // realm_user_permissions rows alone would 403 a user who can really read
     // via a `users` grant, diverging from what the realm would accept.
     let realmPermissions = await fetchRealmPermissions(
@@ -124,7 +124,8 @@ export default function handleDelegateSession({
     );
     let permissionChecker = new RealmPermissionChecker(
       realmPermissions,
-      matrixClient,
+      dbAdapter,
+      matrixClient.serverName,
     );
     if (!(await permissionChecker.can(onBehalfOf, 'read'))) {
       log.warn(

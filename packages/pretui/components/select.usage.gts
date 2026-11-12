@@ -78,7 +78,7 @@ export class SelectUsage extends Component {
         <Args.Object
           @name='options'
           @required={{true}}
-          @description='The options to list, as {value, label} pairs.'
+          @description='The options to list, as {value, label, meta?, glyph?} objects.'
           @value={{this.countryOptions}}
         />
         <Args.Action

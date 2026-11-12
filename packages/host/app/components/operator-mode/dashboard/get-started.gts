@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
@@ -15,10 +15,11 @@ import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Menu } from '@cardstack/pretui/components/menu';
 import { ProgressBar } from '@cardstack/pretui/components/progress-bar';
 import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
-import { didCancel, dropTask, task, timeout } from 'ember-concurrency';
+import { eq } from '@cardstack/pretui/helpers';
+import { didCancel, dropTask, task } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
-import { cn, eq, not } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { logger, type RealmIdentifier } from '@cardstack/runtime-common';
 
@@ -40,7 +41,10 @@ import type { MenuEntry } from '@cardstack/pretui/internal/menu';
 
 const log = logger('component:dashboard/get-started');
 
-const AUTO_DISMISS_RETRY_DELAYS = [5_000, 30_000];
+const ERROR_MESSAGES = {
+  dismiss: 'Couldn’t dismiss. Try again.',
+  undo: 'Couldn’t undo. Try again.',
+};
 
 type StepId = 'open-card' | 'ask-ai' | 'publish' | 'agent';
 
@@ -69,10 +73,12 @@ class ChangeCounter<T> {
 // What the page's own Get started button needs, yielded to the block that
 // renders the page's header.
 export interface GetStartedToggle {
-  // Whether the button shows: the steps' ticks have been read, one is
-  // still to do, and the list hasn't been dismissed.
+  // Whether the button shows: the steps' ticks have been read and the list
+  // hasn't been dismissed.
   isReady: boolean;
   isOpen: boolean;
+  // Every step is done, so the button no longer calls for attention.
+  isComplete: boolean;
   panelId: string;
   toggle: () => void;
 }
@@ -94,10 +100,10 @@ function countOf<T>(values: T[], value: T) {
   return values.filter((other) => other === value).length;
 }
 
-// The dashboard's onboarding checklist. Every tick comes from something the
-// user has actually done, read from state the host already keeps, so the list
-// can't drift from what happened. A button in the page's header opens and
-// closes it; it starts closed. Dismissing it hides both for good.
+// The dashboard's onboarding checklist. Every tick is read from state the
+// host already keeps. A button in the page's header opens and closes
+// the list; it starts closed. Only Dismiss hides both, even once every step
+// is done, so the user can come back to a step and do it again.
 export default class GetStarted extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
@@ -115,6 +121,12 @@ export default class GetStarted extends Component<Signature> {
   @tracked private isExpanded = true;
   // Just dismissed: a note stands in for the list, with Undo.
   @tracked private dismissedIn: number | undefined;
+  // The last Dismiss or Undo that failed to save, so the list or the
+  // dismissed note says so. Like the open list, it holds only for the
+  // dismissal it was clicked under.
+  @tracked private failure:
+    | { control: 'dismiss' | 'undo'; epoch: number }
+    | undefined;
   private dismissalChanges = new ChangeCounter<boolean>();
   // Dismiss or Undo held focus and is gone, so the control that
   // replaces it takes it.
@@ -124,6 +136,7 @@ export default class GetStarted extends Component<Signature> {
   private titleId = `${guidFor(this)}-title`;
   private stepsId = `${guidFor(this)}-steps`;
   private dismissedNoteId = `${guidFor(this)}-dismissed`;
+  private errorId = `${guidFor(this)}-error`;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -158,7 +171,12 @@ export default class GetStarted extends Component<Signature> {
         id: 'open-card',
         title: 'Open a card in a workspace',
         hint: 'Cards hold your data, documents and apps.',
-        done: this.recentCardsService.recentCards.length > 0,
+        // The account records cards opened since login, in any browser. This
+        // browser's recent cards count too, so cards opened here before login
+        // still tick the step here.
+        done:
+          this.recentCardsService.recentCards.length > 0 ||
+          Boolean(this.matrixService.dashboardState.openedCard),
       },
       this.buildStep,
       {
@@ -218,8 +236,12 @@ export default class GetStarted extends Component<Signature> {
     return this.openedIn === this.dismissalEpoch;
   }
 
-  // Opening from the header always shows the steps.
+  // Opening from the header always shows the steps. Closing clears a
+  // failed dismissal's error.
   @action private toggle() {
+    if (this.isOpen) {
+      this.failure = undefined;
+    }
     this.openedIn = this.isOpen ? undefined : this.dismissalEpoch;
     this.isExpanded = true;
   }
@@ -232,16 +254,21 @@ export default class GetStarted extends Component<Signature> {
     return this.steps.find((step) => !step.done);
   }
 
-  // Dismissed, or with every step done, neither the button nor the list
-  // shows.
   private get isAvailable() {
-    return this.isLoaded && !this.isDismissed && this.nextStep !== undefined;
+    return this.isLoaded && !this.isDismissed;
   }
 
-  // Finishing every step dismisses it, so a step that later reads as undone
-  // (recent cards are kept per browser) doesn't bring it back.
-  private get isFinished() {
-    return this.isLoaded && !this.isDismissed && this.nextStep === undefined;
+  // The control whose last save failed under the current dismissal.
+  private get failedControl() {
+    return this.failure?.epoch === this.dismissalEpoch
+      ? this.failure.control
+      : undefined;
+  }
+
+  // Also written into a live region that stays on the page, so a screen
+  // reader announces it once, when the save fails.
+  private get errorMessage() {
+    return this.failedControl ? ERROR_MESSAGES[this.failedControl] : '';
   }
 
   private get showsDismissedNote() {
@@ -252,37 +279,10 @@ export default class GetStarted extends Component<Signature> {
     return {
       isReady: this.isAvailable,
       isOpen: this.isAvailable && this.isOpen,
+      isComplete: this.nextStep === undefined,
       panelId: this.panelId,
       toggle: this.toggle,
     };
-  }
-
-  // Runs when the finished state renders, not on every render: its element
-  // is inserted once, and goes when the dismissal lands. Nothing runs it
-  // again while it stays, so a failed write is retried here.
-  private dismissWhenFinished = modifier(() => {
-    this.autoDismissTask.perform();
-  });
-
-  private autoDismissTask = dropTask(async () => {
-    for (let delay of [0, ...AUTO_DISMISS_RETRY_DELAYS]) {
-      await timeout(delay);
-      if (await this.saveDismissal()) {
-        return;
-      }
-    }
-  });
-
-  private async saveDismissal() {
-    try {
-      await this.matrixService.updateDashboardState({
-        onboardingDismissed: true,
-      });
-      return true;
-    } catch (error) {
-      log.warn(`dismissing Get started failed: ${error}`);
-      return false;
-    }
   }
 
   private focusIfNext = modifier(
@@ -302,7 +302,19 @@ export default class GetStarted extends Component<Signature> {
 
   // Hides the list and the header's button for good, short of Undo.
   private dismissTask = dropTask(async () => {
-    if (!(await this.saveDismissal())) {
+    let epoch = this.dismissalEpoch;
+    this.failure = undefined;
+    try {
+      await this.matrixService.updateDashboardState({
+        onboardingDismissed: true,
+      });
+    } catch (error) {
+      log.warn(`dismissing Get started failed: ${error}`);
+      // Shown only where the user still is. Once they've closed the list,
+      // its button still being there says the dismissal didn't take.
+      if (this.isOpen) {
+        this.failure = { control: 'dismiss', epoch };
+      }
       return;
     }
     this.focusNext = 'undo';
@@ -314,22 +326,30 @@ export default class GetStarted extends Component<Signature> {
   // button comes back already open rather than in its closed look for the
   // moment the write takes.
   private undoDismissTask = dropTask(async () => {
+    let epoch = this.dismissalEpoch;
     this.focusNext = 'dismiss';
     this.isExpanded = true;
-    this.openedIn = this.dismissalEpoch + 1;
+    this.failure = undefined;
+    this.openedIn = epoch + 1;
     try {
       await this.matrixService.updateDashboardState({
         onboardingDismissed: false,
       });
     } catch (error) {
       log.warn(`undoing the dismissal of Get started failed: ${error}`);
-      this.focusNext = undefined;
-      this.openedIn = undefined;
+      if (this.dismissalEpoch === epoch) {
+        this.failure = { control: 'undo', epoch };
+      }
+      // An undo from elsewhere already brought the list back, unless the
+      // dismissal has changed again since.
+      if (this.dismissalEpoch !== epoch + 1) {
+        this.focusNext = undefined;
+        this.openedIn = undefined;
+      }
       return;
     }
-    // The list won't render if the write was dropped with its session or
-    // every step got done meanwhile, so nothing later opens it or takes the
-    // focus.
+    // The list won't render if the write was dropped with its session, so
+    // nothing later opens it or takes the focus.
     if (!this.isAvailable) {
       this.focusNext = undefined;
       this.openedIn = undefined;
@@ -356,22 +376,22 @@ export default class GetStarted extends Component<Signature> {
   }
 
   // Why there's nothing to publish. A workspace made before workspaces were
-  // marked publishable isn't, so owning one isn't enough.
+  // marked publishable isn't, so being able to edit one isn't enough.
   private get publishUnavailableNote() {
     return this.realmServer.userRealmIdentifiers.some((url) =>
-      this.realm.isRealmOwner(url),
+      this.realm.canAdminister(url),
     )
       ? 'None of your workspaces can be published. Create a new one to publish it.'
-      : 'Publishing needs a workspace you own. Create one to publish it.';
+      : 'Publishing needs a workspace you can edit. Create one to publish it.';
   }
 
-  // The note waits for the info of every workspace the user owns: until a
+  // The note waits for the info of every workspace the user administers: until a
   // workspace's info loads, it may yet turn out publishable.
   private get showsPublishUnavailableNote() {
     return (
       this.workspacesToPublish.length === 0 &&
       this.realmServer.userRealmIdentifiers
-        .filter((url) => this.realm.isRealmOwner(url))
+        .filter((url) => this.realm.canAdminister(url))
         .every((url) => this.realm.isInfoLoaded(url))
     );
   }
@@ -451,6 +471,10 @@ export default class GetStarted extends Component<Signature> {
               @appearance='link'
               @size='s'
               @busy={{this.dismissTask.isRunning}}
+              aria-describedby={{if
+                (eq this.failedControl 'dismiss')
+                this.errorId
+              }}
               {{on 'click' this.dismissTask.perform}}
               {{this.focusIfNext 'dismiss'}}
               data-test-get-started-dismiss
@@ -472,98 +496,103 @@ export default class GetStarted extends Component<Signature> {
                 data-test-get-started-toggle
               />
             </div>
+            {{#if (eq this.failedControl 'dismiss')}}
+              <p
+                class='get-started-error'
+                id={{this.errorId}}
+                data-test-get-started-dismiss-error
+              >{{this.errorMessage}}</p>
+            {{/if}}
           </header>
 
           {{#if this.isExpanded}}
             <ol class='get-started-steps' id={{this.stepsId}}>
               {{#each this.steps key='id' as |step|}}
-                <li
-                  class={{cn 'get-started-step' is-done=step.done}}
-                  data-test-get-started-step={{step.id}}
-                  data-test-get-started-step-done={{if
-                    step.done
-                    'true'
-                    'false'
-                  }}
-                >
-                  <span class='tick' aria-hidden='true'>
-                    {{#if step.done}}
-                      <Check width='14' height='14' stroke-width='3' />
-                    {{/if}}
-                  </span>
-                  <span class='step-words'>
-                    <span class='step-title'>
-                      {{step.title}}
+                {{#let (if step.done 'plain' 'outlined') as |actionAppearance|}}
+                  <li
+                    class={{cn 'get-started-step' is-done=step.done}}
+                    data-test-get-started-step={{step.id}}
+                    data-test-get-started-step-done={{if
+                      step.done
+                      'true'
+                      'false'
+                    }}
+                  >
+                    <span class='tick' aria-hidden='true'>
                       {{#if step.done}}
-                        <VisuallyHidden>(done)</VisuallyHidden>
+                        <Check width='14' height='14' stroke-width='3' />
                       {{/if}}
                     </span>
-                    <span class='step-hint'>{{step.hint}}</span>
-                    {{#if (eq step.id 'publish')}}
-                      {{#unless step.done}}
-                        {{#if this.showsPublishUnavailableNote}}
-                          <span
-                            class='step-note'
-                            data-test-get-started-publish-unavailable
-                          >{{this.publishUnavailableNote}}</span>
+                    <span class='step-words'>
+                      <span class='step-title'>
+                        {{step.title}}
+                        {{#if step.done}}
+                          <VisuallyHidden>(done)</VisuallyHidden>
                         {{/if}}
-                      {{/unless}}
-                    {{/if}}
-                  </span>
-                  {{! Publishing again stays a step away once one workspace
-                      is on the web. }}
-                  {{#if (eq step.id 'publish')}}
-                    {{#if this.onlyWorkspaceToPublish}}
-                      <Button
-                        class='step-action'
-                        @appearance='outlined'
-                        @size='s'
-                        {{on
-                          'click'
-                          (fn this.openToPublish this.onlyWorkspaceToPublish)
-                        }}
-                        data-test-get-started-action={{step.id}}
-                      >Publish a workspace</Button>
-                    {{else if this.workspacesToPublish.length}}
-                      <Menu
-                        class='step-action'
-                        @items={{this.publishMenuItems}}
-                        @label='Workspaces to publish'
-                        @align='end'
-                      >
-                        <:trigger as |isMenuOpen toggle|>
-                          <Button
-                            @appearance='outlined'
-                            @size='s'
-                            {{on 'click' toggle}}
-                            data-test-get-started-action={{step.id}}
-                          >Publish a workspace
-                            {{#if isMenuOpen}}
-                              <ChevronUp
-                                width='14'
-                                height='14'
-                                class='publish-chevron'
-                                aria-hidden='true'
-                                data-test-get-started-publish-chevron='up'
-                              />
-                            {{else}}
-                              <ChevronDown
-                                width='14'
-                                height='14'
-                                class='publish-chevron'
-                                aria-hidden='true'
-                                data-test-get-started-publish-chevron='down'
-                              />
-                            {{/if}}</Button>
-                        </:trigger>
-                      </Menu>
-                    {{/if}}
-                  {{else if (not step.done)}}
-                    {{#if (eq step.id 'open-card')}}
+                      </span>
+                      <span class='step-hint'>{{step.hint}}</span>
+                      {{#if (eq step.id 'publish')}}
+                        {{#unless step.done}}
+                          {{#if this.showsPublishUnavailableNote}}
+                            <span
+                              class='step-note'
+                              data-test-get-started-publish-unavailable
+                            >{{this.publishUnavailableNote}}</span>
+                          {{/if}}
+                        {{/unless}}
+                      {{/if}}
+                    </span>
+                    {{#if (eq step.id 'publish')}}
+                      {{#if this.onlyWorkspaceToPublish}}
+                        <Button
+                          class='step-action'
+                          @appearance={{actionAppearance}}
+                          @size='s'
+                          {{on
+                            'click'
+                            (fn this.openToPublish this.onlyWorkspaceToPublish)
+                          }}
+                          data-test-get-started-action={{step.id}}
+                        >Publish a workspace</Button>
+                      {{else if this.workspacesToPublish.length}}
+                        <Menu
+                          class='step-action'
+                          @items={{this.publishMenuItems}}
+                          @label='Workspaces to publish'
+                          @align='end'
+                        >
+                          <:trigger as |isMenuOpen toggle|>
+                            <Button
+                              @appearance={{actionAppearance}}
+                              @size='s'
+                              {{on 'click' toggle}}
+                              data-test-get-started-action={{step.id}}
+                            >Publish a workspace
+                              {{#if isMenuOpen}}
+                                <ChevronUp
+                                  width='14'
+                                  height='14'
+                                  class='publish-chevron'
+                                  aria-hidden='true'
+                                  data-test-get-started-publish-chevron='up'
+                                />
+                              {{else}}
+                                <ChevronDown
+                                  width='14'
+                                  height='14'
+                                  class='publish-chevron'
+                                  aria-hidden='true'
+                                  data-test-get-started-publish-chevron='down'
+                                />
+                              {{/if}}</Button>
+                          </:trigger>
+                        </Menu>
+                      {{/if}}
+                    {{else if (eq step.id 'open-card')}}
                       {{#if this.realmServer.userRealmIdentifiers.length}}
                         <Button
                           class='step-action'
-                          @appearance='outlined'
+                          @appearance={{actionAppearance}}
                           @size='s'
                           {{on 'click' this.openFirstWorkspace}}
                           data-test-get-started-action={{step.id}}
@@ -572,7 +601,7 @@ export default class GetStarted extends Component<Signature> {
                     {{else if (eq step.id 'ask-ai')}}
                       <Button
                         class='step-action'
-                        @appearance='outlined'
+                        @appearance={{actionAppearance}}
                         @size='s'
                         {{on 'click' this.askBoxelAi}}
                         data-test-get-started-action={{step.id}}
@@ -580,14 +609,14 @@ export default class GetStarted extends Component<Signature> {
                     {{else if (eq step.id 'agent')}}
                       <Button
                         class='step-action'
-                        @appearance='outlined'
+                        @appearance={{actionAppearance}}
                         @size='s'
                         {{on 'click' @showAgents}}
                         data-test-get-started-action={{step.id}}
                       >Set up an agent</Button>
                     {{/if}}
-                  {{/if}}
-                </li>
+                  </li>
+                {{/let}}
               {{/each}}
             </ol>
           {{/if}}
@@ -601,17 +630,30 @@ export default class GetStarted extends Component<Signature> {
           @appearance='link'
           @size='s'
           @busy={{this.undoDismissTask.isRunning}}
-          aria-describedby={{this.dismissedNoteId}}
+          aria-describedby={{if
+            (eq this.failedControl 'undo')
+            (concat this.dismissedNoteId ' ' this.errorId)
+            this.dismissedNoteId
+          }}
           {{on 'click' this.undoDismissTask.perform}}
           {{this.focusIfNext 'undo'}}
           data-test-get-started-undo-dismiss
         >
           Undo
         </Button>
+        {{#if (eq this.failedControl 'undo')}}
+          <p
+            class='get-started-error'
+            id={{this.errorId}}
+            data-test-get-started-undo-error
+          >{{this.errorMessage}}</p>
+        {{/if}}
       </div>
-    {{else if this.isFinished}}
-      <span hidden {{this.dismissWhenFinished}}></span>
     {{/if}}
+    <VisuallyHidden
+      role='status'
+      data-test-get-started-error-announcement
+    >{{this.errorMessage}}</VisuallyHidden>
 
     <style scoped>
       .get-started {
@@ -702,6 +744,13 @@ export default class GetStarted extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
+      /* On a line of its own, below the row it reports on. */
+      .get-started-error {
+        flex-basis: 100%;
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        color: var(--destructive-ink);
+      }
       /* Keeps its size when the label runs short of room. */
       .publish-chevron {
         flex: none;
@@ -719,9 +768,10 @@ export default class GetStarted extends Component<Signature> {
         font-style: italic;
       }
       /* Narrow, the box stacks: the title row with Dismiss and the
-         minimize button, the progress bar across the box, the count, then
-         the steps. The header's items join the body's grid for that, in
-         their DOM order so Tab follows what's on screen. */
+         minimize button, the progress bar across the box, the count, a
+         failed dismissal's error when there is one, then the steps. The
+         header's items join the body's grid for that, in their DOM order
+         so Tab follows what's on screen. */
       @container get-started (max-width: 30rem) {
         .get-started-body {
           display: grid;
@@ -755,6 +805,19 @@ export default class GetStarted extends Component<Signature> {
         }
         .get-started-dismiss {
           grid-area: dismiss;
+        }
+        .get-started-error {
+          grid-area: error;
+        }
+        /* An empty row would still add a gap, so the row exists only while
+           an error shows. Keep this map in step with the one above. */
+        .get-started-body:has(.get-started-error) {
+          grid-template-areas:
+            'title dismiss actions'
+            'progress progress progress'
+            'count count count'
+            'error error error'
+            'steps steps steps';
         }
         .get-started-step {
           grid-template-columns: var(--_get-started-tick-size) minmax(0, 1fr);

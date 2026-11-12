@@ -37,6 +37,9 @@ import {
   Theme,
 } from '@cardstack/base/card-api';
 import CodeRefField from '@cardstack/base/code-ref';
+import ColorField from '@cardstack/base/color';
+import CountryField from '@cardstack/base/country';
+import CurrencyField from '@cardstack/base/currency';
 import DateField from '@cardstack/base/date';
 import DateTimeField from '@cardstack/base/datetime';
 import EmailField from '@cardstack/base/email';
@@ -4425,6 +4428,151 @@ module('Integration | card-basics', function (hooks) {
       assert.strictEqual(
         cleanWhiteSpace(root.textContent!),
         'Mango First Name Mango Is Cool true Notes',
+      );
+    });
+
+    test('text fields in edit format tell password managers to skip them', async function (assert) {
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field age = contains(NumberField);
+        @field email = contains(EmailField);
+        @field nicknames = containsMany(StringField);
+        @field favoriteColor = contains(ColorField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
+      let mango = new Person({
+        firstName: 'Mango',
+        age: 3,
+        email: 'mango@example.com',
+        nicknames: ['Mangy', 'Mango Bear'],
+        favoriteColor: '#ffaa00',
+      });
+
+      await renderCard(loader, mango, 'edit');
+
+      for (let input of [
+        '[data-test-field="firstName"] input',
+        '[data-test-field="age"] input',
+        '[data-test-field="email"] input',
+        '[data-test-field="nicknames"] [data-test-item="0"] input',
+        '[data-test-field="nicknames"] [data-test-item="1"] input',
+        '[data-test-field="favoriteColor"] [data-test-color-text-input]',
+      ]) {
+        assert.dom(input).hasAttribute('data-1p-ignore', '', input);
+        assert.dom(input).hasAttribute('data-lpignore', 'true', input);
+        assert.dom(input).hasAttribute('data-form-type', 'other', input);
+        assert.dom(input).hasAttribute('data-bwignore', '', input);
+      }
+    });
+
+    test("the country picker's search field tells password managers to skip it", async function (assert) {
+      class Person extends CardDef {
+        @field home = contains(CountryField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
+      let mango = new Person({
+        home: new CountryField({ name: 'Japan', code: 'JP' }),
+      });
+
+      await renderCard(loader, mango, 'edit');
+      assert
+        .dom('[data-test-field="home"] [data-test-pretui-select-trigger]')
+        .hasText('🇯🇵 Japan', "the trigger shows the country's flag and name");
+
+      await click('[data-test-field="home"] [data-test-pretui-select-trigger]');
+      let search = '[data-test-pretui-select-search-input]';
+      assert.dom(search).hasAttribute('data-1p-ignore', '');
+      assert.dom(search).hasAttribute('data-lpignore', 'true');
+      assert.dom(search).hasAttribute('data-form-type', 'other');
+      assert.dom(search).hasAttribute('data-bwignore', '');
+
+      await fillIn(search, 'Portugal');
+      let portugal = Array.from(
+        document.querySelectorAll(
+          "[role='listbox'] [data-test-pretui-select-option]",
+        ),
+      ).find((option) => option.textContent?.trim() === 'Portugal');
+      assert.ok(portugal, 'the search finds the country by name');
+      await click(portugal!);
+      assert.strictEqual(mango.home.code, 'PT', 'choosing sets the code');
+      assert.strictEqual(mango.home.name, 'Portugal', 'and the name');
+    });
+
+    test("the currency picker's search field tells password managers to skip it", async function (assert) {
+      class Invoice extends CardDef {
+        @field currency = contains(CurrencyField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Invoice });
+      let invoice = new Invoice({ currency: new CurrencyField() });
+
+      await renderCard(loader, invoice, 'edit');
+      let trigger =
+        '[data-test-field="currency"] [data-test-pretui-select-trigger]';
+      assert.dom(trigger).hasText('USD', 'a field with no code shows USD');
+
+      await click(trigger);
+      let search = '[data-test-pretui-select-search-input]';
+      assert.dom(search).hasAttribute('data-1p-ignore', '');
+      assert.dom(search).hasAttribute('data-lpignore', 'true');
+      assert.dom(search).hasAttribute('data-form-type', 'other');
+      assert.dom(search).hasAttribute('data-bwignore', '');
+
+      await fillIn(search, 'EUR');
+      let euro = Array.from(
+        document.querySelectorAll(
+          "[role='listbox'] [data-test-pretui-select-option]",
+        ),
+      ).find((option) => option.textContent?.trim() === 'EUR');
+      assert.ok(euro, 'the search finds the currency by code');
+      await click(euro!);
+      assert.strictEqual(
+        invoice.currency.code,
+        'EUR',
+        'choosing sets the code',
+      );
+      assert.dom(trigger).hasText('EUR');
+    });
+
+    test('the country picker shows the country the field stores', async function (assert) {
+      class Person extends CardDef {
+        @field home = contains(CountryField);
+        @field born = contains(CountryField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
+      let mango = new Person({
+        home: new CountryField({ name: 'Kosovo', code: 'XK' }),
+        born: new CountryField({ name: 'Nippon', code: 'JP' }),
+      });
+
+      await renderCard(loader, mango, 'edit');
+      assert
+        .dom('[data-test-field="home"] [data-test-pretui-select-trigger]')
+        .hasText('Kosovo', 'a code the dataset lacks shows its stored name');
+      assert
+        .dom('[data-test-field="born"] [data-test-pretui-select-trigger]')
+        .hasText('🇯🇵 Nippon', 'a listed code keeps the name stored with it');
+    });
+
+    test("the country picker's search box takes its options' type size", async function (assert) {
+      class Person extends CardDef {
+        @field home = contains(CountryField);
+      }
+      tagTestModuleExports(`${testRealmURL}test-cards`, { Person });
+      let mango = new Person({
+        home: new CountryField({ name: 'Japan', code: 'JP' }),
+      });
+
+      await renderCard(loader, mango, 'edit');
+      await click('[data-test-field="home"] [data-test-pretui-select-trigger]');
+      let search = document.querySelector(
+        '[data-test-pretui-select-search-input]',
+      ) as HTMLElement;
+      let option = document.querySelector(
+        "[role='listbox'] [data-test-pretui-select-option]",
+      ) as HTMLElement;
+      assert.strictEqual(
+        getComputedStyle(search).fontSize,
+        getComputedStyle(option).fontSize,
       );
     });
 

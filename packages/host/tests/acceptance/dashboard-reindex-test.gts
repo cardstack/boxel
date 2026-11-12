@@ -10,8 +10,8 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 import { setupRealmServerEndpoints, visitOperatorMode } from '../helpers';
 import { setupDashboardTest } from '../helpers/dashboard';
 
-// Workspace A is owned by the test user; Workspace C is read/write only (the
-// test user is not its owner), so the Re-index action must never appear on it.
+// The test user administers Workspace A and may only read Workspace C, so
+// the Re-index action must never appear on Workspace C.
 const ownedRealmURL = 'http://test-realm/testuser/workspace-a/';
 const readOnlyRealmURL = 'http://test-realm/otheruser/workspace-c/';
 
@@ -84,13 +84,13 @@ module('Acceptance | dashboard re-index', function (hooks) {
       {
         url: readOnlyRealmURL,
         name: 'Workspace C',
-        permissions: { '@testuser:localhost': ['read', 'write'] },
+        permissions: { '@testuser:localhost': ['read'] },
         contents: { 'index.json': cardsGridIndex },
       },
     ],
   });
 
-  test('Re-index is offered only on workspaces the user owns', async function (assert) {
+  test('Re-index is offered only on workspaces the user administers', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
     assert.dom('[data-test-dashboard]').exists();
 
@@ -102,10 +102,10 @@ module('Acceptance | dashboard re-index', function (hooks) {
     await click(`[data-test-workspace-menu-trigger="${readOnlyRealmURL}"]`);
     assert
       .dom('[data-test-boxel-menu-item-text="Re-index"]')
-      .doesNotExist('Re-index is absent on a workspace the user does not own');
+      .doesNotExist('Re-index is absent on a workspace the user may only read');
     assert
       .dom('[data-test-boxel-menu-item-text="Realm Settings"]')
-      .exists('the rest of the menu still renders for non-owners');
+      .exists('the rest of the menu still renders for readers');
   });
 
   test('Re-index POSTs to the realm endpoint and animates the workspace until the index event', async function (assert) {

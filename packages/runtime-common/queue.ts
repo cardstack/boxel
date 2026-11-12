@@ -12,6 +12,7 @@ import type { Deferred } from './deferred.ts';
 //   | -------- | ------------------------------------------------------- |
 //   | 10       | user indexing (+ any user job); publish-awaited render  |
 //   |  9       | user prerender-html (the common case)                   |
+//   |  5       | automation runs                                         |
 //   |  1       | system indexing (+ any system job)                      |
 //   |  0       | system prerender-html                                   |
 //
@@ -40,15 +41,39 @@ import type { Deferred } from './deferred.ts';
 // never system-tier jobs; the all-priority pool floors at
 // `systemInitiatedPrerenderHtmlPriority` (0) and serves everything.
 //
-// One realm escapes the system tier. An index of the base realm — the realm
-// every card in the system imports from — is enqueued at the user-initiated
-// tier even when the system initiated it, because a system-tier job can only
-// be claimed by the all-priority pool and so has no way past a backlog there,
-// and a stale or errored base index breaks reads on every realm rather than
-// one. See `systemInitiatedIndexPriority` in jobs/indexing.ts for why base and
-// nothing else.
+// Automation runs sit between the two initiator tiers, at
+// `automationInitiatedPriority` (5): the run-command job that runs an
+// automation, whatever started the run — its schedule, reconcile, one of its
+// webhook triggers, a batch follow-up, Preview, or Run now. That job is the
+// tier's only member. Index and prerender-html work never enqueue at it:
+// `isUserInitiatedTier` in pg-queue and `prerenderHtmlPriority` treat
+// anything below 9 as system tier, so an index pass at 5 would wait behind
+// its family's system-tier exclusive work and render its HTML at 0. The
+// indexing a run's writes cause takes the tier the realm's write path gives
+// it. The run-command job runs in its realm's `command:` group, which belongs
+// to no lane family, so neither rule reaches it. The tier exists so a run due
+// at a set time is not queued behind a system backlog such as a full reindex,
+// which only the all-priority pool works through. The automation pool (`--automationCount`) floors there, so
+// it serves automation runs and every user-initiated job and never
+// system-tier work: when no automation is due it helps with user work. The
+// all-priority pool claims automation runs too, so a deployment that runs no
+// automation pool still runs every automation, in FIFO order with the rest
+// of that pool's work. The high-priority pool, flooring at 9, never claims
+// one, which keeps scheduled work out of the capacity held for a user who is
+// waiting.
+//
+// Two kinds of system-initiated job escape the system tier, because a
+// system-tier job can only be claimed by the all-priority pool and so has no
+// way past a backlog there. An index of the base realm — the realm every card
+// in the system imports from — is enqueued at the user-initiated tier, because
+// a stale or errored base index breaks reads on every realm rather than one.
+// See `systemInitiatedIndexPriority` in jobs/indexing.ts for why base and no
+// other realm. The daily credit grant is enqueued at the user-initiated tier
+// too, because every user low on credits waits on it; see
+// `enqueueDailyCreditGrant` in the realm server.
 export const userInitiatedPriority = 10;
 export const userInitiatedPrerenderHtmlPriority = 9;
+export const automationInitiatedPriority = 5;
 // ── Job heartbeats ─────────────────────────────────────────────────────────
 //
 // A job's `timeout` bounds how long it may go *without progress*, not how long

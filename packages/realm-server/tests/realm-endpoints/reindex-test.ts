@@ -202,6 +202,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
                 event.type === 'app.boxel.realm-event' &&
                 event.content.eventName === 'index' &&
                 event.content.indexType === 'incremental' &&
+                !('realmWide' in event.content) &&
                 hasMatchingInvalidations(
                   event.content.invalidations,
                   expectedInvalidations,

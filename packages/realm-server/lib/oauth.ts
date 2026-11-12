@@ -2014,6 +2014,28 @@ async function mintingStatus(
   return { kind: 'oauth-connection', generation: Number(row.generation) };
 }
 
+// Why an OAuth connection or `client_credentials` client can't mint a token
+// now, from what the database records alone: the reason a call would be
+// refused with (`rejected`: a connection its vendor refused, or an
+// access-only token past its expiry; `needs-admin`: a client that is broken,
+// deleted, unshared or suspended), or nothing when it may mint. Opens no key
+// and asks no vendor, so a token endpoint that is failing right now
+// (`unavailable`) shows only when a call asks it.
+export async function mintingRefusal(
+  dbAdapter: DBAdapter,
+  keyId: string,
+): Promise<OAuthTokenFailure | undefined> {
+  try {
+    await mintingStatus(dbAdapter, keyId);
+    return undefined;
+  } catch (error) {
+    if (error instanceof OAuthTokenError) {
+      return error.reason;
+    }
+    throw error;
+  }
+}
+
 class OAuthTokens {
   #cache = new Map<string, CachedToken>();
   #inflight = new Map<string, Promise<string>>();

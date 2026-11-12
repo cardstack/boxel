@@ -178,6 +178,7 @@ export const skillsRealmDir = resolve(
   '..',
   'skills-realm',
   'contents',
+  'skills',
 );
 export const boxelIconsDir = resolve(packageRoot, '..', 'boxel-icons');
 export const dbSnapshotDir = resolve(packageRoot, 'db-snapshots');
@@ -233,6 +234,11 @@ export const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 export const REALM_SECRET_SEED = "shhh! it's a secret";
 export const REALM_SERVER_SECRET_SEED = "mum's the word";
 export const GRAFANA_SECRET = "shhh! it's a secret";
+// The value the Synapse templates give the invite module (boxel_invite_check).
+// The module answers an invite that involves a service user on its own; the
+// realm servers of this harness listen on dynamic ports the module isn't
+// configured with, so an invite between two end users is denied here.
+export const MATRIX_INVITE_CHECK_SECRET = "shhh! it's a secret";
 export const FIXTURE_REALM_SERVER_URL_PLACEHOLDER =
   'https://test-harness.test/';
 export const DEFAULT_MATRIX_SERVER_USERNAME =

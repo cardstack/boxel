@@ -236,9 +236,9 @@ export default class FileUploadService extends Service {
 
       task.fileName = uploadName;
 
-      // The realm rejects an over-limit write with a 413, but only after the
-      // whole body has crossed the wire and been buffered server-side. Checking
-      // the size the browser already knows turns that into an immediate error.
+      // The realm refuses an over-limit upload with a 413 from its declared
+      // length, but only once the request reaches it. Checking the size the
+      // browser already knows refuses it without sending the request at all.
       validateByteLength(
         file.size,
         fileSizeLimitFor(uploadName, {

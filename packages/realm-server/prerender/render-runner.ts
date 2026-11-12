@@ -61,6 +61,7 @@ import {
 } from './utils.ts';
 import { randomUUID } from 'crypto';
 import type { Page } from 'puppeteer';
+import { readVisitMemory, type VisitMemory } from './chrome-memory.ts';
 
 const log = logger('prerenderer');
 const reproduceLog = logger('prerenderer-reproduce');
@@ -1290,6 +1291,7 @@ export class RenderRunner {
     response: RenderVisitResponse;
     timings: Timings;
     pool: PoolInfo;
+    memory?: VisitMemory;
   }> {
     let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     // Which halves of the bifurcated visit run. The fused visit (no
@@ -1695,7 +1697,8 @@ export class RenderRunner {
       // ── fileExtract pass ───────────────────────────────────────────────
       if (requested.fileExtract) {
         if ((await runFileExtractPass()) === 'short-circuit') {
-          return this.#finalizeVisit(
+          return await this.#finalizeVisit(
+            page,
             response,
             pageId,
             renderStart,
@@ -2146,7 +2149,8 @@ export class RenderRunner {
         if (poolInfo.evicted) {
           response.pageUnusableError =
             cardResponse.error ?? response.pageUnusableError;
-          return this.#finalizeVisit(
+          return await this.#finalizeVisit(
+            page,
             response,
             pageId,
             renderStart,
@@ -2181,7 +2185,8 @@ export class RenderRunner {
               deps: cardError.error.deps ?? [],
               error: cardError,
             };
-            return this.#finalizeVisit(
+            return await this.#finalizeVisit(
+              page,
               response,
               pageId,
               renderStart,
@@ -2191,7 +2196,8 @@ export class RenderRunner {
             );
           }
           if ((await runFileExtractPass()) === 'short-circuit') {
-            return this.#finalizeVisit(
+            return await this.#finalizeVisit(
+              page,
               response,
               pageId,
               renderStart,
@@ -2592,7 +2598,8 @@ export class RenderRunner {
         }
       }
 
-      return this.#finalizeVisit(
+      return await this.#finalizeVisit(
+        page,
         response,
         pageId,
         renderStart,
@@ -2656,28 +2663,41 @@ export class RenderRunner {
     }
   }
 
-  #finalizeVisit(
+  // Awaited by every return path inside the visit's `try`, so the memory
+  // reading finishes on a tab this visit still holds: the `finally` that
+  // releases it runs only after.
+  async #finalizeVisit(
+    page: Page,
     response: RenderVisitResponse,
     pageId: string,
     renderStart: number,
     launchMs: number,
     waits: LaunchWaits,
     poolInfo: PoolInfo,
-  ): {
+  ): Promise<{
     response: RenderVisitResponse;
     timings: Timings;
     pool: PoolInfo;
-  } {
+    memory: VisitMemory;
+  }> {
     if (response.pageUnusableError) {
       response.pageUnusableError = this.#mergeConsoleErrors(
         pageId,
         response.pageUnusableError,
       );
     }
+    // Taken before the memory reading, which is not part of the render.
+    let renderMs = Date.now() - renderStart;
+    let memory = await readVisitMemory(page, {
+      // A tab that timed out stopped answering, and an evicted one is gone;
+      // neither can report its own heap, while `/proc` still can.
+      includeTab: !poolInfo.timedOut && !poolInfo.evicted,
+    });
     return {
       response,
-      timings: { launchMs, renderMs: Date.now() - renderStart, waits },
+      timings: { launchMs, renderMs, waits },
       pool: poolInfo,
+      memory,
     };
   }
 

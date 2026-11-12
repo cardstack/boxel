@@ -16,6 +16,7 @@ export type RealmRunnerCallMethod =
   | 'cards.update'
   | 'operations.invoke'
   | 'operations.invokeBatchOperation'
+  | 'operations.capabilities'
   | 'entries.search'
   | 'fs.delete'
   | 'capture'
@@ -25,6 +26,7 @@ export type RealmRunnerCallMethod =
   | 'room.enableSkills'
   | 'room.disableSkills'
   | 'room.setModel'
+  | 'room.credits'
   | 'ui.switchSubmode'
   | 'ui.openFile'
   | 'ui.previewFormat'
@@ -36,6 +38,7 @@ export type RealmRunnerCallMethod =
   | 'web.search'
   | 'web.read'
   | 'resolve'
+  | 'transform'
   | 'activity'
   | 'plan'
   | 'ask';

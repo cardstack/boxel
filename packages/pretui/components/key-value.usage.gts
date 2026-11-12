@@ -103,6 +103,12 @@ class KeyValueUsage extends Component {
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
+          @name='pretui-kv-pad-inline'
+          @type='length'
+          @description='Inline padding between the text and the container edges. Divided hairlines stay full width. Set on the KeyValue or any ancestor.'
+          @defaultValue='0'
+        />
+        <Css.Basic
           @name='pretui-kv-label-color'
           @type='color'
           @description='Key ink. Set on the KeyValue or any ancestor.'

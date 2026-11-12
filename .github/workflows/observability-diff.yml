@@ -116,10 +116,10 @@ jobs:
         #                   the same per-env value to compare
         #                   apples-to-apples.
         #
-        # GRAFANA_SECRET is intentionally NOT fetched here — diff.sh
-        # redacts both sides of the diff for the `grafana_secret`
-        # constant template variable, so it never needs the real value
-        # and there's no risk of it appearing in the PR comment output.
+        # GRAFANA_SECRET is intentionally NOT fetched here. No dashboard
+        # carries it, and diff.sh redacts any `grafana_secret` constant
+        # template variable a live dashboard still has, so it can't
+        # appear in the PR comment output.
         run: |
           GRAFANA_TOKEN="$(aws ssm get-parameter \
             --name /staging/grafana/grafanactl_token \

@@ -1,3 +1,4 @@
+import { cachedNumberFormat } from '../utils/intl-formatters.ts';
 export default function formatDuration(
   duration: number | null | undefined,
   options: {
@@ -58,7 +59,7 @@ export default function formatDuration(
   const getUnitName = (unit: string, count: number): string => {
     try {
       // Use Intl.NumberFormat with unit style for proper pluralization and localization
-      const nf = new Intl.NumberFormat(locale, {
+      const nf = cachedNumberFormat(locale, {
         style: 'unit',
         unit: unit,
         unitDisplay: 'long', // Use full words like "years" instead of "yr"

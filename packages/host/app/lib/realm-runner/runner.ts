@@ -28,7 +28,7 @@ const BOOT_TIMEOUT_MS = 60_000;
 // the assets origin; in dev they stay root-relative, so resolving them against
 // the document would ask the realm origin for a file only the asset origin
 // has.
-function resolveAssetURL(assetURL: string): URL {
+export function resolveAssetURL(assetURL: string): URL {
   let assetsURL = (
     globalThis as typeof globalThis & {
       __boxelAssetsURL?: string;
@@ -49,7 +49,7 @@ export class DeadlineExtension {
   ) {}
 }
 
-function makeRealmWorker(absoluteURL: URL): Worker {
+export function makeRealmWorker(absoluteURL: URL): Worker {
   if (absoluteURL.origin === window.location.origin) {
     return new Worker(absoluteURL, { type: 'module' });
   }

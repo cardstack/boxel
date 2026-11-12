@@ -5,7 +5,7 @@ The Skills Realm is a specialized realm in the Boxel system that hosts AI skills
 ## Architecture
 
 - **Skills Source**: Skills are stored in the [boxel-skills](https://github.com/cardstack/boxel-skills) repository
-- **Local Development**: Skills are cloned into `packages/skills-realm/contents/` for local editing
+- **Local Development**: Skills are cloned into `packages/skills-realm/contents/` for local editing. The realm serves that clone's `skills/` folder, so `contents/skills/boxel/SKILL.md` is `/skills/boxel/SKILL.md`
 - **Skills Writer User**: A special `skills_writer` Matrix user has permissions to edit skills in the realm
 - **Deployment Pipeline**: Changes flow from local development → boxel-skills repo → staging → production
 
@@ -80,7 +80,7 @@ This workflow is ideal for rapid iteration and testing of skills:
 
    - Navigate to the skills realm
    - Create or modify skills using the visual editor
-   - Changes are automatically saved to `packages/skills-realm/contents/`
+   - Changes are automatically saved to `packages/skills-realm/contents/skills/`
 
 3. **Test your changes** immediately in the live environment
 

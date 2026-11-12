@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "allowJs": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "experimentalDecorators": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@cardstack/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
+      "https://cardstack.com/base/*": [
+        "../base/*.gts",
+        "../base/*.ts",
+        "../base/*.d.ts",
+        "../base/*"
+      ],
+      "@cardstack/boxel-ui": ["../boxel-ui"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/*"]
+    },
+    "types": ["node", "qunit", "@cardstack/local-types"]
+  },
+  "include": [
+    "../base/types/**/*",
+    "main.ts",
+    "setup-logger.ts",
+    "scripts",
+    "src",
+    "tests"
+  ]
+}

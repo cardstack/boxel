@@ -43,7 +43,7 @@ aws --profile $PROFILE ssm put-parameter \
   --name "/${ENV}/boxel/PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX" --value 8 --overwrite
 
 aws --profile $PROFILE ssm put-parameter \
-  --name "/${ENV}/boxel/PRERENDER_HIGH_PRIORITY_THRESHOLD" --value 5 --overwrite
+  --name "/${ENV}/boxel/PRERENDER_HIGH_PRIORITY_THRESHOLD" --value 9 --overwrite
 
 aws --profile $PROFILE ssm put-parameter \
   --name "/${ENV}/boxel/PRERENDER_POOL_IDLE_CONTRACTION_MS" --value 60000 --overwrite
@@ -95,7 +95,7 @@ If the ECS task is still 4 vCPU / 8 GB, the recommended values would OOM at `HP_
 | `PRERENDER_PAGE_POOL_MIN`               |                        2 |                    2 |
 | `PRERENDER_PAGE_POOL_MAX`               |                        6 |                    4 |
 | `PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX` |                        8 |                    5 |
-| `PRERENDER_HIGH_PRIORITY_THRESHOLD`     |                        5 |                    5 |
+| `PRERENDER_HIGH_PRIORITY_THRESHOLD`     |                        9 |                    9 |
 | `PRERENDER_POOL_IDLE_CONTRACTION_MS`    |                    60000 |                60000 |
 | `PRERENDER_SHARED_CONTEXT_CAP`          |                       12 |                    8 |
 

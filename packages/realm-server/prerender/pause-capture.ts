@@ -32,6 +32,7 @@
 import type { CDPSession, Page } from 'puppeteer';
 import { logger } from '@cardstack/runtime-common';
 import { raceNodeTimeout, TIMED_OUT } from './node-race.ts';
+import { toTabHeapUsage, type TabHeapUsage } from './chrome-memory.ts';
 
 const log = logger('prerenderer');
 
@@ -45,6 +46,10 @@ export interface PausedStackCapture {
   // V8 used heap at the moment of the wedge. Flat across the peg → a tight
   // compute/recursion loop; climbing → a combinatorial re-build (breadth).
   heapUsedMB: number | null;
+  // The same `Runtime.getHeapUsage` reading in full: the JS heap beside the
+  // DOM heap and ArrayBuffer backing stores, which a JS-heap figure alone
+  // can't see.
+  heapUsage?: TabHeapUsage | null;
   // Set when no usable stack was captured, naming why.
   reason?: string;
 }
@@ -60,8 +65,19 @@ async function detachQuietly(client: CDPSession | undefined): Promise<void> {
   }
 }
 
-function empty(heapUsedMB: number | null, reason: string): PausedStackCapture {
-  return { frames: [], truncated: false, totalFrames: 0, heapUsedMB, reason };
+function empty(
+  heapUsedMB: number | null,
+  reason: string,
+  heapUsage: TabHeapUsage | null = null,
+): PausedStackCapture {
+  return {
+    frames: [],
+    truncated: false,
+    totalFrames: 0,
+    heapUsedMB,
+    heapUsage,
+    reason,
+  };
 }
 
 export async function capturePausedCallStack(
@@ -88,13 +104,15 @@ export async function capturePausedCallStack(
     // Heap usage first: `Runtime.getHeapUsage` is answered from V8 stats,
     // so it returns even while the JS thread is pegged.
     let heapUsedMB: number | null = null;
+    let heapUsage: TabHeapUsage | null = null;
     try {
       let usage = (await raceNodeTimeout(
         client.send('Runtime.getHeapUsage'),
         budgetMs,
-      )) as { usedSize?: number } | typeof TIMED_OUT;
+      )) as Parameters<typeof toTabHeapUsage>[0] | typeof TIMED_OUT;
       if (usage !== TIMED_OUT && typeof usage.usedSize === 'number') {
         heapUsedMB = usage.usedSize / (1024 * 1024);
+        heapUsage = toTabHeapUsage(usage);
       }
     } catch {
       // best-effort
@@ -113,7 +131,7 @@ export async function capturePausedCallStack(
       budgetMs,
     );
     if (enabled === TIMED_OUT) {
-      return empty(heapUsedMB, 'debugger-enable-timeout');
+      return empty(heapUsedMB, 'debugger-enable-timeout', heapUsage);
     }
     // Fire-and-forget: the pause lands at the next V8 interrupt check.
     void client.send('Debugger.pause').catch(() => {});
@@ -135,7 +153,7 @@ export async function capturePausedCallStack(
     if (callFrames === TIMED_OUT || !Array.isArray(callFrames)) {
       // No back-edge honored the pause within budget — most likely a
       // non-yielding native peg. The `--prof` sampler is the fallback.
-      return empty(heapUsedMB, 'pause-timeout');
+      return empty(heapUsedMB, 'pause-timeout', heapUsage);
     }
 
     let totalFrames = callFrames.length;
@@ -158,6 +176,7 @@ export async function capturePausedCallStack(
       truncated: totalFrames > maxFrames,
       totalFrames,
       heapUsedMB,
+      heapUsage,
     };
   } catch (e) {
     log.debug('paused stack capture failed:', e);

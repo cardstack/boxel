@@ -11,6 +11,7 @@ import GenerateExampleCardsTool from '@cardstack/boxel-host/commands/generate-ex
 import OpenCreateListingModalTool from '@cardstack/boxel-host/commands/open-create-listing-modal';
 import OpenInInteractModeTool from '@cardstack/boxel-host/commands/open-in-interact-mode';
 import PopulateWithSampleDataTool from '@cardstack/boxel-host/commands/populate-with-sample-data';
+import SetWorkspacePinTool from '@cardstack/boxel-host/commands/set-workspace-pin';
 import ShowCardTool from '@cardstack/boxel-host/commands/show-card';
 import type {
   ToolContext,
@@ -31,6 +32,8 @@ import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import ClipboardCopy from '@cardstack/boxel-icons/clipboard-copy';
 import Eye from '@cardstack/boxel-icons/eye';
 import LinkIcon from '@cardstack/boxel-icons/link';
+import Pin from '@cardstack/boxel-icons/pin';
+import PinOff from '@cardstack/boxel-icons/pin-off';
 import Trash2Icon from '@cardstack/boxel-icons/trash-2';
 import Wand from '@cardstack/boxel-icons/wand';
 
@@ -60,7 +63,29 @@ export type GetMenuItemParams = {
   toolContext: ToolContext;
   format?: Format;
   useBaseTemplate?: boolean;
+  // Set by the host when the user can pin this card to its workspace.
+  workspacePin?: { pinned: boolean };
 } & MenuContext;
+
+function makeWorkspacePinItem(
+  card: CardDef,
+  params: GetMenuItemParams,
+): MenuItemOptions | undefined {
+  let cardId = card.id as unknown as string;
+  if (!params.workspacePin || !cardId || isWorkspaceIndexCard(card)) {
+    return undefined;
+  }
+  let { pinned } = params.workspacePin;
+  return {
+    label: pinned ? 'Unpin from Workspace' : 'Pin to Workspace',
+    action: () =>
+      new SetWorkspacePinTool(params.toolContext).execute({
+        cardId,
+        pinned: !pinned,
+      }),
+    icon: pinned ? PinOff : Pin,
+  };
+}
 
 function makeToggleTemplateItem(
   card: CardDef,
@@ -93,6 +118,10 @@ export function getDefaultCardMenuItems(
       icon: LinkIcon,
       disabled: !cardId,
     });
+    let pinItem = makeWorkspacePinItem(card, params);
+    if (pinItem) {
+      menuItems.push(pinItem);
+    }
   }
   if (params.menuContext === 'interact') {
     menuItems.push({

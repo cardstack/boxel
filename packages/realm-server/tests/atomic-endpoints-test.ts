@@ -13,6 +13,7 @@ import {
 } from '@cardstack/runtime-common';
 import type {
   IncrementalIndexEventContent,
+  RealmWideIncrementalIndexEventContent,
   IncrementalIndexInitiationContent,
   RealmEventContent,
 } from '@cardstack/base/matrix-event';
@@ -1567,6 +1568,146 @@ module(basename(import.meta.filename), function () {
               `${testRealmHref}batch-c`,
             ],
             'the completion event names every card the batch wrote',
+          );
+        });
+
+        // Enough cards, with paths long enough, that listing them overruns
+        // what one Matrix event may carry: each URL runs to about 1 KB, so
+        // ninety of them are well past the budget while staying few enough to
+        // index quickly.
+        function oversizedNames(prefix: string) {
+          let dirs = ['a', 'b', 'c', 'd'].map((d) => d.repeat(200)).join('/');
+          return Array.from(
+            { length: 90 },
+            (_, i) =>
+              `${dirs}/${prefix}-${String(i).padStart(3, '0')}-${'x'.repeat(200)}`,
+          );
+        }
+
+        function encodedBytes(event: RealmEventContent) {
+          return new TextEncoder().encode(JSON.stringify(event)).length;
+        }
+
+        test('a batch whose invalidations would not fit in one event completes realm-wide, keeping its request id', async function (assert) {
+          assert.timeout(180_000);
+          let events = recordRealmEvents();
+          let names = oversizedNames('wide');
+          // Adopted from by absolute URL, since the cards sit in nested
+          // directories that a relative module reference would resolve into.
+          let response = await postAtomic(
+            {
+              'atomic:operations': names.map((name) => ({
+                op: 'add',
+                href: `${name}.json`,
+                data: {
+                  type: 'card',
+                  attributes: { firstName: name },
+                  meta: {
+                    adoptsFrom: {
+                      module: `${testRealmHref}person`,
+                      name: 'Person',
+                    },
+                  },
+                },
+              })),
+            },
+            { 'X-Boxel-Client-Request-Id': 'instance:realm-wide-batch' },
+          );
+          assert.strictEqual(response.status, 201);
+          await testRealm.incrementalIndexing();
+
+          assert.deepEqual(
+            eventKinds(events),
+            [
+              'index:incremental-index-initiation',
+              'update',
+              'index:incremental',
+            ],
+            'the batch ends in exactly one completion',
+          );
+          let completion = events[2] as RealmWideIncrementalIndexEventContent;
+          assert.true(completion.realmWide, 'the completion is realm-wide');
+          assert.false(
+            'invalidations' in completion,
+            'the completion carries no invalidation list',
+          );
+          assert.strictEqual(
+            completion.clientRequestId,
+            'instance:realm-wide-batch',
+            "the writer's request id rides along",
+          );
+          assert.deepEqual(
+            completion.invalidatedModules,
+            [],
+            'the completion says no module changed',
+          );
+          assert.strictEqual(
+            typeof completion.generation,
+            'number',
+            'the completion names the generation the pass committed',
+          );
+          assert.ok(
+            encodedBytes(completion) < 65536,
+            'the completion fits in a Matrix event',
+          );
+          let card = await request
+            .get(`/${names[names.length - 1]}`)
+            .set('Accept', SupportedMimeType.CardJson);
+          assert.strictEqual(card.status, 200, 'every card is indexed');
+        });
+
+        test('a writer whose authorship list would not fit keeps its request id, with an empty list', async function (assert) {
+          assert.timeout(180_000);
+          let events = recordRealmEvents();
+          let names = oversizedNames('authored');
+          let files = new Map<string, string>(
+            names.map((name) => [
+              `${name}.json`,
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  attributes: { firstName: name },
+                  meta: {
+                    adoptsFrom: {
+                      module: `${testRealmHref}person`,
+                      name: 'Person',
+                    },
+                  },
+                },
+              }),
+            ]),
+          );
+          await testRealm.writeMany(files, {
+            clientRequestId: 'instance:realm-wide-authored',
+            clientAuthored: names.map((name) => `${testRealmHref}${name}`),
+          });
+          await testRealm.incrementalIndexing();
+
+          let completions = events.filter(
+            (event): event is RealmWideIncrementalIndexEventContent =>
+              event.eventName === 'index' &&
+              event.indexType === 'incremental' &&
+              'realmWide' in event,
+          );
+          assert.strictEqual(
+            completions.length,
+            1,
+            'one realm-wide completion',
+          );
+          let [completion] = completions;
+          assert.strictEqual(
+            completion.clientRequestId,
+            'instance:realm-wide-authored',
+            "the writer's request id rides along",
+          );
+          assert.deepEqual(
+            completion.clientAuthored,
+            [],
+            'authorship is reported as covering no card, so the writer re-reads them all',
+          );
+          assert.ok(
+            encodedBytes(completion) < 65536,
+            'the completion fits in a Matrix event',
           );
         });
 

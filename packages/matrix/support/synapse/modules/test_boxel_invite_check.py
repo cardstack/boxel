@@ -1,0 +1,287 @@
+"""Unit tests for BoxelInviteCheck.
+
+The room's members and the realm server's answers are stubbed on the mocked
+`module_api`, so there is no Synapse boot, DB, network or Docker stack
+involved - just the module's reading of the room and the answers, and its
+fail-closed handling of everything else. They import the real `synapse.*`
+types, so they must run inside the pinned Synapse image (see
+scripts/test-synapse-modules.sh).
+"""
+
+import inspect
+import json
+import os
+import unittest
+from unittest.mock import AsyncMock, Mock
+
+from boxel_invite_check import (
+    BoxelInviteCheck,
+    InviteCheckConfig,
+    is_service_user,
+)
+from synapse.module_api import NOT_SPAM
+from synapse.module_api.errors import Codes, ConfigError
+
+CONFIG = InviteCheckConfig(
+    realm_server_url="https://realm-server.example",
+    shared_secret="the shared secret",
+)
+INVITER = "@inviter:localhost"
+INVITEE = "@invitee:localhost"
+ROOM = "!room:localhost"
+# A person's account whose name passes as a service user's: registration
+# doesn't reserve the service suffixes.
+SERVICE_LIKE = "@someone_realm:localhost"
+OTHER = "@other:localhost"
+
+
+def member_event(user_id, membership):
+    event = Mock()
+    event.state_key = user_id
+    event.membership = membership
+    return event
+
+
+def make_module(answer=None, error=None, members=None, room_error=None, answers=None):
+    """Build a module whose realm server answers `answer` to every question,
+    or fails with `error`, or answers `answers[(user, invitee)]` (`{"allowed":
+    False}` for a pair it doesn't list). The room holds `members`, a mapping
+    of user id to membership: by default the inviter, joined. Reading the room
+    fails with `room_error` when it's given."""
+    module_api = Mock()
+    module_api.server_name = "localhost"
+    if error is not None:
+        module_api.http_client.get_json = AsyncMock(side_effect=error)
+    elif answers is not None:
+
+        async def answer_pair(url, args, headers):
+            return answers.get((args["inviter"], args["invitee"]), {"allowed": False})
+
+        module_api.http_client.get_json = AsyncMock(side_effect=answer_pair)
+    else:
+        module_api.http_client.get_json = AsyncMock(return_value=answer)
+    if room_error is not None:
+        module_api.get_room_state = AsyncMock(side_effect=room_error)
+    else:
+        members = {INVITER: "join"} if members is None else members
+        module_api.get_room_state = AsyncMock(
+            return_value={
+                ("m.room.member", user_id): member_event(user_id, membership)
+                for user_id, membership in members.items()
+            }
+        )
+    return BoxelInviteCheck(CONFIG, module_api), module_api
+
+
+def asked_pairs(module_api):
+    return [
+        (call.kwargs["args"]["inviter"], call.kwargs["args"]["invitee"])
+        for call in module_api.http_client.get_json.await_args_list
+    ]
+
+
+class UserMayInviteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_allows_an_invite_the_realm_server_allows(self):
+        module, _ = make_module(answer={"allowed": True})
+        self.assertIs(await module.user_may_invite(INVITER, INVITEE, ROOM), NOT_SPAM)
+
+    async def test_refuses_an_invite_the_realm_server_refuses(self):
+        module, _ = make_module(answer={"allowed": False})
+        self.assertEqual(
+            await module.user_may_invite(INVITER, INVITEE, ROOM), Codes.FORBIDDEN
+        )
+
+    async def test_asks_the_realm_server_for_the_two_users_with_the_secret(self):
+        module, module_api = make_module(answer={"allowed": True})
+        await module.user_may_invite(INVITER, INVITEE, ROOM)
+        module_api.http_client.get_json.assert_awaited_once_with(
+            "https://realm-server.example/_invite-check",
+            args={"inviter": INVITER, "invitee": INVITEE},
+            headers={"Authorization": ["Bearer the shared secret"]},
+        )
+
+    async def test_refuses_when_the_realm_server_cannot_be_reached(self):
+        # Any failure of the request - a connection error, a non-200 status
+        # (the http client raises on those), a timeout - denies the invite.
+        module, _ = make_module(error=ConnectionError("refused"))
+        with self.assertLogs("boxel_invite_check", level="WARNING"):
+            decision = await module.user_may_invite(INVITER, INVITEE, ROOM)
+        self.assertEqual(decision, Codes.FORBIDDEN)
+
+    async def test_refuses_an_answer_of_another_shape(self):
+        for body in ({}, {"allowed": "yes"}, {"allowed": 1}, [], None, "ok"):
+            with self.subTest(body=body):
+                module, _ = make_module(answer=body)
+                with self.assertLogs("boxel_invite_check", level="WARNING"):
+                    decision = await module.user_may_invite(INVITER, INVITEE, ROOM)
+                self.assertEqual(decision, Codes.FORBIDDEN)
+
+    async def test_allows_an_invite_to_a_service_user_without_asking(self):
+        # AI assistant rooms are made before any realm server a test stack
+        # runs is reachable, and need no grant anyway. The room isn't read:
+        # it may hold any number of service users beside its end users.
+        module, module_api = make_module(
+            error=ConnectionError("unreachable"),
+            members={INVITER: "join", OTHER: "join"},
+        )
+        for invitee in (
+            "@aibot:localhost",
+            "@submissionbot:localhost",
+            "@realm/example-user_example-realm:localhost",
+        ):
+            with self.subTest(invitee=invitee):
+                self.assertIs(
+                    await module.user_may_invite(INVITER, invitee, ROOM), NOT_SPAM
+                )
+        module_api.http_client.get_json.assert_not_awaited()
+        module_api.get_room_state.assert_not_awaited()
+
+    async def test_allows_a_service_user_to_invite_the_rooms_only_end_user(self):
+        # A session room: the realm server's account makes it and invites the
+        # user, before any realm server a test stack runs is reachable.
+        for inviter in ("@realm_server:localhost", "@node-test_realm-server:localhost"):
+            with self.subTest(inviter=inviter):
+                module, module_api = make_module(
+                    error=ConnectionError("unreachable"),
+                    members={inviter: "join", "@aibot:localhost": "join"},
+                )
+                self.assertIs(
+                    await module.user_may_invite(inviter, INVITEE, ROOM), NOT_SPAM
+                )
+                module_api.get_room_state.assert_awaited_once_with(
+                    ROOM, [("m.room.member", None)]
+                )
+                module_api.http_client.get_json.assert_not_awaited()
+
+    async def test_a_service_like_name_cant_put_two_end_users_in_one_room(self):
+        # Whoever sends the invite, the invitee is checked against every end
+        # user the room already holds, joined or invited.
+        for membership in ("join", "invite"):
+            with self.subTest(membership=membership):
+                module, module_api = make_module(
+                    answer={"allowed": False},
+                    members={SERVICE_LIKE: "join", OTHER: membership},
+                )
+                decision = await module.user_may_invite(SERVICE_LIKE, INVITEE, ROOM)
+                self.assertEqual(decision, Codes.FORBIDDEN)
+                self.assertEqual(asked_pairs(module_api), [(OTHER, INVITEE)])
+
+    async def test_asks_about_every_end_user_in_the_room(self):
+        members = {
+            INVITER: "join",
+            OTHER: "invite",
+            "@aibot:localhost": "join",
+            "@left:localhost": "leave",
+            "@banned:localhost": "ban",
+            "@knocking:localhost": "knock",
+        }
+        module, module_api = make_module(answer={"allowed": True}, members=members)
+        self.assertIs(await module.user_may_invite(INVITER, INVITEE, ROOM), NOT_SPAM)
+        self.assertEqual(
+            sorted(asked_pairs(module_api)), [(INVITER, INVITEE), (OTHER, INVITEE)]
+        )
+
+    async def test_refuses_when_any_end_user_in_the_room_shares_no_realm(self):
+        module, _ = make_module(
+            answers={(INVITER, INVITEE): {"allowed": True}},
+            members={INVITER: "join", OTHER: "join"},
+        )
+        self.assertEqual(
+            await module.user_may_invite(INVITER, INVITEE, ROOM), Codes.FORBIDDEN
+        )
+
+    async def test_asks_about_an_end_user_inviter_the_room_doesnt_list(self):
+        module, module_api = make_module(answer={"allowed": False}, members={})
+        self.assertEqual(
+            await module.user_may_invite(INVITER, INVITEE, ROOM), Codes.FORBIDDEN
+        )
+        self.assertEqual(asked_pairs(module_api), [(INVITER, INVITEE)])
+
+    async def test_refuses_when_the_room_cannot_be_read(self):
+        module, module_api = make_module(
+            answer={"allowed": True}, room_error=RuntimeError("no such room")
+        )
+        with self.assertLogs("boxel_invite_check", level="WARNING"):
+            decision = await module.user_may_invite(
+                "@realm_server:localhost", INVITEE, ROOM
+            )
+        self.assertEqual(decision, Codes.FORBIDDEN)
+        module_api.http_client.get_json.assert_not_awaited()
+
+    async def test_refuses_when_the_realm_server_cannot_be_asked_about_a_member(self):
+        module, _ = make_module(
+            error=ConnectionError("refused"),
+            members={SERVICE_LIKE: "join", OTHER: "join"},
+        )
+        with self.assertLogs("boxel_invite_check", level="WARNING"):
+            decision = await module.user_may_invite(SERVICE_LIKE, INVITEE, ROOM)
+        self.assertEqual(decision, Codes.FORBIDDEN)
+
+    async def test_a_service_account_name_on_another_server_is_an_end_user(self):
+        remote = "@realm_server:elsewhere.example"
+        module, module_api = make_module(
+            answer={"allowed": False}, members={remote: "join"}
+        )
+        decision = await module.user_may_invite(remote, INVITEE, ROOM)
+        self.assertEqual(decision, Codes.FORBIDDEN)
+        self.assertEqual(asked_pairs(module_api), [(remote, INVITEE)])
+
+    async def test_registers_user_may_invite_with_synapse(self):
+        module, module_api = make_module(answer={"allowed": True})
+        module_api.register_spam_checker_callbacks.assert_called_once_with(
+            user_may_invite=module.user_may_invite
+        )
+
+
+# The vectors isBotAccount in the realm server runs too, so the two apply one
+# naming convention.
+VECTORS_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "test_service_account_vectors.json"
+)
+
+
+class ServiceUserTests(unittest.TestCase):
+    def test_shared_vectors(self):
+        with open(VECTORS_PATH, encoding="utf-8") as f:
+            vectors = json.load(f)["vectors"]
+        self.assertTrue(vectors)
+        for vector in vectors:
+            with self.subTest(user_id=vector["userId"]):
+                self.assertIs(
+                    is_service_user(vector["userId"], vector["serverName"]),
+                    vector["serviceAccount"],
+                )
+
+
+class InterfaceShapeTests(unittest.TestCase):
+    def test_user_may_invite_is_awaited_by_synapse(self):
+        self.assertTrue(inspect.iscoroutinefunction(BoxelInviteCheck.user_may_invite))
+
+
+class ParseConfigTests(unittest.TestCase):
+    def test_reads_the_url_and_secret(self):
+        config = BoxelInviteCheck.parse_config(
+            {
+                "realm_server_url": "https://realm-server.example/",
+                "shared_secret": "s",
+            }
+        )
+        self.assertEqual(config.realm_server_url, "https://realm-server.example")
+        self.assertEqual(config.shared_secret, "s")
+
+    def test_refuses_a_missing_or_empty_setting(self):
+        for config in (
+            None,
+            {},
+            {"realm_server_url": "https://realm-server.example"},
+            {"shared_secret": "s"},
+            {"realm_server_url": "", "shared_secret": "s"},
+            {"realm_server_url": "https://realm-server.example", "shared_secret": ""},
+        ):
+            with self.subTest(config=config):
+                with self.assertRaises(ConfigError):
+                    BoxelInviteCheck.parse_config(config)
+
+
+if __name__ == "__main__":
+    unittest.main()

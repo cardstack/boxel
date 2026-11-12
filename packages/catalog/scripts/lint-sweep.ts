@@ -57,7 +57,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 
 import { mainVerdict, type Pair, type Resolution } from './pairing.ts';
 
-type Linter = 'lint:types' | 'lint:js' | 'lint:hbs';
+type Linter = 'lint:types' | 'lint:js' | 'lint:hbs' | 'lint:identity';
 
 interface Diagnostic {
   linter: Linter;
@@ -243,10 +243,34 @@ function lintHbs(outDir: string): LinterRun {
   return { diagnostics, status, output };
 }
 
+// lint/identity.ts prints `file(line,col): error mark-definition:
+// message`, one line per definition, and exits 2 without printing any when it
+// can't run.
+function lintIdentity(): LinterRun {
+  let { status, output } = runScript('lint:identity', []);
+  let diagnostics: Diagnostic[] = [];
+  let located = /^(.+?)\((\d+),(\d+)\): error (mark-definition): (.*)$/;
+  for (let line of output.split('\n')) {
+    let match = located.exec(line);
+    if (match) {
+      diagnostics.push({
+        linter: 'lint:identity',
+        file: repoPath(match[1]),
+        line: Number(match[2]),
+        column: Number(match[3]),
+        rule: match[4],
+        message: match[5],
+      });
+    }
+  }
+  return { diagnostics, status, output };
+}
+
 const parsers: Record<Linter, (outDir: string) => LinterRun> = {
   'lint:types': () => lintTypes(),
   'lint:js': lintJs,
   'lint:hbs': lintHbs,
+  'lint:identity': () => lintIdentity(),
 };
 
 function git(dir: string, args: string[]) {

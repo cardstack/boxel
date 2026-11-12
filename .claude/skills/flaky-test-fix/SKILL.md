@@ -1,6 +1,11 @@
 ---
 name: flaky-test-fix
-description: Investigate and fix a flaky test reported by a CI failure URL (e.g. a GitHub Actions job link) or a known-flaky test name. Use whenever someone hands over a flaky/intermittent test and wants it fixed — not skipped or retried. Triggers on "this test is flaky: <URL>", "intermittent failure in <test>", or a CI job link for a test that passes on re-run.
+description: >-
+  Investigate and fix a flaky test reported by a CI failure URL (e.g. a GitHub
+  Actions job link) or a known-flaky test name. Use whenever someone hands
+  over a flaky/intermittent test and wants it fixed — not skipped or retried.
+  Triggers on "this test is flaky: <URL>", "intermittent failure in <test>",
+  or a CI job link for a test that passes on re-run.
 ---
 
 # Flaky Test Fix

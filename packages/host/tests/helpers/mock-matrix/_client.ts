@@ -304,6 +304,12 @@ export class MockClient implements ExtendedClient {
         'Support for raw writes of this event type is not yet implemented in this mock.',
       );
     }
+    if (this.sdkOpts.dashboardStateWriteError) {
+      // Waited on, so settled() waits at least for the rejection.
+      let failed = Promise.reject(this.sdkOpts.dashboardStateWriteError);
+      waitForPromise(failed.catch(() => undefined));
+      return failed;
+    }
     this.sdkOpts.dashboardState = data as any;
     let echo = () =>
       this.emitEvent(

@@ -448,7 +448,11 @@ module(basename(import.meta.filename), function (hooks) {
     let originalBroadcast = realmAdapter.broadcastRealmEvent;
     let broadcast = originalBroadcast.bind(realmAdapter);
     realmAdapter.broadcastRealmEvent = async (event, ...args) => {
-      if (event.eventName === 'index' && event.indexType === 'incremental') {
+      if (
+        event.eventName === 'index' &&
+        event.indexType === 'incremental' &&
+        !('realmWide' in event)
+      ) {
         events.push(event);
       }
       return await broadcast(event, ...args);
@@ -476,7 +480,11 @@ module(basename(import.meta.filename), function (hooks) {
           ...(event.removed ?? []),
         ].includes(localPath);
       }
-      if (event.eventName === 'index' && event.indexType === 'incremental') {
+      if (
+        event.eventName === 'index' &&
+        event.indexType === 'incremental' &&
+        !('realmWide' in event)
+      ) {
         return event.invalidations.includes(instanceURL);
       }
       return false;

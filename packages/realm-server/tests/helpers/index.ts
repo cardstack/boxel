@@ -73,7 +73,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler.ts';
-import { realmDiskPath } from '../../lib/realm-disk-path.ts';
+import { mountableRealmDiskPath } from '../../lib/realm-disk-path.ts';
 import {
   installSecretsKeyring,
   LocalKeyProvider,
@@ -375,6 +375,8 @@ import {
   type PolicyPointerReader,
 } from '../../lib/policy-share-audit.ts';
 import { realmPolicyPointer } from '../../lib/realm-policy-pointer.ts';
+import { meteredChargesFor } from '../../lib/metered-charge.ts';
+import { readPricing, type Pricing } from '../../lib/pricing.ts';
 export { realmInfoExtraKeys, withoutRealmInfoExtras };
 
 // Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
@@ -570,12 +572,10 @@ export function makeTestReconciler(
         );
       }
       // Resolved as the production mount resolves it.
-      let diskPath = realmDiskPath(row, dynamicMountDeps.realmsRootPath);
-      if (!diskPath) {
-        throw new Error(
-          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
-        );
-      }
+      let diskPath = mountableRealmDiskPath(
+        row,
+        dynamicMountDeps.realmsRootPath,
+      );
       let adapter = new NodeAdapter(
         diskPath,
         dynamicMountDeps.enableFileWatcher,
@@ -1702,6 +1702,7 @@ export async function createRealm({
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
       mediaCacheAdapter,
+      meteredCharges: meteredChargesFor(dbAdapter, testPricing),
     });
   }
   let matrixClient = new MatrixClient({
@@ -1911,6 +1912,7 @@ export async function runTestRealmServer({
     // The indexing worker persists declared captures when a store is
     // configured — same wiring as the production worker child.
     mediaCacheAdapter,
+    meteredCharges: meteredChargesFor(dbAdapter, testPricing),
   });
   await worker.run();
   let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({
@@ -1975,6 +1977,10 @@ export async function runTestRealmServer({
     domainsForPublishedRealms,
     definitionLookup,
     prerenderer,
+    // The server shares the realm's journal, as the production server shares
+    // one with every realm it mounts, so a realm it creates appends its
+    // `scan` event there.
+    ...(history ? { changeJournal: history.journal } : {}),
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
     ...(secureOriginURL ? { secureOriginURL } : {}),
     ...(googleSignIn ? { googleSignIn } : {}),
@@ -2098,6 +2104,7 @@ export async function runTestRealmServerWithRealms({
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
     mediaCacheAdapter,
+    meteredCharges: meteredChargesFor(dbAdapter, testPricing),
   });
   await worker.run();
 
@@ -2369,6 +2376,33 @@ export async function insertUser(
     stripeCustomerEmail: result[0].stripe_customer_email,
     sessionRoomId: result[0].session_room_id ?? null,
   } as User;
+}
+
+// The prices a test worker charges at. A prerender tab costs
+// (4 × 0.04048 + 16 × 0.004445) / 8 / 3600 USD a second and a worker process
+// (2 × 0.03238 + 4 × 0.00356) / 2 / 3600 USD a second, at a margin of 2.
+export function testPricing(): Pricing {
+  let check = readPricing({
+    PRICING_PRERENDER_USD_PER_VCPU_HOUR: '0.04048',
+    PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR: '0.004445',
+    PRICING_PRERENDER_TASK_VCPUS: '4',
+    PRICING_PRERENDER_TASK_MEMORY_GB: '16',
+    PRICING_PRERENDER_TASK_TABS: '8',
+    PRICING_WORKER_USD_PER_VCPU_HOUR: '0.03238',
+    PRICING_WORKER_USD_PER_MEMORY_GB_HOUR: '0.00356',
+    PRICING_WORKER_TASK_VCPUS: '2',
+    PRICING_WORKER_TASK_MEMORY_GB: '4',
+    PRICING_WORKER_TASK_PROCESSES: '2',
+    PRICING_USD_PER_DOWNLOADED_GB: '0.045',
+    PRICING_USD_PER_FILE_STORAGE_GB_MONTH: '0.30',
+    PRICING_USD_PER_DATABASE_STORAGE_GB_MONTH: '0.115',
+    PRICING_MARGIN: '2',
+    PRICING_MINIMUM_BALANCE_FLOOR_CREDITS: '1000',
+  });
+  if (!check.ok) {
+    throw new Error(`test pricing failed: ${JSON.stringify(check.problems)}`);
+  }
+  return check.pricing;
 }
 
 export async function ensureTestUser(

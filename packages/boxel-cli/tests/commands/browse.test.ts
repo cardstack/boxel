@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 import {
   hostAppUrlForProfile,
@@ -10,7 +13,7 @@ import {
   MatrixAuthError,
   MatrixRateLimitError,
 } from '../../src/lib/auth.js';
-import type { ProfileManager } from '../../src/lib/profile-manager.js';
+import { ProfileManager } from '../../src/lib/profile-manager.js';
 
 const MATRIX_URL = 'https://matrix.example.com';
 const MATRIX_AUTH = {
@@ -276,7 +279,6 @@ describe('browse', () => {
         id: '@alice:localhost',
         profile: ALICE_PROFILE,
       }),
-      getProfile: () => undefined,
       getStoredMatrixAuth: () => ({
         accessToken: 'access-token',
         userId: '@alice:localhost',
@@ -616,50 +618,51 @@ describe('browse', () => {
     stdout.mockRestore();
   });
 
-  it('uses a named --profile via getProfile', async () => {
-    let openBrowserFn = vi.fn().mockResolvedValue(true);
-    let getStoredMatrixAuth = vi.fn().mockReturnValue({
-      accessToken: 'access-token',
-      userId: '@bob:boxel.ai',
-      deviceId: 'DEVICE',
-      matrixUrl: 'https://matrix.boxel.ai',
-    });
-    let pm = fakeProfileManager({
-      // A named profile shouldn't fall back to the active one.
-      getActiveProfile: () => null,
-      getProfile: (id: string) =>
-        id === '@bob:boxel.ai'
-          ? { ...ALICE_PROFILE, realmServerUrl: 'https://app.boxel.ai/' }
-          : undefined,
-      getStoredMatrixAuth,
-    });
-
-    await browse(undefined, {
-      profile: '@bob:boxel.ai',
-      profileManager: pm,
-      requestLoginToken: vi
+  it('signs in as the profile selected for this invocation, not the active one', async () => {
+    let configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-browse-'));
+    try {
+      let pm = new ProfileManager(configDir);
+      for (let [id, realmServerUrl] of [
+        ['@alice:localhost', 'https://localhost:4201/'],
+        ['@bob:boxel.ai', 'https://app.boxel.ai/'],
+      ]) {
+        await pm.addProfileWithAuth(
+          id,
+          {
+            accessToken: `token-for-${id}`,
+            userId: id,
+            deviceId: 'DEVICE',
+            matrixUrl: MATRIX_URL,
+          },
+          undefined,
+          realmServerUrl,
+        );
+      }
+      pm.selectProfile('@bob:boxel.ai');
+      let requestLoginTokenFn = vi
         .fn()
-        .mockResolvedValue({ loginToken: 'lt_abc', expiresInMs: 120000 }),
-      openBrowserFn,
-      log: () => {},
-    });
+        .mockResolvedValue({ loginToken: 'lt_abc', expiresInMs: 120000 });
+      let openBrowserFn = vi.fn().mockResolvedValue(true);
 
-    expect(getStoredMatrixAuth).toHaveBeenCalledWith('@bob:boxel.ai');
-    expect(openBrowserFn).toHaveBeenCalledWith(
-      'https://app.boxel.ai/?loginToken=lt_abc',
-    );
-  });
-
-  it('errors when the named --profile does not exist', async () => {
-    await expect(
-      browse(undefined, {
-        profile: '@nobody:boxel.ai',
-        profileManager: fakeProfileManager({ getProfile: () => undefined }),
-        requestLoginToken: vi.fn(),
-        openBrowserFn: vi.fn(),
+      await browse(undefined, {
+        profileManager: pm,
+        requestLoginToken: requestLoginTokenFn,
+        openBrowserFn,
         log: () => {},
-      }),
-    ).rejects.toThrow(/No profile named "@nobody:boxel.ai"/);
+      });
+
+      expect(requestLoginTokenFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: '@bob:boxel.ai',
+          accessToken: 'token-for-@bob:boxel.ai',
+        }),
+      );
+      expect(openBrowserFn).toHaveBeenCalledWith(
+        'https://app.boxel.ai/?loginToken=lt_abc',
+      );
+    } finally {
+      fs.rmSync(configDir, { recursive: true, force: true });
+    }
   });
 
   it('errors when there is no active profile', async () => {

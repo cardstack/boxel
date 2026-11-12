@@ -67,6 +67,13 @@ import {
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { raceNodeTimeout, TIMED_OUT } from './node-race.ts';
 import { probePageResponsive } from './page-responsiveness.ts';
+import {
+  browserPidOf,
+  CHROME_MEMORY_READ_BUDGET_MS,
+  formatChromeProcessMemory,
+  formatTabHeapUsage,
+  readChromeProcessMemory,
+} from './chrome-memory.ts';
 
 import type { CDPSession, ElementHandle, Page } from 'puppeteer';
 
@@ -3321,6 +3328,13 @@ export async function withTimeout<T>(
     // captures still pending settle on their own once the tab is retired.
     let diagnosticsStartedAt = Date.now();
     let collected = emptyTimeoutPathCaptures();
+    // Read from `/proc`, not from Chrome, so it lands even when the renderer
+    // has stopped answering, and it is taken before the tab is evicted, which
+    // is when a renderer that grew during the render still holds its memory.
+    let chromeMemoryRead = raceNodeTimeout(
+      readChromeProcessMemory(browserPidOf(page)),
+      CHROME_MEMORY_READ_BUDGET_MS,
+    ).catch(() => null);
     // Hard-peg capture (armed only when `PRERENDER_V8_PROF=true`): ship the
     // pegged isolate's raw kernel-sampled V8 `--prof` log to the artifact
     // bucket, keyed by this render's realm/card/job, to be symbolized
@@ -3346,6 +3360,7 @@ export async function withTimeout<T>(
     if (v8ProfUpload && collected.v8ProfStatus === null) {
       collected.v8ProfStatus = 'still uploading at the diagnostics budget';
     }
+    let chromeMemory = await chromeMemoryRead;
     let diagnosticsMs = Date.now() - diagnosticsStartedAt;
     // Read once: a capture that lands after the budget must not change the
     // error already being built from these.
@@ -3401,6 +3416,12 @@ export async function withTimeout<T>(
         (cpuProfileTopFrames ? ` cpuTopFrames: ${cpuProfileTopFrames}` : '') +
         (pausedStack?.heapUsedMB != null
           ? ` jsHeapUsedMB=${pausedStack.heapUsedMB.toFixed(0)}`
+          : '') +
+        (pausedStack?.heapUsage
+          ? ` ${formatTabHeapUsage(pausedStack.heapUsage)}`
+          : '') +
+        (chromeMemory && chromeMemory !== TIMED_OUT
+          ? ` ${formatChromeProcessMemory(chromeMemory)}`
           : '') +
         (pausedStackStr ? ` pausedStack: ${pausedStackStr}` : '') +
         (v8ProfStatus ? ` v8ProfLog: ${v8ProfStatus}` : '') +

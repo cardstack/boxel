@@ -58,8 +58,11 @@ import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-fa
 import { receiveSecretsKeyring } from './lib/secrets-at-rest/index.ts';
 import { getInstanceId } from './lib/instance-id.ts';
 import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
+import { checkPricingAtStartup } from './lib/pricing.ts';
+import { meteredChargesFor } from './lib/metered-charge.ts';
 
 let log = logger('worker');
+checkPricingAtStartup('worker');
 
 // How often a running job's worker logs its memory. A job that outgrows the
 // worker can be killed without a chance to log anything, so the samples taken
@@ -278,6 +281,7 @@ let autoMigrate = migrateDB || undefined;
     indexJobsOnly,
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
+    meteredCharges: meteredChargesFor(dbAdapter),
   });
 
   await worker.run();

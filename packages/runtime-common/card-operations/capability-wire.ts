@@ -52,7 +52,9 @@ export interface CapabilityCheck {
 //   approved.
 // - `needs-admin`: a slot the realm fills from a share has no share approved
 //   for it, or one that is suspended or not approved for this use, and the
-//   caller isn't the one who could approve it.
+//   caller isn't the one who could approve it; or the OAuth client a slot's
+//   key mints its tokens through is broken, deleted, unshared or suspended,
+//   which only that client's administrator can fix.
 // - `needs-sign-in`: the caller isn't signed in, and a slot takes their own
 //   key.
 // - `rate-limited`, `over-budget`, `credential-rejected`: the caller's limit,

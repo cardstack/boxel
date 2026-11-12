@@ -7,6 +7,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { v4 as uuidv4 } from 'uuid';
@@ -267,6 +268,7 @@ export default class ProfileEmail extends Component<Signature> {
             @onInput={{this.setEmail}}
             @errorMessage={{this.emailError}}
             @state={{this.emailValidationState}}
+            {{ignoredByPasswordManagers}}
           />
           <div class='warning-box' data-test-email-validation-msg>
             <div class='warning-title'>
