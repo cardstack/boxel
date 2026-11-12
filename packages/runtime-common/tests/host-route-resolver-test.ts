@@ -29,13 +29,15 @@ function cardType(name: string, fields: Fields): HostRouteTypeInfo {
   };
 }
 
-const contains = { type: 'contains' as const };
+const contains = { type: 'contains' as const, isPrimitive: true };
 const linksTo = (name: string) => ({
   type: 'linksTo' as const,
+  isPrimitive: false,
   target: `${MODULE}/${name}`,
 });
 const linksToMany = (name: string) => ({
   type: 'linksToMany' as const,
+  isPrimitive: false,
   target: `${MODULE}/${name}`,
 });
 
@@ -120,7 +122,7 @@ class FakeRealm {
 
   load = async (request: HostRouteLoadRequest) => {
     this.loads.push(request);
-    let href = request.cardURL.href;
+    let href = request.cardHref;
     if (this.failLoad.has(href)) {
       throw new Error(`load of ${href} refused`);
     }
@@ -145,13 +147,13 @@ class FakeRealm {
   };
 
   private view(card: FakeCard, linkFields: readonly string[]): HostRouteCard {
-    let links: Record<string, URL[]> = {};
+    let linkHrefs: Record<string, string[]> = {};
     for (let field of linkFields) {
       if (card.links?.[field]) {
-        links[field] = card.links[field]!.map((href) => new URL(href));
+        linkHrefs[field] = card.links[field]!;
       }
     }
-    return { cardURL: new URL(card.id), links };
+    return { cardHref: card.id, linkHrefs };
   }
 }
 
@@ -185,7 +187,7 @@ async function resolve(
 // The served URL of the card a result serves, as an `href`.
 function cardIdOf(result: HostRouteResolution): string | undefined {
   return result.kind === 'card' || result.kind === 'alias'
-    ? result.cardURL.href
+    ? result.cardHref
     : undefined;
 }
 
@@ -223,7 +225,7 @@ const tests: SharedTests<unknown> = Object.freeze({
       'returns the matched values',
     );
     assert.deepEqual(
-      realm.loads.map((l) => l.cardURL.href),
+      realm.loads.map((l) => l.cardHref),
       [abs('Person/writer-a')],
       'loads the filled id once',
     );
@@ -572,6 +574,30 @@ const tests: SharedTests<unknown> = Object.freeze({
     assert.strictEqual(searchFailed.kind, 'error', 'a failed search too');
   },
 
+  'resolveHostRoute: a lookup that returns an identifier, not a served URL, is an error':
+    async (assert) => {
+      let routes = routesFor([
+        { path: '/people/:person_id', card: './Person/:person_id' },
+        { path: '/:id', card: './Legacy/:id' },
+      ]);
+      let result = await resolveHostRoute({
+        path: '/people/writer-a',
+        routes,
+        realmURL: new URL(REALM),
+        load: async () => ({ cardHref: '@cardstack/site/Person/writer-a' }),
+        search: async () => [],
+      });
+      assert.strictEqual(
+        result.kind,
+        'error',
+        'not a silent outside-realm miss',
+      );
+      assert.strictEqual(
+        result.kind === 'error' ? (result.error as Error).message : undefined,
+        'A host route lookup returned "@cardstack/site/Person/writer-a" where it must return a served URL',
+      );
+    },
+
   'resolveHostRoute: a child route resolves within its parent card (link on the child)':
     async (assert) => {
       let realm = new FakeRealm([
@@ -758,7 +784,7 @@ const tests: SharedTests<unknown> = Object.freeze({
       'a parent that misses lets its sibling try',
     );
     assert.deepEqual(
-      realm.loads.map((l) => l.cardURL.href),
+      realm.loads.map((l) => l.cardHref),
       [abs('Other/hats/x')],
     );
   },
@@ -848,12 +874,12 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.deepEqual(
         result.kind === 'alias'
           ? {
-              cardURL: result.cardURL.href,
+              cardHref: result.cardHref,
               statusCode: result.statusCode,
               position: result.position,
             }
           : result.kind,
-        { cardURL: abs('Person/writer-a'), statusCode: 301, position: [1] },
+        { cardHref: abs('Person/writer-a'), statusCode: 301, position: [1] },
       );
       let missing = await resolve(rules, realm, '/p/nobody');
       assert.strictEqual(missing.kind, 'nothing', 'an alias can miss too');

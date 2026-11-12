@@ -41,6 +41,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRouteResolverTests, assert, {});
   });
 
+  test('resolveHostRoute: a lookup that returns an identifier, not a served URL, is an error', async function (assert) {
+    await runSharedTest(hostRouteResolverTests, assert, {});
+  });
+
   test('resolveHostRoute: a child route resolves within its parent card (link on the child)', async function (assert) {
     await runSharedTest(hostRouteResolverTests, assert, {});
   });

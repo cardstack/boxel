@@ -35,23 +35,26 @@ import {
 // A card as the resolver needs it: its served URL, and the served URLs of
 // the cards some of its link fields point to.
 //
-// Every card here is named by the URL it is served at, without `.json`:
-// the form the index keys its rows by, and the form `fillCardIdPattern`
-// gives. Card ids and link targets are identifiers (RRIs), and an RRI can
-// be in prefix form, so the caller converts each one to its served URL at
-// its own boundary, with its VirtualNetwork, before it returns the card.
+// Every `...Href` here is a served URL, as an `href`: the URL the card is
+// served at, without `.json`, the form the index keys its rows by and the
+// form `fillCardIdPattern` gives. It is never an identifier (RRI). Card ids
+// and link targets are RRIs, and an RRI can be in prefix form, so the
+// caller converts each one to its served URL at its own boundary, with its
+// VirtualNetwork, before it returns the card. A value that doesn't parse
+// as a URL makes the resolution an `error`, not a miss.
 export interface HostRouteCard {
-  cardURL: URL;
+  cardHref: string;
   // For each field the lookup asked for in `linkFields`, the served URLs
-  // of the cards the field links to: one or none for a `linksTo`, the
-  // list for a `linksToMany`. A field that is missing, or holds no link,
-  // may be left out.
-  links?: Readonly<Record<string, readonly URL[] | undefined>>;
+  // of the cards the field links to, as `href`s: one or none for a
+  // `linksTo`, the list for a `linksToMany`. A field that is missing, or
+  // holds no link, may be left out.
+  linkHrefs?: Readonly<Record<string, readonly string[] | undefined>>;
 }
 
 export interface HostRouteLoadRequest {
-  // The served URL of the card to load, in the routing realm.
-  cardURL: URL;
+  // The served URL of the card to load, as an `href`, in the routing
+  // realm.
+  cardHref: string;
   // The link fields whose values the resolver reads on the card. Often
   // empty.
   linkFields: readonly string[];
@@ -115,8 +118,8 @@ export type HostRouteResolution =
 // Serve this card at the requested path.
 export interface HostRouteCardResult {
   kind: 'card';
-  // The card's served URL.
-  cardURL: URL;
+  // The card's served URL, as an `href`.
+  cardHref: string;
   // The route that resolved the card, as `HostRoute.position`.
   position: readonly number[];
   // Every `:name` value the path matched, decoded.
@@ -139,15 +142,15 @@ export interface HostRouteRedirectResult {
   trace: readonly HostRouteTraceStep[];
 }
 
-// An alias route (`"statusCode": 301`) resolved the card at `cardURL`. The resolver
+// An alias route (`"statusCode": 301`) resolved the card at `cardHref`. The resolver
 // doesn't know the card's canonical address: the caller looks it up with
 // the reverse lookup (card to address) and answers a 301 to it. When the
 // card has no other address, the caller serves the card at the requested
 // path instead, as for a `card` result.
 export interface HostRouteAliasResult {
   kind: 'alias';
-  // The card's served URL.
-  cardURL: URL;
+  // The card's served URL, as an `href`.
+  cardHref: string;
   statusCode: 301;
   position: readonly number[];
   params: RouteParams;
@@ -326,7 +329,7 @@ class Resolver {
 
       let card: HostRouteCard;
       if (route.kind === 'fixed-card') {
-        card = { cardURL: new URL(route.id) };
+        card = { cardHref: route.cardHref };
       } else {
         let found: HostRouteCard | undefined;
         try {
@@ -346,7 +349,7 @@ class Resolver {
         card = found;
       }
       step.outcome = 'resolved';
-      step.cardHref = card.cardURL.href;
+      step.cardHref = card.cardHref;
 
       if (!atEnd) {
         // The route resolves its level: whatever its children find is the
@@ -373,7 +376,7 @@ class Resolver {
       ) {
         return {
           kind: 'alias',
-          cardURL: card.cardURL,
+          cardHref: card.cardHref,
           statusCode: 301,
           position: route.position,
           params: allParams,
@@ -382,7 +385,7 @@ class Resolver {
       }
       return {
         kind: 'card',
-        cardURL: card.cardURL,
+        cardHref: card.cardHref,
         position: route.position,
         params: allParams,
         trace: this.trace,
@@ -491,16 +494,13 @@ class Resolver {
       }
       let load = { kind: 'load' as const, cardHref: href, found: false };
       step.lookup = load;
-      let card = await this.options.load({
-        cardURL: new URL(href),
-        linkFields,
-      });
+      let card = await this.options.load({ cardHref: href, linkFields });
       if (!card) {
         step.reason = 'not-found';
         return undefined;
       }
       load.found = true;
-      if (!this.inRealm(card.cardURL)) {
+      if (!this.inRealm(card.cardHref)) {
         step.reason = 'outside-realm';
         return undefined;
       }
@@ -539,7 +539,7 @@ class Resolver {
       step.reason = 'no-results';
       return undefined;
     }
-    let inRealm = results.filter((card) => this.inRealm(card.cardURL));
+    let inRealm = results.filter((card) => this.inRealm(card.cardHref));
     if (inRealm.length === 0) {
       step.reason = 'outside-realm';
       return undefined;
@@ -555,8 +555,8 @@ class Resolver {
     return card;
   }
 
-  private inRealm(cardURL: URL): boolean {
-    return this.realmPaths.inRealm(cardURL);
+  private inRealm(cardHref: string): boolean {
+    return this.realmPaths.inRealm(servedURL(cardHref));
   }
 }
 
@@ -592,8 +592,8 @@ function isMember(
   child: HostRouteCard,
   parent: HostRouteCard,
 ): boolean {
-  let childHolds = () => linksTo(child, link.field, parent.cardURL);
-  let parentHolds = () => linksTo(parent, link.field, child.cardURL);
+  let childHolds = () => linksTo(child, link.field, parent.cardHref);
+  let parentHolds = () => linksTo(parent, link.field, child.cardHref);
   switch (link.side) {
     case 'child':
       return childHolds();
@@ -604,11 +604,30 @@ function isMember(
   }
 }
 
-function linksTo(card: HostRouteCard, field: string, target: URL): boolean {
-  let urls = card.links?.[field];
-  return (
-    Array.isArray(urls) && urls.some((url: URL) => url.href === target.href)
-  );
+function linksTo(
+  card: HostRouteCard,
+  field: string,
+  targetHref: string,
+): boolean {
+  let hrefs = card.linkHrefs?.[field];
+  if (!Array.isArray(hrefs)) {
+    return false;
+  }
+  let target = servedURL(targetHref).href;
+  return hrefs.some((href: string) => servedURL(href).href === target);
+}
+
+// Parses a served URL a lookup returned. Throws for a value that isn't
+// one, such as a prefix-form identifier the caller didn't convert; the
+// resolver reports it as an error rather than a miss.
+function servedURL(href: string): URL {
+  try {
+    return new URL(href);
+  } catch {
+    throw new Error(
+      `A host route lookup returned "${href}" where it must return a served URL`,
+    );
+  }
 }
 
 // For each segment of the path from a route's offset to the end, whether
