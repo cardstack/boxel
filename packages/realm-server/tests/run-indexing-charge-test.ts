@@ -357,9 +357,12 @@ module(basename(import.meta.filename), function (hooks) {
 
     let [, render] = await runJobs(run.id);
     assert.true(
-      render.run_indexing!.workerProcessSeconds > 1000 &&
-        render.run_indexing!.prerenderTabSeconds > 500,
-      'the render job is handed the seeded measurement plus the pass’s',
+      render.run_indexing!.workerProcessSeconds > 1000,
+      'the render job is handed the seeded worker time plus the pass’s',
+    );
+    assert.true(
+      render.run_indexing!.prerenderTabSeconds > 500,
+      'the render job is handed the seeded tab time plus the pass’s',
     );
     let usage = await chargedUsage(run.id);
     assert.true(
