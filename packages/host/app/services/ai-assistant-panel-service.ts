@@ -689,12 +689,21 @@ export default class AiAssistantPanelService extends Service {
   }
 
   private loadRoomsTask = restartableTask(async () => {
+    let persistedRoomId = this.localPersistenceService.getCurrentRoomId();
     await this.waitForSessionRooms();
-    await this.enterRoomInitially();
+    await this.enterRoomInitially(persistedRoomId);
   });
 
-  private async enterRoomInitially() {
-    let persistedRoomId = this.localPersistenceService.getCurrentRoomId();
+  // persistedRoomId is the persisted room when the rooms started to load.
+  private async enterRoomInitially(persistedRoomId: string | null) {
+    // Entering a room persists it. If the persisted room changed while the
+    // rooms loaded, the user entered a room from the past-sessions list, and
+    // the panel stays in that room.
+    let roomEnteredDuringLoad = () =>
+      this.localPersistenceService.getCurrentRoomId() !== persistedRoomId;
+    if (roomEnteredDuringLoad()) {
+      return;
+    }
     if (persistedRoomId) {
       let roomToEnter = this.aiSessionRooms.find(
         (r) => r.roomId === persistedRoomId,
@@ -728,6 +737,9 @@ export default class AiAssistantPanelService extends Service {
             window.clearInterval(interval);
           }
         }
+      }
+      if (roomEnteredDuringLoad()) {
+        return;
       }
       // The panel selects this room on its own, so it doesn't close a
       // past-sessions list the user opened while the rooms were loading.
