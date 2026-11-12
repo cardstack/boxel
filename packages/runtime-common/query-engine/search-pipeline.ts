@@ -781,8 +781,18 @@ export abstract class SearchPipeline extends Columns {
         realmURL,
       };
       let extendedPlans = facetPlans;
+      let batchedCounts = await this.batchValueFacets(
+        extendedPlans,
+        opts,
+        everyCondition,
+        realmURL,
+      );
       let extendedResults = await Promise.all(
-        extendedPlans.map((plan) => {
+        extendedPlans.map(async (plan) => {
+          let counts = batchedCounts.get(plan);
+          if (counts) {
+            return { counts, stats: undefined };
+          }
           let condition = everyCondition;
           if (plan.facet.own === 'ignore') {
             let rest = filter

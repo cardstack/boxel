@@ -890,6 +890,32 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(after.facets, before.facets);
   });
 
+  test('value facets sharing a filter match separate requests', async function (assert) {
+    let filter: Query['filter'] = {
+      every: [{ type: on }, { on, eq: { status: 'open' } }],
+    };
+    let facets = [
+      { by: 'tags', size: 2 },
+      { by: 'status', size: 1 },
+      { by: 'shipTo.city', size: 1 },
+      { by: 'total', own: 'ignore', stats: true },
+    ] satisfies NonNullable<Query['facets']>;
+    let batch = await meta({ filter, facets, page: { size: 0 } });
+    for (let facet of facets) {
+      let single = await meta({ filter, facets: [facet], page: { size: 0 } });
+      assert.deepEqual(
+        batch.facets?.[facet.by],
+        single.facets?.[facet.by],
+        facet.by,
+      );
+      assert.deepEqual(
+        batch.facetStats?.[facet.by],
+        single.facetStats?.[facet.by],
+      );
+      assert.deepEqual(batch.page, single.page);
+    }
+  });
+
   // Proven once against the search-doc read this table replaced (batch O):
   // every kind below answered alike from both, then the search-doc read was
   // removed. These pin the answers.

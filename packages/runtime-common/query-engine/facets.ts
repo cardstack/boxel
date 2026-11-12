@@ -471,6 +471,74 @@ export abstract class Facets extends SortWindow {
     };
   }
 
+  // Value facets over the same filter share one read of the matching keys.
+  protected async batchValueFacets(
+    plans: FacetPlan[],
+    opts: QueryOptions,
+    condition: CardExpression,
+    realmURL: URL,
+  ): Promise<Map<FacetPlan, FacetCount[]>> {
+    let batch = plans.filter(
+      ({ facet, shape, column, empty, link, bigInteger, measurePath }) =>
+        shape === 'values' &&
+        !column &&
+        !empty &&
+        !link &&
+        !bigInteger &&
+        !measurePath &&
+        !facet.stats &&
+        !facet.missing &&
+        !facet.prefix &&
+        (!facet.order || facet.order === 'count') &&
+        facet.own !== 'ignore',
+    );
+    if (batch.length < 2) {
+      return new Map();
+    }
+
+    let requested = batch.map(({ facet }, slot) =>
+      addExplicitParens([
+        String(slot),
+        ',',
+        param(facet.by),
+        ',',
+        param(facet.size ?? DEFAULT_FACET_SIZE),
+        '::integer',
+      ]),
+    );
+    let rows = await this.queryCards(
+      [
+        'WITH requested(slot, path, size) AS (VALUES',
+        ...separatedByCommas(requested),
+        '), counts AS (SELECT field_path, facet_value, COUNT(*) AS count FROM (',
+        'SELECT DISTINCT fv.field_path, fv.url, fv.type, fv.txt AS facet_value, fv.num',
+        'FROM boxel_index_facet_values AS fv WHERE',
+        ...realmIs('fv.realm_url', realmURL),
+        'AND fv.field_path IN',
+        ...addExplicitParens(
+          separatedByCommas(batch.map(({ facet }) => [param(facet.by)])),
+        ),
+        'AND (fv.realm_url, fv.url, fv.type) IN (SELECT i.realm_url, i.url, i.type',
+        `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+        tableValuedFunctionsPlaceholder,
+        'WHERE',
+        ...condition,
+        ')) AS facet_rows GROUP BY field_path, facet_value',
+        '), ranked AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY field_path ORDER BY count DESC, facet_value) AS position FROM counts)',
+        'SELECT slot, facet_value, count FROM ranked JOIN requested ON path = field_path',
+        'WHERE position <= size ORDER BY slot, position',
+      ],
+      opts.timings,
+      opts,
+    );
+    return new Map(
+      batch.map((plan, slot) => [
+        plan,
+        facetCountsOf(rows.filter((row) => Number(row.slot) === slot)),
+      ]),
+    );
+  }
+
   // A facet that isn't plain values counted with the page: its counts (by
   // value, by range or by date bucket) and, when it asked for them or its
   // shape implies them, its statistics.
