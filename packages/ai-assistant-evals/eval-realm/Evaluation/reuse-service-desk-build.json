@@ -13,7 +13,6 @@
         "notes": "This is a multi-part build with a follow-up, so `secondsPerPrompt` raises the time target to 450 s per prompt, against the default 200 s set on hello-world. The turn target stays at 10 per prompt. Judge it on the reuse ratio and the must-not-hand-roll list.\n\nThe service-desk domain carries no Listing, so this card exercises the Spec/parts path only. Install and remix of a whole bundle are deliberately unmeasured here.\n\nDomain chosen because no other evaluation touches it, keeping eval vocabulary disjoint from the skill's own examples.",
         "cardThumbnailURL": null
       },
-      "skillFeatures": ["catalog-reuse"],
       "secondsPerPrompt": 450
     },
     "relationships": {

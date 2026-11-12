@@ -19,10 +19,13 @@ import {
 } from '@cardstack/runtime-common/ai';
 import type { MatrixClient } from 'matrix-js-sdk';
 
+const NO_FEATURES_AVAILABLE = 'No features are available.';
+
 function helpMessage() {
-  let features = Object.entries(SKILL_FEATURES)
-    .map(([name, description]) => `- \`${name}\` — ${description}`)
-    .join('\n');
+  let features =
+    Object.entries(SKILL_FEATURES)
+      .map(([name, description]) => `- \`${name}\` — ${description}`)
+      .join('\n') || NO_FEATURES_AVAILABLE;
   return `**Debug commands.** Send one as its own message. The assistant does not see it.
 
 ### Dumps
@@ -145,7 +148,7 @@ export async function handleDebugCommands(
       (features.length
         ? `Features enabled in this room: ${features.map(code).join(', ')}.`
         : 'No features are enabled in this room.') +
-      `\n\nAvailable features: ${available}.`;
+      `\n\n${available ? `Available features: ${available}.` : NO_FEATURES_AVAILABLE}`;
     if (command && !(command.feature in SKILL_FEATURES)) {
       status = `There is no feature named ${code(command.feature)}.\n\n${status}`;
     } else if (command) {

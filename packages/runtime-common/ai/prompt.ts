@@ -3867,9 +3867,9 @@ function isRelativeLink(target: string): boolean {
 // A skill body can mark a section as belonging to a feature that is off by
 // default:
 //
-//   <!-- feature:catalog-reuse -->
+//   <!-- feature:<name> -->
 //   ...text the model only sees when the feature is enabled...
-//   <!-- /feature:catalog-reuse -->
+//   <!-- /feature:<name> -->
 //
 // The markers are HTML comments, so the same file renders unchanged anywhere
 // else (the coding harness reads it from disk and sees every section). Here, a
