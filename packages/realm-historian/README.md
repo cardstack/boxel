@@ -19,6 +19,8 @@ The database comes from the `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` and
 `--taskCount` divide the realms between the tasks of one service (one shard and
 one task by default). `--leaseRenewMs` and `--leaseExpiryMs` set the lease's
 renewal interval and expiry (10 s and 30 s by default).
+`--backgroundConcurrency` sets how many background jobs run at once (2 by
+default).
 
 `GET /health` on the port answers 200 while the main loop has made progress
 within the last 30 s, whether the task holds a lease or is waiting for one, and
@@ -61,6 +63,33 @@ carry on. Setting its `status` back to `ok` takes effect when a task next
 starts or takes over the realm's shard, which reads the realm's events again
 from its cursor. A `scan` or `delete-realm` event records no revision: the
 recorder moves its cursor past it.
+
+## Background work
+
+Work on a realm other than recording its events, such as a reconcile pass or
+maintenance, is a kind of background work scheduled by `src/background.ts`.
+Each kind says when it comes due on a realm:
+
+- as soon as the realm is loaded (`atStart`);
+- a fixed time after it last ran (`everyMs`);
+- once a number of revisions have been committed since then (`afterCommits`),
+  optionally only after none for a while (`quietMs`);
+- or when asked (`request`), now or after a delay, or because a run asked to
+  run again (`againAfterMs`).
+
+Only the realms of the shards the task holds are scheduled. At most
+`--backgroundConcurrency` jobs run at once across the task, and one at a time
+on each realm. A kind's `isDue` check, if it has one, runs first, so a realm
+that needs nothing doesn't get a recorder.
+
+Each job runs in its realm's recorder queue, so it never runs between a commit
+and its cursor update. It runs only when the realm has nothing captured.
+A job that reaches the front of the queue with events queued behind it is
+skipped and tried again a moment later. A job holds no recording permit.
+Stopping the recorder aborts the job's signal and waits for it. A realm with
+work due and no recorder gets one, which is dropped once idle again. A job that
+fails is logged and tried again after its kind's retry delay. The realm records
+on, unless the kind stalls the realm on failure.
 
 ## Scripts
 
