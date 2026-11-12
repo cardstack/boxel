@@ -163,6 +163,37 @@ export async function getAutomationRun(
   return row ? runFromRow(row) : undefined;
 }
 
+// Why a run-token call was refused by the run's row: there is no such run,
+// it isn't running (it finished, was canceled or hasn't started), or another
+// attempt owns it.
+export type AutomationRunCallRefusal = 'missing' | 'not-running' | 'superseded';
+
+// The run a run-token call belongs to, when the row lets the call through:
+// the run is running and `attempt`, the attempt the token was minted for,
+// still owns it. A cancel, a pause that cancels the run, a finish or a
+// takeover by a newer attempt refuses every later call. The row is read on
+// every call, so a change made by any process takes effect at the next one.
+export async function automationRunForCall(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+): Promise<
+  | { ok: true; run: AutomationRun }
+  | { ok: false; reason: AutomationRunCallRefusal; run?: AutomationRun }
+> {
+  let run = await getAutomationRun(dbAdapter, id);
+  if (!run) {
+    return { ok: false, reason: 'missing' };
+  }
+  if (run.state !== 'running') {
+    return { ok: false, reason: 'not-running', run };
+  }
+  if (run.attempt !== attempt) {
+    return { ok: false, reason: 'superseded', run };
+  }
+  return { ok: true, run };
+}
+
 // Makes `attempt` the owner of a pending or running run, and says what it must
 // do next. A running run is taken over by an attempt at least as new as its
 // owner: the attempt that owned it is refused from then on. `started_at` keeps

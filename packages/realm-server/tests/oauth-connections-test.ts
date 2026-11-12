@@ -5,7 +5,11 @@ import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
-import { createJWT, setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  createAutomationRunToken,
+  createJWT,
+  setupPermissionedRealmCached,
+} from './helpers/index.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import {
   startStubOAuthProvider,
@@ -324,7 +328,7 @@ module(basename(import.meta.filename), function (hooks) {
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${createJWT(realm, user, ['read', 'write'])}`,
+          Authorization: `Bearer ${(await createAutomationRunToken(dbAdapter, realm, user)).token}`,
         },
         body: JSON.stringify({
           'boxel:operations': [

@@ -199,6 +199,13 @@ import {
   type DiagnosticSessionClaim,
 } from './diagnostic-session.ts';
 import {
+  carriesRunToken,
+  runTokenContext,
+  runTokenSecret,
+  type RunTokenClaim,
+} from './run-token.ts';
+import { automationRunForCall } from './automation-runs.ts';
+import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -220,6 +227,11 @@ import {
   type RealmHistory,
   type WriteContext,
 } from './realm-history.ts';
+import {
+  forgetAutomationFiles,
+  recordAutomationFiles,
+  type AutomationRunWrite,
+} from './automation-files.ts';
 import {
   systemError,
   notFound,
@@ -2469,6 +2481,11 @@ export interface TokenClaims {
   // authorization treats it specially. It is signed under its own key, which
   // `Realm.#verifySession` picks for a token carrying this claim.
   diagnostic?: DiagnosticSessionClaim;
+  // Set on a run token (see `run-token.ts`): the session an automation run's
+  // calls carry, naming the run and the attempt it was minted for. It is
+  // signed under its own key and accepted only by `Realm.handleAutomation`,
+  // which checks it against the run's row on every call.
+  run?: RunTokenClaim;
 }
 
 export interface AdapterWriteResult {
@@ -2610,6 +2627,10 @@ export interface WriteOptions {
   // write that restores an earlier revision. Absent, the write is recorded
   // as `api`. It never decides the author, which is `initiatingUser`.
   history?: WriteContext;
+  // The automation run whose batch this write commits. The files the write
+  // creates are recorded as the run's automation's, which its storage charge
+  // prices. Set only by the commit of a run's batch.
+  automationRun?: AutomationRunWrite;
   // Where a caller reporting where its write's time went wants this commit's
   // stages stamped. The commit drains prior indexing, makes the bytes
   // durable, queues an index job, waits for a worker to run it and then
@@ -2857,6 +2878,19 @@ export interface MatrixConfig {
   username: string;
 }
 
+// A run-token call `Realm.handleAutomation` admitted (see
+// `RequestContext.automationRun`).
+export interface AutomationRunCall {
+  runId: string;
+  attempt: number;
+  // The automation card the run belongs to, from the run's row.
+  automationId: RealmResourceIdentifier;
+  // The Matrix user id of the run's identity.
+  actsAs: string;
+  // Set in a realm the run may only read: one its cards' modules load from.
+  readOnly: boolean;
+}
+
 export type RequestContext = {
   realm: Realm;
   permissions: RealmPermissions;
@@ -2904,6 +2938,11 @@ export type RequestContext = {
   // identity past the request — a capture drawn as its reader, a signed
   // capture URL — treats the caller as no one.
   diagnosticSession?: true;
+  // Set by `Realm.handleAutomation` for a call carrying a run token that the
+  // run's row admitted: the run, the attempt that owns it, and the person it
+  // acts as. Every permission check of the call is that person's, and a
+  // `callApi` in it is an automation call recorded under the run.
+  automationRun?: AutomationRunCall;
   // Set when the request's token is a realm-authority session
   // (`TokenClaims.realmAuthority`): a realm rendering its own cards, whose
   // `authenticatedUser` is the identity it reads as rather than someone a
@@ -3211,10 +3250,6 @@ export class Realm {
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #callApi: CallApiSender | undefined;
   #policyWriteAuditor: PolicyWriteAuditor | undefined;
-  // The requests the realm server handed to `handleAutomation`: runs it makes
-  // on its own, never a request off the network, which is a new object every
-  // time and so never in here.
-  #automationRequests = new WeakSet<Request>();
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // The change journal every write appends to, and the reader the history
   // operations read from. Absent in a realm that records no history, such as
@@ -6295,6 +6330,7 @@ export class Realm {
             appendedPaths,
             initiatingUser,
             history: options?.history,
+            automationRun: options?.automationRun,
             partial: true,
           });
         } catch (persistErr: unknown) {
@@ -6344,6 +6380,7 @@ export class Realm {
       appendedPaths,
       initiatingUser,
       history: options?.history,
+      automationRun: options?.automationRun,
       partial: false,
     });
     // Everything the caller asked for is durable at this point: the bytes, the
@@ -6742,6 +6779,7 @@ export class Realm {
     appendedPaths,
     initiatingUser,
     history,
+    automationRun,
     partial,
   }: {
     fileMetaRows: {
@@ -6755,6 +6793,7 @@ export class Realm {
     appendedPaths: Set<LocalPath>;
     initiatingUser: string | null;
     history: WriteContext | undefined;
+    automationRun?: AutomationRunWrite;
     partial: boolean;
   }): Promise<
     Map<
@@ -6782,13 +6821,32 @@ export class Realm {
     ];
     let journal = this.#history?.journal;
     if (!journal) {
-      // No history, so nothing to commit together: the rows are written as
-      // the adapter's own statements. The in-browser realm's SQLite adapter
-      // runs one connection with no transaction nesting, so a realm that
-      // records nothing never opens a transaction here.
-      let createdMap = await this.persistFileMeta(fileMetaRows);
-      await this.removeFileMeta(removedFiles);
-      return createdMap;
+      // No history. The in-browser realm's SQLite adapter runs one
+      // connection with no transaction nesting, so there the rows are written
+      // as the adapter's own statements and no transaction is opened.
+      if (this.#dbAdapter.kind !== 'pg') {
+        let createdMap = await this.persistFileMeta(fileMetaRows);
+        await this.removeFileMeta(removedFiles);
+        return createdMap;
+      }
+      // A server realm with history switched off still keeps the record of
+      // the files automations' runs created (server-only: the in-browser
+      // realm's database has no such table), in one transaction with the
+      // file meta.
+      return await this.#dbAdapter.withTransaction(
+        async (querier) => {
+          let createdMap = await this.persistFileMeta(fileMetaRows, querier);
+          await this.removeFileMeta(removedFiles, querier);
+          await this.#persistAutomationFiles(
+            querier,
+            addedFiles,
+            removedFiles,
+            automationRun,
+          );
+          return createdMap;
+        },
+        { label: 'realm write outcome' },
+      );
     }
     // How the write was made, checked here whoever set it. A write that
     // names nothing is `api`.
@@ -6812,12 +6870,37 @@ export class Realm {
         async (querier) => {
           let createdMap = await this.persistFileMeta(fileMetaRows, querier);
           await this.removeFileMeta(removedFiles, querier);
+          await this.#persistAutomationFiles(
+            querier,
+            addedFiles,
+            removedFiles,
+            automationRun,
+          );
           await appendChangeEvent(querier);
           return createdMap;
         },
         { label: 'realm write outcome' },
       ),
     );
+  }
+
+  // Keeps the record of the files automations' runs created in step with a
+  // write: a file the write deleted or created stops being any automation's,
+  // whoever wrote it, and the files a run's commit created become its
+  // automation's.
+  async #persistAutomationFiles(
+    querier: Querier,
+    addedFiles: LocalPath[],
+    removedFiles: LocalPath[],
+    automationRun: AutomationRunWrite | undefined,
+  ): Promise<void> {
+    await forgetAutomationFiles(querier, this.url, [
+      ...removedFiles,
+      ...addedFiles,
+    ]);
+    if (automationRun) {
+      await recordAutomationFiles(querier, this.url, automationRun, addedFiles);
+    }
   }
 
   private lowestStatusCode(errors: AtomicPayloadValidationError[]): number {
@@ -7562,9 +7645,11 @@ export class Realm {
               this.#duringRender(request, requestContext)
                 ? { duringPrerender: true }
                 : {}),
-              ...(definition.base === 'callApi' &&
-              this.#automationRequests.has(request)
-                ? { callApiMode: 'automation' as const }
+              ...(definition.base === 'callApi' && requestContext.automationRun
+                ? {
+                    callApiMode: 'automation' as const,
+                    automationRunId: requestContext.automationRun.runId,
+                  }
                 : {}),
               ...(definition.base === 'callApi'
                 ? this.#callApiAnonymous(requestContext)
@@ -8734,12 +8819,14 @@ export class Realm {
   // to end, a capture-URL token (minted only for a reader this vouched for —
   // see `signCaptureURLs`), or a token a public realm's read path took
   // without checking it, once it passes those checks here. A delegated session
-  // reads this realm as the user it acts for. A diagnostic session is drawn
-  // as no one: a capture outlives its request, and a capture-URL token its
-  // session (see `RequestContext.diagnosticSession`). Anyone else is
-  // `ANONYMOUS_RENDER`, drawn with no session at all.
+  // reads this realm as the user it acts for. A diagnostic session and an
+  // automation run are drawn as no one: a capture outlives its request, and a
+  // capture-URL token its session, so either would carry the identity past
+  // the diagnostic session's scope or the run's row (see
+  // `RequestContext.diagnosticSession`, `RequestContext.automationRun`).
+  // Anyone else is `ANONYMOUS_RENDER`, drawn with no session at all.
   async #captureReader(requestContext: RequestContext): Promise<string> {
-    if (requestContext.diagnosticSession) {
+    if (requestContext.diagnosticSession || requestContext.automationRun) {
       return ANONYMOUS_RENDER;
     }
     let session = requestContext.unvouchedSession;
@@ -9114,6 +9201,9 @@ export class Realm {
     if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
+    if (carriesRunToken(request.headers.get('Authorization'))) {
+      return await this.handleAutomation(request);
+    }
     return await this.internalHandle(request, true);
   };
 
@@ -9121,21 +9211,28 @@ export class Realm {
     if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
+    if (carriesRunToken(request.headers.get('Authorization'))) {
+      return await this.handleAutomation(request);
+    }
     return await this.internalHandle(request, false);
   };
 
-  // Handles a request an automation makes: an `_operations` batch the realm
-  // server runs on its own, carrying the session of the user it runs as (a
-  // schedule's payer, or whoever started the run). It is authorized as that
-  // user's request would be, and a `callApi` in it is an automation
-  // invocation, which a binding approved for automations only fills. Only
-  // code in this process can call this; nothing that arrives off the network
-  // is an automation invocation.
+  // Handles a call an automation run makes: a request carrying the run's
+  // token (ADR 026 §1.3). Every request with a run token reaches the realm
+  // here, whichever entry point it arrived at, and a request without one is
+  // refused, so nothing but a run token reaches automation mode. The call is
+  // admitted only while the run's row says the run is running and owned by
+  // the attempt the token was minted for, and only in the run's own realm or,
+  // for a read, a realm its cards' modules load from. It then takes the
+  // permission check as the person the run acts as, and a `callApi` in it is
+  // an automation call, which a binding approved for automations fills.
   handleAutomation = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
-    this.#automationRequests.add(request);
-    return await this.handle(request);
+    if (!this.paths.inRealm(rri(request.url))) {
+      return null;
+    }
+    return await this.internalHandle(request, false, { automation: true });
   };
 
   async getRealmOwnerUserId(): Promise<string> {
@@ -9240,6 +9337,7 @@ export class Realm {
   private async internalHandle(
     request: Request,
     isLocal: boolean,
+    { automation = false }: { automation?: boolean } = {},
   ): Promise<ResponseWithNodeStream> {
     let redirectResponse = this.rootRealmRedirect(request);
     if (redirectResponse) {
@@ -9283,6 +9381,12 @@ export class Realm {
     }
 
     try {
+      if (automation) {
+        requestContext.automationRun = await this.#admitRunCall(
+          request,
+          requiredPermission,
+        );
+      }
       let dispatch = this.#routeRequest(request, localPath, requestContext);
       if (!isLocal) {
         // A capture-URL token (`?token=` on a `_capture/` GET) authorizes
@@ -12480,6 +12584,17 @@ export class Realm {
         this.#log.warn(message);
       }
     };
+    let run = requestContext.automationRun;
+    if (run) {
+      await this.#checkRunPermission(
+        request,
+        requestContext,
+        run,
+        requiredPermission,
+        warnRefusal,
+      );
+      return;
+    }
     if (
       requiredPermission !== 'administer' &&
       (answersWithoutCredentials ||
@@ -12729,6 +12844,172 @@ export class Realm {
       }
       throw e;
     }
+  }
+
+  // A realm in one spelling, whichever spelling it arrived in: a prefix
+  // such as `@cardstack/base/`, or a URL decoded or percent-encoded, with or
+  // without its trailing slash. So the realm a run token names, the realm
+  // its row names and the realm a call reached compare as equal when they
+  // are one realm. Undefined when it names no realm, so it matches none.
+  #sameRealmSpelling(realm: string): string | undefined {
+    try {
+      return ensureTrailingSlash(this.#virtualNetwork.toURL(realm).href);
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Admits a call carrying a run token, or refuses it before anything about
+  // the request is judged, so no policy grant can admit a call the run's row
+  // refuses. The token must verify under the run-token key and within its
+  // expiry, which is the run's time limit. This realm must be the run's own,
+  // or, for a read, one the token lets the run read. The person the run acts
+  // as must not have had their sessions revoked since the token was minted.
+  // And the run's row must say the run is running, owned by the attempt the
+  // token names, in the realm and as the person the token names. The row is
+  // read on every call, so a cancel, a pause that cancels the run, its finish
+  // or a newer attempt taking it over refuses the next call.
+  async #admitRunCall(
+    request: Request,
+    requiredPermission: RequiredPermission,
+  ): Promise<AutomationRunCall> {
+    let described = `${request.method} ${maskLoggedURL(request.url)}`;
+    let refuse = (
+      why: string,
+      message: string = AuthenticationErrorMessages.TokenInvalid,
+    ): never => {
+      this.#log.warn(`run-token call ${described} refused: ${why}`);
+      throw new AuthenticationError(message);
+    };
+    let authorization = request.headers.get('Authorization');
+    if (!carriesRunToken(authorization)) {
+      return refuse('the request carries no run token');
+    }
+    let claims: TokenClaims & { iat: number; exp: number };
+    try {
+      claims = this.#adapter.verifyJWT(
+        authorization!.slice('Bearer '.length),
+        runTokenSecret(this.#realmSecretSeed),
+      );
+    } catch (e: any) {
+      if (e?.constructor?.name === 'TokenExpiredError') {
+        return refuse(
+          `the run's time limit passed at ${e.expiredAt}`,
+          AuthenticationErrorMessages.TokenExpired,
+        );
+      }
+      return refuse(`the token did not verify: ${e?.message ?? e}`);
+    }
+    let context = runTokenContext(claims);
+    if (!context) {
+      return refuse('the token does not name a run');
+    }
+    let realmURL = this.#sameRealmSpelling(this.url);
+    let ownRealm =
+      realmURL !== undefined &&
+      this.#sameRealmSpelling(context.realm) === realmURL;
+    let readOnly =
+      !ownRealm &&
+      realmURL !== undefined &&
+      context.readRealms.some((r) => this.#sameRealmSpelling(r) === realmURL);
+    if (!ownRealm && !readOnly) {
+      return refuse(
+        `run ${context.runId} is in realm ${context.realm}, not ${this.url}`,
+      );
+    }
+    if (readOnly && requiredPermission !== 'read') {
+      this.#log.warn(
+        `run-token call ${described} refused: run ${context.runId} may only read ${this.url}`,
+      );
+      throw new AuthorizationError(
+        'An automation run may only read this realm',
+      );
+    }
+    if (context.actsAs === this.#matrixClientUserId) {
+      return refuse(
+        `run ${context.runId} acts as the realm's own user, which no run may (ADR 026 §1.5)`,
+      );
+    }
+    if (requiredPermission === 'administer') {
+      this.#log.warn(
+        `run-token call ${described} refused: run ${context.runId} attempted to administer ${this.url}`,
+      );
+      throw new AuthorizationError(
+        'An automation run may not administer a realm',
+      );
+    }
+    if (await isSessionRevoked(this.#dbAdapter, context.actsAs, context.iat)) {
+      return refuse(
+        `the sessions of ${context.actsAs}, whom run ${context.runId} acts as, were revoked after the token was minted`,
+        AuthenticationErrorMessages.SessionRevoked,
+      );
+    }
+    let call = await automationRunForCall(
+      this.#dbAdapter,
+      context.runId,
+      context.attempt,
+    );
+    if (!call.ok) {
+      return refuse(
+        `run ${context.runId} attempt ${context.attempt}: ${call.reason}${call.run ? ` (state ${call.run.state}, attempt ${call.run.attempt})` : ''}`,
+        'The automation run is not running',
+      );
+    }
+    let runRealm = this.#sameRealmSpelling(call.run.realm);
+    if (
+      runRealm === undefined ||
+      runRealm !== this.#sameRealmSpelling(context.realm)
+    ) {
+      return refuse(
+        `run ${context.runId} is in realm ${call.run.realm}, but the token names ${context.realm}`,
+      );
+    }
+    if (call.run.actsAs !== context.actsAs) {
+      return refuse(
+        `run ${context.runId} acts as ${call.run.actsAs}, but the token names ${context.actsAs}`,
+      );
+    }
+    return {
+      runId: context.runId,
+      attempt: context.attempt,
+      automationId: call.run.automationId,
+      actsAs: context.actsAs,
+      readOnly,
+    };
+  }
+
+  // A run's call takes the permission check its person's own request would:
+  // the ACL as the person the run acts as, with no token permissions to
+  // match, since the run token carries none and the person's permissions are
+  // read fresh here. No public grant stands in for the check, so a run reads
+  // and writes only what its person may. Administration was refused at
+  // admission. A shortfall is recorded with the person's identity, so the
+  // realm's policy judges the call as theirs.
+  async #checkRunPermission(
+    request: Request,
+    requestContext: RequestContext,
+    run: AutomationRunCall,
+    requiredPermission: RequiredPermission,
+    warnRefusal: (message: string) => void,
+  ): Promise<void> {
+    let checker = new RealmPermissionChecker(
+      requestContext.permissions,
+      this.#dbAdapter,
+      this.#matrixClient.serverName,
+    );
+    requestContext.authenticatedUser = run.actsAs;
+    if (
+      requiredPermission === 'administer' ||
+      !(await checker.can(run.actsAs, requiredPermission))
+    ) {
+      warnRefusal(
+        `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), run ${run.runId} acts as ${run.actsAs}, who lacks ${requiredPermission} permission`,
+      );
+      throw new CoarsePermissionInsufficient(
+        'Insufficient permissions to perform this action',
+      );
+    }
+    requestContext.principal = run.actsAs;
   }
 
   // Verifies a session presented to this realm: a diagnostic session under its
