@@ -8,6 +8,7 @@ import {
   param,
   REALM_CHANGE_EVENTS_CHANNEL,
   SupportedMimeType,
+  withChangeEvent,
   type ChangeEventChange,
   type LocalPath,
   type Realm,
@@ -25,6 +26,7 @@ import {
   type RealmRequest,
 } from './helpers/index.ts';
 import { FailableChangeJournal } from './helpers/failable-change-journal.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
 
 // The change journal: every change to a recording realm's files leaves one
 // `realm_change_events` row, committed with the write's `realm_file_meta`
@@ -584,6 +586,33 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         rows[0].changes.map((change) => change.path),
         ['landed.txt'],
+      );
+    });
+  });
+
+  module('a writer that never appends', function () {
+    test('a transaction that commits without appending its event is logged as an error', async function (assert) {
+      let lines = await logLinesDuring(['realm:change-journal'], async () => {
+        let result = await withChangeEvent(
+          journal,
+          {
+            realmURL: realmHref,
+            author: writer,
+            channel: 'api',
+            changes: [{ path: 'lost.txt', status: 'A' }],
+          },
+          async () => 'committed',
+        );
+        assert.strictEqual(result, 'committed', "the writer's result");
+      });
+      assert.deepEqual(
+        lines.map(({ level, message }) => ({ level, message })),
+        [
+          {
+            level: 'error',
+            message: `the change event for 1 path(s) in ${realmHref} was never appended: its writer's transaction committed without calling appendChangeEvent`,
+          },
+        ],
       );
     });
   });

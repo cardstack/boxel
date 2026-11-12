@@ -357,7 +357,8 @@ type AppendResult = Pick<
 // with the transaction's querier once on every run of its body. A transaction
 // that is retried from the start appends again, and only its last run's
 // append is reported. `appendChangeEvent` does nothing when there is no
-// journal or no event.
+// journal or no event. A transaction that commits without having called it
+// loses its event, which is logged as an error.
 //
 // The append runs under a savepoint, so a journal failure doesn't fail the
 // write: the transaction rolls back to the savepoint, the rest of it still
@@ -427,6 +428,10 @@ export async function withChangeEvent<T>(
   }
   if (event && appended) {
     reportAppend(event, appended);
+  } else if (journal && event) {
+    changeJournalLog().error(
+      `${describeEvent(event)} was never appended: its writer's transaction committed without calling appendChangeEvent`,
+    );
   }
   return result;
 }
