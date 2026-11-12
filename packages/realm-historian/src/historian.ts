@@ -133,7 +133,10 @@ export class Historian {
     );
     this.#background = new BackgroundScheduler({
       ...options.background,
-      recorderFor: (realm) => this.#recorderOf(realm),
+      // A realm the last load dropped, such as one whose recording was turned
+      // off while a job's `isDue` ran, gets no recorder.
+      recorderFor: (realm) =>
+        this.#realms.has(realm.id) ? this.#recorderOf(realm) : undefined,
     });
   }
 

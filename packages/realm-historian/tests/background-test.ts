@@ -1,8 +1,9 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { computeContentHash } from '@cardstack/runtime-common';
 import {
   BackgroundScheduler,
   type BackgroundKind,
@@ -21,6 +22,7 @@ import { LeaseManager, shardOf } from '../src/lease.ts';
 import { Semaphore } from '../src/semaphore.ts';
 import type { RecordedRealm } from '../src/realms.ts';
 import {
+  appendEvent,
   insertRealm,
   setupTestDatabase,
   sleep,
@@ -500,12 +502,15 @@ module('background work through the historian', (hooks) => {
     shardCount = 1,
     taskCount = 1,
     created = [],
+    createdFor = [],
     failures = [],
   }: {
     kinds: BackgroundKind[];
     shardCount?: number;
     taskCount?: number;
     created?: Recorder[];
+    // The realm each recorder in `created` records, by registry id.
+    createdFor?: string[];
     failures?: unknown[];
   }): Historian {
     let db = database.another();
@@ -539,6 +544,7 @@ module('background work through the historian', (hooks) => {
           onCommits,
         });
         created.push(recorder);
+        createdFor.push(realm.id);
         return recorder;
       },
     });
@@ -584,6 +590,75 @@ module('background work through the historian', (hooks) => {
     await waitUntil(() => created[0].state === 'stopped', {
       what: 'the idle recorder to be dropped',
     });
+    assert.deepEqual(failures, []);
+  });
+
+  test('a realm dropped while its job is checked gets no recorder, and the job does not run', async (assert) => {
+    let dropped = await realmAt('dropped');
+    let release!: () => void;
+    let released = new Promise<void>((resolve) => (release = resolve));
+    let checking = false;
+    let ran: string[] = [];
+    let createdFor: string[] = [];
+    let failures: unknown[] = [];
+    let started = historian({
+      kinds: [
+        {
+          name: 'checked',
+          atStart: true,
+          isDue: async (target) => {
+            if (target.id === dropped.id) {
+              checking = true;
+              await released;
+            }
+            return true;
+          },
+          run: async (target) => void ran.push(target.id),
+        },
+      ],
+      createdFor,
+      failures,
+    });
+    await waitUntil(() => checking, { what: "the dropped realm's check" });
+
+    await database.db.execute(
+      `UPDATE realm_history_state SET enabled = false WHERE realm_id = $1`,
+      { bind: [dropped.id] },
+    );
+    // An event for a realm the task hasn't loaded makes it load the realms
+    // again, which drops the realm whose recording is now off.
+    let other = await realmAt('other');
+    await writeFile(
+      join(root, 'realms', 'test-user', 'other', 'card.json'),
+      '{}',
+    );
+    await appendEvent(database.db, other, {
+      changes: [
+        {
+          path: 'card.json',
+          status: 'A',
+          contentHash: computeContentHash('{}'),
+          size: 2,
+        },
+      ],
+    });
+    await waitUntil(
+      () => started.realms.has(other.id) && !started.realms.has(dropped.id),
+      { timeoutMs: 10_000, what: 'the realms to be loaded again' },
+    );
+    release();
+    await waitUntil(() => ran.includes(other.id), {
+      timeoutMs: 10_000,
+      what: "the other realm's job",
+    });
+    await sleep(100);
+
+    assert.false(ran.includes(dropped.id), 'no job ran on the dropped realm');
+    assert.deepEqual(
+      createdFor,
+      [other.id],
+      'only the other realm got a recorder',
+    );
     assert.deepEqual(failures, []);
   });
 
