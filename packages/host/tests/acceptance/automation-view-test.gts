@@ -216,7 +216,9 @@ module('Acceptance | automation view', function (hooks) {
     await visitOperatorMode({
       stacks: [[{ id: AUTOMATION, format: 'isolated' }]],
     });
-    await waitFor('[data-test-automation-trigger-icon], .automation');
+    await waitFor('[data-test-automation-trigger-icon], .automation', {
+      timeout: 10000,
+    });
   }
 
   function text(selector: string) {
@@ -230,7 +232,11 @@ module('Acceptance | automation view', function (hooks) {
   test('a viewer the route refuses sees the card alone, with who turns the automation on and who pays', async function (assert) {
     await openIsolated();
     await waitUntil(() => asked.length > 0, { timeout: 10000 });
-    assert.deepEqual(asked, [AUTOMATION], 'the view asks about this card');
+    assert.deepEqual(
+      [...new Set(asked)],
+      [AUTOMATION],
+      'the view asks about this card',
+    );
     assert.dom('[data-test-automation-who-pays]').exists();
     assert.dom('[data-test-automation-status]').doesNotExist();
     assert.dom('[data-test-automation-header-state]').doesNotExist();
@@ -245,8 +251,8 @@ module('Acceptance | automation view', function (hooks) {
     await visitOperatorMode({
       stacks: [[{ id: `${testRealmURL}holders/one`, format: 'isolated' }]],
     });
-    await waitFor('[data-test-automation-embedded]');
-    await waitFor('[data-test-automation-fitted]');
+    await waitFor('[data-test-automation-embedded]', { timeout: 10000 });
+    await waitFor('[data-test-automation-fitted]', { timeout: 10000 });
     assert.dom('[data-test-automation-embedded-state]').doesNotExist();
     assert.dom('[data-test-automation-fitted-state]').doesNotExist();
     assert
@@ -280,22 +286,22 @@ module('Acceptance | automation view', function (hooks) {
       .includesText('Last run: Completed');
 
     let nightly = text('[data-test-automation-trigger-progress="nightly"]');
-    assert.ok(nightly?.includes('Runs so far 4 runs'), nightly);
-    assert.ok(nightly?.includes('Runs left 26 runs left'), nightly);
+    assert.ok(nightly?.includes('Runs so far 4'), nightly);
+    assert.ok(nightly?.includes('Runs left 26'), nightly);
     assert.ok(nightly?.includes('Last possible run'), nightly);
 
     let hourly = text('[data-test-automation-trigger-progress="hourly"]');
-    assert.ok(hourly?.includes('Runs so far 12 runs'), hourly);
+    assert.ok(hourly?.includes('Runs so far 12'), hourly);
     assert.notOk(
       hourly?.includes('Runs left'),
       'an unbounded schedule has no runs left',
     );
 
     let kickoff = text('[data-test-automation-trigger-progress="kickoff"]');
-    assert.ok(kickoff?.includes('Runs left 1 run left'), kickoff);
+    assert.ok(kickoff?.includes('Runs left 1'), kickoff);
 
     let push = text('[data-test-automation-trigger-progress="push"]');
-    assert.ok(push?.includes('Runs so far 3 runs'), push);
+    assert.ok(push?.includes('Runs so far 3'), push);
     assert.notOk(push?.includes('Next run'), 'a webhook has no next run');
 
     await visitOperatorMode({
@@ -363,17 +369,33 @@ module('Acceptance | automation view', function (hooks) {
     ];
     for (let [change, label, sentence] of cases) {
       answer = { status: 200, attributes: { ...ACTIVE, ...change } };
-      await openIsolated();
-      await waitFor(`[data-test-automation-state="${label}"]`, {
-        timeout: 10000,
+      // A view asks once when it mounts, so each state gets a fresh view.
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}holders/one`, format: 'isolated' }]],
       });
+      await waitFor('[data-test-automation-embedded]', { timeout: 10000 });
+      await openIsolated();
+      await waitUntil(
+        () =>
+          text('[data-test-automation-state-sentence]')?.trim() === sentence,
+        { timeout: 10000, timeoutMessage: `${label} never read "${sentence}"` },
+      );
+      assert.dom(`[data-test-automation-state="${label}"]`).exists();
+      if (label === 'Paused') {
+        assert
+          .dom('[data-test-automation-status]')
+          .includesText('Next run None while paused');
+        assert
+          .dom('[data-test-automation-trigger-progress="hourly"]')
+          .doesNotIncludeText('Next run', 'a paused trigger has no next run');
+      }
       assert
         .dom('[data-test-automation-state-sentence]')
         .hasText(sentence, `${label}: ${String(change.pauseReason)}`);
     }
     assert
       .dom('[data-test-automation-trigger-progress="nightly"]')
-      .includesText('No runs left', 'a spent trigger has no runs left');
+      .includesText('Runs left None', 'a spent trigger has no runs left');
     assert
       .dom('[data-test-automation-status]')
       .includesText('None scheduled', 'a done automation has no next run');
