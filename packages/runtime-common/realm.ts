@@ -2869,6 +2869,19 @@ export interface MatrixConfig {
   username: string;
 }
 
+// Why a run's commit was refused before anything was claimed, with the
+// status and code the commit route answers with.
+class RunCommitRefusal extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    readonly title: string,
+    readonly detail: string,
+  ) {
+    super(detail);
+  }
+}
+
 // A request's body, read no further than `limit` bytes: undefined when it
 // declares or turns out to hold more, so an oversized body is refused without
 // being buffered.
@@ -13250,7 +13263,7 @@ export class Realm {
       code: string,
       title: string,
       detail: string,
-    ) => new OperationFailure({ status, code, title, detail });
+    ) => new RunCommitRefusal(status, code, title, detail);
     let precondition = async () => {
       if (
         !(await isDirectWriter(
@@ -13353,10 +13366,13 @@ export class Realm {
         },
       );
     } catch (err: unknown) {
+      if (err instanceof RunCommitRefusal) {
+        // Refused by the precondition, before anything was claimed.
+        return refuse(err.status, err.code, err.title, err.detail);
+      }
       if (isOperationFailure(err)) {
-        // Refused before any file was written: by the precondition, with
-        // nothing claimed, or by the batch's own entry checks, which run
-        // before it writes anything, so a claim it holds can go.
+        // Refused by the batch's own entry checks, which run before it
+        // writes anything, so the claim it holds can go.
         if (claimed) {
           await releaseRunOverlayCommitClaim(this.#dbAdapter, key);
         }
