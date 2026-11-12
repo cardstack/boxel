@@ -128,8 +128,10 @@ with a cost estimate, and wait for a yes:
 
 ## 4. Run without and with the change
 
-The local stack serves skills from `packages/skills-realm/contents/`, a clone
-of boxel-skills. Whatever is checked out there is what the assistant reads.
+`packages/skills-realm/contents/` is a clone of boxel-skills, and the local
+stack serves that clone's `skills/` folder as the skills realm, so
+`contents/skills/boxel/SKILL.md` is `/skills/boxel/SKILL.md`. Whatever is
+checked out there is what the assistant reads.
 Edits to the skill files there need no restart, and the runner opens a new
 room per run, which a skill change needs.
 

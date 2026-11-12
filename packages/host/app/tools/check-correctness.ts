@@ -496,7 +496,19 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       return { errors: [], warnings: [] };
     }
     let moduleGeneration = indexed.generation;
-    let instances = await this.readInstances(indexed.invalidations, roomId);
+    // A pass too large to list what it reindexed leaves the module's
+    // dependents unnamed, so the candidates are the cards the user is looking
+    // at in the module's realm, any of which may use it.
+    let candidates = indexed.realmWide
+      ? this.contextCardHrefs(roomId).filter((href) => {
+          try {
+            return this.realm.realmOf(new URL(href)) === realmURL;
+          } catch {
+            return false;
+          }
+        })
+      : indexed.invalidations;
+    let instances = await this.readInstances(candidates, roomId);
     let awaitingRender = new Map<string, number>();
     for (let { href, read } of instances) {
       if (read.kind === 'clean') {

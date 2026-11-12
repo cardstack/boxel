@@ -325,9 +325,12 @@ export const DENIED_BY_USER = 'Denied by you';
 
 // What the index pass of a tracked write reported: every file it reindexed,
 // dependents included, spelled as an index event spells them, and the realm
-// generation it committed when the event says.
+// generation it committed when the event says. `realmWide` marks a pass too
+// large for its event to list what it reindexed, which leaves `invalidations`
+// empty: any file of the realm may be among them.
 export interface IndexedWrite {
   invalidations: string[];
+  realmWide?: true;
   generation?: number;
 }
 
@@ -656,7 +659,9 @@ export default class ToolService extends Service {
       this.cleanupInvalidationWaiter(key);
       let current = this.aiAssistantInvalidations.get(key);
       current?.deferred.fulfill({
-        invalidations: event.invalidations,
+        ...('realmWide' in event
+          ? { invalidations: [], realmWide: true as const }
+          : { invalidations: event.invalidations }),
         ...(event.generation !== undefined
           ? { generation: event.generation }
           : {}),

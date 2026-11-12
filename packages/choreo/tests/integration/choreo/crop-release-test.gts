@@ -35,7 +35,7 @@ class Stage extends Component<{ Args: { seize: (self: Stage) => void } }> {
   }
   <template>
     <Choreo class='stage' style='position:relative;width:300px' as |c|>
-      <div data-box style={{this.boxStyle}} {{motion id='box'}}></div>
+      <div style={{this.boxStyle}} {{motion id='box'}} data-test-box></div>
       <c.Move @of={{c.all}} @duration={{0.2}} @ease='linear' @size='crop' />
     </Choreo>
   </template>
@@ -62,7 +62,7 @@ class Leaving extends Component {
   <template>
     <Choreo class='stage' style='position:relative;width:300px' as |c|>
       {{grab c}}
-      <div data-box style={{this.boxStyle}} {{motion id='box'}}></div>
+      <div style={{this.boxStyle}} {{motion id='box'}} data-test-box></div>
       {{#if this.shown}}
         <div style='height:20px' {{motion id='leaver'}}></div>
       {{/if}}
@@ -82,7 +82,7 @@ module('Integration | choreo | crop release', function (hooks) {
     stage!.tall = true;
     await settled();
     await animationsSettled();
-    let box = document.querySelector('[data-box]') as HTMLElement;
+    let box = document.querySelector('[data-test-box]') as HTMLElement;
     let clip = getComputedStyle(box).clipPath;
     assert.strictEqual(clip, 'none', `no clip once landed (was ${clip})`);
   });
@@ -96,7 +96,7 @@ module('Integration | choreo | crop release', function (hooks) {
     await settled();
     await animationsSettled();
     await new Promise((resolve) => setTimeout(resolve, 300));
-    let box = document.querySelector('[data-box]') as HTMLElement;
+    let box = document.querySelector('[data-test-box]') as HTMLElement;
     let clip = getComputedStyle(box).clipPath;
     assert.strictEqual(
       clip,

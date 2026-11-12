@@ -82,7 +82,7 @@ Requirements:
       // The request can't follow links, so attach the spec-type guidance the
       // boxel skill only links to.
       attachedFileIdentifiers: [
-        `${skillsRealmURL}skills/boxel/references/spec-usage.md`,
+        `${skillsRealmURL}boxel/references/spec-usage.md`,
       ],
     });
 

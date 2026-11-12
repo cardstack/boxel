@@ -56,7 +56,7 @@ Use **FormField** for anything validated. Field is right for a labeled control o
 
 ## Theming
 
-`--foreground` (label ink), `--muted-foreground` (hint ink, through Cue), `--destructive-ink` (error ink, through Cue, and an invalid control's edge), `--info-ink` / `--success-ink` / `--warning-ink` (`@status` ink by `@statusTone`, through Cue), `--field` (an invalid control's face), `--boxel-ui-label-*` (label), `--boxel-font-size-2xs` (messages, through Cue).
+`--foreground` (label ink), `--muted-foreground` (hint ink, through Cue), `--destructive-ink` (error ink, through Cue, an invalid control's edge, and the `@required` marker), `--info-ink` / `--success-ink` / `--warning-ink` (`@status` ink by `@statusTone`, through Cue), `--field` (an invalid control's face), `--boxel-ui-label-*` (label), `--boxel-font-size-2xs` (messages, through Cue).
 
 Repointed into descendants when invalid: on Input, Textarea and the other boxel-ui-wrapped controls, `--border` → `--destructive-ink` and `--background` → `--field`, matching Select and Autocomplete; and on the Field itself `--input` → `--destructive-ink`, which the select-type triggers draw their edge from. A Field whose control is disabled keeps the usual edges.
 

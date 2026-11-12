@@ -306,7 +306,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator action: grant the chosen permission level to a Matrix user on this realm. Pick from existing users (sourced from the `users` table) or type a new Matrix ID like `@user:matrix.host`. POSTs to the realm-server with `Authorization: Bearer ${grafana_secret}` (token from SSM at apply time, CS-10929).",
+        "description": "Operator action: grant the chosen permission level to a Matrix user on this realm. Pick from existing users (sourced from the `users` table) or type a new Matrix ID like `@user:matrix.host`. POSTs to the realm-server through the Grafana datasource proxy, which adds the realm-server credential.",
         "fieldConfig": {
           "defaults": {},
           "overrides": []
@@ -393,7 +393,7 @@
               "size": "md",
               "variant": "primary",
               "value": "",
-              "customCode": "const realm = ${realm_url:doublequote};\nconst username = (context.panel.elements.find(function(e){return e.id==='matrix_username';})||{}).value || '';\nconst permission = (context.panel.elements.find(function(e){return e.id==='permission';})||{}).value || 'read';\nconst trimmed = String(username).trim();\nif (!trimmed) {\n  context.grafana.notifyWarning(['Username required', 'Pick a Matrix user from the list or type one (e.g. @user:matrix.host).']);\n  return;\n}\nconst read = 'true';\nconst write = permission === 'read_write' ? 'true' : 'false';\nconst label = permission === 'read_write' ? 'read/write' : 'read';\nif (!window.confirm('Grant ' + label + ' to ' + trimmed + ' on ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const url = ${realm_server:doublequote} + '_grafana-upsert-realm-user-permission?realm=' + encodeURIComponent(realm)\n            + '&user=' + encodeURIComponent(trimmed)\n            + '&read=' + read\n            + '&write=' + write;\n  const r = await fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Permission granted', label + ' granted to ' + trimmed + ' on ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Grant failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Grant failed', String(err)]);\n}\n\n})();"
+              "customCode": "const realm = ${realm_url:doublequote};\nconst username = (context.panel.elements.find(function(e){return e.id==='matrix_username';})||{}).value || '';\nconst permission = (context.panel.elements.find(function(e){return e.id==='permission';})||{}).value || 'read';\nconst trimmed = String(username).trim();\nif (!trimmed) {\n  context.grafana.notifyWarning(['Username required', 'Pick a Matrix user from the list or type one (e.g. @user:matrix.host).']);\n  return;\n}\nconst read = 'true';\nconst write = permission === 'read_write' ? 'true' : 'false';\nconst label = permission === 'read_write' ? 'read/write' : 'read';\nif (!window.confirm('Grant ' + label + ' to ' + trimmed + ' on ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const url = '/api/datasources/proxy/uid/realm-server-operator/_grafana-upsert-realm-user-permission?realm=' + encodeURIComponent(realm)\n            + '&user=' + encodeURIComponent(trimmed)\n            + '&read=' + read\n            + '&write=' + write;\n  const r = await fetch(url, { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Permission granted', label + ' granted to ' + trimmed + ' on ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Grant failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Grant failed', String(err)]);\n}\n\n})();"
             }
           ],
           "initial": {
@@ -763,7 +763,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator action: queue a from-scratch reindex for the realm currently selected in the **Realm** picker (template variable `${realm_url}`). Live blast-radius (pending / in-flight / oldest pending) is fetched every refresh; the button disables itself while an indexing job is already in flight. Click POSTs to `/_grafana-reindex?realm=...` with `Authorization: Bearer ${grafana_secret}` (substituted from SSM at apply time, CS-10929). System-wide \"Reindex ALL realms\" lives on the Indexing dashboard.",
+        "description": "Operator action: queue a from-scratch reindex for the realm currently selected in the **Realm** picker (template variable `${realm_url}`). Live blast-radius (pending / in-flight / oldest pending) is fetched every refresh; the button disables itself while an indexing job is already in flight. Click POSTs to `/_grafana-reindex?realm=...` through the Grafana datasource proxy, which adds the realm-server credential. System-wide \"Reindex ALL realms\" lives on the Indexing dashboard.",
         "fieldConfig": {
           "defaults": {},
           "overrides": []
@@ -863,7 +863,7 @@
               "variant": "primary",
               "value": "",
               "disableIf": "return Number((context.panel.elements.find(function(e){return e.id==='in_flight';})||{}).value || 0) > 0;",
-              "customCode": "const realm = ${realm_url:doublequote};\nconst inFlight = Number((context.panel.elements.find(function(e){return e.id==='in_flight';})||{}).value || 0);\nconst pending = Number((context.panel.elements.find(function(e){return e.id==='pending';})||{}).value || 0);\nconst oldest = (context.panel.elements.find(function(e){return e.id==='oldest_pending_human';})||{}).value || 'n/a';\nif (inFlight > 0) {\n  context.grafana.notifyWarning(['Reindex blocked', 'An indexing job is already in flight for this realm. Wait for it to finish before triggering a new one.']);\n  return;\n}\nif (!window.confirm('Reindex ' + realm + '?\\n\\nBlast radius:\\n  pending: ' + pending + '\\n  oldest pending: ' + oldest + '\\n\\nThis will queue a from-scratch index for this realm only.')) { return; }\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-reindex?realm=' + encodeURIComponent(realm), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Reindex queued', 'Started reindex of ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Reindex failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Reindex failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+              "customCode": "const realm = ${realm_url:doublequote};\nconst inFlight = Number((context.panel.elements.find(function(e){return e.id==='in_flight';})||{}).value || 0);\nconst pending = Number((context.panel.elements.find(function(e){return e.id==='pending';})||{}).value || 0);\nconst oldest = (context.panel.elements.find(function(e){return e.id==='oldest_pending_human';})||{}).value || 'n/a';\nif (inFlight > 0) {\n  context.grafana.notifyWarning(['Reindex blocked', 'An indexing job is already in flight for this realm. Wait for it to finish before triggering a new one.']);\n  return;\n}\nif (!window.confirm('Reindex ' + realm + '?\\n\\nBlast radius:\\n  pending: ' + pending + '\\n  oldest pending: ' + oldest + '\\n\\nThis will queue a from-scratch index for this realm only.')) { return; }\n(async () => {\ntry {\n  const r = await fetch('/api/datasources/proxy/uid/realm-server-operator/_grafana-reindex?realm=' + encodeURIComponent(realm), { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Reindex queued', 'Started reindex of ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Reindex failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Reindex failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
             }
           ],
           "initial": {
@@ -952,7 +952,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator action: add the realm selected in the **Realm** picker (template variable `${realm_url}`) to the Catalogs section of every signed-in user's dashboard, or take it out. Only public realms (a `*` read grant) can be catalogs; every other public realm stays reachable by URL without being listed. The choice persists in `realm_metadata.show_as_catalog`. Clicks POST to `/_grafana-set-realm-catalog?realm=...&catalog=true|false` with `Authorization: Bearer ${grafana_secret}`. Other realm-server instances serve the change within a minute.",
+        "description": "Operator action: add the realm selected in the **Realm** picker (template variable `${realm_url}`) to the Catalogs section of every signed-in user's dashboard, or take it out. Only public realms (a `*` read grant) can be catalogs; every other public realm stays reachable by URL without being listed. The choice persists in `realm_metadata.show_as_catalog`. Clicks POST to `/_grafana-set-realm-catalog?realm=...&catalog=true|false` through the Grafana datasource proxy, which adds the realm-server credential. Other realm-server instances serve the change within a minute.",
         "fieldConfig": {
           "defaults": {},
           "overrides": []
@@ -1025,7 +1025,7 @@
               "variant": "primary",
               "value": "",
               "disableIf": "return (context.panel.elements.find(function(e){return e.id==='public_readable';})||{}).value !== 'yes' || (context.panel.elements.find(function(e){return e.id==='in_catalog';})||{}).value === 'yes';",
-              "customCode": "const realm = ${realm_url:doublequote};\nif (!window.confirm('Add to Catalogs: ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-set-realm-catalog?realm=' + encodeURIComponent(realm) + '&catalog=true', { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Added to Catalogs', (await r.json()).message]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Added to Catalogs failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Added to Catalogs failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+              "customCode": "const realm = ${realm_url:doublequote};\nif (!window.confirm('Add to Catalogs: ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const r = await fetch('/api/datasources/proxy/uid/realm-server-operator/_grafana-set-realm-catalog?realm=' + encodeURIComponent(realm) + '&catalog=true', { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Added to Catalogs', (await r.json()).message]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Added to Catalogs failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Added to Catalogs failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
             },
             {
               "id": "btn_remove_from_catalog",
@@ -1040,7 +1040,7 @@
               "variant": "secondary",
               "value": "",
               "disableIf": "return (context.panel.elements.find(function(e){return e.id==='in_catalog';})||{}).value !== 'yes';",
-              "customCode": "const realm = ${realm_url:doublequote};\nif (!window.confirm('Remove from Catalogs: ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-set-realm-catalog?realm=' + encodeURIComponent(realm) + '&catalog=false', { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Removed from Catalogs', (await r.json()).message]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Removed from Catalogs failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Removed from Catalogs failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+              "customCode": "const realm = ${realm_url:doublequote};\nif (!window.confirm('Remove from Catalogs: ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const r = await fetch('/api/datasources/proxy/uid/realm-server-operator/_grafana-set-realm-catalog?realm=' + encodeURIComponent(realm) + '&catalog=false', { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Removed from Catalogs', (await r.json()).message]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Removed from Catalogs failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Removed from Catalogs failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
             }
           ],
           "initial": {
@@ -1580,20 +1580,6 @@
           "skipUrlSync": false,
           "sort": 1,
           "type": "query"
-        },
-        {
-          "hide": 2,
-          "name": "realm_server",
-          "query": "__REALM_SERVER_URL__",
-          "skipUrlSync": true,
-          "type": "constant"
-        },
-        {
-          "hide": 2,
-          "name": "grafana_secret",
-          "query": "REPLACE_AT_APPLY_TIME",
-          "skipUrlSync": true,
-          "type": "constant"
         }
       ]
     },

@@ -12,8 +12,8 @@ import {
   registerRealmServerRoute,
 } from '../helpers/realm-server-mock/routes';
 
-// Workspace A is owned by the test user; Workspace C is read/write only (the
-// test user is not its owner), so archive affordances must never appear on it.
+// The test user administers Workspace A and may only read Workspace C, so
+// archive affordances must never appear on Workspace C.
 const ownedRealmURL = 'http://test-realm/testuser/workspace-a/';
 const readOnlyRealmURL = 'http://test-realm/otheruser/workspace-c/';
 
@@ -64,7 +64,7 @@ module('Acceptance | dashboard archive', function (hooks) {
       {
         url: readOnlyRealmURL,
         name: 'Workspace C',
-        permissions: { '@testuser:localhost': ['read', 'write'] },
+        permissions: { '@testuser:localhost': ['read'] },
         contents: { 'index.json': cardsGridIndex },
       },
     ],
@@ -229,16 +229,16 @@ module('Acceptance | dashboard archive', function (hooks) {
       .isFocused('focus moves to the workspace left in the list');
   });
 
-  test('a workspace the user does not own has no Archive action', async function (assert) {
+  test('a workspace the user may only read has no Archive action', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
 
     await click(`[data-test-workspace-menu-trigger="${readOnlyRealmURL}"]`);
 
     assert
       .dom('[data-test-boxel-menu-item-text="Archive Workspace"]')
-      .doesNotExist('Archive is absent on a workspace the user does not own');
+      .doesNotExist('Archive is absent on a workspace the user may only read');
     assert
       .dom('[data-test-boxel-menu-item-text="Realm Settings"]')
-      .exists('the rest of the menu still renders for non-owners');
+      .exists('the rest of the menu still renders for readers');
   });
 });

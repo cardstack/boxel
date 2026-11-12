@@ -16,8 +16,8 @@ read). The counters are the shared rate-limit store (see the
 ## What is limited, and what isn't
 
 - **Interactive `callApi` calls only**: an invocation carrying a user's
-  session — a card in the browser, the AI assistant, the CLI. A pipeline (a
-  run the realm server makes as its payer, `Realm.handlePipeline`) counts
+  session — a card in the browser, the AI assistant, the CLI. An automation (a
+  run the realm server makes as its payer, `Realm.handleAutomation`) counts
   against nothing; it is bounded by its schedule's payer and caps.
 - **Against the share or the key filling each slot.** An `{{apiKey}}` slot
   counts against the share it is filled from; a `{{userKey}}` slot against
@@ -253,7 +253,7 @@ ORDER BY created_at DESC;
 
 Each `callApi` invocation whose binding resolved to a share or a personal key
 is recorded in `key_uses`, against that share (`share_id`) or key (`key_id`),
-interactive and pipeline alike (`mode`), whether the vendor answered
+interactive and automation alike (`mode`), whether the vendor answered
 (`outcome` `sent`, with its `status` and `host`) or the call was refused
 (`refused`, with its `code`). A sent call is one row. Refusals are collapsed:
 those of one UTC minute (`refusal_window`) that match in share or key, realm,

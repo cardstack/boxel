@@ -2036,6 +2036,7 @@ export * from './code-ref.ts';
 export * from './command-parsing-utils.ts';
 export * from './serializers/index.ts';
 export * from './host-routing-validation.ts';
+export * from './route-pattern.ts';
 
 export type {
   CardDocument,
@@ -2581,3 +2582,4 @@ export {
 } from './bot-command.ts';
 export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
+export * from './automation-runs.ts';

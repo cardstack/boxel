@@ -256,10 +256,10 @@ export class FormSection
             {{on 'click' this.toggle}}
           >
             <span class='pretui-formsection-caret' aria-hidden='true'></span>
-            <span class='pretui-formsection-title'>{{@title}}</span>
+            <span class='pretui-formsection-title' data-test-pretui-form-section-title>{{@title}}</span>
           </button>
         {{else}}
-          <span class='pretui-formsection-title'>{{@title}}</span>
+          <span class='pretui-formsection-title' data-test-pretui-form-section-title>{{@title}}</span>
         {{/if}}
         {{#if this.badgeText}}
           {{! In the legend on purpose: the legend IS the group's accessible

@@ -980,13 +980,14 @@ export interface OperationSourceResult {
   // facade whether the validators it built from the handle's stat describe
   // these bytes. Undefined when the open finds the file gone: another host's
   // delete can be invisible to the handle's stat until the file is opened.
-  openBody?: () =>
+  openBody?: () => Promise<
     | {
         body: OperationSourceBody;
         size?: number;
         lastModifiedMs?: number;
       }
-    | undefined;
+    | undefined
+  >;
 }
 
 export type OperationSourceBody =
@@ -1737,7 +1738,7 @@ export type OperationErrorCode =
   // again.
   | 'binding-needs-reapproval'
   // A `callApi` invoked interactively — from a browser, the AI assistant or
-  // the CLI — whose binding was approved for pipelines only. Nothing was sent.
+  // the CLI — whose binding was approved for automations only. Nothing was sent.
   | 'interactive-use-not-approved'
   // A `callApi` invoked by a caller who isn't signed in, filled from a share
   // whose key doesn't allow anonymous use. Carries a 401:

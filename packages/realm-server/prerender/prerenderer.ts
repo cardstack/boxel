@@ -33,6 +33,13 @@ import {
   type UnresponsiveTabReport,
 } from './unresponsive-tab-tracker.ts';
 import { formatHeapTelemetry, heapTelemetry } from './heap-telemetry.ts';
+import {
+  CHROME_MEMORY_READ_BUDGET_MS,
+  formatChromeProcessMemory,
+  readChromeProcessMemory,
+  type VisitMemory,
+} from './chrome-memory.ts';
+import { raceNodeTimeout, TIMED_OUT } from './node-race.ts';
 import { maybeAutoCaptureHeapSnapshot } from './heap-snapshot.ts';
 import {
   type BatchOwner,
@@ -857,6 +864,7 @@ export class Prerenderer {
     response: RenderVisitResponse;
     timings: Timings;
     pool: PoolMeta;
+    memory?: VisitMemory;
   }> {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
@@ -917,6 +925,7 @@ export class Prerenderer {
             response: RenderVisitResponse;
             timings: Timings;
             pool: PoolMeta;
+            memory?: VisitMemory;
           }
         | undefined;
       // CS-10872: see prerenderModule for why totalElapsedMs is
@@ -930,6 +939,7 @@ export class Prerenderer {
           response: RenderVisitResponse;
           timings: Timings;
           pool: PoolMeta;
+          memory?: VisitMemory;
         };
         try {
           result = await this.#renderRunner.prerenderVisitAttempt({
@@ -1262,6 +1272,24 @@ export class Prerenderer {
       } catch (e) {
         log.warn('heap telemetry log failed:', e);
       }
+      // Chrome's side of the task's memory, on its own line for the same
+      // reason as `prerender-heap`: a renderer can climb by gigabytes between
+      // two visit lines, and this tick is what traces the climb while it
+      // happens. Read from `/proc`, so a renderer that has stopped answering
+      // CDP still shows up.
+      void raceNodeTimeout(
+        readChromeProcessMemory(this.#browserManager.browserPid()),
+        CHROME_MEMORY_READ_BUDGET_MS,
+      )
+        .then((memory) => {
+          if (memory && memory !== TIMED_OUT) {
+            log.info(
+              'prerender-chrome-memory %s',
+              formatChromeProcessMemory(memory),
+            );
+          }
+        })
+        .catch((e) => log.warn('chrome memory telemetry log failed:', e));
       try {
         if (snap.affinities.length === 0 && snap.totalPending === 0) {
           // Quiet path: no active affinities and no pending work. Skip the

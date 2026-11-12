@@ -444,6 +444,12 @@ export interface CodeBlockSignature {
     noCopy?: boolean;
     /** the region's accessible name; defaults to the filename or language */
     label?: string;
+    /** the id of an element that names the region, set as aria-labelledby.
+     * Wins over `@label`, as it does in the accessibility tree. */
+    labelledBy?: string;
+    /** the id of an element that describes the region, set as
+     * aria-describedby */
+    describedBy?: string;
     /** the content is not text. Renders an explanation instead of a screen of
      * mojibake — the source modelled this flag and never consumed it. */
     binary?: boolean;
@@ -642,7 +648,9 @@ export class CodeBlock extends Component<CodeBlockSignature> {
           id={{this.bodyId}}
           tabindex='0'
           role='region'
-          aria-label={{this.regionLabel}}
+          aria-label={{unless @labelledBy this.regionLabel}}
+          aria-labelledby={{@labelledBy}}
+          aria-describedby={{@describedBy}}
           data-clamped={{if this.clamped 'true' 'false'}}
           style={{if this.clamped this.clampStyle}}
           data-test-pretui-code-body

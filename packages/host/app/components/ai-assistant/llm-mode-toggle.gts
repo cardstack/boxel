@@ -41,7 +41,7 @@ export default class LLMModeToggle extends Component<Signature> {
         @value={{this.selected}}
         @onValueChange={{this.change}}
         @disabled={{@disabled}}
-        title='Ask answers without changing anything. Act applies changes and runs commands.'
+        title='Ask answers without changing anything. Act applies changes, runs commands and reads web pages without asking.'
         data-test-llm-mode-toggle
       />
     </div>

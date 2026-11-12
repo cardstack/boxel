@@ -7,6 +7,71 @@ import '../setup-logger.ts';
 
 module(basename(import.meta.filename), function () {
   module('virtual-network', function () {
+    test('server URL remapping can refuse a streaming upload before reading it', async function (assert) {
+      let network = new VirtualNetwork();
+      network.addURLMapping(
+        new URL('http://virtual.example/'),
+        new URL('http://real.example/'),
+      );
+      let pulls = 0;
+      let canceled = false;
+      let body = new ReadableStream<Uint8Array>(
+        {
+          pull() {
+            pulls++;
+          },
+          cancel() {
+            canceled = true;
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      network.mount(async (request) => {
+        assert.strictEqual(request.url, 'http://virtual.example/asset.bin');
+        assert.strictEqual(request.headers.get('content-length'), '1000');
+        await request.body?.cancel();
+        return new Response(null, { status: 413 });
+      });
+      let response = await network.handle(
+        new Request('http://real.example/asset.bin', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': '1000',
+          },
+          body,
+          ...{ duplex: 'half' },
+        }),
+      );
+      assert.strictEqual(response.status, 413);
+      assert.strictEqual(pulls, 0);
+      assert.true(canceled, 'the sole stream owner can cancel the upload');
+    });
+
+    test('server URL remapping preserves binary bytes and the abort signal', async function (assert) {
+      let network = new VirtualNetwork();
+      network.addURLMapping(
+        new URL('http://virtual.example/'),
+        new URL('http://real.example/'),
+      );
+      let controller = new AbortController();
+      let bytes = new Uint8Array([0, 255, 254, 128, 3]);
+      network.mount(async (request) => {
+        controller.abort();
+        assert.true(request.signal.aborted);
+        return new Response(await request.arrayBuffer());
+      });
+      let response = await network.handle(
+        new Request('http://real.example/asset.bin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: bytes,
+          signal: controller.signal,
+        }),
+      );
+      assert.deepEqual(new Uint8Array(await response.arrayBuffer()), bytes);
+    });
+
     test('will respond with real (not virtual) url when handler makes a redirect', async function (assert) {
       let virtualNetwork = new VirtualNetwork();
       virtualNetwork.addURLMapping(

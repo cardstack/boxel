@@ -20,6 +20,7 @@ import type {
   QueueRunner,
 } from '@cardstack/runtime-common';
 import {
+  automationInitiatedPriority,
   Deferred,
   registerQueueJobDefinition,
   systemInitiatedPrerenderHtmlPriority,
@@ -3662,6 +3663,165 @@ module(basename(import.meta.filename), function () {
           writerRanOn: allPriority,
         },
         'the all-priority runner took the exclusive job first and the writer job after it',
+      );
+    });
+  });
+
+  // The automation tier against each lane that could claim it. Each module
+  // pairs two runners, and each test first holds one of them with a job only
+  // it can claim, so which runner takes the next job is decided by the floors
+  // rather than by which runner wakes first.
+  module('queue - automation lane', function (hooks) {
+    const automation = automationInitiatedPriority;
+    const highPriority = userInitiatedPrerenderHtmlPriority;
+
+    let {
+      publishLaneJob,
+      started,
+      hasStarted,
+      finish,
+      afterAControlStarts,
+      floorOf,
+    } = setupLaneFamilies(hooks, [highPriority, automation]);
+
+    test('an automation run is claimed by the automation lane and never by a high-priority worker', async function (assert) {
+      await publishLaneJob('earlier run', {
+        concurrencyGroup: 'automation:earlier',
+        priority: automationInitiatedPriority,
+      });
+      await started('earlier run');
+      await publishLaneJob('run', {
+        concurrencyGroup: 'automation:run',
+        priority: automationInitiatedPriority,
+      });
+      await afterAControlStarts('control', {
+        priority: userInitiatedPrerenderHtmlPriority,
+      });
+      assert.false(
+        hasStarted('run'),
+        'the free high-priority worker passed over the older automation run',
+      );
+
+      await finish('earlier run');
+      await started('run');
+      assert.deepEqual(
+        { earlier: floorOf('earlier run'), run: floorOf('run') },
+        { earlier: automation, run: automation },
+        'both runs went to the automation lane',
+      );
+    });
+
+    test('an automation worker claims user-initiated jobs when no automation run is due', async function (assert) {
+      await publishLaneJob('run', {
+        concurrencyGroup: 'automation:run',
+        priority: automationInitiatedPriority,
+      });
+      await started('run');
+      await publishLaneJob('user render', {
+        concurrencyGroup: 'prerender-html:user',
+        priority: userInitiatedPrerenderHtmlPriority,
+      });
+      await started('user render');
+      await finish('run');
+
+      await publishLaneJob('user index', {
+        concurrencyGroup: 'indexing:http://test-realm/user/',
+        priority: userInitiatedPriority,
+      });
+      await started('user index');
+      assert.deepEqual(
+        {
+          userRender: floorOf('user render'),
+          userIndex: floorOf('user index'),
+        },
+        { userRender: highPriority, userIndex: automation },
+        'with the high-priority worker busy, the automation worker took the user index job',
+      );
+    });
+  });
+
+  module(
+    'queue - automation runs without an automation lane',
+    function (hooks) {
+      const allPriority = systemInitiatedPrerenderHtmlPriority;
+
+      let {
+        publishLaneJob,
+        started,
+        hasStarted,
+        finish,
+        afterAControlStarts,
+        floorOf,
+      } = setupLaneFamilies(hooks, [
+        userInitiatedPrerenderHtmlPriority,
+        allPriority,
+      ]);
+
+      test('an all-priority worker claims an automation run that a high-priority worker passes over', async function (assert) {
+        await publishLaneJob('system work', {
+          concurrencyGroup: 'indexing:http://test-realm/system/',
+          priority: systemInitiatedPriority,
+        });
+        await started('system work');
+        await publishLaneJob('run', {
+          concurrencyGroup: 'automation:run',
+          priority: automationInitiatedPriority,
+        });
+        await afterAControlStarts('control', {
+          priority: userInitiatedPrerenderHtmlPriority,
+        });
+        assert.false(
+          hasStarted('run'),
+          'the free high-priority worker passed over the automation run',
+        );
+
+        await finish('system work');
+        await started('run');
+        assert.strictEqual(
+          floorOf('run'),
+          allPriority,
+          'the all-priority worker ran it',
+        );
+      });
+    },
+  );
+
+  module('queue - automation lane and system-tier work', function (hooks) {
+    const allPriority = systemInitiatedPrerenderHtmlPriority;
+
+    let {
+      publishLaneJob,
+      started,
+      hasStarted,
+      finish,
+      afterAControlStarts,
+      floorOf,
+    } = setupLaneFamilies(hooks, [automationInitiatedPriority, allPriority]);
+
+    test('an automation worker never claims system-tier work', async function (assert) {
+      await publishLaneJob('system work', {
+        concurrencyGroup: 'indexing:http://test-realm/system/',
+        priority: systemInitiatedPriority,
+      });
+      await started('system work');
+      await publishLaneJob('more system work', {
+        concurrencyGroup: 'indexing:http://test-realm/other-system/',
+        priority: systemInitiatedPriority,
+      });
+      await afterAControlStarts('control', {
+        priority: automationInitiatedPriority,
+      });
+      assert.false(
+        hasStarted('more system work'),
+        'the free automation worker passed over the system-tier job',
+      );
+
+      await finish('system work');
+      await started('more system work');
+      assert.strictEqual(
+        floorOf('more system work'),
+        allPriority,
+        'the all-priority worker ran it',
       );
     });
   });

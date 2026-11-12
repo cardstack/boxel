@@ -26,7 +26,7 @@ module(basename(import.meta.filename), function () {
       await runSharedTest(runCommandTaskTests, assert, {});
     });
 
-    test('mints the union of the users grant for a registered matrix user', async function (assert) {
+    test('mints the union of the users grant for a runner with a Boxel account', async function (assert) {
       await runSharedTest(runCommandTaskTests, assert, {});
     });
 

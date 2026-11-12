@@ -11,6 +11,7 @@ import { Deferred } from '../deferred.ts';
 import type * as JSONTypes from 'json-typescript';
 import type { IncrementalChange } from '../tasks/indexer.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
+import type { RunIndexing } from '../run-indexing.ts';
 import {
   exclusiveLane,
   sameWriterLaneIn,
@@ -125,6 +126,8 @@ export interface PrerenderHtmlEnqueueArgs {
   // `prerenderHtmlWriterLane`). Absent, the job is the family's exclusive work,
   // as a from-scratch spawn and a reconcile repair are.
   lane?: Lane;
+  // See PrerenderHtmlArgs. Absent, the job charges no run.
+  runIndexing?: RunIndexing | null;
 }
 
 // The name of a realm's prerender-html lane family, and of the family's
@@ -354,6 +357,7 @@ export async function enqueuePrerenderHtmlJob(
     announce,
     awaitedByPublish,
     lane,
+    runIndexing,
   }: PrerenderHtmlEnqueueArgs,
 ): Promise<Job<PgPrimitive>> {
   let args: PrerenderHtmlArgs = {
@@ -367,6 +371,7 @@ export async function enqueuePrerenderHtmlJob(
     coalescedPublishes: null,
     preWarm,
     announce: announce !== false,
+    runIndexing: runIndexing ?? null,
   };
   return await queuePublisher.publish({
     jobType: 'prerender_html',

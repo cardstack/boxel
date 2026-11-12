@@ -27,6 +27,9 @@ module('Integration | sign-in screen', function (hooks) {
       .dom('h1[data-test-secure-sign-in-title]')
       .hasText('Sign in to your Boxel Account');
     assert.dom('[data-test-secure-sign-in-subtitle]').exists();
+    assert
+      .dom('[data-test-secure-sign-in-form]')
+      .hasAttribute('method', 'post');
   });
 
   test('a page names itself and says what signing in grants', async function (assert) {

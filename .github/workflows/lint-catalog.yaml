@@ -97,6 +97,10 @@ jobs:
       - name: Test the pairing check
         if: always()
         run: pnpm --dir packages/catalog test:pairing
+
+      - name: Test the definition identity check
+        if: always()
+        run: pnpm --dir packages/catalog test:lint-identity
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: cardstack/boxel-catalog

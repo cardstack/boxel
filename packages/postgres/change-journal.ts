@@ -3,14 +3,21 @@
 // transaction so the event commits with the write's `realm_file_meta` update
 // or not at all.
 //
+// The realm server's write path appends through it, and so do the writers
+// that change a realm's files from outside the realm: create-realm, and
+// realm-historian's `scripts/scan.ts`, which the deploy runs after its rsync.
+// They share this one statement so that every event obeys the same rule for
+// which realms record.
+//
 // Whether a realm records history is read in that same transaction. One
 // statement looks the realm up by URL in `realm_registry`, takes it only when
 // it is not published and `realm_history_state.enabled` is true, inserts the
 // event from that row, and inserts the path rows from the event's `seq`. A
 // realm the statement doesn't take gets no row, so there is no per-realm flag
-// to cache or to refresh. The insert then notifies `realm_change_events`,
-// which Postgres delivers when the transaction commits, so realm-historian
-// wakes for an event it can already see.
+// to cache or to refresh. The insert then notifies `realm_change_events` with
+// the realm's id, which Postgres delivers when the transaction commits, so
+// realm-historian wakes for an event it can already see, and only the task
+// whose shard holds the realm.
 
 import {
   param,
@@ -74,7 +81,7 @@ export class PostgresChangeJournal implements ChangeJournal {
       ')',
       'SELECT seq, pg_notify(',
       param(REALM_CHANGE_EVENTS_CHANNEL),
-      ", '') FROM event",
+      ', realm_id::text) FROM event',
     ];
     let rows = await querier(expression);
     return rows.length > 0;

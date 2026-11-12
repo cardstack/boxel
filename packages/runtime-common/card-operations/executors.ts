@@ -1,3 +1,4 @@
+import type { StagedFile } from '../staged-file.ts';
 import { cloneDeep, isEqual, merge, mergeWith } from 'lodash-es';
 import { v4 as uuidV4 } from 'uuid';
 
@@ -247,7 +248,7 @@ export interface UpdateEntry extends EntryCommon {
   // The file's new content. Text through the operations envelope; raw bytes
   // when the facade dispatches an upload, which is why the two spellings are
   // one member rather than a text one and a binary one.
-  content?: string | Uint8Array;
+  content?: string | Uint8Array | StagedFile;
   // Replace the bytes stored at the target verbatim, whatever they are — the
   // one way an update reaches a module's source, a card's stored `.json`, or a
   // path that holds nothing yet.
@@ -337,7 +338,7 @@ export interface StagedWrite {
   content: StagedContent;
 }
 
-export type StagedContent = string | Uint8Array | SplicedSource;
+export type StagedContent = string | Uint8Array | SplicedSource | StagedFile;
 
 // Content one entry adds to the end of a file. Distinct from a write because
 // what it names is not the file's next content but an addition to it: the
@@ -811,10 +812,17 @@ export async function stageUpdate(
   // win cleanly.
   let merged = cloneDeep(original);
   clearReplacedArrayFieldMeta(merged.meta, patch.attributes);
-  let primary = mergeWith(merged, patch, (_target, source: unknown) =>
-    // A patched array replaces the original rather than merging into it —
-    // merging would make removing an item impossible.
-    Array.isArray(source) ? source : undefined,
+  // Relationships are merged on their own below, so the result doesn't depend
+  // on whether a patch's `<field>` key lands before or after the stored
+  // `<field>.0`, `<field>.1`, ….
+  let { relationships: _relationships, ...patchWithoutRelationships } = patch;
+  let primary = mergeWith(
+    merged,
+    patchWithoutRelationships,
+    (_target, source: unknown) =>
+      // A patched array replaces the original rather than merging into it —
+      // merging would make removing an item impossible.
+      Array.isArray(source) ? source : undefined,
   );
   if (patch.attributes && primary.attributes) {
     await replacePrimitiveValues(
@@ -988,7 +996,7 @@ async function replacePrimitiveValues(
 // once they dispatch through here.
 async function stageFileUpdate(
   entry: UpdateEntry,
-  content: string | Uint8Array,
+  content: string | Uint8Array | StagedFile,
   url: URL,
   ctx: StagingContext,
 ): Promise<StagedChange> {
@@ -2266,7 +2274,8 @@ function promoteStagedLinks(resource: CardResource, ctx: StagingContext): void {
       // realm, so the batch does not write it — and serialization records a
       // link it cannot resolve as an explicit null. The card is stored saying
       // the edge is empty, rather than saying it points at a URL nothing is
-      // stored under.
+      // stored under, unless a patch leaves a stored `linksTo` there (see
+      // `mergeRelationships`).
       return;
     }
     relationship.links = { self: stagedLid(lid, ctx).id };

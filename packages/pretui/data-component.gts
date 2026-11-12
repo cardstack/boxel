@@ -386,7 +386,7 @@ export class DataShell extends Component<DataShellSignature> {
         display: block;
         min-width: 0;
         color: var(--foreground);
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--pretui-data-font-size, var(--text-ui-md, 12.5px));
         letter-spacing: var(--track-ui, 0.01em);
       }
       .pretui-sr {

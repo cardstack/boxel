@@ -3,7 +3,9 @@
 // for the email address to be validated, and the wait while the account is set
 // up. They hold no state and send nothing; the caller decides what each
 // control does. The password fields are the caller's, in the form's block: on
-// the secure origin its own inputs, in the app the credential frame.
+// the secure origin its own inputs, in the app the credential frame. Each
+// form's method is `post`, as a password manager expects of a sign-up form, so
+// a submit the caller doesn't prevent puts no field in the address.
 //
 // Each control carries the test attributes of both origins' suites.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
@@ -74,7 +76,12 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
         class='title'
         data-test-secure-title
       >Create a Boxel Account</AuthHeading>
-      <form novalidate data-test-register-form {{on 'submit' @onSubmit}}>
+      <form
+        method='post'
+        novalidate
+        data-test-register-form
+        {{on 'submit' @onSubmit}}
+      >
         <AuthFormField
           @label='Your Name'
           data-test-secure-field='name'
@@ -114,14 +121,17 @@ export const RegisterForm: TemplateOnlyComponent<RegisterFormSignature> =
             {{on 'blur' @onEmailBlur}}
           />
         </AuthFormField>
+        {{! The group's input takes the field's control id, so the label is a
+            label for it, which a password manager reads to know the field
+            holds the username. }}
         <AuthFormField
-          @labelTag='span'
           @label='Username'
           data-test-secure-field='username'
-          as |labelId|
+          as |labelId controlId|
         >
           <InputGroup
             data-test-username-field
+            @controlId={{controlId}}
             @state={{@usernameState}}
             @errorMessage={{@usernameError}}
           >
@@ -242,6 +252,7 @@ export const InviteCodeForm: TemplateOnlyComponent<InviteCodeFormSignature> =
   <template>
     <form
       class='step'
+      method='post'
       novalidate
       data-test-token-page
       {{on 'submit' @onSubmit}}

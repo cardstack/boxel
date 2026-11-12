@@ -39,11 +39,14 @@ const MAX_FIT_PASSES = 8;
 
 /**
  * The chooser, pure so it can be checked without a DOM. Every slot starts at
- * its richest form (index 0). While the row doesn't fit, step down one slot:
- * among slots that can still step, the one that has stepped least; ties go to
- * the least important (highest @priority, then the later slot). Returns a
- * form index per slot id. A slot with no 'menu' form (or with @pinned) never
- * folds; that is how the primary action stays in the row.
+ * its richest form (index 0). While the row doesn't fit, one slot steps down,
+ * in two phases. First every slot steps through its non-menu forms: among
+ * slots that can still step, the one that has stepped least; ties go to the
+ * least important (highest @priority, then the later slot). Only when every
+ * slot is at its last non-menu form and the row still overflows do slots fold
+ * into ⋯, least important first (same tie order). Returns a form index per
+ * slot id. A slot with no 'menu' form (or with @pinned) never folds; that is
+ * how the primary action stays in the row.
  */
 export function chooseForms(
   slots: LayoutControlSlotSpec[],
@@ -73,15 +76,19 @@ export function chooseForms(
     return total + gapPx * Math.max(visible - 1, 0);
   };
   while (need() > widthPx) {
-    let can = slots
+    let steppable = slots
       .map((_, i) => i)
       .filter((i) => level[i]! < slots[i]!.forms.length - 1);
-    if (!can.length) {
+    if (!steppable.length) {
       break;
     }
-    let least = Math.min(...can.map((i) => level[i]!));
+    let shorter = steppable.filter(
+      (i) => slots[i]!.forms[level[i]! + 1]!.name !== MENU_FORM,
+    );
+    let can = shorter.length ? shorter : steppable;
+    let least = shorter.length ? Math.min(...can.map((i) => level[i]!)) : 0;
     let pick = can
-      .filter((i) => level[i] === least)
+      .filter((i) => !shorter.length || level[i] === least)
       .sort((a, b) => slots[b]!.priority - slots[a]!.priority || b - a)[0]!;
     level[pick]!++;
   }
@@ -103,7 +110,10 @@ export function applyHysteresis(
   return new Map(
     [...next].map(([id, n]) => {
       let l = last.get(id);
-      return [id, l !== undefined && n < l ? Math.min(guarded.get(id) ?? l, l) : n];
+      return [
+        id,
+        l !== undefined && n < l ? Math.min(guarded.get(id) ?? l, l) : n,
+      ];
     }),
   );
 }
@@ -159,6 +169,10 @@ export interface LayoutControlSlotSignature {
     /** never folds into ⋯; still steps down its own forms. Use it for the
      * primary action */
     pinned?: boolean;
+    /** 'end' puts the slot in the row's end group: the first end-aligned slot
+     * that is in the row takes the free space before it, and ⋯ follows it.
+     * Default: the start group */
+    align?: 'start' | 'end';
   };
   Blocks: { default: [form: string] };
   Element: HTMLSpanElement;
@@ -169,10 +183,12 @@ class LayoutControlSlot extends Component<
 > {
   get spec(): LayoutControlSlotSpec {
     let { id, priority, forms, pinned } = this.args;
+    // 'menu' is always the last step, wherever the caller listed it
+    let menu = pinned ? [] : forms.filter((f) => f.name === MENU_FORM);
     return {
       id,
       priority: priority ?? 1,
-      forms: pinned ? forms.filter((f) => f.name !== MENU_FORM) : forms,
+      forms: [...forms.filter((f) => f.name !== MENU_FORM), ...menu],
     };
   }
   get label() {
@@ -194,6 +210,9 @@ class LayoutControlSlot extends Component<
   get folded() {
     return this.form === MENU_FORM;
   }
+  get isEndAnchor() {
+    return this.args.bar.endAnchor === this;
+  }
   el: HTMLElement | undefined;
   register = modifier((el: HTMLElement) => {
     this.el = el;
@@ -206,6 +225,7 @@ class LayoutControlSlot extends Component<
       class='pretui-lc-slot'
       data-slot={{@id}}
       data-form={{this.form}}
+      data-end-anchor={{if this.isEndAnchor 'true'}}
       {{this.register}}
       ...attributes
     >
@@ -226,6 +246,14 @@ class LayoutControlSlot extends Component<
           /* inherited through display: contents, so labels never break */
           white-space: nowrap;
         }
+        /* the first end-aligned slot is a flex item of its own so it can take
+           the free space; its content keeps the row's gap */
+        .pretui-lc-slot[data-end-anchor] {
+          display: flex;
+          align-items: center;
+          gap: var(--pretui-lc-gap, var(--boxel-sp-xs));
+          margin-inline-start: auto;
+        }
       }
     </style>
   </template>
@@ -235,9 +263,9 @@ export interface LayoutControlSignature {
   Args: {
     /** accessible name for the row (default 'Toolbar') */
     label?: string;
-    /** one height for every control in the row; sets --control-height on the
-     * bar. Any CSS length (default: whatever an ancestor sets, else the
-     * row's own height) */
+    /** one height for every control in the row; sets --pretui-row-h (and
+     * --control-height) on the bar. Any CSS length (default: none set, so
+     * each control keeps its own height, unless an ancestor sets one) */
     controlHeight?: string;
     /** accessible name of the ⋯ button (default 'More options') */
     overflowLabel?: string;
@@ -291,7 +319,7 @@ export class LayoutControl extends Component<LayoutControlSignature> {
   }
   get style() {
     let h = this.args.controlHeight;
-    return h ? `--control-height: ${h}` : undefined;
+    return h ? `--control-height: ${h}; --pretui-row-h: ${h}` : undefined;
   }
   get moreIcon() {
     return iconFor('ellipsis');
@@ -378,6 +406,22 @@ export class LayoutControl extends Component<LayoutControlSignature> {
     if (!bar || !this.controlPx) {
       return;
     }
+    // This frame runs before the ResizeObserver reports a resize made since
+    // the last one, so a failure is pinned to the width it really failed at.
+    // Inline size, like the observer's: the bar's height in a vertical
+    // writing mode.
+    let own = getComputedStyle(bar);
+    let vertical = !own.writingMode.startsWith('horizontal');
+    this.widthPx =
+      (vertical ? bar.clientHeight : bar.clientWidth) -
+      (parseFloat(own.paddingInlineStart) || 0) -
+      (parseFloat(own.paddingInlineEnd) || 0);
+    // Client rects keep subpixels but shrink under an ancestor's transform
+    // (a card stack's opening scale); dividing by the bar's own scale undoes it.
+    let scale =
+      (bar.offsetWidth &&
+        bar.getBoundingClientRect().width / bar.offsetWidth) ||
+      1;
     let wrapLimit = this.controlPx * WRAP_RATIO;
     let changed = false;
     let record = (key: string, rem: number) => {
@@ -390,7 +434,7 @@ export class LayoutControl extends Component<LayoutControlSignature> {
       this.failed.set(key, { rem, atPx: this.widthPx });
       changed = true;
     };
-    let steppable: { key: string; priority: number; width: number }[] = [];
+    let steppable: { key: string; priority: number; width: number; shorter: boolean }[] = [];
     for (let slot of this.slots) {
       let form = slot.form;
       if (!slot.el || form === MENU_FORM) {
@@ -402,8 +446,8 @@ export class LayoutControl extends Component<LayoutControlSignature> {
       let height = 0;
       for (let child of slot.el.children) {
         let rect = child.getBoundingClientRect();
-        width += rect.width;
-        height = Math.max(height, rect.height);
+        width += rect.width / scale;
+        height = Math.max(height, rect.height / scale);
       }
       if (!width) {
         continue;
@@ -419,14 +463,21 @@ export class LayoutControl extends Component<LayoutControlSignature> {
       }
       let spec = slot.spec;
       if (spec.forms[spec.forms.length - 1]?.name !== form) {
-        steppable.push({ key, priority: spec.priority, width });
+        let next = spec.forms[spec.forms.findIndex((f) => f.name === form) + 1];
+        steppable.push({
+          key,
+          priority: spec.priority,
+          width,
+          shorter: next?.name !== MENU_FORM,
+        });
       }
     }
     // Overflow without a wrap: charge the deficit to the least important slot
     // that can still step, so the chooser steps it.
     let deficit = bar.scrollWidth - bar.clientWidth;
     if (deficit > 1 && steppable.length) {
-      let pick = steppable.sort((a, b) => b.priority - a.priority)[0]!;
+      let shorter = steppable.filter((s) => s.shorter);
+      let pick = (shorter.length ? shorter : steppable).sort((a, b) => b.priority - a.priority)[0]!;
       fail(pick.key, (pick.width + deficit) / this.remPx);
     }
     if (changed) {
@@ -438,6 +489,18 @@ export class LayoutControl extends Component<LayoutControlSignature> {
     let i = this.levels.get(spec.id) ?? 0;
     return (spec.forms[i] ?? spec.forms[0])?.name ?? '';
   };
+
+  /** the first end-aligned slot that is in the row (document order); ⋯ follows
+   * it, and without one ⋯ takes the free space itself */
+  get endAnchor() {
+    return this.slots
+      .filter((s) => s.args.align === 'end' && !s.folded && s.el)
+      .sort((a, b) =>
+        a.el!.compareDocumentPosition(b.el!) & Node.DOCUMENT_POSITION_FOLLOWING
+          ? -1
+          : 1,
+      )[0];
+  }
 
   get foldedSlots() {
     return this.slots.filter((s) => s.folded);
@@ -551,6 +614,8 @@ export class LayoutControl extends Component<LayoutControlSignature> {
       aria-label={{this.label}}
       style={{this.style}}
       data-overflow={{if this.overflow.active 'true'}}
+      data-pretui-layout-control
+      data-end-anchored={{if this.endAnchor 'true'}}
       {{this.measure}}
       data-test-pretui-layout-control
       ...attributes
@@ -621,10 +686,11 @@ export class LayoutControl extends Component<LayoutControlSignature> {
       /* composite: it passes a class onto Popover's root */
       @layer PretComposite {
         .pretui-lc {
-          /* Equal height: each child's own height knob maps from
-             --control-height here (custom properties inherit, so no :deep()).
-             No child has one yet; a control that gains one adds
-             its line in this block. */
+          /* Equal height: @controlHeight sets --pretui-row-h on this root, and
+             a control reads it as the first link of its own height chain
+             (custom properties inherit, so no :deep()). The theme also defines
+             --control-height for every themed scope, so controls read the
+             row-scoped name, which only a sized row sets. */
           display: flex;
           align-items: center;
           gap: var(--pretui-lc-gap, var(--boxel-sp-xs));
@@ -637,6 +703,8 @@ export class LayoutControl extends Component<LayoutControlSignature> {
         }
         .pretui-lc-more {
           flex: none;
+        }
+        .pretui-lc:not([data-end-anchored]) .pretui-lc-more {
           margin-inline-start: auto;
         }
         .pretui-lc-fallback {

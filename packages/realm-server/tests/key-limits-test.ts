@@ -57,7 +57,7 @@ import {
 // interactive call takes from the caller's token bucket and spends the share's
 // or key's daily and monthly budget, a call over either is refused before
 // anything is sent, a counter store that can't be read refuses every call,
-// pipeline calls count against nothing, readiness answers from the same
+// automation calls count against nothing, readiness answers from the same
 // counters, and owners and the realm's direct writers are told once at the
 // high-water mark and once at the budget.
 //
@@ -335,9 +335,9 @@ module(basename(import.meta.filename), function (hooks) {
     };
   }
 
-  // Invokes `operation` as a pipeline the realm server runs as `user`.
-  async function pipelineCall(operation: string, user = OWNER) {
-    let response = (await realm.handlePipeline(
+  // Invokes `operation` as an automation the realm server runs as `user`.
+  async function automationCall(operation: string, user = OWNER) {
+    let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
         headers: {
@@ -1078,7 +1078,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a pipeline call counts against no limit', async function (assert) {
+  test('an automation call counts against no limit', async function (assert) {
     let key = await addKey();
     await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
     await setLimits(`/_user-keys/${key.id}/limits`, OWNER, {
@@ -1086,7 +1086,7 @@ module(basename(import.meta.filename), function (hooks) {
       dailyBudget: 1,
     });
     for (let i = 0; i < 3; i++) {
-      let response = await pipelineCall('check');
+      let response = await automationCall('check');
       assert.strictEqual(response.status, 200, response.body);
     }
     assert.strictEqual(vendor.requests.length, 3);

@@ -8,6 +8,10 @@ import type { AddressInfo } from 'net';
 import Koa from 'koa';
 import puppeteer, { type Browser, type Frame, type Page } from 'puppeteer';
 import {
+  CHROME_NO_SANDBOX_ARGS,
+  chromeSandboxEnabled,
+} from '@cardstack/runtime-common/chrome-sandbox';
+import {
   createSecureOrigin,
   secureOriginGate,
   secureOriginHeaders,
@@ -414,8 +418,9 @@ module(basename(import.meta.filename), function (hooks) {
     browser = await puppeteer.launch({
       headless: true,
       args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
+        // The sandbox is off only on Linux, for the reasons
+        // `chromeSandboxEnabled` gives.
+        ...(chromeSandboxEnabled() ? [] : CHROME_NO_SANDBOX_ARGS),
         // Keeps the framed credential fields in the page's own process, so
         // the violation listener is installed in that frame too.
         '--disable-features=IsolateOrigins,site-per-process',
@@ -571,6 +576,53 @@ module(basename(import.meta.filename), function (hooks) {
       timeout: 10000,
     });
     assert.deepEqual(await violationsIn(page), [], 'signed out: no violation');
+  });
+
+  test('sign-in and sign-up each load as a document of their own', async function (assert) {
+    // A password manager reads a page's form as the page loads, so the
+    // sign-up form never replaces the sign-in form in place, nor the other
+    // way round.
+    await page.goto(`${secureOrigin}/secure/sign-in`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-secure-register]', {
+      timeout: 10000,
+    });
+    await page.evaluate(() => {
+      (window as any).__document = 'sign-in';
+    });
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle0' }),
+      page.click('[data-test-secure-register]'),
+    ]);
+    await page.waitForSelector('[data-test-register-form]', {
+      timeout: 10000,
+    });
+    assert.strictEqual(
+      await page.evaluate(() => window.location.pathname),
+      '/secure/register',
+    );
+    assert.strictEqual(
+      await page.evaluate(() => (window as any).__document),
+      undefined,
+      'the sign-up page is a new document',
+    );
+    assert.deepEqual(await violationsIn(page), [], 'sign-up: no violation');
+
+    await page.evaluate(() => {
+      (window as any).__document = 'register';
+    });
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle0' }),
+      page.click('[data-test-cancel-btn]'),
+    ]);
+    await page.waitForSelector(WINDOW_SIGN_IN, { timeout: 10000 });
+    assert.strictEqual(
+      await page.evaluate(() => (window as any).__document),
+      undefined,
+      'the sign-in page it goes back to is a new document too',
+    );
+    assert.deepEqual(await violationsIn(page), [], 'sign-in: no violation');
   });
 
   test('the screens a sign-in is handed back to the app from run under the policy', async function (assert) {

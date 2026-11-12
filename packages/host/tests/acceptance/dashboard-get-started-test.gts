@@ -33,6 +33,7 @@ import {
   setupMoreWorkspaces,
   sharedRealmURL,
 } from '../helpers/dashboard';
+import { setRecentCards } from '../helpers/recent-files-cards';
 
 module('Acceptance | dashboard get started', function (hooks) {
   let mockMatrixUtils = setupDashboardTest(hooks);
@@ -211,7 +212,7 @@ module('Acceptance | dashboard get started', function (hooks) {
       .doesNotExist('a done step does not say what publishing needs');
   });
 
-  test('owning only workspaces that cannot be published, the publish step says so instead of offering a button', async function (assert) {
+  test('administering only workspaces that cannot be published, the publish step says so instead of offering a button', async function (assert) {
     await visitAsNewUser();
     await openSteps();
 
@@ -223,9 +224,9 @@ module('Acceptance | dashboard get started', function (hooks) {
       );
   });
 
-  test('owning no workspace, the publish step says publishing needs one', async function (assert) {
+  test('able to edit no workspace, the publish step says publishing needs one', async function (assert) {
     mockMatrixUtils.setRealmPermissions({
-      [realmURL]: ['read', 'write'],
+      [realmURL]: ['read'],
     });
     await visitAsNewUser();
     await openSteps();
@@ -234,11 +235,11 @@ module('Acceptance | dashboard get started', function (hooks) {
     assert
       .dom('[data-test-get-started-publish-unavailable]')
       .hasText(
-        'Publishing needs a workspace you own. Create one to publish it.',
+        'Publishing needs a workspace you can edit. Create one to publish it.',
       );
   });
 
-  test("the publish step's note waits for the info of the workspaces the user owns", async function (assert) {
+  test("the publish step's note waits for the info of the workspaces the user administers", async function (assert) {
     await visitAsNewUser();
     // Holds Workspace A's info back, as a slow load does.
     let resource = (getService('realm') as any).realms.get(realmURL);
@@ -271,7 +272,7 @@ module('Acceptance | dashboard get started', function (hooks) {
     test('with one workspace to publish, the publish step opens it in host mode with the publish dialog', async function (assert) {
       await visitAsNewUser();
       markPublishable(ownedRealmURL);
-      // Publishable, but shared with the user rather than theirs.
+      // Publishable, but shared with the user to read only.
       markPublishable(sharedRealmURL);
       await settled();
       await openSteps();
@@ -370,7 +371,7 @@ module('Acceptance | dashboard get started', function (hooks) {
       }
       markUpdated(realmURL, new Date(now - 60_000));
       markUpdated(ownedRealmURL, new Date(now - 30_000));
-      // The newest, but shared with the user rather than theirs.
+      // The newest, but shared with the user to read only.
       markUpdated(sharedRealmURL, new Date(now));
       await settled();
       await openSteps();
@@ -432,40 +433,197 @@ module('Acceptance | dashboard get started', function (hooks) {
     assert.strictEqual(stepDone('ask-ai'), 'true');
   });
 
-  test('with every step done, neither the button nor the steps show', async function (assert) {
+  test('with every step done, the steps stay, each with its action, until dismissed', async function (assert) {
     await visitAsNewUser();
+    assert.dom(BUTTON).hasAttribute('data-tone', 'primary');
     await openSteps();
-    assert.dom(GET_STARTED).exists();
+    assert
+      .dom('[data-test-get-started-action="ask-ai"]')
+      .hasAttribute('data-appearance', 'outlined', 'an undone step stands out');
 
     await mockMatrixUtils.setDashboardStateFromAnotherDevice({
       agent: 'claude',
       agentSetup: { claude: 1 },
     });
     (getService('recent-cards-service') as any).add(`${realmURL}index`);
+    markPublishable(realmURL);
     markHosted(realmURL);
     await settled();
 
-    assert.dom(GET_STARTED).doesNotExist('nothing left to start');
-    assert.dom(BUTTON).doesNotExist();
+    assert.dom('[data-test-get-started-count]').hasText('3 of 3 done');
+    for (let id of ['open-card', 'agent', 'publish']) {
+      assert.strictEqual(stepDone(id), 'true', `${id} is done`);
+      assert
+        .dom(`[data-test-get-started-action="${id}"]`)
+        .hasAttribute(
+          'data-appearance',
+          'plain',
+          `${id} keeps a quieter action`,
+        );
+    }
 
-    let matrixService = getService('matrix-service') as MatrixService;
-    await waitUntil(() => matrixService.dashboardState.onboardingDismissed);
-    assert
-      .dom('[data-test-get-started-dismissed]')
-      .doesNotExist('finishing offers no undo');
-    assert.true(
+    assert.notOk(
       (mockMatrixUtils.getDashboardState() as any).onboardingDismissed,
-      'the dismissal is stored',
+      'finishing does not dismiss it',
     );
 
+    await click(BUTTON);
+    assert.dom(BUTTON).hasAttribute('aria-expanded', 'false');
+    assert
+      .dom(BUTTON)
+      .hasAttribute('data-appearance', 'outlined', 'closed, it steps back');
+    assert.dom(BUTTON).doesNotHaveAttribute('data-theme');
+
+    await click(BUTTON);
+    assert.dom(BUTTON).hasAttribute('data-appearance', 'accent');
+    assert.dom(BUTTON).hasAttribute('data-theme', 'light');
+    await click(BUTTON);
+
+    // Replacing the stored state also clears the openedCard the card
+    // opened above recorded.
     (getService('recent-cards-service') as any).resetState();
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+      agent: 'claude',
+      agentSetup: {},
+    });
     await settled();
     assert
       .dom(BUTTON)
-      .doesNotExist('a step that reads as undone later does not bring it back');
+      .hasAttribute(
+        'data-appearance',
+        'accent',
+        'a step that reads as undone again calls for attention',
+      );
+    assert.dom(BUTTON).hasAttribute('data-tone', 'primary');
+    assert.dom(BUTTON).hasAttribute('data-theme', 'light');
+    await openSteps();
+    assert.strictEqual(stepDone('open-card'), 'false');
+    assert.strictEqual(stepDone('agent'), 'false');
+    await click(BUTTON);
 
     await reopenDashboard();
-    assert.dom(BUTTON).doesNotExist('still gone after reopening');
+    assert.dom(BUTTON).exists('still there after reopening');
+
+    await openSteps();
+    await click('[data-test-get-started-dismiss]');
+    assert.dom(GET_STARTED).doesNotExist('only Dismiss hides it');
+    assert.dom(BUTTON).doesNotExist();
+    assert.dom('[data-test-get-started-undo-dismiss]').exists();
+  });
+
+  test('a Dismiss that fails to save keeps the list and says so', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    mockMatrixUtils.setDashboardStateWriteError(new Error('offline'));
+    await click('[data-test-get-started-dismiss]');
+    await waitFor('[data-test-get-started-dismiss-error]');
+    mockMatrixUtils.setDashboardStateWriteError();
+
+    assert.dom(GET_STARTED).exists('the list stays');
+    assert
+      .dom('[data-test-get-started-dismiss-error]')
+      .hasText('Couldn’t dismiss. Try again.');
+    assert
+      .dom('[data-test-get-started-error-announcement]')
+      .hasText('Couldn’t dismiss. Try again.', 'screen readers hear it');
+    assert.dom('[data-test-get-started-dismissed]').doesNotExist();
+
+    await click(BUTTON);
+    await openSteps();
+    assert
+      .dom('[data-test-get-started-dismiss-error]')
+      .doesNotExist('the error clears once the list closes');
+
+    await click('[data-test-get-started-dismiss]');
+    assert.dom('[data-test-get-started-dismiss-error]').doesNotExist();
+    assert.dom('[data-test-get-started-dismissed]').exists('the retry saves');
+    assert.dom('[data-test-get-started-error-announcement]').hasNoText();
+  });
+
+  test('a card opened in another browser ticks the open-card step', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+    assert.strictEqual(stepDone('open-card'), 'false');
+
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+      openedCard: true,
+    });
+    await settled();
+
+    assert.strictEqual(stepDone('open-card'), 'true');
+  });
+
+  test('opening a card records it on the account', async function (assert) {
+    await visitAsNewUser();
+
+    (getService('recent-cards-service') as any).add(`${realmURL}index`);
+    await settled();
+
+    assert.true(
+      (mockMatrixUtils.getDashboardState() as any).openedCard,
+      'other browsers read it from there',
+    );
+  });
+
+  test('a card opened after a failed recording records it', async function (assert) {
+    await visitAsNewUser();
+    let recentCards = getService('recent-cards-service') as any;
+
+    mockMatrixUtils.setDashboardStateWriteError(new Error('offline'));
+    recentCards.add(`${realmURL}index`);
+    await settled();
+    mockMatrixUtils.setDashboardStateWriteError();
+    recentCards.add(`${realmURL}index`);
+    await settled();
+
+    assert.true((mockMatrixUtils.getDashboardState() as any).openedCard);
+  });
+
+  test('recording an opened card stops after two failed writes in a session', async function (assert) {
+    await visitAsNewUser();
+    let recentCards = getService('recent-cards-service') as any;
+
+    mockMatrixUtils.setDashboardStateWriteError(new Error('offline'));
+    recentCards.add(`${realmURL}index`);
+    await settled();
+    recentCards.add(`${realmURL}index`);
+    await settled();
+    mockMatrixUtils.setDashboardStateWriteError();
+    recentCards.add(`${realmURL}index`);
+    await settled();
+
+    assert.notOk(
+      (mockMatrixUtils.getDashboardState() as any)?.openedCard,
+      'a homeserver rejecting writes is not asked again on every card opened',
+    );
+  });
+
+  test('cards this browser opened before login tick the step here but are not recorded on the account', async function (assert) {
+    setRecentCards([[`${realmURL}index`, Date.now()]]);
+    await visitOperatorMode({ workspaceChooserOpened: true });
+    await click(BUTTON);
+
+    assert.strictEqual(stepDone('open-card'), 'true');
+    assert.notOk(
+      (mockMatrixUtils.getDashboardState() as any)?.openedCard,
+      'the list may be another account’s',
+    );
+  });
+
+  test('connecting an agent and publishing do not tick the open-card step', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+      agent: 'claude',
+      agentSetup: { claude: 1 },
+    });
+    markHosted(realmURL);
+    await settled();
+
+    assert.dom('[data-test-get-started-count]').hasText('2 of 3 done');
+    assert.strictEqual(stepDone('open-card'), 'false');
   });
 
   test('picking a coding agent puts the agent step in place of the ask step', async function (assert) {
@@ -500,6 +658,55 @@ module('Acceptance | dashboard get started', function (hooks) {
     assert
       .dom('[data-test-section-rail-entry="agents"]')
       .hasAttribute('aria-current', 'location');
+  });
+
+  test('an Undo that fails to save keeps the note and says so', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+    await click('[data-test-get-started-dismiss]');
+
+    mockMatrixUtils.setDashboardStateWriteError(new Error('offline'));
+    await click('[data-test-get-started-undo-dismiss]');
+    await waitFor('[data-test-get-started-undo-error]');
+    mockMatrixUtils.setDashboardStateWriteError();
+
+    assert.dom('[data-test-get-started-dismissed]').exists('the note stays');
+    assert
+      .dom('[data-test-get-started-undo-error]')
+      .hasText('Couldn’t undo. Try again.');
+    assert
+      .dom('[data-test-get-started-error-announcement]')
+      .hasText('Couldn’t undo. Try again.', 'screen readers hear it');
+    assert.dom(GET_STARTED).doesNotExist();
+
+    await click('[data-test-get-started-undo-dismiss]');
+    assert.dom('[data-test-get-started-undo-error]').doesNotExist();
+    assert.dom(GET_STARTED).exists('the retry brings the list back');
+    assert.dom('[data-test-get-started-error-announcement]').hasNoText();
+  });
+
+  test('a failed Dismiss leaves no error behind once another device dismisses and undoes', async function (assert) {
+    await visitAsNewUser();
+    await openSteps();
+
+    mockMatrixUtils.setDashboardStateWriteError(new Error('offline'));
+    await click('[data-test-get-started-dismiss]');
+    await waitFor('[data-test-get-started-dismiss-error]');
+    mockMatrixUtils.setDashboardStateWriteError();
+    assert.dom('[data-test-get-started-dismiss-error]').exists();
+
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+      onboardingDismissed: true,
+    });
+    await settled();
+    await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+      onboardingDismissed: false,
+    });
+    await settled();
+    await openSteps();
+
+    assert.dom(GET_STARTED).exists();
+    assert.dom('[data-test-get-started-dismiss-error]').doesNotExist();
   });
 
   test('Dismiss saves that and leaves a note whose Undo brings the list back', async function (assert) {

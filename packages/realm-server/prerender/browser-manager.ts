@@ -1,4 +1,8 @@
 import { logger } from '@cardstack/runtime-common';
+import {
+  CHROME_NO_SANDBOX_ARGS,
+  chromeSandboxEnabled,
+} from '@cardstack/runtime-common/chrome-sandbox';
 import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import path from 'path';
@@ -29,16 +33,16 @@ export class BrowserManager {
     await this.cleanupUserDataDirs();
 
     let launchArgs: string[] = [];
-    // Always launch the prerender renderer with the Chromium sandbox off — it
-    // always has, and we require it to. This task runs only in a container
-    // where the sandbox can't initialize, so Chrome won't start with it on
-    // (and the V8 `--prof` diagnostic needs the renderer able to write its log
-    // to disk, which the sandbox blocks). The security boundary is the task
-    // itself: the prerenderer is a separate, segregated ECS task, isolated
-    // from the realm-server. Forced unconditionally rather than gated on CI /
-    // PUPPETEER_DISABLE_SANDBOX so a missing env var can't silently break the
-    // launch.
-    launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    // The renderer runs card code from any realm, so the sandbox stays on
+    // except in two cases:
+    // - On Linux, for the reasons `chromeSandboxEnabled` gives. The deployed
+    //   prerenderer is a Linux ECS task, and there the boundary is the task
+    //   itself: a separate ECS task, isolated from the realm-server.
+    // - Whenever the V8 `--prof` diagnostic is on. The renderer has to write its
+    //   log to disk, which the sandbox blocks.
+    if (!chromeSandboxEnabled() || v8ProfEnabled()) {
+      launchArgs.push(...CHROME_NO_SANDBOX_ARGS);
+    }
 
     // When the realm-server speaks HTTPS (local dev with a mkcert leaf
     // cert), Chromium needs to be told to accept it. mkcert's root CA
@@ -116,6 +120,13 @@ export class BrowserManager {
         e,
       );
     }
+  }
+
+  // The running Chrome's browser-process pid, without launching one. Undefined
+  // before the first launch, between a close and the relaunch, and when
+  // Puppeteer connected to a browser it didn't spawn.
+  browserPid(): number | undefined {
+    return this.#browser?.process()?.pid;
   }
 
   // SIGKILLs the running Chrome without waiting on it. Used when Chrome has

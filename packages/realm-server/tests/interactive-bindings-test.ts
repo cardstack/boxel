@@ -31,9 +31,9 @@ import { DEFAULT_KEY_LIMITS } from '../lib/key-limit-settings.ts';
 // ============================================================================
 // Interactive use of a binding, end to end against the stub vendor. A key's
 // owner approves a card's operations for interactive use as well as for
-// pipelines, and a card opened in the browser (an `_operations` request
+// automations, and a card opened in the browser (an `_operations` request
 // carrying the user's session) then sends the key, within the key's limits.
-// A binding approved for pipelines only refuses that call
+// A binding approved for automations only refuses that call
 // `interactive-use-not-approved`. A share's first interactive approval names
 // its daily budget.
 //
@@ -362,9 +362,9 @@ module(basename(import.meta.filename), function (hooks) {
     };
   }
 
-  // Invokes as a pipeline the realm server runs as `user`.
-  async function asPipeline(user: string, body: string) {
-    let response = (await realm.handlePipeline(
+  // Invokes as an automation the realm server runs as `user`.
+  async function asAutomation(user: string, body: string) {
+    let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
         headers: {
@@ -389,7 +389,7 @@ module(basename(import.meta.filename), function (hooks) {
     return rows.length === 0 ? 0 : Number(rows[0].count);
   }
 
-  test('the PR Inbox, approved interactively with a personal key, loads pull requests in the browser; one approved for pipelines only is refused there', async function (assert) {
+  test('the PR Inbox, approved interactively with a personal key, loads pull requests in the browser; one approved for automations only is refused there', async function (assert) {
     let key = await addKey();
     let approved = await approve(
       OWNER,
@@ -405,15 +405,20 @@ module(basename(import.meta.filename), function (hooks) {
       approved.body.data[0].attributes.interactive,
       'the binding allows interactive use',
     );
-    let pipelinesOnly = await approve(OWNER, PR_INBOX, ['listReviewRequests'], {
-      keyId: key.id,
-    });
-    assert.strictEqual(
-      pipelinesOnly.status,
-      201,
-      JSON.stringify(pipelinesOnly.body),
+    let automationsOnly = await approve(
+      OWNER,
+      PR_INBOX,
+      ['listReviewRequests'],
+      {
+        keyId: key.id,
+      },
     );
-    assert.false(pipelinesOnly.body.data[0].attributes.interactive);
+    assert.strictEqual(
+      automationsOnly.status,
+      201,
+      JSON.stringify(automationsOnly.body),
+    );
+    assert.false(automationsOnly.body.data[0].attributes.interactive);
 
     let loaded = await fromBrowser(OWNER, onInbox('listPRs'));
     assert.strictEqual(loaded.status, 200, JSON.stringify(loaded.body));
@@ -451,12 +456,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(vendor.requests.length, 1, 'nothing more was sent');
 
-    let pipeline = await asPipeline(OWNER, onInbox('listReviewRequests'));
-    assert.strictEqual(pipeline.status, 200, JSON.stringify(pipeline.body));
+    let automation = await asAutomation(OWNER, onInbox('listReviewRequests'));
+    assert.strictEqual(automation.status, 200, JSON.stringify(automation.body));
     assert.strictEqual(
       await budgetUsed('key', key.id),
       1,
-      'a pipeline call counts against nothing',
+      'an automation call counts against nothing',
     );
   });
 
@@ -488,7 +493,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('approving again without interactive use returns a binding to pipelines only, and each approval records which it allowed', async function (assert) {
+  test('approving again without interactive use returns a binding to automations only, and each approval records which it allowed', async function (assert) {
     let key = await addKey();
     let first = await approve(
       OWNER,
@@ -538,7 +543,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(rows.length, 0);
   });
 
-  test('a batch asked with interactive also answers what is approved for pipelines only, and says how each slot was approved', async function (assert) {
+  test('a batch asked with interactive also answers what is approved for automations only, and says how each slot was approved', async function (assert) {
     let key = await addKey();
     await approve(
       OWNER,
@@ -554,25 +559,25 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(
       operationsIn(await batchOf(OWNER, PR_INBOX)),
       [],
-      'both are approved, so a batch for pipelines has nothing to ask',
+      'both are approved, so a batch for automations has nothing to ask',
     );
     let forInteractive = operationsIn(
       await batchOf(OWNER, PR_INBOX, { interactive: true }),
     );
     assert.deepEqual(
       forInteractive.map((o) => [o.name, o.status]),
-      [['listReviewRequests', 'pipelines-only']],
-      'only the one approved for pipelines only needs approving for interactive use',
+      [['listReviewRequests', 'automations-only']],
+      'only the one approved for automations only needs approving for interactive use',
     );
     assert.false(forInteractive[0].slots[0].approved?.interactive);
   });
 
   test("a share's first interactive approval names its daily budget, which is set with it; later ones needn't", async function (assert) {
     let share = await addShare();
-    let pipelinesOnly = await approve(OWNER, TEAM_FEED, ['latest'], {
+    let automationsOnly = await approve(OWNER, TEAM_FEED, ['latest'], {
       shareId: share.id,
     });
-    assert.strictEqual(pipelinesOnly.status, 201);
+    assert.strictEqual(automationsOnly.status, 201);
     let refusedReader = await fromBrowser(READER, onTeamFeed());
     assert.strictEqual(refusedReader.code, 'interactive-use-not-approved');
     let readerDetail: string = refusedReader.body.errors[0].detail;

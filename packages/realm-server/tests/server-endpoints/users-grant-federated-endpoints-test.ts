@@ -4,8 +4,8 @@ import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { basename, join } from 'path';
 import { dirSync } from 'tmp';
-import sinon from 'sinon';
 import {
+  getOrCreateUser,
   param,
   query,
   rri,
@@ -17,7 +17,6 @@ import type {
   Realm,
   RealmPermissions,
 } from '@cardstack/runtime-common';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import type { RealmHttpServer as Server } from '../../server.ts';
@@ -35,17 +34,17 @@ import {
 // A signed-in session on the endpoints that answer for several realms at once,
 // for a realm it reads only through a grant the realm shares with callers.
 //
-// A realm's `users` grant lets every caller with a Matrix account read it, and
+// A realm's `users` grant lets every caller with a Boxel account read it, and
 // its `*` grant lets anyone read it. The federated endpoints read such a realm
 // to a caller as the realm itself does. No realm here names a policy.
 //
 // - Lib: anyone may read it, token or not. It holds the note type.
-// - Members: any registered Matrix user reads it, through its `users` grant.
+// - Members: any user with a Boxel account reads it, through its `users` grant.
 // - Private: only its owner reads it.
 // - Own: Lee reads it through a row of their own.
 // - Open: anyone may read it, and Lee has a row of their own on it that grants
 //   `write` but not `read`.
-// - Archived: any registered Matrix user would read it through its `users`
+// - Archived: any user with a Boxel account would read it through its `users`
 //   grant, but it is archived.
 // ============================================================================
 
@@ -86,7 +85,6 @@ function note(title: string) {
 }
 
 const MEMBERS_NOTES = [`${MEMBERS}notes/one`, `${MEMBERS}notes/two`];
-const OWN_NOTES = [`${OWN}notes/one`];
 const OPEN_NOTES = [`${OPEN}notes/one`];
 
 // The endpoints that refuse a realm the caller may not read, rather than
@@ -108,6 +106,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       let realms: Realm[] = [];
       let request: SuperTest<Test>;
       let server: Server;
+      let db: PgAdapter;
 
       async function start({
         dbAdapter,
@@ -118,6 +117,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         publisher: QueuePublisher;
         runner: QueueRunner;
       }) {
+        db = dbAdapter;
         let owner: RealmPermissions = {
           [OWNER]: ['read', 'write', 'realm-owner'],
         };
@@ -181,10 +181,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.timeout(300_000);
       });
 
-      hooks.afterEach(function () {
-        sinon.restore();
-      });
-
       setupDB(hooks, {
         before: async (dbAdapter, publisher, runner) => {
           await start({ dbAdapter, publisher, runner });
@@ -218,10 +214,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           .send({ filter: NOTES, realms: realmURLs });
       }
 
-      function hasProfile() {
-        sinon
-          .stub(MatrixClient.prototype, 'getProfile')
-          .resolves({ displayname: 'Lee' });
+      // Whether Lee holds a Boxel account: a row in the realm server's
+      // `users` table, which a person gets on their first sign-in. The server
+      // is shared by the module, so each test says which it wants.
+      async function hasAccount() {
+        await getOrCreateUser(db, LEE);
       }
 
       // A session a realm renders its own cards under.
@@ -236,12 +233,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       }
 
-      function hasNoProfile() {
-        sinon.stub(MatrixClient.prototype, 'getProfile').resolves(undefined);
+      async function hasNoAccount() {
+        await query(db, [
+          'DELETE FROM users WHERE matrix_user_id =',
+          param(LEE),
+        ]);
       }
 
       test('a signed-in user searches a realm they read through its `users` grant, with no policy to grant them `query`', async function (assert) {
-        hasProfile();
+        await hasAccount();
 
         let response = await federatedSearch([MEMBERS], session(LEE));
 
@@ -254,7 +254,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test("a `users`-grant realm answers alongside a realm the user can't read", async function (assert) {
-        hasProfile();
+        await hasAccount();
 
         let response = await federatedSearch([MEMBERS, PRIVATE], session(LEE));
 
@@ -266,8 +266,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      test('a user with no Matrix profile finds no rows in a `users`-grant realm', async function (assert) {
-        hasNoProfile();
+      test('a user with no Boxel account finds no rows in a `users`-grant realm', async function (assert) {
+        await hasNoAccount();
 
         let response = await federatedSearch([MEMBERS], session(LEE));
 
@@ -276,7 +276,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test('the endpoints that refuse an unreadable realm answer a user who reads it through its `users` grant', async function (assert) {
-        hasProfile();
+        await hasAccount();
         let token = session(LEE);
 
         for (let { path, accept } of REFUSING_ENDPOINTS) {
@@ -304,8 +304,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         }
       });
 
-      test('the endpoints that refuse an unreadable realm refuse a `users`-grant realm to a user with no Matrix profile', async function (assert) {
-        hasNoProfile();
+      test('the endpoints that refuse an unreadable realm refuse a `users`-grant realm to a user with no Boxel account', async function (assert) {
+        await hasNoAccount();
         let token = session(LEE);
 
         for (let { path, accept } of REFUSING_ENDPOINTS) {
@@ -320,7 +320,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test("a realm's render finds no rows in a `users`-grant realm, since what it renders is served to callers who aren't signed in", async function (assert) {
-        hasProfile();
+        await hasAccount();
 
         let response = await federatedSearch([MEMBERS], renderSession(LEE));
 
@@ -328,19 +328,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.deepEqual(ids(response), [], 'no rows');
       });
 
-      test("a homeserver that can't answer leaves the `users`-grant realm unread, and the realms the user reads outright still answer", async function (assert) {
-        sinon
-          .stub(MatrixClient.prototype, 'getProfile')
-          .rejects(new Error('homeserver unavailable'));
-
-        let response = await federatedSearch([OWN, MEMBERS], session(LEE));
-
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.deepEqual(ids(response), OWN_NOTES, "the readable realm's rows");
-      });
-
       test('an archived realm reads to no one through its `users` grant', async function (assert) {
-        hasProfile();
+        await hasAccount();
 
         let search = await federatedSearch([ARCHIVED], session(LEE));
         assert.strictEqual(search.status, 200, 'HTTP 200 status');
@@ -356,7 +345,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       });
 
       test("a realm anyone may read answers a user whose own row on it doesn't grant `read`", async function (assert) {
-        hasNoProfile();
+        await hasNoAccount();
 
         let response = await federatedSearch([OPEN], session(LEE));
 

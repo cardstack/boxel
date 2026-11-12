@@ -6,41 +6,25 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   query,
   param,
+  REALM_CHANGE_EVENTS_CHANNEL,
   SupportedMimeType,
   type ChangeEventChange,
-  type ChangeEventInput,
-  type ChangeJournal,
   type LocalPath,
-  type Querier,
   type Realm,
 } from '@cardstack/runtime-common';
 import { commitBatch } from '@cardstack/runtime-common/card-operations';
-import { PostgresChangeJournal } from '../lib/change-journal.ts';
 import {
   setupPermissionedRealmCached,
   createJWT,
+  waitUntil,
   withRealmPath,
   type RealmRequest,
 } from './helpers/index.ts';
+import { FailableChangeJournal } from './helpers/failable-change-journal.ts';
 
 // The change journal: every change to a recording realm's files leaves one
 // `realm_change_events` row, committed with the write's `realm_file_meta`
 // update, and a journal failure never fails the write.
-
-// The Postgres journal behind a switch a test can throw, so a test can make
-// one insert fail without reaching into the realm.
-class FailableJournal implements ChangeJournal {
-  #inner = new PostgresChangeJournal();
-  failNext = false;
-
-  async append(querier: Querier, event: ChangeEventInput): Promise<boolean> {
-    if (this.failNext) {
-      this.failNext = false;
-      throw new Error('the change journal is unavailable');
-    }
-    return await this.#inner.append(querier, event);
-  }
-}
 
 interface JournalRow {
   seq: number;
@@ -55,7 +39,7 @@ module(basename(import.meta.filename), function () {
   const realmURL = new URL('http://127.0.0.1:4444/test/');
   const realmHref = realmURL.href;
   const writer = '@john:localhost';
-  let journal = new FailableJournal();
+  let journal = new FailableChangeJournal();
   let testRealm: Realm;
   let request: RealmRequest;
   let dbAdapter: PgAdapter;
@@ -338,6 +322,33 @@ module(basename(import.meta.filename), function () {
         1,
         'the next write is journaled as usual',
       );
+    });
+
+    // realm-historian hashes the payload to a shard the same way it hashes a
+    // realm's registry id, so a task wakes only for the realms of the shards
+    // it holds. A payload that named the realm any other way would wake no
+    // task, and every task would fall back to its poll.
+    test("the journal's notification names the realm by its registry id", async function (assert) {
+      let realmId = await setRecording(true);
+      let payloads: string[] = [];
+      let subscription = await dbAdapter.subscribe(
+        REALM_CHANGE_EVENTS_CHANNEL,
+        (notification) => payloads.push(notification.payload ?? ''),
+      );
+      try {
+        assert.strictEqual(
+          (await postSource('notified.txt', 'wake up')).status,
+          204,
+        );
+        await waitUntil(async () => payloads.length > 0, {
+          timeout: 5000,
+          interval: 20,
+          timeoutMessage: 'the journal notification',
+        });
+      } finally {
+        await subscription.unsubscribe();
+      }
+      assert.deepEqual(payloads, [realmId]);
     });
 
     test('a realm whose recording is off writes no event', async function (assert) {

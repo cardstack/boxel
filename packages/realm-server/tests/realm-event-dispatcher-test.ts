@@ -588,6 +588,7 @@ module(basename(import.meta.filename), function () {
         (e) =>
           e.eventName === 'index' &&
           e.indexType === 'incremental' &&
+          !('realmWide' in e) &&
           e.invalidations[0] === `${REALM_A}card-0`,
       ),
       'the completion queued before it is delivered',

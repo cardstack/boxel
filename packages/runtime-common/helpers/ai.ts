@@ -398,6 +398,10 @@ function getEnumValues(
  * @param def - The field to generate the patch call specification for.
  * @param cardApi - The card API to use to generate the patch call specification
  * @param mappings - A map of field definitions to JSON schema
+ * @param expanding - The compound types whose schema is being built on the
+ *   current path. A field whose type is already on it (a field that contains
+ *   itself, directly or through other fields) gets an object schema with no
+ *   listed properties instead of being expanded again, so the schema ends.
  * @returns The generated patch call specification as JSON schema
  */
 function generateJsonSchemaForContainsFields(
@@ -409,6 +413,7 @@ function generateJsonSchemaForContainsFields(
     ignore?: string[];
     strict?: boolean;
   },
+  expanding: (typeof CardAPI.BaseDef)[] = [],
 ): AttributesSchema | undefined {
   let ignoreFields = options?.ignore || [];
   let requiredFields = options?.require || [];
@@ -446,6 +451,7 @@ function generateJsonSchemaForContainsFields(
   });
 
   let includedRequiredFields = [];
+  let nextExpanding = [...expanding, def];
   for (let [fieldName, field] of Object.entries(fields)) {
     // We're generating patch data, so computeds should be skipped
     // We'll be handling relationships separately in `generatePatchCallRelationshipsSpecification`
@@ -458,10 +464,20 @@ function generateJsonSchemaForContainsFields(
       continue;
     }
 
-    let fieldSchemaForSingleItem = generateJsonSchemaForContainsFields(
-      field.card,
-      cardApi,
-      mappings,
+    let fieldSchemaForSingleItem = (
+      nextExpanding.includes(field.card)
+        ? {
+            type: 'object',
+            properties: {},
+            description: `Same fields as the enclosing ${field.card.displayName}`,
+          }
+        : generateJsonSchemaForContainsFields(
+            field.card,
+            cardApi,
+            mappings,
+            undefined,
+            nextExpanding,
+          )
     ) as AttributesSchema | undefined;
     // This happens when we have no known schema for the field type
     if (fieldSchemaForSingleItem == undefined) {
@@ -568,15 +584,19 @@ function generateJsonSchemaForLinksToFields(
   return schema;
 }
 
+// `expanding` works as in `generateJsonSchemaForContainsFields`: the links
+// inside a field that contains itself are listed once, at the first level.
 function generateRelationshipFieldsInfo(
   def: typeof CardAPI.BaseDef,
   cardApi: typeof CardAPI,
   relationships: RelationshipFieldInfo[] = [],
   fieldName?: string,
+  expanding: (typeof CardAPI.BaseDef)[] = [],
 ) {
   const { id: _removedIdField, ...fields } = cardApi.getFields(def, {
     usedLinksToFieldsOnly: false,
   });
+  let nextExpanding = [...expanding, def];
   for (let [fName, fValue] of Object.entries(fields)) {
     let flatFieldName = fieldName ? `${fieldName}.${fName}` : fName;
     if (fValue.computeVia) {
@@ -590,12 +610,13 @@ function generateRelationshipFieldsInfo(
         fieldType: fValue.fieldType,
         description: cardApi.getFieldDescription(def, fName),
       });
-    } else {
+    } else if (!nextExpanding.includes(fValue.card)) {
       relationships = generateRelationshipFieldsInfo(
         fValue.card,
         cardApi,
         relationships,
         flatFieldName,
+        nextExpanding,
       );
     }
   }

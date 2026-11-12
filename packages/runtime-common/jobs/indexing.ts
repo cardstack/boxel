@@ -18,6 +18,7 @@ import { baseRealm, baseRealmRRI } from '../constants.ts';
 import { systemInitiatedPriority, userInitiatedPriority } from '../queue.ts';
 import { Deferred } from '../deferred.ts';
 import { parseSpawningIndexPasses } from './prerender-html.ts';
+import { parseRunIndexing, type RunIndexing } from '../run-indexing.ts';
 import { laneFamilyPredicate, writerLane, type Lane } from './lane-family.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { isObjectLike } from 'lodash-es';
@@ -97,16 +98,17 @@ export function indexingWriterLane(
 // bootstrap realms (catalog, skills, ...) stay at the system tier and get FIFO
 // position instead (see `getFullReindexRealmUrls`).
 //
-// Two pool shapes float above the system tier and could serve this: the
+// Three pool shapes float above the system tier and could serve this: the
+// dedicated index lane (`--userIndexCount` + `--indexJobsOnly`), which floors
+// at exactly this tier and registers only indexing job types; the
 // high-priority pool (`--highPriorityCount`), flooring one tier below
-// indexing, and the dedicated index lane (`--userIndexCount` +
-// `--indexJobsOnly`), which floors at exactly this tier and registers only
-// indexing job types. The lane would be the better home of the two — a
-// prerender-html sweep can neither hold it nor be held by it — but no
-// deployment configures it today, so in practice this reaches the
-// high-priority pool. A deployment that runs neither has no pool above the
-// lowest floor, so base's job waits its turn in the all-priority pool's FIFO
-// like anything else, and the sweep ordering is what covers that case.
+// indexing; and the automation pool (`--automationCount`), flooring at the
+// automation tier. The index lane is the best home of the three — a
+// prerender-html sweep can neither hold it nor be held by it. Whichever of
+// them a deployment runs, base's job reaches it ahead of the all-priority
+// pool's backlog. A deployment that runs none has no pool above the lowest
+// floor, so base's job waits its turn in the all-priority pool's FIFO like
+// anything else, and the sweep ordering is what covers that case.
 export function systemInitiatedIndexPriority(realmURL: string): number {
   return isBaseRealm(realmURL)
     ? userInitiatedPriority
@@ -714,10 +716,8 @@ function parseDeferredPrerenderHtml(
   if (!isObjectLike(value) || Array.isArray(value)) {
     return undefined;
   }
-  let { changes, spawningIndexPass, generation, loaderEpoch } = value as Record<
-    string,
-    PgPrimitive
-  >;
+  let { changes, spawningIndexPass, generation, loaderEpoch, runIndexing } =
+    value as Record<string, PgPrimitive>;
   if (
     !Array.isArray(changes) ||
     typeof generation !== 'number' ||
@@ -747,6 +747,7 @@ function parseDeferredPrerenderHtml(
     loaderEpoch,
     spawningIndexPass: pass ?? null,
     generation,
+    runIndexing: parseRunIndexing(runIndexing),
   };
 }
 
@@ -759,6 +760,8 @@ export interface IncrementalIndexEnqueueArgs {
   deferPrerenderHtml?: boolean;
   carriedPrerenderHtmlChanges?: IncrementalChange[];
   readsOwnWrite?: boolean;
+  // See IncrementalArgs.runIndexing.
+  runIndexing?: RunIndexing | null;
 }
 
 export function makeIncrementalArgsWithCallerMetadata(
@@ -792,6 +795,7 @@ export function makeIncrementalArgsWithCallerMetadata(
     carriedPrerenderHtmlChanges: args.carriedPrerenderHtmlChanges ?? [],
     readsOwnWrite: args.readsOwnWrite === true,
     realmEvents: caller?.realmEvents !== false,
+    runIndexing: args.runIndexing ?? null,
   };
 }
 

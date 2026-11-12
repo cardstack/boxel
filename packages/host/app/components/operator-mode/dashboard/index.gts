@@ -15,17 +15,18 @@ import { Button } from '@cardstack/pretui/components/button';
 import { Collapsible } from '@cardstack/pretui/components/collapsible';
 import { SegmentedControl } from '@cardstack/pretui/components/segmented-control';
 import { Spinner } from '@cardstack/pretui/components/spinner';
+import { add, and, eq, gt, not, or } from '@cardstack/pretui/helpers';
 import { didCancel, dropTask } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
-import { add, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 import {
   FailureBordered as FailureIcon,
   WarningTriangleFilled as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
-import { logger } from '@cardstack/runtime-common';
+import { logger, nowDate } from '@cardstack/runtime-common';
 
 import {
   isHostedRealm,
@@ -98,7 +99,9 @@ export default class Dashboard extends Component<Signature> {
     }
   }
 
-  @tracked private hour = new Date().getHours();
+  // Read through the clock seam: tests pin it, so a visual comparison of the
+  // dashboard doesn't depend on the hour the suite ran at.
+  @tracked private hour = nowDate().getHours();
 
   private get greeting() {
     return greetingFor(this.hour, this.matrixService.profile.displayName);
@@ -117,7 +120,7 @@ export default class Dashboard extends Component<Signature> {
     };
     let update = () => {
       clearTimeout(timer);
-      this.hour = new Date().getHours();
+      this.hour = nowDate().getHours();
       schedule();
     };
     let onVisibilityChange = () => {
@@ -576,31 +579,43 @@ export default class Dashboard extends Component<Signature> {
             <:head as |getStarted|>
               <header class='page-head'>
                 <div class='greeting-line'>
-                  {{! Percy hides the greeting: it changes with the hour. }}
                   <h1
                     class='greeting'
                     {{this.trackHour}}
                     data-test-dashboard-greeting
-                    data-test-percy-hide
                   >{{this.greeting}}</h1>
                   {{#if getStarted.isReady}}
                     {{! Light mode on the dark dashboard, so the neutral open state
-                        is a dark fill rather than a light one. }}
-                    <Button
-                      class={{cn
-                        'get-started-button'
-                        is-open=getStarted.isOpen
-                      }}
-                      @tone={{if getStarted.isOpen 'neutral' 'primary'}}
-                      @appearance='accent'
-                      @size='m'
-                      @shape='pill'
-                      aria-expanded={{if getStarted.isOpen 'true' 'false'}}
-                      aria-controls={{if getStarted.isOpen getStarted.panelId}}
-                      data-theme='light'
-                      {{on 'click' getStarted.toggle}}
-                      data-test-get-started-button
-                    >Get started</Button>
+                        is a dark fill rather than a light one. Once every step
+                        is done, closed it's an outline in the page's own
+                        theme, so it no longer calls for attention. }}
+                    {{#let
+                      (and getStarted.isComplete (not getStarted.isOpen))
+                      as |isQuiet|
+                    }}
+                      <Button
+                        class={{cn
+                          'get-started-button'
+                          is-open=getStarted.isOpen
+                        }}
+                        @tone={{if
+                          (or getStarted.isOpen getStarted.isComplete)
+                          'neutral'
+                          'primary'
+                        }}
+                        @appearance={{if isQuiet 'outlined' 'accent'}}
+                        @size='m'
+                        @shape='pill'
+                        aria-expanded={{if getStarted.isOpen 'true' 'false'}}
+                        aria-controls={{if
+                          getStarted.isOpen
+                          getStarted.panelId
+                        }}
+                        data-theme={{unless isQuiet 'light'}}
+                        {{on 'click' getStarted.toggle}}
+                        data-test-get-started-button
+                      >Get started</Button>
+                    {{/let}}
                   {{/if}}
                 </div>
                 <SegmentedControl
