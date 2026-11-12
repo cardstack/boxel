@@ -1410,46 +1410,50 @@ module('recorder', (hooks) => {
     );
   });
 
-  test("a background job gives way when its realm's queue fills, and counts as skipped", async (assert) => {
-    // Without the fix this waits forever rather than failing.
-    assert.timeout(10_000);
-    let target = recorder({ maxQueuedEvents: 2 });
-    let started = false;
-    let job = target.runBackground({
-      kind: 'long',
-      stallOnFailure: true,
-      run: async ({ signal }) => {
-        started = true;
-        await new Promise((resolve) =>
-          signal.addEventListener('abort', resolve),
+  for (let ending of ['throws', 'returns'] as const) {
+    test(`a background job gives way when its realm's queue fills, and counts as skipped when it then ${ending}`, async (assert) => {
+      // Without the fix this waits forever rather than failing.
+      assert.timeout(10_000);
+      let target = recorder({ maxQueuedEvents: 2 });
+      let started = false;
+      let job = target.runBackground({
+        kind: 'long',
+        stallOnFailure: true,
+        run: async ({ signal }) => {
+          started = true;
+          await new Promise((resolve) =>
+            signal.addEventListener('abort', resolve),
+          );
+          if (ending === 'throws') {
+            throw signal.reason;
+          }
+        },
+      });
+      await waitUntil(() => started, { what: 'the job to start' });
+      let events: ChangeEvent[] = [];
+      for (let i = 0; i < 3; i++) {
+        events.push(
+          await event({
+            author: ALICE,
+            changes: [await put(`card-${i}.json`, `{"i":${i}}`, 'A')],
+            occurredAt: at(i * 100),
+          }),
         );
-        throw signal.reason;
-      },
-    });
-    await waitUntil(() => started, { what: 'the job to start' });
-    let events: ChangeEvent[] = [];
-    for (let i = 0; i < 3; i++) {
-      events.push(
-        await event({
-          author: ALICE,
-          changes: [await put(`card-${i}.json`, `{"i":${i}}`, 'A')],
-          occurredAt: at(i * 100),
-        }),
-      );
-    }
-    for (let next of events) {
-      await target.record(next);
-    }
+      }
+      for (let next of events) {
+        await target.record(next);
+      }
 
-    assert.strictEqual(await job, 'skipped');
-    assert.strictEqual(target.state, 'running', 'the realm did not stall');
-    target.tick(T0 + 200 + quietPeriodMs);
-    await target.settled();
-    assert.deepEqual(await coveredSeqs(await history()), [
-      events.map(({ seq }) => seq),
-    ]);
-    assert.deepEqual(fatals, []);
-  });
+      assert.strictEqual(await job, 'skipped');
+      assert.strictEqual(target.state, 'running', 'the realm did not stall');
+      target.tick(T0 + 200 + quietPeriodMs);
+      await target.settled();
+      assert.deepEqual(await coveredSeqs(await history()), [
+        events.map(({ seq }) => seq),
+      ]);
+      assert.deepEqual(fatals, []);
+    });
+  }
 
   test('a failing background job fails alone, unless its kind stalls the realm', async (assert) => {
     let target = recorder();
