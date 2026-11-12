@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
+import jsonwebtoken from 'jsonwebtoken';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   insertPermissions,
@@ -9,6 +10,7 @@ import {
   param,
   query,
   ri,
+  revokeUserSessions,
   rri,
   SupportedMimeType,
   type DBAdapter,
@@ -32,6 +34,7 @@ import {
   createJWT,
   createVirtualNetwork,
   insertUser,
+  realmSecretSeed,
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
@@ -105,6 +108,14 @@ module(basename(import.meta.filename), function (hooks) {
   setupCatalogTestSubset(hooks);
 
   module('a realm with direct writers and a reader', function (hooks) {
+    // The route reads the realm's clock for each trigger's next run.
+    hooks.beforeEach(function () {
+      (globalThis as { __boxelNow?: number }).__boxelNow = NOW * 1000;
+    });
+    hooks.afterEach(function () {
+      delete (globalThis as { __boxelNow?: number }).__boxelNow;
+    });
+
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
     });
@@ -509,6 +520,82 @@ module(basename(import.meta.filename), function (hooks) {
           `Bearer ${createJWT(usersRealm, STRANGER, ['read', 'write'])}`,
         );
       assert.strictEqual(response.status, 403, 'HTTP 403');
+    });
+  });
+
+  module('a realm anyone can read', function (hooks) {
+    let publicRealm: Realm;
+    let publicRequest: SuperTest<Test>;
+    let publicServer: Server;
+    let publicDB: PgAdapter;
+
+    hooks.afterEach(async function () {
+      await closeServer(publicServer);
+    });
+
+    setupPermissionedRealmCached(hooks, {
+      fixture: 'blank',
+      permissions: {
+        '*': ['read'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
+        [ADMIN]: ['read', 'write'],
+      },
+      onRealmSetup(args) {
+        publicRealm = args.testRealm;
+        publicRequest = args.request;
+        publicServer = args.testRealmHttpServer;
+        publicDB = args.dbAdapter as PgAdapter;
+      },
+    });
+
+    // A realm session issued a minute ago, so a revocation recorded now
+    // postdates it.
+    function backdatedSession(user: string) {
+      let iat = Math.floor(Date.now() / 1000) - 60;
+      return jsonwebtoken.sign(
+        {
+          user,
+          realm: publicRealm.url,
+          permissions: ['read', 'write'],
+          sessionRoom: `test-session-room-for-${user}`,
+          realmServerURL: publicRealm.realmServerURL,
+          iat,
+          exp: iat + 900,
+        },
+        realmSecretSeed,
+      );
+    }
+
+    function status(authorization?: string) {
+      let request = publicRequest
+        .get(
+          `/_automation-status?automation=${encodeURIComponent(
+            `${publicRealm.url}automations/nightly`,
+          )}`,
+        )
+        .set('Accept', SupportedMimeType.JSON);
+      return authorization
+        ? request.set('Authorization', authorization)
+        : request;
+    }
+
+    test('an anonymous reader is refused', async function (assert) {
+      assert.strictEqual((await status()).status, 403);
+    });
+
+    test("a direct writer's revoked session asks as no one", async function (assert) {
+      let session = backdatedSession(ADMIN);
+      assert.strictEqual(
+        (await status(`Bearer ${session}`)).status,
+        200,
+        'the session answers before it is revoked',
+      );
+      await revokeUserSessions(publicDB, ADMIN);
+      assert.strictEqual(
+        (await status(`Bearer ${session}`)).status,
+        403,
+        'the revoked session is refused',
+      );
     });
   });
 });

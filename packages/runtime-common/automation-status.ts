@@ -23,6 +23,7 @@ import {
   type AutomationRunResult,
   type AutomationState,
 } from './automations.ts';
+import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
 import {
   isDirectWriter,
@@ -100,6 +101,7 @@ export async function answerAutomationStatus({
   viewer,
   automation,
   readInstance,
+  now = Math.floor(clockNow() / 1000),
 }: {
   dbAdapter: DBAdapter;
   realmURL: URL;
@@ -112,6 +114,8 @@ export async function answerAutomationStatus({
   // The `automation` query parameter.
   automation: string | null;
   readInstance: (url: URL) => Promise<IndexedInstanceSource | undefined>;
+  // Unix seconds; the realm's clock when absent.
+  now?: number;
 }): Promise<AutomationStatusAnswer> {
   if (
     !viewer ||
@@ -161,6 +165,7 @@ export async function answerAutomationStatus({
       declaration,
       viewer,
       payerShown,
+      now,
     }),
   };
 }
@@ -176,12 +181,15 @@ export function automationStatusDocument({
   declaration,
   viewer,
   payerShown,
+  now,
 }: {
   url: string;
   row: AutomationRow | undefined;
   declaration: AutomationDeclaration | undefined;
   viewer: string;
   payerShown: boolean;
+  // Unix seconds.
+  now: number;
 }): AutomationStatusDocument {
   return {
     data: {
@@ -197,21 +205,30 @@ export function automationStatusDocument({
             nextRun: isoOrNull(row.nextRun),
             lastResult: row.lastResult,
             lastFinishedAt: row.lastFinishedAt,
-            triggers: triggerStatuses(row, declaration),
+            triggers: triggerStatuses(row, declaration, now),
           }
         : { switchedOn: false },
     },
   };
 }
 
+// How long one answer may spend counting runs left, in milliseconds. A
+// bounded trigger's count scans each slot up to its `until`, which takes tens
+// of milliseconds for a daily trigger decades out, and a card may declare any
+// number of triggers. Past the budget, the remaining triggers report no
+// `runsLeft`, and the view shows their runs so far and their end alone.
+export const RUNS_LEFT_BUDGET_MS = 250;
+
 // Each trigger the card declares, in the card's order, with its run count
-// from the row. The schedule runs from the row's `since` and run counts with
-// no `now`, so a slot that has passed but hasn't been enqueued yet still
-// counts as left, as the card's view wants. Without a declaration, each
-// trigger the row has counted.
+// from the row. The next run and whether a trigger is spent are computed at
+// `now`, as the tick computes them, so a slot that came due and isn't
+// enqueued yet reads as due now. Runs left are counted without `now`, so such
+// a slot still counts as left. Without a declaration, each trigger the row
+// has counted.
 function triggerStatuses(
   row: AutomationRow,
   declaration: AutomationDeclaration | undefined,
+  now: number,
 ): AutomationTriggerStatus[] {
   if (!declaration) {
     return Object.entries(row.triggerRuns).map(([label, state]) => ({
@@ -223,9 +240,10 @@ function triggerStatuses(
     triggers: declaration.triggers,
     since: row.scheduledSince,
     runState: row.triggerRuns,
-    includeRemainingRuns: true,
+    now,
   });
   let scheduledByLabel = new Map(schedule.triggers.map((t) => [t.label, t]));
+  let countingStarted = performance.now();
   return declaration.triggers.map((trigger) => {
     let label = trigger.label;
     let status: AutomationTriggerStatus = {
@@ -236,10 +254,21 @@ function triggerStatuses(
     if (!scheduled) {
       return status;
     }
-    if (scheduled.remainingRuns !== undefined) {
-      status.runsLeft = scheduled.remainingRuns;
-      if (scheduled.remainingRunsAtLeast) {
-        status.runsLeftAtLeast = true;
+    if (
+      trigger.kind !== 'webhook' &&
+      performance.now() - countingStarted < RUNS_LEFT_BUDGET_MS
+    ) {
+      let [counted] = computeAutomationSchedule({
+        triggers: [trigger],
+        since: row.scheduledSince,
+        runState: { [label]: row.triggerRuns[label] },
+        includeRemainingRuns: true,
+      }).triggers;
+      if (counted?.remainingRuns !== undefined) {
+        status.runsLeft = counted.remainingRuns;
+        if (counted.remainingRunsAtLeast) {
+          status.runsLeftAtLeast = true;
+        }
       }
     }
     let until = trigger.kind === 'once' ? trigger.at : scheduled.until;

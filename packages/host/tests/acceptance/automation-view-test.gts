@@ -258,7 +258,7 @@ module('Acceptance | automation view', function (hooks) {
     await openIsolated();
     await waitForStatus();
     assert.dom('[data-test-automation-state="On"]').exists();
-    assert.dom('[data-test-automation-status]').includesText('Paid by You');
+    assert.dom('[data-test-automation-status]').includesText('Payer You');
     assert
       .dom('[data-test-automation-status]')
       .includesText('Last run: Completed');
@@ -302,7 +302,7 @@ module('Acceptance | automation view', function (hooks) {
     await waitForStatus();
     assert
       .dom('[data-test-automation-status]')
-      .includesText('Paid by A person who shares no workspace with you');
+      .includesText('Payer A person who shares no workspace with you');
   });
 
   test('a paused, waiting and done automation each read with that state', async function (assert) {
@@ -315,7 +315,7 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'paused', pauseReason: 'caps-raised' },
         'Paused',
-        'An edit raised a limit above what the payer agreed to pay for, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and agrees to the new limits.',
+        'Someone raised a limit above what the payer agreed to pay for, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and agrees to the new limits.',
       ],
       [
         { state: 'paused', pauseReason: 'payer-lost-access' },
@@ -340,7 +340,7 @@ module('Acceptance | automation view', function (hooks) {
           })),
         },
         'Done',
-        'Every trigger has started as many runs as the trigger allows, so Boxel runs nothing more. Adding a trigger starts the automation again.',
+        "Every trigger has used up the trigger's runs or passed the trigger's end, so Boxel runs nothing more. Boxel runs the automation again when someone who can edit this workspace adds a trigger.",
       ],
     ];
     for (let [change, label, sentence] of cases) {
@@ -371,6 +371,6 @@ module('Acceptance | automation view', function (hooks) {
       .includesText('Runs left None', 'a spent trigger has no runs left');
     assert
       .dom('[data-test-automation-status]')
-      .includesText('None scheduled', 'a done automation has no next run');
+      .includesText('Next run None', 'a done automation has no next run');
   });
 });

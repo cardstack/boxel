@@ -1188,6 +1188,9 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   read.
 // - `_sign-capture-urls` signs the URLs of the capture serve, which the ACL
 //   alone admits a caller to.
+// - `_automation-status` answers an automation's server row, which only the
+//   realm's direct writers see (see `automation-status.ts`). A grant reaches
+//   a card, not the row.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
 // differently on some of them (see `#refusalUnderPolicy`), as does the
@@ -17568,7 +17571,7 @@ export class Realm {
         undefined,
         this.#virtualNetwork,
       ),
-      viewer: requestContext.authenticatedUser,
+      viewer: await this.#statusViewer(requestContext),
       automation: new URL(request.url).searchParams.get(
         AUTOMATION_STATUS_PARAM,
       ),
@@ -17597,6 +17600,20 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // Who asks for an automation's status: the session the realm vouches for
+  // (`#sessionPrincipal`), so a revoked session or one delegated to another
+  // realm asks as no one. A realm-authority session is a realm rendering its
+  // own cards, and a diagnostic session is an operator reading as a user;
+  // neither is a person looking at the card, so neither sees the payer.
+  async #statusViewer(
+    requestContext: RequestContext,
+  ): Promise<string | undefined> {
+    if (requestContext.realmAuthority || requestContext.diagnosticSession) {
+      return undefined;
+    }
+    return await this.#sessionPrincipal(requestContext);
   }
 
   private async patchRealmPermissions(
