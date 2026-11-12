@@ -186,7 +186,7 @@ function parseExcelSerial(
 
 export function resolveEffectiveTimeZone(input?: string): string {
   try {
-    return input ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+    return input ?? cachedDateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
   } catch {
     return input ?? 'UTC';
   }

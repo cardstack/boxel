@@ -26,13 +26,23 @@ const CONSTRUCTORS: IntlConstructor[] = [
 ];
 
 // Runs `fn` with every Intl constructor the helpers use wrapped in a counter,
-// and returns how many formatters it built.
+// and returns how many formatters it built. Calling an Intl constructor
+// without `new` (`Intl.DateTimeFormat()`) also builds a formatter, so both
+// traps count.
 function constructionsDuring(fn: () => void): number {
   let intl = Intl as unknown as Record<IntlConstructor, object>;
   let originals = CONSTRUCTORS.map((name) => [name, intl[name]] as const);
   let count = 0;
   for (let [name, original] of originals) {
     intl[name] = new Proxy(original, {
+      apply(target, thisArg, args) {
+        count++;
+        return Reflect.apply(
+          target as (...a: unknown[]) => object,
+          thisArg,
+          args,
+        );
+      },
       construct(target, args, newTarget) {
         count++;
         return Reflect.construct(
@@ -169,6 +179,27 @@ module('Unit | intl formatter reuse', function () {
     );
   });
 
+  test('formatDateTime in the default time zone reuses its formatters', function (assert) {
+    // No `timeZone`: the helper resolves the host's zone, which is the path
+    // a bare `{{formatDateTime row.date}}` in a template takes.
+    let medium = () =>
+      formatDateTime(NOW, { locale: 'en-SG', preset: 'medium' });
+    let tiny = () =>
+      formatDateTime(NOW, { locale: 'en-SG', now: NOW, preset: 'tiny' });
+    let first = medium();
+    tiny();
+
+    assert.ok(first.length > 0, `formats: ${first}`);
+    assert.strictEqual(
+      constructionsDuring(() => {
+        assert.strictEqual(medium(), first);
+        tiny();
+      }),
+      0,
+      'repeat calls build nothing, including resolving the default time zone',
+    );
+  });
+
   test('formatRelativeTime reuses its formatters and keeps numeric styles apart', function (assert) {
     let twoDaysBefore = new Date(NOW.getTime() - 2 * DAY);
     let dayBefore = new Date(NOW.getTime() - DAY);
@@ -211,6 +242,28 @@ module('Unit | intl formatter reuse', function () {
     run();
 
     assert.strictEqual(constructionsDuring(run), 0);
+  });
+
+  test('the cache drops its oldest formatter once it holds 500 of a kind', function (assert) {
+    // Private-use locale tags are valid and distinct, so each one keys a
+    // formatter of its own, the way per-row locales from card data would.
+    let tag = (n: number) => `en-x-cap${String(n).padStart(4, '0')}`;
+    let format = (n: number) =>
+      formatNumber(1.5, { locale: tag(n), style: 'percent' });
+    for (let n = 0; n < 600; n++) {
+      format(n);
+    }
+
+    assert.strictEqual(
+      constructionsDuring(() => format(599)),
+      0,
+      'a recent formatter is still cached',
+    );
+    assert.strictEqual(
+      constructionsDuring(() => format(0)),
+      1,
+      'the oldest formatter was dropped and is rebuilt',
+    );
   });
 
   test('a formatter that fails to build is not cached', function (assert) {
