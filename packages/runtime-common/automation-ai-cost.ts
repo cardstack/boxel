@@ -32,7 +32,7 @@ export interface AIModelPrice {
   contextLength: number | null;
   // The other rates the model lists (OpenRouter's `pricing.overrides`), each
   // charged in place of the rates above when its conditions hold: a prompt of
-  // at least `minPromptTokens` tokens, or a time of day or week.
+  // more than `minPromptTokens` tokens, or a time of day or week.
   tiers?: AIModelPriceTier[];
 }
 
@@ -47,8 +47,8 @@ type AIModelRates = Pick<
 // One of a model's other listed rates. A rate the tier doesn't list is the
 // model's base rate.
 export interface AIModelPriceTier {
-  // The fewest prompt tokens the tier charges at, or null when the tier's
-  // conditions don't depend on the prompt's length.
+  // The tier charges a prompt of more than this many tokens, or this is null
+  // when the tier's conditions don't depend on the prompt's length.
   minPromptTokens: number | null;
   promptUsdPerToken: number;
   cacheWriteUsdPerToken?: number;
@@ -179,7 +179,7 @@ export function readOpenRouterModelPrice(
 // - **Per request**: the model's request price.
 // - **Rates**: the highest of the model's base rates and each tier the
 //   request can reach. A tier with a `minPromptTokens` is reachable when the
-//   input bound is at least that many tokens. A tier set by the time of day
+//   input bound is more than that many tokens. A tier set by the time of day
 //   or week is always reachable, since a request can be sent, or a batch's
 //   requests worked through, at any time.
 //
@@ -250,7 +250,7 @@ export function aiRequestCostCeiling(
     price,
     ...(price.tiers ?? []).filter(
       (tier) =>
-        tier.minPromptTokens === null || inputTokens >= tier.minPromptTokens,
+        tier.minPromptTokens === null || inputTokens > tier.minPromptTokens,
     ),
   ];
   let usd = Math.max(

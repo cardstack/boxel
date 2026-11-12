@@ -484,6 +484,25 @@ const tests = Object.freeze({
       'a request whose input bound is under the threshold is priced at the base rates',
     );
 
+    let atThreshold = {
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: 'x' }],
+    };
+    let thresholdBody = JSON.stringify({
+      model: PRICE.modelId,
+      ...atThreshold,
+    });
+    let exactly: AIModelPrice = {
+      ...tiered,
+      tiers: [{ ...tiered.tiers![0], minPromptTokens: bytes(thresholdBody) }],
+    };
+    close(
+      assert,
+      ceilingOf(atThreshold, exactly).ceiling.credits,
+      ceilingOf(atThreshold).ceiling.credits,
+      'an input bound equal to the threshold can’t cross it, since a tier charges only prompts longer than its threshold',
+    );
+
     let long = ceilingOf(
       {
         max_tokens: 1000,
