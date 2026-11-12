@@ -18,11 +18,11 @@
 // a batch's cost only once it ends, and only for one that completed, so the
 // settle job bills this estimate for a batch that ends with no reported cost.
 //
-// `run_ai_reservations` holds the ids of the reservations the batch's requests
-// took on the submitting run's AI spending cap (`ai_reservations` on
-// `automation_runs`), each at twice the request's worst case at the model's
-// listed price (ADR 030 §1.4). They hold against the cap until the batch is
-// settled. A jsonb array of strings, as `jobs.initiated_by` is.
+// `run_ai_reservation` is the id of the reservation the batch took on the
+// submitting run's AI spending cap (a key of `ai_reservations` on
+// `automation_runs`): twice its requests' worst case at the model's listed
+// price (ADR 030 §1.4). It holds against the cap until the batch is
+// settled.
 //
 // `deadline` is how long the submitting script will wait for the results,
 // at most 24 hours after submission. `expires_at` is when OpenRouter says
@@ -49,7 +49,7 @@ exports.up = (pgm) => {
       model text NOT NULL,
       request_count integer NOT NULL,
       estimated_usd numeric NOT NULL,
-      run_ai_reservations jsonb NOT NULL DEFAULT '[]'::jsonb,
+      run_ai_reservation text NOT NULL,
       deadline timestamptz NOT NULL,
       expires_at timestamptz,
       state text NOT NULL,

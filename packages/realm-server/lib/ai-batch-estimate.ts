@@ -43,9 +43,10 @@ export type AIBatchEstimateResult =
   | {
       ok: true;
       estimate: AIBatchEstimate;
-      // The model's own listed price, which a run's AI spending cap counts
-      // batched requests against (ADR 030 §1.4).
-      listedPrice: AIModelPrice;
+      // The batch's worst case at the model's own listed price, in credits:
+      // what a run's AI spending cap counts its requests at, twice over
+      // (ADR 030 §1.4).
+      listedCredits: number;
     }
   | {
       ok: false;
@@ -76,22 +77,35 @@ export async function estimateAIBatch(
   // listing's rates are priced under the model's own id.
   let price: AIModelPrice = batch ? { ...batch, modelId: model } : listed;
   let usd = 0;
+  let listedCredits = 0;
   for (let [index, body] of requestBodies.entries()) {
-    let priced = aiRequestCostCeiling(body, price);
-    if (!priced.ok) {
-      return {
-        ok: false,
-        reason: priced.reason,
-        message: `Request ${index + 1} of the batch: ${priced.message}`,
-      };
+    let atBatch = aiRequestCostCeiling(body, price);
+    if (!atBatch.ok) {
+      return refuseRequest(index, atBatch);
+    }
+    let atListed = batch ? aiRequestCostCeiling(body, listed) : atBatch;
+    if (!atListed.ok) {
+      return refuseRequest(index, atListed);
     }
     // The record keeps USD, the unit OpenRouter reports a batch's cost in.
-    usd += priced.ceiling.credits / CREDITS_PER_USD;
+    usd += atBatch.ceiling.credits / CREDITS_PER_USD;
+    listedCredits += atListed.ceiling.credits;
   }
   return {
     ok: true,
     estimate: { usd, pricedAs: batch ? batch.modelId : model },
-    listedPrice: listed,
+    listedCredits,
+  };
+}
+
+function refuseRequest(
+  index: number,
+  refusal: { reason: AIRequestCostRefusal; message: string },
+): AIBatchEstimateResult {
+  return {
+    ok: false,
+    reason: refusal.reason,
+    message: `Request ${index + 1} of the batch: ${refusal.message}`,
   };
 }
 

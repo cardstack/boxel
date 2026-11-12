@@ -35,10 +35,10 @@ export interface AIBatch {
   // The most the batch can cost, in USD: each request's input and
   // output-token limit at the model's listed batch price.
   estimatedUsd: number;
-  // The reservations the batch's requests hold on the submitting run's AI
-  // spending cap, each at twice the request's worst case at the normal
-  // price, for the settle job to settle when the batch ends.
-  runAIReservations: string[];
+  // The reservation the batch holds on the submitting run's AI spending cap,
+  // at twice its requests' worst case at the normal price, for the settle job
+  // to settle when the batch ends.
+  runAIReservation: string;
   // How long the submitting script waits for the results.
   deadline: string;
   // When OpenRouter says its provider stops working on the batch, if it
@@ -59,7 +59,7 @@ export interface NewAIBatch {
   model: string;
   requestCount: number;
   estimatedUsd: number;
-  runAIReservations: string[];
+  runAIReservation: string;
   deadline: Date;
   expiresAt: Date | null;
   state: string;
@@ -86,7 +86,7 @@ export async function recordAIBatch(
     );
   }
   let [created] = await query(dbAdapter, [
-    'INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, estimated_usd, run_ai_reservations, deadline, expires_at, state) VALUES (',
+    'INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, estimated_usd, run_ai_reservation, deadline, expires_at, state) VALUES (',
     param(batch.batchId),
     ',',
     param(batch.runId),
@@ -102,9 +102,9 @@ export async function recordAIBatch(
     param(batch.requestCount),
     ',',
     param(batch.estimatedUsd),
-    ', CAST(',
-    param(JSON.stringify(batch.runAIReservations)),
-    'AS jsonb),',
+    ',',
+    param(batch.runAIReservation),
+    ',',
     param(batch.deadline.toISOString()),
     ',',
     param(batch.expiresAt ? batch.expiresAt.toISOString() : null),
@@ -173,18 +173,13 @@ function batchFromRow(row: Record<string, PgPrimitive>): AIBatch {
     model: String(row.model),
     requestCount: Number(row.request_count),
     estimatedUsd: Number(row.estimated_usd),
-    runAIReservations: jsonStrings(row.run_ai_reservations),
+    runAIReservation: String(row.run_ai_reservation),
     deadline: iso(row.deadline)!,
     expiresAt: iso(row.expires_at),
     state: String(row.state),
     stateReadAt: iso(row.state_read_at)!,
     submittedAt: iso(row.submitted_at)!,
   };
-}
-
-function jsonStrings(value: PgPrimitive | undefined): string[] {
-  let parsed = typeof value === 'string' ? JSON.parse(value) : value;
-  return Array.isArray(parsed) ? parsed.map(String) : [];
 }
 
 function iso(value: PgPrimitive | undefined): string | null {

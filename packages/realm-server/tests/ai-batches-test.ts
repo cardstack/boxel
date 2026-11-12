@@ -500,10 +500,9 @@ module(basename(import.meta.filename), function () {
         `the estimate is each request's worst case at the batch price (${batch!.estimatedUsd} vs ${expected})`,
       );
 
-      assert.strictEqual(
-        batch!.runAIReservations.length,
-        2,
-        'each request holds a reservation on the run’s AI cap',
+      assert.ok(
+        batch!.runAIReservation,
+        'the batch holds a reservation on the run’s AI cap',
       );
       let reservedCredits =
         (requestCeilingUsd(
@@ -521,7 +520,7 @@ module(basename(import.meta.filename), function () {
       let held = (await getAutomationRun(dbAdapter, run.id))!.aiCreditsReserved;
       assert.ok(
         Math.abs(held - reservedCredits) < 1e-9,
-        `the run holds twice each request's worst case at the listed price (${held} vs ${reservedCredits})`,
+        `the run holds twice its requests' worst case at the listed price (${held} vs ${reservedCredits})`,
       );
 
       assert.strictEqual(
@@ -676,7 +675,7 @@ module(basename(import.meta.filename), function () {
 
     test('a batch that would pass the run’s AI cap is refused before anything is sent', async function (assert) {
       // Each request's worst case at the listed price is about 1.2 credits,
-      // so two of them reserved at twice that pass a 4-credit cap.
+      // so two of them, reserved at twice that, pass a 4-credit cap.
       await switchOn(AUTOMATION, true, 4);
       let { run, token } = await runningRun();
 
@@ -684,18 +683,18 @@ module(basename(import.meta.filename), function () {
 
       assert.strictEqual(response.status, 403);
       assert.ok(
-        response.body.errors[0].startsWith('Request 2 of the batch'),
+        response.body.errors[0].startsWith('This batch of 2 requests'),
         response.body.errors[0],
       );
       assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
       assert.strictEqual(
         (await getAutomationRun(dbAdapter, run.id))!.aiCreditsReserved,
         0,
-        'the first request’s reservation is released',
+        'nothing is reserved',
       );
     });
 
-    test('a batch OpenRouter refuses releases its reservations', async function (assert) {
+    test('a batch OpenRouter refuses releases its reservation', async function (assert) {
       await switchOn();
       let { run, token } = await runningRun();
       submitAnswer = {
@@ -712,7 +711,29 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a submit whose outcome is unknown keeps its reservations and records nothing', async function (assert) {
+    test('a 5xx answer to a submit is an unknown outcome: the reservation stays held', async function (assert) {
+      await switchOn();
+      let { run, token } = await runningRun();
+      submitAnswer = { status: 524, body: { error: 'A timeout occurred' } };
+
+      let response = await submit(token, twoRequests());
+
+      assert.strictEqual(
+        response.status,
+        524,
+        'OpenRouter’s answer is passed on',
+      );
+      let [{ count }] = await dbAdapter.execute(
+        'SELECT COUNT(*) AS count FROM ai_batches',
+      );
+      assert.strictEqual(Number(count), 0, 'nothing is recorded');
+      assert.ok(
+        (await getAutomationRun(dbAdapter, run.id))!.aiCreditsReserved > 0,
+        'the reservation stays held, since a batch may exist',
+      );
+    });
+
+    test('a submit whose outcome is unknown keeps its reservation and records nothing', async function (assert) {
       await switchOn();
       let { run, token } = await runningRun();
       submitAnswer = 'network-error';
@@ -727,7 +748,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(Number(count), 0, 'nothing is recorded');
       assert.ok(
         (await getAutomationRun(dbAdapter, run.id))!.aiCreditsReserved > 0,
-        'the reservations stay held, since a batch may exist',
+        'the reservation stays held, since a batch may exist',
       );
     });
 
