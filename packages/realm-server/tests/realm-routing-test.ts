@@ -2,7 +2,11 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
-import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
+import type {
+  LooseSingleCardDocument,
+  RawHostRoutingRule,
+  Realm,
+} from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { setupDB, setupPermissionedRealmCached } from './helpers/index.ts';
 import {
@@ -118,6 +122,108 @@ function makeRoutingFixture(): Record<
   };
 }
 
+// Every route form a rule can take, with child routes two levels deep: a
+// fixed card, a redirect, a card id template and a field match. The `where`
+// filter nests `every`, `any`, `not` and `eq`, so the read must return it
+// exactly as authored, arrays in order.
+const POST_WHERE = {
+  every: [
+    { eq: { published: true } },
+    { not: { eq: { title: 'Draft' } } },
+    { any: [{ eq: { tag: 'news' } }, { eq: { tag: 'events' } }] },
+  ],
+};
+
+function makeRouteFormsFixture(): Record<
+  string,
+  string | LooseSingleCardDocument
+> {
+  return {
+    'person.gts': `
+      import { CardDef, field, contains } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      export class Person extends CardDef {
+        static displayName = 'Person';
+        @field slug = contains(StringField);
+      }
+    `,
+    'home.json': {
+      data: {
+        type: 'card',
+        attributes: { cardInfo: { name: 'Home' } },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/card-api'),
+            name: 'CardDef',
+          },
+        },
+      },
+    },
+    'realm.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Route Forms Realm' },
+          hostRoutingRules: [
+            { path: '/', name: 'home' },
+            { path: '/old', redirectTo: '/', statusCode: 301 },
+            {
+              path: '/people/:person_id',
+              name: 'person',
+              card: './Person/:person_id',
+            },
+            {
+              path: '/:person_slug',
+              name: 'profile',
+              type: { module: './person', name: 'Person' },
+              match: { slug: ':person_slug' },
+              where: POST_WHERE,
+              routes: [
+                {
+                  path: '/friends/:friend_slug',
+                  name: 'friend',
+                  type: { module: './person', name: 'Person' },
+                  parent: 'friendOf',
+                  match: { slug: ':friend_slug' },
+                  routes: [{ path: '/about', name: 'about' }],
+                },
+                { path: '/card', name: 'profile-card' },
+              ],
+            },
+          ],
+        },
+        relationships: {
+          'hostRoutingRules.0.instance': { links: { self: './home' } },
+          'hostRoutingRules.3.routes.0.routes.0.instance': {
+            links: { self: './home' },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/realm-config'),
+            name: 'RealmConfig',
+          },
+        },
+      },
+    },
+  };
+}
+
+// The search document flattens a linked card into `instance`; keep only its
+// id, which is all a routing rule needs of it.
+function withInstanceIds(rules: RawHostRoutingRule[]): RawHostRoutingRule[] {
+  return rules.map((rule) => {
+    let result: RawHostRoutingRule = { ...rule };
+    if (rule.instance) {
+      result.instance = { id: (rule.instance as { id: unknown }).id };
+    }
+    if (rule.routes) {
+      result.routes = withInstanceIds(rule.routes);
+    }
+    return result;
+  });
+}
+
 module(basename(import.meta.filename), function () {
   module('Realm.getHostRoutingMap', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-unit/');
@@ -213,6 +319,76 @@ module(basename(import.meta.filename), function () {
         first,
         'recomputed map matches the previously cached value',
       );
+    });
+  });
+
+  module('Realm.getRawHostRoutingRules', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/routing-forms/');
+    let testRealm: Realm;
+
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
+      permissions: { '*': ['read'] },
+      fileSystem: makeRouteFormsFixture(),
+      onRealmSetup({ testRealm: realm }) {
+        testRealm = realm;
+      },
+    });
+
+    hooks.beforeEach(async function () {
+      await testRealm.indexing();
+    });
+
+    test('reads every route form and its child routes back from the search document', async function (assert) {
+      let rules = await testRealm.getRawHostRoutingRules();
+      let personType = { module: `${realmURL.href}person`, name: 'Person' };
+
+      assert.deepEqual(withInstanceIds(rules), [
+        {
+          path: '/',
+          name: 'home',
+          instance: { id: `${realmURL.href}home` },
+        },
+        { path: '/old', redirectTo: '/', statusCode: 301 },
+        {
+          path: '/people/:person_id',
+          name: 'person',
+          card: './Person/:person_id',
+        },
+        {
+          path: '/:person_slug',
+          name: 'profile',
+          type: personType,
+          match: { slug: ':person_slug' },
+          where: POST_WHERE,
+          routes: [
+            {
+              path: '/friends/:friend_slug',
+              name: 'friend',
+              type: personType,
+              parent: 'friendOf',
+              match: { slug: ':friend_slug' },
+              routes: [
+                {
+                  path: '/about',
+                  name: 'about',
+                  instance: { id: `${realmURL.href}home` },
+                },
+              ],
+            },
+            { path: '/card', name: 'profile-card' },
+          ],
+        },
+      ]);
+    });
+
+    test('the routing map still serves the fixed card and redirect rules', async function (assert) {
+      let map = await testRealm.getHostRoutingMap();
+
+      assert.deepEqual(map, [
+        { path: '/', id: `${realmURL.href}home` },
+        { path: '/old', redirectTo: '/', statusCode: 301 },
+      ]);
     });
   });
 
