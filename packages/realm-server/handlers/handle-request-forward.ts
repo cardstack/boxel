@@ -28,6 +28,10 @@ import {
 import { scrubError } from '../lib/outbound/scrub-error.ts';
 import { CredentialScrubber } from '../lib/outbound/scrubber.ts';
 import { withBillableCall } from '../lib/billable-call.ts';
+import {
+  AI_BATCHES_PATH,
+  isOpenRouterBatchURL,
+} from '../lib/openrouter-batches.ts';
 import * as Sentry from '@sentry/node';
 
 const log = logger('request-forward');
@@ -203,6 +207,17 @@ export default function handleRequestForward({
         await sendResponseForBadRequest(
           ctxt,
           `Header ${forbiddenHeaders.join(', ')} may not be forwarded`,
+        );
+        return;
+      }
+
+      // A batch submit answers with no cost, and a batch can't be canceled,
+      // so a batch sent from here would be paid for and never billed. Batches
+      // go only through the batch path, which records each one for billing.
+      if (isOpenRouterBatchURL(json.url)) {
+        await sendResponseForForbiddenRequest(
+          ctxt,
+          `Batch calls to ${json.url} are accepted only from automation runs, through ${AI_BATCHES_PATH}`,
         );
         return;
       }

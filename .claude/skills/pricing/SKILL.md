@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -298,6 +298,116 @@ added to it, since Preview is charged to whoever clicks, not the payer.
 The result also breaks the ceiling into its parts (`perRun`) and the runs
 into `unboundedRunsPerMonth`, `boundedRunsPerMonth`, `onceRuns` and one entry
 per trigger, so the screen can show where the number comes from.
+
+## Batches: recorded at submit, billed when they end
+
+A batch of AI requests sent to OpenRouter's Batch API (ADR 030) is not
+charged when it is submitted. OpenRouter reports a batch's cost only once the
+batch ends, in its `usage.cost`, and says so only for a completed batch. A
+batch can't be canceled, so every submitted batch is paid for, and billed,
+whatever happens to its run.
+
+**The batch path.** An automation run submits and reads batches through
+`POST /_ai-batches` and `GET /_ai-batches/<batch id>`
+(`packages/realm-server/handlers/handle-ai-batches.ts`), which call
+`https://openrouter.ai/api/v1/batches` with the platform's OpenRouter key.
+That key is the system key whose destination covers that URL in
+`proxy_endpoints` (see the `system-keys` skill). Add it with
+`--credit-strategy none`, which the server stores as `no-credit`, since
+nothing is charged per call. Only a run token reaches the path, from a
+running run that its token's attempt still owns, for a person whose sessions
+weren't revoked since the token was minted. A submit also needs the
+automation's caps snapshot to have `batchedAI` on; a status read doesn't, so
+a follow-up run can read a batch that is already paid for.
+`_request-forward` refuses OpenRouter batch URLs, percent-encoded spellings
+included, so a batch goes out only through the batch path.
+
+**The record.** Each accepted submit writes one `ai_batches` row:
+
+| Column                   | Holds                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `batch_id`               | OpenRouter's id for the batch, which a `batched_ai` ledger entry's `batch_id` names                          |
+| `run_id`, `acts_as`      | the run that submitted it, and the person that run acted as, whom the batch is billed to                     |
+| `realm`, `automation_id` | the automation's realm and card. Copied, not joined: a batch still settles after its realm and runs are gone |
+| `model`, `request_count` | the model every request names, and how many requests the batch holds                                         |
+| `estimated_usd`          | the most the batch can cost, in USD (below)                                                                  |
+| `run_ai_reservation`     | the id of the reservation the batch holds on the submitting run's AI spending cap (below)                    |
+| `deadline`               | how long the submitting script waits for the results, at most 24 hours                                       |
+| `expires_at`             | when OpenRouter says the provider stops working on the batch                                                 |
+| `state`, `state_read_at` | OpenRouter's status as last read, and when. A final status is never overwritten                              |
+
+A batch whose `state` is not `completed`, `failed`, `expired` or
+`cancelled` is still open; the partial index `ai_batches_open_idx` serves the
+search for them. A batch OpenRouter refuses at submit (a `402` when the
+platform's OpenRouter balance can't cover it, a `400` for a body it won't
+take) is not submitted and not recorded.
+
+**The estimate.** OpenRouter gives no cost estimate when it accepts a batch,
+so the realm server works one out before submitting
+(`packages/realm-server/lib/ai-batch-estimate.ts`): each request's worst case
+(`aiRequestCostCeiling`: its body's bytes as input tokens and its
+output-token limit) at the model's listed batch price, summed. OpenRouter
+lists a model's batch price under `<model>:batch`, which the model sync keeps
+as an `OpenRouterModel` card in the `@cardstack/openrouter/` realm like any
+other model. A model with no batch listing is priced at its own listed price,
+which a batch never costs more than. A request whose worst case can't be
+priced, or a model with no listing, is refused before anything is sent. The
+estimate is what a batch that ends with no reported cost is billed at.
+
+**The run's AI spending cap.** Before a batch is sent, it reserves twice its
+requests' worst case at the model's listed (normal) price on the submitting
+run's `aiCredits` cap, in one statement (`reserveAutomationRunAICredits`,
+ADR 030 §1.4): once for the batch, and once for the normal-price requests it
+falls back to when the batch misses its deadline. A batch that would pass the
+cap is refused whole, with a 403. When the batch isn't submitted (OpenRouter
+refuses it with a 4xx, or no key covers the URL), the reservation is
+released. Otherwise it stays held, named by `run_ai_reservation`, until the
+settle job settles it with what the batch cost.
+
+A batch carries no margin, like any AI charge (ADR 029 §1.1).
+
+```sql
+-- Open batches, oldest first, with what each would be billed if it ended
+-- with no reported cost.
+SELECT batch_id, run_id, acts_as, request_count, estimated_usd, state,
+       submitted_at, deadline, expires_at
+FROM ai_batches
+WHERE state NOT IN ('completed', 'failed', 'expired', 'cancelled')
+ORDER BY submitted_at;
+
+-- A batch beside its charge, once settled.
+SELECT b.batch_id, b.estimated_usd, b.state,
+       -SUM(l.credit_amount) AS credits_charged
+FROM ai_batches b
+LEFT JOIN credits_ledger l
+  ON l.batch_id = b.batch_id AND l.charge_kind = 'batched_ai'
+WHERE b.batch_id = '<batch id>'
+GROUP BY b.batch_id, b.estimated_usd, b.state;
+```
+
+The submit logs one line on the `ai-batches` channel naming the run, the
+batch, its request count, the estimate and the listing it was priced at.
+
+**A batch that may exist with no row.** A batch is recorded only after
+OpenRouter answers its submit. Two cases can leave a batch that is paid for
+and recorded nowhere, and both log an error and go to Sentry with the run,
+identity, automation, model, request count, estimate and reservation in the
+event's extras:
+
+- OpenRouter accepted the batch and the row couldn't be written. The event
+  names the batch id.
+- The submit went out and its outcome is unknown: it timed out, its answer
+  couldn't be read, OpenRouter answered with a 5xx (a gateway that stopped
+  waiting doesn't mean no batch was created), or OpenRouter accepted it and
+  named no batch. The log
+  line reads `batch submit outcome unknown`. Find the batch in OpenRouter's
+  batch list (`GET https://openrouter.ai/api/v1/batches`, newest first) by
+  its model, request count and submission time.
+
+Either way, bill the batch by hand from that event. A process that stops
+between OpenRouter's answer and the insert leaves no event at all, and
+nothing yet reconciles OpenRouter's batch list against `ai_batches` (ADR 030
+remediation).
 
 ## The daily storage charge
 
