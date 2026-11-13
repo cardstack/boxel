@@ -1294,8 +1294,8 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(mostActive, 1, 'one query ran at a time');
         assert.strictEqual(
           calls,
-          6,
-          'each check queried each of the three field-match routes once',
+          10,
+          'each check queried each of the five field-match routes once',
         );
         assert.strictEqual(
           testRealm.getHostRouteDuplicates(),
