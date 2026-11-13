@@ -7,6 +7,9 @@ scope:
   - packages/realm-server/handlers/handle-*host-url*.ts
   - packages/realm-server/handlers/handle-publish-realm.ts
   - packages/postgres/migrations/*_add-realm-host-urls.js
+  - packages/realm-server/routes.ts
+  - packages/realm-server/lib/index-html-injection.ts
+  - packages/base/default-templates/head.gts
 ---
 
 # 033. Map host URLs to a realm by its identity, and resolve them before any other route
