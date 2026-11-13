@@ -9,6 +9,11 @@ import {
 } from './authorization.ts';
 import { OAUTH_CONSENT_PATH } from './consent.ts';
 import {
+  OAUTH_PROTECTED_RESOURCE_PATH,
+  protectedResourceMetadataHandler,
+  resourcePath,
+} from './resource.ts';
+import {
   OAUTH_DISCOVERY_PATH,
   OAUTH_REGISTRATION_PATH,
   OAUTH_TOKEN_PATH,
@@ -47,6 +52,10 @@ export function registerOAuthProviderRoutes(
     handleErrorDetails,
     handleErrorReturn,
     consentHandlers,
+    issuer,
+    registry,
+    testOnlyResourceIds,
+    resourceController,
   }: OAuthProviderService,
   consentDeps: ConsentRouteDeps,
 ) {
@@ -76,6 +85,47 @@ export function registerOAuthProviderRoutes(
       Promise.resolve(handle(ctxt, async () => {}));
 
   router.get(OAUTH_DISCOVERY_PATH, onIssuerHost(serve));
+  // Each resource's protected-resource metadata (RFC 9728), which a client
+  // reads from the challenge a resource answers without a token.
+  for (let resource of registry) {
+    router.get(
+      `${OAUTH_PROTECTED_RESOURCE_PATH}${resourcePath(resource)}`,
+      onIssuerHost(protectedResourceMetadataHandler(issuer, resource)),
+    );
+  }
+  // A resource a test adds has no route of its own, so each server route its
+  // scopes map is served here, behind its controller, answering the verified
+  // caller. Nothing in production adds a test resource (`registry.ts`).
+  for (let resource of registry) {
+    if (!testOnlyResourceIds.has(resource.id)) {
+      continue;
+    }
+    let controller = resourceController(resource);
+    let routes = new Map<string, { method: string; path: string }>();
+    for (let scope of resource.scopes) {
+      for (let route of scope.routes) {
+        if (route.on === 'server') {
+          routes.set(`${route.method} ${route.path}`, route);
+        }
+      }
+    }
+    for (let { method, path } of routes.values()) {
+      router.register(
+        path,
+        [method],
+        [
+          onIssuerHost((ctxt) =>
+            Promise.resolve(
+              controller(ctxt, async () => {
+                ctxt.status = 200;
+                ctxt.body = { caller: ctxt.state.oauthCaller };
+              }),
+            ),
+          ),
+        ],
+      );
+    }
+  }
   router.post(
     OAUTH_REGISTRATION_PATH,
     onIssuerHost((ctxt) => handleRegistration(ctxt, () => serve(ctxt))),

@@ -318,9 +318,11 @@ interface Breadcrumb {
 
 // The query parameters that carry a bearer credential on ordinary routes: a
 // `token` (a capture-URL token, or a session JWT on a `_download-realm` link)
-// and a `loginToken` (the single-use Matrix login token handed to the app
-// page). Masked the same way the request log masks them.
-const TOKEN_PARAMS = ['token', 'loginToken'];
+// a `loginToken` (the single-use Matrix login token handed to the app
+// page), and an `access_token` (an OAuth access token a client put in the
+// query string, which a resource refuses unread). Masked the same way the
+// request log masks them.
+const TOKEN_PARAMS = ['token', 'loginToken', 'access_token'];
 const MASKED = 'REDACTED';
 
 function withTokenMasked(url: string | undefined): string | undefined {
