@@ -267,17 +267,28 @@ const KEY_BY_NAME = new Map(
   ]),
 );
 
-// The `Boxel-*` trailers of a message: the lines of its last paragraph, when
-// every line there is a trailer. Unknown trailers are left out.
-export function parseTrailers(message: string): Trailers {
+// A message's trailer block: its last paragraph, when the message has more
+// than one and every line of the last is a trailer, with the paragraphs
+// before it. Undefined for a message with no trailer block.
+function trailerBlock(
+  message: string,
+): { before: string; lines: string[] } | undefined {
   let paragraphs = message.trimEnd().split(/\n\s*\n/);
-  let last = paragraphs.length > 1 ? paragraphs[paragraphs.length - 1] : '';
-  let trailers: Trailers = {};
-  let lines = last.split('\n');
-  if (!lines.every((line) => TRAILER_LINE.test(line))) {
-    return trailers;
+  if (paragraphs.length < 2) {
+    return undefined;
   }
-  for (let line of lines) {
+  let lines = paragraphs[paragraphs.length - 1].split('\n');
+  if (!lines.every((line) => TRAILER_LINE.test(line))) {
+    return undefined;
+  }
+  return { before: paragraphs.slice(0, -1).join('\n\n'), lines };
+}
+
+// The `Boxel-*` trailers of a message's trailer block. Unknown trailers are
+// left out.
+export function parseTrailers(message: string): Trailers {
+  let trailers: Trailers = {};
+  for (let line of trailerBlock(message)?.lines ?? []) {
     let [, name, value] = TRAILER_LINE.exec(line)!;
     let key = KEY_BY_NAME.get(name);
     if (key) {
@@ -287,17 +298,10 @@ export function parseTrailers(message: string): Trailers {
   return trailers;
 }
 
-// The message without its trailer block: the paragraphs before it, or the
-// whole message when its last paragraph holds anything but trailers.
+// The message without its trailer block, or the whole message when it has
+// none.
 export function messageWithoutTrailers(message: string): string {
-  let paragraphs = message.trimEnd().split(/\n\s*\n/);
-  if (paragraphs.length > 1) {
-    let last = paragraphs[paragraphs.length - 1];
-    if (last.split('\n').every((line) => TRAILER_LINE.test(line))) {
-      return paragraphs.slice(0, -1).join('\n\n');
-    }
-  }
-  return message.trimEnd();
+  return trailerBlock(message)?.before ?? message.trimEnd();
 }
 
 // `Boxel-Journal-Seq`: the change events a revision covers, as the `seq` of
