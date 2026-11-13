@@ -390,6 +390,7 @@ module(basename(import.meta.filename), function () {
         run: started.run,
         realmURL: REALM_URL,
         readRealms: [],
+        writesCap: 10,
         realmServerURL: SERVER_URL,
         timeLimitSeconds: 600,
       });
@@ -635,6 +636,7 @@ module(basename(import.meta.filename), function () {
         run,
         realmURL: REALM_URL,
         readRealms: [],
+        writesCap: 10,
         realmServerURL: SERVER_URL,
         timeLimitSeconds: 600,
       });
