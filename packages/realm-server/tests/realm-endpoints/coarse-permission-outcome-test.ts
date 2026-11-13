@@ -157,15 +157,17 @@ const writeProbes: Probe[] = [
         .set('Accept', SupportedMimeType.JSON)
         .send('not json'),
   },
+  // Routes that consume it. The verbatim writes judge each write as the
+  // operation it amounts to on its path.
   {
     label: 'POST /_atomic',
-    consumes: false,
+    consumes: true,
     send: (r) =>
       r.post('/_atomic').set('Accept', SupportedMimeType.JSONAPI).send('{}'),
   },
   {
     label: 'POST into the reserved _capture/ subtree',
-    consumes: false,
+    consumes: true,
     send: (r) =>
       r
         .post('/_capture/foo.gts')
@@ -174,7 +176,7 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'POST card+source',
-    consumes: false,
+    consumes: true,
     send: (r) =>
       r
         .post('/new-file.gts')
@@ -183,7 +185,7 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'POST octet-stream',
-    consumes: false,
+    consumes: true,
     send: (r) =>
       r
         .post('/new-file.bin')
@@ -192,11 +194,10 @@ const writeProbes: Probe[] = [
   },
   {
     label: 'DELETE card+source',
-    consumes: false,
+    consumes: true,
     send: (r) =>
       r.delete('/person.gts').set('Accept', SupportedMimeType.CardSource),
   },
-  // Routes that consume it.
   {
     label: 'POST card+json',
     consumes: true,
@@ -247,7 +248,59 @@ function operationsBatch(realmURL: string, name: string) {
   });
 }
 
+// A verbatim write of a stored card's document, as the card+source routes
+// and `/_atomic` send one.
+function personDocument(realmURL: string) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: { firstName: 'Mango' },
+      meta: { adoptsFrom: { module: `${realmURL}person`, name: 'Person' } },
+    },
+  });
+}
+
 const gatedProbes: GatedProbe[] = [
+  {
+    route: `POST ${SupportedMimeType.CardSource}`,
+    send: (r, realmURL) =>
+      r
+        .post('/person-1.json')
+        .set('Accept', SupportedMimeType.CardSource)
+        .send(personDocument(realmURL)),
+  },
+  {
+    route: `POST ${SupportedMimeType.OctetStream}`,
+    send: (r) =>
+      r
+        .post('/sample.md')
+        .set('Accept', SupportedMimeType.OctetStream)
+        .set('Content-Type', SupportedMimeType.OctetStream)
+        .send(Buffer.from('# Changed')),
+  },
+  {
+    route: `DELETE ${SupportedMimeType.CardSource}`,
+    send: (r) =>
+      r.delete('/person-1.json').set('Accept', SupportedMimeType.CardSource),
+  },
+  {
+    route: `POST ${SupportedMimeType.JSONAPI}`,
+    send: (r, realmURL) =>
+      r
+        .post('/_atomic')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .send(
+          JSON.stringify({
+            'atomic:operations': [
+              {
+                op: 'update',
+                href: './person-1.json',
+                data: JSON.parse(personDocument(realmURL)).data,
+              },
+            ],
+          }),
+        ),
+  },
   {
     route: `GET ${SupportedMimeType.CardJson}`,
     send: (r) => r.get('/person-1').set('Accept', SupportedMimeType.CardJson),

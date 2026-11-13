@@ -351,6 +351,7 @@ import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   actingUserResolver,
   dischargePendingDecision,
+  loadPolicy,
   nonGrantableAnswerSources,
   notPermitted,
   pendingWriteFor,
@@ -3227,7 +3228,7 @@ type VerbatimOperation =
 interface VerbatimAdmission {
   // Judges each write again from the bytes stored at its path, under the
   // write lock that covers the path, and refuses the request by throwing where
-  // a write is no longer the operation the gate judged, or where the lock
+  // a write is not the operation the gate judged it as, or where the lock
   // refuses what the gate left to it.
   locked(): Promise<void>;
   // A refusal the write made, in the words the caller may be told it in.
@@ -7417,7 +7418,7 @@ export class Realm {
       admission = await this.#admitVerbatimWrites(
         request,
         requestContext,
-        this.#atomicVerbatimWrites(atomicOperations),
+        () => this.#atomicVerbatimWrites(atomicOperations),
         byteRoute('_atomic'),
       );
       if (requestContext.archivedSeal) {
@@ -14567,18 +14568,24 @@ export class Realm {
       return await this.#stageRunWrite(request, requestContext, run);
     }
     let text = await request.text();
-    let admission: VerbatimAdmission;
+    // The gate's refusal and the batch's are answered from this one place,
+    // so a path no grant admits and a path holding nothing get the same
+    // bytes (see `#sourceWriteRefusal`).
     try {
-      admission = await this.#admitSourceWrite(request, requestContext, text);
+      let admission = await this.#admitSourceWrite(
+        request,
+        requestContext,
+        text,
+      );
+      return await this.replaceFileContent(
+        request,
+        requestContext,
+        text,
+        admission,
+      );
     } catch (err: unknown) {
       return this.#sourceWriteRefusal(err, request, requestContext);
     }
-    return await this.replaceFileContent(
-      request,
-      requestContext,
-      text,
-      admission,
-    );
   }
 
   // The policy gate's part in a card+source write of `request`'s path, whose
@@ -14592,7 +14599,7 @@ export class Realm {
     return await this.#admitVerbatimWrites(
       request,
       requestContext,
-      [
+      () => [
         {
           path,
           ...(path.endsWith('.json') && text !== undefined ? { text } : {}),
@@ -14642,18 +14649,31 @@ export class Realm {
     // audit, the card checks), and its limit is the card limit, so it stays
     // in memory. Every other upload streams to disk, once the policy gate has
     // admitted the write, so a caller no grant admits sends nothing to disk.
+    // The gate's refusal and the batch's are answered from one place, as the
+    // card+source write answers them (see `upsertCardSource`).
+    try {
+      return await this.#upsertBinaryFileAdmitted(
+        request,
+        requestContext,
+        path,
+      );
+    } catch (err: unknown) {
+      return this.#sourceWriteRefusal(err, request, requestContext);
+    }
+  }
+
+  async #upsertBinaryFileAdmitted(
+    request: Request,
+    requestContext: RequestContext,
+    path: LocalPath,
+  ): Promise<Response> {
     if (path.endsWith('.json')) {
       let bytes = new Uint8Array(await request.arrayBuffer());
-      let admission: VerbatimAdmission;
-      try {
-        admission = await this.#admitSourceWrite(
-          request,
-          requestContext,
-          new TextDecoder().decode(bytes),
-        );
-      } catch (err: unknown) {
-        return this.#sourceWriteRefusal(err, request, requestContext);
-      }
+      let admission = await this.#admitSourceWrite(
+        request,
+        requestContext,
+        new TextDecoder().decode(bytes),
+      );
       return await this.replaceFileContent(
         request,
         requestContext,
@@ -14661,16 +14681,11 @@ export class Realm {
         admission,
       );
     }
-    let admission: VerbatimAdmission;
-    try {
-      admission = await this.#admitSourceWrite(
-        request,
-        requestContext,
-        undefined,
-      );
-    } catch (err: unknown) {
-      return this.#sourceWriteRefusal(err, request, requestContext);
-    }
+    let admission = await this.#admitSourceWrite(
+      request,
+      requestContext,
+      undefined,
+    );
     let limit = fileSizeLimitFor(path, {
       default: this.#fileSizeLimitBytes,
       audio: this.#audioSizeLimitBytes,
@@ -14784,8 +14799,10 @@ export class Realm {
       );
     } catch (thrown: unknown) {
       let err = await admission.seenBy(thrown);
+      // A caller the realm ACL declined is answered by the route's own catch
+      // (see `#sourceWriteRefusal`).
       if (admission !== COARSE_VERBATIM_WRITE) {
-        return this.#sourceWriteRefusal(err, request, requestContext);
+        throw err;
       }
       if (isOperationFailure(err)) {
         // A batch reports a refusal as an operations error, which is the
@@ -15176,13 +15193,8 @@ export class Realm {
       '.json',
     ]);
     let declined = this.#coarseDeclined(requestContext) !== 'none';
-    if (!handle) {
-      // A caller the realm ACL declined is told of a path holding nothing in
-      // the bytes a path no grant admits them to gets (see
-      // `#sourceWriteRefusal`).
-      return declined
-        ? notFound(request, requestContext)
-        : notFound(request, requestContext, `${localName} not found`);
+    if (!handle && !declined) {
+      return notFound(request, requestContext, `${localName} not found`);
     }
     let options = {
       waitForIndex: false,
@@ -15191,18 +15203,22 @@ export class Realm {
       broadcastRealmEvents: !realmEventsSuppressed(request),
     };
     if (!declined) {
-      await this.delete(handle.path, options);
+      await this.delete(handle!.path, options);
     } else {
       // The removal of the file the path resolved to, judged by the policy
       // gate as the operation it amounts to, and judged again under the
-      // removal's own write lock.
-      let path = handle.path;
+      // removal's own write lock. A path holding nothing is refused from the
+      // same catch as one no grant admits, so the two get the same bytes.
       let admission = COARSE_VERBATIM_WRITE;
       try {
+        if (!handle) {
+          throw notPermitted({ kind: 'instance', url: request.url }, 'delete');
+        }
+        let path = handle.path;
         admission = await this.#admitVerbatimWrites(
           request,
           requestContext,
-          [{ path, removal: true }],
+          () => [{ path, removal: true }],
           byteRoute('source'),
         );
         if (requestContext.archivedSeal) {
@@ -16881,13 +16897,16 @@ export class Realm {
   async #admitVerbatimWrites(
     request: Request,
     requestContext: RequestContext,
-    writes: VerbatimWrite[],
+    // Asked only for a caller the ACL declined, so a caller it allowed pays
+    // nothing to describe the writes.
+    writesOf: () => VerbatimWrite[],
     route: PolicyRoute,
   ): Promise<VerbatimAdmission> {
     let coarseDeclined = this.#coarseDeclined(requestContext);
     if (coarseDeclined === 'none') {
       return COARSE_VERBATIM_WRITE;
     }
+    let writes = writesOf();
     let core = this.operationCore;
     let scope = newOperationScope(core, {
       caller: scopeCallerFor(this.#callerOf(request, requestContext).actor),
@@ -16901,11 +16920,24 @@ export class Realm {
       pending: PendingWrite | undefined;
     }[] = [];
     for (let write of writes) {
-      let operation = this.#verbatimOperation(
-        write,
-        await this.#storedForVerbatimWrite(write.path),
-        coarseDeclined,
-      );
+      let operation: VerbatimOperation;
+      try {
+        operation = this.#verbatimOperation(
+          write,
+          await this.#storedForVerbatimWrite(write.path),
+          coarseDeclined,
+        );
+      } catch (refusal: unknown) {
+        // A write no operation describes is refused before the gate, by what
+        // the path holds. The gate loads the policy before it resolves
+        // anything for a caller who may not read the realm, so a policy that
+        // won't load answers the same whatever a target holds, and this
+        // refusal does too.
+        if (coarseDeclined === 'all') {
+          await loadPolicy(core);
+        }
+        throw refusal;
+      }
       let decision = await resolveFacadeWrite(
         core,
         operation.target,
@@ -16958,9 +16990,9 @@ export class Realm {
         try {
           for (let entry of judged) {
             let stored = await this.#storedForVerbatimWrite(entry.write.path);
-            // A write the path no longer makes the same operation of, say a
+            // A write judged as one operation and made as another, say over a
             // document another writer turned into a card, or into another
-            // type, was judged as something it no longer is.
+            // type, is refused.
             let now = this.#verbatimOperation(
               entry.write,
               stored,

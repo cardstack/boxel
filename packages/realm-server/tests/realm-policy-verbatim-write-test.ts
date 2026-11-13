@@ -600,10 +600,35 @@ module(basename(import.meta.filename), function (hooks) {
         'classrooms/room-205.json',
         AUTH.teacher(),
       );
+      let missingRemoval = await removeSource(
+        'classrooms/room-999.json',
+        AUTH.teacher(),
+      );
       assert.strictEqual(notRemoved.status, 404, status(notRemoved));
+      assert.strictEqual(
+        notRemoved.text.replaceAll('room-205', 'room-999'),
+        missingRemoval.text,
+        'and so is a removal, byte for byte',
+      );
       assert.ok(
         await stored('classrooms/room-205.json'),
         'the classroom no grant admits is still there',
+      );
+
+      let refusedBytes = await writeBytes(
+        'classrooms/room-205.json',
+        AUTH.teacher(),
+        classroom('Room 205, renamed', [COLLEAGUE]),
+      );
+      let missingBytes = await writeBytes(
+        'classrooms/room-999.json',
+        AUTH.teacher(),
+        classroom('Room 999', [COLLEAGUE]),
+      );
+      assert.strictEqual(
+        refusedBytes.text.replaceAll('room-205', 'room-999'),
+        missingBytes.text,
+        'and so is the octet-stream write, byte for byte',
       );
     });
 
