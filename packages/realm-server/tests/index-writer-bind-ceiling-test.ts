@@ -102,6 +102,57 @@ module(basename(import.meta.filename), function (hooks) {
       [['instance', true]],
       'the one live row, past the first statement, is staged as a tombstone',
     );
+    // The commit binds every URL of the pass too: it promotes the staged
+    // rows, applies the tombstones and reads the adoption chains back.
+    await batch.done();
+    let [published] = (await adapter.execute(
+      `SELECT is_deleted FROM prerendered_html WHERE url = $1 AND type = 'instance'`,
+      { bind: [url('kim')] },
+    )) as { is_deleted: boolean }[];
+    assert.true(
+      published?.is_deleted,
+      'the tombstone is committed to production',
+    );
+  });
+
+  test('an index pass over a realm-sized list of invalidations commits', async function (assert) {
+    await indexCard('kim');
+    let batch = await indexWriter.createBatch(
+      new URL(testRealm),
+      virtualNetwork,
+      undefined,
+      { splitPrerenderHtml: false },
+    );
+    await batch.invalidate(realmSizedURLs('kim').map((u) => new URL(u)));
+    let cardURL = new URL(url('kim'));
+    await batch.updateEntry(cardURL, {
+      type: 'instance',
+      resource: {
+        id: rri(cardURL.href),
+        type: 'card',
+        attributes: { name: 'kim again' },
+        meta: {
+          adoptsFrom: { module: rri(`${testRealm}person`), name: 'kim' },
+        },
+      },
+      lastModified: Date.now(),
+      resourceCreatedAt: Date.now(),
+      searchData: { name: 'kim again' },
+      deps: new Set(),
+      displayNames: ['kim'],
+      types: [personKey, cardDefKey],
+      isolatedHtml: `<div>kim again</div>`,
+    });
+    await batch.done();
+    let [row] = (await adapter.execute(
+      `SELECT search_doc->>'name' AS name, is_deleted FROM boxel_index WHERE url = $1 AND type = 'instance'`,
+      { bind: [url('kim')] },
+    )) as { name: string; is_deleted: boolean | null }[];
+    assert.deepEqual(
+      [row?.name, Boolean(row?.is_deleted)],
+      ['kim again', false],
+      'the one card past the first statement is promoted',
+    );
   });
 
   test('seeding live types from a realm-sized list reads them all', async function (assert) {
