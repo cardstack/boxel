@@ -59,6 +59,7 @@ import { receiveSecretsKeyring } from './lib/secrets-at-rest/index.ts';
 import { getInstanceId } from './lib/instance-id.ts';
 import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
 import { checkPricingAtStartup } from './lib/pricing.ts';
+import { meteredChargesFor } from './lib/metered-charge.ts';
 
 let log = logger('worker');
 checkPricingAtStartup('worker');
@@ -280,6 +281,7 @@ let autoMigrate = migrateDB || undefined;
     indexJobsOnly,
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
+    meteredCharges: meteredChargesFor(dbAdapter),
   });
 
   await worker.run();

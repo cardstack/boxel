@@ -28,6 +28,7 @@ Boxel tokens are derived credentials with their own, weaker retirement story.
 | prerender service    | `buildCreatePrerenderAuth` (in-process)                | per-realm session shape, plus `realmAuthority: true` (see below)                            | `1d`                                                                       |
 | publish-realm        | `handle-publish-realm` (in-process)                    | per-realm session shape                                                                     | `1h`                                                                       |
 | diagnostic           | `POST /_diagnostic-render-token` (operator token)      | prerender shape, plus `diagnostic: {id, note, card, scope, realm}`, `permissions: ['read']` | `DIAGNOSTIC_SESSION_LIFETIME_SEC` (15m)                                    |
+| run token            | `mintRunToken` (in-process, one per run attempt)       | `{user, realm, run: {id, attempt, readRealms, writesCap}}`, `permissions: []`               | the run's time limit                                                       |
 
 A **diagnostic session** is what an operator renders a live card under to see
 it as the indexer does (`boxel realm-server render-token`; the
@@ -65,11 +66,25 @@ The two lifetimes a browser holds live in `packages/runtime-common/session-token
 runtime-common barrel. Keep it that way: the barrel drags in base-realm type
 references that other packages can't resolve.
 
+A **run token** is what an automation run's calls carry (ADR 026;
+`packages/runtime-common/run-token.ts` and `packages/realm-server/lib/run-token.ts`).
+It names the run and the attempt it was minted for, acts as the run's identity
+(`user`), and admits read and write in its own realm (`realm`) and read in
+`run.readRealms`. It carries no permissions: every call's are its identity's,
+read fresh. A realm routes any request carrying one, from `handle` or
+`maybeHandle`, to `Realm.handleAutomation`, which refuses the call unless the
+run's row says the run is running and owned by the token's attempt
+(`automationRunForCall`), and then checks it as the identity. `handleAutomation`
+refuses a request without a run token, so nothing else reaches automation mode.
+A realm-server route that serves run tokens verifies one with `verifyRunToken`
+and checks the run's row itself. The `automations` skill has how to trace one.
+
 **Every session token above is signed with `REALM_SECRET_SEED`** — both families,
 minted and verified with the same seed — except the diagnostic session, which is
-signed under `diagnosticSessionSecret(seed)`, the seed with a family suffix.
-Because of that, every verifier that doesn't ask for a diagnostic session by
-name refuses it on its signature; a realm (`Realm.#verifySession`) and
+signed under `diagnosticSessionSecret(seed)`, and the run token, signed under
+`runTokenSecret(seed)`, each the seed with a family suffix.
+Because of that, every verifier that doesn't ask for one of them by name
+refuses it on its signature; a realm (`Realm.#verifySession`) and
 `multiRealmAuthorization` pick the key from the token's own `diagnostic` claim,
 and a token that claims it falsely fails verification. Don't confuse it with
 `REALM_SERVER_SECRET_SEED`, a separate env var that signs the monitoring

@@ -899,7 +899,7 @@ function readParams(
       );
       continue;
     }
-    if (Object.hasOwn(params, name)) {
+    if (Object.prototype.hasOwnProperty.call(params, name)) {
       report(
         'invalid-param',
         `${path}.${index}.name`,
