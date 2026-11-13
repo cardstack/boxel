@@ -32,7 +32,11 @@ description: >-
   `commit-interrupted`, or committed twice. Also covers the run token a run's
   calls carry (`run-token.ts`, `mintRunToken`, `verifyRunToken`), how
   `Realm.handleAutomation` admits a call against the run row, and how to trace
-  a refused run-token call or a run's `key_uses`. Also covers how an automation run
+  a refused run-token call or a run's `key_uses`. Also covers the run
+  overlay (`run-overlay.ts`, `run_overlay_files`): how a run's writes are
+  staged, how its reads and listings read through them, the `writes` cap, and
+  how to inspect a run's staged files; and the commit (`/_run-commit`), its
+  checks and its failure modes. Also covers how an automation run
   reaches a worker — the automation priority tier (`automationInitiatedPriority
   = 5` in runtime-common's queue.ts), the automation worker lane
   (`--automationCount` on the worker manager, `WORKER_AUTOMATION_PRIORITY_COUNT`
@@ -413,7 +417,9 @@ Every call a run makes carries the run's token (ADR 026 §1.2), minted per
 attempt by `mintRunToken` (`packages/realm-server/lib/run-token.ts`) once the
 attempt has started the run. It names the run (`run.id`) and the attempt
 (`run.attempt`), acts as the run's `acts_as` (`user`), and expires at the run's
-time limit. It admits read and write in the automation's realm (`realm`) and
+time limit. It carries the automation's `writes` cap (`run.writesCap`),
+which bounds the files the run stages. It admits read and write in the
+automation's realm (`realm`) and
 read in `run.readRealms`, the base and catalog realms its cards' modules load
 from. It carries no permissions; every call is checked as `acts_as`. It is
 signed under `runTokenSecret(seed)`, so no ordinary session verifier accepts it
@@ -441,7 +447,7 @@ token, so only a run token reaches automation mode.
 
 A realm-server route that serves run tokens verifies one with
 `verifyRunToken(token, seed)`, which answers `{ runId, attempt, actsAs, realm,
-readRealms, iat, exp }` or nothing, and then checks the run's row with
+readRealms, writesCap, iat, exp }` or nothing, and then checks the run's row with
 `automationRunForCall` itself.
 
 Tracing a run-token call: every refusal logs on the realm's log as
@@ -456,6 +462,130 @@ SELECT created_at, operation, outcome, code, status, host, count
 To read a token you have in hand, decode its payload (the middle segment,
 base64url) without verifying it: `run.id` and `run.attempt` name the row to
 check, and `exp` is when the run's time limit passes.
+
+### The run overlay
+
+A run's card+source writes, and their octet-stream spelling, don't reach the
+realm while it runs (ADR 027 §1.2). They are the only writes a run makes: a
+run-token write (any `PUT`, `PATCH`, `POST` or `DELETE`) to a route without
+`takesRunWrites` is refused with 403 before the route runs, and logged as
+`run-token call <method> <url> refused: … wrote through a route that doesn't
+stage its writes`. So `fs.delete`, `cards.update`, `operations.*`, `_atomic`
+and the card+json writes are refused for a run until they stage (see
+`docs/adr/remediation/027.md`). Each one is staged in the run's **overlay**, `run_overlay_files` in Postgres, one row per
+file keyed by run, attempt and realm-local path, with the bytes inline. The
+functions are in `packages/runtime-common/run-overlay.ts`. Every realm-server
+instance reads the same overlay, so a run's calls can land on any of them.
+
+What goes through it, for a run-token call in the run's own realm
+(`requestContext.automationRun`, not `readOnly`):
+
+- **Writes** (`realm.fs.writeText`, `writeBytes`, and the writes behind
+  `replace` and `copy`): a card+source `POST`, or its octet-stream spelling,
+  is staged with `stageRunOverlayFile` instead of written. Any file may be
+  staged, card instance or not. The realm's size limit for the file's kind
+  applies (the card limit for a card document, the file limit otherwise,
+  checked before the body is buffered), as do the realm's reserved paths. A
+  run may not stage `realm.json`, a module (`.gts`, `.ts`, `.gjs`, `.js`), the
+  realm's policy card, a RealmPolicy card or an automation card, whether the
+  realm holds one at the path or the run's bytes would make one (403). Modules
+  are refused because the module a card's class comes from decides whether
+  it's a RealmPolicy or an automation, and the type check reads modules from
+  the index, which never sees a staged one. A path can't be staged as both a file and
+  a directory (409). The token's `run.writesCap` bounds how many files the
+  attempt stages (403 `Writes cap reached`), and `RUN_OVERLAY_MAX_BYTES`
+  (100 MiB) bounds their bytes together (413). Rewriting a staged
+  path replaces it and doesn't count again. The run's row is locked for the
+  check, so racing writes can't pass the cap, and a write after the run
+  stopped running is refused.
+- **Reads** (`realm.fs.readText`, `exists`): a card+source `GET` or `HEAD` of a
+  path the attempt staged answers with the staged bytes; any other path reads
+  the realm as usual.
+- **Listings** (`realm.fs.list`): a directory listing adds the files the
+  attempt staged under it, and the directories they make, beside the realm's
+  own entries. A directory only staged files make is listed for the run.
+
+No other caller sees a staged file. Staged files aren't indexed.
+
+An overlay is per attempt. `startAutomationRunAttempt` drops what any other
+attempt staged, in the transaction that makes the new attempt the owner, so a
+retry starts from an empty overlay and a replaced attempt's writes never
+reach its commit. A run whose commit was already claimed keeps its files,
+since the claiming attempt may still be sending them. Every way a run ends
+(`finishAutomationRun`, `cancelAutomationRun`, `abandonAutomationRun`)
+discards its overlay in the transaction that ends it, as a statement of its
+own after the update, so it also catches a file staged while the end waited
+on the run's row lock. Deleting a run row deletes its overlay
+(`ON DELETE CASCADE`).
+
+The bound on a run's overlay is `writesCap` files, each within the realm's
+limit for its kind, and `RUN_OVERLAY_MAX_BYTES` together. Binary content is
+stored inline rather than as a reference, since the overlay lives only as
+long as its run and stays within that byte bound. A row holds a file's bytes
+and nothing else, so the overlay can't record a delete. A run's deletes are
+refused rather than staged.
+
+Inspecting what a run has staged:
+
+```sql
+SELECT attempt, path, size, updated_at
+  FROM run_overlay_files WHERE run_id = '<run id>' ORDER BY attempt, path;
+```
+
+A finished run has no rows. Rows from more than one attempt would mean a
+start that didn't drop its predecessors' files. To read a staged file's text:
+`SELECT convert_from(content, 'UTF8') FROM run_overlay_files WHERE run_id = …
+AND path = …`.
+
+### Committing the overlay
+
+When the script finishes, the run commits its overlay with a `POST` to the
+realm's `/_run-commit` (`RUN_COMMIT_PATH` in `run-overlay.ts`), carrying the
+run's token and no body (ADR 027 §1.4). `Realm.commitRunOverlay` refuses
+anything but the run's own call in its own realm (403 `not-a-run`); the call
+was admitted as the run's identity under their current permissions. It reads
+the attempt's staged files and sends them as one `commitBatch` of `rawSource`
+updates, one per file. Inside the batch's write lock, before anything is
+staged, its precondition:
+
+1. re-confirms that the identity is a **direct writer** of the realm
+   (`isDirectWriter`), so a person who lost direct write but keeps a policy
+   or wildcard grant can't write through it (403 `not-a-direct-writer`);
+2. checks the files again: no more than `run.writesCap` (403 `writes-cap`);
+   none at a reserved path, `realm.json`, the policy card, a RealmPolicy card
+   or an automation card (403 `forbidden-path`); none where the realm holds a
+   directory, or under a path it holds as a file (409 `path-clash`). Paths
+   are realm-local, so every file is in the run's realm, and the batch has no
+   `callApi` entry;
+3. claims the commit with `claimRunOverlayCommit`, which locks the run row,
+   checks the run is running under this attempt and has never claimed one,
+   and checks the overlay still holds exactly the files read (409
+   `overlay-changed` when a write was staged in between). Staging refuses a
+   run whose commit is claimed.
+
+The batch then writes every file or none for any entry it refuses, under one
+index pass the commit doesn't wait for. A file whose text matches the stored
+file's is left alone and enqueues no indexing. Once it lands, the commit
+records it (`recordAutomationRunCommitted`), adds the files committed to the
+run's `writes` count (an unchanged file included), discards the overlay, and
+answers `200` with `data.attributes.files`.
+
+Failure modes, and what the caller does:
+
+| Answer                                                    | Claim                        | What happened                                                                    | Next                                                                                             |
+| --------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 403 `not-a-direct-writer`, `writes-cap`, `forbidden-path` | none                         | the identity or the overlay breaks the run's limits                              | finish the run as an error                                                                       |
+| 409 `path-clash`                                          | none                         | the realm holds a file or directory in the way                                   | finish as an error; the next run compares and catches up                                         |
+| 409 `overlay-changed`                                     | none                         | a write was staged while the commit started                                      | commit again                                                                                     |
+| a batch refusal of an entry (4xx)                         | released                     | nothing was written                                                              | finish as an error                                                                               |
+| 409 `commit-refused`                                      | earlier, unrecorded, or none | this attempt's earlier commit hasn't landed, or the run isn't under this attempt | finish as an error, or stop when another attempt owns the run                                    |
+| 401                                                       | none                         | the token's run isn't running, or the token expired                              | stop                                                                                             |
+| 5xx from a failure while writing                          | kept, unrecorded             | some files may have landed                                                       | finish as an error; a retry finds `commit-interrupted`, and the next run compares and catches up |
+| 200 again                                                 | recorded                     | the commit landed earlier (a repeat after a lost answer)                         | finish complete                                                                                  |
+
+A Preview never commits: it finishes complete, and the finish discards its
+overlay. A run with nothing staged commits an empty batch, which claims and
+records the commit and writes nothing.
 
 ### The AI spending cap
 

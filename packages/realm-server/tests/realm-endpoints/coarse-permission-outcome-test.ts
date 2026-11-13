@@ -540,6 +540,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.OctetStream} /.*`,
           `DELETE ${SupportedMimeType.CardSource} /.+`,
           `POST ${SupportedMimeType.JSONAPI} /_atomic`,
+          `POST ${SupportedMimeType.JSONAPI} /_run-commit`,
           `GET ${SupportedMimeType.JSON} /_automation-status`,
           `GET ${SupportedMimeType.Permissions} /_permissions`,
           `PATCH ${SupportedMimeType.Permissions} /_permissions`,
@@ -548,7 +549,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.JSON} /_full-reindex`,
           `POST ${SupportedMimeType.JSONAPI} /_invalidate`,
         ].sort(),
-        'the index-backed reads, the verbatim writes, and the administration routes',
+        "the index-backed reads, the verbatim writes (an automation run's commit among them), and the administration routes",
       );
       assert.deepEqual(
         testRealm

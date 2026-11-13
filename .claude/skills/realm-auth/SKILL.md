@@ -28,7 +28,7 @@ Boxel tokens are derived credentials with their own, weaker retirement story.
 | prerender service    | `buildCreatePrerenderAuth` (in-process)                | per-realm session shape, plus `realmAuthority: true` (see below)                            | `1d`                                                                       |
 | publish-realm        | `handle-publish-realm` (in-process)                    | per-realm session shape                                                                     | `1h`                                                                       |
 | diagnostic           | `POST /_diagnostic-render-token` (operator token)      | prerender shape, plus `diagnostic: {id, note, card, scope, realm}`, `permissions: ['read']` | `DIAGNOSTIC_SESSION_LIFETIME_SEC` (15m)                                    |
-| run token            | `mintRunToken` (in-process, one per run attempt)       | `{user, realm, run: {id, attempt, readRealms}}`, `permissions: []`                          | the run's time limit                                                       |
+| run token            | `mintRunToken` (in-process, one per run attempt)       | `{user, realm, run: {id, attempt, readRealms, writesCap}}`, `permissions: []`               | the run's time limit                                                       |
 
 A **diagnostic session** is what an operator renders a live card under to see
 it as the indexer does (`boxel realm-server render-token`; the
