@@ -43,6 +43,7 @@ import {
   maintenanceKinds,
   maintainRepo,
   passLogLine,
+  pruneRerunAt,
   writeCommitGraph,
 } from '../src/maintenance.ts';
 import { BackgroundScheduler } from '../src/background.ts';
@@ -1218,6 +1219,51 @@ module('maintenance as background work', (hooks) => {
       await missingObjects(gitDir, intermediates),
       intermediates,
       'the captures are pruned',
+    );
+  });
+
+  test('a pending prune rerun survives a restart', async (assert) => {
+    let { scheduler, recorder } = schedule({
+      quietMs: 0,
+      pruneExpiryMs: 1500,
+    });
+    let saves = ['{"v":0}', '{"v":1}', '{"v":2}'];
+    for (let [i, content] of saves.entries()) {
+      await recorder.record(await save(content, i * 1000));
+      await recorder.settled();
+    }
+    recorder.tick(T0 + 2000 + quietPeriodMs);
+    await recorder.settled();
+    let head = await readMain(gitDir);
+    await dispatchUntil(
+      scheduler,
+      async () => (await maintainedHead(gitDir)) === head,
+      'the first pass',
+    );
+    assert.true(
+      (await countObjects(gitDir)).looseObjects > 0,
+      'the first pass keeps the young captures',
+    );
+    assert.notStrictEqual(await pruneRerunAt(gitDir), undefined);
+
+    // A new task: its scheduler and recorder know nothing of the first's.
+    await scheduler.stop();
+    await recorder.stop();
+    let restarted = new BackgroundScheduler({
+      kinds: maintenanceKinds({ historyRoot, pruneExpiryMs: 1500 }),
+      recorderFor: (target) => recorderFor(target),
+    });
+    schedulers.push(restarted);
+    restarted.setRealms(new Map([[realm.id, recordedRealm()]]));
+    await dispatchUntil(
+      restarted,
+      async () => (await countObjects(gitDir)).looseObjects === 0,
+      'the rerun after the restart',
+    );
+    assert.strictEqual(
+      await pruneRerunAt(gitDir),
+      undefined,
+      'the rerun clears its record',
     );
   });
 

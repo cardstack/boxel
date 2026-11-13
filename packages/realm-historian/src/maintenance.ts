@@ -52,8 +52,9 @@
 //   still gets a pass, in a moment between its revisions. Its check skips a
 //   realm whose `info/refs` already names HEAD. A pass that leaves loose objects
 //   younger than the prune expiry runs again once they have passed it, so a
-//   realm that goes quiet after a burst doesn't keep its captures. The
-//   service forgets that rerun when it restarts.
+//   realm that goes quiet after a burst doesn't keep its captures. The pass
+//   records when in the repo (`realm-historian-prune-after`), so the rerun
+//   survives a restart and a handover of the realm to another task.
 // * `commit-graph` writes the commit-graph after every `COMMIT_GRAPH_EVERY`
 //   revisions, so a busy realm's path-filtered reads stay fast between
 //   passes.
@@ -62,7 +63,7 @@
 // what made it due, how it ended, each step's duration, and the object
 // counts before and after.
 
-import { readdir, readFile, stat, unlink } from 'node:fs/promises';
+import { readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { logger } from '@cardstack/runtime-common';
@@ -93,6 +94,11 @@ export const DEFAULT_MAINTAIN_EVERY_MS = 60 * 60_000;
 // pack older than this was left by a git that was killed, or that outlived
 // the git that ran it. A lock left behind would fail every later write.
 const STALE_AFTER_MS = 60 * 60_000;
+
+// The file in a repo's directory recording when the captures its last pass
+// kept pass the prune expiry. Git reads no file of this name, and a clone
+// doesn't copy it.
+const PRUNE_AFTER_FILE = 'realm-historian-prune-after';
 
 const COMMIT_GRAPH_LOCK = [
   'objects',
@@ -161,9 +167,6 @@ export function maintenanceKinds({
   everyMs = DEFAULT_MAINTAIN_EVERY_MS,
   commitGraphEvery = COMMIT_GRAPH_EVERY,
 }: MaintenanceKindsOptions): BackgroundKind[] {
-  // The realms whose last pass left loose objects younger than the prune
-  // expiry, by registry id.
-  let rerunsDue = new Set<string>();
   return [
     {
       name: 'maintain',
@@ -171,9 +174,7 @@ export function maintenanceKinds({
       afterCommits: 1,
       quietMs,
       everyMs,
-      isDue: async (realm) =>
-        rerunsDue.has(realm.id) ||
-        !(await isMaintained(repoPath(historyRoot, realm.id))),
+      isDue: (realm) => needsMaintenance(repoPath(historyRoot, realm.id)),
       run: async (realm, { gitDir, head, signal }) => {
         let trigger: PassTrigger =
           head !== undefined && head === (await maintainedHead(gitDir))
@@ -207,12 +208,9 @@ export function maintenanceKinds({
             result,
           }),
         );
-        if (result.after.looseObjects > 0) {
-          rerunsDue.add(realm.id);
-          return { againAfterMs: pruneExpiryMs };
-        }
-        rerunsDue.delete(realm.id);
-        return undefined;
+        return result.after.looseObjects > 0
+          ? { againAfterMs: pruneExpiryMs }
+          : undefined;
       },
     },
     {
@@ -362,11 +360,26 @@ export async function maintainRepo(
     .filter((line) => /^[0-9a-f]{40} /.test(line)).length;
   let prune = performance.now() - step;
 
+  // Loose objects left after the prune are captures younger than the
+  // expiry. The time they pass it is recorded in the repo, so the pass that
+  // removes them runs whichever task records the realm then, across a
+  // restart. It is written before `info/refs`, which marks the pass done.
+  let after = await countObjects(gitDir, signal);
+  let pruneAfter = join(gitDir, PRUNE_AFTER_FILE);
+  if (after.looseObjects > 0) {
+    await writeFile(pruneAfter, `${Date.now() + pruneExpiryMs}\n`);
+  } else {
+    await unlink(pruneAfter).catch((error) => {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+    });
+  }
+
   step = performance.now();
   await runGit(gitDir, ['update-server-info'], { signal });
   let updateServerInfo = performance.now() - step;
 
-  let after = await countObjects(gitDir, signal);
   return {
     before,
     after,
@@ -402,6 +415,37 @@ export async function writeCommitGraph(
     ],
     { signal },
   );
+}
+
+// Whether the repo needs a pass: HEAD has moved since the last complete
+// pass, or the last pass kept captures younger than the prune expiry. A
+// pass run before they pass it removes nothing, and asks to run again when
+// they do, so a task that finds the record when it loads the realm runs
+// the rerun at the right time without knowing when the record was made.
+export async function needsMaintenance(gitDir: string): Promise<boolean> {
+  if ((await pruneRerunAt(gitDir)) !== undefined) {
+    return true;
+  }
+  return !(await isMaintained(gitDir));
+}
+
+// When the captures the last pass kept pass the prune expiry, in
+// milliseconds since the epoch, or undefined when it kept none. A record
+// that can't be read counts as due now.
+export async function pruneRerunAt(
+  gitDir: string,
+): Promise<number | undefined> {
+  let text: string;
+  try {
+    text = await readFile(join(gitDir, PRUNE_AFTER_FILE), 'utf8');
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
+  }
+  let at = Number(text.trim());
+  return Number.isFinite(at) ? at : 0;
 }
 
 // Whether the last complete pass saw the repo's current HEAD: true for a

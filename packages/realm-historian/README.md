@@ -123,7 +123,9 @@ A pass runs four steps:
    revisions.
 3. `git prune --expire=1.hour.ago` removes captured objects no revision uses.
    The hour protects objects another task is writing during a lease handover.
-   A pass that leaves younger ones runs again an hour later.
+   A pass that leaves younger ones runs again an hour later. It records that
+   time in the repo (`realm-historian-prune-after`), so the rerun survives a
+   restart and a handover of the realm to another task.
 4. `git update-server-info` writes `info/refs` and `objects/info/packs`, so a
    repo can be cloned read-only over git's dumb HTTP protocol from a static
    file server. `info/refs` also names the HEAD the last complete pass saw.
