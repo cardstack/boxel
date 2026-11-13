@@ -182,7 +182,7 @@ export interface OAuthResourceControllerDeps {
 }
 
 // The resource's controller, for a route its scopes map (§1.3, §1.5). It
-// answers, as §12 of the provider's design says:
+// answers as RFC 6750 §3.1 and ADR 021 §1.5 say:
 //
 // - a token outside the header: `400 invalid_request`, without a lookup;
 // - no token: `401`, with the challenge naming the resource's metadata;
