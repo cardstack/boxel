@@ -311,22 +311,52 @@ function scriptFailure(
     name?: string;
     message?: string;
     lineNumber?: number;
+    stack?: string;
   };
   let message = describeScriptError(dumped, code);
   let name = error.name ?? 'Error';
-  if (
-    !['SyntaxError', 'TypeError', 'ReferenceError', 'RangeError'].includes(name)
-  ) {
+  // QuickJS's own InternalError is the engine stopping the script (an
+  // interrupt at its time limit, memory or stack), not something the script
+  // threw. Anything else, including an error the script throws itself, is the
+  // script's error and keeps its line.
+  if (name === 'InternalError') {
     return new Error(message);
   }
+  let line = scriptLineOf(error, code);
   return new ScriptFailure(message, {
     name,
     message: error.message ?? String(dumped),
-    ...(typeof error.lineNumber === 'number'
-      ? { line: error.lineNumber - REALM_RUNNER_WRAPPER_LINES }
-      : {}),
+    ...(line !== undefined ? { line } : {}),
     phase,
   });
+}
+
+// The line of its own script an error points at. QuickJS gives an error it
+// raises a `lineNumber`, kept as it is. An error the script constructs
+// itself carries its line only in its stack, whose frames in the script's
+// file include the wrapper's own call to the script: only a frame on one of
+// the script's lines counts, and the first such frame is where it was thrown.
+function scriptLineOf(
+  error: { lineNumber?: number; stack?: string },
+  code: string,
+): number | undefined {
+  let lineCount = code.split('\n').length;
+  let onScript = (wrapped: number) => {
+    let line = wrapped - REALM_RUNNER_WRAPPER_LINES;
+    return line >= 1 && line <= lineCount ? line : undefined;
+  };
+  if (typeof error.lineNumber === 'number') {
+    return error.lineNumber - REALM_RUNNER_WRAPPER_LINES;
+  }
+  for (let found of (error.stack ?? '').matchAll(
+    new RegExp(`${SCRIPT_FILE_PATTERN}:(\\d+)`, 'g'),
+  )) {
+    let line = onScript(Number(found[1]));
+    if (line !== undefined) {
+      return line;
+    }
+  }
+  return undefined;
 }
 
 // A worker runs one script. These hold that run's open host calls so a

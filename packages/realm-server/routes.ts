@@ -51,7 +51,7 @@ import {
   sendResponseForUnauthorizedRequest,
 } from './middleware/index.ts';
 import type Koa from 'koa';
-import { carriesRunToken } from '@cardstack/runtime-common/run-token';
+import { runTokenOf } from '@cardstack/runtime-common/run-token';
 import { verifyRunToken } from './lib/run-token.ts';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
 import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
@@ -635,16 +635,11 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(
     REQUEST_FORWARD_PATH,
     async (ctxt: Koa.Context, next: Koa.Next) => {
-      let authorization = ctxt.req.headers['authorization'] ?? null;
-      if (!carriesRunToken(authorization)) {
+      let runToken = runTokenOf(ctxt.req.headers['authorization'] ?? null);
+      if (!runToken) {
         return await requestForwardSession(ctxt, next);
       }
-      if (
-        !verifyRunToken(
-          authorization!.slice('Bearer '.length),
-          args.realmSecretSeed,
-        )
-      ) {
+      if (!verifyRunToken(runToken, args.realmSecretSeed)) {
         return await sendResponseForUnauthorizedRequest(
           ctxt,
           AuthenticationErrorMessages.TokenInvalid,

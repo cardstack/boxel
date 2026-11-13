@@ -80,6 +80,7 @@ import {
   proposeFix,
 } from '../lib/realm-runner/auto-fix';
 import {
+  AutomationTimeLimitError,
   automationTimeLimitMs,
   redactSecrets,
 } from '../lib/realm-runner/automation';
@@ -3312,6 +3313,9 @@ function redactedError(error: unknown, secrets: readonly string[]): unknown {
       message: redactSecrets(error.scriptError.message, secrets),
     });
   }
+  if (error instanceof AutomationTimeLimitError) {
+    return new AutomationTimeLimitError(redactSecrets(error.message, secrets));
+  }
   if (error instanceof Error) {
     return new Error(redactSecrets(error.message, secrets));
   }
@@ -3328,7 +3332,7 @@ function automationRunError(error: unknown, timeoutMs: number): unknown {
   ) {
     return error;
   }
-  return new Error(
+  return new AutomationTimeLimitError(
     `The automation run reached its time limit of ${timeoutMs / 1000} s (its seconds cap)`,
   );
 }

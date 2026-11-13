@@ -4,7 +4,9 @@ import { module, test } from 'qunit';
 
 import type { RunProgressEvent } from '@cardstack/host/lib/realm-runner/automation';
 import { REDACTED } from '@cardstack/host/lib/realm-runner/automation';
-import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
+import runRealmCode, {
+  RealmScriptError,
+} from '@cardstack/host/lib/realm-runner/runner';
 import {
   AUTOMATION_METHODS,
   INTERACTIVE_METHODS,
@@ -372,6 +374,17 @@ return 'done';`,
     );
     await assert.rejects(failed.done, (error: Error) => {
       return error.message.includes(REDACTED) && !error.message.includes(token);
+    });
+  });
+
+  test("an error the script throws itself is the script's error, with its line", async function (assert) {
+    let { done } = run(`let total = 1;\nthrow new Error('upstream said no');`);
+    await assert.rejects(done, (error: unknown) => {
+      return (
+        error instanceof RealmScriptError &&
+        error.scriptError.line === 2 &&
+        error.scriptError.message === 'upstream said no'
+      );
     });
   });
 

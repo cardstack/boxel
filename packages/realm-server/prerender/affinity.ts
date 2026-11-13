@@ -6,9 +6,11 @@ import type { AffinityArgs } from '@cardstack/runtime-common';
 // realm authority holds sessions with the `realmAuthority` claim, all minted
 // for one user; a render a user asks for holds that user's ordinary sessions;
 // an anonymous render holds none. Anything else, including auth that cannot
-// be read, is `unreadable`.
+// be read, is `unreadable`. An automation run holds one run token, for its
+// automation's realm, minted for the run's identity (ADR 026 §1.2).
 export type RenderSession =
   | { kind: 'realm-authority'; user: string }
+  | { kind: 'run'; user: string }
   | { kind: 'user'; user: string }
   | { kind: 'anonymous' }
   | { kind: 'unreadable' };
@@ -29,11 +31,16 @@ export function renderSessionOf(auth: string): RenderSession {
   }
   let users = new Set<string>();
   let authorities = 0;
+  let runs = 0;
   for (let token of values) {
     if (typeof token !== 'string') {
       return { kind: 'unreadable' };
     }
-    let claims: { user?: unknown; realmAuthority?: unknown } | null;
+    let claims: {
+      user?: unknown;
+      realmAuthority?: unknown;
+      run?: unknown;
+    } | null;
     try {
       claims = JSON.parse(
         Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'),
@@ -51,11 +58,21 @@ export function renderSessionOf(auth: string): RenderSession {
     if (claims.realmAuthority) {
       authorities++;
     }
+    if (claims.run !== undefined) {
+      runs++;
+    }
   }
   if (users.size !== 1) {
     return { kind: 'unreadable' };
   }
   let [user] = users;
+  // A run's tab holds its run token and nothing else, so its sessions never
+  // mix with another kind's in one affinity.
+  if (runs > 0) {
+    return runs === 1 && values.length === 1 && authorities === 0
+      ? { kind: 'run', user }
+      : { kind: 'unreadable' };
+  }
   if (authorities === values.length) {
     return { kind: 'realm-authority', user };
   }
@@ -74,7 +91,10 @@ export function renderSessionOf(auth: string): RenderSession {
 // sessions are keyed by the user they were minted for, ordinary sessions by
 // their user, and an anonymous render has a key of its own. Auth that cannot
 // be read gets a key no other auth shares. A user affinity already names one
-// user.
+// user. An automation run's tab is keyed `realm:<url>#run:<user>`: the
+// automation's realm and the run's identity, so its context serves runs of
+// one realm and one identity (ADR 025 §1.2), and never an interactive or index
+// render, whose sessions are of another kind.
 //
 // Callers that build a key for a render pass its `auth`. Without it the key
 // is the bare `realm:<url>` key the prerender manager routes by, which no
@@ -92,6 +112,8 @@ export function toAffinityKey({
   switch (session.kind) {
     case 'realm-authority':
       return `${key}${SESSION_SEPARATOR}${AUTHORITY_SESSION_PREFIX}${session.user}`;
+    case 'run':
+      return `${key}${SESSION_SEPARATOR}${RUN_SESSION_PREFIX}${session.user}`;
     case 'user':
       return `${key}${SESSION_SEPARATOR}${session.user}`;
     case 'anonymous':
@@ -108,6 +130,19 @@ export function toAffinityKey({
 // names contain `#`, so the first `#` in a realm key starts its session.
 const SESSION_SEPARATOR = '#';
 const AUTHORITY_SESSION_PREFIX = 'authority:';
+const RUN_SESSION_PREFIX = 'run:';
+
+// Whether an affinity key is an automation run's. Every tab of such an
+// affinity shares one BrowserContext, and so one `boxel-session`, which holds
+// the run token of the run in it. A second tab would give a second run's token
+// a way into the first run's tab, so the pool holds a run affinity to one tab
+// and its runs take turns on it.
+export function isRunAffinityKey(affinityKey: string): boolean {
+  return (
+    fromAffinityKey(affinityKey)?.session?.startsWith(RUN_SESSION_PREFIX) ===
+    true
+  );
+}
 
 export function fromAffinityKey(
   affinityKey: string,

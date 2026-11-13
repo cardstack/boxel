@@ -200,6 +200,7 @@ import {
 } from './diagnostic-session.ts';
 import {
   carriesRunToken,
+  runTokenOf,
   runTokenContext,
   runTokenSecret,
   type RunTokenClaim,
@@ -13117,14 +13118,14 @@ export class Realm {
       this.#log.warn(`run-token call ${described} refused: ${why}`);
       throw new AuthenticationError(message);
     };
-    let authorization = request.headers.get('Authorization');
-    if (!carriesRunToken(authorization)) {
+    let runToken = runTokenOf(request.headers.get('Authorization'));
+    if (!runToken) {
       return refuse('the request carries no run token');
     }
     let claims: TokenClaims & { iat: number; exp: number };
     try {
       claims = this.#adapter.verifyJWT(
-        authorization!.slice('Bearer '.length),
+        runToken,
         runTokenSecret(this.#realmSecretSeed),
       );
     } catch (e: any) {

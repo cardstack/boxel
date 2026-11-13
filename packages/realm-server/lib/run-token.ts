@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import type { AutomationRun } from '@cardstack/runtime-common';
+import type { AutomationRun, MintRunToken } from '@cardstack/runtime-common';
 import {
   runTokenContext,
   runTokenSecret,
@@ -104,4 +104,20 @@ export function verifyRunToken(
     return undefined;
   }
   return runTokenContext(claims);
+}
+
+// The worker's `MintRunToken`: `mintRunToken` under the process's secret seed.
+// A worker serves many realm servers' realms, so each token names the origin
+// its realm is served from as its realm server.
+export function buildMintRunToken(realmSecretSeed: string): MintRunToken {
+  return ({ run, realmURL, readRealms, writesCap, timeLimitSeconds }) =>
+    mintRunToken({
+      realmSecretSeed,
+      run,
+      realmURL,
+      readRealms,
+      writesCap,
+      timeLimitSeconds,
+      realmServerURL: `${new URL(realmURL).origin}/`,
+    });
 }

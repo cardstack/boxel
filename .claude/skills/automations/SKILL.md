@@ -53,6 +53,13 @@ description: >-
   progress sink with secrets redacted, and `runAutomationScript`. Use when
   adding or moving a Realm Runner method, changing what an automation script
   can call, or diagnosing a method an automation run refused.
+  Also covers the automation command that runs one attempt of a run
+  (`AUTOMATION_COMMAND`, `runAutomationAttempt` in
+  `runtime-common/tasks/run-automation.ts`, `enqueueAutomationRunJob`, the
+  host's `run-automation` tool): the run's job and its timeout, the run's own
+  prerender affinity and warm tab, the run token as the tab's only session,
+  the commit or the recorded error, and how to run one automation by hand in
+  development (`pnpm run-automation`) and read its outcome.
 ---
 
 # Automations
@@ -766,6 +773,130 @@ The name it was found under stays (`Authorization: Bearer [REDACTED]`,
 `"api_key":"[REDACTED]"`). The sink is where the run log takes these lines;
 the scrubber still removes a vendor's own key from a `callApi` response
 before the script sees it.
+
+## The automation command
+
+One attempt of a run is a `run-command` job naming `AUTOMATION_COMMAND`
+(`@cardstack/boxel-host/tools/run-automation/default`, in
+`runtime-common/automation-run-command.ts`). The run-command task hands such a
+job to `runAutomationAttempt` (`runtime-common/tasks/run-automation.ts`)
+instead of the ordinary command path. No other path runs it:
+`prepareRunCommand` refuses it, so `/_run-command`, bot commands and webhook
+receivers can't run it with a person's sessions (ADR 025 §1.3).
+
+### The job
+
+`enqueueAutomationRunJob` (`runtime-common/jobs/run-command.ts`) enqueues it
+for a run row its trigger has already made with `createAutomationRun`:
+
+- `commandInput` is an `AutomationJobInput`: the run's id, `scheduledAt`,
+  `dryRun`, and for a run no trigger on the card names, `triggerKind`
+  (`manual` or `batch`), plus a webhook run's `webhookPayload`;
+- `dedupeKey` is `automationRunDedupeKey(run)`,
+  `automation:<id>:<trigger>:<slot>`. The worker runs a job only when its key
+  is its run's, so a job some other publisher enqueued that names a run id
+  touches nothing (`not-the-runs-job`);
+- `concurrencyGroup` is `automation:<id>`, so an automation runs one at a time;
+- the priority is `automationInitiatedPriority`;
+- the timeout is `automationJobTimeoutSec(secondsCap)`: the run's time limit
+  plus `AUTOMATION_JOB_OVERHEAD_SEC` (120 s) for the steps around the script.
+  Every other `run-command` job keeps `RUN_COMMAND_JOB_TIMEOUT_SEC` (60 s).
+
+### One attempt
+
+`runAutomationAttempt`, in order:
+
+1. Checks the job's key against the run, then `startAutomationRunAttempt`
+   with the job's reservation id as the attempt, and does what the start says
+   (_An attempt, start to finish_).
+2. Reads the card's declaration and the run's limits from the index. A card
+   that doesn't read as an automation ends the run (`not-an-automation`). A
+   retry gets what is left of the run's time, counted from its first start,
+   never a fresh limit; none left ends it (`timed-out`).
+3. Mints the run's token with the worker's `mintRunToken`
+   (`buildMintRunToken` in `realm-server/lib/run-token.ts`, wired in
+   `worker.ts`). Read realms are `RUN_READ_REALMS`, the base and catalog
+   realms.
+4. Reads the script file with the run's token, so the read takes the realm's
+   check as the run's identity (`missing-script` when it can't), and records
+   its id and the sha256 of its text with `recordAutomationRunScript`. At
+   most `MAX_AUTOMATION_SCRIPT_CHARS` (100,000) characters.
+5. Sends the script to a prerender tab with `prerenderer.runCommand`, with
+   `runRealm` set to the automation's realm, the run's token as the whole of
+   the tab's auth, the `AutomationScriptInput` as a `JsonCard`'s `json`, and
+   `timeoutMs` of what's left of the time limit plus 30 s.
+6. Finishes the run from what the tab answers:
+   - `complete`, Preview: finishes complete without a commit, which discards
+     the overlay;
+   - `complete`: commits with `POST /_run-commit` carrying the token, sent
+     again up to three times on `overlay-changed`, and finishes complete on
+     `200`. Any other answer finishes the run as an error named by the
+     refusal's code (_Committing the overlay_);
+   - `error`: finishes the run as an error with the outcome's reason
+     (`script-error`, `timed-out`, `run-failed`) and its message, prefixed
+     `line N:` for a script error that has a line. The finish discards the
+     overlay, so nothing the script staged lands;
+   - a tab that never answered (`unusable`) is `timed-out`; a command that
+     failed or a request that failed is `run-failed`.
+
+The run's token is redacted from every message the row records.
+
+### The tab
+
+The run goes to its realm's **run affinity**, `realm:<realm>#run:<identity>`
+(`renderSessionOf` reads a run token as a `run` session; `toAffinityKey`). The
+prerender server takes a realm affinity for `/run-command` only when the
+whole of the auth is one run token, so no other session reaches a run's tab
+and a run's token reaches no other tab. The pool holds a run affinity to one
+tab (`isRunAffinityKey`), because the affinity's tabs share one
+`boxel-session`: a second tab would let one run's token replace another's
+partway through. Runs of one realm and identity take turns on that tab. The
+tab is a warm one, never one the run starts itself (ADR 025 §1.2); see the
+`prerender-sizing` skill.
+
+`timeoutMs` widens every layer's timeout for this one request: the worker's
+request to the manager, the manager's proxy, and the tab's wait on the
+command (`commandRequestTimeoutMs` in `prerender-constants.ts`, up to
+`MAX_COMMAND_TIMEOUT_MS`, which is `MAX_RUN_SECONDS`).
+
+In the tab, the `run-automation` tool (`host/app/tools/run-automation.ts`)
+refuses to run unless the tab's session for the realm is a run token. It runs
+the script with `runAutomationScript` on `automationRealmIO`, with `resolve`
+sent to the realm server's `_request-forward` carrying the run's token, so it
+is counted and priced against the run's caps. It answers an
+`AutomationScriptOutcome`: a script that throws (`RealmScriptError`) is
+`script-error` with its line, and a run out of time
+(`AutomationTimeLimitError`) is `timed-out`. It flushes the run's progress
+sink before it answers, while the run is still running.
+
+### Running one automation by hand in development
+
+With the dev stack up (a worker and the prerender server running), from
+`packages/realm-server`:
+
+```sh
+pnpm run-automation \
+  --realm http://localhost:4201/user/my-realm/ \
+  --card http://localhost:4201/user/my-realm/automation/sync \
+  --as @user:localhost          # add --preview to stop before the commit
+```
+
+It creates a `manual` run row for the card, enqueues its job, waits for it
+and prints the run row. `--as` must be a direct writer of the realm, since the
+commit re-confirms it. Then read the outcome:
+
+- the printed row: `state`, `error_reason`, `error_message` (a script error
+  starts `line N:`), `script_hash`, `committed_at`;
+- the files: a complete run's writes are in the realm, indexed in the
+  background (`writes` on the row counts them);
+- the worker's log: `automation run <id> attempt <n> complete`, `ended as an
+error (<reason>)` or `left alone: …`;
+- the prerender server's log: the tab's progress lines, logged as
+  `[automation run] {…}` console lines.
+
+A run that stays `pending` was never claimed: check that a worker can claim
+priority 5 (_The lanes_). One that stays `running` lost its attempt; see
+_Diagnosing a run_.
 
 ## The queue tier and worker lane
 
