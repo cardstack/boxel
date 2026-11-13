@@ -755,6 +755,41 @@ module('reader', (hooks) => {
     );
   });
 
+  test('diffs read from many chunks of git output match the diffs of each revision read alone', async (assert) => {
+    let lines = (version: number) =>
+      Array.from(
+        { length: 1200 },
+        (_, line) => `line ${line} v${version}\n`,
+      ).join('');
+    for (let version = 0; version < 12; version++) {
+      await record([
+        await put('long.md', lines(version), version === 0 ? 'A' : 'M'),
+      ]);
+    }
+    let together = await history({ limit: 12 });
+    let output = together.revisions.reduce(
+      (sum, { changes }) => sum + Buffer.byteLength(changes[0].diff ?? ''),
+      0,
+    );
+    assert.ok(
+      output > 256 * 1024,
+      `the diffs span many chunks (${output} bytes)`,
+    );
+    let one = async (before: string | undefined) =>
+      (await history({ limit: 1, before })).revisions[0];
+    let before: string | undefined;
+    for (let revision of together.revisions) {
+      let alone = await one(before);
+      assert.strictEqual(alone.id, revision.id);
+      assert.strictEqual(
+        revision.changes[0].diff,
+        alone.changes[0].diff,
+        `${revision.id} has the same diff`,
+      );
+      before = revision.id;
+    }
+  });
+
   test('diffs past the response budget are left out, and the listing says so', async (assert) => {
     await record([await put('a.md', 'v0\n', 'A')]);
     for (let version = 1; version <= 3; version++) {

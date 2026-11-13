@@ -1117,15 +1117,19 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     let spent = 0;
     let read = 0;
     let truncated = false;
-    let buffer = Buffer.alloc(0);
     let next = 0;
     let ids = revisions.map(({ record }) => record.id);
+    let unread = new ByteQueue();
+    // Where the search for the end of the current revision's patch resumes,
+    // relative to the unread bytes, so each byte is searched once.
+    let searchFrom = 0;
 
     // Parses the revisions whose output is complete, and says whether to
     // stop reading.
     let consume = (ended: boolean): boolean => {
       while (next < ids.length) {
         let id = ids[next];
+        let buffer = unread.bytes;
         if (buffer.byteLength < 41) {
           return false;
         }
@@ -1150,16 +1154,26 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
           // More raw entries, or the patch, may follow.
           return false;
         }
-        let patch = Buffer.alloc(0);
+        let patch: Buffer = Buffer.alloc(0);
         if (entries.length > 0) {
           if (buffer[position] !== 0) {
             throw new Error(`git diff-tree printed no patch for ${id}`);
           }
           let following = ids[next + 1];
+          let header = following ? `\n${following}\0` : '';
           let nextHeader = following
-            ? buffer.indexOf(`\n${following}\0`, position + 1, 'latin1')
+            ? buffer.indexOf(
+                header,
+                Math.max(position + 1, searchFrom),
+                'latin1',
+              )
             : -1;
           if (nextHeader === -1 && !ended) {
+            // The header may straddle the bytes still to come.
+            searchFrom = Math.max(
+              position + 1,
+              buffer.byteLength - header.length + 1,
+            );
             return false;
           }
           let end = nextHeader === -1 ? buffer.byteLength : nextHeader + 1;
@@ -1192,7 +1206,8 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
             diffs.set(change, { diff: text });
           }
         }
-        buffer = buffer.subarray(position);
+        unread.drop(position);
+        searchFrom = 0;
         next++;
       }
       return true;
@@ -1222,7 +1237,7 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
         ],
         (chunk) => {
           read += chunk.byteLength;
-          buffer = Buffer.concat([buffer, chunk]);
+          unread.push(chunk);
           if (consume(false)) {
             return true;
           }
@@ -1247,6 +1262,44 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
       }
     }
     return { diffs, truncated };
+  }
+}
+
+// Bytes read from a stream and not yet parsed. A chunk is copied into spare
+// room at the end, and parsed bytes are dropped from the front by moving
+// where the unread bytes start; the room is compacted or doubled only when
+// a chunk doesn't fit, so each byte is copied a bounded number of times.
+class ByteQueue {
+  #storage = Buffer.alloc(64 * 1024);
+  #start = 0;
+  #end = 0;
+
+  get bytes(): Buffer {
+    return this.#storage.subarray(this.#start, this.#end);
+  }
+
+  push(chunk: Buffer): void {
+    let length = this.#end - this.#start;
+    if (this.#end + chunk.byteLength > this.#storage.byteLength) {
+      let needed = length + chunk.byteLength;
+      if (needed * 2 <= this.#storage.byteLength) {
+        this.#storage.copyWithin(0, this.#start, this.#end);
+      } else {
+        let grown = Buffer.alloc(
+          Math.max(this.#storage.byteLength * 2, needed * 2),
+        );
+        this.#storage.copy(grown, 0, this.#start, this.#end);
+        this.#storage = grown;
+      }
+      this.#start = 0;
+      this.#end = length;
+    }
+    chunk.copy(this.#storage, this.#end);
+    this.#end += chunk.byteLength;
+  }
+
+  drop(count: number): void {
+    this.#start += count;
   }
 }
 
