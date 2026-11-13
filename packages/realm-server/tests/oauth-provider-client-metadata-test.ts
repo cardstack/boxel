@@ -39,6 +39,7 @@ import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
 import { oauthProviderAdapter } from '../lib/oauth-provider/adapter.ts';
 import {
   boxelDomains,
+  CHECKS_PROPERTY,
   clientIdForLogs,
   clientMetadataDocuments,
   inMetadataDocumentRequest,
@@ -469,6 +470,91 @@ module(basename(import.meta.filename), function () {
         });
         assert.deepEqual(lines, [], 'with no second refusal counted or logged');
       });
+    });
+
+    // `CALLER` starts a download of Claude Code's document; a second caller,
+    // whose one download is spent, then names the same client while it runs.
+    const SECOND_CALLER = '198.51.100.9';
+    async function spendSecondCaller(
+      assert: Assert,
+      documents: ClientMetadataDocuments,
+    ) {
+      assert.true(
+        await ask(documents, CODEX.client_id, SECOND_CALLER),
+        "the second caller's one download",
+      );
+    }
+
+    test('a request naming a client another request is downloading waits for it, and is not counted', async function (assert) {
+      let documents = hooksFor(store, ONE_PER_ADDRESS);
+      await spendSecondCaller(assert, documents);
+      let waiting: Promise<boolean> | undefined;
+      let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
+        await inMetadataDocumentRequest(CALLER, async () => {
+          assert.true(
+            await documents.allowFetch(undefined, CLAUDE_CODE.client_id),
+            'the first request downloads',
+          );
+          waiting = ask(documents, CLAUDE_CODE.client_id, SECOND_CALLER);
+          await documents.allowClient(undefined, {
+            clientId: CLAUDE_CODE.client_id,
+          });
+        });
+        assert.true(
+          await waiting!,
+          'the second request is admitted once the download is accepted, though its allowance is spent',
+        );
+        await inMetadataDocumentRequest(SECOND_CALLER, () =>
+          documents.allowClient(undefined, {
+            clientId: CLAUDE_CODE.client_id,
+          }),
+        );
+      });
+      assert.deepEqual(
+        lines.map(({ message }) => message),
+        ['client metadata document: outcome=cache-hit host=claude.ai'],
+        'the first request used what it downloaded; the second, the cache',
+      );
+    });
+
+    test('a request waiting for a download that fails is decided as any other', async function (assert) {
+      let documents = hooksFor(store, ONE_PER_ADDRESS);
+      await spendSecondCaller(assert, documents);
+      await inMetadataDocumentRequest(CALLER, async () => {
+        assert.true(
+          await documents.allowFetch(undefined, CLAUDE_CODE.client_id),
+        );
+        let waiting = ask(documents, CLAUDE_CODE.client_id, SECOND_CALLER);
+        assert.throws(
+          () =>
+            documents.validate(undefined, CHECKS_PROPERTY, undefined, {
+              client_id: CLAUDE_CODE.client_id,
+              redirect_uris: ['cursor://callback'],
+            }),
+          'the document is refused',
+        );
+        assert.false(
+          await waiting,
+          'the second request is counted, and its allowance is spent',
+        );
+      });
+    });
+
+    test('a download its request leaves unfinished ends with the request', async function (assert) {
+      let documents = hooksFor(store, ONE_PER_ADDRESS);
+      await spendSecondCaller(assert, documents);
+      let waiting: Promise<boolean> | undefined;
+      await inMetadataDocumentRequest(CALLER, async () => {
+        assert.true(
+          await documents.allowFetch(undefined, CLAUDE_CODE.client_id),
+        );
+        // The library refuses the document where no hook sees it.
+        waiting = ask(documents, CLAUDE_CODE.client_id, SECOND_CALLER);
+      });
+      assert.false(
+        await waiting!,
+        'the second request is decided as soon as the first ends, and counted',
+      );
     });
 
     test('a document is downloaded only by the client ID as the lookup was given it', async function (assert) {

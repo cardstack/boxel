@@ -19,7 +19,9 @@
 //    counts until it is accepted again. A download the limit refuses is noted
 //    on the request, so the start of a flow tells the caller they were
 //    limited rather than that the client is unknown (`authorization.ts`).
-//    A cache hit never gets here.
+//    A request naming a client ID another request is downloading waits for
+//    that download: once it is accepted, this one is served from the cache,
+//    uncounted. A cache hit never gets here.
 // 2. `fetch`, the download: through the outbound guard, so a client ID can't
 //    reach a private address, with no redirect followed and at most
 //    `MAX_DOCUMENT_BYTES` read.
@@ -75,6 +77,14 @@ export const DOCUMENT_CACHE_SECONDS = Object.freeze({ min: 30, max: 86400 });
 // first; a forgotten one is counted again.
 const KNOWN_CLIENT_IDS = 1000;
 
+// The longest a request waits for another request's download of the same
+// document, in milliseconds. A download also ends with the request that
+// makes it, which covers a document the library refuses after Boxel's hooks
+// have run (a body it can't read or parse, a `client_id` that doesn't
+// match); this bounds the wait for one made outside a provider route.
+// Longer than the library allows a download (2.5 seconds).
+const DOWNLOAD_WAIT_MS = 5000;
+
 // The library runs `extraClientMetadata.validator` once for each property
 // listed, as it builds any client, so one property is listed to run Boxel's
 // checks. Registration drops it, as it drops every field it doesn't allow,
@@ -114,6 +124,8 @@ interface MetadataDocumentRequest {
   asked: Set<string>;
   // Whether the new-client limit refused a download in this request.
   limited: boolean;
+  // Run when the request ends, to end each download it left unfinished.
+  onEnd: (() => void)[];
 }
 
 const currentRequest = new AsyncLocalStorage<MetadataDocumentRequest>();
@@ -124,10 +136,21 @@ export function inMetadataDocumentRequest<T>(
   address: string | undefined,
   handle: () => Promise<T>,
 ): Promise<T> {
-  return currentRequest.run(
-    { address, asked: new Set(), limited: false },
-    handle,
-  );
+  let request: MetadataDocumentRequest = {
+    address,
+    asked: new Set(),
+    limited: false,
+    onEnd: [],
+  };
+  return currentRequest.run(request, async () => {
+    try {
+      return await handle();
+    } finally {
+      for (let end of request.onEnd) {
+        end();
+      }
+    }
+  });
 }
 
 // Whether the new-client limit refused a download in the current request. The
@@ -176,10 +199,45 @@ export function clientMetadataDocuments({
 }): ClientMetadataDocuments {
   let ownDomains = boxelDomains(hosts);
   let known = new BoundedSet(KNOWN_CLIENT_IDS);
-  // The client IDs downloaded and not yet used, so `allowClient` can tell a
-  // download from a cache hit. Bounded, since a download that fails after it
-  // is read (a document the library refuses) is never used.
-  let downloading = new BoundedSet(KNOWN_CLIENT_IDS);
+  // The downloads `allowFetch` has admitted and that haven't ended, by client
+  // ID, each with the request that makes it, so `allowClient` can tell that
+  // request's use of the client from a cache hit, and other requests can wait
+  // for it. Each ends when the client is used, the download fails, the
+  // request ends, or `DOWNLOAD_WAIT_MS` passes.
+  let downloads = new Map<string, Download>();
+
+  function startDownload(clientId: string) {
+    let finish!: (accepted: boolean) => void;
+    let ended = new Promise<boolean>((resolve) => (finish = resolve));
+    let timer = setTimeout(
+      () => endDownload(clientId, false),
+      DOWNLOAD_WAIT_MS,
+    );
+    timer.unref?.();
+    let request = currentRequest.getStore();
+    let download: Download = {
+      request,
+      ended,
+      finish: (accepted) => {
+        clearTimeout(timer);
+        finish(accepted);
+      },
+    };
+    downloads.set(clientId, download);
+    request?.onEnd.push(() => {
+      if (downloads.get(clientId) === download) {
+        endDownload(clientId, false);
+      }
+    });
+  }
+
+  function endDownload(clientId: string, accepted: boolean) {
+    let download = downloads.get(clientId);
+    if (download) {
+      downloads.delete(clientId);
+      download.finish(accepted);
+    }
+  }
 
   async function allowFetch(
     _ctx: KoaContextWithOIDC | undefined,
@@ -204,6 +262,21 @@ export function clientMetadataDocuments({
       note('refused', url, 'boxel-domain');
       return false;
     }
+    // Another request is downloading this document. Once that download is
+    // accepted the library serves this request from its cache, so it counts
+    // for nothing; if it fails, this request is decided as any other. The
+    // download is registered before it is counted, with nothing awaited in
+    // between, so two requests can't both count one document.
+    for (
+      let other = downloads.get(clientId);
+      other;
+      other = downloads.get(clientId)
+    ) {
+      if (await other.ended) {
+        return true;
+      }
+    }
+    startDownload(clientId);
     // A client accepted before gets this download free. It counts again
     // until it is accepted again, so a document that stopped loading can't
     // be downloaded for free over and over.
@@ -214,6 +287,7 @@ export function clientMetadataDocuments({
         newClientLimit,
       );
       if (!outcome.admitted) {
+        endDownload(clientId, false);
         if (request) {
           request.limited = true;
         }
@@ -221,7 +295,6 @@ export function clientMetadataDocuments({
         return false;
       }
     }
-    downloading.add(clientId);
     return true;
   }
 
@@ -232,7 +305,10 @@ export function clientMetadataDocuments({
     let { clientId } = client;
     // Known clients are ordered by last use, so one in use stays known.
     known.add(clientId);
-    if (!downloading.delete(clientId)) {
+    let download = downloads.get(clientId);
+    if (download && download.request === currentRequest.getStore()) {
+      endDownload(clientId, true);
+    } else {
       let url = URL.parse(clientId);
       if (url) {
         note('cache-hit', url);
@@ -270,12 +346,12 @@ export function clientMetadataDocuments({
         noRedirects: true,
       });
     } catch (error) {
-      downloading.delete(clientId);
+      endDownload(clientId, false);
       note('failed', url, failureReason(error));
       throw error;
     }
     if (response.status !== 200) {
-      downloading.delete(clientId);
+      endDownload(clientId, false);
       note('failed', url, `status-${response.status}`);
     } else {
       note('downloaded', url);
@@ -296,7 +372,7 @@ export function clientMetadataDocuments({
     }
     let check = checkRegistration({ ...metadata }, { hosts, scopes });
     if (!check.allowed) {
-      downloading.delete(metadata.client_id);
+      endDownload(metadata.client_id, false);
       let url = URL.parse(metadata.client_id);
       if (url) {
         note('refused', url, check.error);
@@ -350,6 +426,14 @@ function failureReason(error: unknown): string {
     return 'timeout';
   }
   return 'error';
+}
+
+interface Download {
+  // The request whose `allowFetch` admitted the download.
+  request: MetadataDocumentRequest | undefined;
+  // Whether the client was accepted, once the download ends.
+  ended: Promise<boolean>;
+  finish: (accepted: boolean) => void;
 }
 
 // A set that forgets its oldest member once it holds `limit`.
