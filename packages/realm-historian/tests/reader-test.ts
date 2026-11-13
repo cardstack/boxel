@@ -988,6 +988,36 @@ module('reader', (hooks) => {
     );
   });
 
+  test("a size-only entry's marker is never a path, and a size-only entry is never a directory", async (assert) => {
+    let first = await record([
+      await put('notes.md', 'abc', 'A'),
+      await grow('logs/big.log', 'x'.repeat(1500), 'A'),
+    ]);
+    let marker = 'logs/big.log/.realm-history-size-only';
+    for (let path of [marker, 'logs/big.log/']) {
+      assert.deepEqual(
+        await reader().readAtRevision(realm.id, first, path),
+        { kind: 'path-not-found-at-revision' },
+        `readAtRevision ${path}`,
+      );
+      assert.deepEqual(
+        await reader().readTreeAtRevision(realm.id, first, path),
+        { kind: 'path-not-found-at-revision' },
+        `readTreeAtRevision ${path}`,
+      );
+    }
+    assert.deepEqual(
+      ids(await history({ paths: [marker] })),
+      [],
+      'a filter on the marker matches nothing',
+    );
+    assert.deepEqual(
+      ids(await history({ paths: [marker, 'notes.md'] })),
+      [first],
+      'beside other filters, it matches nothing of its own',
+    );
+  });
+
   test('several path filters list the same revisions whether git uses Bloom filters with several paths or not', async (assert) => {
     await record([await put('Author/jane.json', '{"v":0}', 'A')]);
     for (let index = 0; index < 3; index++) {

@@ -272,6 +272,9 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     if (!commit) {
       return { kind: 'revision-not-found' };
     }
+    if (withinMarker(target)) {
+      return { kind: 'path-not-found-at-revision' };
+    }
     let [object] = await this.#describe(gitDir, [
       target === '' ? `${commit}^{tree}` : `${commit}:${target}`,
     ]);
@@ -354,6 +357,9 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     if (!commit) {
       return { kind: 'revision-not-found' };
     }
+    if (withinMarker(target)) {
+      return { kind: 'path-not-found-at-revision' };
+    }
     let pathspec = target === '' ? [] : [directory ? `${target}/` : target];
     let { stdout } = await this.#git.run(gitDir, [
       'ls-tree',
@@ -386,6 +392,10 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
           blobs.push({ path: entryPath, id, size: Number(size) });
         }
       }
+    }
+    if (directory && markers.has(target)) {
+      // A size-only entry is a file, as `readAtRevision` answers for it.
+      return { kind: 'path-not-found-at-revision' };
     }
     let files: TreeFileAtRevision[] = blobs;
     if (markers.size > 0) {
@@ -1400,12 +1410,19 @@ function pathFilters(paths: string[] | undefined): Filters {
       return 'all';
     }
     let key = directory ? `${path}/` : path;
-    if (!seen.has(key)) {
+    if (!withinMarker(path) && !seen.has(key)) {
       seen.add(key);
       filters.push({ path, directory });
     }
   }
   return filters;
+}
+
+// Whether a path is a size-only entry's marker or lies under one. No realm
+// file can: the recorder refuses that name, so such a path names nothing
+// in a realm's history.
+function withinMarker(path: string): boolean {
+  return path.split('/').includes(SIZE_ONLY_MARKER_NAME);
 }
 
 // A realm path as the reader takes it: relative to the realm, with or
