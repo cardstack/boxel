@@ -802,8 +802,15 @@ const tests: SharedTests<unknown> = Object.freeze({
         { path: '/named', id: `${REALM}named` },
       ]);
       assert.deepEqual(codes(warnings), [
+        { code: 'literal-param-segment', path: '/talks/:2024', dropped: false },
+        { code: 'literal-param-segment', path: '/:about', dropped: false },
+        { code: 'literal-param-segment', path: '/old/:page', dropped: false },
         { code: 'invalid-name', path: '/named', dropped: false },
       ]);
+      assert.strictEqual(
+        warnings[0]!.message,
+        ':2024 is served as literal text, not as a :name: a fixed route, or a redirect whose target uses no :name, has no parameters',
+      );
       let literal = routes[1]!;
       assert.deepEqual(
         [literal.paramNames, literal.kind === 'fixed-card' && literal.pattern],

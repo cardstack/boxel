@@ -259,6 +259,9 @@ export type HostRouteWarningCode =
   | 'multiple-forms'
   // `name` is set but isn't a non-empty string.
   | 'invalid-name'
+  // A top-level fixed route or a redirect without parameters has a segment
+  // that starts with `:`, which it serves as literal text, not as a `:name`.
+  | 'literal-param-segment'
   // `instance` has no usable id.
   | 'invalid-instance'
   // `instance` is a card in another realm.
@@ -507,6 +510,18 @@ class Validator {
       (hasInstance || hasRedirect) &&
       !(hasRedirect && redirectTargetHasParam(rule.redirectTo));
     let literalPath = legacy && hasParamSegment(rule.path);
+    if (literalPath) {
+      let segments = rule.path
+        .split('/')
+        .filter((segment) => segment.startsWith(':'));
+      this.warn(
+        'literal-param-segment',
+        `${segments.join(', ')} ${segments.length === 1 ? 'is' : 'are'} served as literal text, not as a :name: a fixed route, or a redirect whose target uses no :name, has no parameters`,
+        position,
+        displayPath,
+        false,
+      );
+    }
 
     let name: string | undefined;
     if (rule.name !== undefined && !isBlank(rule.name)) {
