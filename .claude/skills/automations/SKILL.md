@@ -507,19 +507,30 @@ What goes through it, for a run-token call in the run's own realm
   a declared operation on a card created in this run doesn't resolve, and a
   read entry answers the realm's version (`docs/adr/remediation/027.md`).
 
-Every staged write meets the same checks (`Realm.#stageRunFiles`). Any file
-may be staged, card instance or not. The realm's size limit for the file's
-kind applies (the card limit for a card document, the file limit otherwise;
-the card+source write checks it before the body is buffered), as do the
-realm's reserved paths. A run may not stage `realm.json`, a module (`.gts`,
-`.ts`, `.gjs`, `.js`), the realm's policy card, a RealmPolicy card or an
-automation card, whether the realm holds one at the path or the run's bytes
-would make one (403). Modules are refused because the module a card's class
-comes from decides whether it's a RealmPolicy or an automation, and the type
-check reads modules from the index, which never sees a staged one. A path
-can't be staged as both a file and a directory (409). The token's
-`run.writesCap` bounds how many files the attempt stages (403 `Writes cap
-reached`), and `RUN_OVERLAY_MAX_BYTES` (100 MiB) bounds their bytes together
+Every staged write meets the same checks (`Realm.#stageRunFiles`), and they
+include every check the commit makes of a file on its own, so a staged write
+(a 204 from the card+source write, a 201 from `_atomic`, a 200 from
+`_operations`) is a file the commit takes unless the realm changes in
+between. Any file may be staged, card instance or not. The realm's size limit
+for the file's kind applies, through the same `assertWriteSize` the commit's
+batch applies (the card limit for a card document, the file limit otherwise;
+the card+source write also checks the larger of the two before the body is
+buffered) (413 `payload-too-large`). `Realm.#runFileRefusal`, which the commit
+asks again of every file, refuses the realm's reserved paths and the files a
+run may not write: `realm.json`, a module (`.gts`, `.ts`, `.gjs`, `.js`), the
+realm's policy card, a RealmPolicy card or an automation card, whether the
+realm holds one at the path or the run's bytes would make one (403
+`forbidden-path`). It also refuses a file under a path the realm holds as a
+file, or at a path where it holds a directory (409 `path-clash`). Modules are
+refused because the module a card's class comes from decides whether it's a
+RealmPolicy or an automation, and the type check reads modules from the
+index, which never sees a staged one. A refusal carries the commit's code and
+reason, without its "nothing was saved"; through `_operations` the code is
+`run-write-refused` and the detail is the commit's. A path can't be staged as
+both a file and a directory among the run's own files either (409
+`path-clash`). The token's
+`run.writesCap` bounds how many files the attempt stages (403 `writes-cap`,
+titled `Writes cap reached`), and `RUN_OVERLAY_MAX_BYTES` (100 MiB) bounds their bytes together
 (413). Rewriting a staged path replaces it and doesn't count again. The run's
 row is locked for the check, so racing writes can't pass the cap or stage a
 path as both a file and a directory, and a write after the run stopped

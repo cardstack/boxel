@@ -11,7 +11,10 @@ import {
   startAutomationRunAttempt,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
+import {
+  RUN_COMMIT_PATH,
+  stageRunOverlayFile,
+} from '@cardstack/runtime-common/run-overlay';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   createAutomationRunToken,
@@ -902,17 +905,6 @@ export class Mine extends Automation {}`;
     );
   });
 
-  test('a run may not stage at a path the realm reserves', async function (assert) {
-    let { token, run } = await createAutomationRunToken(
-      dbAdapter,
-      realm,
-      OWNER,
-    );
-    let refused = await writeText(token, 'notes.txt.boxel-partial', 'nope');
-    assert.notStrictEqual(refused.status, 204, refused.text);
-    assert.deepEqual(await overlayRows(run.id), []);
-  });
-
   test('a path is not staged as both a file and a directory', async function (assert) {
     let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
     assert.strictEqual((await writeText(token, 'clash', 'a file')).status, 204);
@@ -930,6 +922,121 @@ export class Mine extends Automation {}`;
       204,
       'a sibling whose name starts the same is no clash',
     );
+  });
+
+  test('a card the commit would refuse is refused at staging, through each staging route, as the commit refuses it', async function (assert) {
+    // A file at `Person` in the realm, which is where a Person card the
+    // envelope creates gets its directory, so every card below would be under
+    // a path the realm holds as a file.
+    assert.strictEqual(
+      (await writeText(session(), 'Person', 'a file, not a directory')).status,
+      204,
+    );
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let card = {
+      data: {
+        type: 'card',
+        attributes: { name: 'Grace', nicknames: [] },
+        meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+      },
+    };
+
+    // What the commit answers for the same card, staged in the overlay
+    // directly, as a realm that changed since staging would leave it.
+    let other = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    await stageRunOverlayFile(
+      dbAdapter,
+      { runId: other.run.id, attempt: other.run.attempt! },
+      'Person/grace.json',
+      new TextEncoder().encode(JSON.stringify(card)),
+      10,
+    );
+    let committed = await realm.handle(
+      new Request(`${realmURL.href}${RUN_COMMIT_PATH.slice(1)}`, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          Authorization: `Bearer ${other.token}`,
+        },
+      }),
+    );
+    let commitText = await committed!.text();
+    assert.strictEqual(committed!.status, 409, commitText);
+    let commitError = JSON.parse(commitText).errors[0];
+    assert.strictEqual(commitError.code, 'path-clash');
+    assert.ok(
+      commitError.detail.endsWith('; nothing was saved'),
+      commitError.detail,
+    );
+    let reason = commitError.detail.replace(/; nothing was saved$/, '');
+
+    let written = await writeText(
+      token,
+      'Person/grace.json',
+      JSON.stringify(card),
+    );
+    assert.strictEqual(written.status, 409, 'the card+source write');
+    let writeError = JSON.parse(written.text).errors[0];
+    assert.strictEqual(writeError.code, 'path-clash');
+    assert.strictEqual(writeError.detail, reason);
+
+    let added = await atomic(token, [
+      { op: 'add', href: './Person/grace.json', data: card.data },
+    ]);
+    assert.strictEqual(added.status, 409, `the atomic write: ${added.text}`);
+    let addError = JSON.parse(added.text).errors[0];
+    assert.strictEqual(addError.code, 'path-clash');
+    assert.strictEqual(addError.detail, reason);
+
+    let created = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'create',
+        data: {
+          lid: 'grace',
+          attributes: { name: 'Grace', nicknames: [] },
+          meta: {
+            adoptsFrom: { module: `${realmURL.href}person`, name: 'Person' },
+          },
+        },
+      },
+    ]);
+    assert.strictEqual(
+      created.status,
+      409,
+      `the operations envelope: ${created.text}`,
+    );
+    let createError = created.json.errors[0];
+    assert.strictEqual(createError.code, 'run-write-refused');
+    assert.strictEqual(createError.detail, reason);
+
+    assert.deepEqual(await overlayRows(run.id), [], 'nothing is staged');
+  });
+
+  test('a run may not stage at a path the realm reserves, and is refused as the commit refuses it', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    // A part-written file's name routes to no staging route, so a run's
+    // write there is refused before it is routed.
+    let written = await writeText(token, 'notes.txt.boxel-partial', 'nope');
+    assert.strictEqual(written.status, 403, written.text);
+    let added = await atomic(token, [
+      {
+        op: 'add',
+        href: './notes.txt.boxel-partial',
+        data: { type: 'source', attributes: { content: 'nope' }, meta: {} },
+      },
+    ]);
+    assert.strictEqual(added.status, 403, added.text);
+    assert.strictEqual(JSON.parse(added.text).errors[0].code, 'forbidden-path');
+    assert.deepEqual(await overlayRows(run.id), []);
   });
 
   for (let [ending, end] of [

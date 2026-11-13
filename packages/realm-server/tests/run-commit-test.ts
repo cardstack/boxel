@@ -189,9 +189,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(await stage(token, 'aaa-first.txt', 'first'), 204);
     // Staged beneath `notes.txt`, which the realm holds as a file. Staging
-    // through the route checks only the run's own files, so this is put in
-    // the overlay directly, as a realm that changed since staging would leave
-    // it.
+    // through a route refuses it, so this is put in the overlay directly, as
+    // a realm that changed since staging would leave it.
     await stageRunOverlayFile(
       dbAdapter,
       { runId: run.id, attempt: 1 },

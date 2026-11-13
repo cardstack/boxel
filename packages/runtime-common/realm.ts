@@ -259,6 +259,7 @@ import {
   methodNotAllowed,
   badRequest,
   CardError,
+  isCardError,
   responseWithError,
   formattedError,
   stringifyErrorForLog,
@@ -13333,24 +13334,36 @@ export class Realm {
   }
 
   // A run's write of one file's bytes, staged in its overlay rather than
-  // written to the realm. The checks are the ones the write itself would meet
-  // where they concern the file alone: the realm's size limit for the file's
-  // kind (a card document's limit for a card document, the file limit for any
-  // other file, read off the body before it is buffered), and the realm's
-  // reserved paths. A run may not write `realm.json`, the realm's policy card,
-  // any RealmPolicy card or any automation card (ADR 026 §1.4). A path may not
-  // be both a file and a directory among the run's staged files. The run's
-  // `writes` cap bounds how many files it stages.
+  // written to the realm. The checks are the ones the run's commit makes of
+  // the file alone (see `#stageRunFiles`): the realm's size limit for the
+  // file's kind (a card document's limit for a card document, the file limit
+  // for any other file, the larger of the two read off the body before it is
+  // buffered), the realm's reserved paths, the files a run may not write
+  // (ADR 026 §1.4), and no file or directory the realm holds in the way. A
+  // path may not be both a file and a directory among the run's staged
+  // files. The run's `writes` cap bounds how many files it stages.
   async #stageRunWrite(
     request: Request,
     requestContext: RequestContext,
     run: RunOverlayKey,
   ): Promise<Response> {
     let path = this.paths.local(new URL(request.url));
-    let refuse = (status: number, title: string, detail: string) =>
+    let refuse = (
+      status: number,
+      title: string,
+      detail: string,
+      code?: string,
+    ) =>
       createResponse({
         body: JSON.stringify({
-          errors: [{ status: String(status), title, detail }],
+          errors: [
+            {
+              status: String(status),
+              ...(code ? { code } : {}),
+              title,
+              detail,
+            },
+          ],
         }),
         init: {
           status,
@@ -13370,6 +13383,7 @@ export class Realm {
         size === undefined
           ? `File size exceeds maximum allowed size (${limit} bytes)`
           : `File size (${size} bytes) exceeds maximum allowed size (${limit} bytes)`,
+        'payload-too-large',
       );
     let readLimit = path.endsWith('.json')
       ? Math.max(fileLimit, this.#cardSizeLimitBytes)
@@ -13399,50 +13413,48 @@ export class Realm {
         requestContext,
       });
     }
-    return refuse(refusal.status, refusal.title, refusal.detail);
+    return refuse(refusal.status, refusal.title, refusal.detail, refusal.code);
   }
 
   // Stages `files` in the run's overlay, all of them or none, after the
-  // checks a run's write of each one meets (see `#stageRunWrite`): the realm's
-  // size limit for the file's kind, its reserved paths, the files a run may
-  // not write, and no path both a file and a directory among the run's
-  // staged files and these. The run's `writes` cap and the overlay's byte
-  // bound hold for the overlay as these files leave it. Answers undefined
-  // once every file is staged, or why none was.
+  // checks the run's commit makes of each file on its own, so a file staged
+  // here is one the commit takes unless the realm changes in between: the
+  // realm's size limit for the file's kind, as the commit's batch classifies
+  // the bytes it sends, and `#runFileRefusal` (reserved paths, the files a
+  // run may not write, a file or directory the realm holds in the way). No
+  // path may be both a file and a directory among the run's staged files and
+  // these, and the run's `writes` cap and the overlay's byte bound hold for
+  // the overlay as these files leave it. Answers undefined once every file
+  // is staged, or why none was, with the status, code and detail the commit
+  // gives for the same file.
   async #stageRunFiles(
     requestContext: RequestContext,
     run: RunOverlayKey,
     files: { path: LocalPath; content: Uint8Array }[],
   ): Promise<RunStageRefusal | undefined> {
     for (let { path, content } of files) {
-      let fileLimit = fileSizeLimitFor(path, {
-        default: this.#fileSizeLimitBytes,
-        audio: this.#audioSizeLimitBytes,
-        video: this.#videoSizeLimitBytes,
-      });
       let text = path.endsWith('.json') ? utf8OrUndefined(content) : undefined;
-      let limit =
-        text !== undefined && isCardDocumentString(text)
-          ? this.#cardSizeLimitBytes
-          : fileLimit;
-      if (content.byteLength > limit) {
+      // The commit sends a file's bytes as text when they decode, and its
+      // batch holds them to the ceiling `writeSizeType` picks for that.
+      // Only a `.json` can be classified as a card, so any other file is
+      // measured by its bytes, which is the length its text encodes to.
+      let sent = text ?? content;
+      try {
+        this.assertWriteSize(sent, writeSizeType(path, sent), path);
+      } catch (err: unknown) {
+        if (!isCardError(err)) {
+          throw err;
+        }
         return {
-          status: 413,
-          title: 'Payload Too Large',
-          detail: `File size (${content.byteLength} bytes) exceeds maximum allowed size (${limit} bytes)`,
+          status: err.status,
+          code: 'payload-too-large',
+          title: err.title ?? 'Payload Too Large',
+          detail: err.message,
         };
       }
-      let reserved = reservedWriteDestination(path);
-      if (reserved) {
-        return { status: 403, title: 'Forbidden', detail: reserved };
-      }
-      let protectedTarget = await this.#runMayNotWrite(path, text);
-      if (protectedTarget) {
-        return {
-          status: 403,
-          title: 'Forbidden',
-          detail: `An automation run may not write ${protectedTarget}`,
-        };
+      let refusal = await this.#runFileRefusal(path, text);
+      if (refusal) {
+        return refusal;
       }
     }
     let paths = files.map(({ path }) => path).join(', ');
@@ -13456,6 +13468,7 @@ export class Realm {
       case 'over-cap':
         return {
           status: 403,
+          code: 'writes-cap',
           title: 'Writes cap reached',
           detail: `This run may write at most ${staged.cap} files, and has written them all; ${paths} was not written`,
         };
@@ -13475,6 +13488,7 @@ export class Realm {
       case 'path-clash':
         return {
           status: 409,
+          code: 'path-clash',
           title: 'Conflict',
           detail: `This run has staged ${staged.clash}, so ${staged.path} can't be both a file and a directory`,
         };
@@ -13487,19 +13501,31 @@ export class Realm {
   // staged in the run's overlay, all or none, and the realm is left as it
   // is. The checks are the atomic write's own, against the files as the run
   // sees them (an `add` of a path that exists, an `update` of one that
-  // doesn't, a reserved path, a resource that is neither a card nor
-  // source), and then the ones every staged write meets (see
-  // `#stageRunFiles`). It answers as the atomic write does, with each file's
-  // id.
+  // doesn't, a resource that is neither a card nor source), and then the
+  // ones every staged write meets (see `#stageRunFiles`), which answer as
+  // the run's commit would, a reserved path among them. It answers as the
+  // atomic write does, with each file's id.
   async #stageRunAtomic(
     requestContext: RequestContext,
     run: RunOverlayKey,
     operations: AtomicOperation[],
   ): Promise<Response> {
-    let refuse = (status: number, title: string, detail: string) =>
+    let refuse = (
+      status: number,
+      title: string,
+      detail: string,
+      code?: string,
+    ) =>
       createResponse({
         body: JSON.stringify({
-          errors: [{ status: String(status), title, detail }],
+          errors: [
+            {
+              status: String(status),
+              ...(code ? { code } : {}),
+              title,
+              detail,
+            },
+          ],
         }),
         init: {
           status,
@@ -13527,14 +13553,6 @@ export class Realm {
               'Invalid atomic:operations format',
               error?.message ??
                 `Request operation contains invalid href '${operation.href}'`,
-            );
-          }
-          let reserved = reservedWriteDestination(localPath);
-          if (reserved) {
-            return refuse(
-              422,
-              'Reserved path',
-              `Cannot write '${operation.href}': ${reserved}`,
             );
           }
           let exists =
@@ -13597,7 +13615,12 @@ export class Realm {
           });
         }
         if (refusal) {
-          return refuse(refusal.status, refusal.title, refusal.detail);
+          return refuse(
+            refusal.status,
+            refusal.title,
+            refusal.detail,
+            refusal.code,
+          );
         }
         return files;
       },
@@ -13895,8 +13918,9 @@ export class Realm {
   // again what staging checked: the identity is still a direct writer of the
   // realm (ADR 026 §1.5), so someone who lost direct write but keeps a policy
   // grant can't write through it; the files are within the run's `writes`
-  // cap; none is at a reserved path, `realm.json`, the realm's policy card, a
-  // RealmPolicy card or an automation card (ADR 026 §1.4); and none would be
+  // cap; and none is refused by `#runFileRefusal`, which staging also asks:
+  // none is at a reserved path, `realm.json`, the realm's policy card, a
+  // RealmPolicy card or an automation card (ADR 026 §1.4), and none would be
   // a file where the realm holds a directory, or under a path it holds as a
   // file. Paths are realm-local, so every file is in the run's realm, and the
   // batch is built from staged files alone, so it carries no `callApi` entry.
@@ -13990,29 +14014,16 @@ export class Realm {
         );
       }
       for (let { path, content } of files) {
-        let reserved = reservedWriteDestination(path);
-        let protectedTarget =
-          reserved === undefined
-            ? await this.#runMayNotWrite(
-                path,
-                path.endsWith('.json') ? utf8OrUndefined(content) : undefined,
-              )
-            : undefined;
-        if (reserved || protectedTarget) {
+        let refused = await this.#runFileRefusal(
+          path,
+          path.endsWith('.json') ? utf8OrUndefined(content) : undefined,
+        );
+        if (refused) {
           throw refusal(
-            403,
-            'forbidden-path',
-            'Forbidden',
-            `${reserved ?? `An automation run may not write ${protectedTarget}`}; nothing was saved`,
-          );
-        }
-        let clash = await this.#realmPathClash(path);
-        if (clash) {
-          throw refusal(
-            409,
-            'path-clash',
-            'Conflict',
-            `The run staged ${path}, but the workspace holds ${clash}, so one of them would have to be both a file and a directory; nothing was saved`,
+            refused.status,
+            refused.code,
+            refused.title,
+            `${refused.detail}; nothing was saved`,
           );
         }
       }
@@ -14111,6 +14122,49 @@ export class Realm {
       );
     }
     return committed(files.map((f) => f.path));
+  }
+
+  // Why a run's commit refuses to write the file at `path`, for a reason that
+  // concerns that file alone: a reserved path; `realm.json`, the realm's
+  // policy card, a RealmPolicy card or an automation card, which a run may
+  // not write (ADR 026 §1.4); or a file or directory the realm holds in the
+  // way of it. `text` is the file's content when it is a `.json` that
+  // decodes, which is what decides whether it would be a RealmPolicy or an
+  // automation card. Staging asks the same question of every file it stages,
+  // and the commit asks it again of every file it sends, since the realm can
+  // change in between. Undefined when there is no such reason.
+  async #runFileRefusal(
+    path: LocalPath,
+    text: string | undefined,
+  ): Promise<RunFileRefusal | undefined> {
+    let reserved = reservedWriteDestination(path);
+    if (reserved) {
+      return {
+        status: 403,
+        code: 'forbidden-path',
+        title: 'Forbidden',
+        detail: reserved,
+      };
+    }
+    let protectedTarget = await this.#runMayNotWrite(path, text);
+    if (protectedTarget) {
+      return {
+        status: 403,
+        code: 'forbidden-path',
+        title: 'Forbidden',
+        detail: `An automation run may not write ${protectedTarget}`,
+      };
+    }
+    let clash = await this.#realmPathClash(path);
+    if (clash) {
+      return {
+        status: 409,
+        code: 'path-clash',
+        title: 'Conflict',
+        detail: `The workspace holds ${clash}, so ${path} would make one of them both a file and a directory`,
+      };
+    }
+    return undefined;
   }
 
   // A file or directory the realm holds that `path` can't be written beside:
@@ -21077,12 +21131,23 @@ function includedCardOf(
 
 // Why a run's write was not staged, as the route that staged it answers.
 // `notRunning` marks the refusal of a run that has stopped running, or that
-// another attempt owns.
+// another attempt owns. `code` is the one the run's commit answers the same
+// refusal with, where the commit makes it.
 interface RunStageRefusal {
   status: number;
+  code?: string;
   title: string;
   detail: string;
   notRunning?: true;
+}
+
+// Why a run's commit refuses one file (see `Realm.#runFileRefusal`), as
+// staging and the commit both answer it.
+interface RunFileRefusal {
+  status: number;
+  code: 'forbidden-path' | 'path-clash';
+  title: string;
+  detail: string;
 }
 
 async function* bytesIterable(bytes: Uint8Array): AsyncIterable<Uint8Array> {
