@@ -21,8 +21,22 @@ export type CanonicalURLMemo = Map<string, string>;
 // the memo starts over, which costs only recomputation.
 export const CANONICAL_URL_MEMO_MAX_ENTRIES = 50_000;
 
+// An absolute http(s) URL, the only scheme-prefixed reference that ignores
+// the base: `http:person.gts` (no `//`) resolves against the base's directory
+// when the base is http, and other schemes are left to the full base.
+const ABSOLUTE_HTTP = /^https?:\/\//i;
 const SCHEME = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 const ORIGIN = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\/[^/?#]*/;
+// What the URL parser strips from the ends or drops from the middle (C0
+// controls and space), which can turn ` #x` into a fragment reference.
+function hasParserWhitespace(url: string): boolean {
+  for (let i = 0; i < url.length; i++) {
+    if (url.charCodeAt(i) <= 0x20) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // The memo key for `(url, relativeTo)`: the URL, with the part of the base its
 // resolution reads.
@@ -31,11 +45,19 @@ function memoKey(
   relativeTo: string | undefined,
   virtualNetwork: VirtualNetwork,
 ): string {
-  if (SCHEME.test(url) || virtualNetwork.isRegisteredPrefix(url)) {
+  let base = relativeTo ?? '';
+  if (hasParserWhitespace(url)) {
+    return `${base}\n${url}`;
+  }
+  if (ABSOLUTE_HTTP.test(url) || virtualNetwork.isRegisteredPrefix(url)) {
     return `\n${url}`;
   }
-  let base = relativeTo ?? '';
-  if (url === '' || url.startsWith('?') || url.startsWith('#')) {
+  if (
+    SCHEME.test(url) ||
+    url === '' ||
+    url.startsWith('?') ||
+    url.startsWith('#')
+  ) {
     return `${base}\n${url}`;
   }
   if (url.startsWith('/') && !url.startsWith('//')) {
@@ -44,9 +66,7 @@ function memoKey(
   }
   let path = base.split(/[?#]/)[0] ?? base;
   let slash = path.lastIndexOf('/');
-  return slash >= 0
-    ? `${path.slice(0, slash + 1)}\n${url}`
-    : `${base}\n${url}`;
+  return slash >= 0 ? `${path.slice(0, slash + 1)}\n${url}` : `${base}\n${url}`;
 }
 
 export function canonicalURL(

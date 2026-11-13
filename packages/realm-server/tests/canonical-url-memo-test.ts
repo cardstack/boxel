@@ -106,6 +106,8 @@ module(basename(import.meta.filename), function () {
         'http://test/dir/a.gts',
         'http://test/dir/b.json',
         'http://test/other/c.json?x=1#y',
+        'http://test/Person/a.json',
+        'http://test/Pet/b.json',
         'http://test/a.json',
         'http://elsewhere/dir/a.gts',
       ];
@@ -119,6 +121,12 @@ module(basename(import.meta.filename), function () {
         '?only-query',
         '#only-hash',
         '',
+        // Same scheme, no authority: relative to the base's directory.
+        'http:person.gts',
+        // The parser strips the space, leaving a fragment of the base.
+        ' #details',
+        '\t./tabbed.gts',
+        'mailto:someone@example.com',
       ];
       for (let i = 0; i < 2; i++) {
         for (let base of bases) {
@@ -152,7 +160,12 @@ module(basename(import.meta.filename), function () {
       let { network, resolveCount } = makeStubNetwork();
       let memo: CanonicalURLMemo = new Map();
       for (let i = 0; i < 100; i++) {
-        canonicalURL('../person', `http://test/Person/${i}.json`, network, memo);
+        canonicalURL(
+          '../person',
+          `http://test/Person/${i}.json`,
+          network,
+          memo,
+        );
         canonicalURL('../person', `http://test/Pet/${i}.json`, network, memo);
       }
       assert.strictEqual(resolveCount(), 2, 'one per directory');
@@ -162,7 +175,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test("a realm-sized pass keeps the memo to its references, not its cards", function (assert) {
+    test('a realm-sized pass keeps the memo to its references, not its cards', function (assert) {
       let { network } = makeStubNetwork();
       let memo: CanonicalURLMemo = new Map();
       let deps = [
