@@ -1,5 +1,6 @@
 // Pretui — RelativeTime: a date as a phrase relative to a caller-supplied now.
 import Component from '@glimmer/component';
+import { nowDate } from '@cardstack/runtime-common';
 import { ABS_FMT } from '../internal/reading-extras';
 import { cachedRelativeTimeFormat } from '../internal/intl-cache';
 
@@ -39,7 +40,7 @@ function asDate(value: string | Date | undefined): Date | undefined {
 
 export class RelativeTime extends Component<RelativeTimeSignature> {
   // Captured once — the no-timer stand-in for "now" when @now is omitted.
-  private constructedAt = new Date();
+  private constructedAt = nowDate();
 
   get dateObj(): Date | undefined {
     return asDate(this.args.date);

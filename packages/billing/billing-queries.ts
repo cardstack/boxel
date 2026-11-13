@@ -764,7 +764,9 @@ export type SpendResult = 'charged' | 'already-charged' | 'nothing-to-charge';
 //
 // A charge with an identity (see `chargeIdentity`) is written at most once:
 // in one transaction, holding a lock on the identity, it checks whether the
-// charge is already in the ledger and writes nothing if it is.
+// charge is already in the ledger and writes nothing if it is. Calls in this
+// process for one identity queue in memory first (see `inChargeQueue`), so
+// only one of them holds a pooled connection while it waits on the lock.
 //
 // The balance it draws on is read and spent without a lock of its own, so two
 // different charges for one user must not run at once: callers hold the
@@ -786,20 +788,70 @@ export async function spendCredits(
   if (identity === undefined) {
     return await writeSpend(dbAdapter, userId, creditsToSpend, charge, usage);
   }
-  return await dbAdapter.withTransaction(
-    async (tx) => {
-      await tx([
-        `SELECT pg_advisory_xact_lock(hashtextextended(`,
-        param(`credits-ledger-charge:${identity}`),
-        `, 0))`,
-      ]);
-      if (await isCharged(tx, charge)) {
-        return 'already-charged';
-      }
-      return await writeSpend(tx, userId, creditsToSpend, charge, usage);
-    },
-    { label: `ledger charge ${identity}` },
+  return await inChargeQueue(dbAdapter, identity, () =>
+    dbAdapter.withTransaction(
+      async (tx) => {
+        await tx([
+          `SELECT pg_advisory_xact_lock(hashtextextended(`,
+          param(`credits-ledger-charge:${identity}`),
+          `, 0))`,
+        ]);
+        if (await isCharged(tx, charge)) {
+          return 'already-charged';
+        }
+        return await writeSpend(tx, userId, creditsToSpend, charge, usage);
+      },
+      { label: `ledger charge ${identity}` },
+    ),
   );
+}
+
+// The tail of each charge identity's in-process queue, per adapter. An entry
+// lives only while a call for its identity is queued or running.
+const chargeQueues = new WeakMap<DBAdapter, Map<string, Promise<void>>>();
+
+// Runs `fn` once every earlier call queued here for the same adapter and
+// charge identity has settled. The advisory lock on the identity still
+// serializes writers across replicas; this queue keeps same-identity callers
+// within one process waiting in memory, so each identity pins at most one
+// pooled connection per process however many calls for it arrive at once.
+// The same shape as `PgAdapter.withUserCostLock`'s in-process queue.
+//
+// Callers that hold the payer's cost lock already wait in memory behind
+// same-payer writers. That lock does not cover writers of one charge under
+// different payers: a charge's identity leaves out the payer (see
+// `chargeIdentity`), so an automation's storage for a day can be retried for
+// a new payer while a write for the old one is still waiting on the lock.
+// Those writers hold different cost locks and meet only here.
+//
+// A call that fails does not fail the calls queued behind it: each waits for
+// the one ahead to settle, not to succeed, and sees only its own outcome.
+async function inChargeQueue<T>(
+  dbAdapter: DBAdapter,
+  identity: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  let queues = chargeQueues.get(dbAdapter);
+  if (!queues) {
+    queues = new Map();
+    chargeQueues.set(dbAdapter, queues);
+  }
+  let previous = queues.get(identity) ?? Promise.resolve();
+  let mine = previous.then(fn);
+  let settled = mine.then(
+    () => undefined,
+    () => undefined,
+  );
+  queues.set(identity, settled);
+  // Removes the entry once its queue is idle. A later caller that has queued
+  // behind this one owns the tail, and removing it would let the next caller
+  // skip past that later one.
+  void settled.then(() => {
+    if (queues.get(identity) === settled) {
+      queues.delete(identity);
+    }
+  });
+  return await mine;
 }
 
 // Writes a spend's ledger entries and its usage in one statement: a

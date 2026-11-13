@@ -16,6 +16,7 @@ import { PgAdapter } from '@cardstack/postgres';
 import { logger } from '@cardstack/runtime-common';
 import { Historian } from './src/historian.ts';
 import { Heartbeat, startHealthServer } from './src/health.ts';
+import { DEFAULT_BACKGROUND_CONCURRENCY } from './src/background.ts';
 
 const log = logger('realm-historian');
 
@@ -30,6 +31,10 @@ let { values: args } = parseArgs({
     taskCount: { type: 'string', default: '1' },
     leaseRenewMs: { type: 'string', default: '10000' },
     leaseExpiryMs: { type: 'string', default: '30000' },
+    backgroundConcurrency: {
+      type: 'string',
+      default: String(DEFAULT_BACKGROUND_CONCURRENCY),
+    },
   },
   strict: true,
 });
@@ -60,6 +65,7 @@ let shardCount = integer('shardCount', 1);
 let taskCount = integer('taskCount', 1);
 let leaseRenewMs = integer('leaseRenewMs', 1);
 let leaseExpiryMs = integer('leaseExpiryMs', 1);
+let backgroundConcurrency = integer('backgroundConcurrency', 1);
 if (leaseExpiryMs <= leaseRenewMs) {
   console.error('--leaseExpiryMs must be greater than --leaseRenewMs');
   process.exit(2);
@@ -90,6 +96,7 @@ let historian = new Historian({
     expiryMs: leaseExpiryMs,
     holder,
   },
+  background: { concurrency: backgroundConcurrency },
 });
 
 let health = await startHealthServer({

@@ -5,7 +5,14 @@ import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
-import { createJWT, setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  createAutomationRunToken,
+  createJWT,
+  setupPermissionedRealmCached,
+  automationFixture,
+  TEST_AUTOMATION_PATH,
+} from './helpers/index.ts';
+import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import {
   startStubVendor,
@@ -159,6 +166,8 @@ interface Batch {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupCatalogTestSubset(hooks);
+
   let realm: Realm;
   let request: SuperTest<Test>;
   let dbAdapter: PgAdapter;
@@ -194,6 +203,12 @@ module(basename(import.meta.filename), function (hooks) {
     fileSystem: {
       'pr-inbox.gts': prInboxModule,
       'team-feed.gts': teamFeedModule,
+      ...automationFixture({
+        operations: [
+          { type: PR_INBOX, names: ['listPRs', 'listReviewRequests'] },
+          { type: TEAM_FEED, names: ['latest'] },
+        ],
+      }),
       'inbox.json': inboxCard(),
     },
     onRealmSetup(args) {
@@ -370,7 +385,13 @@ module(basename(import.meta.filename), function (hooks) {
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${createJWT(realm, user, ['read', 'write'])}`,
+          Authorization: `Bearer ${
+            (
+              await createAutomationRunToken(dbAdapter, realm, user, {
+                automation: TEST_AUTOMATION_PATH,
+              })
+            ).token
+          }`,
         },
         body,
       }),

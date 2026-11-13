@@ -19,11 +19,11 @@ import {
 import { addPlatformClient } from '#realm-server/lib/oauth';
 // Signing in on the secure origin drives Synapse's admin API.
 import {
-  createJWT,
   ensureMatrixAdminUser,
   getTestPrerenderer,
   stopTestPrerenderServer,
 } from '#realm-server/tests/helpers/index';
+import { automationAdmission } from '#realm-server/lib/key-bindings';
 import {
   startStubOAuthProvider,
   type StubOAuthProvider,
@@ -382,20 +382,18 @@ describe('boxel keys: OAuth clients and connections (integration)', () => {
     expect(await interactive.text()).toContain('interactive-use-not-approved');
     expect(provider.apiCalls).toEqual([]);
 
-    let piped = (await testRealm.handleAutomation(
-      new Request(`${realm}_operations`, {
-        method: 'POST',
-        headers: {
-          Accept: OPERATIONS,
-          'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${createJWT(testRealm, matrixId, ['read', 'write'])}`,
-        },
-        body: invokeBody,
-      }),
-    ))!;
-    expect(piped.status, await piped.clone().text()).toBe(200);
-    expect(provider.apiCalls).toHaveLength(1);
-    expect(provider.issued).toContain(provider.apiCalls[0].token);
+    // An automation run's call is held to its automation card's declaration,
+    // which this stack can't index (it serves no catalog realm), so the
+    // binding is checked the way a run is admitted: with every check a call
+    // makes, short of sending it.
+    let admission = await automationAdmission(getTestDbAdapter()!, {
+      core: testRealm.operationCore,
+      realmURL: new URL(realm),
+      codeRef: { module: rri(`${realm}service`), name: 'Service' },
+      operation: 'me',
+      payer: matrixId,
+    });
+    expect(admission?.error).toBeUndefined();
   });
 
   it('connects through a client shared into the realm', async () => {

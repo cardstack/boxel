@@ -7,6 +7,7 @@ import {
   CLIENT_IP_HEADER,
   INFRA_CLIENT_CLASS,
   isMatrixUserId,
+  networkRateLimitKey,
   normalizeIP,
   parseAddressRange,
   parseAddressRanges,
@@ -116,6 +117,35 @@ module(basename(import.meta.filename), function () {
       assert.notStrictEqual(
         rateLimitKey(parseIP('2001:db8:1:2::1')!),
         rateLimitKey(parseIP('2001:db8:1:3::1')!),
+      );
+    });
+
+    test("a caller's network is the /24 or /48 they are in", function (assert) {
+      assert.strictEqual(
+        networkRateLimitKey(parseIP('192.0.2.200')!),
+        '192.0.2.0/24',
+      );
+      assert.strictEqual(
+        networkRateLimitKey(parseIP('::ffff:192.0.2.200')!),
+        '192.0.2.0/24',
+        'a mapped address is in the network of the IPv4 address it maps',
+      );
+      assert.notStrictEqual(
+        networkRateLimitKey(parseIP('192.0.2.1')!),
+        networkRateLimitKey(parseIP('192.0.3.1')!),
+      );
+      assert.strictEqual(
+        networkRateLimitKey(parseIP('2001:db8:1:2:aaaa:bbbb:cccc:dddd')!),
+        '2001:db8:1::/48',
+      );
+      assert.strictEqual(
+        networkRateLimitKey(parseIP('2001:db8:1:2::1')!),
+        networkRateLimitKey(parseIP('2001:db8:1:ffff::9')!),
+        'two /64s in one /48 are one network',
+      );
+      assert.notStrictEqual(
+        networkRateLimitKey(parseIP('2001:db8:1::1')!),
+        networkRateLimitKey(parseIP('2001:db8:2::1')!),
       );
     });
 

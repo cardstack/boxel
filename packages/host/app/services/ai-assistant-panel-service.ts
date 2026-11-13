@@ -240,6 +240,11 @@ export default class AiAssistantPanelService extends Service {
     // user may have switched or the persisted room may have changed while
     // closed. (ensureRoomsLoaded()'s "leave the current room alone" guard is
     // only for the passive session-start hook.)
+    //
+    // The panel opens with the past-sessions list closed. The room that
+    // loadRoomsTask then selects leaves the list as it is, so a list the user
+    // opens while the rooms load stays open.
+    this.hidePastSessions();
     return this.loadRoomsTask.perform();
   }
 
@@ -684,12 +689,21 @@ export default class AiAssistantPanelService extends Service {
   }
 
   private loadRoomsTask = restartableTask(async () => {
+    let persistedRoomId = this.localPersistenceService.getCurrentRoomId();
     await this.waitForSessionRooms();
-    await this.enterRoomInitially();
+    await this.enterRoomInitially(persistedRoomId);
   });
 
-  private async enterRoomInitially() {
-    let persistedRoomId = this.localPersistenceService.getCurrentRoomId();
+  // persistedRoomId is the persisted room when the rooms started to load.
+  private async enterRoomInitially(persistedRoomId: string | null) {
+    // Entering a room persists it. If the persisted room changed while the
+    // rooms loaded, the user entered a room from the past-sessions list, and
+    // the panel stays in that room.
+    let roomEnteredDuringLoad = () =>
+      this.localPersistenceService.getCurrentRoomId() !== persistedRoomId;
+    if (roomEnteredDuringLoad()) {
+      return;
+    }
     if (persistedRoomId) {
       let roomToEnter = this.aiSessionRooms.find(
         (r) => r.roomId === persistedRoomId,
@@ -724,15 +738,20 @@ export default class AiAssistantPanelService extends Service {
           }
         }
       }
+      if (roomEnteredDuringLoad()) {
+        return;
+      }
+      // The panel selects this room on its own, so it doesn't close a
+      // past-sessions list the user opened while the rooms were loading.
       if (roomToEnter) {
-        this.enterRoom(roomToEnter.roomId);
+        this.enterRoom(roomToEnter.roomId, false);
         return;
       }
     }
 
     let latestRoom = this.latestRoom;
     if (latestRoom) {
-      this.enterRoom(latestRoom.roomId);
+      this.enterRoom(latestRoom.roomId, false);
       return;
     }
 

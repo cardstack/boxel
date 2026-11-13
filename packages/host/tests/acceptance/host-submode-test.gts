@@ -53,6 +53,7 @@ const publishedSpaceHost = ENV.publishedRealmBoxelSpaceDomain;
 import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 
 const personCardSource = `
   import { contains, containsMany, field, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
@@ -964,7 +965,7 @@ module('Acceptance | host submode', function (hooks) {
             sourceRealmURL,
             publishedRealmURL,
             publishedRealmId: '1',
-            lastPublishedAt: String(new Date().getTime()),
+            lastPublishedAt: String(TEST_CLOCK_INSTANT),
             status: 'published',
           };
         };
@@ -1217,9 +1218,8 @@ module('Acceptance | host submode', function (hooks) {
         publishDeferred.fulfill();
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            [`https://first.last.${publishedSpaceHost}/test/`]: String(
-              Date.now(),
-            ),
+            [`https://first.last.${publishedSpaceHost}/test/`]:
+              String(TEST_CLOCK_INSTANT),
           },
         });
 
@@ -1344,7 +1344,7 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       test('preselects previously published domains on refresh', async function (assert) {
-        let now = Date.now();
+        let now = TEST_CLOCK_INSTANT;
         let realmServer = getService('realm-server') as any;
         let originalFetchClaimed = realmServer.fetchBoxelClaimedDomain;
 
@@ -1546,7 +1546,7 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       test('preselects a previously published unlisted link on refresh', async function (assert) {
-        let now = Date.now();
+        let now = TEST_CLOCK_INSTANT;
         let slug = 'k7f3qz9pbcdmnpqr';
         let unlistedUrl = `https://testuser.${publishedSpaceHost}/${slug}/`;
 
@@ -1582,7 +1582,7 @@ module('Acceptance | host submode', function (hooks) {
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
             [`https://testuser.${publishedSpaceHost}/test/`]: (
-              new Date().getTime() -
+              TEST_CLOCK_INSTANT -
               3 * 24 * 60 * 60 * 1000
             ).toString(),
           },
@@ -1773,7 +1773,7 @@ module('Acceptance | host submode', function (hooks) {
       });
 
       test('open site popover shows published realms and opens them correctly', async function (assert) {
-        let now = Date.now();
+        let now = TEST_CLOCK_INSTANT;
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
             [`https://testuser.${publishedSpaceHost}/test/`]: String(now),
@@ -2124,7 +2124,7 @@ module('Acceptance | host submode', function (hooks) {
             sourceRealmURL: _sourceURL,
             publishedRealmURL: publishedURL,
             publishedRealmId: '1',
-            lastPublishedAt: String(new Date().getTime()),
+            lastPublishedAt: String(TEST_CLOCK_INSTANT),
             status: 'published',
           };
         };
@@ -2300,7 +2300,7 @@ module('Acceptance | host submode', function (hooks) {
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
             [`https://my-custom-site.${publishedSpaceHost}/`]: (
-              new Date().getTime() -
+              TEST_CLOCK_INSTANT -
               2 * 24 * 60 * 60 * 1000
             ).toString(),
           },

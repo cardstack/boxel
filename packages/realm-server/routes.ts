@@ -10,6 +10,7 @@ import type {
   LinkShapePolicy,
 } from '@cardstack/runtime-common';
 import { DBRateLimitStore } from '@cardstack/runtime-common';
+import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import { createRequire } from 'module';
@@ -47,8 +48,11 @@ import {
   jwtMiddleware,
   grafanaAuthorization,
   operatorAuthorization,
+  sendResponseForUnauthorizedRequest,
 } from './middleware/index.ts';
 import type Koa from 'koa';
+import { carriesRunToken } from '@cardstack/runtime-common/run-token';
+import { verifyRunToken } from './lib/run-token.ts';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
 import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
 import handleQueueStatusRequest from './handlers/handle-queue-status.ts';
@@ -62,6 +66,11 @@ import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts'
 import handleInviteCheck from './handlers/handle-invite-check.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
+import {
+  handleAIBatchStatus,
+  handleSubmitAIBatch,
+} from './handlers/handle-ai-batches.ts';
+import { AI_BATCHES_PATH } from './lib/openrouter-batches.ts';
 import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
@@ -127,6 +136,7 @@ import {
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
+  accountContactLookup,
   handleCheckSecureSession,
   handleEndSecureSession,
   handleEndWindowSessions,
@@ -143,7 +153,7 @@ import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
 import { PREFIX_REALMS_ENDPOINT } from '@cardstack/runtime-common/prefix-realm-network';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
-import type Provider from 'oidc-provider';
+import type { OAuthProviderService } from './lib/oauth-provider/provider.ts';
 import { registerOAuthProviderRoutes } from './lib/oauth-provider/serve.ts';
 import {
   handleAddUserKey,
@@ -286,7 +296,7 @@ export type CreateRoutesArgs = {
   googleSignIn?: GoogleSignInConfig;
   // Boxel's OAuth provider (see `lib/oauth-provider/`). Unset, the provider
   // is off and none of its routes are served.
-  oauthProvider?: Provider;
+  oauthProvider?: OAuthProviderService;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -313,7 +323,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   };
 
   if (args.oauthProvider) {
-    registerOAuthProviderRoutes(router, args.oauthProvider);
+    registerOAuthProviderRoutes(router, args.oauthProvider, {
+      realmSecretSeed: args.realmSecretSeed,
+      accountContact: accountContactLookup(args),
+    });
   }
 
   router.get(
@@ -610,11 +623,59 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSecureWindowCards(args),
   );
+  // A request carrying an automation run's token skips the session check,
+  // which refuses it on its signature. Its own signature is verified here, in
+  // the session check's place, so a bearer that only looks like a run token
+  // is refused before the handler reads anything. The handler then checks
+  // the run itself.
+  let requestForwardSession = jwtMiddleware(
+    args.realmSecretSeed,
+    args.dbAdapter,
+  );
   router.post(
     REQUEST_FORWARD_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    async (ctxt: Koa.Context, next: Koa.Next) => {
+      let authorization = ctxt.req.headers['authorization'] ?? null;
+      if (!carriesRunToken(authorization)) {
+        return await requestForwardSession(ctxt, next);
+      }
+      if (
+        !verifyRunToken(
+          authorization!.slice('Bearer '.length),
+          args.realmSecretSeed,
+        )
+      ) {
+        return await sendResponseForUnauthorizedRequest(
+          ctxt,
+          AuthenticationErrorMessages.TokenInvalid,
+        );
+      }
+      await next();
+    },
     handleRequestForward({
       dbAdapter: args.dbAdapter,
+      definitionLookup: args.definitionLookup,
+      virtualNetwork: args.virtualNetwork,
+      realmSecretSeed: args.realmSecretSeed,
+    }),
+  );
+  // An automation run's calls to OpenRouter's Batch API. They carry a run
+  // token, which the handler checks itself, since an ordinary session is
+  // refused.
+  router.post(
+    AI_BATCHES_PATH,
+    handleSubmitAIBatch({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
+    }),
+  );
+  router.get(
+    `${AI_BATCHES_PATH}/:batchId`,
+    handleAIBatchStatus({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
     }),
   );
   // Batched client performance beacons. The host sends its server session

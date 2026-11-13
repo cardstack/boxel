@@ -10,6 +10,7 @@ scope:
   - packages/ai-bot/lib/script-syntax-check.ts
   - packages/ai-bot/lib/bot-tools/**
   - packages/host/app/services/matrix-service.ts
+  - packages/runtime-common/ai/prompt.ts
 ---
 
 # 022. Do the assistant's workspace work in one sandboxed script
@@ -79,7 +80,14 @@ has finished without an error. A failed run MUST make none of them.
 
 Each call MUST act with the permissions of the user who started the run. The
 realm makes the permission decision. Each call method MUST have an entry in
-`REQUIRES_WRITE`.
+`REQUIRES_WRITE` and in `REQUIRES_READ`.
+
+The runner MAY refuse a call before it reaches the realm, to say why before
+any work. Such a refusal MUST be one the realm would make too: a method MUST
+be in `REQUIRES_WRITE` or `REQUIRES_READ` only if every realm route it reaches
+admits a caller by the realm's own permissions alone, never by a policy grant.
+A change that lets a policy grant reach such a route MUST take the methods
+that reach it out of the table in the same change.
 
 ### 1.5. Confirmation
 
@@ -105,6 +113,16 @@ NOT count against the script's time limit.
 
 Each component that parses or runs a script MUST wrap it and describe its
 errors with `packages/runtime-common/realm-runner-script.ts`.
+
+### 1.8. Who a run serves
+
+A run MUST start for a user who can read or write its workspace, and for a
+user whom the workspace's realm admits only through its policy. For that
+user the realm decides each call, and the runner MUST NOT narrow the run to a
+fixed set of calls, such as `realm.operations.*`, beyond the refusals of
+§1.4. What the AI context tells the assistant about who may run a script in
+a workspace, and which calls reach the realm for them, MUST match this
+section and the refusals of §1.4.
 
 ## 2. Rationale
 
@@ -134,6 +152,22 @@ A call that only reads outside content needs no click, but each one is a paid
 request, so it has a limit per run
 (`packages/host/app/tools/run-realm-code.ts`).
 
+A policy can grant a user whom the realm's permissions give nothing its
+operations, and also `read`, `readSource` and `query` (ADR 024 §1.1, §1.7).
+So a run starts for that user and the realm answers each call (#7411). An
+operations-only run would refuse reads a grant admits, and
+`realm.operations.invoke` reads its target card before it invokes. The host
+knows such a user by the realm's info: a realm answers its info to a caller
+its permissions don't let read only when its policy judges them
+(`packages/runtime-common/realm.ts`). The host caches info longer than a
+session, so it reads that sign only while the user holds a session with the
+realm. The runner's own refusals only say
+early what the realm will answer. One the realm would not make leaves the
+runner, not the realm, deciding (§1.4), so the tables follow the realm's
+routes. The AI context and the gate are kept together (§1.8) because they
+drifted apart: the context told the assistant to run granted operations in
+run-realm-code for a user the runner refused (#7401, #7411).
+
 A tool that ai-bot runs itself stays a named tool for two reasons. It needs
 no round trip to the browser, and ai-bot is a special app with no access to
 the browser (Matic Jurglic, 2026-11-09).
@@ -148,6 +182,12 @@ a runner in either place, so a server runner follows this ADR.
   trained on it, and its output was often malformed (#6235).
 - **A sequence of named tool calls.** Rejected: a script with loops can do
   the same task in one call (#6235).
+- **A run only for a user who can read or write the workspace.** Rejected:
+  `realm.operations` can't reach a user whom the realm admits only through its
+  policy (#7411).
+- **An operations-only run for a user whom the realm admits only through its
+  policy.** Rejected: it refuses reads a policy grant admits, and an operation
+  on a card reads the card first (#7411).
 - **A per-card patch tool in each message.** Rejected: its definition changes
   when the open card changes, so each change bills the conversation again
   (`packages/host/app/services/matrix-service.ts`).
@@ -163,6 +203,10 @@ No source states this reason. Ask Matic Jurglic.
 
 - #6235: the first runner and its reasons.
 - #6630: a run in a workspace the user can only read.
+- #7401: `realm.operations.capabilities`, and the AI context leaving it out
+  for a user the runner refused.
+- #7411: a run for a user whom the realm admits only through its policy,
+  `REQUIRES_READ`, and which realm routes a grant reaches.
 - #6629, #6632, #6748: room actions and card calls added as `realm.*` and
   `room.*` calls instead of named tools.
 - 886bc0648d: sandbox start time is not charged to the script.

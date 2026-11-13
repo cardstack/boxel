@@ -41,6 +41,7 @@ import {
   ensureTrailingSlash,
   fetchPublishabilityReport,
   logger,
+  nowDate,
   ReadinessTimeoutError,
   ri,
   rri,
@@ -379,7 +380,7 @@ class RealmResource {
               // writes, and only source realms actually move (a non-source realm
               // would self-correct on that next load).
               if (data.indexType === 'incremental' && this.info) {
-                this.info.updatedAt = new Date().toISOString();
+                this.info.updatedAt = nowDate().toISOString();
               }
               // Tile counts derive from the index, so any completed index makes
               // them stale — no need to narrow to the config card as above, and
@@ -1284,6 +1285,25 @@ export default class RealmService extends Service {
   // isn't marked publishable.
   isInfoLoaded = (realm: RealmIdentifier): boolean => {
     return this.knownRealm(this.toLookupURL(realm))?.info !== undefined;
+  };
+
+  // Whether the realm admits the user only through its policy: they hold a
+  // session with it, its permissions give them neither read nor write, and its
+  // policy judges them. A realm answers its info to a caller its permissions
+  // don't let read only when its policy judges them, so info the host holds
+  // for such a user is the sign. Info outlives the session it was fetched
+  // under, through re-authentication, sign-out and a switch of account, so
+  // without a session this answers false. A session minted after the user's
+  // permissions changed still reads info fetched under the earlier ones. The
+  // realm decides each request such a user makes.
+  admitsOnlyThroughPolicy = (realm: RealmIdentifier): boolean => {
+    let resource = this.knownRealm(this.toLookupURL(realm));
+    return (
+      resource?.claims !== undefined &&
+      !resource.canRead &&
+      !resource.canWrite &&
+      resource.info !== undefined
+    );
   };
 
   url = (url: string): string | undefined => {
