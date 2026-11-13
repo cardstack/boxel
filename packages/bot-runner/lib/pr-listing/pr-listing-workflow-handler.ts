@@ -17,6 +17,7 @@ import type {
   EnqueueRunCommandFn,
 } from '../command-runner.ts';
 import type { GitHubClient } from '../github.ts';
+import { SubmissionRejectedError } from '../submission-rejected-error.ts';
 
 export type LintSubmissionFilesFn = (
   files: SubmissionFile[],
@@ -365,17 +366,26 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     }
 
     if (!outcome.passed) {
-      log.error('pr-listing-create: lint found unfixable errors', {
-        errorCount: outcome.lintErrors.length,
-      });
+      log[outcome.lintRanOutOfMemory ? 'error' : 'warn'](
+        'pr-listing-create: lint found unfixable errors',
+        {
+          errorCount: outcome.lintErrors.length,
+          lintRanOutOfMemory: outcome.lintRanOutOfMemory,
+        },
+      );
       await this.patchWorkflowCard(ctx, {
         attributes: { lintStatus: 'failed', lintErrors: outcome.lintErrors },
       });
       // The individual errors are already persisted in lintErrors above;
       // keep the thrown message short so prCreationError doesn't repeat them.
-      throw new Error(
-        `Lint failed with ${outcome.lintErrors.length} unfixable error(s)`,
-      );
+      let message = `Lint failed with ${outcome.lintErrors.length} unfixable error(s)`;
+      // An out-of-memory lint thread is a fault in the lint worker, so it is
+      // reported. Otherwise the errors are in the user's code, and the
+      // submission is rejected.
+      if (outcome.lintRanOutOfMemory) {
+        throw new Error(message);
+      }
+      throw new SubmissionRejectedError(message);
     }
 
     log.info('pr-listing-create: lint passed', {
