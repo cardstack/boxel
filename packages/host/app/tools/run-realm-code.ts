@@ -282,10 +282,17 @@ const MAX_PARALLEL_RESEARCH = 4;
 // names realm.images.generate does: a few pages read one after another
 // outlast the usual limit.
 const RESEARCH_TIME_MS = 60_000;
+// The most characters of file content an automation run holds at once: each
+// file it reads, each version it writes, and each card it updates, as the
+// realm sent it and as the update leaves it. A run keeps them all until it
+// ends, in a tab other runs share. The interactive surface's MAX_FILES and
+// MAX_CARD_UPDATES bound the same memory there.
+const MAX_AUTOMATION_HELD_CHARS = 20_000_000;
 // What a session serves: its surface's methods, and the per-run limits that
-// hold on it. The interactive surface's limits keep one chat turn small; an
-// automation run has none of its own here, since its card's caps take their
-// place and the realm server enforces them on every call.
+// hold on it. The interactive surface's limits keep one chat turn small. An
+// automation run's card caps take their place, and the realm server enforces
+// them on every call; the one limit kept here is `heldChars`, on the memory
+// the run costs the tab.
 export interface SessionSurface {
   name: RealmRunnerSurface;
   methods: ReadonlySet<RealmRunnerCallMethod>;
@@ -295,6 +302,8 @@ export interface SessionSurface {
     operations: number;
     resolveCalls: number;
     researchBytes: number;
+    // characters of file content the session holds at once
+    heldChars: number;
   };
   // Whether realm.fs.writeText replaces a file that exists. An interactive
   // run edits a file through realm.fs.replace, so each change shows as a diff
@@ -312,6 +321,7 @@ export const INTERACTIVE_SURFACE: SessionSurface = {
     operations: MAX_OPERATIONS,
     resolveCalls: MAX_RESOLVE_CALLS,
     researchBytes: MAX_RESEARCH_BYTES_PER_RUN,
+    heldChars: Infinity,
   },
   writeTextReplaces: false,
 };
@@ -325,6 +335,7 @@ export const AUTOMATION_SURFACE: SessionSurface = {
     operations: Infinity,
     resolveCalls: Infinity,
     researchBytes: Infinity,
+    heldChars: MAX_AUTOMATION_HELD_CHARS,
   },
   writeTextReplaces: true,
 };
@@ -758,7 +769,7 @@ class RealmFsSession {
   // order of their first update. None is saved until the script finishes.
   private cardUpdates = new Map<
     string,
-    { expected: string; doc: LooseSingleCardDocument }
+    { expected: string; doc: LooseSingleCardDocument; chars: number }
   >();
   // Files that existed before this run and that realm.fs.delete deleted, in
   // the order of their delete.
@@ -800,6 +811,10 @@ class RealmFsSession {
     Object.keys(MAX_INDEX_CALLS).map((method) => [method, 0]),
   ) as Record<LimitedIndexCall, number>;
   private researchBytes = 0;
+  // Characters of file content held in `known`, `edits` and `cardUpdates`,
+  // counted against the surface's `heldChars`. A file read or written again
+  // counts again, so this is at least what the session holds.
+  private heldChars = 0;
   private researchSlots = MAX_PARALLEL_RESEARCH;
   private researchWaiters: (() => void)[] = [];
   // Research calls and transforms run outside the queue: they touch no file,
@@ -1310,6 +1325,17 @@ class RealmFsSession {
       );
     }
     this.webCalls += 1;
+  }
+
+  // Counts file content the session is about to hold, and refuses it past
+  // the surface's `heldChars`, before it is held or written.
+  private hold(chars: number, what: string) {
+    if (this.heldChars + chars > this.surface.limits.heldChars) {
+      throw new Error(
+        `An automation run may hold at most ${this.surface.limits.heldChars} characters of file content; ${what} would pass it`,
+      );
+    }
+    this.heldChars += chars;
   }
 
   // Charged once the answer is in, so an answer past the limit is refused
@@ -1988,7 +2014,8 @@ class RealmFsSession {
       ) {
         throw new Error(`Not a card instance: ${url}`);
       }
-      pending = { expected, doc };
+      this.hold(expected.length, `reading ${url}`);
+      pending = { expected, doc, chars: 0 };
     }
     let patch = attributes as Record<string, unknown>;
     let doc = cloneDeep(pending.doc);
@@ -2002,18 +2029,20 @@ class RealmFsSession {
     );
     // The realm refuses the whole batch for one card over the limit, and only
     // after the script has ended, so the call that makes it too large fails.
+    let serialized = JSON.stringify(doc, null, 2);
     try {
-      validateWriteSize(
-        JSON.stringify(doc, null, 2),
-        this.cardSizeLimitBytes,
-        'card',
-      );
+      validateWriteSize(serialized, this.cardSizeLimitBytes, 'card');
     } catch (error) {
       throw new Error(
         `Card is too large after this update: ${url}. ${coerceErrorMessage(error, '')}`.trim(),
       );
     }
-    this.cardUpdates.set(url, { expected: pending.expected, doc });
+    this.hold(serialized.length - pending.chars, `updating ${url}`);
+    this.cardUpdates.set(url, {
+      expected: pending.expected,
+      doc,
+      chars: serialized.length,
+    });
     return {
       path: this.relative(url),
       fields: Object.keys(patch),
@@ -2899,6 +2928,7 @@ class RealmFsSession {
     if (content !== undefined && content.length > MAX_FILE_SIZE) {
       throw new Error(`File is too large: ${url}`);
     }
+    this.hold(content?.length ?? 0, `reading ${url}`);
     this.known.set(url, content);
     return content;
   }
@@ -2916,6 +2946,7 @@ class RealmFsSession {
       this.refused += 1;
       throw new Error(`The run has ended; ${url} was not saved`);
     }
+    this.hold(content.length, `writing ${url}`);
     let saved = await this.writeFile(url, content, expected, options);
     if (saved === undefined) {
       if (!this.saved.has(url)) {

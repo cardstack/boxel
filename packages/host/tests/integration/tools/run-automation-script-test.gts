@@ -261,6 +261,48 @@ module('Integration | tools | run-automation-script', function (hooks) {
     );
   });
 
+  test('a run may hold only so much file content, so it cannot fill the tab it shares', async function (assert) {
+    // Each `big/` file is near the largest a run reads; a copy holds it once
+    // as read and once as written.
+    let big = 'x'.repeat(450_000);
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let io = tool.automationRealmIO(testRealmURL);
+    let { done } = run(
+      `
+        let copied = 0;
+        try {
+          for (let i = 0; i < 40; i++) {
+            await realm.fs.copy('big/' + i + '.txt', 'out/' + i + '.txt');
+            copied++;
+          }
+        } catch (error) {
+          return { copied, message: error.message };
+        }
+        return { copied };
+      `,
+      {
+        io: {
+          ...io,
+          readSource: async (url: string) =>
+            url.startsWith(`${testRealmURL}big/`)
+              ? { status: 200, content: big, binary: false }
+              : { status: 404, content: '', binary: false },
+          writeFile: async (_url: string, content: string) => content,
+        },
+      },
+    );
+    let result = JSON.parse((await done).scriptResult);
+    assert.strictEqual(
+      result.copied,
+      22,
+      'it copies until the next read would pass the limit',
+    );
+    assert.strictEqual(
+      result.message,
+      `An automation run may hold at most 20000000 characters of file content; reading ${testRealmURL}big/22.txt would pass it`,
+    );
+  });
+
   test("a script's searches go to its own realm's search", async function (assert) {
     let { done } = run(`
       const cards = await realm.cards.search({
