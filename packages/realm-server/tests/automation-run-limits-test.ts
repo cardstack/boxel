@@ -33,7 +33,7 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
-import { OPENROUTER_MODELS_REALM } from '../lib/openrouter-model-price.ts';
+import { OPENROUTER_MODELS_REALM } from '../lib/ai-batch-estimate.ts';
 import { OPENROUTER_CHAT_COMPLETIONS_URL } from '../lib/run-token-forward.ts';
 
 // An automation run's calls are held to its automation card's declaration:

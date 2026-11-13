@@ -518,4 +518,29 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual((await events()).length, 0);
     });
   });
+
+  // The shape of the in-browser realm: no journal and no reader.
+  module('a realm with no history', function (hooks) {
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
+      permissions: { '*': ['read'], [writer]: ['read', 'write'] },
+      fileSystem: { 'card.txt': 'hello\n' },
+      onRealmSetup,
+    });
+
+    test('answers every history read with history-unavailable', async function (assert) {
+      let realmId = await setRecording(true);
+      let reader = testRealm.historyReader;
+      assert.deepEqual(await reader.readHistory(realmId, {}), {
+        kind: 'history-unavailable',
+      });
+      assert.deepEqual(
+        await reader.readAtRevision(realmId, 'abc1234', 'card.txt'),
+        { kind: 'history-unavailable' },
+      );
+      assert.deepEqual(await reader.readTreeAtRevision(realmId, 'abc1234'), {
+        kind: 'history-unavailable',
+      });
+    });
+  });
 });

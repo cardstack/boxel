@@ -61,6 +61,7 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 
 import type { CardDefOrId } from './stack-item';
 import type NetworkService from '../../services/network';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type StoreService from '../../services/store';
 import type WorkspacePinsService from '../../services/workspace-pins';
 import type {
@@ -81,6 +82,7 @@ function shouldRenderCompact(width: number, height: number): boolean {
 export default class OperatorModeOverlays extends Overlays {
   overlayClassName = 'actions-overlay';
   @service declare private network: NetworkService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private store: StoreService;
   @service declare private workspacePins: WorkspacePinsService;
 
@@ -631,7 +633,7 @@ export default class OperatorModeOverlays extends Overlays {
           icon: workspacePin.pinned ? PinOff : Pin,
         });
       }
-      if (!isField && this.realm.canWrite(cardId)) {
+      if (!isField && this.operatorModeStateService.canDeleteCard(cardId)) {
         menuItems.push({
           label: 'Delete',
           action: () => this.cardCrudFunctions.deleteCard?.(cardDefOrId),
@@ -645,6 +647,9 @@ export default class OperatorModeOverlays extends Overlays {
     const cardMenuItems =
       (cardDefOrId as CardDef)[getMenuItems]?.({
         canEdit: this.realm.canWrite(cardId),
+        // A field overlay offers no Delete, so it asks the realm nothing.
+        canDelete:
+          !isField && this.operatorModeStateService.canDeleteCard(cardId),
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         toolContext: this.toolContext,

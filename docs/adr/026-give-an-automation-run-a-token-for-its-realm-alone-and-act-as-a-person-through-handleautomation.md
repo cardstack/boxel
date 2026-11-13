@@ -5,6 +5,7 @@ scope:
   - packages/runtime-common/realm.ts
   - packages/runtime-common/**/*run-token*
   - packages/realm-server/**/*run-token*
+  - packages/realm-server/handlers/handle-ai-batches.ts
   - packages/runtime-common/**/*run-overlay*
   - packages/realm-server/**/*run-overlay*
   - packages/realm-server/lib/key-bindings.ts
@@ -71,11 +72,12 @@ is still running, its time limit has not passed, and its caps are not spent.
 A cancel or a pause MUST stop the run's next call.
 
 A realm-server route that serves a run's requests to no realm, such as
-forwarding its AI requests, MUST make the same checks against the run's row
-before it acts: the token verifies under the run-token key, its identity's
-sessions were not revoked after it was minted, the run is running and owned
-by the token's attempt, and the caps that bound what the route does are not
-spent. Every other realm-server route MUST refuse a run token.
+forwarding its AI requests or the batch path (ADR 030), MUST make the same
+checks against the run's row before it acts: the token verifies under the
+run-token key, its identity's sessions were not revoked after it was minted,
+the run is running and owned by the token's attempt, and the caps that bound
+what the route does are not spent. Every other realm-server route MUST refuse
+a run token.
 
 Only a run token MUST reach automation mode. The server MUST treat a request
 as an automation call because it carries a run token, and for no other

@@ -20,6 +20,12 @@
 // a recorder with nothing uncommitted is dropped once it has been idle for a
 // while.
 //
+// Background work, such as reconcile passes and maintenance, is scheduled
+// per realm by `background.ts` over the realms the task loaded, and runs in
+// each realm's recorder at its own, lower concurrency. After every turn the
+// loop starts whatever work has come due; a realm with work due and no
+// recorder gets one.
+//
 // The loop exits rather than run degraded: a lost lease or a query that fails
 // ends `run()` with the error, and the process exits non-zero. A lost
 // listening connection doesn't: the adapter reopens it with backoff, and
@@ -47,6 +53,7 @@ import {
 } from './recorder.ts';
 import { Semaphore } from './semaphore.ts';
 import type { GroupingLimits } from './grouper.ts';
+import { BackgroundScheduler, type BackgroundOptions } from './background.ts';
 
 const log = logger('realm-historian');
 
@@ -59,12 +66,20 @@ export interface HistorianOptions {
   // How long the loop waits for a wakeup before polling anyway.
   pollMs?: number;
   recording?: RecordingOptions;
+  // The kinds of background work and how many jobs run at once.
+  background?: BackgroundOptions;
   // The recorder for a realm this task records, in place of the default
   // `Recorder`. `beat` beats the heartbeat: a recorder whose work can outlast
   // the health endpoint's stale threshold calls it as it makes progress,
   // such as after each object it writes, so the endpoint tells a large event
   // from a stall without a threshold long enough to hide a real one.
-  recorderFor?: (realm: RecordedRealm, beat: () => void) => ManagedRecorder;
+  // `onCommits` counts the revisions committed to the realm, for background
+  // work that comes due by commits (`RecorderOptions.onCommits`).
+  recorderFor?: (
+    realm: RecordedRealm,
+    beat: () => void,
+    onCommits: (count: number) => void,
+  ) => ManagedRecorder;
 }
 
 export interface RecordingOptions {
@@ -95,6 +110,7 @@ export class Historian {
   // for too.
   #stopping = new Set<Promise<void>>();
   #io: Semaphore;
+  #background: BackgroundScheduler;
   // The shards whose realms the consumer's position accounts for.
   #loadedShards = new Set<number>();
   // The horizon taken before the realms were last loaded: every event below
@@ -115,6 +131,13 @@ export class Historian {
     this.#io = new Semaphore(
       options.recording?.ioConcurrency ?? DEFAULT_IO_CONCURRENCY,
     );
+    this.#background = new BackgroundScheduler({
+      ...options.background,
+      // A realm the last load dropped, such as one whose recording was turned
+      // off while a job's `isDue` ran, gets no recorder.
+      recorderFor: (realm) =>
+        this.#realms.has(realm.id) ? this.#recorderOf(realm) : undefined,
+    });
   }
 
   // The shards the task holds.
@@ -191,6 +214,9 @@ export class Historian {
               await this.#consumer!.earliestUnread(),
             );
           }
+          if (this.#running()) {
+            this.#background.dispatch();
+          }
         }
         if (this.#running()) {
           await this.#sleep(pollMs);
@@ -201,11 +227,13 @@ export class Historian {
       }
     } finally {
       // Each recorder finishes the commit in progress while the task still
-      // holds the lease its cursor update checks.
+      // holds the lease its cursor update checks. Stopping a recorder aborts
+      // its background job, which the scheduler waits for.
+      let background = this.#background.stop();
       for (let [id, recorder] of this.#recorders) {
         this.#drop(id, recorder);
       }
-      await Promise.all(this.#stopping);
+      await Promise.all([background, ...this.#stopping]);
       // An unsubscribe that fails, as it can when the database is gone, is
       // logged rather than thrown: the lease is released either way, and the
       // failure that ended the loop stays the one `run()` reports.
@@ -256,6 +284,7 @@ export class Historian {
         this.#drop(id, recorder);
       }
     }
+    this.#background.setRealms(this.#realms);
     this.#realmsStale = false;
     if (!this.#consumer) {
       let cursors = cursorsOf(this.#realms.values());
@@ -299,18 +328,33 @@ export class Historian {
     if (!realm) {
       return undefined;
     }
-    let recorder = this.#recorders.get(realmId);
+    return this.#recorderOf(realm);
+  }
+
+  // The realm's recorder, started if it has none. Undefined once the task
+  // is stopping, so nothing starts a recorder that shutdown would miss.
+  #recorderOf(realm: RecordedRealm): ManagedRecorder | undefined {
+    if (!this.#running()) {
+      return undefined;
+    }
+    let recorder = this.#recorders.get(realm.id);
     if (!recorder) {
       let beat = () => this.#options.heartbeat.beat();
+      let onCommits = (count: number) =>
+        this.#background.commitsRecorded(realm.id, count);
       recorder = this.#options.recorderFor
-        ? this.#options.recorderFor(realm, beat)
-        : this.#newRecorder(realm, beat);
-      this.#recorders.set(realmId, recorder);
+        ? this.#options.recorderFor(realm, beat, onCommits)
+        : this.#newRecorder(realm, beat, onCommits);
+      this.#recorders.set(realm.id, recorder);
     }
     return recorder;
   }
 
-  #newRecorder(realm: RecordedRealm, beat: () => void): Recorder {
+  #newRecorder(
+    realm: RecordedRealm,
+    beat: () => void,
+    onCommits: (count: number) => void,
+  ): Recorder {
     let { db, historyRoot, lease, recording } = this.#options;
     return new Recorder({
       db,
@@ -320,6 +364,7 @@ export class Historian {
       io: this.#io,
       onFatal: (error) => this.#fail(error),
       beat,
+      onCommits,
       limits: recording?.limits,
       sizeOnlyThresholdBytes: recording?.sizeOnlyThresholdBytes,
     });

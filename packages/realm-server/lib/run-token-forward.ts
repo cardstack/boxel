@@ -16,10 +16,8 @@ import {
   admitAutomationRunAIRequest,
   settleAutomationRunAIRequest,
 } from './automation-ai-spending.ts';
-import {
-  openRouterModelPrice,
-  openRouterModelsRealmURL,
-} from './openrouter-model-price.ts';
+import { openRouterModelsRealmURL } from './ai-batch-estimate.ts';
+import { openRouterModelPrice } from './openrouter-model-price.ts';
 import { verifyRunToken } from './run-token.ts';
 
 const log = logger('request-forward');
