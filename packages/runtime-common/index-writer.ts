@@ -70,6 +70,12 @@ import {
 } from './jobs/indexing.ts';
 import { queueClaimOf, withoutQueueClaim } from './jobs/queue-claim.ts';
 
+// One element of a Postgres array literal (`{"a","b"}`), quoted so a comma,
+// brace, space or quote in a URL stays inside its element.
+function textArrayElement(value: string): string {
+  return `"${value.replace(/["\\]/g, (c) => `\\${c}`)}"`;
+}
+
 export class IndexWriter {
   #dbAdapter: DBAdapter;
   constructor(dbAdapter: DBAdapter) {
@@ -2403,22 +2409,30 @@ export class Batch {
     }
     let uniqueInvalidations = [...new Set(invalidations)];
     // One row per (url, type) — the table's primary key is
-    // (url, realm_url, type) and the realm is pinned below.
-    let rows = (await this.#query([
-      'SELECT url, type, is_deleted FROM prerendered_html WHERE',
-      ...every([
-        ['realm_url =', param(this.realmURL.href)],
-        [
-          'url IN',
-          ...addExplicitParens(
-            separatedByCommas(uniqueInvalidations.map((id) => [param(id)])),
-          ),
-        ],
-      ]),
-    ] as Expression)) as Pick<
-      PrerenderedHtmlTable,
-      'url' | 'type' | 'is_deleted'
-    >[];
+    // (url, realm_url, type) and the realm is pinned below. Each URL binds a
+    // parameter, so a realm-sized list is read in chunks: one statement over
+    // every URL of a large realm passes the driver's bind ceiling.
+    let rows: Pick<PrerenderedHtmlTable, 'url' | 'type' | 'is_deleted'>[] = [];
+    for (let offset = 0; offset < uniqueInvalidations.length; offset += 10000) {
+      let chunk = uniqueInvalidations.slice(offset, offset + 10000);
+      rows.push(
+        ...((await this.#query([
+          'SELECT url, type, is_deleted FROM prerendered_html WHERE',
+          ...every([
+            ['realm_url =', param(this.realmURL.href)],
+            [
+              'url IN',
+              ...addExplicitParens(
+                separatedByCommas(chunk.map((id) => [param(id)])),
+              ),
+            ],
+          ]),
+        ] as Expression)) as Pick<
+          PrerenderedHtmlTable,
+          'url' | 'type' | 'is_deleted'
+        >[]),
+      );
+    }
     let typesByUrl = new Map<
       string,
       { type: PrerenderedHtmlTable['type']; isDeleted: boolean }[]
@@ -3719,6 +3733,25 @@ export class Batch {
     ]);
   }
 
+  // `column` is one of `urls`. On Postgres that is one array parameter however
+  // many URLs there are: the commit binds every URL of its pass, and a
+  // realm-sized pass bound one parameter each passes Postgres's 65,535-
+  // parameter limit, which refuses the whole swap. SQLite, the browser's
+  // index, keeps the list; its realms stay far below its own limit.
+  #urlIn(column: string, urls: string[]): Expression {
+    if (this.#dbAdapter.kind === 'pg') {
+      return [
+        `${column} = ANY(`,
+        param(`{${urls.map(textArrayElement).join(',')}}`),
+        '::text[])',
+      ];
+    }
+    let list = addExplicitParens(
+      separatedByCommas(urls.map((url) => [param(url)])) as Expression,
+    ) as Expression;
+    return [`${column} IN`, ...list];
+  }
+
   private async applyBatchUpdates(columns: {
     boxelIndex: string[];
     prerenderedHtml: string[];
@@ -3737,14 +3770,7 @@ export class Batch {
           ['realm_url =', param(this.realmURL.href)],
           ['staging_id =', param(this.#stagingId)],
           any([['is_deleted = false'], ['is_deleted IS NULL']]),
-          [
-            'url in',
-            ...addExplicitParens(
-              separatedByCommas(
-                [...this.#invalidations].map((i) => [param(i)]),
-              ),
-            ),
-          ],
+          this.#urlIn('url', [...this.#invalidations]),
         ]),
         'ON CONFLICT ON CONSTRAINT boxel_index_pkey DO UPDATE SET',
         ...separatedByCommas(names.map((name) => [`${name}=EXCLUDED.${name}`])),
@@ -3983,12 +4009,7 @@ export class Batch {
         // SQL-NULL case falls out of the same test, since `jsonb_typeof`
         // returns NULL there.
         [`jsonb_typeof(types) = 'array'`],
-        [
-          'url IN',
-          ...addExplicitParens(
-            separatedByCommas(urls.map((url) => [param(url)])),
-          ),
-        ],
+        this.#urlIn('url', urls),
       ]),
     ] as Expression)) as { type_key: string }[];
     return rows.map(({ type_key }) => type_key);
@@ -4037,12 +4058,7 @@ export class Batch {
         ['realm_url =', param(this.realmURL.href)],
         ['staging_id =', param(this.#stagingId)],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
-        [
-          'url in',
-          ...addExplicitParens(
-            separatedByCommas([...this.#invalidations].map((i) => [param(i)])),
-          ),
-        ],
+        this.#urlIn('url', [...this.#invalidations]),
       ]),
       'ON CONFLICT ON CONSTRAINT prerendered_html_pkey DO UPDATE SET',
       ...separatedByCommas(
@@ -4094,12 +4110,7 @@ export class Batch {
         ['p.realm_url =', param(this.realmURL.href)],
         ['p.staging_id =', param(this.#stagingId)],
         ['p.is_deleted = TRUE'],
-        [
-          'p.url IN',
-          ...addExplicitParens(
-            separatedByCommas([...this.#invalidations].map((i) => [param(i)])),
-          ),
-        ],
+        this.#urlIn('p.url', [...this.#invalidations]),
         ['t.realm_url = p.realm_url'],
         ['t.url = p.url'],
         ['t.type = p.type'],
@@ -4424,22 +4435,31 @@ export class Batch {
     }
     let uniqueInvalidations = [...new Set(invalidations)];
     // One row per (url, type) — the table's primary key is
-    // (url, realm_url, type) and the realm is pinned below.
-    let rows = (await this.#query([
-      'SELECT url, type, is_deleted, types FROM boxel_index WHERE',
-      ...every([
-        ['realm_url =', param(this.realmURL.href)],
-        [
-          'url IN',
-          ...addExplicitParens(
-            separatedByCommas(uniqueInvalidations.map((id) => [param(id)])),
-          ),
-        ],
-      ]),
-    ] as Expression)) as Pick<
-      BoxelIndexTable,
-      'url' | 'type' | 'is_deleted' | 'types'
-    >[];
+    // (url, realm_url, type) and the realm is pinned below. Each URL binds a
+    // parameter, so a realm-sized list is read in chunks: one statement over
+    // every URL of a large realm passes the driver's bind ceiling.
+    let rows: Pick<BoxelIndexTable, 'url' | 'type' | 'is_deleted' | 'types'>[] =
+      [];
+    for (let offset = 0; offset < uniqueInvalidations.length; offset += 10000) {
+      let chunk = uniqueInvalidations.slice(offset, offset + 10000);
+      rows.push(
+        ...((await this.#query([
+          'SELECT url, type, is_deleted, types FROM boxel_index WHERE',
+          ...every([
+            ['realm_url =', param(this.realmURL.href)],
+            [
+              'url IN',
+              ...addExplicitParens(
+                separatedByCommas(chunk.map((id) => [param(id)])),
+              ),
+            ],
+          ]),
+        ] as Expression)) as Pick<
+          BoxelIndexTable,
+          'url' | 'type' | 'is_deleted' | 'types'
+        >[]),
+      );
+    }
     let typesByUrl = new Map<string, ExistingIndexRowType[]>();
     for (let row of rows) {
       let entry = {
