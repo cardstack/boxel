@@ -13420,7 +13420,14 @@ export class Realm {
         // A pointer that names nothing protects no path.
       }
     }
-    if (text !== undefined && !(await this.#runCardTypeJudged(path, text))) {
+    // Readers of a stored document decode it leniently, turning a bad byte
+    // into U+FFFD and dropping a leading byte-order mark, so bytes that don't
+    // decode strictly may still read as a card of any type. Such a document
+    // can't be judged here, so it isn't staged.
+    if (text === undefined || text.startsWith('\uFEFF')) {
+      return 'a .json file that isn’t UTF-8 text without a byte-order mark';
+    }
+    if (!(await this.#runCardTypeJudged(path, text))) {
       return 'a card whose type the realm has no definition for';
     }
     let stored = (await this.readFileAsText(path))?.content;

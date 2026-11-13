@@ -320,6 +320,55 @@ export class Mine extends Automation {}`;
       let refused = await writeText(token, 'x.json', escaped);
       assert.strictEqual(refused.status, 403, `${module}: ${refused.text}`);
     }
+    // A reader decodes a bad byte as U+FFFD and drops a leading byte-order
+    // mark, so either would leave the card readable but unjudged.
+    let encoder = new TextEncoder();
+    for (let [module, name] of [
+      ['@cardstack/catalog/automation/automation', 'Automation'],
+      ['@cardstack/catalog/realm-policy/realm-policy', 'RealmPolicy'],
+    ]) {
+      let document = JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { title: 'BAD' },
+          meta: { adoptsFrom: { module, name } },
+        },
+      });
+      let [before, after] = document.split('BAD');
+      let badByte = new Uint8Array([
+        ...encoder.encode(before),
+        0xff,
+        ...encoder.encode(after),
+      ]);
+      let byteOrderMark = new Uint8Array([
+        0xef,
+        0xbb,
+        0xbf,
+        ...encoder.encode(document),
+      ]);
+      for (let [label, bytes] of [
+        ['a bad byte', badByte],
+        ['a byte-order mark', byteOrderMark],
+      ] as const) {
+        assert.strictEqual(
+          await writeBytes(token, 'x.json', bytes),
+          403,
+          `${name} with ${label} as octet-stream`,
+        );
+        let asSource = (await realm.handle(
+          new Request(`${realmURL.href}x.json`, {
+            method: 'POST',
+            headers: { Accept: SOURCE, Authorization: `Bearer ${token}` },
+            body: bytes,
+          }),
+        ))!;
+        assert.strictEqual(
+          asSource.status,
+          403,
+          `${name} with ${label} as card source`,
+        );
+      }
+    }
     let named = await writeText(token, 'y.json', card('./thing', 'Thing'));
     assert.strictEqual(named.status, 204, named.text);
     assert.deepEqual(
