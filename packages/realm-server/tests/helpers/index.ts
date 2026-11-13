@@ -9,6 +9,7 @@ const {
 } = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
 import { mintRunToken } from '../../lib/run-token.ts';
+import { automationRef } from '@cardstack/runtime-common/automation-declaration';
 import {
   createAutomationRun,
   startAutomationRunAttempt,
@@ -3883,10 +3884,75 @@ export function createJWT(
   );
 }
 
+// Where `automationFixture` puts its Automation card in a realm, relative
+// to the realm's root.
+export const TEST_AUTOMATION_PATH = 'automation/test-run';
+
+// Per-run caps that no test reaches unless it means to.
+export const ROOMY_AUTOMATION_CAPS = {
+  callApiCalls: 1000,
+  responseBytes: 100 * 1024 * 1024,
+  resolveCalls: 1000,
+  aiCredits: 100000,
+  writes: 1000,
+  seconds: 600,
+  dailyCredits: null,
+  monthlyCredits: 100000,
+};
+
+// Fixture files for an Automation card at `path` (`TEST_AUTOMATION_PATH`) that
+// declares `operations` (each type's operations by name) and `caps`, with a
+// script beside it. The card adopts from the catalog's Automation card, so a
+// module using it calls `setupCatalogTestSubset(hooks)`. A run of it is made
+// with `createAutomationRunToken`'s `automation` option.
+export function automationFixture({
+  operations,
+  caps = {},
+  path = TEST_AUTOMATION_PATH,
+}: {
+  operations: {
+    type: { module: string; name: string };
+    names: string[];
+  }[];
+  caps?: Partial<typeof ROOMY_AUTOMATION_CAPS>;
+  // Where the card goes, relative to the realm's root, for a realm that
+  // holds more than one.
+  path?: string;
+}): Record<string, string> {
+  let scriptName = `${path.split('/').pop()}-script.js`;
+  return {
+    [`${path}.json`]: JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Test automation' },
+          triggers: [],
+          operations: operations.flatMap(({ type, names }) =>
+            names.map((operation) => ({
+              targetType: { module: type.module, name: type.name },
+              operation,
+            })),
+          ),
+          caps: { ...ROOMY_AUTOMATION_CAPS, ...caps },
+          params: [],
+        },
+        relationships: {
+          script: { links: { self: `./${scriptName}` } },
+        },
+        meta: { adoptsFrom: automationRef },
+      },
+    }),
+    [`${path}-script.js`]: 'export default async function () {}\n',
+  };
+}
+
 // The run token of a new run of an automation in `realm`, acting as
 // `actsAs`: what an automation run's calls carry. The run is started by
 // `attempt` and is running, so the token is admitted until the run's row
-// changes or `timeLimitSeconds` pass.
+// changes or `timeLimitSeconds` pass. `automation` is the automation card's
+// path in the realm (`TEST_AUTOMATION_PATH` for `automationFixture`'s);
+// without it the run is of a card that doesn't exist, so it declares
+// nothing.
 export async function createAutomationRunToken(
   dbAdapter: DBAdapter,
   realm: Realm,
@@ -3896,15 +3962,19 @@ export async function createAutomationRunToken(
     readRealms = [],
     writesCap = 100,
     timeLimitSeconds = 600,
+    automation,
   }: {
     attempt?: number;
     readRealms?: string[];
     writesCap?: number;
     timeLimitSeconds?: number;
+    automation?: string;
   } = {},
 ): Promise<{ token: string; run: AutomationRun }> {
   let created = await createAutomationRun(dbAdapter, {
-    automationId: rri(`${realm.url}Automation/test-${randomUUID()}`),
+    automationId: rri(
+      `${realm.url}${automation ?? `Automation/test-${randomUUID()}`}`,
+    ),
     realm: ri(realm.url),
     trigger: 'test',
     slot: randomUUID(),

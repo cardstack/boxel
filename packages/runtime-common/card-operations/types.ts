@@ -1776,6 +1776,15 @@ export type OperationErrorCode =
   // The vendor's response was larger than the realm server carries for a
   // `callApi`.
   | 'response-too-large'
+  // An automation run's `callApi` for an operation its automation doesn't
+  // declare, or whose declaration can't be read. Nothing was sent.
+  | 'operation-not-declared'
+  // An automation run's call past one of the run's caps, named in `meta.cap`.
+  // The run has ended as an error, reason `hit-a-cap`.
+  | 'run-cap-reached'
+  // An automation run's call made once the run had stopped running, or after
+  // another attempt took it over.
+  | 'run-not-running'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.

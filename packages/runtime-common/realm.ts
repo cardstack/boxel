@@ -224,6 +224,8 @@ import {
   stageRunOverlayFile,
   type RunOverlayKey,
 } from './run-overlay.ts';
+import { automationRunCallApiMeter } from './automation-run-limits.ts';
+import type { CallApiRunMeter } from './card-operations/call-api.ts';
 import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
@@ -3239,6 +3241,7 @@ export class Realm {
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
+  #callApiRunMeters = new WeakMap<RequestContext, CallApiRunMeter>();
   // The definition lookup an operation reads through: a cache miss renders at
   // user priority, ahead of background re-index work, and a render that does
   // not finish in time refuses with a retryable 503 rather than holding the
@@ -7861,6 +7864,10 @@ export class Realm {
                 ? {
                     callApiMode: 'automation' as const,
                     automationRunId: requestContext.automationRun.runId,
+                    callApiRunMeter: this.#callApiRunMeter(
+                      requestContext,
+                      requestContext.automationRun,
+                    ),
                   }
                 : {}),
               ...(definition.base === 'callApi'
@@ -13206,6 +13213,26 @@ export class Realm {
       readOnly,
       writesCap: context.writesCap,
     };
+  }
+
+  // The meter that holds a run-token request's `callApi` calls to the
+  // automation's declaration and the run's caps, one per request so the
+  // declaration is read once however many calls the request carries.
+  #callApiRunMeter(
+    requestContext: RequestContext,
+    run: AutomationRunCall,
+  ): CallApiRunMeter {
+    let meter = this.#callApiRunMeters.get(requestContext);
+    if (!meter) {
+      meter = automationRunCallApiMeter({
+        dbAdapter: this.#dbAdapter,
+        definitionLookup: this.#definitionLookup,
+        virtualNetwork: this.#virtualNetwork,
+        run,
+      });
+      this.#callApiRunMeters.set(requestContext, meter);
+    }
+    return meter;
   }
 
   // A run's call takes the permission check its person's own request would:

@@ -14,7 +14,10 @@ import {
   createAutomationRunToken,
   createJWT,
   setupPermissionedRealmCached,
+  automationFixture,
+  TEST_AUTOMATION_PATH,
 } from './helpers/index.ts';
+import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
@@ -143,6 +146,8 @@ function card(channel: string): LooseSingleCardDocument {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupCatalogTestSubset(hooks);
+
   let realm: Realm;
   let request: SuperTest<Test>;
   let dbAdapter: PgAdapter;
@@ -178,6 +183,14 @@ module(basename(import.meta.filename), function (hooks) {
     },
     fileSystem: {
       'inbox.gts': inboxModule(),
+      ...automationFixture({
+        operations: [
+          {
+            type: INBOX,
+            names: ['list', 'note', 'elsewhere', 'shared', 'ping', 'post'],
+          },
+        ],
+      }),
       'general.json': card('general'),
       'alerts.json': card('alerts'),
     },
@@ -323,7 +336,13 @@ module(basename(import.meta.filename), function (hooks) {
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${(await createAutomationRunToken(dbAdapter, realm, user)).token}`,
+          Authorization: `Bearer ${
+            (
+              await createAutomationRunToken(dbAdapter, realm, user, {
+                automation: TEST_AUTOMATION_PATH,
+              })
+            ).token
+          }`,
         },
         body,
       }),
