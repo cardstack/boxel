@@ -568,8 +568,9 @@ And the run's reads:
   staged as staged (`Realm.#withStagedCards`): its attributes,
   relationships and type come from the staged document, and the rest of what
   the search answered for it stays. Its attributes are the staged ones, so a
-  staged hit carries no computed fields, as `cards.get` of it doesn't. A hit
-  whose staged file isn't a card document keeps the index's version. Which cards match, and their order, are
+  staged hit carries no computed fields; read it with `cards.get`, which
+  computes them from the staged values. A hit whose staged file isn't a card
+  document keeps the index's version. Which cards match, and their order, are
   the index's, so **a search won't find a card created in this run, and
   won't match on a value this run changed**; a card it returns staged may no
   longer match the query. This is the decided shape (ADR 027 §1.3), not a
