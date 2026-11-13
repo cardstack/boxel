@@ -12,6 +12,7 @@ import './health-test.ts';
 import './historian-test.ts';
 import './recorder-test.ts';
 import './background-test.ts';
+import './reader-test.ts';
 import './process-test.ts';
 import './scan-test.ts';
 
