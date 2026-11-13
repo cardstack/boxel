@@ -888,6 +888,30 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.typeKeysFor(ref);
   }
 
+  // This realm's instances that pass `filter` and share their values of
+  // `fields` with another such instance. See
+  // `IndexQueryEngine.findSharedFieldValues`.
+  async findSharedFieldValues(
+    filter: Filter,
+    fields: readonly { path: string; on: CodeRef }[],
+  ): Promise<{ url: string; values: string[] }[]> {
+    return await this.#indexQueryEngine.findSharedFieldValues(
+      new URL(this.#realm.url),
+      filter,
+      fields,
+    );
+  }
+
+  // This realm's instances that pass `filter`, as their indexed resources,
+  // errored instances left out.
+  async instanceResources(filter: Filter): Promise<CardResource[]> {
+    let { cards } = await this.#indexQueryEngine.searchCards(
+      new URL(this.#realm.url),
+      { filter },
+    );
+    return cards;
+  }
+
   // The types this realm holds cards of that descend from `ref`, as the
   // first key of each row's adoption chain.
   async instanceTypesUnder(ref: ResolvedCodeRef): Promise<string[]> {

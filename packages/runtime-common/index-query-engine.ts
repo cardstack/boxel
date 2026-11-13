@@ -1427,6 +1427,62 @@ export class IndexQueryEngine {
     return { files, meta };
   }
 
+  // The card instances that pass `filter` and have the same values in all of
+  // `fields` as at least one other such instance, in one query. A card with
+  // no value in one of the fields is left out. Each row gives the instance's
+  // index URL (its `.json` file URL) and its values, as text, in the order of
+  // `fields`. Rows sharing values are adjacent, and within them ordered by
+  // URL, the final sort every search applies, so the first row of a group is
+  // the one a search on those values returns first. Errored instances are
+  // left out, as a search leaves them out.
+  async findSharedFieldValues(
+    realmURL: URL,
+    filter: Filter,
+    fields: readonly { path: string; on: CodeRef }[],
+    opts: WIPOptions = {},
+  ): Promise<{ url: string; values: string[] }[]> {
+    if (fields.length === 0) {
+      return [];
+    }
+    let keys = fields.map((_, i) => `_key_${i}`);
+    let conditions: CardExpression[] = [
+      ['i.realm_url = ', param(realmURL.href)],
+      ['i.is_deleted = FALSE OR i.is_deleted IS NULL'],
+      ['i.type =', param('instance')],
+      [`NOT ${effectiveHasError()}`],
+      this.filterCondition(filter, baseCardRef, 'positive'),
+    ];
+    let perCard: CardExpression = [
+      'SELECT i.url AS url',
+      ...fields.flatMap((field, i) => [
+        ', ANY_VALUE(',
+        fieldQuery(field.path, field.on, false, 'filter'),
+        `) AS ${keys[i]}`,
+      ]),
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(
+        opts,
+      )} ${tableValuedFunctionsPlaceholder}`,
+      'WHERE',
+      ...every(conditions),
+      'GROUP BY i.url, i.type',
+    ];
+    let query: CardExpression = [
+      `SELECT url, ${keys.join(', ')} FROM (`,
+      `SELECT c.*, COUNT(*) OVER (PARTITION BY ${keys.join(
+        ', ',
+      )}) AS _shared FROM (`,
+      ...perCard,
+      `) AS c WHERE ${keys.map((k) => `${k} IS NOT NULL`).join(' AND ')}`,
+      ') AS w WHERE _shared > 1',
+      `ORDER BY ${keys.join(', ')}, url COLLATE "POSIX"`,
+    ];
+    let rows = await this.#queryCards(query);
+    return rows.map((row) => ({
+      url: String(row.url),
+      values: keys.map((k) => String((row as Record<string, unknown>)[k])),
+    }));
+  }
+
   private generalFieldSortColumn(field: string) {
     let mappedField = generalSortFields[field];
     if (mappedField) {

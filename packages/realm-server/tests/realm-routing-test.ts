@@ -9,6 +9,7 @@ import type {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { CachingDefinitionLookup } from '@cardstack/runtime-common';
+import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 import { setupDB, setupPermissionedRealmCached } from './helpers/index.ts';
 import {
   RealmRegistryReconciler,
@@ -374,6 +375,205 @@ function makeOtherRealmTypeFixture(): Record<
               path: '/cards/:name',
               type: { module: '@cardstack/base/card-api', name: 'CardDef' },
               match: { 'cardInfo.name': ':name' },
+            },
+          ],
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/realm-config'),
+            name: 'RealmConfig',
+          },
+        },
+      },
+    },
+  };
+}
+
+// Field-match routes whose cards share values: posts with the same slug,
+// one of them failing the route's `where`, and cards nested in a parent,
+// where a slug only has to be unique within its parent. A product links to
+// its category; a shelf links to its items.
+function makeDuplicatesFixture(): Record<
+  string,
+  string | LooseSingleCardDocument
+> {
+  let card = (
+    name: string,
+    attributes: Record<string, unknown>,
+    relationships?: Record<string, { links: { self: string } }>,
+  ): LooseSingleCardDocument => ({
+    data: {
+      type: 'card',
+      attributes,
+      ...(relationships ? { relationships } : {}),
+      meta: { adoptsFrom: { module: rri('./shop'), name } },
+    },
+  });
+  return {
+    'shop.gts': `
+      import { CardDef, field, contains, linksTo, linksToMany } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      export class Post extends CardDef {
+        static displayName = 'Post';
+        @field slug = contains(StringField);
+        @field status = contains(StringField);
+      }
+      export class Category extends CardDef {
+        static displayName = 'Category';
+        @field slug = contains(StringField);
+      }
+      export class Product extends CardDef {
+        static displayName = 'Product';
+        @field slug = contains(StringField);
+        @field category = linksTo(Category);
+      }
+      export class Item extends CardDef {
+        static displayName = 'Item';
+        @field slug = contains(StringField);
+      }
+      export class Shelf extends CardDef {
+        static displayName = 'Shelf';
+        @field slug = contains(StringField);
+        @field items = linksToMany(Item);
+      }
+    `,
+    'post-a.json': card('Post', { slug: 'hello', status: 'published' }),
+    'post-b.json': card('Post', { slug: 'hello', status: 'published' }),
+    'post-c.json': card('Post', { slug: 'hello', status: 'draft' }),
+    'post-d.json': card('Post', { slug: 'draft-twin', status: 'published' }),
+    'post-e.json': card('Post', { slug: 'draft-twin', status: 'draft' }),
+    'post-f.json': card('Post', { slug: 'unique', status: 'published' }),
+    'shoes.json': card('Category', { slug: 'shoes' }),
+    'hats.json': card('Category', { slug: 'hats' }),
+    'shoe-classic.json': card(
+      'Product',
+      { slug: 'classic' },
+      { category: { links: { self: './shoes' } } },
+    ),
+    'hat-classic.json': card(
+      'Product',
+      { slug: 'classic' },
+      { category: { links: { self: './hats' } } },
+    ),
+    'trail-1.json': card(
+      'Product',
+      { slug: 'trail' },
+      { category: { links: { self: './shoes' } } },
+    ),
+    'trail-2.json': card(
+      'Product',
+      { slug: 'trail' },
+      { category: { links: { self: './shoes' } } },
+    ),
+    'lamp-1.json': card('Item', { slug: 'lamp' }),
+    'lamp-2.json': card('Item', { slug: 'lamp' }),
+    'cup-1.json': card('Item', { slug: 'cup' }),
+    'cup-2.json': card('Item', { slug: 'cup' }),
+    'shelf-a.json': card(
+      'Shelf',
+      { slug: 'a' },
+      {
+        'items.0': { links: { self: './lamp-1' } },
+        'items.1': { links: { self: './lamp-2' } },
+        'items.2': { links: { self: './cup-1' } },
+      },
+    ),
+    'shelf-b.json': card(
+      'Shelf',
+      { slug: 'b' },
+      { 'items.0': { links: { self: './cup-2' } } },
+    ),
+    'realm.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Duplicates Realm' },
+          hostRoutingRules: [
+            {
+              path: '/posts/:slug',
+              type: { module: './shop', name: 'Post' },
+              where: { eq: { status: 'published' } },
+              match: { slug: ':slug' },
+            },
+            {
+              path: '/c/:category',
+              type: { module: './shop', name: 'Category' },
+              match: { slug: ':category' },
+              routes: [
+                {
+                  path: '/:product',
+                  type: { module: './shop', name: 'Product' },
+                  match: { slug: ':product' },
+                },
+              ],
+            },
+            {
+              path: '/s/:shelf',
+              type: { module: './shop', name: 'Shelf' },
+              match: { slug: ':shelf' },
+              routes: [
+                {
+                  path: '/:item',
+                  type: { module: './shop', name: 'Item' },
+                  match: { slug: ':item' },
+                },
+              ],
+            },
+          ],
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/realm-config'),
+            name: 'RealmConfig',
+          },
+        },
+      },
+    },
+  };
+}
+
+// A field-match route under a card id template, whose `parent` names a
+// field the child's type doesn't have: the link is on the parent's card,
+// whose type the route doesn't say.
+function makeUnknownParentSideFixture(): Record<
+  string,
+  string | LooseSingleCardDocument
+> {
+  let thing = (slug: string): LooseSingleCardDocument => ({
+    data: {
+      type: 'card',
+      attributes: { slug },
+      meta: { adoptsFrom: { module: rri('./things'), name: 'Thing' } },
+    },
+  });
+  return {
+    'things.gts': `
+      import { CardDef, field, contains } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      export class Thing extends CardDef {
+        static displayName = 'Thing';
+        @field slug = contains(StringField);
+      }
+    `,
+    'thing-1.json': thing('same'),
+    'thing-2.json': thing('same'),
+    'realm.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Unknown Parent Side Realm' },
+          hostRoutingRules: [
+            {
+              path: '/groups/:group',
+              card: './Group/:group',
+              routes: [
+                {
+                  path: '/:thing',
+                  type: { module: './things', name: 'Thing' },
+                  parent: 'things',
+                  match: { slug: ':thing' },
+                },
+              ],
             },
           ],
         },
@@ -906,6 +1106,256 @@ module(basename(import.meta.filename), function () {
       );
     });
   });
+
+  module('Realm.getHostRouteDuplicates', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/routing-duplicates/');
+    let testRealm: Realm;
+    let definitionLookup: CachingDefinitionLookup;
+
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
+      permissions: { '*': ['read'] },
+      fileSystem: makeDuplicatesFixture(),
+      onRealmSetup({ testRealm: realm, testRealmServer }) {
+        testRealm = realm;
+        definitionLookup = serverDefinitionLookup(testRealmServer);
+      },
+    });
+
+    hooks.beforeEach(async function () {
+      await testRealm.indexing();
+      // A host route reads only cached definitions, so cache the route
+      // types first, then check again as after an index.
+      let scoped = definitionLookup.forRealm(testRealm);
+      for (let name of ['Post', 'Category', 'Product', 'Item', 'Shelf']) {
+        await scoped.lookupDefinition({
+          module: rri(`${realmURL.href}shop`),
+          name,
+        });
+      }
+      testRealm.clearRealmIndexCaches();
+      expectCompleteRoutes(await testRealm.getHostRoutes());
+    });
+
+    function expectCompleteRoutes(validation: { complete: boolean }) {
+      if (!validation.complete) {
+        throw new Error('the host routes were expected to be validated');
+      }
+    }
+
+    function summary(
+      duplicates: Awaited<
+        ReturnType<Realm['getHostRouteDuplicates']>
+      >['duplicates'],
+    ) {
+      return duplicates.map((d) => ({
+        fullPath: d.fullPath,
+        values: d.values,
+        parentCardId: d.parentCardId,
+        cardIds: d.cardIds,
+        servedCardId: d.servedCardId,
+      }));
+    }
+
+    test('reports cards that share a value, and the one that is served', async function (assert) {
+      let result = await testRealm.getHostRouteDuplicates();
+      assert.true(result.complete);
+      assert.deepEqual(
+        summary(result.duplicates.filter((d) => d.fullPath === '/posts/:slug')),
+        [
+          {
+            fullPath: '/posts/:slug',
+            values: { slug: 'hello' },
+            parentCardId: undefined,
+            cardIds: [`${realmURL.href}post-a`, `${realmURL.href}post-b`],
+            servedCardId: `${realmURL.href}post-a`,
+          },
+        ],
+        'the draft post fails the where, so it is not counted, and a value only a draft shares is not reported',
+      );
+    });
+
+    test('compares nested cards only within their parent', async function (assert) {
+      let result = await testRealm.getHostRouteDuplicates();
+      assert.deepEqual(
+        summary(
+          result.duplicates.filter(
+            (d) => d.fullPath === '/c/:category/:product',
+          ),
+        ),
+        [
+          {
+            fullPath: '/c/:category/:product',
+            values: { product: 'trail' },
+            parentCardId: `${realmURL.href}shoes`,
+            cardIds: [`${realmURL.href}trail-1`, `${realmURL.href}trail-2`],
+            servedCardId: `${realmURL.href}trail-1`,
+          },
+        ],
+        'the same slug in two categories is not reported',
+      );
+    });
+
+    test('finds the parent of a card through a link the parent holds', async function (assert) {
+      let { routes } = await testRealm.getHostRoutes();
+      let item = routes.find((r) => r.fullPath === '/s/:shelf')?.routes[0];
+      assert.deepEqual(
+        item?.kind === 'field-match' ? item.parentLink : undefined,
+        { field: 'items', side: 'parent', kind: 'linksToMany', inferred: true },
+        'the shelf holds the link',
+      );
+      let result = await testRealm.getHostRouteDuplicates();
+      assert.deepEqual(
+        summary(
+          result.duplicates.filter((d) => d.fullPath === '/s/:shelf/:item'),
+        ),
+        [
+          {
+            fullPath: '/s/:shelf/:item',
+            values: { item: 'lamp' },
+            parentCardId: `${realmURL.href}shelf-a`,
+            cardIds: [`${realmURL.href}lamp-1`, `${realmURL.href}lamp-2`],
+            servedCardId: `${realmURL.href}lamp-1`,
+          },
+        ],
+        'the same slug on two shelves is not reported',
+      );
+    });
+
+    test('the result is cached until the next index, which finds them again', async function (assert) {
+      let first = await testRealm.getHostRouteDuplicates();
+      assert.strictEqual(
+        testRealm.getHostRouteDuplicates(),
+        testRealm.getHostRouteDuplicates(),
+        'concurrent calls share one check',
+      );
+      assert.deepEqual(await testRealm.getHostRouteDuplicates(), first);
+
+      await testRealm.delete('post-b.json');
+      await testRealm.indexing();
+
+      let after = await testRealm.getHostRouteDuplicates();
+      assert.notStrictEqual(after, first, 'checked again after the index');
+      assert.deepEqual(
+        summary(after.duplicates).map((d) => d.fullPath),
+        ['/c/:category/:product', '/s/:shelf/:item'],
+        'the removed duplicate is no longer reported',
+      );
+    });
+
+    test('runs one check at a time, and an index during a check leaves its result uncached', async function (assert) {
+      let original = RealmIndexQueryEngine.prototype.findSharedFieldValues;
+      let calls = 0;
+      let active = 0;
+      let mostActive = 0;
+      let firstCall: () => void;
+      let started = new Promise<void>((resolve) => (firstCall = resolve));
+      let release: () => void;
+      let gate = new Promise<void>((resolve) => (release = resolve));
+      RealmIndexQueryEngine.prototype.findSharedFieldValues = async function (
+        this: RealmIndexQueryEngine,
+        ...args: Parameters<typeof original>
+      ) {
+        calls++;
+        active++;
+        mostActive = Math.max(mostActive, active);
+        firstCall();
+        try {
+          await gate;
+          return await original.apply(this, args);
+        } finally {
+          active--;
+        }
+      };
+      try {
+        testRealm.clearRealmIndexCaches();
+        let first = testRealm.getHostRouteDuplicates();
+        assert.strictEqual(
+          testRealm.getHostRouteDuplicates(),
+          first,
+          'concurrent readers share one check',
+        );
+        await started;
+
+        // What an index does when it lands while the check runs.
+        testRealm.clearRealmIndexCaches();
+        let second = testRealm.getHostRouteDuplicates();
+        assert.notStrictEqual(second, first, 'the index drops the check');
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.strictEqual(
+          calls,
+          1,
+          'the new check waits for the dropped one to finish',
+        );
+
+        release!();
+        await first;
+        let result = await second;
+        assert.strictEqual(mostActive, 1, 'one query ran at a time');
+        assert.strictEqual(
+          calls,
+          10,
+          'each check queried each of the five field-match routes once',
+        );
+        assert.strictEqual(
+          testRealm.getHostRouteDuplicates(),
+          second,
+          "the dropped check's result is not cached",
+        );
+        assert.true(result.complete);
+      } finally {
+        RealmIndexQueryEngine.prototype.findSharedFieldValues = original;
+      }
+    });
+  });
+
+  module(
+    'Realm.getHostRouteDuplicates with a parent link of unknown side',
+    function (hooks) {
+      let realmURL = new URL(
+        'http://127.0.0.1:4444/routing-unknown-parent-side/',
+      );
+      let testRealm: Realm;
+      let definitionLookup: CachingDefinitionLookup;
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL,
+        permissions: { '*': ['read'] },
+        fileSystem: makeUnknownParentSideFixture(),
+        onRealmSetup({ testRealm: realm, testRealmServer }) {
+          testRealm = realm;
+          definitionLookup = serverDefinitionLookup(testRealmServer);
+        },
+      });
+
+      hooks.beforeEach(async function () {
+        await testRealm.indexing();
+        await definitionLookup.forRealm(testRealm).lookupDefinition({
+          module: rri(`${realmURL.href}things`),
+          name: 'Thing',
+        });
+        testRealm.clearRealmIndexCaches();
+      });
+
+      test('reports the check as not complete, and does not cache it', async function (assert) {
+        let { routes, complete } = await testRealm.getHostRoutes();
+        assert.true(complete, 'the routes are all validated');
+        let thing = routes[0]?.routes[0];
+        assert.deepEqual(
+          thing?.kind === 'field-match' ? thing.parentLink : undefined,
+          { field: 'things', side: 'unverified', inferred: false },
+          "the link is not on the child's card",
+        );
+        let first = await testRealm.getHostRouteDuplicates();
+        assert.deepEqual(first, { duplicates: [], complete: false });
+        assert.notStrictEqual(
+          testRealm.getHostRouteDuplicates(),
+          first,
+          'the next read checks again',
+        );
+      });
+    },
+  );
 
   module(
     'Realm.getHostRoutes with a type from another realm',

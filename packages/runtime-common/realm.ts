@@ -172,6 +172,10 @@ import {
   type HostRouteTypeInfo,
   type HostRoutesValidation,
 } from './host-routes.ts';
+import {
+  findHostRouteDuplicates,
+  type HostRouteDuplicates,
+} from './host-route-duplicates.ts';
 import type { LocalPath } from './paths.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -3365,6 +3369,15 @@ export class Realm {
   // The warnings of the last validation, so the same ones aren't logged on
   // every read.
   #loggedHostRouteWarnings: string | undefined;
+  // The values more than one card of a field-match route shares, found
+  // after the last index. Dropped with the host routes.
+  #hostRouteDuplicates: Promise<HostRouteDuplicates> | undefined;
+  // The check running now, which may be one an index has since dropped. A
+  // new check waits for it, so one check at a time runs per realm.
+  #hostRouteDuplicatesRunning: Promise<HostRouteDuplicates> | undefined;
+  // The duplicates last logged, so the same ones aren't logged after every
+  // index.
+  #loggedHostRouteDuplicates: string | undefined;
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -5053,6 +5066,7 @@ export class Realm {
     this.#invalidateHostRoutes();
     this.#hostRouteTypeWarmedAt.clear();
     this.#loggedHostRouteWarnings = undefined;
+    this.#hostRouteDuplicates = undefined;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
@@ -18713,6 +18727,90 @@ export class Realm {
       // Don't cache a transient read failure — leave `null` so the next
       // call retries the index query.
       return undefined;
+    }
+  }
+
+  // The values more than one card of a field-match route shares, so that
+  // only the card that sorts first by id is served at their address. Found
+  // from the index alone, on the first call after an index: one query per
+  // field-match route, plus, for a route under a dynamic parent whose link
+  // the query can't group by, a read of that link for the cards that share
+  // values. Concurrent calls share one check, a check waits for the one an
+  // index dropped to finish, and the result is cached until the next index.
+  // A result that isn't complete is not cached, so the next call checks
+  // again. Never rejects.
+  getHostRouteDuplicates(): Promise<HostRouteDuplicates> {
+    if (this.#hostRouteDuplicates) {
+      return this.#hostRouteDuplicates;
+    }
+    let previous = this.#hostRouteDuplicatesRunning;
+    let found = (async () => {
+      await previous;
+      return await this.#findHostRouteDuplicates();
+    })();
+    this.#hostRouteDuplicates = found;
+    this.#hostRouteDuplicatesRunning = found;
+    void found.then((result) => {
+      if (this.#hostRouteDuplicatesRunning === found) {
+        this.#hostRouteDuplicatesRunning = undefined;
+      }
+      if (!result.complete && this.#hostRouteDuplicates === found) {
+        this.#hostRouteDuplicates = undefined;
+      }
+    });
+    return found;
+  }
+
+  async #findHostRouteDuplicates(): Promise<HostRouteDuplicates> {
+    try {
+      let validation = await this.getHostRoutes();
+      let result = await findHostRouteDuplicates(
+        validation.routes,
+        {
+          findSharedFieldValues: (filter, fields) =>
+            this.#realmIndexQueryEngine.findSharedFieldValues(filter, fields),
+          instanceResources: (filter) =>
+            this.#realmIndexQueryEngine.instanceResources(filter),
+          instance: async (cardId) => {
+            let entry = await this.#realmIndexQueryEngine.instance(
+              new URL(cardId),
+            );
+            return entry?.type === 'instance' ? entry.instance : undefined;
+          },
+        },
+        {
+          complete: validation.complete,
+          onError: (route, e) =>
+            this.#log.warn(
+              `could not check host route "${route.fullPath}" for duplicate values: ${e}`,
+            ),
+        },
+      );
+      this.#logHostRouteDuplicates(result);
+      return result;
+    } catch (e) {
+      this.#log.warn(`could not check host routes for duplicate values: ${e}`);
+      return { duplicates: [], complete: false };
+    }
+  }
+
+  // Logs each value more than one card of a route shares, unless the last
+  // check logged the same ones.
+  #logHostRouteDuplicates(result: HostRouteDuplicates): void {
+    let lines = result.duplicates.map((d) => {
+      let values = Object.entries(d.values)
+        .map(([param, value]) => `${param}=${JSON.stringify(value)}`)
+        .join(', ');
+      let parent = d.parentCardId ? ` in ${d.parentCardId}` : '';
+      return `host route "${d.fullPath}": ${d.cardIds.length} cards share ${values}${parent}; ${d.servedCardId} is served, ${d.cardIds.slice(1).join(', ')} not`;
+    });
+    let logged = lines.join('\n');
+    if (logged === this.#loggedHostRouteDuplicates) {
+      return;
+    }
+    this.#loggedHostRouteDuplicates = logged;
+    for (let line of lines) {
+      this.#log.warn(line);
     }
   }
 
