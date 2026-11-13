@@ -496,12 +496,14 @@ export class PgQueuePublisher implements QueuePublisher {
 // 7200s leases.
 const MAX_RESERVATION_COUNT_PER_JOB = 2;
 
-// Cap on attempts that ended with the child's V8 heap exhausted. Counted apart
-// from the cap above: an index job stages its rows as it goes and a retry of
-// the same job resumes from them, skipping every file an earlier attempt
-// finished, so each attempt on a large realm gets further than the last
-// rather than repeating it. A job that cannot make progress still stops after
-// this many.
+// Cap on attempts that ran the child's V8 heap out after staging rows no
+// earlier attempt had. Counted apart from the cap above: an index job stages
+// its rows as it goes and a retry of the same job resumes from them, skipping
+// every file an earlier attempt finished, so such an attempt is progress, not
+// a repeat. An attempt that ran its heap out without staging anything new
+// (`'heap-exhausted-without-progress'`) counts toward the cap above instead,
+// since its retry would resume from the same place. This cap stops a job
+// whose attempts each get a little further but never finish.
 const MAX_HEAP_EXHAUSTED_COUNT_PER_JOB = 8;
 
 // How many of one family's writer lanes may hold a worker at once. Writer lanes
@@ -924,13 +926,17 @@ export class PgQueueRunner implements QueueRunner {
           // that exhausts its container's memory does so again on every
           // retry, and each time the kernel kills workers running other jobs
           // on that task too. An attempt that ran the child's own V8 heap out
-          // (`'heap-exhausted'`) is counted on its own against
-          // #maxHeapExhaustedCount instead: the next attempt resumes from the
-          // rows this one staged, so it is progress, not a repeat.
+          // after staging new rows (`'heap-exhausted'`) is counted on its own
+          // against #maxHeapExhaustedCount instead: the next attempt resumes
+          // from them, so it is progress, not a repeat. One that ran its heap
+          // out before staging anything new
+          // (`'heap-exhausted-without-progress'`) would repeat, so it counts
+          // here.
           let [priorReservations] = (await query([
-            `SELECT COUNT(*) FILTER (WHERE completion_reason IS NULL OR completion_reason IN ('completed', 'killed'))::int as count,
+            `SELECT COUNT(*) FILTER (WHERE completion_reason IS NULL OR completion_reason IN ('completed', 'killed', 'heap-exhausted-without-progress'))::int as count,
                     COUNT(*) FILTER (WHERE completion_reason = 'killed')::int as killed,
-                    COUNT(*) FILTER (WHERE completion_reason = 'heap-exhausted')::int as "heapExhausted"
+                    COUNT(*) FILTER (WHERE completion_reason = 'heap-exhausted')::int as "heapExhausted",
+                    COUNT(*) FILTER (WHERE completion_reason = 'heap-exhausted-without-progress')::int as "heapExhaustedWithoutProgress"
              FROM job_reservations
              WHERE job_id =`,
             param(jobToRun.id),
@@ -938,6 +944,7 @@ export class PgQueueRunner implements QueueRunner {
             count: number;
             killed: number;
             heapExhausted: number;
+            heapExhaustedWithoutProgress: number;
           }[];
           let heapCapHit =
             priorReservations.heapExhausted >= this.#maxHeapExhaustedCount;
@@ -949,9 +956,14 @@ export class PgQueueRunner implements QueueRunner {
               priorReservations.killed > 0
                 ? `; the worker running it was killed ${priorReservations.killed} time(s), which usually means the job ran its container out of memory`
                 : '';
-            let heapNote = heapCapHit
-              ? `; ${priorReservations.heapExhausted} attempt(s) ran the worker's heap out (max=${this.#maxHeapExhaustedCount})`
-              : '';
+            let noProgressNote =
+              priorReservations.heapExhaustedWithoutProgress > 0
+                ? `; ${priorReservations.heapExhaustedWithoutProgress} attempt(s) ran the worker's heap out before staging anything new`
+                : '';
+            // Lead with whichever cap tripped.
+            let message = heapCapHit
+              ? `Job abandoned after ${priorReservations.heapExhausted} attempts ran the worker's heap out (max=${this.#maxHeapExhaustedCount})`
+              : `Job abandoned after ${priorReservations.count} failed attempts (max=${this.#maxReservationCount})${killedNote}${noProgressNote}`;
             await query([
               `UPDATE jobs SET `,
               ...separatedByCommas([
@@ -959,7 +971,7 @@ export class PgQueueRunner implements QueueRunner {
                   `result =`,
                   param({
                     status: 500,
-                    message: `Job abandoned after ${priorReservations.count} failed attempts (max=${this.#maxReservationCount})${killedNote}${heapNote}`,
+                    message,
                   }),
                 ],
                 [`status = 'rejected'`],
