@@ -27,7 +27,8 @@ export interface HostRouteDuplicate {
 export interface HostRouteDuplicates {
   duplicates: HostRouteDuplicate[];
   // False when a field-match route could not be checked: the routes could
-  // not all be validated, or a query for a route failed. The duplicates
+  // not all be validated, a query for a route failed, or a nested route's
+  // link to its parent is on a parent card of unknown type. The duplicates
   // found in the routes that were checked are still listed.
   complete: boolean;
 }
@@ -62,9 +63,10 @@ export function hostFieldMatchFilter(route: HostFieldMatchRoute): Filter {
 
 // Finds the values more than one card of a field-match route shares, in
 // every field-match route of `routes`, child routes included. One query per
-// route finds the cards that share values across the whole realm. For a
-// route under a dynamic parent route, the link to the parent is then read
-// for those cards only, and they are compared within each parent.
+// route finds the cards that share values. For a route under a dynamic
+// parent route, cards are compared only within each parent: a `linksTo` the
+// child holds is part of that query, and any other link is read for the
+// cards that share values only.
 export async function findHostRouteDuplicates(
   routes: readonly HostRoute[],
   index: HostRouteDuplicateIndex,
@@ -84,9 +86,12 @@ export async function findHostRouteDuplicates(
     for (let route of list) {
       if (route.kind === 'field-match') {
         try {
-          result.duplicates.push(
-            ...(await duplicatesOfRoute(route, parent, index)),
-          );
+          let checked = await duplicatesOfRoute(route, parent, index);
+          if (checked === 'unchecked') {
+            result.complete = false;
+          } else {
+            result.duplicates.push(...checked);
+          }
         } catch (e) {
           result.complete = false;
           opts.onError?.(route, e);
@@ -104,19 +109,49 @@ interface Candidate {
   values: string[];
 }
 
+// The duplicates of one route, or `unchecked` when the cards can't be
+// grouped by parent: a link whose side isn't known is a field the child's
+// type doesn't have, so it is on the parent's card, and the parent route (a
+// card id template) has no type to search those cards by.
 async function duplicatesOfRoute(
   route: HostFieldMatchRoute,
   parent: HostRoute | undefined,
   index: HostRouteDuplicateIndex,
-): Promise<HostRouteDuplicate[]> {
+): Promise<HostRouteDuplicate[] | 'unchecked'> {
+  let link = route.parentLink;
+  if (
+    link &&
+    (link.side === 'unverified' ||
+      (link.side === 'parent' && parent?.kind !== 'field-match'))
+  ) {
+    return 'unchecked';
+  }
+  // A `linksTo` on the child names one parent, so the query groups by it.
+  let parentInQuery = link?.side === 'child' && link.kind === 'linksTo';
+  let fields = route.match.map(({ field }) => ({
+    path: field,
+    on: route.type,
+  }));
+  if (parentInQuery) {
+    fields.push({ path: `${link!.field}.id`, on: route.type });
+  }
   let rows = await index.findSharedFieldValues(
     hostFieldMatchFilter(route),
-    route.match.map(({ field }) => ({ path: field, on: route.type })),
+    fields,
   );
+  let valueCount = route.match.length;
   // An empty value is not a path segment, so it gives the card no address.
-  let candidates: Candidate[] = rows
-    .filter((row) => row.values.every((value) => value !== ''))
-    .map((row) => ({ cardId: trimJsonExtension(row.url), values: row.values }));
+  let candidates = rows
+    .filter((row) =>
+      row.values.slice(0, valueCount).every((value) => value !== ''),
+    )
+    .map((row) => ({
+      cardId: trimJsonExtension(row.url),
+      values: row.values.slice(0, valueCount),
+      parentCardId: parentInQuery
+        ? trimJsonExtension(row.values[valueCount])
+        : undefined,
+    }));
   if (candidates.length < 2) {
     return [];
   }
@@ -132,9 +167,9 @@ async function duplicatesOfRoute(
     group.cards.push(candidate);
   };
 
-  if (!route.parentLink) {
+  if (!link || parentInQuery) {
     for (let candidate of candidates) {
-      addTo(candidate, undefined);
+      addTo(candidate, candidate.parentCardId);
     }
   } else {
     let parentsByCard = await parentCardIds(
@@ -173,10 +208,10 @@ async function duplicatesOfRoute(
 }
 
 // The parent cards each of `cardIds` belongs to through the route's parent
-// link. A link held by the child is read from the child's resource. A link
-// held by the parent is found by searching the parent route's cards for the
-// ones that link to the children. A link whose side isn't known is read from
-// the child only, since the parent route's type isn't known to search.
+// link, when that link is a `linksToMany` the child holds or a link the
+// parent holds. The child's link is read from the child's resource. A link
+// the parent holds is found by searching the parent route's cards for the
+// ones that link to the children.
 async function parentCardIds(
   route: HostFieldMatchRoute,
   parent: HostRoute | undefined,
@@ -194,10 +229,7 @@ async function parentCardIds(
     set.add(parentCardId);
   };
 
-  if (link.side === 'parent') {
-    if (parent?.kind !== 'field-match') {
-      return parents;
-    }
+  if (link.side === 'parent' && parent?.kind === 'field-match') {
     let wanted = new Set(cardIds);
     for (let chunk of chunks(cardIds, 100)) {
       let parentCards = await index.instanceResources({
@@ -223,14 +255,17 @@ async function parentCardIds(
     return parents;
   }
 
-  for (let cardId of cardIds) {
-    let card = await index.instance(cardId);
-    if (!card) {
-      continue;
-    }
-    for (let target of linkedIds(card, cardId, link.field)) {
-      add(cardId, target);
-    }
+  for (let chunk of chunks(cardIds, 10)) {
+    let cards = await Promise.all(chunk.map((id) => index.instance(id)));
+    chunk.forEach((cardId, i) => {
+      let card = cards[i];
+      if (!card) {
+        return;
+      }
+      for (let target of linkedIds(card, cardId, link.field)) {
+        add(cardId, target);
+      }
+    });
   }
   return parents;
 }

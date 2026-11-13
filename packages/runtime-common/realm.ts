@@ -3372,6 +3372,9 @@ export class Realm {
   // The values more than one card of a field-match route shares, found
   // after the last index. Dropped with the host routes.
   #hostRouteDuplicates: Promise<HostRouteDuplicates> | undefined;
+  // The check running now, which may be one an index has since dropped. A
+  // new check waits for it, so one check at a time runs per realm.
+  #hostRouteDuplicatesRunning: Promise<HostRouteDuplicates> | undefined;
   // The duplicates last logged, so the same ones aren't logged after every
   // index.
   #loggedHostRouteDuplicates: string | undefined;
@@ -5081,9 +5084,6 @@ export class Realm {
   // the byte-cache surface.
   async clearRealmIndexCachesAndBroadcast(): Promise<void> {
     this.clearRealmIndexCaches();
-    // The index this replica just swapped in may have changed which cards
-    // share a route value. Found in the background: nothing waits on it.
-    void this.getHostRouteDuplicates();
     await notifyRealmIndexUpdated(this.#dbAdapter, this.url);
   }
 
@@ -18732,18 +18732,28 @@ export class Realm {
 
   // The values more than one card of a field-match route shares, so that
   // only the card that sorts first by id is served at their address. Found
-  // once after each index, from the index alone: one query per field-match
-  // route, plus a read of the parent link of the cards that share values
-  // for a route under a dynamic parent. Cached until the next index. A
-  // result that isn't complete is not cached, so the next call checks again.
-  // Never rejects.
+  // from the index alone, on the first call after an index: one query per
+  // field-match route, plus, for a route under a dynamic parent whose link
+  // the query can't group by, a read of that link for the cards that share
+  // values. Concurrent calls share one check, a check waits for the one an
+  // index dropped to finish, and the result is cached until the next index.
+  // A result that isn't complete is not cached, so the next call checks
+  // again. Never rejects.
   getHostRouteDuplicates(): Promise<HostRouteDuplicates> {
     if (this.#hostRouteDuplicates) {
       return this.#hostRouteDuplicates;
     }
-    let found = this.#findHostRouteDuplicates();
+    let previous = this.#hostRouteDuplicatesRunning;
+    let found = (async () => {
+      await previous;
+      return await this.#findHostRouteDuplicates();
+    })();
     this.#hostRouteDuplicates = found;
+    this.#hostRouteDuplicatesRunning = found;
     void found.then((result) => {
+      if (this.#hostRouteDuplicatesRunning === found) {
+        this.#hostRouteDuplicatesRunning = undefined;
+      }
       if (!result.complete && this.#hostRouteDuplicates === found) {
         this.#hostRouteDuplicates = undefined;
       }

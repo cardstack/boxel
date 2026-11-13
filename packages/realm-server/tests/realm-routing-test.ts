@@ -389,8 +389,9 @@ function makeOtherRealmTypeFixture(): Record<
 }
 
 // Field-match routes whose cards share values: posts with the same slug,
-// one of them failing the route's `where`, and products nested in
-// categories, where a slug only has to be unique within its category.
+// one of them failing the route's `where`, and cards nested in a parent,
+// where a slug only has to be unique within its parent. A product links to
+// its category; a shelf links to its items.
 function makeDuplicatesFixture(): Record<
   string,
   string | LooseSingleCardDocument
@@ -409,7 +410,7 @@ function makeDuplicatesFixture(): Record<
   });
   return {
     'shop.gts': `
-      import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+      import { CardDef, field, contains, linksTo, linksToMany } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
       export class Post extends CardDef {
         static displayName = 'Post';
@@ -424,6 +425,15 @@ function makeDuplicatesFixture(): Record<
         static displayName = 'Product';
         @field slug = contains(StringField);
         @field category = linksTo(Category);
+      }
+      export class Item extends CardDef {
+        static displayName = 'Item';
+        @field slug = contains(StringField);
+      }
+      export class Shelf extends CardDef {
+        static displayName = 'Shelf';
+        @field slug = contains(StringField);
+        @field items = linksToMany(Item);
       }
     `,
     'post-a.json': card('Post', { slug: 'hello', status: 'published' }),
@@ -454,6 +464,24 @@ function makeDuplicatesFixture(): Record<
       { slug: 'trail' },
       { category: { links: { self: './shoes' } } },
     ),
+    'lamp-1.json': card('Item', { slug: 'lamp' }),
+    'lamp-2.json': card('Item', { slug: 'lamp' }),
+    'cup-1.json': card('Item', { slug: 'cup' }),
+    'cup-2.json': card('Item', { slug: 'cup' }),
+    'shelf-a.json': card(
+      'Shelf',
+      { slug: 'a' },
+      {
+        'items.0': { links: { self: './lamp-1' } },
+        'items.1': { links: { self: './lamp-2' } },
+        'items.2': { links: { self: './cup-1' } },
+      },
+    ),
+    'shelf-b.json': card(
+      'Shelf',
+      { slug: 'b' },
+      { 'items.0': { links: { self: './cup-2' } } },
+    ),
     'realm.json': {
       data: {
         type: 'card',
@@ -475,6 +503,18 @@ function makeDuplicatesFixture(): Record<
                   path: '/:product',
                   type: { module: './shop', name: 'Product' },
                   match: { slug: ':product' },
+                },
+              ],
+            },
+            {
+              path: '/s/:shelf',
+              type: { module: './shop', name: 'Shelf' },
+              match: { slug: ':shelf' },
+              routes: [
+                {
+                  path: '/:item',
+                  type: { module: './shop', name: 'Item' },
+                  match: { slug: ':item' },
                 },
               ],
             },
@@ -1030,7 +1070,7 @@ module(basename(import.meta.filename), function () {
       // A host route reads only cached definitions, so cache the route
       // types first, then check again as after an index.
       let scoped = definitionLookup.forRealm(testRealm);
-      for (let name of ['Post', 'Category', 'Product']) {
+      for (let name of ['Post', 'Category', 'Product', 'Item', 'Shelf']) {
         await scoped.lookupDefinition({
           module: rri(`${realmURL.href}shop`),
           name,
@@ -1099,6 +1139,32 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('finds the parent of a card through a link the parent holds', async function (assert) {
+      let { routes } = await testRealm.getHostRoutes();
+      let item = routes.find((r) => r.fullPath === '/s/:shelf')?.routes[0];
+      assert.deepEqual(
+        item?.kind === 'field-match' ? item.parentLink : undefined,
+        { field: 'items', side: 'parent', kind: 'linksToMany', inferred: true },
+        'the shelf holds the link',
+      );
+      let result = await testRealm.getHostRouteDuplicates();
+      assert.deepEqual(
+        summary(
+          result.duplicates.filter((d) => d.fullPath === '/s/:shelf/:item'),
+        ),
+        [
+          {
+            fullPath: '/s/:shelf/:item',
+            values: { item: 'lamp' },
+            parentCardId: `${realmURL.href}shelf-a`,
+            cardIds: [`${realmURL.href}lamp-1`, `${realmURL.href}lamp-2`],
+            servedCardId: `${realmURL.href}lamp-1`,
+          },
+        ],
+        'the same slug on two shelves is not reported',
+      );
+    });
+
     test('the result is cached until the next index, which finds them again', async function (assert) {
       let first = await testRealm.getHostRouteDuplicates();
       assert.strictEqual(
@@ -1115,7 +1181,7 @@ module(basename(import.meta.filename), function () {
       assert.notStrictEqual(after, first, 'checked again after the index');
       assert.deepEqual(
         summary(after.duplicates).map((d) => d.fullPath),
-        ['/c/:category/:product'],
+        ['/c/:category/:product', '/s/:shelf/:item'],
         'the removed duplicate is no longer reported',
       );
     });
