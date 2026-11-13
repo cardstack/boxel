@@ -2403,22 +2403,30 @@ export class Batch {
     }
     let uniqueInvalidations = [...new Set(invalidations)];
     // One row per (url, type) — the table's primary key is
-    // (url, realm_url, type) and the realm is pinned below.
-    let rows = (await this.#query([
-      'SELECT url, type, is_deleted FROM prerendered_html WHERE',
-      ...every([
-        ['realm_url =', param(this.realmURL.href)],
-        [
-          'url IN',
-          ...addExplicitParens(
-            separatedByCommas(uniqueInvalidations.map((id) => [param(id)])),
-          ),
-        ],
-      ]),
-    ] as Expression)) as Pick<
-      PrerenderedHtmlTable,
-      'url' | 'type' | 'is_deleted'
-    >[];
+    // (url, realm_url, type) and the realm is pinned below. Each URL binds a
+    // parameter, so a realm-sized list is read in chunks: one statement over
+    // every URL of a large realm passes the driver's bind ceiling.
+    let rows: Pick<PrerenderedHtmlTable, 'url' | 'type' | 'is_deleted'>[] = [];
+    for (let offset = 0; offset < uniqueInvalidations.length; offset += 10000) {
+      let chunk = uniqueInvalidations.slice(offset, offset + 10000);
+      rows.push(
+        ...((await this.#query([
+          'SELECT url, type, is_deleted FROM prerendered_html WHERE',
+          ...every([
+            ['realm_url =', param(this.realmURL.href)],
+            [
+              'url IN',
+              ...addExplicitParens(
+                separatedByCommas(chunk.map((id) => [param(id)])),
+              ),
+            ],
+          ]),
+        ] as Expression)) as Pick<
+          PrerenderedHtmlTable,
+          'url' | 'type' | 'is_deleted'
+        >[]),
+      );
+    }
     let typesByUrl = new Map<
       string,
       { type: PrerenderedHtmlTable['type']; isDeleted: boolean }[]
@@ -4424,22 +4432,31 @@ export class Batch {
     }
     let uniqueInvalidations = [...new Set(invalidations)];
     // One row per (url, type) — the table's primary key is
-    // (url, realm_url, type) and the realm is pinned below.
-    let rows = (await this.#query([
-      'SELECT url, type, is_deleted, types FROM boxel_index WHERE',
-      ...every([
-        ['realm_url =', param(this.realmURL.href)],
-        [
-          'url IN',
-          ...addExplicitParens(
-            separatedByCommas(uniqueInvalidations.map((id) => [param(id)])),
-          ),
-        ],
-      ]),
-    ] as Expression)) as Pick<
-      BoxelIndexTable,
-      'url' | 'type' | 'is_deleted' | 'types'
-    >[];
+    // (url, realm_url, type) and the realm is pinned below. Each URL binds a
+    // parameter, so a realm-sized list is read in chunks: one statement over
+    // every URL of a large realm passes the driver's bind ceiling.
+    let rows: Pick<BoxelIndexTable, 'url' | 'type' | 'is_deleted' | 'types'>[] =
+      [];
+    for (let offset = 0; offset < uniqueInvalidations.length; offset += 10000) {
+      let chunk = uniqueInvalidations.slice(offset, offset + 10000);
+      rows.push(
+        ...((await this.#query([
+          'SELECT url, type, is_deleted, types FROM boxel_index WHERE',
+          ...every([
+            ['realm_url =', param(this.realmURL.href)],
+            [
+              'url IN',
+              ...addExplicitParens(
+                separatedByCommas(chunk.map((id) => [param(id)])),
+              ),
+            ],
+          ]),
+        ] as Expression)) as Pick<
+          BoxelIndexTable,
+          'url' | 'type' | 'is_deleted' | 'types'
+        >[]),
+      );
+    }
     let typesByUrl = new Map<string, ExistingIndexRowType[]>();
     for (let row of rows) {
       let entry = {
