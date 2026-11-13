@@ -3896,7 +3896,9 @@ export class Realm {
       )
       // An automation run's commit of its overlay, which is where a run's
       // staged writes reach the realm. It is answered on the realm ACL alone:
-      // a caller with no run has no overlay to commit.
+      // a run's identity is a direct writer of its realm when its writes
+      // commit, and a policy grant makes no one a run's identity
+      // (ADR 026 §1.5).
       .post(
         RUN_COMMIT_PATH,
         SupportedMimeType.JSONAPI,

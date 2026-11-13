@@ -490,9 +490,13 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
           `GET ${SupportedMimeType.RealmInfo} /_info`,
           `QUERY ${SupportedMimeType.RealmInfo} /_info`,
+          `POST ${SupportedMimeType.CardSource} /.*`,
+          `POST ${SupportedMimeType.OctetStream} /.*`,
+          `DELETE ${SupportedMimeType.CardSource} /.+`,
+          `POST ${SupportedMimeType.JSONAPI} /_atomic`,
           'GET * /_scoped-css/*',
         ].sort(),
-        'the consumer set is the card+json read and writes, the search, the operations envelope, the capability check, the realm info and the hashed stylesheet serve',
+        'the consumer set is the card+json read and writes, the verbatim writes, the search, the operations envelope, the capability check, the realm info and the hashed stylesheet serve',
       );
       let nonConsumers = testRealm
         .routeDescriptions()
@@ -536,10 +540,6 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `GET ${SupportedMimeType.JSONAPI} /_indexing-errors`,
           `QUERY ${SupportedMimeType.JSON} /_lint`,
           `QUERY ${SupportedMimeType.JSON} /_sign-capture-urls`,
-          `POST ${SupportedMimeType.CardSource} /.*`,
-          `POST ${SupportedMimeType.OctetStream} /.*`,
-          `DELETE ${SupportedMimeType.CardSource} /.+`,
-          `POST ${SupportedMimeType.JSONAPI} /_atomic`,
           `POST ${SupportedMimeType.JSONAPI} /_run-commit`,
           `GET ${SupportedMimeType.JSON} /_automation-status`,
           `GET ${SupportedMimeType.Permissions} /_permissions`,
@@ -549,7 +549,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.JSON} /_full-reindex`,
           `POST ${SupportedMimeType.JSONAPI} /_invalidate`,
         ].sort(),
-        "the index-backed reads, the verbatim writes (an automation run's commit among them), and the administration routes",
+        "the index-backed reads, an automation run's commit, and the administration routes",
       );
       assert.deepEqual(
         testRealm
@@ -604,9 +604,13 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.JSONAPI} /_operations`,
           `GET ${SupportedMimeType.RealmInfo} /_info`,
           `QUERY ${SupportedMimeType.RealmInfo} /_info`,
+          `POST ${SupportedMimeType.CardSource} /.*`,
+          `POST ${SupportedMimeType.OctetStream} /.*`,
+          `DELETE ${SupportedMimeType.CardSource} /.+`,
+          `POST ${SupportedMimeType.JSONAPI} /_atomic`,
           'GET * /_scoped-css/*',
         ].sort(),
-        'the card+json read and writes, the search, the operations envelope, the capability check, the realm info, which applies it by never sealing, and the hashed stylesheet serve',
+        'the card+json read and writes, the verbatim writes, the search, the operations envelope, the capability check, the realm info, which applies it by never sealing, and the hashed stylesheet serve',
       );
       assert.deepEqual(
         testRealm

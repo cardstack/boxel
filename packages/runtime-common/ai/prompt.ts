@@ -3583,6 +3583,11 @@ const POLICY_GRANTED_READS = `The user can't read this workspace directly either
 // that asks it.
 const CHECK_GRANTED_OPERATIONS = `To learn whether the realm allows the user an operation now, on a given card or as a create of a given type, ask it with realm.operations.capabilities in run-realm-code, which runs nothing. Ask before offering an operation whose grant, or whose condition, you can't confirm from what you've read.`;
 
+// The realm judges a direct write by a user its permissions don't let write
+// as the operation the write amounts to, so a grant admits one as it admits
+// the operation (ADR 006 §1.3, ADR 022 §1.4).
+const POLICY_GRANTED_WRITES = `The realm judges a direct write the same way: realm.cards.update or a realm.fs write of a card's .json is the card's update (keeping its type) or create, realm.fs.delete of one is its delete, and a realm.fs write of a file that exists is the file's update. It allows each one a grant allows and refuses the rest.`;
+
 // What the context says about a workspace the user can't write. The realm's
 // policy can still grant them operations there, so where the host knows the
 // realm names one, the note lists what it grants rather than saying every
@@ -3599,11 +3604,11 @@ function readOnlyWorkspaceNote(
     return `This workspace is read-only for the user: edits to its cards and files will be rejected.\n`;
   }
   if (policy.tooLarge && policy.card) {
-    return `The user can't edit this workspace's cards and files directly, but its policy, ${policy.card}, grants them operations here: more than the context can list. Read that card to see which. ${OFFER_GRANTED_OPERATIONS} ${CHECK_GRANTED_OPERATIONS}${reads} The realm refuses an operation the policy doesn't grant when it runs.\n`;
+    return `The user can't edit this workspace's cards and files directly, but its policy, ${policy.card}, grants them operations here: more than the context can list. Read that card to see which. ${OFFER_GRANTED_OPERATIONS} ${CHECK_GRANTED_OPERATIONS} ${POLICY_GRANTED_WRITES}${reads} The realm refuses an operation the policy doesn't grant when it runs.\n`;
   }
   if (!policy.rules) {
     let named = policy.card ? `, ${policy.card},` : '';
-    return `The user can't edit this workspace's cards and files directly. Its policy${named} can still grant them operations a card's type declares, but the policy couldn't be read, so which ones is unknown. ${OFFER_GRANTED_OPERATIONS} ${CHECK_GRANTED_OPERATIONS}${reads} The realm refuses an operation the policy doesn't grant when it runs.\n`;
+    return `The user can't edit this workspace's cards and files directly. Its policy${named} can still grant them operations a card's type declares, but the policy couldn't be read, so which ones is unknown. ${OFFER_GRANTED_OPERATIONS} ${CHECK_GRANTED_OPERATIONS} ${POLICY_GRANTED_WRITES}${reads} The realm refuses an operation the policy doesn't grant when it runs.\n`;
   }
   if (policy.rules.length === 0) {
     return `This workspace is read-only for the user: edits to its cards and files will be rejected. Its policy, ${policy.card}, grants no operations.\n`;
@@ -3619,7 +3624,7 @@ function readOnlyWorkspaceNote(
       .join('; ');
     note += ` - ${humanReadable(targetType)}: ${granted}\n`;
   }
-  note += `In a condition, actor() is the user${user ? ` (${user})` : ''}, and a path that starts with "." reads a field of the card. ${OFFER_GRANTED_OPERATIONS} ${CHECK_GRANTED_OPERATIONS}${reads} Any other change to this workspace is refused.\n`;
+  note += `In a condition, actor() is the user${user ? ` (${user})` : ''}, and a path that starts with "." reads a field of the card. ${OFFER_GRANTED_OPERATIONS} ${CHECK_GRANTED_OPERATIONS} ${POLICY_GRANTED_WRITES}${reads} Any other change to this workspace is refused.\n`;
   return note;
 }
 

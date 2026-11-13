@@ -92,6 +92,18 @@ MUST consult its policy only for a caller its permissions would refuse. A policy
 MUST NOT refuse anything the permissions allow. A policy MUST NOT admit
 administering (§1.2), and MUST NOT make a user the realm owner.
 
+Every realm route that writes the realm's cards or files for a caller its
+permissions refuse MUST judge each write by the policy as the operation it
+amounts to, so a grant admits through one route what it admits through any
+other. An automation run's commit is the exception: only a direct writer
+makes one (ADR 026 §1.5). A grant MUST NOT admit a write that changes the type
+of what it writes, since the grant was matched on the type the write replaces.
+
+A grant MAY admit a write to module source, which a policy types as
+`TsFileDef` or `GtsFileDef`, as it admits a write to any other file. The
+realm MUST NOT refuse that write, or anything that loads the module, because
+a grant admitted it.
+
 ### 1.4. Restriction is a separate realm
 
 Content that some of a realm's readers or writers must not reach SHOULD go in
@@ -133,6 +145,19 @@ manage it, and would leave the creator in charge after handing it over. The
 owner keeps one job that needs a single user: indexing renders the realm as
 them, so a realm's index is the same whoever triggered it.
 
+A grant reaches a write the same way on every route, because a policy author
+writes one rule per operation and type, not per route. A grant on a type is
+matched against what a write's target is. A write that leaves its target
+another type would escape the grants it was matched on, and could turn a card
+into a `RealmPolicy` after the gate judged it as its old type [10].
+
+Who may change a realm's code is its administrators' decision [10]. A module
+runs in the browser of everyone who loads it, with that person's sessions, and
+in an automation run beside the run's token, so whoever a grant lets write a
+module can act with the authority of anyone who loads it. An administrator who
+grants write to module source widens who can change the realm's code and
+accepts that risk. A refusal would second-guess that choice.
+
 A policy only widens for two reasons [8]. A caller the permissions allow never
 loads the policy or evaluates a predicate, so a writer editing their own realm
 pays nothing for it [7]. And the permissions stay truthful: if they say a user
@@ -155,6 +180,10 @@ may read a realm, nothing elsewhere takes that away.
   by the one user who created it, whatever the other administrators' direct
   write says, and a permission level that separates administering a realm from
   writing it is the kind of level ADR 024 §1.3 rules out [9].
+- **Leave verbatim writes and module source to the permissions alone.** A
+  grant would admit a write on one route and not another, and a script that
+  saves a card through a batch write would fail for a user a grant admits
+  [10].
 - **Roles or groups as subjects.** Membership already lives in the data. A
   policy predicate over a card's fields, such as
   `.teacherIds | any(. == actor())`, expresses it with nothing separate to
@@ -183,6 +212,11 @@ may read a realm, nothing elsewhere takes that away.
 9. Hassan Abdel-Rahman, 2026-11-10: `realm-owner` keeps its function, but no
    permission decision rests on it; a realm owner who administers the realm
    "flies in the face of shared realms".
+10. Hassan Abdel-Rahman, 2026-11-13: a policy applies across every realm
+    API; a write grant on `TsFileDef` or `GtsFileDef` writes a module like
+    any other grant writes its target, and the administrator who grants it
+    accepts the risk, automation runs included; a write that changes a
+    card's type is never matched on the type it replaces.
 
 ## 5. Remediation
 

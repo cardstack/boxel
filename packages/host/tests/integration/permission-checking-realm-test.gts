@@ -173,6 +173,28 @@ const enrollmentPolicy: LooseSingleCardDocument = {
   },
 };
 
+// Lets a teacher save a script's changes to their own classroom: a card a
+// script updates is read back as its source before it is saved.
+const classroomUpdatePolicy: LooseSingleCardDocument = {
+  data: {
+    type: 'card',
+    attributes: {
+      cardInfo: { name: 'Classrooms' },
+      rules: [
+        {
+          targetType: { module: `${DEFINITIONS}classroom`, name: 'Classroom' },
+          grants: [
+            { operation: 'read' },
+            { operation: 'readSource' },
+            { operation: 'update', where: TEACHES },
+          ],
+        },
+      ],
+    },
+    meta: { adoptsFrom: REALM_POLICY },
+  },
+};
+
 function classroom(title: string, teacherIds: string[]) {
   return {
     data: {
@@ -766,7 +788,7 @@ return { renamed: renamed.id, refused };`,
     );
   });
 
-  test('a Realm Runner script run by a user the realm admits only through its policy reads what the policy grants, and is refused a write and a folder listing before the realm is asked', async function (assert) {
+  test('a Realm Runner script run by a user the realm admits only through its policy reads what the policy grants, and is refused a write no grant admits and a folder listing', async function (assert) {
     let adapter = await setupSchool({ enforcePermissions: true });
     await signInToSchoolAfresh();
 
@@ -782,18 +804,56 @@ return { title: card.attributes.title, refused };`,
       'Room 204',
       'the classroom the policy grants reads',
     );
-    assert.deepEqual(
-      refused,
-      [
-        "You can't write this workspace directly; realm.fs.writeText was not run. A change the realm's policy grants runs as an operation, with realm.operations.invoke",
-        "You can't read this workspace directly; realm.fs.list was not run. Read what the realm's policy grants with realm.cards.get (a read grant), realm.cards.search (a query grant) or realm.fs.readText (a readSource grant)",
-      ],
-      'the write and the listing are refused, each saying what does run',
+    assert.strictEqual(
+      refused.length,
+      2,
+      'the write and the listing are refused',
+    );
+    assert.false(
+      refused[0].includes("You can't write this workspace directly"),
+      `the realm, not the run, refuses the write, which no grant admits: ${refused[0]}`,
+    );
+    assert.strictEqual(
+      refused[1],
+      "You can't read this workspace directly; realm.fs.list was not run. Read what the realm's policy grants with realm.cards.get (a read grant), realm.cards.search (a query grant) or realm.fs.readText (a readSource grant)",
+      'the listing, which no grant reaches, is refused before the realm is asked, saying what does run',
     );
     assert.strictEqual(
       await adapter.openFile('notes.txt'),
       undefined,
       'nothing was written',
+    );
+  });
+
+  test('a Realm Runner script run by a user the realm admits only through its policy saves a card update the policy grants, and not one it refuses', async function (assert) {
+    let adapter = await setupSchool({
+      enforcePermissions: true,
+      policy: classroomUpdatePolicy,
+    });
+    await signInToSchoolAfresh();
+
+    await runInSchool(
+      `await realm.cards.update('classrooms/room-204', { title: 'Renamed' });
+return 'ok';`,
+    );
+    assert.strictEqual(
+      await storedTitle(adapter, 'classrooms/room-204.json'),
+      'Renamed',
+      'the update to the classroom the user teaches is saved',
+    );
+
+    await assert.rejects(
+      runInSchool(
+        `await realm.cards.update('classrooms/room-205', { title: 'Renamed' });
+return 'ok';`,
+      ),
+      /not saved/,
+      'the update to a classroom someone else teaches is refused by the realm',
+    );
+    assert.strictEqual(
+      await storedTitle(adapter, 'classrooms/room-205.json'),
+      'Room 205',
+      'and nothing was written',
     );
   });
 

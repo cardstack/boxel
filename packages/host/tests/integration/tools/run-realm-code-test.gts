@@ -4193,13 +4193,11 @@ return { refused, text: await realm.fs.readText('task.json') };`,
 
       assert.deepEqual(result.files, [], 'nothing is saved');
       let { refused, text } = JSON.parse(result.scriptResult!);
-      assert.strictEqual(refused.length, 2, 'both writes are refused');
-      for (let message of refused) {
-        assert.true(
-          /You can only read this workspace/.test(message),
-          `the refusal says why: ${message}`,
-        );
-      }
+      assert.strictEqual(
+        refused.length,
+        2,
+        'both writes reach the realm, which refuses them: its policy, not the run, decides a write',
+      );
       assert.strictEqual(text, '{ "title": "Old title" }\n');
       let source = await cardService.getSource(
         new URL(`${testRealmURL}new.json`),
@@ -4221,7 +4219,7 @@ return { refused, text: await realm.fs.readText('task.json') };`,
           roomId: '!room:example.com',
           code: `await realm.fs.writeText('new.json', '{}');`,
         }),
-        /You can only read this workspace.*No file was saved/,
+        /No file was saved/,
       );
     });
 
