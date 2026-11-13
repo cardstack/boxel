@@ -46,6 +46,7 @@ import {
 import { boxelHosts } from './redirect-uris.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { registrationHandler } from './registration.ts';
+import { oauthResourceController } from './resource.ts';
 import {
   DEFAULT_TOKEN_LIMIT,
   tokenHandler,
@@ -141,6 +142,14 @@ export interface OAuthProviderService {
     handleConsentDetails: Koa.Middleware;
     handleConsentDecision: Koa.Middleware;
   };
+  // The issuer, and the resources it issues tokens for (`registry.ts`).
+  issuer: string;
+  registry: readonly OAuthResource[];
+  // The identifiers of the resources a test added, which the realm server
+  // serves a test-only route for. Empty outside tests.
+  testOnlyResourceIds: ReadonlySet<string>;
+  // A resource's controller, for a route its scopes map (`resource.ts`).
+  resourceController(resource: OAuthResource): Koa.Middleware;
 }
 
 export interface ConsentRouteDeps {
@@ -208,8 +217,18 @@ export function startOAuthProvider({
   });
   // Boxel's own apps, listed in code. None is listed yet.
   let preRegistered: ReadonlySet<string> = new Set();
+  let testOnlyResourceIds: ReadonlySet<string> = new Set(
+    (testOnlyResources ?? []).map(({ path }) =>
+      oauthIssuer(`${issuer}${path}`),
+    ),
+  );
   return {
     provider,
+    issuer,
+    registry,
+    testOnlyResourceIds,
+    resourceController: (resource) =>
+      oauthResourceController({ dbAdapter, issuer, resource }),
     handleAuthorization: authorizationHandler({
       provider,
       registry,
