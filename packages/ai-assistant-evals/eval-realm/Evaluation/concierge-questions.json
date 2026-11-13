@@ -38,7 +38,7 @@
       "cardInfo": {
         "name": "Concierge Questions",
         "summary": "Five questions a new user asks the assistant, in one session, with a Project card open: where they are, what Boxel can do, how to build a kanban board, whether they can work from Claude Code, and what it costs. The assistant only answers; a judge grades each answer, and the runner checks which skill it opened for each.",
-        "notes": "Answer-only, with the catalog-reuse feature on, since a guide should point to the catalog once the feature ships. Run it with EVAL_SKILL_FEATURES=-catalog-reuse for the picture users get today. The cost question is answered from room.credits() by the always-loaded skills index, so it expects no read; the call is a read-only script, not a write. The Claude Code and cost criteria need boxel-skills with the questions-about-boxel reference (merged after v0.1.22) and a host with room.credits().",
+        "notes": "Answer-only, with the catalog-reuse feature on, so the always-loaded index carries its catalog-reuse sections and a guide points to the catalog. EVAL_SKILL_FEATURES=-catalog-reuse runs it on the index without them. The cost question is answered from room.credits() by the always-loaded skills index, so it expects no read; the call is a read-only script, not a write. The Claude Code and cost criteria need boxel-environment/references/questions-about-boxel.md in the served skills, and a host with room.credits().",
         "cardThumbnailURL": null
       }
     },

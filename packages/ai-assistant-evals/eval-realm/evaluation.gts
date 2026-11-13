@@ -152,7 +152,7 @@ export class PromptReads extends FieldDef {
       {{/if}}
       <style scoped>
         .none {
-          color: var(--boxel-450);
+          color: var(--muted-foreground);
         }
       </style>
     </template>
@@ -264,8 +264,8 @@ export class EvaluationCard extends CardDef {
         <section>
           <h2>Success criteria</h2>
           {{#if @model.expectsNoWrites}}
-            <p class='hint'>Conversation only: the run passes without a write
-              or a rendered card, and any write fails it.</p>
+            <p class='hint'>Conversation only: the run passes without a write or
+              a rendered card, and any write fails it.</p>
           {{/if}}
           <@fields.successCriteria />
         </section>
@@ -273,8 +273,7 @@ export class EvaluationCard extends CardDef {
         {{#if (gt @model.expectedReads.length 0)}}
           <section>
             <h2>Expected reads</h2>
-            <p class='hint'>The skill each prompt should open, in prompt
-              order.</p>
+            <p class='hint'>The skill each prompt should open, in prompt order.</p>
             <ol class='follow-ups'>
               {{#each @fields.expectedReads as |Reads|}}
                 <li><Reads /></li>
@@ -376,7 +375,7 @@ export class EvaluationCard extends CardDef {
         .summary,
         .hint {
           margin: 0;
-          color: var(--boxel-450);
+          color: var(--muted-foreground);
           font: var(--boxel-font-sm);
         }
         .prompt {
@@ -419,7 +418,7 @@ export class EvaluationCard extends CardDef {
           gap: var(--boxel-sp-xxs);
         }
         .prompt {
-          color: var(--boxel-450);
+          color: var(--muted-foreground);
           font: var(--boxel-font-sm);
           overflow: hidden;
           text-overflow: ellipsis;
@@ -695,7 +694,7 @@ export class EvaluationResultCard extends CardDef {
         }
         .meta {
           margin: 0;
-          color: var(--boxel-450);
+          color: var(--muted-foreground);
           font: var(--boxel-font-sm);
         }
         .tier {
@@ -730,7 +729,7 @@ export class EvaluationResultCard extends CardDef {
         .tier-unscored {
           background: transparent;
           border: 1px dashed var(--boxel-300);
-          color: var(--boxel-450);
+          color: var(--muted-foreground);
           font-style: italic;
         }
         .numbers {
@@ -745,7 +744,7 @@ export class EvaluationResultCard extends CardDef {
           border-radius: var(--boxel-border-radius);
         }
         dt {
-          color: var(--boxel-450);
+          color: var(--muted-foreground);
           font: var(--boxel-font-xs);
           text-transform: uppercase;
           letter-spacing: 0.05em;
@@ -771,17 +770,16 @@ export class EvaluationResultCard extends CardDef {
         }
         .routing th,
         .routing td {
-          padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm) var(--boxel-sp-xxxs)
-            0;
+          padding: var(--boxel-sp-3xs) var(--boxel-sp-sm) var(--boxel-sp-3xs) 0;
           text-align: start;
           vertical-align: top;
         }
         .routing th {
-          color: var(--boxel-450);
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 600;
+          color: var(--muted-foreground);
+          font-size: var(--boxel-ui-label-font-size);
+          font-weight: var(--boxel-ui-label-font-weight);
           text-transform: uppercase;
-          letter-spacing: var(--boxel-lsp-xl);
+          letter-spacing: var(--boxel-ui-label-letter-spacing);
         }
         .routing code {
           display: block;
@@ -1335,7 +1333,7 @@ export class EvaluationReportCard extends CardDef {
           padding: var(--boxel-sp-sm);
         }
         .meta {
-          color: var(--boxel-450);
+          color: var(--muted-foreground);
           font: var(--boxel-font-sm);
         }
       </style>

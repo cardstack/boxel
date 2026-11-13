@@ -80,6 +80,18 @@ test('skillsPath reads a URL or the prefix form as a path in the skills realm', 
   );
 });
 
+test('a URL read matches wherever the prefix map serves the skills realm', () => {
+  let served = 'https://skills.example.localhost/boxel-skills/';
+  assert.equal(
+    skillsPath(`${served}api-keys/SKILL.md`, served),
+    'api-keys/SKILL.md',
+  );
+  assert.equal(
+    skillsPath(`${SKILLS}api-keys/SKILL.md`, served),
+    `${SKILLS}api-keys/SKILL.md`,
+  );
+});
+
 test('a read in prefix form counts the same as one by URL', () => {
   let result = scoreRouting(
     ['What can I do?', 'Keys?'],

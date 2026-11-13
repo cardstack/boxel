@@ -112,13 +112,14 @@ Three evaluations test the assistant as a guide to Boxel rather than a
 builder. Each asks five questions in one session, with a Project card open,
 and is conversation-only (`expectsNoWrites`): `concierge-questions` (where
 am I, what Boxel can do, a kanban board, Claude Code, cost),
-`concierge-keys-and-integrations` (API keys, a card's colours and fonts, data
+`concierge-keys-and-integrations` (API keys, a card's colors and fonts, data
 from another website, moving a card between workspaces) and
 `concierge-workspace-help` (a broken link, an empty search, the catalog, a
 report, slow indexing). A judge grades each answer against the criteria, and
 the routing check below shows whether the assistant opened the skill that
 covers each question. They switch on the `catalog-reuse` feature;
-`EVAL_SKILL_FEATURES=-catalog-reuse` runs them as users get them today.
+`EVAL_SKILL_FEATURES=-catalog-reuse` runs them on the index without its
+catalog-reuse sections.
 
 An evaluation's `expectedReads` turns on the routing check: one entry per
 prompt, in order, each a list of skill files any one of which covers it
@@ -128,9 +129,12 @@ no read. The runner credits each `readRealmFile` to the prompt it followed,
 counts a file read after an earlier prompt as already in context, and never
 counts the always-loaded `index.md`. A path missing from the skills clone
 (`packages/skills-realm/contents/skills`, or `EVAL_SKILLS_DIR`) is reported as
-unchecked rather than missed. The result card shows the outcome per question,
-and the summary prints `routing N / M`. `pnpm test` runs the check's unit
-tests.
+unchecked rather than missed. A read by URL is matched against where the
+realm server's prefix map serves the skills realm. The result card shows the
+outcome per question, its notes give one line per question, and the summary
+prints `routing N / M`. Such an evaluation skips the note that an enabled
+skill feature's `SKILL.md` was never read, since its routing rows say which
+skills each question needed. `pnpm test` runs the check's unit tests.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace
