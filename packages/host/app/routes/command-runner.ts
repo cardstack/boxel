@@ -137,8 +137,8 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
     let toolInput = parseCommandInputValue(request?.input);
 
     if (!command) {
-      model.status = 'error';
       model.error = new Error('Missing, expired, or invalid command request');
+      this.#answer(model, 'error');
       return model;
     }
 
@@ -187,15 +187,23 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
       model.cardResultString = serialized
         ? JSON.stringify(serialized, null, 2)
         : '';
-      model.status = 'success';
+      this.#answer(model, 'success');
     } catch (error) {
       console.error('Command runner failed', {
         command,
         error,
       });
       model.error = error instanceof Error ? error : new Error(String(error));
-      model.status = 'error';
+      this.#answer(model, 'error');
     }
+  }
+
+  // The status is the command's answer: the prerender server reads it from
+  // the page. An automation run's sessions, which the tab holds in memory, go
+  // before it, so nothing of the run is left in the tab once it answers.
+  #answer(model: CommandRunState, status: 'success' | 'error') {
+    this.realm.dropInMemorySessions();
+    model.status = status;
   }
 
   // The stored input arrives as raw JSON (e.g. from `run-command --input`), so

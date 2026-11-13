@@ -58,7 +58,7 @@ description: >-
   `runtime-common/tasks/run-automation.ts`, `enqueueAutomationRunJob`, the
   host's `run-automation` tool): the run's job and its timeout, the run's own
   prerender affinity and warm tab, the run token as the tab's only session,
-  the commit or the recorded error, and how to run one automation by hand in
+  handed to the tab in memory rather than in `localStorage`, the commit or the recorded error, and how to run one automation by hand in
   development (`pnpm run-automation`) and read its outcome.
 ---
 
@@ -859,11 +859,34 @@ The run goes to its realm's **run affinity**, `realm:<realm>#run:<identity>`
 prerender server takes a realm affinity for `/run-command` only when the
 whole of the auth is one run token, so no other session reaches a run's tab
 and a run's token reaches no other tab. The pool holds a run affinity to one
-tab (`isRunAffinityKey`), because the affinity's tabs share one
-`boxel-session`: a second tab would let one run's token replace another's
-partway through. Runs of one realm and identity take turns on that tab. The
+tab (`isRunAffinityKey`), so runs of one realm and identity take turns on that
+tab and never hold more than one of the tabs index renders also draw on. The
 tab is a warm one, never one the run starts itself (ADR 025 §1.2); see the
 `prerender-sizing` skill.
+
+**The token reaches the tab in memory.** A run's token MUST NOT be written
+anywhere the tab keeps state (ADR 026 §1.2), so the run's sessions never go
+through `localStorage['boxel-session']`, which hands every render and every
+other command its sessions. `runCommandAttempt` in `render-runner.ts` sees a
+`run` session and sets the sessions map on the page global
+`__boxelInMemorySessions` (`inMemorySessionsGlobal` in
+`runtime-common/in-memory-sessions.ts`), and removes `boxel-session` from the
+tab's storage, so the tab holds no other session. While that global is set the
+host reads and writes the tab's sessions there and nowhere else: the realm
+service's session store and `restoreSessionsFromStorage`
+(`host/app/utils/realm-sessions.ts`), `RealmAuthClient.getJWT` in a render
+context, and the realm-server service's session read. Nothing is synced to the
+auth service worker, which would keep the token past the run. The
+`command-runner` route answers through `#answer`, which first calls
+`RealmService.dropInMemorySessions`: every realm holding a session is removed,
+along with its token and refresher, and the global is deleted, so nothing of
+the run is left in the tab once the run answers. Every other prerender visit
+(render, module, capture, ordinary command) sets `boxel-session` and deletes
+the global, so a tab that served a run and is then handed to another affinity
+never reads the run's sessions in place of its own.
+
+To check a tab by hand after a run, read `localStorage` and
+`globalThis.__boxelInMemorySessions` in it: neither holds the run's token.
 
 `timeoutMs` widens every layer's timeout for this one request: the worker's
 request to the manager, the manager's proxy, and the tab's wait on the

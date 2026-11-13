@@ -132,11 +132,12 @@ const SESSION_SEPARATOR = '#';
 const AUTHORITY_SESSION_PREFIX = 'authority:';
 const RUN_SESSION_PREFIX = 'run:';
 
-// Whether an affinity key is an automation run's. Every tab of such an
-// affinity shares one BrowserContext, and so one `boxel-session`, which holds
-// the run token of the run in it. A second tab would give a second run's token
-// a way into the first run's tab, so the pool holds a run affinity to one tab
-// and its runs take turns on it.
+// Whether an affinity key is an automation run's. The pool holds a run
+// affinity to one tab, and its runs take turns on it: a run can hold its tab
+// for up to `MAX_RUN_SECONDS`, so runs of one realm and identity never take
+// more than one of the tabs index renders also draw on. A run's token reaches
+// its tab in the page's memory, never in the BrowserContext's storage, so the
+// tabs of a context share no run's token.
 export function isRunAffinityKey(affinityKey: string): boolean {
   return (
     fromAffinityKey(affinityKey)?.session?.startsWith(RUN_SESSION_PREFIX) ===

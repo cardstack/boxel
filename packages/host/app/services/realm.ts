@@ -50,6 +50,10 @@ import {
   type RealmInfo,
   RealmPaths,
 } from '@cardstack/runtime-common';
+import {
+  clearInMemorySessions,
+  inMemorySessions,
+} from '@cardstack/runtime-common/in-memory-sessions';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import ENV from '@cardstack/host/config/environment';
@@ -64,6 +68,11 @@ import {
   clearServiceWorkerTokens,
 } from '../utils/auth-service-worker-registration';
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
+import {
+  readRealmSessions,
+  readRealmSessionsString,
+  writeRealmSessions,
+} from '../utils/realm-sessions';
 
 import { realmClaimsFromRawToken } from './realm-server';
 
@@ -1104,7 +1113,7 @@ export default class RealmService extends Service {
   restoreSessionsFromStorage({
     startingVisit = false,
   }: { startingVisit?: boolean } = {}): void {
-    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
+    let sessionsString = readRealmSessionsString();
     if (!startingVisit && sessionsString === this.lastRestoredSessionsString) {
       return;
     }
@@ -1130,6 +1139,24 @@ export default class RealmService extends Service {
         resource.token = token;
       }
     }
+  }
+
+  // Forgets the sessions an automation run's tab was handed in memory, and
+  // every realm holding one, so no session of the run outlives its answer.
+  // A run's tab holds no session but the run's own, so every realm holding a
+  // session got it from the run. Does nothing in a tab whose sessions are in
+  // storage.
+  dropInMemorySessions(): void {
+    if (!inMemorySessions()) {
+      return;
+    }
+    for (let [realmURL, resource] of [...this._realms]) {
+      if (resource.token) {
+        this.removeRealm(realmURL);
+      }
+    }
+    clearInMemorySessions();
+    this.lastRestoredSessionsString = null;
   }
 
   // Only realms holding a session go: one this tab identified without a
@@ -1443,7 +1470,8 @@ export default class RealmService extends Service {
   token = (url: string): string | undefined => {
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource && (globalThis as any).__boxelRenderContext && !isTesting()) {
-      // prerender contexts should always reflect localStorage session state
+      // prerender contexts should always reflect the sessions the prerender
+      // server handed the tab
       this.restoreSessionsFromStorage();
       resource = this.knownRealm(url, { tracked: false });
     }
@@ -1916,35 +1944,25 @@ export function claimsFromRawToken(rawToken: string): JWTPayload {
 
 let SessionStorage = {
   getAll(): Record<string, string> | undefined {
-    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
-    if (sessionsString) {
-      return JSON.parse(sessionsString);
-    }
-    return undefined;
+    return readRealmSessions();
   },
   persist(realmURL: string, token: string | undefined) {
-    let sessionStr =
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
-    let session = JSON.parse(sessionStr);
+    let session = { ...(readRealmSessions() ?? {}) };
     if (session[realmURL] !== token) {
-      session[realmURL] = token;
-      window.localStorage.setItem(
-        SessionLocalStorageKey,
-        JSON.stringify(session),
-      );
+      if (token === undefined) {
+        delete session[realmURL];
+      } else {
+        session[realmURL] = token;
+      }
+      writeRealmSessions(session);
     }
     syncTokenToServiceWorker(realmURL, token);
   },
   remove(realmURL: string) {
-    let sessionStr =
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
-    let session = JSON.parse(sessionStr);
+    let session = { ...(readRealmSessions() ?? {}) };
     if (realmURL in session) {
       delete session[realmURL];
-      window.localStorage.setItem(
-        SessionLocalStorageKey,
-        JSON.stringify(session),
-      );
+      writeRealmSessions(session);
     }
   },
 };
