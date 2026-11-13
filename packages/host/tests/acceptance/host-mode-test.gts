@@ -107,12 +107,12 @@ class StubHijackedOriginHostModeService extends StubRoutingHostModeService {
 // here the way the server validates them. The fixed rule stays in
 // `hostRoutingMap`, where the server puts it.
 const DYNAMIC_ROUTE_RULES: RawHostRoutingRule[] = [
-  { path: '/terms', instance: `${testHostModeRealmURL}Pet/mango` },
+  { path: '/terms', instance: { id: `${testHostModeRealmURL}Pet/mango` } },
   { path: '/pets/:pet', card: './Pet/:pet' },
   {
     path: '/by-name/:name',
     type: { module: `${testHostModeRealmURL}pet`, name: 'Pet' },
-    match: { name: 'name' },
+    match: { name: ':name' },
   },
   {
     path: '/folders/:folder',
@@ -120,6 +120,7 @@ const DYNAMIC_ROUTE_RULES: RawHostRoutingRule[] = [
     routes: [{ path: '/:item', card: './:folder/:item' }],
   },
   { path: '/old-pets/:pet', redirectTo: '/pets/:pet', statusCode: 301 },
+  { path: '/files/:name', card: './:name' },
 ];
 
 function dynamicRoutes(): readonly HostRoute[] {
@@ -150,6 +151,12 @@ class StubDynamicRoutingHostModeService extends StubHostModeService {
 
   get hostDynamicRoutes(): HostDynamicRoutes {
     return { realmURL: testHostModeRealmURL, routes: dynamicRoutes() };
+  }
+}
+
+class StubIncompleteDynamicRoutingHostModeService extends StubDynamicRoutingHostModeService {
+  get hostDynamicRoutes(): HostDynamicRoutes {
+    return { ...super.hostDynamicRoutes, complete: false };
   }
 }
 
@@ -1659,7 +1666,25 @@ module('Acceptance | host mode tests', function (hooks) {
       assert.dom('[data-test-host-mode-404]').doesNotExist();
     });
 
-    test('going back to a resolved path runs no lookup again', async function (assert) {
+    test('a stack change on a dynamic page runs no lookup again', async function (assert) {
+      await visit('/test/by-name/Mango');
+      lookups = [];
+
+      let hostModeStackValue = encodeURIComponent(
+        JSON.stringify([`${testHostModeRealmURL}ViewCardDemo/secondary`]),
+      );
+      await visit(`/test/by-name/Mango?hostModeStack=${hostModeStackValue}`);
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.notOk(
+        lookups.some((l) => l.endsWith('_search')),
+        'the current page keeps its card',
+      );
+    });
+
+    test('coming back to a dynamic page runs its lookup again', async function (assert) {
       await visit('/test/by-name/Mango');
       await visit('/test/folders/ViewCardDemo');
       lookups = [];
@@ -1669,9 +1694,9 @@ module('Acceptance | host mode tests', function (hooks) {
       assert
         .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
         .exists();
-      assert.notOk(
+      assert.ok(
         lookups.some((l) => l.endsWith('_search')),
-        'the remembered card is used',
+        'a path from an earlier page is resolved again',
       );
     });
 
@@ -1707,6 +1732,48 @@ module('Acceptance | host mode tests', function (hooks) {
       await settled();
 
       assert.dom('[data-card-error]').exists();
+      assert
+        .dom('[data-card-error]')
+        .containsText('This page could not be loaded.');
+      assert
+        .dom('[data-card-error]')
+        .doesNotContainText(failingCardURL, 'the lookup URL is not shown');
+      assert
+        .dom('[data-card-error]')
+        .doesNotContainText('503', 'the lookup status is not shown');
+      assert.dom('[data-test-host-mode-404]').doesNotExist();
+    });
+
+    test('a card id that names a file that is not a card is a miss', async function (assert) {
+      await visit('/test/files/spring-guide.md');
+
+      await waitFor('[data-test-host-mode-404]');
+      assert.dom('[data-test-host-mode-404]').exists();
+      assert.dom('[data-card-error]').doesNotExist();
+    });
+
+    test('a miss on an incomplete route set shows an error, not the not-found page', async function (assert) {
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
+        'service:host-mode-service',
+        StubIncompleteDynamicRoutingHostModeService,
+      );
+
+      try {
+        await visit('/test/pets/nobody');
+      } catch (e) {
+        assert.strictEqual(
+          (e as Error).name,
+          'HostRouteResolutionError',
+          'the miss ends the transition',
+        );
+      }
+      await settled();
+
       assert
         .dom('[data-card-error]')
         .containsText('This page could not be loaded.');

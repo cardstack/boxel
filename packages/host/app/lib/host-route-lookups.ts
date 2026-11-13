@@ -59,6 +59,11 @@ export function visitorHostRouteLookups({
         `loading ${cardHref} for a host route returned no card`,
       );
     }
+    // A file that isn't a card instance (a module, an image) is no card at
+    // that id, as in `search`.
+    if (resource.type !== 'card') {
+      return undefined;
+    }
     return toHostRouteCard(virtualNetwork, realmURL, resource, linkFields);
   };
 

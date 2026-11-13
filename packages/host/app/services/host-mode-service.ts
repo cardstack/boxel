@@ -47,9 +47,13 @@ import type SessionService from '@cardstack/host/services/session';
 // The routing realm's validated routes, the whole tree, as the realm server
 // injects them next to the fixed routing map, for a realm with dynamic
 // routes. `realmURL` is the URL the realm is served at, ending with `/`.
+// `complete` is false when validation dropped routes for now because a type
+// definition could not be read; the route set is then not final, so a path
+// it does not resolve may still be one a route serves.
 export interface HostDynamicRoutes {
   realmURL: string;
   routes: readonly HostRoute[];
+  complete?: boolean;
 }
 
 // What a path no fixed rule matches resolves to through the dynamic routes.
@@ -75,10 +79,14 @@ export default class HostModeService extends Service {
   @service declare session: SessionService;
   @service declare private network: NetworkService;
 
-  // Paths the dynamic routes resolved to a card or a redirect in this
-  // session, by canonical path, so going back to one, or a change to the
-  // stack that refreshes the route, runs no lookup again.
-  private dynamicRoutedPaths = new Map<string, DynamicRoutedPath>();
+  // The path the dynamic routes last resolved to a card, by canonical path,
+  // so a change to the stack, which refreshes the route on the same page,
+  // runs no lookup again. Only the current page is kept: a visitor who
+  // moves to another path, or comes back to this one, gets a fresh lookup,
+  // so a slug or route the author changed is never served from memory.
+  private currentDynamicRoutedPath:
+    | { path: string; result: DynamicRoutedPath }
+    | undefined;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
@@ -100,7 +108,7 @@ export default class HostModeService extends Service {
     this.headUpdateRequestId = 0;
     this.headTemplateContainsTitle = false;
     this.publishDialogRealm = undefined;
-    this.dynamicRoutedPaths.clear();
+    this.currentDynamicRoutedPath = undefined;
     // A Publish still opening its workspace doesn't carry into the next
     // session.
     this.openToPublishTask.cancelAll();
@@ -271,10 +279,10 @@ export default class HostModeService extends Service {
     let mountPathname = `/${realmURL.pathname.slice(originPathname.length)}`;
     let pathname = path.startsWith('/') ? path : `/${path}`;
     let canonical = normalizeRoutingPath(pathname);
-    let remembered = this.dynamicRoutedPaths.get(canonical);
-    if (remembered) {
-      return remembered;
+    if (this.currentDynamicRoutedPath?.path === canonical) {
+      return this.currentDynamicRoutedPath.result;
     }
+    this.currentDynamicRoutedPath = undefined;
     let realmRoot = mountPathname.replace(/\/$/, '');
     if (pathname !== realmRoot && !pathname.startsWith(mountPathname)) {
       return undefined;
@@ -289,7 +297,7 @@ export default class HostModeService extends Service {
         realmURL: realmURL.href,
       }),
     });
-    let result: DynamicRoutedPath | undefined;
+    let result: DynamicRoutedPath;
     switch (resolution.kind) {
       // An alias serves its card for now: redirecting to the card's
       // canonical address needs the reverse lookup from a card to its
@@ -297,13 +305,13 @@ export default class HostModeService extends Service {
       case 'card':
       case 'alias':
         result = { kind: 'card', cardHref: resolution.cardHref };
-        break;
+        this.currentDynamicRoutedPath = { path: canonical, result };
+        return result;
       case 'redirect':
-        result = {
+        return {
           kind: 'redirect',
           redirectTo: resolveRedirectTarget(resolution.location, mountPathname),
         };
-        break;
       case 'error':
         log.warn(
           `host route lookup for ${pathname} failed: ${
@@ -314,10 +322,22 @@ export default class HostModeService extends Service {
         );
         return { kind: 'error', error: resolution.error };
       case 'nothing':
+        // With an incomplete route set, a route that would serve this path
+        // may be one validation dropped for now, so the path is not known
+        // to be missing: the server answers 503 here, and so does this.
+        if (dynamicRoutes.complete === false) {
+          log.warn(
+            `host route lookup for ${pathname} found nothing in an incomplete route set`,
+          );
+          return {
+            kind: 'error',
+            error: new Error(
+              `${pathname} resolved to nothing while some routes are not validated yet`,
+            ),
+          };
+        }
         return undefined;
     }
-    this.dynamicRoutedPaths.set(canonical, result);
-    return result;
   }
 
   // SPA-side counterpart of the server's HTTP redirect for a redirect
