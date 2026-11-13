@@ -9,6 +9,7 @@ import type {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { CachingDefinitionLookup } from '@cardstack/runtime-common';
+import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 import { setupDB, setupPermissionedRealmCached } from './helpers/index.ts';
 import {
   RealmRegistryReconciler,
@@ -515,6 +516,62 @@ function makeDuplicatesFixture(): Record<
                   path: '/:item',
                   type: { module: './shop', name: 'Item' },
                   match: { slug: ':item' },
+                },
+              ],
+            },
+          ],
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/realm-config'),
+            name: 'RealmConfig',
+          },
+        },
+      },
+    },
+  };
+}
+
+// A field-match route under a card id template, whose `parent` names a
+// field the child's type doesn't have: the link is on the parent's card,
+// whose type the route doesn't say.
+function makeUnknownParentSideFixture(): Record<
+  string,
+  string | LooseSingleCardDocument
+> {
+  let thing = (slug: string): LooseSingleCardDocument => ({
+    data: {
+      type: 'card',
+      attributes: { slug },
+      meta: { adoptsFrom: { module: rri('./things'), name: 'Thing' } },
+    },
+  });
+  return {
+    'things.gts': `
+      import { CardDef, field, contains } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      export class Thing extends CardDef {
+        static displayName = 'Thing';
+        @field slug = contains(StringField);
+      }
+    `,
+    'thing-1.json': thing('same'),
+    'thing-2.json': thing('same'),
+    'realm.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Unknown Parent Side Realm' },
+          hostRoutingRules: [
+            {
+              path: '/groups/:group',
+              card: './Group/:group',
+              routes: [
+                {
+                  path: '/:thing',
+                  type: { module: './things', name: 'Thing' },
+                  parent: 'things',
+                  match: { slug: ':thing' },
                 },
               ],
             },
@@ -1185,7 +1242,120 @@ module(basename(import.meta.filename), function () {
         'the removed duplicate is no longer reported',
       );
     });
+
+    test('runs one check at a time, and an index during a check leaves its result uncached', async function (assert) {
+      let original = RealmIndexQueryEngine.prototype.findSharedFieldValues;
+      let calls = 0;
+      let active = 0;
+      let mostActive = 0;
+      let firstCall: () => void;
+      let started = new Promise<void>((resolve) => (firstCall = resolve));
+      let release: () => void;
+      let gate = new Promise<void>((resolve) => (release = resolve));
+      RealmIndexQueryEngine.prototype.findSharedFieldValues = async function (
+        this: RealmIndexQueryEngine,
+        ...args: Parameters<typeof original>
+      ) {
+        calls++;
+        active++;
+        mostActive = Math.max(mostActive, active);
+        firstCall();
+        try {
+          await gate;
+          return await original.apply(this, args);
+        } finally {
+          active--;
+        }
+      };
+      try {
+        testRealm.clearRealmIndexCaches();
+        let first = testRealm.getHostRouteDuplicates();
+        assert.strictEqual(
+          testRealm.getHostRouteDuplicates(),
+          first,
+          'concurrent readers share one check',
+        );
+        await started;
+
+        // What an index does when it lands while the check runs.
+        testRealm.clearRealmIndexCaches();
+        let second = testRealm.getHostRouteDuplicates();
+        assert.notStrictEqual(second, first, 'the index drops the check');
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.strictEqual(
+          calls,
+          1,
+          'the new check waits for the dropped one to finish',
+        );
+
+        release!();
+        await first;
+        let result = await second;
+        assert.strictEqual(mostActive, 1, 'one query ran at a time');
+        assert.strictEqual(
+          calls,
+          6,
+          'each check queried each of the three field-match routes once',
+        );
+        assert.strictEqual(
+          testRealm.getHostRouteDuplicates(),
+          second,
+          "the dropped check's result is not cached",
+        );
+        assert.true(result.complete);
+      } finally {
+        RealmIndexQueryEngine.prototype.findSharedFieldValues = original;
+      }
+    });
   });
+
+  module(
+    'Realm.getHostRouteDuplicates with a parent link of unknown side',
+    function (hooks) {
+      let realmURL = new URL(
+        'http://127.0.0.1:4444/routing-unknown-parent-side/',
+      );
+      let testRealm: Realm;
+      let definitionLookup: CachingDefinitionLookup;
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL,
+        permissions: { '*': ['read'] },
+        fileSystem: makeUnknownParentSideFixture(),
+        onRealmSetup({ testRealm: realm, testRealmServer }) {
+          testRealm = realm;
+          definitionLookup = serverDefinitionLookup(testRealmServer);
+        },
+      });
+
+      hooks.beforeEach(async function () {
+        await testRealm.indexing();
+        await definitionLookup.forRealm(testRealm).lookupDefinition({
+          module: rri(`${realmURL.href}things`),
+          name: 'Thing',
+        });
+        testRealm.clearRealmIndexCaches();
+      });
+
+      test('reports the check as not complete, and does not cache it', async function (assert) {
+        let { routes, complete } = await testRealm.getHostRoutes();
+        assert.true(complete, 'the routes are all validated');
+        let thing = routes[0]?.routes[0];
+        assert.deepEqual(
+          thing?.kind === 'field-match' ? thing.parentLink : undefined,
+          { field: 'things', side: 'unverified', inferred: false },
+          "the link is not on the child's card",
+        );
+        let first = await testRealm.getHostRouteDuplicates();
+        assert.deepEqual(first, { duplicates: [], complete: false });
+        assert.notStrictEqual(
+          testRealm.getHostRouteDuplicates(),
+          first,
+          'the next read checks again',
+        );
+      });
+    },
+  );
 
   module(
     'Realm.getHostRoutes with a type from another realm',
