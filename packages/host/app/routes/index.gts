@@ -47,16 +47,14 @@ export type ErrorModel = {
 
 // A dynamic route whose lookup failed or was refused. The index route's
 // error state shows it, so the visitor sees that the page could not be
-// loaded rather than that it does not exist.
+// loaded rather than that it does not exist. The message is for a site
+// visitor: the lookup's detail (its URL and status) goes to the console
+// and the host-mode log only.
 class HostRouteResolutionError extends Error implements ErrorModel {
   loadType = 'card' as const;
   operatorModeState = '';
-  constructor(cause: unknown) {
-    super(
-      `This page could not be loaded. Try again in a moment.\n${
-        cause instanceof Error ? cause.message : String(cause)
-      }`,
-    );
+  constructor() {
+    super('This page could not be loaded. Try again in a moment.');
     this.name = 'HostRouteResolutionError';
   }
 }
@@ -142,6 +140,12 @@ export default class Card extends Route {
       if (!routed) {
         let dynamic =
           await this.hostModeService.resolveDynamicRoutedPath(normalizedPath);
+        // The visitor may have moved on while the lookup ran. A result for
+        // a transition that was aborted is neither rendered nor followed,
+        // so a late redirect cannot replace the page they went to.
+        if (transition.isAborted) {
+          return;
+        }
         if (dynamic?.kind === 'redirect') {
           this.hostModeService.redirectTo(
             dynamic.redirectTo,
@@ -150,7 +154,11 @@ export default class Card extends Route {
           return;
         }
         if (dynamic?.kind === 'error') {
-          throw new HostRouteResolutionError(dynamic.error);
+          console.error(
+            `host route lookup for /${normalizedPath} failed`,
+            dynamic.error,
+          );
+          throw new HostRouteResolutionError();
         }
         if (dynamic?.kind === 'card') {
           return this.store.get(dynamic.cardHref);
