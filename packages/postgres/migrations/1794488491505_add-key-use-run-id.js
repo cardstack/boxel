@@ -7,14 +7,15 @@
 // A collapsed refusal row (one with a `refusal_window`) of an automation's
 // call keys the run too: `key_uses_refusal_window_run_idx` covers those rows
 // alone (`run_id IS NOT NULL`), and the insert of a run's refusal names its
-// columns. An interactive refusal keeps `key_uses_refusal_window_idx` as its
-// conflict target, so its collapse is the same. That older index also covers
-// run rows, without the run, so while it does, a run's refusal that matches
-// a row it doesn't arbitrate on in the same minute is refused by it: one from
-// another run, or a concurrent refusal of the same run that loses the race to
-// insert the row. The call path logs it as a use it could not record. A later
-// migration narrows the older index to interactive rows, and it lands before
-// any run token is minted outside tests.
+// columns. An interactive refusal names no run and collapses on the other
+// columns alone. `key_uses_refusal_window_idx` covers run rows as well,
+// without the run, so while it exists a run's refusal that matches a row it
+// doesn't arbitrate on in the same minute is refused by it: one from another
+// run, or a concurrent refusal of the same run that loses the race to insert
+// the row. The call path logs it as a use it could not record. A later
+// migration gives interactive refusals an index of their own,
+// `key_uses_refusal_window_interactive_idx`, so the older index can be
+// dropped, and the drop lands before any run token is minted outside tests.
 //
 // CONCURRENTLY keeps `key_uses` writable while the indexes build, since every
 // `callApi` writes to it; it can't run in a transaction, hence noTransaction().
