@@ -149,10 +149,10 @@ sizes before and after, whether the packs were put into one, and the objects
 pruned.
 
 The commit-graph's Bloom filters serve `git log` with one path filter from
-git 2.27, and with several path filters only from git 2.51. On an older git,
-a `git log` with several path filters reads every revision's trees.
-`probeGit` (`src/git-capabilities.ts`) reports which the git on PATH does,
-and the service logs the answer at startup.
+git 2.27, and with several path filters only from git 2.51. `probeGit`
+(`src/git-capabilities.ts`) tries both on the git on PATH, and the service
+logs the answer at startup. Its `bloomWithSeveralPaths` is the value for the
+reader's option of that name.
 
 ## Reading
 
