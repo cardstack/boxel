@@ -267,6 +267,22 @@ async function requestTokenFromClient(requestURL, initiatingClientId) {
   return promise;
 }
 
+// <video>/<audio> stream with byte-range requests. Safari cannot play media
+// whose range requests are answered by a service worker that re-fetches
+// them (the element fails with MEDIA_ERR_SRC_NOT_SUPPORTED, while the same
+// URL plays fine uncontrolled), so a published site's films never start.
+// When the SW has no token to add, it has nothing to contribute to a media
+// request, so it leaves those to the browser's own media pipeline.
+// `destination` covers elements; the Range header covers any other ranged
+// load (and is what tests can construct).
+function isMediaRequest(request) {
+  return (
+    request.destination === 'video' ||
+    request.destination === 'audio' ||
+    request.headers.has('Range')
+  );
+}
+
 function buildRealmRequest(request, token) {
   // Cross-origin <img> and CSS background-image requests arrive with
   // mode: 'no-cors', which silently strips non-safelisted headers like
@@ -344,6 +360,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (realmHosts.size > 0 && !realmHosts.has(requestOrigin)) {
+    return;
+  }
+
+  // Tokenless media is left to the browser (see isMediaRequest): asking the
+  // page for a token would make the SW answer the range request itself,
+  // which Safari's media pipeline cannot play.
+  if (isMediaRequest(request)) {
     return;
   }
 
