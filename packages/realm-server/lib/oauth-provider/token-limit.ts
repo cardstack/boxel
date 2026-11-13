@@ -5,11 +5,12 @@
 //   names. A connection refreshes about every 10 minutes, so the default
 //   allows ten times that. Not per address or per client: a hosted client
 //   refreshes every user's tokens from a few server addresses.
-// - Failed attempts per address: every request the library refuses counts
-//   against the caller's address, and a caller with none left is refused
-//   before its request is read, so guessing codes or refresh tokens is slow.
-//   The address is the one the `clientAddress` middleware works out, never
-//   the socket's.
+// - Failed attempts per address, for requests that name no code or refresh
+//   token the provider holds: each the library refuses counts against the
+//   caller's address, and a caller with none left is refused, so guessing
+//   codes or refresh tokens is slow. A request that names one the provider
+//   holds is bounded by its grant instead. The address is the one the
+//   `clientAddress` middleware works out, never the socket's.
 
 import type Koa from 'koa';
 import type Provider from 'oidc-provider';
@@ -27,6 +28,7 @@ import {
   type TokenBucketLimit,
   type TokenBucketOutcome,
 } from '@cardstack/runtime-common';
+import { browserOriginAllowed } from './client-cors.ts';
 import { sha256Hex } from './objects.ts';
 
 const log = logger('boxel:oauth-provider');
@@ -91,8 +93,14 @@ export function tokenLimitFormat(): string {
 
 // The handler for `POST` on the token endpoint. `next` hands the request to
 // the library, which reads the body Boxel left on `req.body` once the body
-// itself has been read. Every request the library refuses is counted against
-// its address.
+// itself has been read.
+//
+// A request that names a code or refresh token the provider holds counts
+// only against that token's grant, never against its address, so a hosted
+// client's users can't be locked out by failures someone else causes through
+// the client's address. Any other request is checked against its address's
+// failures, and counted there if the library refuses it. One whose address
+// can't be worked out is refused, since it can't be counted.
 export function tokenHandler({
   provider,
   dbAdapter,
@@ -106,8 +114,14 @@ export function tokenHandler({
 }): Koa.Middleware {
   let failures = tokenBucket(limit.failuresPerAddress);
   let perGrant = tokenBucket(limit.perGrant);
+  // The requests that named no code or token the provider holds, which are
+  // the only ones whose refusals count against their address.
+  let unknownExchanges = new WeakSet<object>();
 
   provider.on('grant.error', (ctx: { req: Koa.Context['req'] }) => {
+    if (!unknownExchanges.has(ctx.req)) {
+      return;
+    }
     let key = failureKey(ctx.req.headers[CLIENT_IP_HEADER]);
     if (key) {
       void rateLimitStore.take(key, failures);
@@ -115,16 +129,8 @@ export function tokenHandler({
   });
 
   return async function handleToken(ctxt, next) {
-    let key = failureKey(ctxt.req.headers[CLIENT_IP_HEADER]);
-    if (key) {
-      let left = await rateLimitStore.peek(key, failures);
-      if (!left.admitted) {
-        return refuse(ctxt, left, 'failures');
-      }
-    }
-
+    let body: string | undefined;
     if (ctxt.is('application/x-www-form-urlencoded')) {
-      let body: string;
       try {
         body = await readBody(ctxt.req);
       } catch {
@@ -133,22 +139,69 @@ export function tokenHandler({
           error_description: `a token request must be at most ${MAX_BODY_BYTES} bytes`,
         });
       }
-      let grantId = await grantOfExchange(dbAdapter, new URLSearchParams(body));
-      if (grantId) {
-        let taken = await rateLimitStore.take(
-          counterKey('oauth-token-grant', grantId),
-          perGrant,
-        );
-        if (!taken.admitted) {
-          return refuse(ctxt, taken, 'grant');
-        }
+    }
+    let params = new URLSearchParams(body ?? '');
+    let answer = async (
+      status: number,
+      error: { error: string; error_description: string },
+    ) => {
+      await allowClientOrigin(ctxt, provider, params.get('client_id'));
+      respond(ctxt, status, error);
+    };
+
+    let grantId =
+      body === undefined ? undefined : await grantOfExchange(dbAdapter, params);
+    if (grantId) {
+      let taken = await rateLimitStore.take(
+        counterKey('oauth-token-grant', grantId),
+        perGrant,
+      );
+      if (!taken.admitted) {
+        return refuse(answer, ctxt, taken, 'grant');
       }
+    } else {
+      let key = failureKey(ctxt.req.headers[CLIENT_IP_HEADER]);
+      if (!key) {
+        log.info('token request refused: unknown address');
+        return answer(403, {
+          error: 'access_denied',
+          error_description: 'token requests are refused from this address',
+        });
+      }
+      let left = await rateLimitStore.peek(key, failures);
+      if (!left.admitted) {
+        return refuse(answer, ctxt, left, 'failures');
+      }
+      unknownExchanges.add(ctxt.req);
+    }
+    if (body !== undefined) {
       // The library reads `req.body` when the request stream has been read,
       // as it now has.
       (ctxt.req as typeof ctxt.req & { body?: unknown }).body = body;
     }
     await next();
   };
+}
+
+// The answers Boxel writes itself on the token route go out before the
+// library's CORS runs, so they carry the same CORS the library would give:
+// a page on an origin the client may call from can read them, `Retry-After`
+// included.
+async function allowClientOrigin(
+  ctxt: Koa.Context,
+  provider: Provider,
+  clientId: string | null,
+) {
+  let origin = ctxt.get('Origin');
+  if (!origin || !clientId) {
+    return;
+  }
+  let client = await provider.Client.find(clientId).catch(() => undefined);
+  if (client && browserOriginAllowed(origin, client)) {
+    ctxt.vary('Origin');
+    ctxt.set('Access-Control-Allow-Origin', origin);
+    ctxt.set('Access-Control-Expose-Headers', 'Retry-After');
+  }
 }
 
 // The grant a code or refresh exchange names, if the code or token is one
@@ -194,21 +247,25 @@ function failureKey(
     : undefined;
 }
 
-function refuse(
+async function refuse(
+  answer: (
+    status: number,
+    error: { error: string; error_description: string },
+  ) => Promise<void>,
   ctxt: Koa.Context,
   outcome: Exclude<TokenBucketOutcome, { admitted: true }>,
   limit: 'grant' | 'failures',
 ) {
   if (isRateLimitUnavailable(outcome)) {
     log.warn(`token request refused: rate limit unavailable`);
-    return respond(ctxt, 503, {
+    return answer(503, {
       error: 'temporarily_unavailable',
       error_description: 'the token endpoint is unavailable; try again later',
     });
   }
   log.info(`token request refused: rate limit, ${limit}`);
   ctxt.set('Retry-After', String(outcome.retryAfterSeconds));
-  return respond(ctxt, 429, {
+  return answer(429, {
     error: 'temporarily_unavailable',
     error_description: 'too many token requests; try again later',
   });

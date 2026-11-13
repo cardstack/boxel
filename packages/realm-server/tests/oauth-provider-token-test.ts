@@ -37,7 +37,10 @@ import {
 } from './helpers/oauth-provider-secrets.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { revokeUserOAuthGrants } from '../lib/oauth-provider/grants.ts';
-import { sha256Hex } from '../lib/oauth-provider/objects.ts';
+import {
+  AuthorizationCodeAdapter,
+  sha256Hex,
+} from '../lib/oauth-provider/objects.ts';
 import type { OAuthResourceDefinition } from '../lib/oauth-provider/registry.ts';
 import type { TokenLimit } from '../lib/oauth-provider/token-limit.ts';
 import { runDueDeviceSweeps } from '../lib/secure-session.ts';
@@ -290,6 +293,26 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(grant.ended_reason, 'reuse', 'the grant ended');
       });
 
+      test('a code that expires before it is marked used is refused without ending its grant', async function (assert) {
+        let { code } = await codeFor();
+        // As though the code expired between the library finding it and
+        // marking it used.
+        await db().execute(
+          `UPDATE oauth_provider_objects SET expires_at = now() - interval '1 second'
+            WHERE kind = 'AuthorizationCode' AND id_hash = decode($1, 'hex')`,
+          { bind: [sha256Hex(code)] },
+        );
+        await assert.rejects(
+          new AuthorizationCodeAdapter(db()).consume(code),
+          (error: { error?: string; error_detail?: string }) =>
+            error.error === 'invalid_grant' &&
+            /expired/.test(error.error_detail ?? ''),
+          'it is refused as expired',
+        );
+        let [grant] = await grants();
+        assert.false(grant.ended, 'and its grant is not ended as reuse');
+      });
+
       test('a request for two resources at once is refused', async function (assert) {
         let twoResources = { resources: [OAUTH_TEST_MCP, SECOND_RESOURCE] };
         let first = await codeFor(twoResources);
@@ -300,8 +323,26 @@ module(basename(import.meta.filename), function () {
         );
         assert.strictEqual(both.status, 400, 'naming none, with two granted');
         assert.strictEqual(both.body.error, 'invalid_target');
-        // A code is spent by an exchange that fails, so the next is a new
-        // flow's.
+        // A code is spent by an exchange that fails, so each request below
+        // is a new flow's.
+        let named = await codeFor(twoResources);
+        let namingBoth = await supertest(server())
+          .post('/_oauth-provider/token')
+          .set('Host', serverURL.host)
+          .set('Content-Type', 'application/x-www-form-urlencoded')
+          .send(
+            new URLSearchParams([
+              ['grant_type', 'authorization_code'],
+              ['client_id', named.clientId],
+              ['code', named.code],
+              ['code_verifier', OAUTH_TEST_CODE_VERIFIER],
+              ['redirect_uri', OAUTH_TEST_WEB_REDIRECT_URI],
+              ['resource', OAUTH_TEST_MCP],
+              ['resource', SECOND_RESOURCE],
+            ]).toString(),
+          );
+        assert.strictEqual(namingBoth.status, 400, 'naming both');
+        assert.strictEqual(namingBoth.body.error, 'invalid_target');
         let second = await codeFor(twoResources);
         let one = await exchangeOAuthCode(
           server(),
@@ -469,6 +510,32 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(grant.ended_reason, 'reuse', 'and the grant ended');
       });
 
+      test('of two sibling tokens presented at once, one is used and the grant ends', async function (assert) {
+        let { clientId, tokens } = await tokensFor();
+        let a = await refreshOAuthTokens(
+          server(),
+          clientId,
+          tokens.refresh_token!,
+        );
+        let b = await refreshOAuthTokens(
+          server(),
+          clientId,
+          tokens.refresh_token!,
+        );
+        assert.strictEqual(b.status, 200, 'the retry gets a sibling');
+        let responses = await Promise.all([
+          refreshOAuthTokens(server(), clientId, a.body.refresh_token),
+          refreshOAuthTokens(server(), clientId, b.body.refresh_token),
+        ]);
+        assert.deepEqual(
+          responses.map(({ status }) => status).sort(),
+          [200, 400],
+          'one sibling is used, and the other refused',
+        );
+        let [grant] = await grants();
+        assert.strictEqual(grant.ended_reason, 'reuse', 'and the grant ended');
+      });
+
       test('a refresh fails once the grant has expired', async function (assert) {
         let { clientId, tokens } = await tokensFor();
         await db().execute(
@@ -544,35 +611,56 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test("a password change's first revocation ends the grants made before it, and its later one leaves those made since", async function (assert) {
+      test("a password change's first revocation ends the grants made before it was due, and its later one leaves those made since", async function (assert) {
+        // A grant decided before the sweep fell due.
         let earlier = await tokensFor();
         let who = earlier.user;
+        await new Promise((resolve) => setTimeout(resolve, 20));
         await db().execute(
           `INSERT INTO password_change_device_sweeps (user_id, sweep_at)
              VALUES ($1, NOW())`,
           { bind: [who.matrixId] },
         );
+        // A grant the same user decided after the sweep fell due and before
+        // it ran, as when a sweep is tried again later.
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        let betweenClient = await registerOAuthClient(server());
+        let betweenCode = await codeForOAuthClient(
+          server(),
+          betweenClient,
+          who.session,
+        );
+        let betweenExchange = await exchangeOAuthCode(
+          server(),
+          betweenClient,
+          betweenCode,
+        );
+        assert.strictEqual(betweenExchange.status, 200, betweenExchange.text);
+
         await runDueDeviceSweeps({
           dbAdapter: db(),
           matrixClient: { matrixURL },
         } as any);
-        let [before] = await grants();
+        let [sweep] = (await db().execute(
+          `SELECT sweep_at IS NULL AS swept, revoke_at IS NOT NULL AS later_due
+             FROM password_change_device_sweeps WHERE user_id = $1`,
+          { bind: [who.matrixId] },
+        )) as { swept: boolean; later_due: boolean }[];
+        assert.deepEqual(
+          sweep,
+          { swept: true, later_due: true },
+          'the first pass ran, and the later revocation is still to come',
+        );
+        let [before, made] = await grants();
         assert.strictEqual(
           before.ended_reason,
           'sessions-revoked',
-          'the first revocation ends the grant made before it',
+          'the first revocation ends the grant decided before it was due',
         );
-
-        // A grant made after the first revocation, under a secure session
-        // signed in with the new password. The revocation ended the old
-        // session, and sessions are revoked by the second they were issued
-        // in.
-        await new Promise((resolve) => setTimeout(resolve, 1100));
-        let session = await secureSessionAuth(db(), who.matrixId);
-        let clientId = await registerOAuthClient(server());
-        let code = await codeForOAuthClient(server(), clientId, session);
-        let exchange = await exchangeOAuthCode(server(), clientId, code);
-        assert.strictEqual(exchange.status, 200, exchange.text);
+        assert.false(
+          made.ended,
+          'and leaves the one decided after it was due, though before it ran',
+        );
 
         await db().execute(
           `UPDATE password_change_device_sweeps SET revoke_at = NOW()
@@ -585,13 +673,13 @@ module(basename(import.meta.filename), function () {
         } as any);
         let refresh = await refreshOAuthTokens(
           server(),
-          clientId,
-          exchange.body.refresh_token,
+          betweenClient,
+          betweenExchange.body.refresh_token,
         );
         assert.strictEqual(
           refresh.status,
           200,
-          'the later revocation, for OpenID tokens, leaves the newer grant',
+          'the later revocation, for OpenID tokens, leaves that grant',
         );
         let rows = await grants();
         assert.false(rows[1].ended, 'which is still current');
@@ -659,6 +747,32 @@ module(basename(import.meta.filename), function () {
           undefined,
           'and its page may not read the answer',
         );
+      });
+
+      test('nor through another spelling of the path', async function (assert) {
+        let clientId = await registerOAuthClient(server());
+        for (let path of [
+          '/_oauth-provider/token/',
+          '/_oauth-provider/TOKEN',
+        ]) {
+          let response = await supertest(server())
+            .post(path)
+            .set('Host', serverURL.host)
+            .set('Origin', 'https://elsewhere.example.test')
+            .set('Content-Type', 'application/x-www-form-urlencoded')
+            .send(
+              new URLSearchParams({
+                grant_type: 'refresh_token',
+                client_id: clientId,
+                refresh_token: 'not-a-token',
+              }).toString(),
+            );
+          assert.strictEqual(
+            response.headers['access-control-allow-origin'],
+            undefined,
+            `${path} gives the page nothing to read`,
+          );
+        }
       });
 
       test("a page on the origin of the client's redirect URI can, as a browser-based client does", async function (assert) {
@@ -741,20 +855,107 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(other.status, 200, 'grant B is not');
     });
 
-    test('an address that keeps failing is refused before its request is read', async function (assert) {
-      let clientId = await registerOAuthClient(server());
+    async function failThrice(clientId: string) {
       for (let i = 0; i < 3; i++) {
         let response = await refreshOAuthTokens(
           server(),
           clientId,
           `not-a-token-${i}`,
         );
-        assert.strictEqual(response.status, 400, `failure ${i + 1}`);
+        if (response.status !== 400) {
+          throw new Error(`failure ${i + 1} was answered ${response.status}`);
+        }
       }
       // The library counts a failure after it answers.
       await new Promise((resolve) => setTimeout(resolve, 50));
-      let refused = await refreshOAuthTokens(server(), clientId, 'not-a-token');
+    }
+
+    test("an address that keeps failing is refused, but a known grant's refresh from it is not", async function (assert) {
+      let known = await tokensFor();
+      await failThrice(known.clientId);
+      let refused = await refreshOAuthTokens(
+        server(),
+        known.clientId,
+        'not-a-token',
+      );
+      assert.strictEqual(
+        refused.status,
+        429,
+        'another unknown token is refused',
+      );
+      let refresh = await refreshOAuthTokens(
+        server(),
+        known.clientId,
+        known.refreshToken,
+      );
+      assert.strictEqual(
+        refresh.status,
+        200,
+        "a known grant's refresh from the same address goes through",
+      );
+    });
+
+    test("a known grant's refusals don't count against its address", async function (assert) {
+      let known = await tokensFor();
+      await db().execute(`UPDATE oauth_provider_grants SET expires_at = now()`);
+      // Two refusals of the grant's own, within its limit of three with the
+      // code exchange.
+      for (let i = 0; i < 2; i++) {
+        let response = await tokenRequest(server(), {
+          grant_type: 'refresh_token',
+          client_id: known.clientId,
+          refresh_token: known.refreshToken,
+        });
+        assert.strictEqual(response.status, 400, `refusal ${i + 1}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // The address still has all three of its failures, so three unknown
+      // tokens are each refused by the library, not by the limit.
+      await failThrice(known.clientId);
+      let fourth = await refreshOAuthTokens(
+        server(),
+        known.clientId,
+        'not-a-token',
+      );
+      assert.strictEqual(fourth.status, 429, 'and only then is it limited');
+    });
+
+    test("a page the client may call from can read Boxel's own refusals", async function (assert) {
+      let redirectUri = 'http://localhost:6274/oauth/callback';
+      let clientId = await registerOAuthClient(server(), { redirectUri });
+      await failThrice(clientId);
+      let refused = await tokenRequest(
+        server(),
+        {
+          grant_type: 'refresh_token',
+          client_id: clientId,
+          refresh_token: 'not-a-token',
+        },
+        { origin: 'http://localhost:6274' },
+      );
       assert.strictEqual(refused.status, 429);
+      assert.strictEqual(
+        refused.headers['access-control-allow-origin'],
+        'http://localhost:6274',
+      );
+      assert.true(
+        /retry-after/i.test(refused.headers['access-control-expose-headers']),
+        'with Retry-After readable',
+      );
+      let elsewhere = await tokenRequest(
+        server(),
+        {
+          grant_type: 'refresh_token',
+          client_id: clientId,
+          refresh_token: 'not-a-token',
+        },
+        { origin: 'https://elsewhere.example.test' },
+      );
+      assert.strictEqual(
+        elsewhere.headers['access-control-allow-origin'],
+        undefined,
+        'and a page elsewhere cannot',
+      );
     });
   });
 });

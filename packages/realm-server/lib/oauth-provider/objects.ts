@@ -261,7 +261,8 @@ export class SessionAdapter extends BearerKeyedAdapter {
 // A code is exchanged once. The library checks that a code is unused and then
 // marks it used, so two exchanges at once could both pass its check: marking
 // it used here is atomic, and the exchange that loses ends the grant as reuse,
-// as presenting a used code does (ADR 021 §1.9).
+// as presenting a used code does (ADR 021 §1.9). A code that expired in
+// between is refused without ending its grant.
 export class AuthorizationCodeAdapter extends BearerKeyedAdapter {
   #dbAdapter: DBAdapter;
 
@@ -287,10 +288,14 @@ export class AuthorizationCodeAdapter extends BearerKeyedAdapter {
     }
     let [row] = (await this.#dbAdapter.execute(
       `SELECT payload->>'grantId' AS grant_id FROM oauth_provider_objects
-        WHERE kind = 'AuthorizationCode' AND id_hash = decode($1, 'hex')`,
+        WHERE kind = 'AuthorizationCode' AND id_hash = decode($1, 'hex')
+          AND payload->'consumed' IS NOT NULL`,
       { bind: [hash] },
     )) as { grant_id: string | null }[];
-    if (row?.grant_id) {
+    if (!row) {
+      throw new errors.InvalidGrant('authorization code is expired');
+    }
+    if (row.grant_id) {
       log.info('authorization code reused');
       await endGrant(this.#dbAdapter, row.grant_id, 'reuse');
     }

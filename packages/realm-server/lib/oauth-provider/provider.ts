@@ -44,6 +44,7 @@ import {
   type NewClientLimit,
 } from './new-client-limit.ts';
 import { boxelHosts } from './redirect-uris.ts';
+import { browserOriginAllowed } from './client-cors.ts';
 import { registrationHandler } from './registration.ts';
 import {
   DEFAULT_TOKEN_LIMIT,
@@ -322,8 +323,10 @@ export function createOAuthProvider({
     // Every refresh rotates its token: the library's default rotates only
     // some clients' (§1.9).
     rotateRefreshToken: true,
-    // A code or refresh token used again revokes its whole grant, which
-    // `GrantAdapter` ends rather than deletes. The library's default.
+    // Revoking any token of a grant revokes the whole grant, which
+    // `GrantAdapter` ends rather than deletes (ADR 021 §1.9). Not the
+    // library's default, which leaves the grant live when its client revokes
+    // an access token.
     revokeGrantPolicy: () => true,
     // The account a flow signs in as: a user's internal ID. The library
     // reads nothing about the user: the provider issues no ID tokens and
@@ -349,11 +352,7 @@ export function createOAuthProvider({
     // of one of the client's redirect URIs, and only for a public client.
     // The library's default, set so an upgrade can't change it.
     clientBasedCORS: (_ctx: KoaContextWithOIDC, origin: string, client) =>
-      origin !== 'null' &&
-      client.clientAuthMethod === 'none' &&
-      (client.redirectUris ?? []).some(
-        (uri) => URL.parse(uri)?.origin === origin,
-      ),
+      browserOriginAllowed(origin, client),
     // Only the grant the flow's finish created, never one the library's
     // session remembers for the client: each consent is its own grant
     // (ADR 021 §1.3).

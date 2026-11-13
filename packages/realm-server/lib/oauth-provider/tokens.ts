@@ -22,6 +22,11 @@ const log = logger('boxel:oauth-provider');
 
 export const REFRESH_GRACE_SECONDS = 30;
 
+// Expired rows are deleted on roughly one store in this many. A row past its
+// expiry already reads as missing, so this only keeps a grant that runs to
+// its expiry, refreshing every few minutes, from piling up its tokens.
+const EXPIRED_SWEEP_ONE_IN = 50;
+
 export type TokenKind = 'AccessToken' | 'RefreshToken';
 
 interface TokenRow {
@@ -57,6 +62,11 @@ export class TokenAdapter implements Adapter {
     if (typeof payload.grantId !== 'string') {
       throw new OAuthProviderObjectError(
         `the OAuth provider's ${this.#kind} names no grant`,
+      );
+    }
+    if (Math.random() * EXPIRED_SWEEP_ONE_IN < 1) {
+      await this.#dbAdapter.execute(
+        `DELETE FROM oauth_provider_tokens WHERE expires_at <= now()`,
       );
     }
     let resource =

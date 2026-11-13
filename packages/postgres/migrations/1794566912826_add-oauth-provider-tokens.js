@@ -18,6 +18,10 @@
 // revocation after a password change, never by the later one that covers
 // Matrix OpenID tokens. A grant created at or before it is refused.
 //
+// A grant's tokens are found by grant, kind and rotation (a refresh finds
+// its token's siblings and children that way), and deleted by grant. Expired
+// rows are deleted by their expiry as tokens are stored.
+//
 // The read-only role may read the token table: it holds no secret, and it is
 // what explains a connection's activity. `readonly_role` exists only where it
 // was provisioned (staging and production), so the grant is skipped wherever
@@ -44,8 +48,8 @@ exports.up = (pgm) => {
     )
   `);
   pgm.sql(`
-    CREATE INDEX IF NOT EXISTS oauth_provider_tokens_grant_id_index
-      ON oauth_provider_tokens (grant_id)
+    CREATE INDEX IF NOT EXISTS oauth_provider_tokens_grant_rotation_index
+      ON oauth_provider_tokens (grant_id, kind, rotation)
   `);
   pgm.sql(`
     CREATE INDEX IF NOT EXISTS oauth_provider_tokens_expires_at_index

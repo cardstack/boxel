@@ -26,7 +26,12 @@ import {
 import {
   OAuthProviderConfigError,
   readNewClientLimit,
+  readTokenLimit,
 } from '../lib/oauth-provider/config.ts';
+import {
+  DEFAULT_TOKEN_LIMIT,
+  parseTokenLimit,
+} from '../lib/oauth-provider/token-limit.ts';
 
 // The hosts a production deployment lists, as its settings spell them.
 const hosts = boxelHosts({
@@ -204,6 +209,55 @@ module(basename(import.meta.filename), function () {
           hosts,
         ) ?? '(allowed)';
       assert.true(/must use https/.test(first), `each is checked: ${first}`);
+    });
+  });
+
+  module('the token limit', function () {
+    test('reads named parts, each defaulting when left out', function (assert) {
+      assert.deepEqual(
+        parseTokenLimit('grant=60/3600,failures=60/600'),
+        DEFAULT_TOKEN_LIMIT,
+      );
+      assert.deepEqual(parseTokenLimit(' grant = 10/60 '), {
+        ...DEFAULT_TOKEN_LIMIT,
+        perGrant: { requests: 10, windowSeconds: 60 },
+      });
+      assert.deepEqual(parseTokenLimit('failures=5/60'), {
+        ...DEFAULT_TOKEN_LIMIT,
+        failuresPerAddress: { requests: 5, windowSeconds: 60 },
+      });
+      for (let spec of [
+        '60/3600,60/600',
+        'grant=60/3600,',
+        'grant=60/3600,grant=30/3600',
+        'everyone=20/3600',
+        'grant=20',
+        'grant=0/60',
+        'grant=20/3600=1',
+      ]) {
+        assert.strictEqual(parseTokenLimit(spec), undefined, spec);
+      }
+    });
+
+    test('defaults when unset, and stops the server when malformed', function (assert) {
+      assert.deepEqual(readTokenLimit({}), DEFAULT_TOKEN_LIMIT);
+      assert.deepEqual(
+        readTokenLimit({
+          BOXEL_OAUTH_TOKEN_RATE_LIMIT: 'grant=3/60,failures=6/60',
+        }),
+        {
+          perGrant: { requests: 3, windowSeconds: 60 },
+          failuresPerAddress: { requests: 6, windowSeconds: 60 },
+        },
+      );
+      assert.throws(
+        () => readTokenLimit({ BOXEL_OAUTH_TOKEN_RATE_LIMIT: '60/3600' }),
+        (error: unknown) =>
+          error instanceof OAuthProviderConfigError &&
+          /BOXEL_OAUTH_TOKEN_RATE_LIMIT must be named parts/.test(
+            error.message,
+          ),
+      );
     });
   });
 

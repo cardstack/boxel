@@ -14,6 +14,7 @@ import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import { grafanaAuthorization, jwtMiddleware } from '../middleware/index.ts';
 import { createJWT } from '../utils/jwt.ts';
 import handleRevokeUserSessions from '../handlers/handle-revoke-user-sessions.ts';
+import { createGrant } from '../lib/oauth-provider/grants.ts';
 import { setupDB, insertUser, realmSecretSeed } from './helpers/index.ts';
 
 const user = '@alice:localhost';
@@ -222,11 +223,17 @@ module(basename(import.meta.filename), function () {
 
   module('revoke-user-sessions endpoint', function (hooks) {
     let dbAdapter: PgAdapter;
+    let userId: string;
 
     setupDB(hooks, {
       beforeEach: async (_dbAdapter) => {
         dbAdapter = _dbAdapter;
-        await insertUser(dbAdapter, user, 'cus_alice', 'alice@example.com');
+        ({ id: userId } = await insertUser(
+          dbAdapter,
+          user,
+          'cus_alice',
+          'alice@example.com',
+        ));
       },
     });
 
@@ -243,6 +250,13 @@ module(basename(import.meta.filename), function () {
     }
 
     test('revokes the named user', async function (assert) {
+      let grantId = await createGrant(dbAdapter, {
+        userId,
+        clientId: 'test-client',
+        resources: { 'https://example.test/mcp': ['boxel:read'] },
+        renewing: true,
+        consentedAt: new Date(Date.now() - 60_000),
+      });
       let response = await supertest(buildApp().callback())
         .post(`/_grafana-revoke-user-sessions?user=${encodeURIComponent(user)}`)
         .set('Authorization', `Bearer ${grafanaSecret}`);
@@ -251,6 +265,15 @@ module(basename(import.meta.filename), function () {
       assert.true(
         await isSessionRevoked(dbAdapter, user, nowInSeconds() - 60),
         'sessions issued before the call are revoked',
+      );
+      let [grant] = (await dbAdapter.execute(
+        `SELECT ended_reason FROM oauth_provider_grants WHERE id = $1`,
+        { bind: [grantId] },
+      )) as { ended_reason: string | null }[];
+      assert.strictEqual(
+        grant.ended_reason,
+        'sessions-revoked',
+        "and the user's OAuth grants end with them",
       );
     });
 

@@ -127,8 +127,18 @@ export function registerOAuthProviderRoutes(
 // library leaves CORS alone on a response that already has it, so the realm
 // server's would let any origin call those routes.
 export function leaveCORSToOAuthProvider(cors: Koa.Middleware): Koa.Middleware {
-  return (ctxt, next) =>
-    ctxt.path === OAUTH_TOKEN_PATH ? next() : cors(ctxt, next);
+  return (ctxt, next) => (isTokenPath(ctxt.path) ? next() : cors(ctxt, next));
+}
+
+// Whether a path reaches the token route. Both the realm server's router and
+// the library's match a path in any case and with or without a trailing
+// slash, so this does too.
+function isTokenPath(pathname: string): boolean {
+  let path = pathname.toLowerCase();
+  if (path.length > 1 && path.endsWith('/')) {
+    path = path.slice(0, -1);
+  }
+  return path === OAUTH_TOKEN_PATH.toLowerCase();
 }
 
 // The library runs in proxy mode (`provider.ts`), so it reads the request's
