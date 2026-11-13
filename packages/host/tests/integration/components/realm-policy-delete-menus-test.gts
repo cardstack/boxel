@@ -37,6 +37,8 @@ const REALM_ADMIN = '@realm-admin:localhost';
 const MANGO = `${POLICY_REALM}Pet/mango`;
 const BEAN = `${POLICY_REALM}Pet/bean`;
 const BALL = `${POLICY_REALM}Toy/ball`;
+// A card whose definition is missing, so it fails to load.
+const BROKEN = `${POLICY_REALM}Toy/broken`;
 
 const PET_MODULE = `
   import { contains, field, CardDef } from '@cardstack/base/card-api';
@@ -138,6 +140,13 @@ module('Integration | realm policy delete menus', function (hooks) {
         'Pet/mango.json': instanceOf('Pet', { name: 'Mango' }),
         'Pet/bean.json': instanceOf('Pet', { name: 'Bean' }),
         'Toy/ball.json': instanceOf('Toy', { name: 'Ball' }),
+        'Toy/broken.json': {
+          data: {
+            type: 'card',
+            attributes: { name: 'Broken' },
+            meta: { adoptsFrom: { module: '../no-such-module', name: 'Toy' } },
+          },
+        },
         'policies/pets.json': petDeletePolicy,
       },
     }));
@@ -319,6 +328,29 @@ module('Integration | realm policy delete menus', function (hooks) {
     assert
       .dom('[data-test-boxel-menu-item-text="Delete"]')
       .doesNotExist("the toy's own menu offers no Delete");
+  });
+
+  test('a card that failed to load offers no Delete Card where nothing grants deleting it', async function (assert) {
+    getService('operator-mode-state-service').restore({
+      stacks: [
+        [
+          { type: 'card', id: `${POLICY_REALM}index`, format: 'isolated' },
+          { type: 'card', id: BROKEN, format: 'isolated' },
+        ],
+      ],
+    });
+    await waitFor(
+      `[data-test-stack-card="${BROKEN}"] [data-test-more-options-button]`,
+    );
+    await click(
+      `[data-test-stack-card="${BROKEN}"] [data-test-more-options-button]`,
+    );
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
+      .exists("the broken card's menu is open");
+    assert
+      .dom('[data-test-boxel-menu-item-text="Delete Card"]')
+      .doesNotExist('a user who may only read the realm is offered no delete');
   });
 
   test('bulk delete deletes a card the policy lets the user delete', async function (assert) {

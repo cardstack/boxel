@@ -596,28 +596,30 @@ export default class OperatorModeStackItem extends Component<Signature> {
     if (this.isBuried) {
       return undefined;
     }
-    return [
+    let cardId = this.cardIdentifier;
+    let items = [
       new MenuItem({
         label: 'Copy Card URL',
         action: () =>
-          this.cardIdentifier &&
-          copyOpenableURLToClipboard(
-            this.cardIdentifier,
-            this.network.virtualNetwork,
-          ),
+          cardId &&
+          copyOpenableURLToClipboard(cardId, this.network.virtualNetwork),
         icon: IconLink,
-        disabled: !this.cardIdentifier,
-      }),
-      new MenuItem({
-        label: 'Delete Card',
-        action: () =>
-          this.cardIdentifier &&
-          this.cardCrudFunctions.deleteCard?.(this.cardIdentifier),
-        icon: IconTrash,
-        dangerous: true,
-        disabled: !this.cardCrudFunctions.deleteCard,
+        disabled: !cardId,
       }),
     ];
+    // A card that failed to load is deleted on the same check as any other.
+    if (cardId && this.operatorModeStateService.canDeleteCard(cardId)) {
+      items.push(
+        new MenuItem({
+          label: 'Delete Card',
+          action: () => this.cardCrudFunctions.deleteCard?.(cardId),
+          icon: IconTrash,
+          dangerous: true,
+          disabled: !this.cardCrudFunctions.deleteCard,
+        }),
+      );
+    }
+    return items;
   }
 
   private get moreOptionsMenuItems() {
