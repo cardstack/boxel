@@ -45,7 +45,10 @@ export type RunOverlayStageResult =
   // `RUN_OVERLAY_MAX_BYTES`.
   | { kind: 'over-bytes'; limit: number }
   // The run isn't running, another attempt owns it, or its commit is claimed.
-  | { kind: 'not-running' };
+  | { kind: 'not-running' }
+  // `path` and the staged `clash` would be a file and a directory at once,
+  // which no realm can hold.
+  | { kind: 'path-clash'; path: string; clash: string };
 
 // One staged file, as the overlay holds it.
 export interface RunOverlayFile {
@@ -77,6 +80,37 @@ export async function stageRunOverlayFile(
   writesCap: number,
   maxBytes = RUN_OVERLAY_MAX_BYTES,
 ): Promise<RunOverlayStageResult> {
+  let result = await stageRunOverlayFiles(
+    dbAdapter,
+    key,
+    [{ path, content }],
+    writesCap,
+    maxBytes,
+  );
+  return result.kind === 'staged'
+    ? { kind: 'staged', created: result.created.length > 0 }
+    : result;
+}
+
+export type RunOverlayStageFilesResult =
+  // Every file is staged. `created` names the paths the attempt had not
+  // staged before.
+  | { kind: 'staged'; created: string[] }
+  | Exclude<RunOverlayStageResult, { kind: 'staged' }>;
+
+// Stages every one of `files` in the attempt's overlay, or none of them: one
+// transaction holds the run's row lock for the checks and every insert. The
+// checks are `stageRunOverlayFile`'s, applied to the overlay as these files
+// leave it: the files it holds, these included, stay within `writesCap`, and
+// their bytes within `maxBytes`. A path named twice stages its last content.
+export async function stageRunOverlayFiles(
+  dbAdapter: DBAdapter,
+  key: RunOverlayKey,
+  files: { path: string; content: Uint8Array }[],
+  writesCap: number,
+  maxBytes = RUN_OVERLAY_MAX_BYTES,
+): Promise<RunOverlayStageFilesResult> {
+  let byPath = new Map(files.map(({ path, content }) => [path, content]));
   return await dbAdapter.withTransaction(async (txQuery) => {
     let [run] = await txQuery([
       'SELECT state, attempt, commit_started_at FROM automation_runs WHERE id =',
@@ -93,36 +127,52 @@ export async function stageRunOverlayFile(
     ) {
       return { kind: 'not-running' } as const;
     }
-    let [{ files, staged, others }] = (await txQuery([
-      'SELECT count(*)::int AS files, count(*) FILTER (WHERE path =',
-      param(path),
-      ')::int AS staged, coalesce(sum(size) FILTER (WHERE path <>',
-      param(path),
-      '), 0)::bigint AS others FROM run_overlay_files WHERE run_id =',
+    let rows = (await txQuery([
+      'SELECT path, size FROM run_overlay_files WHERE run_id =',
       param(key.runId),
       'AND attempt =',
       param(key.attempt),
-    ])) as { files: number; staged: number; others: number | string }[];
-    let created = Number(staged) === 0;
-    if (created && Number(files) >= writesCap) {
+    ])) as { path: string; size: number | string }[];
+    let stagedBefore = new Set(rows.map((row) => String(row.path)));
+    // Checked under the run's row lock, so two requests racing to stage a
+    // path and a path under it can't both pass.
+    let all = new Set([...stagedBefore, ...byPath.keys()]);
+    for (let path of byPath.keys()) {
+      let clash = [...all].find(
+        (other) => other.startsWith(`${path}/`) || path.startsWith(`${other}/`),
+      );
+      if (clash) {
+        return { kind: 'path-clash', path, clash } as const;
+      }
+    }
+    let created = [...byPath.keys()].filter((path) => !stagedBefore.has(path));
+    if (created.length > 0 && stagedBefore.size + created.length > writesCap) {
       return { kind: 'over-cap', cap: writesCap } as const;
     }
-    if (Number(others) + content.byteLength > maxBytes) {
+    let bytes = rows
+      .filter((row) => !byPath.has(String(row.path)))
+      .reduce((sum, row) => sum + Number(row.size), 0);
+    for (let content of byPath.values()) {
+      bytes += content.byteLength;
+    }
+    if (bytes > maxBytes) {
       return { kind: 'over-bytes', limit: maxBytes } as const;
     }
-    await txQuery([
-      'INSERT INTO run_overlay_files (run_id, attempt, path, content, size) VALUES (',
-      param(key.runId),
-      ',',
-      param(key.attempt),
-      ',',
-      param(path),
-      ', decode(',
-      param(toBase64(content)),
-      ", 'base64'),",
-      param(content.byteLength),
-      ') ON CONFLICT (run_id, attempt, path) DO UPDATE SET content = EXCLUDED.content, size = EXCLUDED.size, updated_at = now()',
-    ]);
+    for (let [path, content] of byPath) {
+      await txQuery([
+        'INSERT INTO run_overlay_files (run_id, attempt, path, content, size) VALUES (',
+        param(key.runId),
+        ',',
+        param(key.attempt),
+        ',',
+        param(path),
+        ', decode(',
+        param(toBase64(content)),
+        ", 'base64'),",
+        param(content.byteLength),
+        ') ON CONFLICT (run_id, attempt, path) DO UPDATE SET content = EXCLUDED.content, size = EXCLUDED.size, updated_at = now()',
+      ]);
+    }
     return { kind: 'staged', created } as const;
   });
 }
@@ -162,33 +212,6 @@ export async function runOverlayPathsUnder(
     'ORDER BY path',
   ]);
   return rows.map((row) => String(row.path));
-}
-
-// A path the attempt staged that `path` can't sit beside: a file at one of
-// the directories `path` is under, or a file under `path` as a directory. A
-// realm can't hold both, so the commit would fail. Undefined when there is
-// none.
-export async function runOverlayPathClash(
-  dbAdapter: DBAdapter,
-  key: RunOverlayKey,
-  path: string,
-): Promise<string | undefined> {
-  let parents = path
-    .split('/')
-    .slice(0, -1)
-    .map((_, i, parts) => parts.slice(0, i + 1).join('/'));
-  let [row] = await query(dbAdapter, [
-    'SELECT path FROM run_overlay_files WHERE run_id =',
-    param(key.runId),
-    'AND attempt =',
-    param(key.attempt),
-    'AND (starts_with(path,',
-    param(`${path}/`),
-    ')',
-    ...parents.flatMap((parent) => ['OR path =', param(parent)]),
-    ') ORDER BY path LIMIT 1',
-  ]);
-  return row ? String(row.path) : undefined;
 }
 
 // Every file the attempt staged, in path order.

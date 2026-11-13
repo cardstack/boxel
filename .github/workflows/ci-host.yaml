@@ -26,6 +26,8 @@ on:
       # The test realm server serves these cards as the `/test/` realm that
       # the host's tests import from.
       - "packages/test-realm-cards/**"
+      # The host's test stack starts Synapse from a template here.
+      - "packages/matrix/support/synapse/**"
       - ".github/workflows/ci-host.yaml"
       # builds the host this suite downloads
       - ".github/workflows/test-web-assets.yaml"

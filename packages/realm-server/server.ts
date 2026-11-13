@@ -67,6 +67,7 @@ import {
 } from './lib/secure-origin.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import { HostURLResolver, resolveHostURLs } from './lib/realm-host-urls.ts';
 import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
@@ -1004,6 +1005,9 @@ export class RealmServer {
       .use(clientAddress(this.clientAddress))
       .use(httpLogging)
       .use(instanceIdHeader)
+      // A request on a host URL is made to name its realm's URL here, ahead
+      // of every route that looks a realm up (ADR 033 §1.2).
+      .use(resolveHostURLs(new HostURLResolver(this.dbAdapter)))
       .use(
         cors({
           origin: '*',

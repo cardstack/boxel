@@ -49,6 +49,37 @@ export class IndexBackedDependencyErrors {
 
   reset(): void {
     this.#relationshipDependencyRows.clear();
+    this.#pendingInvalidations = new Set();
+    this.#pendingInvalidationsSeen = 0;
+  }
+
+  // The pass's invalidations, normalized as stored dependencies. A pass's
+  // invalidation list only grows, and keeps its order as it does (a
+  // from-scratch pass adds each URL as its visit writes it), so the set is
+  // extended with the new entries rather than rebuilt for every card: rebuilt
+  // per card, a realm's whole list was normalized once for each card with a
+  // relationship, which for a 79,136-file realm took seconds per card. A list
+  // that is somehow shorter than what was seen is rebuilt from the start.
+  #pendingInvalidations = new Set<string>();
+  #pendingInvalidationsSeen = 0;
+  #normalizedPendingInvalidations(): Set<string> {
+    let all = this.#getInvalidations();
+    if (all.length < this.#pendingInvalidationsSeen) {
+      this.#pendingInvalidations = new Set();
+      this.#pendingInvalidationsSeen = 0;
+    }
+    for (let i = this.#pendingInvalidationsSeen; i < all.length; i++) {
+      this.#pendingInvalidations.add(
+        normalizeStoredDependency(
+          all[i],
+          this.#realmURL,
+          this.#virtualNetwork,
+          this.#canonicalURLMemo,
+        ),
+      );
+    }
+    this.#pendingInvalidationsSeen = all.length;
+    return this.#pendingInvalidations;
   }
 
   invalidateRelationshipDependencyRowCache(url: URL): void {
@@ -390,16 +421,7 @@ export class IndexBackedDependencyErrors {
     let rowsByUrl = await this.getRelationshipDependencyRows(urls);
     let collected: SerializedError[] = [];
     let seenErrors = new Set<string>();
-    let pendingInvalidations = new Set(
-      this.#getInvalidations().map((href) =>
-        normalizeStoredDependency(
-          href,
-          this.#realmURL,
-          this.#virtualNetwork,
-          this.#canonicalURLMemo,
-        ),
-      ),
-    );
+    let pendingInvalidations = this.#normalizedPendingInvalidations();
     for (let dep of urls) {
       if (pendingInvalidations.has(dep)) {
         // This dependency is actively being reindexed in this batch; avoid

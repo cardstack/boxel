@@ -9,6 +9,7 @@ import type {
 } from '@cardstack/postgres';
 import {
   finalizeOrphanedReservations,
+  isHeapExhaustion,
   orphanedReservationReason,
 } from '../lib/finalize-orphan-reservations.ts';
 import {
@@ -66,6 +67,27 @@ async function fetchReservation(
 }
 
 module(basename(import.meta.filename), function () {
+  module('isHeapExhaustion', function () {
+    test("V8's out-of-heap reports are heap exhaustion", function (assert) {
+      assert.true(
+        isHeapExhaustion(
+          'FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory',
+        ),
+      );
+      assert.true(
+        isHeapExhaustion(
+          'FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory',
+        ),
+      );
+    });
+
+    test('another fatal error is not', function (assert) {
+      assert.false(
+        isHeapExhaustion('FATAL ERROR: v8::ToLocalChecked Empty MaybeLocal'),
+      );
+    });
+  });
+
   module('orphanedReservationReason', function () {
     test('a SIGKILL outside a shutdown is a kill, which the cap counts', function (assert) {
       assert.strictEqual(orphanedReservationReason('SIGKILL', false), 'killed');

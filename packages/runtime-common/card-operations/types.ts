@@ -1699,11 +1699,27 @@ export type OperationErrorCode =
   // it is planned and run on the search engine, so reaching the operation core
   // with one means the caller used the wrong entry point.
   | 'wrong-entry-point'
-  // An automation run's batch carries a write. A run's writes are staged in
-  // its overlay and committed together, and a batch writes the realm
-  // directly, so the run writes through the card+source write instead.
-  // Carries a 403. Nothing was written.
+  // An automation run's batch removes a file, or writes a realm the run may
+  // only read. A run's writes are staged in its own realm's overlay, which
+  // holds a file's bytes with nothing to mark a removal. Carries a 403.
+  // Nothing was staged.
   | 'run-write-not-staged'
+  // An automation run's batch whose result its overlay refuses for a reason
+  // the run's commit has no code of its own for: the overlay's byte bound,
+  // or a run that is no longer running (401). Nothing was staged.
+  | 'run-write-refused'
+  // An automation run's batch writes a file the run's commit would refuse
+  // for its path: a reserved path, `realm.json`, a module, the realm's policy
+  // card, a RealmPolicy card or an automation card. Carries a 403, as the
+  // commit does. Nothing was staged.
+  | 'forbidden-path'
+  // An automation run's batch writes a file where the realm, or the run's
+  // own staged files, hold a file or directory that would make one path both.
+  // Carries a 409, as the commit does. Nothing was staged.
+  | 'path-clash'
+  // An automation run's batch stages more files than the run's `writes` cap
+  // allows. Carries a 403, as the commit does. Nothing was staged.
+  | 'writes-cap'
   // Two entries of one parallel group stage a change to the same file. The
   // members of a parallel group are evaluated against the state the group
   // started from, so neither of the two composes over the other and only one
