@@ -636,11 +636,10 @@ const tests: SharedTests<unknown> = Object.freeze({
     );
   },
 
-  'validateHostRoutes: fixed routes cannot have :name segments': async (
+  'validateHostRoutes: a fixed route under a dynamic route is dropped': async (
     assert,
   ) => {
     let { routes, warnings } = validate([
-      { path: '/posts/:slug', instance: instance('x') },
       fieldMatch(
         '/p/:slug',
         'Post',
@@ -660,7 +659,6 @@ const tests: SharedTests<unknown> = Object.freeze({
     ]);
     assert.deepEqual(paths(routes), ['/p/:slug', '/p/:slug/old', '/r']);
     assert.deepEqual(codes(warnings), [
-      { code: 'fixed-route-with-params', path: '/posts/:slug', dropped: true },
       {
         code: 'fixed-route-with-params',
         path: '/p/:slug/about',
@@ -720,11 +718,13 @@ const tests: SharedTests<unknown> = Object.freeze({
         ],
       },
       { path: '/feed', name: 'feed2', instance: instance('feed') },
-      { path: '/n', name: 7, instance: instance('n') },
+      // A top-level fixed route ignores a name that isn't a string; any
+      // other route is dropped for it.
+      { path: '/n/:id', name: 7, card: './N/:id' },
     ]);
     assert.deepEqual(paths(routes), ['/', '/blog', '/blog/feed', '/feed']);
     assert.deepEqual(codes(warnings), [
-      { code: 'invalid-name', path: '/n', dropped: true },
+      { code: 'invalid-name', path: '/n/:id', dropped: true },
       { code: 'duplicate-name', path: '/blog/:id', dropped: true },
       { code: 'parent-dropped', path: '/blog/:id/x', dropped: true },
     ]);
@@ -781,6 +781,105 @@ const tests: SharedTests<unknown> = Object.freeze({
     let small = validate(rules.slice(0, 4), { maxDynamicRoutes: 2 });
     assert.deepEqual(paths(small.routes), ['/', '/r0/:id', '/r1/:id']);
   },
+
+  'validateHostRoutes: a top-level fixed route keeps the path rules it had':
+    async (assert) => {
+      let { routes, warnings } = validate([
+        // A segment that starts with `:` is literal text, as it always was.
+        { path: '/talks/:2024', instance: instance('talks-2024') },
+        { path: '/:about', instance: instance('about') },
+        { path: '/old/:page', redirectTo: '/new' },
+        // These routes never had names, so a name that isn't a string is
+        // ignored rather than dropping the route.
+        { path: '/named', instance: instance('named'), name: 42 },
+        // A redirect whose target uses a :name is a dynamic redirect.
+        { path: '/go/:slug', redirectTo: '/p/:slug' },
+      ]);
+      assert.deepEqual(hostRoutingMapFromRoutes(routes), [
+        { path: '/talks/:2024', id: `${REALM}talks-2024` },
+        { path: '/:about', id: `${REALM}about` },
+        { path: '/old/:page', redirectTo: '/new', statusCode: 302 },
+        { path: '/named', id: `${REALM}named` },
+      ]);
+      assert.deepEqual(codes(warnings), [
+        { code: 'invalid-name', path: '/named', dropped: false },
+      ]);
+      let literal = routes[1]!;
+      assert.deepEqual(
+        [literal.paramNames, literal.kind === 'fixed-card' && literal.pattern],
+        [[], undefined],
+        'a literal path has no :names and no pattern',
+      );
+      let named = routes[3]!;
+      assert.strictEqual(named.name, undefined);
+      let dynamic = routes[4]!;
+      assert.deepEqual(
+        [dynamic.kind, dynamic.paramNames],
+        ['redirect', ['slug']],
+      );
+    },
+
+  'validateHostRoutes: a duplicate fixed route takes no part in a redirect cycle':
+    async (assert) => {
+      let { routes, warnings } = validate([
+        { path: '/a', redirectTo: '/b' },
+        { path: '/b', instance: instance('b') },
+        { path: '/b', redirectTo: '/a' },
+      ]);
+      assert.deepEqual(hostRoutingMapFromRoutes(routes), [
+        { path: '/a', redirectTo: '/b', statusCode: 302 },
+        { path: '/b', id: `${REALM}b` },
+      ]);
+      assert.deepEqual(codes(warnings), [
+        { code: 'duplicate-path', path: '/b', dropped: true },
+      ]);
+    },
+
+  'validateHostRoutes: a named parent link known only on the parent type is unverified':
+    async (assert) => {
+      let { routes, warnings } = validate([
+        fieldMatch(
+          '/posts/:post',
+          'Post',
+          { slug: ':post' },
+          {
+            // Post has an author link, but the comment card may hold an
+            // author link of its own.
+            routes: [
+              {
+                path: '/:comment',
+                card: './Comment/:comment',
+                parent: 'author',
+              },
+            ],
+          },
+        ),
+        {
+          path: '/c/:category',
+          card: './Category/:category',
+          routes: [
+            fieldMatch(
+              '/:post',
+              'Post',
+              { slug: ':post' },
+              { parent: 'author' },
+            ),
+          ],
+        },
+      ]);
+      let comment = routes[0]!.routes[0]!;
+      assert.deepEqual(
+        comment.kind === 'card-id' ? comment.parentLink : undefined,
+        { field: 'author', side: 'unverified', inferred: false },
+      );
+      let post = routes[1]!.routes[0]!;
+      assert.deepEqual(
+        post.kind === 'field-match' ? post.parentLink : undefined,
+        { field: 'author', side: 'child', kind: 'linksTo', inferred: false },
+        'a link field on the known child type is on the child',
+      );
+      assert.deepEqual(warnings, [], 'no warning that one card has no address');
+    },
 
   'validateHostRoutes: warns when one card gets no address': async (assert) => {
     let { routes, warnings } = validate([

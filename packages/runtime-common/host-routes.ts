@@ -411,8 +411,10 @@ class Validator {
 
   run(rules: readonly RawHostRoutingRule[]): HostRoutesValidation {
     let routes = this.validateList(rules, [], undefined);
-    routes = this.dropRedirectCycles(routes);
+    // Duplicates first, so a route dropped as a duplicate takes no part in
+    // a redirect cycle.
     routes = this.applyRealmWideRules(routes);
+    routes = this.dropRedirectCycles(routes);
     this.warnNoAddressFromOneCard(routes);
     return { routes, warnings: this.warnings, complete: this.complete };
   }
@@ -469,14 +471,6 @@ class Validator {
       );
     }
 
-    let name: string | undefined;
-    if (rule.name !== undefined && !isBlank(rule.name)) {
-      if (typeof rule.name !== 'string') {
-        return drop('invalid-name', 'Route name must be a string');
-      }
-      name = rule.name.trim();
-    }
-
     let hasInstance = rule.instance !== undefined;
     let hasRedirect = !isBlank(rule.redirectTo);
     let hasCard = !isBlank(rule.card);
@@ -504,21 +498,46 @@ class Validator {
       );
     }
 
-    // A top-level fixed card route or redirect without `:name` segments
-    // keeps the path rules it always had.
+    // A top-level fixed card route or redirect keeps the path rules it
+    // always had, unless it is a redirect whose target uses a `:name`. A
+    // segment that starts with `:` in its path is literal text, as it always
+    // was (`/talks/:2024`): a fixed route has no `:name` segments.
     let legacy =
       !parentRoute &&
       (hasInstance || hasRedirect) &&
-      !hasParamSegment(rule.path);
+      !(hasRedirect && redirectTargetHasParam(rule.redirectTo));
+    let literalPath = legacy && hasParamSegment(rule.path);
+
+    let name: string | undefined;
+    if (rule.name !== undefined && !isBlank(rule.name)) {
+      if (typeof rule.name === 'string') {
+        name = rule.name.trim();
+      } else if (legacy) {
+        // These routes never had names, so a realm.json may hold anything
+        // there; the route is served without one.
+        this.warn(
+          'invalid-name',
+          'Route name must be a string; ignored',
+          position,
+          displayPath,
+          false,
+        );
+      } else {
+        return drop('invalid-name', 'Route name must be a string');
+      }
+    }
+
     let path = normalizeRoutingPath(rule.path);
     let pattern: RoutePathPattern | undefined;
-    let parsed = parseRoutePathPattern(path, {
-      usedNames: parentRoute?.paramNames,
-    });
-    if (parsed.ok) {
-      pattern = parsed.pattern;
-    } else if (!legacy) {
-      return drop('invalid-path', parsed.error.message);
+    if (!literalPath) {
+      let parsed = parseRoutePathPattern(path, {
+        usedNames: parentRoute?.paramNames,
+      });
+      if (parsed.ok) {
+        pattern = parsed.pattern;
+      } else if (!legacy) {
+        return drop('invalid-path', parsed.error.message);
+      }
     }
     let base: Omit<HostRouteBase, 'routes'> & { routes: HostRoute[] } = {
       position,
@@ -832,14 +851,21 @@ class Validator {
     }
     if (!childType || !parentType) {
       if (named) {
-        // Only one side's type is known, at most. The field is on that side
-        // when that type has it as a link; otherwise it is left for the
-        // resolver to read on whichever card has it.
-        let known = childType ?? parentType;
-        let side: 'child' | 'parent' = childType ? 'child' : 'parent';
-        let field = known?.fields[named];
+        // Only one side's type is known, at most. The field is on the child
+        // when the child's type has it as a link: a link from the child to
+        // its parent is the one each card can be addressed by. When only the
+        // parent's type is known, a link field of that name on it doesn't
+        // show which card holds the link, since the child's card may have a
+        // field of that name too, so it is left for the resolver to read on
+        // whichever card has it, as is a field the known type doesn't have.
+        let field = childType?.fields[named];
         if (field && isLinkType(field.type)) {
-          return { field: named, side, kind: field.type, inferred: false };
+          return {
+            field: named,
+            side: 'child',
+            kind: field.type,
+            inferred: false,
+          };
         }
         return { field: named, side: 'unverified', inferred: false };
       }
@@ -1148,6 +1174,13 @@ function joinPaths(parentFullPath: string, path: string): string {
 
 function hasParamSegment(path: string): boolean {
   return path.split('/').some((segment) => segment.startsWith(':'));
+}
+
+function redirectTargetHasParam(redirectTo: unknown): boolean {
+  return (
+    typeof redirectTo === 'string' &&
+    hasParamSegment(redirectTo.trim().split(/[?#]/, 1)[0]!)
+  );
 }
 
 const EXTERNAL_ORIGIN = /^(https?:\/\/[^/?#]*)/i;

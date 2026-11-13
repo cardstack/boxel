@@ -84,6 +84,10 @@ import {
 // refuses every other method outright — so no HTTP cache reaches either body,
 // and the in-process caches that do hold one key on the served mode directly.
 const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
+// How long host routes that dropped a route for an unavailable type are kept
+// before they are read again, with their unavailable types. A failed render's
+// cached error row expires after the same interval.
+const HOST_ROUTES_RETRY_MS = 30_000;
 
 // The cache directive a card+json response carries when a declared `output`
 // projected its body.
@@ -3345,12 +3349,22 @@ export class Realm {
   // they use a type from another realm. A change to that type doesn't
   // reindex this realm, so the cache is dropped when the generation moves.
   #cachedHostRoutesGeneration: number | undefined;
+  // When the cached host routes dropped a route for an unavailable type: the
+  // time after which they are read again.
+  #cachedHostRoutesRetryAt: number | undefined;
+  // Moved by every index and by a type becoming available. A validation
+  // caches its result only when the epoch hasn't moved while it ran.
+  #hostRoutesEpoch = 0;
+  // The validation running now, shared by concurrent calls.
+  #hostRoutesInFlight: Promise<HostRoutesValidation | undefined> | undefined;
   // Background reads that put a host route type's definition in the cache,
   // by type, while they run. A request never waits on one.
   #hostRouteTypeWarmups = new Map<string, Promise<void>>();
-  // The types whose background read failed. They are not read again in the
-  // background until the next index.
-  #failedHostRouteTypeWarmups = new Set<string>();
+  // When each type's last background read started.
+  #hostRouteTypeWarmedAt = new Map<string, number>();
+  // The warnings of the last validation, so the same ones aren't logged on
+  // every read.
+  #loggedHostRouteWarnings: string | undefined;
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -5036,10 +5050,9 @@ export class Realm {
         `reloading the ignore rules of ${this.url} failed: ${String(err)}`,
       );
     });
-    this.#cachedHostRoutingMap = null;
-    this.#cachedHostRoutes = null;
-    this.#cachedHostRoutesGeneration = undefined;
-    this.#failedHostRouteTypeWarmups.clear();
+    this.#invalidateHostRoutes();
+    this.#hostRouteTypeWarmedAt.clear();
+    this.#loggedHostRouteWarnings = undefined;
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
@@ -18491,9 +18504,11 @@ export class Realm {
 
   // The realm's host routes, validated: every route form, child routes
   // included, in authored order, with the warnings for the routes that were
-  // dropped. Cached until the next index, like the routing map, once it is
-  // complete. Resolves to no routes when the rules can't be read, without
-  // caching that.
+  // dropped. Cached until the next index. A validation that dropped a route
+  // because its type's definition wasn't available is cached too, until a
+  // background read makes a type available or `HOST_ROUTES_RETRY_MS` passes,
+  // so a request never repeats the reads. Resolves to no routes when the
+  // rules can't be read, without caching that.
   async getHostRoutes(): Promise<HostRoutesValidation> {
     return (
       (await this.#validateHostRoutes()) ?? {
@@ -18504,24 +18519,45 @@ export class Realm {
     );
   }
 
+  // Drops the cached host routes and the map built from them, and makes a
+  // validation that is running now leave its result uncached.
+  #invalidateHostRoutes(): void {
+    this.#hostRoutesEpoch++;
+    this.#cachedHostRoutes = null;
+    this.#cachedHostRoutingMap = null;
+    this.#cachedHostRoutesGeneration = undefined;
+    this.#cachedHostRoutesRetryAt = undefined;
+    this.#hostRoutesInFlight = undefined;
+  }
+
   // Puts the definition of a host route type in the cache in the background,
   // so a later request can route on it. The definitions cache is cleared when
   // the server starts, and a realm that boots on its existing index doesn't
   // render its modules again, so without this a field-match route stays
   // dropped until some other request happens to render the type's module.
-  // The request that starts the read doesn't wait on it (ADR 015 §1.1).
+  // A type whose cached render failed is read again too: once its error row
+  // expires, the read renders the module again. The request that starts the
+  // read doesn't wait on it (ADR 015 §1.1). A type is read at most once in
+  // `HOST_ROUTES_RETRY_MS`.
   #warmHostRouteType(ref: ResolvedCodeRef): void {
     let key = typeLookupKey(ref);
+    let startedAt = this.#hostRouteTypeWarmedAt.get(key);
     if (
       this.#hostRouteTypeWarmups.has(key) ||
-      this.#failedHostRouteTypeWarmups.has(key)
+      (startedAt !== undefined && Date.now() - startedAt < HOST_ROUTES_RETRY_MS)
     ) {
       return;
     }
+    this.#hostRouteTypeWarmedAt.set(key, Date.now());
     let warmup = this.#definitionLookup.lookupDefinitionEntry(ref).then(
-      () => undefined,
+      () => {
+        // The type is available now: validate again on the next call,
+        // unless the cached validation is already final.
+        if (!this.#cachedHostRoutes?.complete) {
+          this.#invalidateHostRoutes();
+        }
+      },
       (e: unknown) => {
-        this.#failedHostRouteTypeWarmups.add(key);
         this.#log.warn(
           `could not cache the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
         );
@@ -18540,93 +18576,131 @@ export class Realm {
     await Promise.all([...this.#hostRouteTypeWarmups.values()]);
   }
 
-  // Drops the cached host routes and the map built from them when they use
-  // a type from another realm whose definitions may have changed since.
-  #dropStaleHostRoutes(): void {
-    if (
-      this.#cachedHostRoutesGeneration !== undefined &&
-      this.#definitionLookup.definitionGeneration?.() !==
-        this.#cachedHostRoutesGeneration
-    ) {
-      this.#cachedHostRoutes = null;
-      this.#cachedHostRoutingMap = null;
-      this.#cachedHostRoutesGeneration = undefined;
+  // Makes the next call read the host routes again and read their unavailable
+  // types again, as it would once `HOST_ROUTES_RETRY_MS` has passed.
+  __testOnlyRetryHostRoutesNow(): void {
+    this.#hostRouteTypeWarmedAt.clear();
+    if (this.#cachedHostRoutesRetryAt !== undefined) {
+      this.#cachedHostRoutesRetryAt = 0;
     }
   }
 
+  // Drops the cached host routes and the map built from them when they use
+  // a type from another realm whose definitions may have changed since, or
+  // when they dropped a route for an unavailable type and the retry time has
+  // passed.
+  #dropStaleHostRoutes(): void {
+    if (
+      (this.#cachedHostRoutesGeneration !== undefined &&
+        this.#definitionLookup.definitionGeneration?.() !==
+          this.#cachedHostRoutesGeneration) ||
+      (this.#cachedHostRoutesRetryAt !== undefined &&
+        Date.now() >= this.#cachedHostRoutesRetryAt)
+    ) {
+      this.#invalidateHostRoutes();
+    }
+  }
+
+  // Coalesced: concurrent calls on a cold cache share one validation.
   async #validateHostRoutes(): Promise<HostRoutesValidation | undefined> {
     this.#dropStaleHostRoutes();
     if (this.#cachedHostRoutes) {
       return this.#cachedHostRoutes;
     }
+    let inFlight = this.#hostRoutesInFlight;
+    if (!inFlight) {
+      inFlight = this.#readAndValidateHostRoutes();
+      this.#hostRoutesInFlight = inFlight;
+      let started = inFlight;
+      void started.finally(() => {
+        if (this.#hostRoutesInFlight === started) {
+          this.#hostRoutesInFlight = undefined;
+        }
+      });
+    }
+    return await inFlight;
+  }
+
+  // The definition of one host route type, read from the cache only. A host
+  // page request waits on this, so only definitions already cached are read:
+  // ADR 015 §1.1 rules out rendering a module for a routing decision while a
+  // request waits. A type that isn't cached yet, or whose read fails, or
+  // whose cached render failed, is unavailable, and a background read is
+  // started for it. A cached module with no such export is `undefined`: the
+  // route is dropped until the module changes.
+  async #readHostRouteType(
+    ref: ResolvedCodeRef,
+  ): Promise<HostRouteTypeInfo | 'unavailable' | undefined> {
     try {
-      // Read before the definitions, so a change made while they are read
-      // moves it past this value.
-      let generation = this.#definitionLookup.definitionGeneration?.();
-      let usesOtherRealmTypes = false;
-      let rules = await this.#readRawHostRoutingRules();
-      // The definitions of the types field-match routes name, read before
-      // validating so the validation itself stays synchronous. A host page
-      // request waits on this, so only definitions already cached are read:
-      // ADR 015 §1.1 rules out rendering a module for a routing decision
-      // while a request waits. A type that isn't cached yet, or whose read
-      // fails, or whose cached render failed, is unavailable: its routes are
-      // dropped for now, and the validation isn't cached, so a later call
-      // reads again. A type that isn't cached yet is also read into the
-      // cache in the background, which the request doesn't wait on. A cached module with no such export drops the route,
-      // and that validation is cached: a module in this realm changes only
-      // with a reindex, which clears the cache, and a module in another
-      // realm is covered by the definition generation check.
-      let types = new Map<
-        string,
-        HostRouteTypeInfo | 'unavailable' | undefined
-      >();
-      for (let ref of hostRouteTypeRefs(rules)) {
-        if (!this.paths.inRealm(ref.module)) {
-          usesOtherRealmTypes = true;
-        }
-        let info: HostRouteTypeInfo | 'unavailable' | undefined;
-        try {
-          let result =
-            await this.#definitionLookup.lookupCachedDefinitionEntry(ref);
-          if (result.status === 'found') {
-            info = hostRouteTypeInfo(result.entry, (codeRef) =>
-              internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-            );
-          } else if (result.status === 'missing-export') {
-            // The module is cached and has no card type by that name: the
-            // route is dropped until the module changes.
-            info = undefined;
-          } else {
-            if (result.status === 'not-cached') {
-              this.#warmHostRouteType(ref);
-            }
-            info = 'unavailable';
-          }
-        } catch (e) {
-          this.#log.warn(
-            `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
-          );
-          info = 'unavailable';
-        }
-        types.set(typeLookupKey(ref), info);
+      let result =
+        await this.#definitionLookup.lookupCachedDefinitionEntry(ref);
+      if (result.status === 'found') {
+        return hostRouteTypeInfo(result.entry, (codeRef) =>
+          internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+        );
       }
+      if (result.status === 'missing-export') {
+        return undefined;
+      }
+    } catch (e) {
+      this.#log.warn(
+        `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
+      );
+    }
+    this.#warmHostRouteType(ref);
+    return 'unavailable';
+  }
+
+  async #readAndValidateHostRoutes(): Promise<
+    HostRoutesValidation | undefined
+  > {
+    // Taken before anything is read: an index, or a type becoming available,
+    // moves the epoch, and a validation that started before that isn't
+    // cached.
+    let epoch = this.#hostRoutesEpoch;
+    // Read before the definitions, so a change made while they are read
+    // moves it past this value.
+    let generation = this.#definitionLookup.definitionGeneration?.();
+    try {
+      let rules = await this.#readRawHostRoutingRules();
+      // The types field-match routes name, read before validating so the
+      // validation itself stays synchronous.
+      let refs = hostRouteTypeRefs(rules);
+      let types = new Map(
+        await Promise.all(
+          refs.map(
+            async (ref) =>
+              [typeLookupKey(ref), await this.#readHostRouteType(ref)] as const,
+          ),
+        ),
+      );
+      let usesOtherRealmTypes = refs.some(
+        (ref) => !this.paths.inRealm(ref.module),
+      );
       let validation = validateHostRoutes(rules, {
         realmURL: new URL(this.url),
         lookupType: (ref) => types.get(typeLookupKey(ref)),
       });
-      for (let warning of validation.warnings) {
-        this.#log.warn(
-          `${warning.dropped ? 'dropping' : 'warning for'} host routing rule for path "${warning.path}": ${warning.message}`,
-        );
+      this.#logHostRouteWarnings(validation);
+      if (epoch !== this.#hostRoutesEpoch) {
+        return validation;
       }
-      // A validation that uses another realm's types is kept only while the
-      // definition generation holds, and not at all by a lookup without one.
-      if (
-        validation.complete &&
-        (!usesOtherRealmTypes || generation !== undefined)
-      ) {
+      if (!validation.complete) {
+        // Kept until a background read makes a type available, or until the
+        // retry time, when the types that are still unavailable are read
+        // again: a failed render's error row expires, and a failed read is
+        // tried again.
         this.#cachedHostRoutes = validation;
+        this.#cachedHostRoutesRetryAt = Date.now() + HOST_ROUTES_RETRY_MS;
+        this.#cachedHostRoutesGeneration = usesOtherRealmTypes
+          ? generation
+          : undefined;
+      } else if (!usesOtherRealmTypes || generation !== undefined) {
+        // A validation that uses another realm's types is kept only while
+        // the definition generation holds, and not at all by a lookup
+        // without one.
+        this.#cachedHostRoutes = validation;
+        this.#cachedHostRoutesRetryAt = undefined;
         this.#cachedHostRoutesGeneration = usesOtherRealmTypes
           ? generation
           : undefined;
@@ -18642,11 +18716,28 @@ export class Realm {
     }
   }
 
+  // Logs the warnings of a validation, unless the last validation logged
+  // the same ones.
+  #logHostRouteWarnings(validation: HostRoutesValidation): void {
+    let logged = validation.warnings
+      .map((w) => `${w.code} ${w.path} ${w.message}`)
+      .join('\n');
+    if (logged === this.#loggedHostRouteWarnings) {
+      return;
+    }
+    this.#loggedHostRouteWarnings = logged;
+    for (let warning of validation.warnings) {
+      this.#log.warn(
+        `${warning.dropped ? 'dropping' : 'warning for'} host routing rule for path "${warning.path}": ${warning.message}`,
+      );
+    }
+  }
+
   // The fixed paths the realm routes: each top-level fixed card route and
   // redirect without `:name` segments, as `{ path, id }` (the card's served
   // URL, in this realm) or `{ path, redirectTo, statusCode }`. Built from the
   // validated routes (`getHostRoutes`), so the same checks apply; dynamic
-  // and nested routes are not in it. Cached only when the validation is.
+  // and nested routes are not in it. Cached with the validation.
   async getHostRoutingMap(): Promise<HostRoutingRule[]> {
     this.#dropStaleHostRoutes();
     if (this.#cachedHostRoutingMap) {

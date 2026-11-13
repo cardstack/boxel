@@ -620,7 +620,7 @@ module(basename(import.meta.filename), function () {
         await testRealm.indexing();
       });
 
-      test('drops the route for now and does not cache the validation', async function (assert) {
+      test('drops the route for now, and keeps the validation until a type may be available', async function (assert) {
         let first = await testRealm.getHostRoutes();
         assert.false(first.complete, 'the validation is incomplete');
         assert.deepEqual(
@@ -630,16 +630,29 @@ module(basename(import.meta.filename), function () {
             ['type-unavailable', '/broken/:slug', true],
           ],
         );
-        let second = await testRealm.getHostRoutes();
-        assert.notStrictEqual(second, first, 'the next call validates again');
-
+        assert.strictEqual(
+          await testRealm.getHostRoutes(),
+          first,
+          'the next call answers from the cache',
+        );
         let map = await testRealm.getHostRoutingMap();
         assert.deepEqual(map, [{ path: '/', id: `${realmURL.href}home` }]);
-        assert.notStrictEqual(
+        assert.strictEqual(
           await testRealm.getHostRoutingMap(),
           map,
-          'the map built from it is not cached either',
+          'the fixed routing map is cached with it',
         );
+
+        // Neither type can be read: one module doesn't exist and the other
+        // fails to render. A failed background read leaves the cache as it is.
+        await testRealm.__testOnlyHostRouteTypeWarmups();
+        assert.strictEqual(await testRealm.getHostRoutes(), first);
+
+        // Once the retry time passes, the routes and their types are read again.
+        testRealm.__testOnlyRetryHostRoutesNow();
+        let retried = await testRealm.getHostRoutes();
+        assert.notStrictEqual(retried, first, 'the routes are read again');
+        assert.false(retried.complete);
         await testRealm.__testOnlyHostRouteTypeWarmups();
       });
 
@@ -691,14 +704,16 @@ module(basename(import.meta.filename), function () {
   module('Realm.getHostRoutes with cached type definitions', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-cached-types/');
     let testRealm: Realm;
+    let dbAdapter: PgAdapter;
     let definitionLookup: CachingDefinitionLookup;
 
     setupPermissionedRealmCached(hooks, {
       realmURL,
       permissions: { '*': ['read'] },
       fileSystem: makeCachedTypesFixture(),
-      onRealmSetup({ testRealm: realm, testRealmServer }) {
+      onRealmSetup({ testRealm: realm, testRealmServer, dbAdapter: adapter }) {
         testRealm = realm;
+        dbAdapter = adapter;
         definitionLookup = serverDefinitionLookup(testRealmServer);
       },
     });
@@ -728,6 +743,73 @@ module(basename(import.meta.filename), function () {
         await testRealm.getHostRoutes(),
         first,
         'the next call answers from the cache',
+      );
+    });
+
+    test('concurrent calls share one validation', async function (assert) {
+      let [a, b] = await Promise.all([
+        testRealm.getHostRoutes(),
+        testRealm.getHostRoutes(),
+      ]);
+      assert.strictEqual(a, b);
+    });
+
+    test('a validation that an index overtakes is not cached', async function (assert) {
+      let inFlight = testRealm.getHostRoutes();
+      // What an index does when it lands while the rules are being read.
+      testRealm.clearRealmIndexCaches();
+      let overtaken = await inFlight;
+      assert.true(overtaken.complete);
+      let next = await testRealm.getHostRoutes();
+      assert.notStrictEqual(next, overtaken, 'the next call validates again');
+      assert.strictEqual(
+        await testRealm.getHostRoutes(),
+        next,
+        'and caches its own result',
+      );
+    });
+
+    test('a type whose cached render failed is rendered again in the background', async function (assert) {
+      // A failed render of the module, as the definitions cache holds it,
+      // old enough that its error row has expired.
+      let rows = (await dbAdapter.execute(
+        `UPDATE modules
+            SET error_doc = $1::jsonb, created_at = $2::bigint
+          WHERE url LIKE $3
+         RETURNING url`,
+        {
+          bind: [
+            JSON.stringify({
+              type: 'module-error',
+              error: {
+                message: 'the render failed',
+                status: 500,
+                additionalErrors: null,
+              },
+            }),
+            String(Date.now() - 10 * 60 * 1000),
+            `${realmURL.href}places%`,
+          ],
+        },
+      )) as { url: string }[];
+      assert.ok(rows.length > 0, 'the definitions cache holds the module');
+
+      let first = await testRealm.getHostRoutes();
+      assert.false(first.complete, 'the failed render is not final');
+      assert.ok(
+        first.warnings.some(
+          (w) => w.code === 'type-unavailable' && w.path === '/cities/:city',
+        ),
+        'the route is dropped for now',
+      );
+
+      await testRealm.__testOnlyHostRouteTypeWarmups();
+
+      let second = await testRealm.getHostRoutes();
+      assert.true(second.complete, 'the module rendered again');
+      assert.deepEqual(
+        second.routes.map((route) => route.fullPath),
+        ['/cities/:city'],
       );
     });
 

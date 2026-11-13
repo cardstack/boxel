@@ -61,7 +61,7 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 
-  test('validateHostRoutes: fixed routes cannot have :name segments', async function (assert) {
+  test('validateHostRoutes: a fixed route under a dynamic route is dropped', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 
@@ -78,6 +78,18 @@ module(basename(import.meta.filename), function () {
   });
 
   test('validateHostRoutes: at most 20 dynamic routes', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: a top-level fixed route keeps the path rules it had', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: a duplicate fixed route takes no part in a redirect cycle', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: a named parent link known only on the parent type is unverified', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 
