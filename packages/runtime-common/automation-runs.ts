@@ -435,6 +435,82 @@ export async function addAutomationRunCounts(
   ]);
 }
 
+// The counts a run's caps bound one call at a time: each `callApi` and each
+// `resolve` is one call against its cap.
+export type AutomationRunCallCounter = 'callApiCalls' | 'resolveCalls';
+
+// What came of counting one call against a run's cap:
+//
+// - `counted`: the call is within the cap and is counted. Make it.
+// - `over-cap`: the run has made as many of these calls as its cap allows.
+//   Refuse the call.
+// - `not-running`: the run is pending, finished or canceled, or another
+//   attempt owns it.
+// - `missing`: there is no such run.
+export type AutomationRunCallCount =
+  | { kind: 'counted'; run: AutomationRun }
+  | { kind: 'over-cap' | 'not-running'; run: AutomationRun }
+  | { kind: 'missing' };
+
+// Counts one call against a running run's cap on `counter`, for the attempt
+// that owns it. The check and the count are one statement, so two calls
+// racing for a run's last call can't both make it.
+export async function countAutomationRunCall(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+  counter: AutomationRunCallCounter,
+  cap: number,
+): Promise<AutomationRunCallCount> {
+  if (!Number.isSafeInteger(cap) || cap < 0) {
+    throw new Error(
+      `a run's ${counter} cap must be a whole number, not ${cap}`,
+    );
+  }
+  let column = COUNT_COLUMNS[counter];
+  let run = await updateOwned(
+    dbAdapter,
+    id,
+    attempt,
+    [`${column} = ${column} + 1`],
+    [`AND ${column} + 1 <=`, param(cap)],
+  );
+  if (run) {
+    return { kind: 'counted', run };
+  }
+  let current = await getAutomationRun(dbAdapter, id);
+  if (!current) {
+    return { kind: 'missing' };
+  }
+  return {
+    kind:
+      current.state === 'running' && current.attempt === attempt
+        ? 'over-cap'
+        : 'not-running',
+    run: current,
+  };
+}
+
+// The error reason of a run that a call past one of its caps ended.
+export const HIT_A_CAP_REASON = 'hit-a-cap';
+
+// Ends a run that a call past one of its caps stopped: an error with reason
+// `hit-a-cap`, whose message names the cap. Owner only, like any finish; a
+// run that already finished, or that another attempt took over, is left as
+// it is.
+export async function endAutomationRunAtCap(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+  cap: string,
+): Promise<AutomationRun | undefined> {
+  return await finishAutomationRun(dbAdapter, id, attempt, {
+    state: 'error',
+    reason: HIT_A_CAP_REASON,
+    message: `The run hit its ${cap} cap`,
+  });
+}
+
 // What came of asking to reserve credits for one of a run's AI requests:
 //
 // - `reserved`: the credits count against the run's AI spending cap.
@@ -455,11 +531,16 @@ export type AutomationRunAIReservation =
 // credits can't both get them. Each reservation is held on the row under its
 // own id (`ai_reservations`) and counts against the cap until
 // `settleAutomationRunAICredits` replaces it with what the request cost.
+//
+// With `attempt`, only that attempt may reserve: a request admitted for an
+// attempt a retry has since taken the run over from is refused as
+// `not-running`.
 export async function reserveAutomationRunAICredits(
   dbAdapter: DBAdapter,
   id: string,
   credits: number,
   cap: number,
+  { attempt }: { attempt?: number } = {},
 ): Promise<AutomationRunAIReservation> {
   assertCredits('reserve', credits);
   assertCredits('cap a run at', cap);
@@ -474,6 +555,7 @@ export async function reserveAutomationRunAICredits(
     'AS numeric)) WHERE id =',
     param(id),
     "AND state = 'running'",
+    ...(attempt !== undefined ? ['AND attempt =', param(attempt)] : []),
     'AND ai_credits_spent + ai_credits_reserved +',
     param(credits),
     '<=',
@@ -487,7 +569,10 @@ export async function reserveAutomationRunAICredits(
   if (!run) {
     return { kind: 'missing' };
   }
-  return { kind: run.state === 'running' ? 'over-cap' : 'not-running', run };
+  let owned =
+    run.state === 'running' &&
+    (attempt === undefined || run.attempt === attempt);
+  return { kind: owned ? 'over-cap' : 'not-running', run };
 }
 
 // Settles the AI request that holds `reservationId`: releases its
