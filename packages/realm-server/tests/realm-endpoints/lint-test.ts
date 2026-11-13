@@ -16,8 +16,8 @@ import {
   lintArgs,
   lintSource,
   LintThread,
+  type LintProgress,
 } from '@cardstack/runtime-common/tasks/lint';
-import type { LintThreadProgress } from '@cardstack/runtime-common/tasks/lint-thread';
 import { setupPermissionedRealmCached, createJWT } from '../helpers/index.ts';
 import {
   benchmarkOperation,
@@ -1642,11 +1642,13 @@ export class MyCard${i} extends CardDef {
   });
 
   module('lint thread', function () {
-    test('every lint waiting on a starting thread hears each engine load, and each of its own passes', async function (assert) {
-      let thread = new LintThread();
+    test('a starting thread loads every engine first, and counts as progress for each lint waiting on it', async function (assert) {
+      let thread = new LintThread(undefined, undefined, {
+        startHeartbeatMs: 50,
+      });
       try {
-        let gts: LintThreadProgress[] = [];
-        let ts: LintThreadProgress[] = [];
+        let gts: LintProgress[] = [];
+        let ts: LintProgress[] = [];
         await Promise.all([
           lintArgs(
             {
@@ -1660,60 +1662,92 @@ export class MyCard${i} extends CardDef {
             ts.push(p),
           ),
         ]);
+        let startup = thread.startup!;
         assert.deepEqual(
-          gts.map((p) => p.stage),
+          startup.stages.map((s) => s.stage),
           [
             'eslint-module',
             'call-api-plugin',
             'eslint-config',
-            'eslint-fix',
-            'prettier',
-            'eslint-settle',
+            'prettier-module',
             'template-lint-engine',
-            'template-lint',
           ],
-          'the .gts lint hears the engines it waits on load, then its passes',
+          'the thread loads every engine, in order',
         );
-        assert.deepEqual(
-          ts.map((p) => p.stage),
-          [
-            'eslint-module',
-            'call-api-plugin',
-            'eslint-config',
-            'eslint-fix',
-            'prettier',
-            'eslint-settle',
-          ],
-          'the .ts lint, waiting on the same ESLint load, hears it too',
+        assert.true(
+          startup.stages.every(
+            (s, i) =>
+              s.at >=
+                (i === 0 ? startup.startedAt : startup.stages[i - 1].at) &&
+              (i === 0 || s.cpuMs >= startup.stages[i - 1].cpuMs),
+          ),
+          `step times only move forward: ${JSON.stringify(startup)}`,
         );
-        for (let stages of [gts, ts]) {
-          assert.true(
-            stages.every(
-              (p, i) =>
-                i === 0 ||
-                (p.at >= stages[i - 1].at && p.cpuMs >= stages[i - 1].cpuMs),
-            ),
-            `stage times only move forward: ${JSON.stringify(stages)}`,
+        let lastLoadedAt = startup.stages[startup.stages.length - 1].at;
+        assert.true(
+          (startup.readyAt ?? -1) >= lastLoadedAt,
+          'the thread is ready once the last engine has loaded',
+        );
+        for (let [name, progress] of [
+          ['.gts', gts],
+          ['.ts', ts],
+        ] as const) {
+          assert.ok(
+            progress.includes('starting'),
+            `the ${name} lint hears the thread starting: ${progress}`,
           );
         }
+        assert.deepEqual(
+          gts.filter((p) => p !== 'starting'),
+          ['eslint-fix', 'prettier', 'eslint-settle', 'template-lint'],
+          'the .gts lint hears its own passes',
+        );
+        assert.deepEqual(
+          ts.filter((p) => p !== 'starting'),
+          ['eslint-fix', 'prettier', 'eslint-settle'],
+          'the .ts lint hears its own passes, and no template-lint pass',
+        );
 
-        let warm: LintThreadProgress[] = [];
+        let warm: LintProgress[] = [];
         await lintArgs(
           { source: `let y = 1\n`, filename: 'c.ts' },
           thread,
           (p) => warm.push(p),
         );
         assert.deepEqual(
-          warm.map((p) => p.stage),
+          warm,
           ['eslint-fix', 'prettier', 'eslint-settle'],
-          'a lint on a running thread hears only its own passes',
+          'a lint on a ready thread hears only its own passes',
         );
       } finally {
         await thread.terminate();
       }
     });
 
-    test('a lint-source job heartbeats its reservation as each stage completes', async function (assert) {
+    test('a thread that does not load its engines in time is stopped, and the lints waiting on it fail', async function (assert) {
+      let thread = new LintThread(undefined, undefined, { startTimeoutMs: 1 });
+      try {
+        let source = `let x = 1\n`;
+        let result = await lintArgs({ source, filename: 'a.ts' }, thread);
+        assert.false(result.passed, 'the lint fails');
+        assert.strictEqual(
+          result.output,
+          source,
+          'the source comes back unchanged',
+        );
+        assert.ok(
+          result.messages[0].message.includes(
+            'did not finish loading its engines within',
+          ),
+          `the error says why: ${result.messages[0].message}`,
+        );
+        assert.false(thread.isRunning, 'the thread is stopped');
+      } finally {
+        await thread.terminate();
+      }
+    });
+
+    test('a lint-source job heartbeats its reservation for each completed pass', async function (assert) {
       let reservationId = 987_654;
       let heartbeats = 0;
       registerJobHeartbeat(reservationId, () => heartbeats++);
@@ -1735,12 +1769,9 @@ export class MyCard${i} extends CardDef {
           },
         });
         assert.strictEqual(result.output, `let x = 1;\n`, 'the lint ran');
-        // Three passes, plus the three ESLint loading stages when this lint
-        // is the one that starts the shared thread.
-        assert.true(
-          [3, 6].includes(heartbeats),
-          `one heartbeat per completed stage (${heartbeats})`,
-        );
+        // Three passes, plus one per heartbeat interval if this lint is the
+        // one that starts the shared thread.
+        assert.true(heartbeats >= 3, `a heartbeat per pass (${heartbeats})`);
       } finally {
         unregisterJobHeartbeat(reservationId);
       }

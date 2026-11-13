@@ -46,25 +46,38 @@ function ensurePnpmNodePath() {
 // Progress
 // ---------------------------------------------------------------------------
 
-// The steps a lint reports as it completes them. Loading an engine is a step
-// of its own: on a busy host it can take far longer than linting with it, and
-// every step that completes is progress the job that is waiting can show.
-export type LintStage =
+// The steps of loading the engines, which a thread does once, when it starts.
+export type EngineStage =
   | 'eslint-module'
   | 'call-api-plugin'
   | 'eslint-config'
-  | 'template-lint-engine'
+  | 'prettier-module'
+  | 'template-lint-engine';
+
+// The passes of one lint, each reported as it completes.
+export type LintPass =
   | 'eslint-fix'
   | 'prettier'
   | 'eslint-settle'
   | 'template-lint';
 
-// An engine is loaded once per thread and shared by every lint waiting on it,
-// so its stages go to the one listener the thread installs rather than to
-// whichever lint happened to start the load.
-let reportEngineStage: (stage: LintStage) => void = () => {};
-export function onEngineStage(listener: (stage: LintStage) => void): void {
-  reportEngineStage = listener;
+let reportEngineStage: (stage: EngineStage) => void = () => {};
+
+// Loads every engine, reporting each step as it completes. A thread calls this
+// once, when it starts, so that loading is a phase of its own rather than part
+// of whichever lint happens to need an engine first.
+export async function loadEngines(
+  onStage: (stage: EngineStage) => void,
+): Promise<void> {
+  reportEngineStage = onStage;
+  try {
+    await getESLint();
+    await import(/* webpackIgnore: true */ 'prettier');
+    onStage('prettier-module');
+    await getTemplateLinter();
+  } finally {
+    reportEngineStage = () => {};
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +238,7 @@ export function isLintableFilename(filename: string): boolean {
 export async function lintOne(
   source: string,
   filename: string,
-  onStage: (stage: LintStage) => void = () => {},
+  onPass: (pass: LintPass) => void = () => {},
 ): Promise<LintResult> {
   const ext = extname(filename).toLowerCase();
   const messages: LintMessage[] = [];
@@ -236,14 +249,14 @@ export async function lintOne(
     // 1. ESLint autofix — dedup imports, inject missing card-api imports,
     //    resolve template invokables, etc.
     const fixed = await runESLint(working, filename);
-    onStage('eslint-fix');
+    onPass('eslint-fix');
     if (typeof fixed.output === 'string' && fixed.output !== working) {
       working = fixed.output;
       modified = true;
     }
     // 2. Prettier as a separate pass over the now-fixed source.
     const formatted = await runPrettier(working, filename);
-    onStage('prettier');
+    onPass('prettier');
     if (formatted !== working) {
       working = formatted;
       modified = true;
@@ -251,7 +264,7 @@ export async function lintOne(
     // 3. Settle any fixes Prettier's reflow re-triggered, and collect the
     //    residual messages against the final formatted output.
     const settled = await runESLint(working, filename);
-    onStage('eslint-settle');
+    onPass('eslint-settle');
     if (typeof settled.output === 'string' && settled.output !== working) {
       working = settled.output;
       modified = true;
@@ -275,7 +288,7 @@ export async function lintOne(
       working,
       filename,
     );
-    onStage('template-lint');
+    onPass('template-lint');
     if (typeof output === 'string' && output !== working) {
       working = output;
       modified = true;
