@@ -28,9 +28,11 @@ import {
 // sets its flow cookies on whatever host a request names. A request on any
 // other host goes on to the realm server's own routing.
 //
-// A registration, and the request that starts a flow, go through Boxel's own
-// handling first, which hands them on to the library only once Boxel allows
-// them. The interaction, error and consent routes are Boxel's alone.
+// A registration, the request that starts a flow, and the request that resumes
+// a finished one go through Boxel's own handling first, which hands them on to
+// the library only once Boxel allows them. The interaction, finish, error and
+// consent routes are Boxel's alone, though finishing hands the result to the
+// library, which answers the request.
 export function registerOAuthProviderRoutes(
   router: Router,
   {
@@ -38,6 +40,8 @@ export function registerOAuthProviderRoutes(
     handleRegistration,
     handleAuthorization,
     handleInteraction,
+    handleFinish,
+    handleResume,
     handleErrorDetails,
     handleErrorReturn,
     consentHandlers,
@@ -81,6 +85,14 @@ export function registerOAuthProviderRoutes(
   router.get(
     `${OAUTH_INTERACTION_PATH}/:uid`,
     onIssuerHost(boxelOnly(handleInteraction)),
+  );
+  router.get(
+    `${OAUTH_INTERACTION_PATH}/:uid/finish`,
+    onIssuerHost(boxelOnly(handleFinish)),
+  );
+  router.get(
+    `${OAUTH_AUTHORIZATION_PATH}/:uid`,
+    onIssuerHost((ctxt) => handleResume(ctxt, () => serve(ctxt))),
   );
   router.get(
     `${OAUTH_ERROR_PATH}/:ref`,
