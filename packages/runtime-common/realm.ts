@@ -5752,6 +5752,18 @@ export class Realm {
     return types;
   }
 
+  // What the document `content` holds at `data.meta.adoptsFrom`, as a parse
+  // reads it: undefined for text that isn't JSON or holds nothing there. Read
+  // from the parsed document, never by looking for the key in the text, since
+  // a JSON key can be spelled with escapes.
+  #adoptsFromOf(content: string): unknown {
+    try {
+      return JSON.parse(content)?.data?.meta?.adoptsFrom;
+    } catch {
+      return undefined;
+    }
+  }
+
   // The type the card `content` would be at `path` names in its `adoptsFrom`,
   // resolved against the card as the realm resolves it. Undefined for a
   // document naming no type, or one that doesn't resolve.
@@ -5759,15 +5771,7 @@ export class Realm {
     path: LocalPath,
     content: string,
   ): ResolvedCodeRef | undefined {
-    if (!content.includes('adoptsFrom')) {
-      return undefined;
-    }
-    let adoptsFrom: unknown;
-    try {
-      adoptsFrom = JSON.parse(content)?.data?.meta?.adoptsFrom;
-    } catch {
-      return undefined;
-    }
+    let adoptsFrom = this.#adoptsFromOf(content);
     if (
       !adoptsFrom ||
       typeof adoptsFrom !== 'object' ||
@@ -13445,14 +13449,13 @@ export class Realm {
   // file with a module extension where it's in this realm. A document naming
   // no type is judged by having none.
   async #runCardTypeJudged(path: LocalPath, text: string): Promise<boolean> {
-    if (!text.includes('adoptsFrom')) {
+    if (this.#adoptsFromOf(text) === undefined) {
       return true;
     }
     let codeRef = this.#adoptedCodeRef(path, text);
     if (!codeRef) {
-      // Not a card document the realm can resolve a type for; the write
-      // itself is judged as any other non-card file.
-      return true;
+      // It names something as its type, but nothing the realm can resolve.
+      return false;
     }
     try {
       let moduleURL = this.#virtualNetwork.toURL(codeRef.module);
