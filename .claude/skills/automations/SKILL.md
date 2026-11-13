@@ -552,10 +552,13 @@ And the run's reads:
   staged type carries runs, and the policy gate matches rules against that
   type), and a predicate reads the staged fields. A `read` entry answers the
   staged document as `cards.get` does, with its generation taken from the
-  realm's index row, or 0 for a card the run created. A staged `.json` that
-  isn't a card document is no card to an entry, and a `read` of it answers
-  422, as `cards.get` does. An entry that finds its targets with a query
-  searches the index, as `cards.search` does.
+  realm's index row, or 0 for a card the run created, and a `read` of a
+  staged file that isn't a card answers its metadata from the staged bytes.
+  A staged `.json` that isn't a card document is no card to an entry, and a
+  `read` of it answers 422, as `cards.get` does. A transform program reads a
+  staged card as not indexed (`#runBatchCore`'s `indexedCardValues`), so it
+  never sees the realm row's computed or linked values. An entry that finds
+  its targets with a query searches the index, as `cards.search` does.
 - **`cards.search`** runs on the index, and answers each card the attempt
   staged as staged (`Realm.#withStagedCards`): its attributes,
   relationships and type come from the staged document, and the rest of what
