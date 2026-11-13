@@ -11,7 +11,13 @@
 // The in-browser realm has no journal and no reader: it emits no events, and
 // its history operations answer `history-unavailable`.
 
+import {
+  emitChangeJournal,
+  type ChangeJournalEvent,
+} from './card-operations/telemetry.ts';
+import { stringifyErrorForLog } from './error.ts';
 import type { Querier } from './expression.ts';
+import { logger } from './log.ts';
 import {
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   sanitizeLoggingCorrelationId,
@@ -325,8 +331,194 @@ export interface ChangeEvent extends ChangeEventInput {
 // its `Querier`, so the event commits with the write's file meta or not at
 // all. It writes nothing for a realm whose recording is off, or that is
 // published, and says whether it wrote.
+//
+// A writer never calls `append` itself. It appends through `withChangeEvent`,
+// or through `appendStandaloneChangeEvent` when it has no transaction of its
+// own. Those two own the savepoint, the rollback and the
+// `boxel:change-journal` record.
 export interface ChangeJournal {
   append(querier: Querier, event: ChangeEventInput): Promise<boolean>;
+}
+
+// The savepoint a writer's change event is appended under.
+const CHANGE_JOURNAL_SAVEPOINT = 'change_journal';
+
+// What one append did: the part of its `boxel:change-journal` record that the
+// event doesn't already say.
+type AppendResult = Pick<
+  ChangeJournalEvent,
+  'outcome' | 'durationMs' | 'error'
+>;
+
+// Runs a writer's transaction with its change event appended on it, and
+// reports the append once that transaction has finished. Every writer whose
+// event commits with its own write appends this way.
+//
+// `transaction` opens the writer's transaction and calls `appendChangeEvent`
+// with the transaction's querier once on every run of its body. A transaction
+// that is retried from the start appends again, and only its last run's
+// append is reported. `appendChangeEvent` does nothing when there is no
+// journal or no event. A transaction that commits without having called it
+// loses its event, which is logged as an error.
+//
+// The append runs under a savepoint, so a journal failure doesn't fail the
+// write: the transaction rolls back to the savepoint, the rest of it still
+// commits, and reconciliation records the change unattributed. If rolling back
+// to the savepoint fails too, `appendChangeEvent` throws, and the write fails
+// with it. Carrying on would leave the transaction aborted, and Postgres
+// answers the COMMIT of an aborted transaction with ROLLBACK and no error, so
+// the write would report success with its own rows silently rolled back.
+//
+// Nothing is reported while the transaction is open. An event the journal
+// wrote is reported `written` only once `transaction` resolves, which is once
+// the event has committed. If `transaction` rejects instead, the event rolled
+// back with it and is reported `failed`, with the transaction's error.
+export async function withChangeEvent<T>(
+  journal: ChangeJournal | undefined,
+  event: ChangeEventInput | undefined,
+  transaction: (
+    appendChangeEvent: (querier: Querier) => Promise<void>,
+  ) => Promise<T>,
+): Promise<T> {
+  // Cast, so the compiler doesn't narrow it to `undefined` for good: only
+  // `appendChangeEvent` assigns it.
+  let appended = undefined as AppendResult | undefined;
+  let appendChangeEvent = async (querier: Querier): Promise<void> => {
+    if (!journal || !event) {
+      return;
+    }
+    appended = undefined;
+    let started = performance.now();
+    await querier([`SAVEPOINT ${CHANGE_JOURNAL_SAVEPOINT}`]);
+    let written: boolean;
+    try {
+      written = await journal.append(querier, event);
+    } catch (appendError: unknown) {
+      appended = {
+        outcome: 'failed',
+        durationMs: elapsedMs(started),
+        error: errorMessage(appendError),
+      };
+      await rollBackAppend(querier, event, appendError);
+      return;
+    }
+    appended = {
+      outcome: written ? 'written' : 'skipped',
+      durationMs: elapsedMs(started),
+    };
+    await querier([`RELEASE SAVEPOINT ${CHANGE_JOURNAL_SAVEPOINT}`]);
+  };
+
+  let result: T;
+  try {
+    result = await transaction(appendChangeEvent);
+  } catch (transactionError: unknown) {
+    if (event && appended) {
+      reportAppend(
+        event,
+        appended.outcome === 'written'
+          ? {
+              outcome: 'failed',
+              durationMs: appended.durationMs,
+              error: errorMessage(transactionError),
+            }
+          : appended,
+      );
+    }
+    throw transactionError;
+  }
+  if (event && appended) {
+    reportAppend(event, appended);
+  } else if (journal && event) {
+    changeJournalLog().error(
+      `${describeEvent(event)} was never appended: its writer's transaction committed without calling appendChangeEvent`,
+    );
+  }
+  return result;
+}
+
+// Appends a change event for a writer with no transaction to commit it with,
+// such as realm-historian's deploy scan. `querier` commits each statement as
+// it runs, so there is no savepoint to roll back to, and the append is
+// reported as soon as the journal answers. A failure is reported and then
+// thrown, for the writer to handle.
+export async function appendStandaloneChangeEvent(
+  querier: Querier,
+  journal: ChangeJournal,
+  event: ChangeEventInput,
+): Promise<boolean> {
+  let started = performance.now();
+  let written: boolean;
+  try {
+    written = await journal.append(querier, event);
+  } catch (error: unknown) {
+    reportAppend(event, {
+      outcome: 'failed',
+      durationMs: elapsedMs(started),
+      error: errorMessage(error),
+    });
+    throw error;
+  }
+  reportAppend(event, {
+    outcome: written ? 'written' : 'skipped',
+    durationMs: elapsedMs(started),
+  });
+  return written;
+}
+
+async function rollBackAppend(
+  querier: Querier,
+  event: ChangeEventInput,
+  appendError: unknown,
+): Promise<void> {
+  try {
+    await querier([`ROLLBACK TO SAVEPOINT ${CHANGE_JOURNAL_SAVEPOINT}`]);
+  } catch (rollbackError: unknown) {
+    changeJournalLog().error(
+      `could not append ${describeEvent(event)} to the change journal, nor roll back to the journal's savepoint, so the write fails. The append: ${stringifyErrorForLog(appendError)} The rollback: ${stringifyErrorForLog(rollbackError)}`,
+    );
+    throw rollbackError;
+  }
+  changeJournalLog().error(
+    `could not append ${describeEvent(event)} to the change journal; reconciliation will record the change unattributed: ${stringifyErrorForLog(appendError)}`,
+  );
+}
+
+function reportAppend(
+  event: ChangeEventInput,
+  { outcome, durationMs, error }: AppendResult,
+): void {
+  emitChangeJournal({
+    realm: event.realmURL,
+    outcome,
+    durationMs,
+    paths: event.changes.length,
+    partial: event.partial === true,
+    ...(error !== undefined ? { error } : {}),
+  });
+}
+
+// "the change event for 2 path(s) in <realm>", or "the scan event for <realm>"
+// for an event that names no paths.
+function describeEvent(event: ChangeEventInput): string {
+  let kind = event.intent?.kind ?? 'change';
+  return event.changes.length > 0
+    ? `the ${kind} event for ${event.changes.length} path(s) in ${event.realmURL}`
+    : `the ${kind} event for ${event.realmURL}`;
+}
+
+function elapsedMs(started: number): number {
+  return Math.round(performance.now() - started);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+let log: ReturnType<typeof logger> | undefined;
+
+function changeJournalLog(): ReturnType<typeof logger> {
+  return (log ??= logger('realm:change-journal'));
 }
 
 // A write under `path` the journal holds and the historian has not yet
