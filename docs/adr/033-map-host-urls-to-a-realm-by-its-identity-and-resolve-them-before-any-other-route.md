@@ -6,6 +6,10 @@ scope:
   - packages/realm-server/lib/realm-host-urls*.ts
   - packages/realm-server/handlers/handle-*host-url*.ts
   - packages/realm-server/handlers/handle-publish-realm.ts
+  - packages/realm-server/handlers/handle-*boxel*domain*.ts
+  - packages/realm-server/handlers/handle-delete-realm.ts
+  - packages/realm-server/middleware/*.ts
+  - packages/realm-server/server.ts
   - packages/postgres/migrations/*_add-realm-host-urls.js
   - packages/realm-server/routes.ts
   - packages/realm-server/lib/index-html-injection.ts
@@ -27,7 +31,11 @@ canonical, and who may change them.
 ### 1.1. Host URLs are server data, keyed by the realm's identity
 
 A host URL MUST be stored in `realm_host_urls` as a host and a path prefix. It
-MUST name its realm by `realm_registry.id`, never by the realm's URL. A host
+MUST name its realm by `realm_registry.id`, never by the realm's URL. A claim
+that binds a site name to a realm MUST also name the realm by its id. A host
+MUST be stored lower-cased, without a trailing dot or a default port, and a
+path prefix MUST start and end with `/`, so that it contains only whole path
+segments. A request's host and path MUST be compared in the same form. A host
 and path prefix MUST map to at most one realm. A realm MAY have any number of
 host URLs. Adding, removing or changing a host URL MUST NOT change any file in
 the realm, `realm.json` included.
@@ -49,7 +57,9 @@ process. A process that caches host URLs MUST drop a host's entries when a
 change to that host is announced. It MUST NOT keep an entry for longer than a
 fixed time without reading the table again, so a lost announcement cannot keep
 a stale entry. A removed host URL MUST answer 404, and MUST NOT redirect.
-Deleting a realm MUST delete its host URLs.
+When a removed host URL's address is also a published realm's URL, removing
+the host URL MUST also remove that published realm, so that the lookup by URL
+cannot serve it. Deleting a realm MUST delete its host URLs.
 
 ### 1.4. Exactly one host URL is canonical
 
@@ -63,10 +73,11 @@ canonical host URL, whichever host URL the request came in on.
 
 A host URL MUST NOT replace the realm's URL in anything stored about the
 realm: its registry row, its permissions, card ids, index rows, search
-documents and files (ADR 002). Prerendered HTML is the one exception, and MAY
-carry the canonical host URL. Code MUST translate between a host URL and the
-realm's URL only where a request enters the realm server or a response leaves
-it.
+documents and files (ADR 002). Prerendered HTML MUST carry the realm's URL
+too. The canonical host URL MUST be put into it when the response leaves the
+server, so that a change to the canonical host URL needs no re-render. Code
+MUST translate between a host URL and the realm's URL only where a request
+enters the realm server or a response leaves it.
 
 ### 1.6. The realm's administrators manage its host URLs
 
@@ -94,7 +105,9 @@ it knows which realm to mount.
 
 Host URLs are resolved first because, while v1 sites are migrated, an address
 can be both a published copy's registry URL and a host URL for the copy's
-source. Resolving the registry first would keep serving the copy.
+source. Resolving the registry first would keep serving the copy. For the same
+reason, removing such a host URL also removes the copy, or the lookup by URL
+would serve the copy again instead of a 404.
 
 Direct `write` already lets a user change the realm's `realm.json` and its
 policy, so a user who holds it administers the realm (ADR 024 §1.3). Giving
