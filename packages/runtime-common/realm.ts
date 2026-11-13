@@ -5737,6 +5737,28 @@ export class Realm {
     path: LocalPath,
     content: string,
   ): Promise<string[] | undefined> {
+    let codeRef = this.#adoptedCodeRef(path, content);
+    if (!codeRef) {
+      return undefined;
+    }
+    let types = [internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
+    try {
+      types.push(
+        ...(await this.#definitionLookup.lookupDefinitionEntry(codeRef)).types,
+      );
+    } catch {
+      // A type with no definition is known only by its own name.
+    }
+    return types;
+  }
+
+  // The type the card `content` would be at `path` names in its `adoptsFrom`,
+  // resolved against the card as the realm resolves it. Undefined for a
+  // document naming no type, or one that doesn't resolve.
+  #adoptedCodeRef(
+    path: LocalPath,
+    content: string,
+  ): ResolvedCodeRef | undefined {
     if (!content.includes('adoptsFrom')) {
       return undefined;
     }
@@ -5762,19 +5784,7 @@ export class Realm {
         undefined,
         this.#virtualNetwork,
       );
-      if (!isResolvedCodeRef(codeRef)) {
-        return undefined;
-      }
-      let types = [internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
-      try {
-        types.push(
-          ...(await this.#definitionLookup.lookupDefinitionEntry(codeRef))
-            .types,
-        );
-      } catch {
-        // A type with no definition is known only by its own name.
-      }
-      return types;
+      return isResolvedCodeRef(codeRef) ? codeRef : undefined;
     } catch {
       return undefined;
     }
@@ -13361,11 +13371,12 @@ export class Realm {
   }
 
   // What a run may not write at `path`, named for a person, or undefined
-  // when it may (ADR 026 §1.4): `realm.json`, any module, the card the
-  // realm's policy pointer names, and any card that is a RealmPolicy or an
-  // automation, either as the realm stores it at the path or as the run's
-  // bytes would make it. So a run can't change who reaches its realm or
-  // widen the declaration that bounds its next run.
+  // when it may (ADR 026 §1.4): `realm.json`, any module or file a module's
+  // name would resolve to, the card the realm's policy pointer names, any
+  // card that is a RealmPolicy or an automation, either as the realm stores
+  // it at the path or as the run's bytes would make it, and any card whose
+  // type the realm can't judge. So a run can't change who reaches its realm
+  // or widen the declaration that bounds its next run.
   async #runMayNotWrite(
     path: LocalPath,
     text: string | undefined,
@@ -13380,6 +13391,13 @@ export class Realm {
     // no check sees it, so a run writes no module at all.
     if (executableExtensions.some((extension) => path.endsWith(extension))) {
       return 'a module';
+    }
+    // A module's name resolves to the file at that exact path before the
+    // module it names, so a file there would be served in the module's place.
+    for (let extension of executableExtensions) {
+      if (await this.#adapter.exists(path + extension)) {
+        return 'a module';
+      }
     }
     if (!path.endsWith('.json')) {
       return undefined;
@@ -13398,6 +13416,9 @@ export class Realm {
         // A pointer that names nothing protects no path.
       }
     }
+    if (text !== undefined && !(await this.#runCardTypeJudged(path, text))) {
+      return 'a card whose type the realm has no definition for';
+    }
     let stored = (await this.readFileAsText(path))?.content;
     for (let content of [text, stored]) {
       if (content === undefined) {
@@ -13412,6 +13433,43 @@ export class Realm {
       }
     }
     return undefined;
+  }
+
+  // Whether the type a run's card names is one the index has judged, so the
+  // checks above see the chain it really has. A type with no definition would
+  // be known by its own name alone, though its module may still load: the
+  // module route serves a path that isn't a module as its stored bytes, and
+  // the loader evaluates whatever source it's served, so a run that staged
+  // plain source at such a path could name a class from it that no check
+  // sees. So a run's card names a type the definition lookup resolves, from a
+  // file with a module extension where it's in this realm. A document naming
+  // no type is judged by having none.
+  async #runCardTypeJudged(path: LocalPath, text: string): Promise<boolean> {
+    if (!text.includes('adoptsFrom')) {
+      return true;
+    }
+    let codeRef = this.#adoptedCodeRef(path, text);
+    if (!codeRef) {
+      // Not a card document the realm can resolve a type for; the write
+      // itself is judged as any other non-card file.
+      return true;
+    }
+    try {
+      let moduleURL = this.#virtualNetwork.toURL(codeRef.module);
+      if (this.paths.inRealm(moduleURL)) {
+        let file = await this.getFileWithFallbacks(
+          this.paths.local(moduleURL),
+          executableExtensions,
+        );
+        if (!file || !hasExecutableExtension(file.path)) {
+          return false;
+        }
+      }
+      await this.#definitionLookup.lookupDefinitionEntry(codeRef);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // A file the run staged, served as the source route serves the realm's
