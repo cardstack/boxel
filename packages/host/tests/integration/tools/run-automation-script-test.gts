@@ -303,6 +303,30 @@ module('Integration | tools | run-automation-script', function (hooks) {
     );
   });
 
+  test('rewriting one file many times holds only its first and latest versions', async function (assert) {
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let io = tool.automationRealmIO(testRealmURL);
+    // Each write holds 450,000 characters; 60 of them, if each counted, would
+    // pass the limit three times over.
+    let { done } = run(
+      `
+        let size = 450000;
+        for (let i = 0; i < 60; i++) {
+          await realm.fs.writeText('big.txt', String(i % 10).repeat(size));
+        }
+        return (await realm.fs.readText('big.txt')).length;
+      `,
+      {
+        io: {
+          ...io,
+          readSource: async () => ({ status: 404, content: '', binary: false }),
+          writeFile: async (_url: string, content: string) => content,
+        },
+      },
+    );
+    assert.strictEqual(JSON.parse((await done).scriptResult), 450_000);
+  });
+
   test("a script's searches go to its own realm's search", async function (assert) {
     let { done } = run(`
       const cards = await realm.cards.search({
