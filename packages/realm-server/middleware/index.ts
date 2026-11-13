@@ -77,7 +77,7 @@ const SEARCH_METHODS = new Set(['POST', 'QUERY']);
 // What a shed search tells the client to do. One second is the granularity
 // `Retry-After` allows and is long enough for the burst that filled the gate
 // to drain a slot or two.
-const SEARCH_SHED_RETRY_AFTER_SECONDS = 1;
+export const SEARCH_SHED_RETRY_AFTER_SECONDS = 1;
 
 const REQUEST_BODY_STATE = 'requestBody';
 

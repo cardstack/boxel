@@ -9,7 +9,16 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached } from '../helpers/index.ts';
-import { visitorHostRouteLookups } from '../../lib/host-route-lookups.ts';
+import {
+  HostRouteLookupError,
+  visitorHostRouteLookups,
+} from '../../lib/host-route-lookups.ts';
+import {
+  admitSearch,
+  getSearchInFlight,
+  resetSearchAdmissionForTests,
+  setSearchAdmissionForTests,
+} from '../../search-inflight.ts';
 
 const realmURL = new URL('http://127.0.0.1:4444/dynamic-routes/');
 const realmPath = realmURL.pathname;
@@ -74,6 +83,17 @@ function makeSiteFixture(): Record<string, string | LooseSingleCardDocument> {
       slug: 'unpublished',
       status: 'draft',
       label: 'Draft',
+    }),
+    // Slugs a URL path carries percent-encoded.
+    'Post/cafe.json': card('Post', {
+      slug: 'café',
+      status: 'published',
+      label: 'Cafe Post',
+    }),
+    'Post/spaced.json': card('Post', {
+      slug: 'hello world',
+      status: 'published',
+      label: 'Spaced Post',
     }),
     'Page/about.json': card('Page', { slug: 'about', label: 'About' }),
     'Category/shoes.json': card('Category', { slug: 'shoes', label: 'Shoes' }),
@@ -374,6 +394,49 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
 
+    test('a slug that needs percent-encoding is served, and its rule has the path the host compares', async function (assert) {
+      // The host's `/*path` catch-all receives the browser's
+      // `location.pathname` unchanged: route-recognizer does not decode a
+      // star segment. So the rule's path is the request path as it arrived,
+      // percent-encoded.
+      for (let [path, label, cardPath] of [
+        ['posts/caf%C3%A9', 'Cafe Post', 'Post/cafe'],
+        ['posts/hello%20world', 'Spaced Post', 'Post/spaced'],
+      ]) {
+        let response = await page(path);
+        assert.strictEqual(response.status, 200, `${path} is served`);
+        assert.true(response.text.includes(`Served ${label}`));
+        let match = response.text.match(
+          /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)"/,
+        );
+        let map = JSON.parse(decodeURIComponent(match![1])).hostRoutingMap;
+        assert.deepEqual(
+          map.at(-1),
+          { path: `${realmPath}${path}`, id: `${realmURL.href}${cardPath}` },
+          `${path} has a serve rule`,
+        );
+      }
+    });
+
+    test('a route search takes a slot under the search ceiling, and a shed answers 429', async function (assert) {
+      setSearchAdmissionForTests({ limit: 1, waitMs: 10 });
+      let held = await admitSearch();
+      try {
+        assert.ok(held, 'the test holds the only slot');
+        let shed = await page('posts/hello');
+        assert.strictEqual(shed.status, 429, 'the shed search answers 429');
+        assert.strictEqual(shed.headers['retry-after'], '1');
+        held!();
+        held = null;
+        let served = await page('posts/hello');
+        assert.strictEqual(served.status, 200, 'with a slot free, it serves');
+        assert.strictEqual(getSearchInFlight(), 0, 'the slot is handed back');
+      } finally {
+        held?.();
+        resetSearchAdmissionForTests();
+      }
+    });
+
     test('a failed lookup answers 503, and a rate-limited one 429', async function (assert) {
       let handle = testRealm.handle;
       let status = 500;
@@ -434,7 +497,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       },
     });
 
-    test('a card the visitor cannot read is a miss, not an error', async function (assert) {
+    test('a card the visitor cannot read is a miss, and a search the realm refuses is an error', async function (assert) {
       let { load, search } = visitorHostRouteLookups({
         realm: testRealm,
         visitorHeaders: {},
@@ -447,8 +510,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         undefined,
         'the load resolves to no card',
       );
-      assert.deepEqual(
-        await search({
+      await assert.rejects(
+        search({
           type: CARD_DEF,
           filter: {
             on: CARD_DEF,
@@ -456,8 +519,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           },
           linkFields: [],
         }),
-        [],
-        'the search resolves to no cards',
+        (error: unknown) =>
+          error instanceof HostRouteLookupError && error.status === 503,
+        'the refused search rejects with a 503 error',
       );
     });
   });

@@ -900,7 +900,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       });
       if (dynamicServeRule) {
         // Already host-scoped: the request's own path, with the mount
-        // pathname, in the form the resolver answered it.
+        // pathname, percent-encoded as it arrived. That is the form the
+        // host's `/*path` catch-all receives, since route-recognizer does
+        // not decode a star segment.
         hostScopedMap.push(dynamicServeRule);
       }
       // Per-request merge into the already-rewritten config meta tag.

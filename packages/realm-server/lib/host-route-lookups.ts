@@ -11,10 +11,12 @@ import {
   isEntryCollectionDocument,
   searchEntryWireQueryFromQuery,
 } from '@cardstack/runtime-common';
+import { SEARCH_SHED_RETRY_AFTER_SECONDS } from '../middleware/index.ts';
+import { admitSearch, beginSearchRequest } from '../search-inflight.ts';
 
 // A host route lookup the realm refused or failed to answer. `status` is the
-// status the page answers with: 429 when the realm rate-limited the visitor,
-// 503 for anything else. `retryAfter` is the realm's `Retry-After`, when it
+// status the page answers with: 429 when the realm rate-limited the visitor or
+// the server's search ceiling shed the search, 503 for anything else. `retryAfter` is the realm's `Retry-After`, when it
 // sent one.
 export class HostRouteLookupError extends Error {
   status: 429 | 503;
@@ -32,10 +34,16 @@ export class HostRouteLookupError extends Error {
 // request would be: no credentials of its own, and the visitor's address
 // headers, so the realm admits, limits and refuses it exactly as it would the
 // visitor's own card request or search. Visitors on host URLs are anonymous.
+// The request goes to the realm in-process, past the server's middleware, so
+// the search takes its slot under the server's in-flight search ceiling here,
+// as an HTTP search does in the admission middleware.
 //
-// A card or search the visitor may not read (401, 403) and a card that isn't
-// there (404) are misses. A rate limit (429) and every other failure reject,
-// so the page answers 429 or 503 rather than a not-found page.
+// A card the visitor may not read (401, 403) and a card that isn't there (404)
+// are misses: the resolver goes on to the next route. A search the realm
+// refuses (401, 403) is not a card the visitor can't read but a visitor the
+// realm turns away, so it is an error, as is every other failure. A rate limit
+// or a search the ceiling sheds answers 429, and any other error 503, rather
+// than a not-found page.
 //
 // Card ids and links come back as the realm writes them, which can be a
 // prefix-form identifier or a relative link; each is turned into the served
@@ -85,21 +93,35 @@ export function visitorHostRouteLookups({
     let searchURL = `${realm.url}_search`;
     let request = headers(SupportedMimeType.CardJson);
     request.set('Content-Type', 'application/json');
-    let response = await handle(
-      realm,
-      new Request(searchURL, {
-        method: 'QUERY',
-        headers: request,
-        body: JSON.stringify({
-          ...searchEntryWireQueryFromQuery({ filter }, { fields: ['item'] }),
-          realms: [realm.url],
-        }),
-      }),
-    );
-    if (isMiss(response.status)) {
-      return [];
+    let release = await admitSearch();
+    if (!release) {
+      throw new HostRouteLookupError(
+        `the server's search ceiling shed a host route search in ${realm.url}`,
+        429,
+        String(SEARCH_SHED_RETRY_AFTER_SECONDS),
+      );
     }
-    let doc = await readJSON(response, searchURL);
+    let searchRequest = beginSearchRequest();
+    searchRequest.attribute([realm.url]);
+    let doc: unknown;
+    try {
+      let response = await handle(
+        realm,
+        new Request(searchURL, {
+          method: 'QUERY',
+          headers: request,
+          body: JSON.stringify({
+            ...searchEntryWireQueryFromQuery({ filter }, { fields: ['item'] }),
+            realms: [realm.url],
+          }),
+        }),
+        { missesAllowed: false },
+      );
+      doc = await readJSON(response, searchURL);
+    } finally {
+      release();
+      searchRequest.end();
+    }
     if (!isEntryCollectionDocument(doc)) {
       throw new HostRouteLookupError(
         `the host route search in ${realm.url} returned an unexpected document`,
@@ -148,7 +170,11 @@ function isMiss(status: number): boolean {
   return status === 401 || status === 403 || status === 404;
 }
 
-async function handle(realm: Realm, request: Request): Promise<Response> {
+async function handle(
+  realm: Realm,
+  request: Request,
+  { missesAllowed = true }: { missesAllowed?: boolean } = {},
+): Promise<Response> {
   let response = await realm.handle(request);
   if (!response) {
     throw new HostRouteLookupError(
@@ -163,7 +189,7 @@ async function handle(realm: Realm, request: Request): Promise<Response> {
       response.headers.get('Retry-After') ?? undefined,
     );
   }
-  if (!isMiss(response.status) && !response.ok) {
+  if (!response.ok && !(missesAllowed && isMiss(response.status))) {
     throw new HostRouteLookupError(
       `a host route lookup of ${request.url} answered ${response.status}`,
       503,
