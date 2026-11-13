@@ -58,6 +58,32 @@ export class Person extends CardDef {
   @field name = contains(StringField);
   @field nicknames = containsMany(StringField);
 }`,
+      // A notice's `close` is an operation its type declares, so it resolves
+      // only on a card whose type is Notice.
+      'notice.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+import { operation, bxl } from 'https://cardstack.com/base/operations';
+export class Notice extends CardDef {
+  @field body = contains(StringField);
+  @field status = contains(StringField);
+  @field headline = contains(StringField, {
+    computeVia: function (this: Notice) {
+      return 'Notice: ' + (this.body ?? '');
+    },
+  });
+  @operation static close = { base: 'transform', set: { status: 'closed' } };
+  @operation static stampHeadline = {
+    base: 'transform',
+    transformations: bxl\`.status = .headline;\`,
+  };
+}`,
+      'notices/drill.json': {
+        data: {
+          type: 'card',
+          attributes: { body: 'Drill at noon', status: 'open' },
+          meta: { adoptsFrom: { module: rri('../notice'), name: 'Notice' } },
+        },
+      },
       'people/ada.json': {
         data: {
           type: 'card',
@@ -676,6 +702,52 @@ export class Mine extends Automation {}`;
     );
   });
 
+  test('a run’s read entry of a file it staged answers the staged file’s metadata', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let created = await writeText(token, 'notes/new.txt', 'brand new');
+    assert.strictEqual(created.status, 204, created.text);
+    let updated = await writeText(token, 'notes.txt', 'rewritten by the run');
+    assert.strictEqual(updated.status, 204, updated.text);
+
+    let read = (href: string) => ({ op: 'invoke', 'boxel:name': 'read', href });
+    let answer = await operations(token, [
+      read('./notes/new.txt'),
+      read('./notes.txt'),
+    ]);
+    assert.strictEqual(answer.status, 200, answer.text);
+    let [fresh, rewritten] = answer.json['atomic:results'];
+    assert.strictEqual(fresh.data.type, 'file-meta');
+    assert.strictEqual(
+      fresh.data.attributes.contentSize,
+      'brand new'.length,
+      'a file the run created is read',
+    );
+    assert.strictEqual(
+      rewritten.data.attributes.contentSize,
+      'rewritten by the run'.length,
+      'a file the run rewrote is read as the run staged it',
+    );
+
+    let outside = await operations(session(), [read('./notes.txt')]);
+    assert.strictEqual(outside.status, 200, outside.text);
+    assert.notStrictEqual(
+      outside.json['atomic:results'][0].data.attributes.contentSize,
+      'rewritten by the run'.length,
+      'an ordinary reader’s read entry doesn’t see the run’s file',
+    );
+  });
+
+  test('a run’s read entry of a staged file that isn’t a card document is refused, not answered from the realm', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let write = await writeText(token, 'people/ada.json', 'not a document');
+    assert.strictEqual(write.status, 204, write.text);
+    let answer = await operations(token, [
+      { op: 'invoke', 'boxel:name': 'read', href: './people/ada' },
+    ]);
+    assert.strictEqual(answer.status, 422, answer.text);
+    assert.strictEqual(answer.json.errors?.[0]?.code, 'target-errored');
+  });
+
   test('racing writes can’t stage a path both as a file and as a directory', async function (assert) {
     let { token, run } = await createAutomationRunToken(
       dbAdapter,
@@ -734,6 +806,141 @@ export class Mine extends Automation {}`;
       'the search runs on the index, which never sees a staged card',
     );
     assert.strictEqual((await readCard(session(), 'people/grace')).status, 404);
+  });
+
+  function notice(op: 'add' | 'update', href: string, body: string) {
+    return {
+      op,
+      href,
+      data: {
+        type: 'source',
+        attributes: {
+          content: JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { body, status: 'open' },
+              meta: { adoptsFrom: { module: '../notice', name: 'Notice' } },
+            },
+          }),
+        },
+        meta: {},
+      },
+    };
+  }
+
+  function close(href: string) {
+    return { op: 'invoke', 'boxel:name': 'close', href };
+  }
+
+  test('a run’s declared operation on a card it created resolves against the staged card’s type', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let add = await atomic(token, [
+      notice('add', './notices/fire-drill.json', 'Fire drill at noon'),
+    ]);
+    assert.strictEqual(add.status, 201, add.text);
+
+    let closed = await operations(token, [close('./notices/fire-drill')]);
+    assert.strictEqual(closed.status, 200, closed.text);
+    let staged = await readCard(token, 'notices/fire-drill');
+    assert.strictEqual(staged.status, 200, staged.text);
+    assert.strictEqual(staged.data.attributes.status, 'closed');
+    assert.deepEqual(
+      (await overlayRows(run.id)).map((row) => row.path),
+      ['notices/fire-drill.json'],
+      'the operation’s result is staged over the card the run created',
+    );
+    assert.strictEqual(
+      (await readCard(session(), 'notices/fire-drill')).status,
+      404,
+      'an ordinary reader sees no such card',
+    );
+  });
+
+  test('a run’s declared operation on a card it re-typed resolves against the staged type', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let retype = await atomic(token, [
+      notice('update', './people/ada.json', 'Ada, as a notice'),
+    ]);
+    assert.strictEqual(retype.status, 201, retype.text);
+
+    let closed = await operations(token, [close('./people/ada')]);
+    assert.strictEqual(closed.status, 200, closed.text);
+    let staged = await readCard(token, 'people/ada');
+    assert.strictEqual(staged.data.attributes.status, 'closed');
+
+    let realmSide = await operations(session(), [close('./people/ada')]);
+    assert.strictEqual(
+      realmSide.status,
+      404,
+      'outside the run the card is a Person, which declares no close',
+    );
+    assert.strictEqual(realmSide.json.errors?.[0]?.code, 'unknown-operation');
+    assert.strictEqual(
+      (await readCard(session(), 'people/ada')).data.attributes.name,
+      'Ada',
+    );
+  });
+
+  test('a run’s transform reads a card it staged as not indexed, never the realm row’s computed values', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let update = await atomic(token, [
+      notice('update', './notices/drill.json', 'Drill moved to two'),
+    ]);
+    assert.strictEqual(update.status, 201, update.text);
+
+    let stamped = await operations(token, [
+      { op: 'invoke', 'boxel:name': 'stampHeadline', href: './notices/drill' },
+    ]);
+    assert.strictEqual(
+      stamped.status,
+      400,
+      `the computed headline of the staged notice isn't indexed, so the program can't read it: ${stamped.text}`,
+    );
+    assert.strictEqual(
+      (await readCard(token, 'notices/drill')).data.attributes.status,
+      'open',
+      'the staged notice is left as the run staged it',
+    );
+  });
+
+  test('a run’s read entry answers the card as the run staged it', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let update = await atomic(token, [
+      updateAda('Ada Lovelace'),
+      notice('add', './notices/fire-drill.json', 'Fire drill at noon'),
+    ]);
+    assert.strictEqual(update.status, 201, update.text);
+
+    let read = (href: string) => ({ op: 'invoke', 'boxel:name': 'read', href });
+    let answer = await operations(token, [
+      read('./people/ada'),
+      read('./notices/fire-drill'),
+    ]);
+    assert.strictEqual(answer.status, 200, answer.text);
+    let [ada, drill] = answer.json['atomic:results'];
+    assert.strictEqual(ada.data.attributes.name, 'Ada Lovelace');
+    assert.strictEqual(ada.data.id, `${realmURL.href}people/ada`);
+    assert.strictEqual(
+      drill.data.attributes.body,
+      'Fire drill at noon',
+      'a card the run created is read too',
+    );
+    assert.strictEqual(
+      drill.data.meta.adoptsFrom.module,
+      `${realmURL.href}notice`,
+    );
+
+    let outside = await operations(session(), [read('./people/ada')]);
+    assert.strictEqual(outside.status, 200, outside.text);
+    assert.strictEqual(
+      outside.json['atomic:results'][0].data.attributes.name,
+      'Ada',
+      'an ordinary reader’s read entry sees the indexed card',
+    );
   });
 
   test('a run’s atomic write stages every file or none', async function (assert) {
