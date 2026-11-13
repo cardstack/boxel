@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import {
   appendFile,
+  chmod,
   mkdir,
   mkdtemp,
   readdir,
@@ -21,7 +22,7 @@ import {
 import { Recorder } from '../src/recorder.ts';
 import { Semaphore } from '../src/semaphore.ts';
 import { DEFAULT_GROUPING_LIMITS } from '../src/grouper.ts';
-import { GitTimeoutError } from '../src/git-process.ts';
+import { GitCommandError, GitTimeoutError } from '../src/git-process.ts';
 import { ObjectStore } from '../src/git-objects.ts';
 import {
   GitRealmHistoryReader,
@@ -1067,6 +1068,7 @@ module('reader: git processes', (hooks) => {
   let historyRoot: string;
   let control: string;
   let realmId: string;
+  let first: string;
   let previousControl: string | undefined;
 
   hooks.beforeEach(async () => {
@@ -1090,6 +1092,7 @@ module('reader: git processes', (hooks) => {
       message: 'Add card.json\n',
     });
     await updateMain(gitDir, commit, undefined);
+    first = commit;
     previousControl = process.env.READER_TEST_CONTROL;
     process.env.READER_TEST_CONTROL = control;
   });
@@ -1166,6 +1169,33 @@ module('reader: git processes', (hooks) => {
       () => process.kill(pid, 0),
       /ESRCH/,
       'the git process is gone',
+    );
+  });
+
+  test('a git failure while resolving a revision is an error, not revision-not-found', async (assert) => {
+    let gitDir = repoPath(historyRoot, realmId);
+    let store = new ObjectStore(gitDir);
+    let tree = (await git(gitDir, 'rev-parse', `${first}^{tree}`)).trim();
+    let { id: second } = await store.writeCommit({
+      tree,
+      parents: [first],
+      author: authorIdentity(ALICE, new Date(T0 + 1000)),
+      committer: committerIdentity(new Date(T0 + 1000)),
+      message: 'Update card.json\n',
+    });
+    await updateMain(gitDir, second, first);
+    let object = store.pathOf(first);
+    await chmod(object, 0o644);
+    await writeFile(object, 'not a git object');
+
+    let reader = new GitRealmHistoryReader({ historyRoot });
+    await assert.rejects(
+      reader.readAtRevision(realmId, first, 'card.json'),
+      GitCommandError,
+    );
+    await assert.rejects(
+      reader.readHistory(realmId, { before: first }),
+      GitCommandError,
     );
   });
 });

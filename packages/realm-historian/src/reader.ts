@@ -440,7 +440,9 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
 
   // The full id of `revision` when it names a revision on `main`. A commit
   // that isn't on `main`, such as one written before its ref update failed,
-  // isn't in the realm's history.
+  // isn't in the realm's history. `rev-parse --verify --quiet` exits 1 for
+  // anything that names no commit, an ambiguous abbreviation included; any
+  // other failure, such as a corrupt object, is an error.
   async #resolveOnMain(
     gitDir: string,
     main: string,
@@ -452,7 +454,7 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     let resolved = await this.#git.run(
       gitDir,
       ['rev-parse', '--verify', '--quiet', `${revision}^{commit}`],
-      { okExitCodes: [1, 128] },
+      { okExitCodes: [1] },
     );
     if (resolved.exitCode !== 0) {
       return undefined;
