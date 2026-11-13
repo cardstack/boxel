@@ -13594,6 +13594,10 @@ export class Realm {
         })),
         {
           actor: actsAs,
+          // The files the batch creates are recorded as this run's
+          // automation's, which is what the automation's payer is charged
+          // storage for.
+          automationRun: { runId, automationId: call.automationId },
           waitForIndex: false,
           broadcastRealmEvents: true,
           precondition,
