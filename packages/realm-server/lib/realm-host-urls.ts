@@ -71,13 +71,27 @@ export function hostURLDomainFilter(
     .filter((domain): domain is string => Boolean(domain))
     .map((domain) => `.${domain.toLowerCase()}`);
   let exact = new Set(
-    (domains.customDomains ?? []).map((domain) => domain.toLowerCase()),
+    (domains.customDomains ?? [])
+      .map(customDomainHost)
+      .filter((host): host is string => host !== undefined),
   );
   if (parents.length === 0 && exact.size === 0) {
     return undefined;
   }
   return (host) =>
     exact.has(host) || parents.some((parent) => host.endsWith(parent));
+}
+
+// A custom domain may be configured as a bare host (`example.test`) or as a
+// URL (`https://example.test/`), as publishing accepts both. Either way it is
+// compared as the host a request names. Undefined when it can't be parsed.
+function customDomainHost(domain: string): string | undefined {
+  try {
+    let url = new URL(domain.includes('://') ? domain : `https://${domain}`);
+    return url.host.toLowerCase();
+  } catch {
+    return undefined;
+  }
 }
 
 // The key a host is cached and stored under: its lowercased host, with the

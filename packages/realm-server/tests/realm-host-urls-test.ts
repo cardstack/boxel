@@ -56,6 +56,14 @@ module(basename(import.meta.filename), function () {
       assert.false(mayHave('app.boxel.ai'));
     });
 
+    test('admits a custom domain configured as a URL by its host', function (assert) {
+      let mayHave = hostURLDomainFilter({
+        customDomains: ['https://Choreo.Example.TEST/', 'not a domain://'],
+      })!;
+      assert.true(mayHave('choreo.example.test'));
+      assert.false(mayHave('https://choreo.example.test/'));
+    });
+
     test('keeps a port as part of the domain', function (assert) {
       let mayHave = hostURLDomainFilter({ boxelSpace: 'localhost:4201' })!;
       assert.true(mayHave('someone.localhost:4201'));
