@@ -9,14 +9,12 @@
 // and a realm path holding `*` or `?` matches only itself.
 
 import { spawn } from 'node:child_process';
+import { GIT_MAX_BUFFER_BYTES } from './repo-format.ts';
 import { Semaphore } from './semaphore.ts';
 
 export const DEFAULT_MAX_GIT_PROCESSES = 8;
 export const DEFAULT_GIT_TIMEOUT_MS = 30_000;
 
-// The most standard output a command may return whole: above a file's
-// largest allowed size (50 MB for video), so a blob read whole always fits.
-const MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
 const MAX_STDERR_BYTES = 64 * 1024;
 
 export class GitTimeoutError extends Error {
@@ -96,9 +94,9 @@ export class GitProcesses {
     let length = 0;
     let exitCode = await this.#spawn(gitDir, args, options, (chunk) => {
       length += chunk.byteLength;
-      if (length > MAX_OUTPUT_BYTES) {
+      if (length > GIT_MAX_BUFFER_BYTES) {
         throw new Error(
-          `git ${args.join(' ')} wrote more than ${MAX_OUTPUT_BYTES} bytes`,
+          `git ${args.join(' ')} wrote more than ${GIT_MAX_BUFFER_BYTES} bytes`,
         );
       }
       chunks.push(chunk);

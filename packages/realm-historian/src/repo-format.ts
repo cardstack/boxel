@@ -24,7 +24,7 @@ export function repoPath(historyRoot: string, realmId: string): string {
 
 // The largest output a git command may return: above a file's largest
 // allowed size (50 MB for video), so a blob read whole always fits.
-const GIT_MAX_BUFFER_BYTES = 256 * 1024 * 1024;
+export const GIT_MAX_BUFFER_BYTES = 256 * 1024 * 1024;
 
 // Runs a git command against the repo and returns its standard output as
 // bytes, so blob content and NUL-separated listings come back unaltered.
