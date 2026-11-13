@@ -679,6 +679,32 @@ export class IndexQueryEngine {
     return rows.length > 0 ? Number(rows[0].generation) : undefined;
   }
 
+  // The dependencies the instance's HTML renders read
+  // (`prerendered_html.deps`). They can name modules its index visit never
+  // loaded, such as a rendered link the search doc doesn't follow, which
+  // `getInstance`'s `deps` (the index visit's) leave out. Empty when the
+  // instance has no HTML row yet.
+  async getInstanceRenderDeps(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<string[]> {
+    let rows = (await this.#query([
+      'SELECT ph.deps AS deps',
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+      'WHERE',
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+      ]),
+      'LIMIT 1',
+    ] as Expression)) as unknown as { deps: string[] | null }[];
+    return rows[0]?.deps ?? [];
+  }
+
   // An instance's row from `boxel_index` alone, with no `prerendered_html`
   // join: what its index visit read and recorded, and whether that visit
   // failed. A render error is not reflected, so a card whose rendering failed

@@ -34,6 +34,7 @@
       "Integration | a realm that checks permissions"
     ],
     "realmServer": [
+      "anonymous-home-page-test",
       "anonymous-key-use-test",
       "automation-card-test",
       "automation-run-limits-test",
