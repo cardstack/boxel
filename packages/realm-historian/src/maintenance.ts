@@ -334,11 +334,7 @@ export async function maintainRepo(
     log.warn(
       `removing ${join(gitDir, 'objects', 'pack', name)}, left by a git that didn't finish`,
     );
-    await unlink(join(gitDir, 'objects', 'pack', name)).catch((error) => {
-      if (error?.code !== 'ENOENT') {
-        throw error;
-      }
-    });
+    await ifPresent(unlink(join(gitDir, 'objects', 'pack', name)), undefined);
   }
 
   step = performance.now();
@@ -369,11 +365,7 @@ export async function maintainRepo(
   if (after.looseObjects > 0) {
     await writeFile(pruneAfter, `${Date.now() + pruneExpiryMs}\n`);
   } else {
-    await unlink(pruneAfter).catch((error) => {
-      if (error?.code !== 'ENOENT') {
-        throw error;
-      }
-    });
+    await ifPresent(unlink(pruneAfter), undefined);
   }
 
   step = performance.now();
@@ -435,14 +427,12 @@ export async function needsMaintenance(gitDir: string): Promise<boolean> {
 export async function pruneRerunAt(
   gitDir: string,
 ): Promise<number | undefined> {
-  let text: string;
-  try {
-    text = await readFile(join(gitDir, PRUNE_AFTER_FILE), 'utf8');
-  } catch (error: any) {
-    if (error?.code === 'ENOENT') {
-      return undefined;
-    }
-    throw error;
+  let text = await ifPresent(
+    readFile(join(gitDir, PRUNE_AFTER_FILE), 'utf8'),
+    undefined,
+  );
+  if (text === undefined) {
+    return undefined;
   }
   let at = Number(text.trim());
   return Number.isFinite(at) ? at : 0;
@@ -451,7 +441,7 @@ export async function pruneRerunAt(
 // Whether the last complete pass saw the repo's current HEAD: true for a
 // repo with no revision, or no repo at all, which have nothing to maintain.
 export async function isMaintained(gitDir: string): Promise<boolean> {
-  if (!(await exists(gitDir))) {
+  if ((await ifPresent(stat(gitDir), undefined)) === undefined) {
     return true;
   }
   let head = await readMain(gitDir);
@@ -462,15 +452,10 @@ export async function isMaintained(gitDir: string): Promise<boolean> {
 export async function maintainedHead(
   gitDir: string,
 ): Promise<string | undefined> {
-  let refs: string;
-  try {
-    refs = await readFile(join(gitDir, 'info', 'refs'), 'utf8');
-  } catch (error: any) {
-    if (error?.code === 'ENOENT') {
-      return undefined;
-    }
-    throw error;
-  }
+  let refs = await ifPresent(
+    readFile(join(gitDir, 'info', 'refs'), 'utf8'),
+    '',
+  );
   for (let line of refs.split('\n')) {
     let [id, ref] = line.split('\t');
     if (ref === MAIN_REF) {
@@ -509,64 +494,43 @@ function expiryDate(expiryMs: number): string {
 }
 
 async function removeStaleLock(path: string): Promise<void> {
-  let modified: number;
-  try {
-    modified = (await stat(path)).mtimeMs;
-  } catch (error: any) {
-    if (error?.code === 'ENOENT') {
-      return;
-    }
-    throw error;
-  }
-  if (Date.now() - modified < STALE_AFTER_MS) {
+  let modified = (await ifPresent(stat(path), undefined))?.mtimeMs;
+  if (modified === undefined || Date.now() - modified < STALE_AFTER_MS) {
     return;
   }
   log.warn(
     `removing ${path}, left ${Math.round((Date.now() - modified) / 60_000)} minutes ago by a git that didn't finish`,
   );
-  await unlink(path).catch((error) => {
-    if (error?.code !== 'ENOENT') {
-      throw error;
-    }
-  });
+  await ifPresent(unlink(path), undefined);
 }
 
 // The files in `objects/pack` with git's temporary pack name that are older
 // than `STALE_AFTER_MS`.
 async function staleTemporaryPackFiles(gitDir: string): Promise<string[]> {
   let directory = join(gitDir, 'objects', 'pack');
-  let names: string[];
-  try {
-    names = await readdir(directory);
-  } catch (error: any) {
-    if (error?.code === 'ENOENT') {
-      return [];
-    }
-    throw error;
-  }
+  let names = await ifPresent(readdir(directory), [] as string[]);
   let stale: string[] = [];
   for (let name of names.filter((name) => name.startsWith('.tmp-'))) {
-    try {
-      let { mtimeMs } = await stat(join(directory, name));
-      if (Date.now() - mtimeMs >= STALE_AFTER_MS) {
-        stale.push(name);
-      }
-    } catch (error: any) {
-      if (error?.code !== 'ENOENT') {
-        throw error;
-      }
+    let modified = (await ifPresent(stat(join(directory, name)), undefined))
+      ?.mtimeMs;
+    if (modified !== undefined && Date.now() - modified >= STALE_AFTER_MS) {
+      stale.push(name);
     }
   }
   return stale;
 }
 
-async function exists(path: string): Promise<boolean> {
+// What `operation` resolves to, or `missing` when the file or directory it
+// reads or removes isn't there. Any other failure is thrown.
+async function ifPresent<T, M>(
+  operation: Promise<T>,
+  missing: M,
+): Promise<T | M> {
   try {
-    await stat(path);
-    return true;
+    return await operation;
   } catch (error: any) {
     if (error?.code === 'ENOENT') {
-      return false;
+      return missing;
     }
     throw error;
   }
