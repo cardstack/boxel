@@ -511,6 +511,11 @@ module('Unit | host-route-address', function (hooks) {
       { reason: 'no-parent', route: '/c/:category/:product' },
       'a child with no parent',
     );
+    assert.deepEqual(
+      outcome(lookup(rules, { kind: 'cards', cards: [hats, orphan] })),
+      { reason: 'not-member', route: '/c/:category/:product' },
+      'a child with an empty link is not a member of the parent',
+    );
     let withOwnRoute: RawHostRoutingRule[] = [
       ...rules,
       {
@@ -570,7 +575,12 @@ module('Unit | host-route-address', function (hooks) {
         type: ref('Shelf'),
         match: { slug: ':shelf' },
         routes: [
-          { path: '/:item', type: ref('Item'), match: { slug: ':item' } },
+          {
+            path: '/:item',
+            name: 'item',
+            type: ref('Item'),
+            match: { slug: ':item' },
+          },
         ],
       },
     ];
@@ -590,6 +600,17 @@ module('Unit | host-route-address', function (hooks) {
       outcome(lookup(rules, { kind: 'cards', cards: [other, item] })),
       { reason: 'not-member', route: '/shelves/:shelf/:item' },
       'a parent that does not hold the child',
+    );
+    assert.deepEqual(
+      outcome(
+        lookup(rules, {
+          kind: 'route-name',
+          name: 'item',
+          args: [other, 'lamp'],
+        }),
+      ),
+      { address: '/shelves/bottom/lamp', route: '/shelves/:shelf/:item' },
+      'a value in the route-name form is not checked as a card',
     );
   });
 

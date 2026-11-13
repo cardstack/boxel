@@ -440,6 +440,49 @@ const tests: SharedTests<unknown> = Object.freeze({
     );
   },
 
+  'hostRouteAddress: a card id template that holds only some parent values':
+    async (assert) => {
+      let rules: RawHostRoutingRule[] = [
+        {
+          path: '/:year/:slug',
+          card: './Archive/:year/:slug',
+          routes: [{ path: '/:post', card: './Post/:slug/:post' }],
+        },
+      ];
+      assert.deepEqual(
+        outcome(lookup(rules, cards('Post/hello/1'))),
+        { reason: 'parent-not-in-id', route: '/:year/:slug/:post' },
+        'the id gives :slug but not :year',
+      );
+      let inherited: RawHostRoutingRule[] = [
+        {
+          path: '/:year/:constructor',
+          card: './Archive/:year/:constructor',
+          routes: [{ path: '/:post', card: './Post/:year/:post' }],
+        },
+      ];
+      assert.deepEqual(
+        outcome(lookup(inherited, cards('Post/2026/1'))),
+        { reason: 'parent-not-in-id', route: '/:year/:constructor/:post' },
+        'a param named like an Object.prototype key is not filled',
+      );
+    },
+
+  'hostRouteAddress: a lookup that throws reports internal-error': async (
+    assert,
+  ) => {
+    let result = hostRouteAddress(cards('Person/robin'), {
+      routes: [null] as unknown as HostRoute[],
+      realmURL: new URL(REALM),
+      api: API,
+    });
+    assert.false(result.ok);
+    if (!result.ok) {
+      assert.strictEqual(result.reason, 'internal-error');
+      assert.ok(result.error instanceof Error, 'the error is kept');
+    }
+  },
+
   'hostRouteAddress: addresses round-trip through the parser': async (
     assert,
   ) => {
