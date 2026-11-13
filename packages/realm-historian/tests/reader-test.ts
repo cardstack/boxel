@@ -556,6 +556,52 @@ module('reader', (hooks) => {
     );
   });
 
+  test('a path superseded twice lists both superseded revisions after the revision that names them, newest first', async (assert) => {
+    let initial = await record(
+      [await put('Author/jane.json', '{"v":"initial"}', 'A')],
+      { author: BOB },
+    );
+    let [userEdit, firstPatch, secondPatch] = await recordLagging([
+      { changes: async () => [await put('Author/jane.json', '{"v":"alice"}')] },
+      {
+        changes: async () => [await put('Author/jane.json', '{"v":"ai-1"}')],
+        fields: aiWrite('tool-call-1'),
+      },
+      {
+        changes: async () => [await put('Author/jane.json', '{"v":"ai-2"}')],
+        fields: aiWrite('tool-call-2'),
+      },
+    ]);
+
+    for (let paths of [['Author/jane.json'], ['Author/']]) {
+      assert.deepEqual(
+        ids(await history({ paths })),
+        [secondPatch, firstPatch, userEdit, initial],
+        `${paths}`,
+      );
+    }
+
+    let pages: string[][] = [];
+    let before: string | undefined;
+    for (;;) {
+      let page = await history({
+        paths: ['Author/jane.json'],
+        limit: 1,
+        before,
+      });
+      pages.push(ids(page));
+      if (!page.hasMore) {
+        break;
+      }
+      before = ids(page)[0];
+    }
+    assert.deepEqual(
+      pages,
+      [[secondPatch], [firstPatch], [userEdit], [initial]],
+      'paging one at a time visits each revision once',
+    );
+  });
+
   test('a revision superseded in two paths is listed once, after the oldest revision that names it', async (assert) => {
     let initial = await record([
       await put('Author/jane.json', '{"v":0}', 'A'),

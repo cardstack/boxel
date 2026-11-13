@@ -26,8 +26,9 @@
 // 4. Commit, for each closed group in order:
 //    * A mismatched path with a newer event in hand or in the journal is
 //      superseded: the revision leaves it out and lists it in
-//      `Boxel-Superseded`, and the next revision to record the path names
-//      this one in `Boxel-Includes-Superseded`. A mismatched path with no
+//      `Boxel-Superseded`. The next revision to record the path names, in
+//      `Boxel-Includes-Superseded`, every revision that superseded it since
+//      it was last recorded, newest first. A mismatched path with no
 //      newer event holds the group, and every group after it, until one
 //      appears or the maximum age has passed since the write; then the
 //      revision lists it as superseded, and an `Unattributed changes`
@@ -113,6 +114,7 @@ import {
   SIZE_ONLY_MARKER_NAME,
   updateMain,
   writeSizeOnlyEntry,
+  type JournalSeqRange,
   type RevisionRecord,
   type RevisionSubject,
   type Trailers,
@@ -238,11 +240,12 @@ interface PathState {
   objectId: string;
 }
 
-// A revision that left a path out as superseded, and the `seq` of the last
-// event it covers, which a revision with no `Boxel-Journal-Seq` lacks.
+// A revision that left a path out as superseded, and the `seq` of the first
+// and last events it covers, which a revision with no `Boxel-Journal-Seq`
+// lacks.
 interface Supersession {
   revision: string;
-  lastSeq: number | undefined;
+  range: JournalSeqRange | undefined;
 }
 
 type Work =
@@ -280,10 +283,11 @@ export class Recorder implements ManagedRecorder {
   #open: Group | undefined;
   // The latest tick: the time by which every earlier event is in hand.
   #clock = -Infinity;
-  // Paths a revision left out as superseded, with that revision, until the
-  // cursor moves past a later event for the path. A revision that records
-  // the path then names the one that left it out.
-  #superseded = new Map<string, Supersession>();
+  // Paths revisions left out as superseded, with those revisions oldest
+  // first, until the cursor moves past a later event for the path that
+  // didn't supersede it. A revision that records the path then names every
+  // one of them.
+  #superseded = new Map<string, Supersession[]>();
 
   constructor(options: RecorderOptions) {
     this.#options = options;
@@ -576,10 +580,12 @@ export class Recorder implements ManagedRecorder {
 
   // Walks revisions, newest first as `readRevisions` lists them, from the
   // oldest: a revision that changes a path has recorded it, and one that
-  // lists it as superseded leaves it to a later revision. Then asks the
-  // journal for the paths the cursor has moved past a later event for,
-  // which a group that changed nothing at the path has settled with no
-  // revision to show for it.
+  // lists it as superseded joins the path's superseding revisions. Then asks
+  // the journal which of those a group that changed nothing at the path has
+  // settled with no revision to show for it: a revision is settled by an
+  // event for the path after its own last event, and before the next
+  // superseding revision's first event, or up to the cursor after the
+  // newest. That forgets the revision and every older one for the path.
   async #learnSuperseded(revisions: RevisionRecord[]): Promise<void> {
     for (let revision of [...revisions].reverse()) {
       for (let path of revision.changedPaths) {
@@ -587,28 +593,44 @@ export class Recorder implements ManagedRecorder {
       }
       let range = parseJournalSeq(revision.trailers.journalSeq?.[0] ?? '');
       for (let path of revision.trailers.superseded ?? []) {
-        this.#superseded.set(path, {
-          revision: revision.id,
-          lastSeq: range?.last,
-        });
+        this.#supersede(path, { revision: revision.id, range });
       }
     }
-    let wanted = [...this.#superseded].flatMap(([path, { lastSeq }]) =>
-      lastSeq === undefined ? [] : [{ path, seq: lastSeq }],
+    // A revision with no range, or whose next one has none, can't be
+    // bounded, and is kept.
+    let wanted = [...this.#superseded].flatMap(([path, supersessions]) =>
+      supersessions.flatMap(({ range }, ordinal) => {
+        let next = supersessions[ordinal + 1];
+        return range && (!next || next.range)
+          ? [
+              {
+                path,
+                ordinal,
+                since_seq: range.last,
+                until_seq: next?.range?.first ?? null,
+              },
+            ]
+          : [];
+      }),
     );
     if (wanted.length === 0) {
       return;
     }
     let rows = await this.#query(
-      `SELECT DISTINCT wanted.path
-       FROM jsonb_to_recordset($2::jsonb) AS wanted(path text, seq bigint)
+      `SELECT DISTINCT wanted.path, wanted.ordinal
+       FROM jsonb_to_recordset($2::jsonb)
+         AS wanted(path text, ordinal int, since_seq bigint, until_seq bigint)
        JOIN realm_change_events since
-         ON since.realm_id = $1 AND since.seq = wanted.seq
+         ON since.realm_id = $1 AND since.seq = wanted.since_seq
+       LEFT JOIN realm_change_events bound
+         ON bound.realm_id = $1 AND bound.seq = wanted.until_seq
        JOIN realm_change_event_paths paths
          ON paths.realm_id = $1 AND paths.path = wanted.path
        JOIN realm_change_events events ON events.seq = paths.seq
        WHERE (events.xid, events.seq) > (since.xid, since.seq)
-         AND (events.xid, events.seq) <= ($3::xid8, $4::bigint)`,
+         AND (events.xid, events.seq) <= ($3::xid8, $4::bigint)
+         AND (wanted.until_seq IS NULL
+              OR (events.xid, events.seq) < (bound.xid, bound.seq))`,
       [
         this.#options.realm.id,
         JSON.stringify(wanted),
@@ -616,8 +638,21 @@ export class Recorder implements ManagedRecorder {
         this.#cursor.seq,
       ],
     );
+    let settledThrough = new Map<string, number>();
     for (let row of rows) {
-      this.#superseded.delete(row.path as string);
+      let path = row.path as string;
+      settledThrough.set(
+        path,
+        Math.max(settledThrough.get(path) ?? -1, Number(row.ordinal)),
+      );
+    }
+    for (let [path, ordinal] of settledThrough) {
+      let remaining = this.#superseded.get(path)!.slice(ordinal + 1);
+      if (remaining.length > 0) {
+        this.#superseded.set(path, remaining);
+      } else {
+        this.#superseded.delete(path);
+      }
     }
   }
 
@@ -857,14 +892,7 @@ export class Recorder implements ManagedRecorder {
       return 'committed';
     }
 
-    let includes = net
-      .filter(({ path }) => this.#superseded.has(path))
-      .map(({ path }) =>
-        formatIncludesSuperseded({
-          revision: this.#superseded.get(path)!.revision,
-          path,
-        }),
-      );
+    let includes = this.#includesSuperseded(net.map(({ path }) => path));
     let supersededPaths = [...superseded].sort();
     let subject: RevisionSubject =
       first.intent?.kind === 'revert'
@@ -913,11 +941,13 @@ export class Recorder implements ManagedRecorder {
       this.#head = commit;
       this.#tree = tree;
     }
-    this.#settleSuperseded(finals.keys());
+    this.#settleSuperseded(
+      [...finals.keys()].filter((path) => !superseded.has(path)),
+    );
     for (let path of supersededPaths) {
-      this.#superseded.set(path, {
+      this.#supersede(path, {
         revision: commit,
-        lastSeq: lastPosition.seq,
+        range: { first: first.seq, last: lastPosition.seq },
       });
     }
     this.#finish(group);
@@ -929,7 +959,7 @@ export class Recorder implements ManagedRecorder {
       // lease before this revision commits loses it: neither the journal
       // nor the repo says it was due. The paths stay superseded by the
       // revision above, and the bytes on disk go unrecorded.
-      await this.#recordUnattributed(unattributed, commit);
+      await this.#recordUnattributed(unattributed);
     }
     return 'committed';
   }
@@ -940,6 +970,35 @@ export class Recorder implements ManagedRecorder {
     for (let path of paths) {
       this.#superseded.delete(path);
     }
+  }
+
+  // `supersession` left `path` out, after any earlier revision that did and
+  // that nothing has settled since.
+  #supersede(path: string, supersession: Supersession): void {
+    let supersessions = this.#superseded.get(path);
+    if (supersessions) {
+      supersessions.push(supersession);
+    } else {
+      this.#superseded.set(path, [supersession]);
+    }
+  }
+
+  // Every revision that superseded `path` since it was last recorded, newest
+  // first.
+  #supersedingRevisions(path: string): string[] {
+    return (this.#superseded.get(path) ?? [])
+      .map(({ revision }) => revision)
+      .reverse();
+  }
+
+  // The `Boxel-Includes-Superseded` values of a revision that records
+  // `paths`: for each path in turn, its superseding revisions newest first.
+  #includesSuperseded(paths: string[]): string[] {
+    return paths.flatMap((path) =>
+      this.#supersedingRevisions(path).map((revision) =>
+        formatIncludesSuperseded({ revision, path }),
+      ),
+    );
   }
 
   // The paths among `finals` that an event after the one that made the
@@ -991,12 +1050,18 @@ export class Recorder implements ManagedRecorder {
 
   // Records the bytes found on disk for paths whose write was replaced by
   // something no event explains, as `Unattributed changes` by
-  // `boxel-system`, naming the revision that left them out.
-  async #recordUnattributed(
-    finals: Final[],
-    supersededIn: string,
-  ): Promise<void> {
+  // `boxel-system`, naming every revision that left them out since they were
+  // last recorded: the one just committed, then any earlier ones. They are
+  // read before the HEAD check, which can change what the recorder
+  // remembers.
+  async #recordUnattributed(finals: Final[]): Promise<void> {
     let { realm } = this.#options;
+    let named = new Map(
+      finals.map(({ change }) => [
+        change.path,
+        this.#supersedingRevisions(change.path),
+      ]),
+    );
     if (await this.#syncWithRepo()) {
       this.#regroup();
     }
@@ -1029,8 +1094,10 @@ export class Recorder implements ManagedRecorder {
       {
         channel: ['system'],
         writeCount: ['0'],
-        includesSuperseded: net.map(({ path }) =>
-          formatIncludesSuperseded({ revision: supersededIn, path }),
+        includesSuperseded: net.flatMap(({ path }) =>
+          (named.get(path) ?? []).map((revision) =>
+            formatIncludesSuperseded({ revision, path }),
+          ),
         ),
       },
     );
@@ -1061,7 +1128,7 @@ export class Recorder implements ManagedRecorder {
     }
     this.#settleSuperseded(net.map(({ path }) => path));
     log.info(
-      `recorded ${commit} for ${realm.url}: unattributed changes to ${net.length} path(s), superseding a write in ${supersededIn}`,
+      `recorded ${commit} for ${realm.url}: unattributed changes to ${net.length} path(s), superseding writes in ${[...new Set([...named.values()].flat())].join(', ')}`,
     );
   }
 
