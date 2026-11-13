@@ -75,6 +75,7 @@ import {
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
   SKILL_FEATURE_REALMS,
+  SKILL_FEATURES,
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
   TRAILING_CONTEXT_PREAMBLE,
@@ -11724,6 +11725,19 @@ module('skill feature sections', () => {
       ),
       [],
       'a name inherited from Object.prototype is not a feature',
+    );
+  });
+
+  // The type of SKILL_FEATURE_REALMS rejects an unregistered key only while
+  // SKILL_FEATURES has an entry: against an empty registry TypeScript skips
+  // the excess-property check. A realm under an unregistered key would be
+  // left out of every room's searches, with no command that can enable it.
+  test('every feature that gates realms is a registered feature', () => {
+    assert.deepEqual(
+      Object.keys(SKILL_FEATURE_REALMS).filter(
+        (feature) => !Object.hasOwn(SKILL_FEATURES, feature),
+      ),
+      [],
     );
   });
 
