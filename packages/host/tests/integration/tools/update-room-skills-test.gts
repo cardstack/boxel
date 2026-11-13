@@ -406,6 +406,74 @@ Instructions live in the markdown body.
       );
     });
 
+    test('matches a markdown skill the room stores by URL to its prefix-form id', async function (assert) {
+      // The room stores a markdown skill by the URL it is served at. A caller
+      // can name the same skill by its prefix-form id, and that id must find
+      // it, not miss it or add a second entry.
+      let virtualNetwork = getService('network').virtualNetwork;
+      virtualNetwork.addRealmMapping('@test-room-skills/', testRealmURL);
+      try {
+        let command = new UpdateRoomSkillsTool(
+          getService('tool-service').toolContext,
+        );
+        let skillURL = `${testRealmURL}skills/markdown-skill/SKILL.md`;
+        let prefixFormId = '@test-room-skills/skills/markdown-skill/SKILL.md';
+        await command.execute({
+          roomId: matrixRoomId,
+          skillCardIdsToActivate: [skillURL],
+          skillCardIdsToDeactivate: [],
+        });
+        let uploadCount = mockMatrixUtils.getUploadedContents().size;
+
+        await command.execute({
+          roomId: matrixRoomId,
+          skillCardIdsToActivate: [],
+          skillCardIdsToDeactivate: [prefixFormId],
+        });
+        let skillsRoomState = mockMatrixUtils.getRoomState(
+          matrixRoomId,
+          APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        );
+        assert.deepEqual(
+          skillsRoomState.enabledSkillCards,
+          [],
+          'the prefix-form id deactivates the skill',
+        );
+        assert.deepEqual(
+          skillsRoomState.disabledSkillCards.map((card: any) => card.sourceUrl),
+          [skillURL],
+          'the room keeps the id it stored for the skill',
+        );
+
+        await command.execute({
+          roomId: matrixRoomId,
+          skillCardIdsToActivate: [prefixFormId],
+          skillCardIdsToDeactivate: [],
+        });
+        skillsRoomState = mockMatrixUtils.getRoomState(
+          matrixRoomId,
+          APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        );
+        assert.deepEqual(
+          skillsRoomState.enabledSkillCards.map((card: any) => card.sourceUrl),
+          [skillURL],
+          'the prefix-form id reactivates the stored skill, with no second entry',
+        );
+        assert.deepEqual(
+          skillsRoomState.disabledSkillCards,
+          [],
+          'nothing is left disabled',
+        );
+        assert.strictEqual(
+          mockMatrixUtils.getUploadedContents().size,
+          uploadCount,
+          'reactivating the stored skill uploads nothing',
+        );
+      } finally {
+        virtualNetwork.removeRealmMapping('@test-room-skills/');
+      }
+    });
+
     test('gathers commands from both a skill card and a skill markdown file', async function (assert) {
       let command = new UpdateRoomSkillsTool(
         getService('tool-service').toolContext,
