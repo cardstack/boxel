@@ -84,6 +84,11 @@ export class HistoryRequestError extends Error {
 const NO_OBJECT = '0'.repeat(40);
 const TREE_MODE = '040000';
 const ABSENT_MODE = '000000';
+// A size-only entry is a tree that holds a `.realm-history-size-only`
+// marker blob. The name is reserved, so no realm directory holds one, and
+// every read applies this one rule: a file read, a directory listing, a
+// tree listing and the changes of a revision. Anything else the tree holds
+// is part of the entry, never a file of its own.
 const MARKER_SUFFIX = `/${SIZE_ONLY_MARKER_NAME}`;
 const REVISION_PATTERN = /^[0-9a-f]{4,40}$/;
 const OBJECT_ID_PATTERN = /^[0-9a-f]{40}$/;
@@ -275,9 +280,14 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     if (withinMarker(target)) {
       return { kind: 'path-not-found-at-revision' };
     }
-    let [object] = await this.#describe(gitDir, [
+    let [object, ...enclosing] = await this.#describe(gitDir, [
       target === '' ? `${commit}^{tree}` : `${commit}:${target}`,
+      ...ancestorMarkers(commit, target),
     ]);
+    if (enclosing.some(Boolean)) {
+      // Under a size-only entry, which is a file.
+      return { kind: 'path-not-found-at-revision' };
+    }
     if (!object) {
       return {
         kind: (await this.#everExisted(gitDir, commit, target, directory))
@@ -357,7 +367,13 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     if (!commit) {
       return { kind: 'revision-not-found' };
     }
-    if (withinMarker(target)) {
+    if (
+      withinMarker(target) ||
+      (await this.#describe(gitDir, ancestorMarkers(commit, target))).some(
+        Boolean,
+      )
+    ) {
+      // A marker, or a path under a size-only entry, which is a file.
       return { kind: 'path-not-found-at-revision' };
     }
     let pathspec = target === '' ? [] : [directory ? `${target}/` : target];
@@ -397,7 +413,10 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
       // A size-only entry is a file, as `readAtRevision` answers for it.
       return { kind: 'path-not-found-at-revision' };
     }
-    let files: TreeFileAtRevision[] = blobs;
+    let files: TreeFileAtRevision[] = blobs.filter(
+      ({ path: blobPath }) =>
+        ![...markers.keys()].some((entry) => blobPath.startsWith(`${entry}/`)),
+    );
     if (markers.size > 0) {
       let paths = [...markers.keys()];
       let sizes = await this.#markerSizes(
@@ -1308,9 +1327,13 @@ function collapse(entries: RawEntry[]): Change[] {
       });
     }
   }
+  let entryPaths = [...markers.keys()];
   let sides = new Map<string, { before?: Side; after?: Side }>();
   for (let entry of entries) {
-    if (entry.path.endsWith(MARKER_SUFFIX)) {
+    if (
+      entry.path.endsWith(MARKER_SUFFIX) ||
+      entryPaths.some((path) => entry.path.startsWith(`${path}/`))
+    ) {
       continue;
     }
     let marker = markers.get(entry.path);
@@ -1349,14 +1372,13 @@ function side(
   return { id };
 }
 
+// The marker blob of a tree's entries, when the tree is a size-only entry.
 function sizeOnlyMarkerOf(
   entries: { type: string; id: string; name: string }[],
 ): string | undefined {
-  return entries.length === 1 &&
-    entries[0].type === 'blob' &&
-    entries[0].name === SIZE_ONLY_MARKER_NAME
-    ? entries[0].id
-    : undefined;
+  return entries.find(
+    ({ type, name }) => type === 'blob' && name === SIZE_ONLY_MARKER_NAME,
+  )?.id;
 }
 
 // Revisions from `git log -z` (with `--raw` or without) and `LOG_FORMAT`.
@@ -1423,6 +1445,18 @@ function pathFilters(paths: string[] | undefined): Filters {
 // in a realm's history.
 function withinMarker(path: string): boolean {
   return path.split('/').includes(SIZE_ONLY_MARKER_NAME);
+}
+
+// The object names of the markers a size-only entry above `path` would
+// hold at `commit`, one per directory above it.
+function ancestorMarkers(commit: string, path: string): string[] {
+  let segments = path.split('/');
+  return segments
+    .slice(0, -1)
+    .map(
+      (_, index) =>
+        `${commit}:${segments.slice(0, index + 1).join('/')}${MARKER_SUFFIX}`,
+    );
 }
 
 // A realm path as the reader takes it: relative to the realm, with or

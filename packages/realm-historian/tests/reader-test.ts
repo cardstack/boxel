@@ -23,7 +23,7 @@ import { Recorder } from '../src/recorder.ts';
 import { Semaphore } from '../src/semaphore.ts';
 import { DEFAULT_GROUPING_LIMITS } from '../src/grouper.ts';
 import { GitCommandError, GitTimeoutError } from '../src/git-process.ts';
-import { ObjectStore } from '../src/git-objects.ts';
+import { BLOB_MODE, ObjectStore, TREE_MODE } from '../src/git-objects.ts';
 import {
   GitRealmHistoryReader,
   HistoryRequestError,
@@ -36,6 +36,8 @@ import {
   initRepo,
   readMain,
   repoPath,
+  SIZE_ONLY_MARKER_NAME,
+  sizeOnlyMarker,
   updateMain,
 } from '../src/repo-format.ts';
 import {
@@ -1061,6 +1063,58 @@ module('reader', (hooks) => {
       together.flatMap(ids).length,
       8,
       'every revision under the filters, the superseded one included',
+    );
+  });
+
+  test('every read takes a tree holding a size-only marker for one size-only entry, whatever else it holds', async (assert) => {
+    let recorded = await record([await put('card.json', '{}', 'A')]);
+    let store = new ObjectStore(gitDir);
+    let { id: card } = await store.writeBlob('{}');
+    let { id: marker } = await store.writeBlob(
+      sizeOnlyMarker({ size: 4242, fingerprint: 'sample-fingerprint' }),
+    );
+    let { id: extra } = await store.writeBlob('not a realm file');
+    let { id: entry } = await store.writeTree([
+      { mode: BLOB_MODE, name: SIZE_ONLY_MARKER_NAME, id: marker },
+      { mode: BLOB_MODE, name: 'extra', id: extra },
+    ]);
+    let { id: tree } = await store.writeTree([
+      { mode: BLOB_MODE, name: 'card.json', id: card },
+      { mode: TREE_MODE, name: 'big.log', id: entry },
+    ]);
+    let { id: revision } = await store.writeCommit({
+      tree,
+      parents: [recorded],
+      author: authorIdentity(ALICE, new Date(T0 + 120_000)),
+      committer: committerIdentity(new Date(T0 + 120_000)),
+      message: buildMessage('Update big.log', { channel: ['host'] }),
+    });
+    await updateMain(gitDir, revision, recorded);
+
+    assert.deepEqual(
+      await reader().readAtRevision(realm.id, revision, 'big.log'),
+      { kind: 'content-not-kept', size: 4242 },
+    );
+    assert.deepEqual(
+      await reader().readAtRevision(realm.id, revision, 'big.log/extra'),
+      { kind: 'path-not-found-at-revision' },
+    );
+    assert.deepEqual(await reader().readAtRevision(realm.id, revision, '/'), {
+      kind: 'directory',
+      entries: [
+        { name: 'big.log', kind: 'file' },
+        { name: 'card.json', kind: 'file' },
+      ],
+    });
+    let listed = await reader().readTreeAtRevision(realm.id, revision);
+    assert.deepEqual(
+      listed.kind === 'tree' ? listed.files.map(({ path }) => path) : listed,
+      ['big.log', 'card.json'],
+    );
+    let [latest] = (await history({ limit: 1 })).revisions;
+    assert.deepEqual(
+      latest.changes.map(({ path, status, size }) => ({ path, status, size })),
+      [{ path: 'big.log', status: 'A', size: 4242 }],
     );
   });
 
