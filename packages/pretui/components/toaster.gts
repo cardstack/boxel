@@ -71,6 +71,10 @@
 //     `role='status'` for the rest.
 // 5. **The remaining time is a non-colour channel** — the
 //     life bar is the only "how long have I got" signal in any of the three.
+import AlertCircleIcon from '@cardstack/boxel-icons/alert-circle';
+import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
+import CheckIcon from '@cardstack/boxel-icons/check';
+import InfoIcon from '@cardstack/boxel-icons/info-small';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
@@ -121,6 +125,10 @@ export interface ToastItem {
   /** the second line — optional, because most toasts are one line */
   message?: string;
   tone?: ToastTone;
+  /** true shows the tone's glyph before the title (a check on success). The
+   * glyph is decorative: the title carries the meaning. A neutral toast has
+   * no glyph. */
+  icon?: boolean;
   /**
    * Seconds before the toast ages out; `0` makes it sticky. Seconds, not ms,
    * per the kit's duration law — Sonner's `duration: 4000` reads as four
@@ -299,6 +307,23 @@ export function resolveToastPlacement(
   return (PLACEMENT_ALIASES[value] ?? value) as ToastPlacement;
 }
 
+// Danger takes the circled alert, not Alert's X, so it never reads as a
+// second dismiss control beside the real one.
+const TOAST_ICONS = {
+  info: InfoIcon,
+  success: CheckIcon,
+  warning: AlertTriangleIcon,
+  danger: AlertCircleIcon,
+};
+
+/** The glyph a toast shows, or undefined when it asked for none or is
+ * neutral. */
+export function toastIcon(item: ToastItem) {
+  return item.icon && item.tone && item.tone !== 'neutral'
+    ? TOAST_ICONS[item.tone]
+    : undefined;
+}
+
 const FOCUSABLE_IN_TOAST = 'button, a[href], [tabindex]:not([tabindex="-1"])';
 
 export interface ToasterSignature {
@@ -406,6 +431,7 @@ export class Toaster extends Component<ToasterSignature> {
   toneOf = (item: ToastItem): ToastTone => item.tone ?? 'neutral';
   roleOf = (item: ToastItem): string => toastRole(item.tone);
   liveOf = (item: ToastItem): string => toastLive(item.tone);
+  iconOf = (item: ToastItem) => toastIcon(item);
   isDismissible = (item: ToastItem): boolean => item.dismissible ?? true;
 
   /** Seconds, resolved against the host default. 0 means sticky. */
@@ -714,6 +740,17 @@ export class Toaster extends Component<ToasterSignature> {
             {{#if (has-block 'toast')}}
               {{yield item to='toast'}}
             {{else}}
+              {{#let (this.iconOf item) as |Icon|}}
+                {{#if Icon}}
+                  <Icon
+                    class='pretui-toast-icon'
+                    width='16'
+                    height='16'
+                    aria-hidden='true'
+                    data-test-pretui-toast-icon
+                  />
+                {{/if}}
+              {{/let}}
               <div class='pretui-toast-text'>
                 <span class='pretui-toast-title'>{{item.title}}</span>
                 {{#if item.message}}
@@ -852,6 +889,12 @@ export class Toaster extends Component<ToasterSignature> {
           gap: var(--space-3, 8px);
           padding: var(--space-4, 11px);
         }
+        .pretui-toast-icon {
+          flex: none;
+          /* centres the 1rem glyph on the title's first line */
+          margin-block-start: 0.0625rem;
+          color: var(--pretui-toast-icon-color, var(--pretui-toast-ink));
+        }
         .pretui-toast-text {
           display: grid;
           gap: 2px;
@@ -922,19 +965,24 @@ export class Toaster extends Component<ToasterSignature> {
           }
         }
 
-        /* Tone. One recipe, seven hue tokens — the stripe is the
-           only place a tone paints, so a neutral toast is genuinely neutral. */
+        /* Tone. One recipe per hue: the stripe and life bar paint the fill,
+           and the opt-in glyph paints the tone's ink, which holds contrast on
+           the popover surface. A neutral toast is genuinely neutral. */
         .pretui-toast-item[data-tone='info'] {
           --pretui-toast-tone: var(--pretui-info, var(--boxel-blue));
+          --pretui-toast-ink: var(--info-ink);
         }
         .pretui-toast-item[data-tone='success'] {
           --pretui-toast-tone: var(--success, var(--boxel-success));
+          --pretui-toast-ink: var(--success-ink);
         }
         .pretui-toast-item[data-tone='warning'] {
           --pretui-toast-tone: var(--warning, var(--boxel-warning));
+          --pretui-toast-ink: var(--warning-ink);
         }
         .pretui-toast-item[data-tone='danger'] {
           --pretui-toast-tone: var(--destructive);
+          --pretui-toast-ink: var(--destructive-ink);
         }
         .pretui-toast-item[data-tone='neutral'] {
           --pretui-toast-tone: var(--muted-foreground);

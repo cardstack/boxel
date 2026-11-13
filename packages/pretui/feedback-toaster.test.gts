@@ -199,6 +199,37 @@ module('Pretui | toaster | render', function (hooks) {
     );
   });
 
+  test('an opted-in toast shows a decorative tone glyph', async function (assert) {
+    let store = new ToastStore();
+    store.show({ id: 'ok', title: 'Added to cart', tone: 'success', icon: true });
+    store.show({ id: 'plain', title: 'Saved', tone: 'success', duration: 0 });
+    store.show({ id: 'calm', title: 'Draft', tone: 'neutral', icon: true, duration: 0 });
+
+    await render(<template><Toaster @store={{store}} /></template>);
+
+    let glyph = document.querySelector(
+      '[data-test-pretui-toast-item="ok"] [data-test-pretui-toast-icon]',
+    );
+    assert.ok(glyph, 'the opted-in success toast shows its glyph');
+    assert.strictEqual(
+      glyph?.getAttribute('aria-hidden'),
+      'true',
+      'the glyph is hidden from assistive tech; the title carries the meaning',
+    );
+    assert.notOk(
+      document.querySelector(
+        '[data-test-pretui-toast-item="plain"] [data-test-pretui-toast-icon]',
+      ),
+      'a toast that did not opt in has no glyph',
+    );
+    assert.notOk(
+      document.querySelector(
+        '[data-test-pretui-toast-item="calm"] [data-test-pretui-toast-icon]',
+      ),
+      'a neutral toast has no glyph even when it opts in',
+    );
+  });
+
   test('the cap renders a slice and announces the queue', async function (assert) {
     let store = new ToastStore();
     for (let i = 0; i < 5; i++) {
