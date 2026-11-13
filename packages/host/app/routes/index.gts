@@ -174,6 +174,9 @@ export default class Card extends Route {
       let model = await this.store.get(cardUrl);
       // A card's own path is still served while the route set is
       // incomplete; any other path is an error then, as on the server.
+      // The server also serves a realm file there (`isRealmFilePath`); the
+      // host has no counterpart, so a realm file the store does not load
+      // shows the error page here while a full page load serves the file.
       if (
         !routed &&
         dynamic?.kind === 'unavailable' &&
