@@ -19,6 +19,8 @@ The database comes from the `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` and
 `--taskCount` divide the realms between the tasks of one service (one shard and
 one task by default). `--leaseRenewMs` and `--leaseExpiryMs` set the lease's
 renewal interval and expiry (10 s and 30 s by default).
+`--backgroundConcurrency` sets how many background jobs run at once (2 by
+default).
 
 `GET /health` on the port answers 200 while the main loop has made progress
 within the last 30 s, whether the task holds a lease or is waiting for one, and
@@ -61,6 +63,66 @@ carry on. Setting its `status` back to `ok` takes effect when a task next
 starts or takes over the realm's shard, which reads the realm's events again
 from its cursor. A `scan` or `delete-realm` event records no revision: the
 recorder moves its cursor past it.
+
+## Background work
+
+Work on a realm other than recording its events, such as a reconcile pass or
+maintenance, is a kind of background work scheduled by `src/background.ts`.
+Each kind says when it comes due on a realm:
+
+- as soon as the realm is loaded (`atStart`);
+- a fixed time after it last ran (`everyMs`);
+- once a number of revisions have been committed since then (`afterCommits`),
+  optionally only after none for a while (`quietMs`);
+- or when asked (`request`), now or after a delay, or because a run asked to
+  run again (`againAfterMs`).
+
+Only the realms of the shards the task holds are scheduled. At most
+`--backgroundConcurrency` jobs run at once across the task, and one at a time
+on each realm. A kind's `isDue` check, if it has one, runs first, so a realm
+that needs nothing doesn't get a recorder.
+
+Each job runs in its realm's recorder queue, so it never runs between a commit
+and its cursor update. It runs only when the realm has no events in hand. A job
+asked for while the realm has events captured, being handled or queued is
+skipped at once, and one that reaches the front of the queue with events queued
+behind it is skipped then. A skipped job is tried again a moment later. A job
+holds no recording permit.
+
+A job's signal fires when its recorder stops, and when the realm's events fill
+the queue behind it, since a full queue holds up every realm the task records.
+Either way the job counts as not having run, whether it then returns or throws:
+cut short by events, it is skipped and tried again a moment later, from the
+beginning. So a kind must end promptly once its signal fires, and must be safe
+to start again. Stopping the recorder waits for the job. A realm with work due
+and no recorder gets one, which is dropped once idle again. A job that fails is
+logged and tried again after its kind's retry delay. The realm records on,
+unless the kind stalls the realm on failure.
+
+## Reading
+
+The realm server reads history itself, through `GitRealmHistoryReader` from
+`src/reader.ts` (`@cardstack/realm-historian/src/reader`). It runs read-only
+git commands against the repo, and never calls realm-historian:
+
+- `readHistory` lists revisions newest first with `git log` over path
+  filters, with their changes and, by default, their diffs. A diff larger
+  than 64 KB is left out, as are the diffs past the listing's 1 MB budget,
+  and binary files get ids and sizes only. A superseded write's revision,
+  which changed nothing under the filters, is listed after the oldest
+  revision whose `Boxel-Includes-Superseded` names it.
+- `readAtRevision` returns a file's content (base64 when it is binary, and
+  always for a `range`) or a directory's listing. A file above 5 MB answers
+  `too-large`, and a size-only entry answers `content-not-kept`.
+- `readTreeAtRevision` lists every file under a path, with size-only entries
+  flagged.
+
+A reader runs at most 8 git processes at once across every read, and kills
+each after 30 s. The cap is per reader, so a realm-server task builds one
+reader and gives it to every realm it serves. Git uses the commit-graph's Bloom filters for several path filters
+only from 2.51 on, and `bloomWithSeveralPaths` says whether the git in use
+does. With it off, the default, the reader runs one `git log` per filter and
+merges the results in history order, which is correct on any git.
 
 ## Scripts
 

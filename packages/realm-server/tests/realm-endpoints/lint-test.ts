@@ -8,8 +8,16 @@ import {
   LINT_FILENAME_HEADER,
   LINT_NOT_RUN_RULE_IDS,
   MAX_LINT_SOURCE_BYTES,
+  registerJobHeartbeat,
+  unregisterJobHeartbeat,
 } from '@cardstack/runtime-common';
-import { lintArgs, LintThread } from '@cardstack/runtime-common/tasks/lint';
+import type { TaskArgs } from '@cardstack/runtime-common/tasks';
+import {
+  lintArgs,
+  lintSource,
+  LintThread,
+  type LintProgress,
+} from '@cardstack/runtime-common/tasks/lint';
 import { setupPermissionedRealmCached, createJWT } from '../helpers/index.ts';
 import {
   benchmarkOperation,
@@ -1634,6 +1642,141 @@ export class MyCard${i} extends CardDef {
   });
 
   module('lint thread', function () {
+    test('a starting thread loads every engine first, and counts as progress for each lint waiting on it', async function (assert) {
+      let thread = new LintThread(undefined, undefined, {
+        startHeartbeatMs: 50,
+      });
+      try {
+        let gts: LintProgress[] = [];
+        let ts: LintProgress[] = [];
+        await Promise.all([
+          lintArgs(
+            {
+              source: `import MyComponent from 'somewhere';\n<template>\n  <MyComponent @flag={{eq 1 1}} />\n</template>`,
+              filename: 'a.gts',
+            },
+            thread,
+            (p) => gts.push(p),
+          ),
+          lintArgs({ source: `let x = 1\n`, filename: 'b.ts' }, thread, (p) =>
+            ts.push(p),
+          ),
+        ]);
+        let startup = thread.startup!;
+        assert.deepEqual(
+          startup.stages.map((s) => s.stage),
+          [
+            'eslint-module',
+            'call-api-plugin',
+            'eslint-config',
+            'prettier-module',
+            'template-lint-engine',
+          ],
+          'the thread loads every engine, in order',
+        );
+        assert.true(
+          startup.stages.every(
+            (s, i) =>
+              s.at >=
+                (i === 0 ? startup.startedAt : startup.stages[i - 1].at) &&
+              (i === 0 || s.cpuMs >= startup.stages[i - 1].cpuMs),
+          ),
+          `step times only move forward: ${JSON.stringify(startup)}`,
+        );
+        let lastLoadedAt = startup.stages[startup.stages.length - 1].at;
+        assert.true(
+          (startup.readyAt ?? -1) >= lastLoadedAt,
+          'the thread is ready once the last engine has loaded',
+        );
+        for (let [name, progress] of [
+          ['.gts', gts],
+          ['.ts', ts],
+        ] as const) {
+          assert.ok(
+            progress.includes('starting'),
+            `the ${name} lint hears the thread starting: ${progress}`,
+          );
+        }
+        assert.deepEqual(
+          gts.filter((p) => p !== 'starting'),
+          ['eslint-fix', 'prettier', 'eslint-settle', 'template-lint'],
+          'the .gts lint hears its own passes',
+        );
+        assert.deepEqual(
+          ts.filter((p) => p !== 'starting'),
+          ['eslint-fix', 'prettier', 'eslint-settle'],
+          'the .ts lint hears its own passes, and no template-lint pass',
+        );
+
+        let warm: LintProgress[] = [];
+        await lintArgs(
+          { source: `let y = 1\n`, filename: 'c.ts' },
+          thread,
+          (p) => warm.push(p),
+        );
+        assert.deepEqual(
+          warm,
+          ['eslint-fix', 'prettier', 'eslint-settle'],
+          'a lint on a ready thread hears only its own passes',
+        );
+      } finally {
+        await thread.terminate();
+      }
+    });
+
+    test('a thread that does not load its engines in time is stopped, and the lints waiting on it fail', async function (assert) {
+      let thread = new LintThread(undefined, undefined, { startTimeoutMs: 1 });
+      try {
+        let source = `let x = 1\n`;
+        let result = await lintArgs({ source, filename: 'a.ts' }, thread);
+        assert.false(result.passed, 'the lint fails');
+        assert.strictEqual(
+          result.output,
+          source,
+          'the source comes back unchanged',
+        );
+        assert.ok(
+          result.messages[0].message.includes(
+            'did not finish loading its engines within',
+          ),
+          `the error says why: ${result.messages[0].message}`,
+        );
+        assert.false(thread.isRunning, 'the thread is stopped');
+      } finally {
+        await thread.terminate();
+      }
+    });
+
+    test('a lint-source job heartbeats its reservation for each completed pass', async function (assert) {
+      let reservationId = 987_654;
+      let heartbeats = 0;
+      registerJobHeartbeat(reservationId, () => heartbeats++);
+      try {
+        let run = lintSource({
+          reportStatus() {},
+          log: { debug() {}, info() {}, warn() {} },
+        } as unknown as TaskArgs);
+        let result = await run({
+          source: `let x = 1\n`,
+          filename: 'a.ts',
+          jobInfo: {
+            jobId: 1,
+            reservationId,
+            priority: 10,
+            queueWaitMs: 0,
+            concurrencyGroup: null,
+            laneFamily: null,
+          },
+        });
+        assert.strictEqual(result.output, `let x = 1;\n`, 'the lint ran');
+        // Three passes, plus one per heartbeat interval if this lint is the
+        // one that starts the shared thread.
+        assert.true(heartbeats >= 3, `a heartbeat per pass (${heartbeats})`);
+      } finally {
+        unregisterJobHeartbeat(reservationId);
+      }
+    });
+
     test('an idle thread exits, and the next lint starts a fresh one', async function (assert) {
       let thread = new LintThread(undefined, 200);
       try {

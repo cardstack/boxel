@@ -1,10 +1,44 @@
+import { randomBytes } from 'crypto';
+import type Koa from 'koa';
 import * as Sentry from '@sentry/node';
-import Provider, { errors } from 'oidc-provider';
-import type { Configuration, KoaContextWithOIDC } from 'oidc-provider';
-import { logger } from '@cardstack/runtime-common';
+import Provider, { errors, interactionPolicy } from 'oidc-provider';
+import type {
+  AdapterFactory,
+  Configuration,
+  KoaContextWithOIDC,
+} from 'oidc-provider';
+import {
+  DBRateLimitStore,
+  logger,
+  type DBAdapter,
+  type RateLimitStore,
+} from '@cardstack/runtime-common';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
+import { oauthProviderAdapter } from './adapter.ts';
+import type { CallerLimit } from './caller-limit.ts';
+import {
+  authorizationHandler,
+  DEFAULT_AUTHORIZATION_LIMIT,
+  errorDetailsHandler,
+  errorReturnHandler,
+  interactionHandler,
+  OAUTH_AUTHORIZATION_PATH,
+  OAUTH_INTERACTION_PATH,
+  renderLibraryError,
+} from './authorization.ts';
 import { OAuthProviderConfigError } from './config.ts';
+import {
+  consentDecisionHandler,
+  consentDetailsHandler,
+  type AccountContactLookup,
+} from './consent.ts';
 import type { OAuthProviderConfig } from './config.ts';
+import {
+  DEFAULT_NEW_CLIENT_LIMIT,
+  type NewClientLimit,
+} from './new-client-limit.ts';
+import { boxelHosts } from './redirect-uris.ts';
+import { registrationHandler } from './registration.ts';
 import type { OAuthResource, OAuthResourceDefinition } from './registry.ts';
 import { buildRegistry, oauthIssuer, registryScopes } from './registry.ts';
 
@@ -14,6 +48,7 @@ export const log = logger('boxel:oauth-provider');
 // strips of its query strings and bodies.
 export const OAUTH_PROVIDER_PATH_PREFIX = OAUTH_PROVIDER_PATH;
 export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
+export const OAUTH_REGISTRATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/reg`;
 
 // The fields discovery copies from the library's document. That document
 // also lists every endpoint it mounts, `jwks_uri`, and OpenID Connect
@@ -27,31 +62,83 @@ export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
 // field is set from the issuer and its registered route instead.
 //
 // `grant_types_supported` is listed because a client that finds it missing
-// assumes the implicit grant is supported (RFC 8414 §2). The library derives
-// it from `responseTypes`, so it holds only `authorization_code`.
+// assumes the implicit grant is supported (RFC 8414 §2). It is set, not
+// copied: the library lists `refresh_token` as soon as a client may register
+// for it, before the token endpoint serves a refresh.
+//
+// `token_endpoint_auth_methods_supported` is listed, before the token
+// endpoint is, because a client that finds it missing assumes
+// `client_secret_basic` (RFC 8414 §2) and registers asking for a secret,
+// which registration refuses. The library lists `none`, from
+// `clientAuthMethods`.
 const DISCOVERY_FIELDS = [
   'issuer',
   'response_types_supported',
-  'grant_types_supported',
   'code_challenge_methods_supported',
-  'scopes_supported',
+  'token_endpoint_auth_methods_supported',
 ] as const;
+const GRANT_TYPES_SERVED = ['authorization_code'];
+
+// How long the library keeps a flow's interaction, and its own session: long
+// enough for a person to sign in and consent, and no longer. The session never
+// outlives a flow: Boxel drops it at the start of each (ADR 021 §1.7).
+const INTERACTION_TTL_SECONDS = 10 * 60;
+const SESSION_TTL_SECONDS = 10 * 60;
+
+// The running provider: the library, and Boxel's handling of the requests that
+// run before or beside the library's: registration, the start of a flow, the
+// interaction route that hands a flow to the secure origin, the error page's
+// details and "Return", and a flow's consent.
+export interface OAuthProviderService {
+  provider: Provider;
+  handleRegistration: Koa.Middleware;
+  handleAuthorization: Koa.Middleware;
+  handleInteraction: Koa.Middleware;
+  handleErrorDetails: Koa.Middleware;
+  handleErrorReturn: Koa.Middleware;
+  // Consent's details and decision. They verify the secure window's session
+  // and look up its account, which the realm server's routes supply.
+  consentHandlers(deps: ConsentRouteDeps): {
+    handleConsentDetails: Koa.Middleware;
+    handleConsentDecision: Koa.Middleware;
+  };
+}
+
+export interface ConsentRouteDeps {
+  realmSecretSeed: string;
+  accountContact: AccountContactLookup;
+}
 
 // Starts the provider for a realm server. Its issuer is the server's URL
 // (ADR 021 §1.1), so every resource's identifier and every URL it publishes
-// are built from that, never from a request.
+// are built from that, never from a request. The hosts a client may not
+// redirect to come from the server's own settings: its URL, the secure
+// origin, the app origins listed for the secure origin, and the domains users
+// publish sites on.
 export function startOAuthProvider({
   serverURL,
   config,
-  hasSecureOrigin,
+  dbAdapter,
+  secureOriginURL,
+  appOrigins = [],
+  publishedDomains = [],
+  newClientLimit = DEFAULT_NEW_CLIENT_LIMIT,
+  authorizationLimit = DEFAULT_AUTHORIZATION_LIMIT,
+  rateLimitStore = new DBRateLimitStore(dbAdapter),
   testOnlyResources,
 }: {
   serverURL: URL;
   config: OAuthProviderConfig;
-  hasSecureOrigin: boolean;
+  dbAdapter: DBAdapter;
+  secureOriginURL: URL | undefined;
+  appOrigins?: readonly string[];
+  publishedDomains?: readonly string[];
+  newClientLimit?: NewClientLimit;
+  authorizationLimit?: CallerLimit;
+  rateLimitStore?: RateLimitStore;
   testOnlyResources?: readonly OAuthResourceDefinition[];
-}): Provider {
-  if (!hasSecureOrigin) {
+}): OAuthProviderService {
+  if (!secureOriginURL) {
     throw new OAuthProviderConfigError(
       `the OAuth provider needs a secure origin for its pages: this realm server has no secureOriginURL`,
     );
@@ -64,33 +151,127 @@ export function startOAuthProvider({
     );
   }
   let issuer = oauthIssuer(serverURL);
-  return createOAuthProvider({
+  let registry = buildRegistry(issuer, testOnlyResources);
+  let provider = createOAuthProvider({
     issuer,
     config,
-    registry: buildRegistry(issuer, testOnlyResources),
+    registry,
+    adapter: oauthProviderAdapter(dbAdapter, {
+      interactionResumeURL: (id) =>
+        `${issuer}${OAUTH_AUTHORIZATION_PATH}/${id}`,
+    }),
+    renderError: renderLibraryError({ dbAdapter, secureOriginURL }),
   });
+  // Boxel's own apps, listed in code. None is listed yet.
+  let preRegistered: ReadonlySet<string> = new Set();
+  return {
+    provider,
+    handleAuthorization: authorizationHandler({
+      provider,
+      registry,
+      preRegistered,
+      dbAdapter,
+      rateLimitStore,
+      limit: authorizationLimit,
+      secureOriginURL,
+    }),
+    handleInteraction: interactionHandler({ secureOriginURL }),
+    handleErrorDetails: errorDetailsHandler({
+      provider,
+      dbAdapter,
+      secureOriginURL,
+      preRegistered,
+    }),
+    handleErrorReturn: errorReturnHandler({
+      provider,
+      dbAdapter,
+      secureOriginURL,
+    }),
+    consentHandlers: ({ realmSecretSeed, accountContact }) => {
+      let deps = {
+        provider,
+        registry,
+        preRegistered,
+        dbAdapter,
+        secureOriginURL,
+        realmSecretSeed,
+        accountContact,
+      };
+      return {
+        handleConsentDetails: consentDetailsHandler(deps),
+        handleConsentDecision: consentDecisionHandler(deps),
+      };
+    },
+    handleRegistration: registrationHandler({
+      hosts: boxelHosts({
+        serverURL,
+        secureOriginURL,
+        appOrigins,
+        publishedDomains,
+      }),
+      scopes: registryScopes(registry),
+      rateLimitStore,
+      newClientLimit,
+    }),
+  };
 }
 
 export function createOAuthProvider({
   issuer,
   config,
   registry,
+  adapter,
+  renderError,
 }: {
   issuer: string;
   config: OAuthProviderConfig;
   registry: readonly OAuthResource[];
+  adapter: AdapterFactory;
+  renderError?: Configuration['renderError'];
 }): Provider {
   let scopes = registryScopes(registry);
   let configuration: Configuration = {
+    adapter,
     cookies: { keys: config.cookieKeys },
     jwks: config.jwks as Configuration['jwks'],
     responseTypes: ['code'],
+    // Every client is public (ADR 021 §1.4): it proves itself by its
+    // redirect URI and PKCE, never a secret.
+    clientAuthMethods: ['none'],
+    // What a client that leaves a field out is registered with. Boxel also
+    // writes `token_endpoint_auth_method` into every registration itself,
+    // since the library decides whether to issue a secret before these apply.
+    clientDefaults: {
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+      id_token_signed_response_alg: 'RS256',
+    },
+    // Set, rather than left to the library's default, so a client may
+    // register for the refresh grant; the library allows the grant only once
+    // this is set or `offline_access` is a scope. Refresh tokens follow the
+    // renewal choice a flow's consent decision records, which no grant
+    // carries until a flow finishes into one, so none is issued.
+    issueRefreshToken: async () => false,
     // The library accepts only S256 challenges; this makes one required of
     // every client, not just public ones.
     pkce: { required: () => true },
     scopes,
+    ttl: {
+      Interaction: INTERACTION_TTL_SECONDS,
+      Session: SESSION_TTL_SECONDS,
+    },
+    interactions: {
+      // A realm-server route, so the library's interaction cookie is set for
+      // the path the flow finishes beneath (ADR 021 §1.7). Built from the
+      // issuer, never the request.
+      url: (_ctx: KoaContextWithOIDC, interaction: { uid: string }) =>
+        `${issuer}${OAUTH_INTERACTION_PATH}/${interaction.uid}`,
+      policy: alwaysPromptingPolicy(),
+    },
+    ...(renderError ? { renderError } : {}),
     routes: {
-      authorization: `${OAUTH_PROVIDER_PATH_PREFIX}/auth`,
+      authorization: OAUTH_AUTHORIZATION_PATH,
       backchannel_authentication: `${OAUTH_PROVIDER_PATH_PREFIX}/backchannel`,
       challenge: `${OAUTH_PROVIDER_PATH_PREFIX}/challenge`,
       code_verification: `${OAUTH_PROVIDER_PATH_PREFIX}/device`,
@@ -140,8 +321,25 @@ export function createOAuthProvider({
           };
         },
       },
+      // Dynamic client registration, open to any caller (ADR 021 §1.4) and
+      // checked by Boxel before the library sees it (`registration.ts`).
+      registration: {
+        enabled: true,
+        // Open: a client needs no token issued ahead of time to register.
+        initialAccessToken: false,
+        policies: undefined,
+        // A registration can't be read, changed or deleted afterwards, so
+        // there is no token to do it with. On by default.
+        issueRegistrationAccessToken: false,
+        idFactory: () => randomBytes(24).toString('base64url'),
+        // No client is ever issued a secret. Should the library ask for one
+        // all the same, the registration is refused rather than a secret
+        // stored.
+        secretFactory: () => {
+          throw new Error('the OAuth provider issues no client secrets');
+        },
+      },
       // Off: nothing serves them.
-      registration: { enabled: false },
       clientIdMetadataDocument: { enabled: false },
       deviceFlow: { enabled: false },
       revocation: { enabled: false },
@@ -192,10 +390,17 @@ export function createOAuthProvider({
       }`,
     );
   }
+  // In production TLS ends at the load balancer, so the library would take
+  // every request for plain HTTP: its cookies would lack `Secure`. It reads
+  // the scheme from `X-Forwarded-Proto` instead, which `serve.ts` sets from
+  // the issuer before every request, and which nothing else reads from the
+  // caller.
+  provider.proxy = true;
 
   // Runs around the library's own routing: after it builds the discovery
   // document, publish only the fields Boxel serves, with the registry's
-  // scopes in place of the library's list (which always adds `openid`).
+  // scopes in place of the library's list (which always adds `openid`), and
+  // each endpoint built from the issuer.
   provider.use(async (ctx, next) => {
     await next();
     if (ctx.oidc?.route === 'discovery' && isRecord(ctx.body)) {
@@ -204,7 +409,10 @@ export function createOAuthProvider({
       for (let field of DISCOVERY_FIELDS) {
         document[field] = body[field];
       }
+      document.grant_types_supported = GRANT_TYPES_SERVED;
       document.scopes_supported = scopes;
+      document.authorization_endpoint = `${issuer}${OAUTH_AUTHORIZATION_PATH}`;
+      document.registration_endpoint = `${issuer}${OAUTH_REGISTRATION_PATH}`;
       ctx.body = document;
     }
   });
@@ -225,6 +433,31 @@ export function createOAuthProvider({
       .join(', ')}`,
   );
   return provider;
+}
+
+// The library's interaction policy, with sign-in and consent asked for on
+// every flow that starts (ADR 021 §1.7). The library's own checks would also
+// ask for them, since Boxel drops its session cookie and each consent makes a
+// new grant; this keeps a flow from skipping either should that change. A
+// resumed flow is left to the library's checks, which see the decision.
+function alwaysPromptingPolicy() {
+  let { base, Check } = interactionPolicy;
+  let policy = base();
+  for (let name of ['login', 'consent']) {
+    policy
+      .get(name)!
+      .checks.add(
+        new Check(
+          'boxel_every_flow',
+          'Boxel asks on every flow',
+          (ctx: KoaContextWithOIDC) =>
+            ctx.oidc.route === 'authorization'
+              ? Check.REQUEST_PROMPT
+              : Check.NO_NEED_TO_PROMPT,
+        ),
+      );
+  }
+  return policy;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -43,6 +43,44 @@ function ensurePnpmNodePath() {
 }
 
 // ---------------------------------------------------------------------------
+// Progress
+// ---------------------------------------------------------------------------
+
+// The steps of loading the engines, which a thread does once, when it starts.
+export type EngineStage =
+  | 'eslint-module'
+  | 'call-api-plugin'
+  | 'eslint-config'
+  | 'prettier-module'
+  | 'template-lint-engine';
+
+// The passes of one lint, each reported as it completes.
+export type LintPass =
+  | 'eslint-fix'
+  | 'prettier'
+  | 'eslint-settle'
+  | 'template-lint';
+
+let reportEngineStage: (stage: EngineStage) => void = () => {};
+
+// Loads every engine, reporting each step as it completes. A thread calls this
+// once, when it starts, so that loading is a phase of its own rather than part
+// of whichever lint happens to need an engine first.
+export async function loadEngines(
+  onStage: (stage: EngineStage) => void,
+): Promise<void> {
+  reportEngineStage = onStage;
+  try {
+    await getESLint();
+    await import(/* webpackIgnore: true */ 'prettier');
+    onStage('prettier-module');
+    await getTemplateLinter();
+  } finally {
+    reportEngineStage = () => {};
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Engine caches — config resolution + plugin loading is heavy and never
 // changes at runtime, so we instantiate once per lint thread.
 // ---------------------------------------------------------------------------
@@ -60,6 +98,7 @@ async function initESLint(): Promise<any> {
   // inside ESLint follows host's dependency tree.
   const hostRequire = Module.createRequire(resolve(HOST_PKG, 'package.json'));
   const { ESLint } = hostRequire('eslint');
+  reportEngineStage('eslint-module');
 
   const importMappingConfig = await import(
     // @ts-ignore no types for the import-mapping config
@@ -76,8 +115,9 @@ async function initESLint(): Promise<any> {
     /* webpackIgnore: true */ new URL('./lint-call-api.ts', import.meta.url)
       .href
   )) as { callApiLintPlugin: { rules: Record<string, unknown> } };
+  reportEngineStage('call-api-plugin');
 
-  return new ESLint({
+  const eslint = new ESLint({
     cwd: HOST_PKG,
     overrideConfigFile: HOST_ESLINTRC,
     fix: true,
@@ -135,6 +175,12 @@ async function initESLint(): Promise<any> {
       },
     },
   });
+  // ESLint loads the plugins and parser a config names on first use. Resolve
+  // the config for a realm file here, so that load is a stage of its own
+  // rather than part of the first lint pass.
+  await eslint.calculateConfigForFile(resolve(LINT_ANCHOR, 'input.gts'));
+  reportEngineStage('eslint-config');
+  return eslint;
 }
 
 let templateLinterPromise: Promise<any> | undefined;
@@ -162,6 +208,7 @@ async function initTemplateLinter(): Promise<any> {
   // whether the file went through the formatter, so gating it by extension
   // would lint identical text differently.
   const hostTemplateLintConfig = hostRequire('./.template-lintrc.js');
+  reportEngineStage('template-lint-engine');
   return new TemplateLinter({
     workingDir: HOST_PKG,
     config: {
@@ -191,6 +238,7 @@ export function isLintableFilename(filename: string): boolean {
 export async function lintOne(
   source: string,
   filename: string,
+  onPass: (pass: LintPass) => void = () => {},
 ): Promise<LintResult> {
   const ext = extname(filename).toLowerCase();
   const messages: LintMessage[] = [];
@@ -201,12 +249,14 @@ export async function lintOne(
     // 1. ESLint autofix — dedup imports, inject missing card-api imports,
     //    resolve template invokables, etc.
     const fixed = await runESLint(working, filename);
+    onPass('eslint-fix');
     if (typeof fixed.output === 'string' && fixed.output !== working) {
       working = fixed.output;
       modified = true;
     }
     // 2. Prettier as a separate pass over the now-fixed source.
     const formatted = await runPrettier(working, filename);
+    onPass('prettier');
     if (formatted !== working) {
       working = formatted;
       modified = true;
@@ -214,6 +264,7 @@ export async function lintOne(
     // 3. Settle any fixes Prettier's reflow re-triggered, and collect the
     //    residual messages against the final formatted output.
     const settled = await runESLint(working, filename);
+    onPass('eslint-settle');
     if (typeof settled.output === 'string' && settled.output !== working) {
       working = settled.output;
       modified = true;
@@ -237,6 +288,7 @@ export async function lintOne(
       working,
       filename,
     );
+    onPass('template-lint');
     if (typeof output === 'string' && output !== working) {
       working = output;
       modified = true;
