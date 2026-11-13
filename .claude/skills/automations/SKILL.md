@@ -47,6 +47,12 @@ description: >-
   now), when a run waits in the queue longer than expected, when sizing or
   adding the automation lane in a deployment, or when changing the priority
   tiers, `lib/worker-lanes.ts` or `worker-manager.ts`.
+  Also covers the Realm Runner automation surface a run's script runs on —
+  its method list and allowlist test (`surfaces.ts`), `realm.current.automation`,
+  the time limit from the `seconds` cap, progress and console lines sent to a
+  progress sink with secrets redacted, and `runAutomationScript`. Use when
+  adding or moving a Realm Runner method, changing what an automation script
+  can call, or diagnosing a method an automation run refused.
 ---
 
 # Automations
@@ -609,6 +615,112 @@ SELECT state, ai_credits_spent, ai_credits_reserved, resolve_calls
 ```
 
 A finished run with `ai_credits_reserved` above 0 has an admitted request that was never settled; `ai_reservations` names it and what it holds.
+
+## The automation surface
+
+A run's script runs on Realm Runner's **automation surface** (ADR 025 §1.4):
+the engine and method names of the assistant's interactive surface, with its
+own allowlist of methods, its own time limit, no chat room, and its progress
+sent to the run record. The pieces live in `packages/host/app/lib/realm-runner/`:
+
+- `surfaces.ts`: `AUTOMATION_METHODS` and `INTERACTIVE_METHODS`, and
+  `METHOD_REACH`, what each method can reach outside QuickJS;
+- `automation.ts`: `automationTimeLimitMs`, the progress sink
+  (`RunProgressSink`, `RunProgressEvent`) and `redactSecrets`;
+- `worker.ts`: builds the guest's `realm`, `room` and `console` from the
+  surface's list, so a method off the list is not defined in the script at
+  all;
+- `runAutomationScript` in `packages/host/app/tools/run-realm-code.ts`: runs
+  one script on the surface, with the realm I/O it's given
+  (`AutomationRealmIO`). `RunRealmCodeTool.automationRealmIO(realmURL)`
+  builds that I/O from the tab's own realm calls, which carry the token the
+  tab holds for the realm: the run's token, in an automation run.
+
+### The method list
+
+| Group                 | Methods                                                                               | On the automation surface                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Reads                 | `cards.search`, `cards.get`, `entries.search`, `fs.readText`, `fs.list`, `fs.exists`  | yes; `entries.search` refuses any realm but the automation's own                             |
+| Writes                | `fs.writeText`, `fs.writeBytes`, `fs.replace`, `fs.copy`, `cards.update`              | yes; the realm server stages them in the run's overlay (see _The run overlay_)               |
+| Operations            | `operations.invoke`, `operations.invokeBatchOperation`                                | yes; a `callApi` runs as an automation call, admitted only for operations the card declares  |
+| Resolve               | `resolve`                                                                             | yes; no per-run count here, the card's `resolve` and `aiCredits` caps bound it on the server |
+| Progress              | `activity`, `progress.plan`, `progress.milestone`, `progress.count`                   | yes; `progress.*` only here                                                                  |
+| Console               | `console.log`, `console.info`, `console.warn`, `console.error`                        | yes; only here                                                                               |
+| Downloads and deletes | `fs.download`, `fs.delete`                                                            | no                                                                                           |
+| Web, images, capture  | `web.search`, `web.read`, `images.generate`, `capture`                                | no                                                                                           |
+| Session and UI        | `room.*`, `ui.*`, `workspaces.*`, `index.*`, `plan`, `ask`, `operations.capabilities` | no                                                                                           |
+| Transforms            | `transform`                                                                           | not yet; the interactive surface has it                                                      |
+
+The unit test `realm-runner-surfaces-test.ts` pins `AUTOMATION_METHODS` and
+fails when a method on it reaches anything but a realm read, a staged write,
+an operation, the model, progress or the console. Adding a method, or moving
+one between surfaces, changes that test in review. The interactive surface
+is unchanged by any of this: its guest has the same `realm` and `room` as
+before, and no `console` or `progress`.
+
+How a method differs from the interactive surface:
+
+- **`fs.writeText` writes the file whole**, whether or not it exists. The
+  interactive surface only creates, and edits through `fs.replace`. A write
+  of the content the file already holds is reported as unchanged.
+- **No interactive per-run limits**: no 20-file, 200-card-update,
+  200-operation or 3-`resolve` limit. The card's caps take their place, and
+  the realm server enforces them on each call the run's token carries.
+- **Progress and console are one-way**: they return nothing, so a script
+  needn't await them, and an unawaited one doesn't fail the run. A bad
+  argument (an empty milestone name, `count(3, 2)`) throws in the script.
+
+For media from an AI vendor, author guidance is boxel-skills'
+`api-integrations` skill, _Images from an AI vendor_: an automation's own AI
+requests carry text only, and an image goes through a `callApi` with the key
+of the person who switched the automation on.
+
+### `realm.current.automation`
+
+`AutomationRunContext` in `types.ts`, frozen in the script:
+
+| Field            | What it holds                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| `url`            | the automation card's URL                                                                       |
+| `trigger`        | `{ label?, kind }`, kind one of `cron`, `once`, `webhook`, `manual` (Preview, Run now), `batch` |
+| `scheduledAt`    | when the trigger was due, or when a manual run was asked for (ISO 8601)                         |
+| `lastSuccessAt`  | when the automation's last complete run started, if it has had one                              |
+| `params`         | the card's params with the trigger's own merged over them                                       |
+| `webhookPayload` | the delivery's JSON body, for a webhook run                                                     |
+| `dryRun`         | true for a Preview                                                                              |
+
+`realm.current.url` is the realm's root, as on the interactive surface.
+
+### The time limit
+
+`automationTimeLimitMs(seconds)` is the card's `seconds` cap in ms, never more
+than `MAX_RUN_SECONDS` (20 minutes); it takes the place of the interactive
+100-second deadline. It bounds everything the script does, waiting on realm
+calls included: QuickJS's interrupt stops a script that computes past it, and
+the runner's own timer stops one that waits past it. Either way
+`runAutomationScript` rejects with `The automation run reached its time limit
+of N s (its seconds cap)`. A script error rejects with `RealmScriptError`,
+which names the script's line.
+
+### Progress and redaction
+
+The run's progress goes to the `RunProgressSink` the caller passes, one
+`RunProgressEvent` at a time, in the order the script made them: `activity`
+lines, the milestone `plan`, each `milestone` reached, `count`s within one,
+and `console` lines with their level and script line (a value that isn't a
+string is shown as JSON, an `Error` as `Name: message`; a line past 10,000
+characters is cut and says how many it lost). Each event's time is `at`.
+
+Every text in an event passes through `redactSecrets` before the sink sees
+it. It replaces with `[REDACTED]` each value the caller registers in
+`secrets` (the run's own token) and every credential it recognizes by shape:
+a vendor key (a prefix in `CREDENTIAL_PREFIXES`,
+`packages/runtime-common/credential-prefixes.ts`, the list the realm server's
+response scrubber uses too, and a key-like tail), a JWT, an
+`Authorization`-style scheme's value (`Bearer [REDACTED]`), an AWS access key
+id, and a PEM private key. The sink is where the run log takes these lines;
+the scrubber still removes a vendor's own key from a `callApi` response
+before the script sees it.
 
 ## The queue tier and worker lane
 

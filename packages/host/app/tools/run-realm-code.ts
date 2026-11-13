@@ -3115,6 +3115,13 @@ export async function runAutomationScript(
   let secrets = options.secrets ?? [];
   let timeoutMs = automationTimeLimitMs(options.secondsCap);
   let realmURL = ensureTrailingSlash(options.realmURL);
+  let paths = new RealmPaths(new URL(realmURL));
+  // Whether a reference, in any form the network resolves, names this realm
+  // itself (`root`) or anything in it.
+  let inThisRealm = (reference: string, root = false) => {
+    let url = new URL(io.resolveURL(reference, realmURL));
+    return paths.inRealm(url) && (!root || paths.local(url) === '');
+  };
   let refused =
     (name: string) =>
     async (..._args: unknown[]): Promise<never> => {
@@ -3137,9 +3144,7 @@ export async function runAutomationScript(
     // Every search stays in the automation's realm.
     (realms) => {
       let outside = (realms ?? []).filter(
-        (realm) =>
-          ensureTrailingSlash(io.resolveURL(ensureTrailingSlash(realm))) !==
-          realmURL,
+        (realm) => !inThisRealm(ensureTrailingSlash(realm), true),
       );
       if (outside.length > 0) {
         throw new Error(
@@ -3149,7 +3154,7 @@ export async function runAutomationScript(
       return [realmURL];
     },
     refused('realm.capture'),
-    (reference) => io.resolveURL(reference, realmURL).startsWith(realmURL),
+    (reference) => inThisRealm(reference),
     refused('realm.workspaces.create'),
     refused('realm.workspaces.delete'),
     refused('realm.images.generate'),
@@ -4291,7 +4296,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // holds what the script last saw, and saves it. Returns the content that
   // was saved.
   private async writeFile(
-    roomId: string,
+    // undefined for an automation run, which has no room
+    roomId: string | undefined,
     url: string,
     content: string,
     expected: string | undefined,
@@ -4324,11 +4330,13 @@ export default class RunRealmCodeTool extends HostBaseTool<
     ) {
       throw new Error(`File changed while the script ran: ${url}`);
     }
-    let clientRequestId = this.toolService.trackAiAssistantCardRequest({
-      action: 'run-realm-code',
-      roomId,
-      fileUrl: url,
-    });
+    let clientRequestId = roomId
+      ? this.toolService.trackAiAssistantCardRequest({
+          action: 'run-realm-code',
+          roomId,
+          fileUrl: url,
+        })
+      : undefined;
     await this.cardService.saveSource(rri(url), content, 'bot-patch', {
       resetLoader: /\.(gts|ts)$/.test(url),
       clientRequestId,
@@ -4341,7 +4349,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // tracked under the request's one client request id, so the correctness
   // check waits for its index event like any other saved file.
   private async saveCards(
-    roomId: string,
+    // undefined for an automation run, which has no room
+    roomId: string | undefined,
     realmURL: string,
     updates: { url: string; content: string; expected: string }[],
   ): Promise<void> {
@@ -4364,6 +4373,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
     let clientRequestId: string | undefined;
     for (let { url } of updates) {
+      if (!roomId) {
+        break;
+      }
       clientRequestId = this.toolService.trackAiAssistantCardRequest({
         action: 'run-realm-code',
         roomId,
@@ -4422,7 +4434,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
 
   // Checks the file still does not exist, and saves the bytes as they are.
   private async writeBinaryFile(
-    roomId: string,
+    // undefined for an automation run, which has no room
+    roomId: string | undefined,
     url: string,
     bytes: Uint8Array,
   ): Promise<void> {
@@ -4430,11 +4443,13 @@ export default class RunRealmCodeTool extends HostBaseTool<
     if (current.status !== 404) {
       throw new Error(`File appeared while the script ran: ${url}`);
     }
-    let clientRequestId = this.toolService.trackAiAssistantCardRequest({
-      action: 'run-realm-code',
-      roomId,
-      fileUrl: url,
-    });
+    let clientRequestId = roomId
+      ? this.toolService.trackAiAssistantCardRequest({
+          action: 'run-realm-code',
+          roomId,
+          fileUrl: url,
+        })
+      : undefined;
     if (clientRequestId) {
       this.cardService.clientRequestIds.add(clientRequestId);
     }
@@ -4728,6 +4743,34 @@ export default class RunRealmCodeTool extends HostBaseTool<
         },
         signal,
       });
+  }
+
+  // The realm I/O of an automation run in this tab, for
+  // `runAutomationScript`: the calls an interactive run makes, without a
+  // room. No write is tracked against a chat, and no file is linted, since a
+  // run can't write a module. Each call carries the token this tab holds for
+  // the realm, which for an automation run is the run's token.
+  automationRealmIO(realmURL: string): AutomationRealmIO {
+    let rootURL = ensureTrailingSlash(realmURL);
+    let send = this.proxySend();
+    return {
+      readSource: (url) => this.readSource(url),
+      writeFile: (url, content, expected) =>
+        this.writeFile(undefined, url, content, expected, { lint: false }),
+      saveCards: (updates) => this.saveCards(undefined, rootURL, updates),
+      writeBinaryFile: (url, bytes) =>
+        this.writeBinaryFile(undefined, url, bytes),
+      listDirectory: (url) => this.listDirectory(url),
+      searchCards: (query) =>
+        this.store.searchEntries(query, [rootURL], { linksOnly: true }),
+      resolveURL: (reference, base) =>
+        this.network.virtualNetwork.resolveURL(reference, base).href,
+      readCard: (id) => this.readCard(id, rootURL),
+      runOperations: (entries) => this.runOperations(entries, rootURL),
+      searchEntries: (query, realms) => this.store.searchEntries(query, realms),
+      cardSizeLimitBytes: this.environmentService.cardSizeLimitBytes,
+      resolve: (request, signal) => resolveJSON(request, send, signal),
+    };
   }
 
   // The research calls send through the same proxy as images. A search asks
