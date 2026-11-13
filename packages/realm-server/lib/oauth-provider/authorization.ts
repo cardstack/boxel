@@ -32,7 +32,10 @@ import {
   type CallerLimit,
 } from './caller-limit.ts';
 import { appName, type AppName } from './app-name.ts';
-import { clientIdForLogs } from './client-metadata-document.ts';
+import {
+  clientIdForLogs,
+  metadataDocumentLimited,
+} from './client-metadata-document.ts';
 import {
   findAuthorizationError,
   storeAuthorizationError,
@@ -344,6 +347,16 @@ export function authorizationHandler({
     let clientId = single(query, 'client_id');
     let client =
       clientId === REPEATED ? undefined : await findClient(provider, clientId);
+    // A document client whose download the new-client limit refused is no
+    // client to the library. The caller is told they were limited, as at
+    // step 1, so they know trying again later can work.
+    if (!client && metadataDocumentLimited()) {
+      log.info('authorization refused by the new-client limit');
+      return navigate(
+        ctxt,
+        errorPageURL(secureOriginURL, FIXED_ERROR_PAGES.rateLimited),
+      );
+    }
     let check = checkAuthorizationRequest(query, {
       client,
       registry,

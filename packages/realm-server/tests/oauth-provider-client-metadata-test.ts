@@ -42,6 +42,8 @@ import {
   clientIdForLogs,
   clientMetadataDocuments,
   inMetadataDocumentRequest,
+  metadataDocumentLimited,
+  type ClientMetadataDocuments,
 } from '../lib/oauth-provider/client-metadata-document.ts';
 import {
   takeNewClient,
@@ -310,34 +312,79 @@ module(basename(import.meta.filename), function () {
       ...ROOMY_LIMIT,
       perAddress: { requests: 1, windowSeconds: 3600 },
     };
-    let ctx = {
-      req: { headers: { [CLIENT_IP_HEADER]: CALLER } },
-    } as unknown as KoaContextWithOIDC;
+
+    // A download decision in a request of its own from `caller`, as a
+    // provider route makes one.
+    function ask(
+      documents: ClientMetadataDocuments,
+      clientId: string,
+      caller = CALLER,
+    ): Promise<boolean> {
+      return inMetadataDocumentRequest(caller, () =>
+        documents.allowFetch(undefined, clientId),
+      );
+    }
 
     test('a document downloaded again for a client already accepted is not a new client', async function (assert) {
       let documents = hooksFor(store, ONE_PER_ADDRESS);
-      assert.true(await documents.allowFetch(ctx, CLAUDE_CODE.client_id));
-      await documents.allowClient(ctx, { clientId: CLAUDE_CODE.client_id });
+      assert.true(await ask(documents, CLAUDE_CODE.client_id));
+      await documents.allowClient(undefined, {
+        clientId: CLAUDE_CODE.client_id,
+      });
       assert.true(
-        await documents.allowFetch(ctx, CLAUDE_CODE.client_id),
+        await ask(documents, CLAUDE_CODE.client_id),
         'its next download is allowed, with the limit already reached',
       );
       assert.false(
-        await documents.allowFetch(ctx, CODEX.client_id),
+        await ask(documents, CODEX.client_id),
         'a client not accepted before is counted, and refused',
       );
       assert.false(
-        await documents.allowFetch(ctx, CLAUDE_CODE.client_id),
+        await ask(documents, CLAUDE_CODE.client_id),
         'its free download was not accepted, so the next one counts',
+      );
+    });
+
+    test('a client in use stays known, however many others are accepted after its download', async function (assert) {
+      let documents = hooksFor(store, {
+        ...ONE_PER_ADDRESS,
+        perNetwork: { requests: 1000, windowSeconds: 3600 },
+      });
+      assert.true(await ask(documents, CLAUDE_CODE.client_id));
+      await documents.allowClient(undefined, {
+        clientId: CLAUDE_CODE.client_id,
+      });
+      // As many other clients as the process remembers are accepted, each
+      // from an address of its own, while Claude Code is used from the cache.
+      for (let i = 0; i < 1000; i++) {
+        let clientId = `https://client.example.test/${i}.json`;
+        assert.true(
+          await ask(documents, clientId, `198.51.${i >> 8}.${i & 255}`),
+          `client ${i}`,
+        );
+        await documents.allowClient(undefined, { clientId });
+        if (i % 100 === 99) {
+          await documents.allowClient(undefined, {
+            clientId: CLAUDE_CODE.client_id,
+          });
+        }
+      }
+      assert.true(
+        await ask(documents, CODEX.client_id, '192.0.2.1'),
+        "a new client takes the caller's one download",
+      );
+      assert.true(
+        await ask(documents, CLAUDE_CODE.client_id, '192.0.2.1'),
+        'Claude Code is still known, so its download is free',
       );
     });
 
     test('a client ID never accepted is counted on every download', async function (assert) {
       let documents = hooksFor(store, ONE_PER_ADDRESS);
-      assert.true(await documents.allowFetch(ctx, CLAUDE_CODE.client_id));
+      assert.true(await ask(documents, CLAUDE_CODE.client_id));
       // The download failed, or the document was refused: it is never used.
       assert.false(
-        await documents.allowFetch(ctx, CLAUDE_CODE.client_id),
+        await ask(documents, CLAUDE_CODE.client_id),
         'counted again',
       );
     });
@@ -352,13 +399,11 @@ module(basename(import.meta.filename), function () {
       let documents = hooksFor(store, limit);
       // Downloads from three networks: more than the overall bucket holds.
       for (let caller of ['203.0.113.7', '198.51.100.7', '192.0.2.7']) {
-        let ctxFrom = {
-          req: { headers: { [CLIENT_IP_HEADER]: caller } },
-        } as unknown as KoaContextWithOIDC;
         assert.true(
-          await documents.allowFetch(
-            ctxFrom,
+          await ask(
+            documents,
             `https://client.example.test/${caller}.json`,
+            caller,
           ),
           `a download from ${caller}`,
         );
@@ -374,19 +419,23 @@ module(basename(import.meta.filename), function () {
         "a registration from the first caller takes the address's last",
       );
       assert.false(
-        await documents.allowFetch(
-          ctx,
-          'https://client.example.test/next.json',
-        ),
+        await ask(documents, 'https://client.example.test/next.json'),
         'and its next download is refused: they share the allowance',
       );
     });
 
-    test("outside the library's handling, the address comes from the request the provider's route is serving", async function (assert) {
+    test("the caller's address comes from the request the provider's route is serving", async function (assert) {
       let documents = hooksFor(store, ROOMY_LIMIT);
       assert.false(
         await documents.allowFetch(undefined, CLAUDE_CODE.client_id),
         'with no request, the caller is unknown, and refused',
+      );
+      let ctx = {
+        req: { headers: { [CLIENT_IP_HEADER]: CALLER } },
+      } as unknown as KoaContextWithOIDC;
+      assert.false(
+        await documents.allowFetch(ctx, CLAUDE_CODE.client_id),
+        "the library's request alone doesn't name the caller",
       );
       assert.true(
         await inMetadataDocumentRequest(CALLER, () =>
@@ -406,10 +455,12 @@ module(basename(import.meta.filename), function () {
           await documents.allowFetch(undefined, CLAUDE_CODE.client_id),
           'a second lookup in the request downloads nothing',
         );
+        assert.false(metadataDocumentLimited(), 'not limited yet');
         assert.false(
           await documents.allowFetch(undefined, CODEX.client_id),
           'refused by the limit',
         );
+        assert.true(metadataDocumentLimited(), 'the request notes the limit');
         let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
           assert.false(
             await documents.allowFetch(undefined, CODEX.client_id),
@@ -418,6 +469,20 @@ module(basename(import.meta.filename), function () {
         });
         assert.deepEqual(lines, [], 'with no second refusal counted or logged');
       });
+    });
+
+    test('a document is downloaded only by the client ID as the lookup was given it', async function (assert) {
+      let documents = hooksFor(store, ROOMY_LIMIT);
+      for (let input of [
+        new URL(CLAUDE_CODE.client_id),
+        new Request(CLAUDE_CODE.client_id),
+      ]) {
+        await assert.rejects(
+          documents.fetch(input),
+          TypeError,
+          `a ${input.constructor.name} is refused before anything is sent`,
+        );
+      }
     });
   });
 
@@ -773,6 +838,25 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("a client ID on one of Boxel's hosts written with a trailing dot is refused before any download", async function (assert) {
+      let clientId = 'https://other.oauth-provider.test./client.json';
+      let messages = await assertRefused(
+        assert,
+        () => authorize(clientId, 'http://127.0.0.1:5000/callback'),
+        'unknown-client',
+        'a fully qualified host name',
+      );
+      assert.deepEqual(documentServer.requested, [], 'nothing is downloaded');
+      assert.true(
+        messages.some((message) =>
+          message.includes(
+            'outcome=refused reason=boxel-domain host=other.oauth-provider.test.',
+          ),
+        ),
+        'the refusal is logged',
+      );
+    });
+
     test('a client ID whose scheme is not written in lower case is refused before any download', async function (assert) {
       let clientId = CLAUDE_CODE.client_id.replace('https://', 'HTTPS://');
       await assertRefused(
@@ -899,11 +983,20 @@ module(basename(import.meta.filename), function () {
         ),
         'the first client',
       );
-      let messages = await assertRefused(
-        assert,
-        () => authorize(CODEX.client_id, 'http://127.0.0.1:43210/callback'),
-        'unknown-client',
-        'a second client from the same address',
+      let refused: supertest.Response | undefined;
+      let messages = (
+        await logLinesDuring(['boxel:oauth-provider'], async () => {
+          refused = await authorize(
+            CODEX.client_id,
+            'http://127.0.0.1:43210/callback',
+          );
+        })
+      ).map(({ message }) => message);
+      assert.strictEqual(refused!.status, 303, refused!.text);
+      assert.strictEqual(
+        refused!.headers.location,
+        `${AUTHORIZE_PAGE}?error=rate_limited`,
+        'a second client from the same address is told the caller is limited, not that the client is unknown',
       );
       assert.true(
         messages.some((message) =>
@@ -912,6 +1005,10 @@ module(basename(import.meta.filename), function () {
           ),
         ),
         'the refusal is logged',
+      );
+      assert.true(
+        messages.includes('authorization refused by the new-client limit'),
+        `the flow's refusal is logged (${messages.join(' | ')})`,
       );
       let lines = await logLinesDuring(['boxel:oauth-provider'], async () => {
         assertStarted(

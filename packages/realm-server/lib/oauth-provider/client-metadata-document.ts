@@ -16,7 +16,9 @@
 //    hasn't accepted before counts against the caller's address and network
 //    buckets of the new-client limit DCR uses, though not its overall one
 //    (`new-client-limit.ts`); one it has accepted gets one download free, then
-//    counts until it is accepted again.
+//    counts until it is accepted again. A download the limit refuses is noted
+//    on the request, so the start of a flow tells the caller they were
+//    limited rather than that the client is unknown (`authorization.ts`).
 //    A cache hit never gets here.
 // 2. `fetch`, the download: through the outbound guard, so a client ID can't
 //    reach a private address, with no redirect followed and at most
@@ -27,7 +29,7 @@
 //    its redirect URIs, so a document listing loopback redirects is native
 //    without declaring it, as Claude Code's doesn't.
 // 4. `allowClient`, each time the client is used, cached or not: notes the
-//    client ID as accepted, and logs a cache hit.
+//    client ID as accepted and most recently used, and logs a cache hit.
 //
 // Boxel's own checks before the library look a client up too (the start of a
 // flow, the error page, consent), outside the library's handling of a request.
@@ -42,11 +44,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { errors, type KoaContextWithOIDC } from 'oidc-provider';
-import {
-  CLIENT_IP_HEADER,
-  logger,
-  type RateLimitStore,
-} from '@cardstack/runtime-common';
+import { logger, type RateLimitStore } from '@cardstack/runtime-common';
 import {
   OutboundRefusedError,
   OutboundResponseTooLargeError,
@@ -72,8 +70,9 @@ export const MAX_DOCUMENT_BYTES = 5 * 1024;
 export const DOCUMENT_CACHE_SECONDS = Object.freeze({ min: 30, max: 86400 });
 
 // The client IDs a process remembers having accepted, so a document it
-// downloads again (after its max-age, or a restart) isn't counted as a new
-// client. Bounded, oldest forgotten first; a forgotten one is counted again.
+// downloads again (after its max-age, or once the library's cache drops it)
+// isn't counted as a new client. Bounded, the least recently used forgotten
+// first; a forgotten one is counted again.
 const KNOWN_CLIENT_IDS = 1000;
 
 // The library runs `extraClientMetadata.validator` once for each property
@@ -113,6 +112,8 @@ interface MetadataDocumentRequest {
   address: string | undefined;
   // The client IDs a download was decided for in this request.
   asked: Set<string>;
+  // Whether the new-client limit refused a download in this request.
+  limited: boolean;
 }
 
 const currentRequest = new AsyncLocalStorage<MetadataDocumentRequest>();
@@ -123,7 +124,17 @@ export function inMetadataDocumentRequest<T>(
   address: string | undefined,
   handle: () => Promise<T>,
 ): Promise<T> {
-  return currentRequest.run({ address, asked: new Set() }, handle);
+  return currentRequest.run(
+    { address, asked: new Set(), limited: false },
+    handle,
+  );
+}
+
+// Whether the new-client limit refused a download in the current request. The
+// library reports such a client as unknown, so the start of a flow asks this
+// to show the caller they were limited, and can try again later.
+export function metadataDocumentLimited(): boolean {
+  return currentRequest.getStore()?.limited ?? false;
 }
 
 export interface ClientMetadataDocuments {
@@ -171,7 +182,7 @@ export function clientMetadataDocuments({
   let downloading = new BoundedSet(KNOWN_CLIENT_IDS);
 
   async function allowFetch(
-    ctx: KoaContextWithOIDC | undefined,
+    _ctx: KoaContextWithOIDC | undefined,
     clientId: string,
   ): Promise<boolean> {
     let request = currentRequest.getStore();
@@ -197,14 +208,15 @@ export function clientMetadataDocuments({
     // until it is accepted again, so a document that stopped loading can't
     // be downloaded for free over and over.
     if (!known.delete(clientId)) {
-      let header = ctx?.req.headers[CLIENT_IP_HEADER];
-      let address = typeof header === 'string' ? header : request?.address;
       let outcome = await takeNewClientDownload(
         rateLimitStore,
-        address,
+        request?.address,
         newClientLimit,
       );
       if (!outcome.admitted) {
+        if (request) {
+          request.limited = true;
+        }
         note('refused', url, outcome.reason);
         return false;
       }
@@ -218,9 +230,9 @@ export function clientMetadataDocuments({
     client: { clientId: string },
   ): Promise<boolean> {
     let { clientId } = client;
-    if (downloading.delete(clientId)) {
-      known.add(clientId);
-    } else {
+    // Known clients are ordered by last use, so one in use stays known.
+    known.add(clientId);
+    if (!downloading.delete(clientId)) {
       let url = URL.parse(clientId);
       if (url) {
         note('cache-hit', url);
@@ -233,7 +245,15 @@ export function clientMetadataDocuments({
     input: string | URL | Request,
     init: RequestInit = {},
   ): Promise<Response> {
-    let clientId = input instanceof Request ? input.url : String(input);
+    // The library passes the client ID exactly as the request gave it, the
+    // same string `allowFetch` was asked about. Anything else would be a
+    // normalized form that no longer matches it.
+    if (typeof input !== 'string') {
+      throw new TypeError(
+        'a client metadata document is fetched by its client ID',
+      );
+    }
+    let clientId = input;
     let url = new URL(clientId);
     let mapped = testOnlyDocumentOrigins?.get(url.origin);
     let target = mapped ? `${mapped}${url.pathname}${url.search}` : clientId;
