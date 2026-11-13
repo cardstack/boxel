@@ -1529,7 +1529,7 @@
         "description": "One line each time a decision changed the spill. `written false` means the write to the repository variable failed; the collector logs the error under Collector health."
       }
     ],
-    "refresh": "1m",
+    "refresh": "",
     "schemaVersion": 42,
     "tags": [
       "ci",
