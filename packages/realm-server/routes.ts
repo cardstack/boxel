@@ -127,6 +127,7 @@ import {
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
+  accountContactLookup,
   handleCheckSecureSession,
   handleEndSecureSession,
   handleEndWindowSessions,
@@ -313,7 +314,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   };
 
   if (args.oauthProvider) {
-    registerOAuthProviderRoutes(router, args.oauthProvider);
+    registerOAuthProviderRoutes(router, args.oauthProvider, {
+      realmSecretSeed: args.realmSecretSeed,
+      accountContact: accountContactLookup(args),
+    });
   }
 
   router.get(

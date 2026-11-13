@@ -245,6 +245,40 @@ function userPath(user: string) {
   return `_synapse/admin/v2/users/${encodeURIComponent(user)}`;
 }
 
+// How a page names the signed-in account to its own user: its email address,
+// else its display name. Read from the Matrix server on each call and kept
+// nowhere, so it is always current.
+export type AccountContact = { email: string } | { displayName: string };
+
+export async function accountContact(
+  deps: SecureSessionDeps,
+  user: string,
+): Promise<AccountContact> {
+  let { status, body } = await adminRequest(deps, userPath(user));
+  if (status !== 200) {
+    throw new Error(`account lookup failed: HTTP ${status}`);
+  }
+  let email = Array.isArray(body.threepids)
+    ? body.threepids.find(
+        (threepid: any): threepid is { address: string } =>
+          typeof threepid === 'object' &&
+          threepid !== null &&
+          threepid.medium === 'email' &&
+          typeof threepid.address === 'string' &&
+          threepid.address.length > 0,
+      )?.address
+    : undefined;
+  if (email) {
+    return { email };
+  }
+  return {
+    displayName:
+      typeof body.displayname === 'string' && body.displayname
+        ? body.displayname
+        : user.slice(1).split(':')[0],
+  };
+}
+
 // The account holding an email address as a third-party id, by the Matrix
 // server's admin lookup. Undefined when none does.
 async function userByEmail(

@@ -77,9 +77,11 @@ interface Refusal {
   reason: AuthorizationRefusalReason;
 }
 
-interface LibraryClient {
+// The parts of the library's client that Boxel's own routes read.
+export interface LibraryClient {
   clientId: string;
   clientName?: string;
+  grantTypes?: readonly string[];
   redirectUriAllowed(value: string): boolean;
 }
 
@@ -105,7 +107,9 @@ function navigate(ctxt: Koa.Context, location: string) {
   ctxt.status = 303;
 }
 
-async function findClient(
+// The client a flow names, or undefined when there is none the library can
+// load.
+export async function findClient(
   provider: Provider,
   clientId: unknown,
 ): Promise<LibraryClient | undefined> {
