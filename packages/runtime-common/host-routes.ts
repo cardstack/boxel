@@ -260,7 +260,8 @@ export type HostRouteWarningCode =
   // `name` is set but isn't a non-empty string.
   | 'invalid-name'
   // A top-level fixed route or a redirect without parameters has a segment
-  // that starts with `:`, which it serves as literal text, not as a `:name`.
+  // that starts with `:`, in its path or in its redirect target, which it
+  // serves as literal text, not as a `:name`.
   | 'literal-param-segment'
   // `instance` has no usable id.
   | 'invalid-instance'
@@ -502,26 +503,43 @@ class Validator {
     }
 
     // A top-level fixed card route or redirect keeps the path rules it
-    // always had, unless it is a redirect whose target uses a `:name`. A
-    // segment that starts with `:` in its path is literal text, as it always
-    // was (`/talks/:2024`): a fixed route has no `:name` segments.
+    // always had, unless it is a redirect whose path and target both have a
+    // `:name`. A segment that starts with `:` in its path, or in its
+    // redirect target, is literal text, as it always was (`/talks/:2024`):
+    // such a route has no `:name` segments.
     let legacy =
       !parentRoute &&
       (hasInstance || hasRedirect) &&
-      !(hasRedirect && redirectTargetHasParam(rule.redirectTo));
-    let literalPath = legacy && hasParamSegment(rule.path);
-    if (literalPath) {
-      let segments = rule.path
-        .split('/')
-        .filter((segment) => segment.startsWith(':'));
-      this.warn(
-        'literal-param-segment',
-        `${segments.join(', ')} ${segments.length === 1 ? 'is' : 'are'} served as literal text, not as a :name: a fixed route, or a redirect whose target uses no :name, has no parameters`,
-        position,
-        displayPath,
-        false,
+      !(
+        hasRedirect &&
+        hasParamSegment(rule.path) &&
+        redirectTargetHasParam(rule.redirectTo)
       );
+    if (legacy) {
+      let segments = paramSegments(rule.path);
+      if (segments.length > 0) {
+        this.warn(
+          'literal-param-segment',
+          `${segments.join(', ')} ${segments.length === 1 ? 'is' : 'are'} served as literal text, not as a :name: a fixed route, or a redirect whose target uses no :name, has no parameters`,
+          position,
+          displayPath,
+          false,
+        );
+      }
+      let targetSegments = hasRedirect
+        ? paramSegments(redirectTargetPath(rule.redirectTo))
+        : [];
+      if (targetSegments.length > 0) {
+        this.warn(
+          'literal-param-segment',
+          `The redirect target's ${targetSegments.join(', ')} ${targetSegments.length === 1 ? 'is' : 'are'} sent as literal text, not as a :name: the route's path has no :name`,
+          position,
+          displayPath,
+          false,
+        );
+      }
     }
+    let literalPath = legacy && hasParamSegment(rule.path);
 
     let name: string | undefined;
     if (rule.name !== undefined && !isBlank(rule.name)) {
@@ -596,7 +614,14 @@ class Validator {
           ? validateRedirectTarget(redirectTo)
           : 'Redirect target must be a string';
       let target: HostRedirectTargetTemplate | undefined;
-      if (!warning && base.paramNames.length > 0) {
+      // A redirect is dynamic when its path has a `:name` or its target
+      // uses one (a top-level redirect only when both do; otherwise it is
+      // literal, as above), and its target uses only its path's names.
+      if (
+        !warning &&
+        !legacy &&
+        (base.paramNames.length > 0 || redirectTargetHasParam(redirectTo))
+      ) {
         let result = parseRedirectTargetTemplate(redirectTo);
         if (typeof result === 'string') {
           warning = result;
@@ -956,10 +981,20 @@ class Validator {
   }
 
   // Unique names, unique fixed paths and the dynamic route limit, applied
-  // in depth-first authored order: the earlier route wins.
+  // in depth-first authored order: the earlier route wins. The one
+  // exception is a fixed path that a top-level fixed route has: the first
+  // such top-level route keeps it, even after a nested fixed route with the
+  // same path. Only top-level fixed routes are in the routing map, so a
+  // nested route must not take a path from one.
   private applyRealmWideRules(routes: HostRoute[]): HostRoute[] {
     let names = new Set<string>();
     let fixedPaths = new Set<string>();
+    let topLevelFixed = new Map<string, HostRoute>();
+    for (let route of routes) {
+      if (!isDynamic(route) && !topLevelFixed.has(route.fullPath)) {
+        topLevelFixed.set(route.fullPath, route);
+      }
+    }
     let dynamicCount = 0;
     let max = this.options.maxDynamicRoutes ?? MAX_DYNAMIC_HOST_ROUTES;
     return this.filterTree(routes, (route) => {
@@ -978,7 +1013,8 @@ class Validator {
         }
         dynamicCount++;
       } else {
-        if (fixedPaths.has(route.fullPath)) {
+        let owner = topLevelFixed.get(route.fullPath);
+        if (fixedPaths.has(route.fullPath) || (owner && owner !== route)) {
           return {
             code: 'duplicate-path',
             message: `Another fixed route already has the path ${route.fullPath}`,
@@ -1125,14 +1161,30 @@ function linkCandidates(
     side: 'child' | 'parent';
     kind: 'linksTo' | 'linksToMany';
   }[] = [];
-  let sameFields = childType.key === parentType.key;
+  // When one type is, or descends from, the other, a field with the same
+  // name and definition on both is the one field, inherited.
+  let related =
+    childType.key === parentType.key ||
+    childType.types.includes(parentType.key) ||
+    parentType.types.includes(childType.key);
+  let sameField = (field: string, def: HostRouteTypeField, other: Fields) =>
+    related &&
+    other[field]?.type === def.type &&
+    other[field]?.target === def.target;
   for (let [field, def] of Object.entries(childType.fields)) {
     if (!isLinkType(def.type) || !def.target) {
       continue;
     }
     let toParent = parentType.types.includes(def.target);
     let toChild = childType.types.includes(def.target);
-    if (toParent && !(sameFields && toChild && def.type === 'linksToMany')) {
+    if (
+      toParent &&
+      !(
+        toChild &&
+        def.type === 'linksToMany' &&
+        sameField(field, def, parentType.fields)
+      )
+    ) {
       out.push({ field, side: 'child', kind: def.type });
     }
   }
@@ -1142,12 +1194,21 @@ function linkCandidates(
     }
     let toChild = childType.types.includes(def.target);
     let toParent = parentType.types.includes(def.target);
-    if (toChild && !(sameFields && toParent && def.type === 'linksTo')) {
+    if (
+      toChild &&
+      !(
+        toParent &&
+        def.type === 'linksTo' &&
+        sameField(field, def, childType.fields)
+      )
+    ) {
       out.push({ field, side: 'parent', kind: def.type });
     }
   }
   return out;
 }
+
+type Fields = HostRouteTypeInfo['fields'];
 
 function isLinkType(
   type: FieldDefinition['type'],
@@ -1191,11 +1252,21 @@ function hasParamSegment(path: string): boolean {
   return path.split('/').some((segment) => segment.startsWith(':'));
 }
 
+function paramSegments(path: string): string[] {
+  return path.split('/').filter((segment) => segment.startsWith(':'));
+}
+
+// The redirect target's path, without its origin, query and fragment.
+function redirectTargetPath(redirectTo: unknown): string {
+  if (typeof redirectTo !== 'string') {
+    return '';
+  }
+  let target = redirectTo.trim().split(/[?#]/, 1)[0]!;
+  return target.replace(EXTERNAL_ORIGIN, '');
+}
+
 function redirectTargetHasParam(redirectTo: unknown): boolean {
-  return (
-    typeof redirectTo === 'string' &&
-    hasParamSegment(redirectTo.trim().split(/[?#]/, 1)[0]!)
-  );
+  return hasParamSegment(redirectTargetPath(redirectTo));
 }
 
 const EXTERNAL_ORIGIN = /^(https?:\/\/[^/?#]*)/i;

@@ -644,20 +644,22 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       );
       if (cached) {
-        if (cached.error) {
-          return { status: 'module-error' };
-        }
+        // A row can hold definitions and an error_doc together. The
+        // export's definition, when the row has one, is the answer, as it
+        // always was for lookupCachedDefinition; the error only explains a
+        // missing one.
         let entry = this.definitionEntryFor(
           cached.definitions,
           codeRef,
           canonicalModuleURL,
         );
-        if (!entry) {
-          return { status: 'missing-export' };
+        if (entry && 'definition' in entry) {
+          return { status: 'found', entry };
         }
-        return 'definition' in entry
-          ? { status: 'found', entry }
-          : { status: 'module-error' };
+        if (entry || cached.error) {
+          return { status: 'module-error' };
+        }
+        return { status: 'missing-export' };
       }
     }
     return { status: 'not-cached' };

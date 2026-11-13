@@ -25,6 +25,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 
+  test('validateHostRoutes: a redirect target :name must come from its path', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
   test('validateHostRoutes: a field match names a card type', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
@@ -38,6 +42,10 @@ module(basename(import.meta.filename), function () {
   });
 
   test('validateHostRoutes: a child route infers its one link to its parent', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
+  test('validateHostRoutes: a link inherited from the parent type counts once', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 

@@ -18734,11 +18734,11 @@ export class Realm {
   }
 
   // The fixed paths the realm routes: each top-level fixed card route and
-  // each top-level redirect whose target uses no `:name`, as `{ path, id }`
-  // (the card's served URL, in this realm) or `{ path, redirectTo,
-  // statusCode }`. A segment of such a path that starts with `:` is literal
-  // text, as it always was, and the validation warns about it
-  // (`literal-param-segment`). Built from the validated routes
+  // each top-level redirect whose path and target do not both have a
+  // `:name`, as `{ path, id }` (the card's served URL, in this realm) or
+  // `{ path, redirectTo, statusCode }`. A segment of such a path or target
+  // that starts with `:` is literal text, as it always was, and the
+  // validation warns about it (`literal-param-segment`). Built from the validated routes
   // (`getHostRoutes`), so the same checks apply; dynamic and nested routes
   // are not in it. Cached with the validation.
   async getHostRoutingMap(): Promise<HostRoutingRule[]> {

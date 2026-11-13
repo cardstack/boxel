@@ -79,6 +79,16 @@ const TYPES: Record<string, HostRouteTypeInfo> = {
     types: [`${MODULE}/City`],
   },
   Venue: cardType('Venue', { slug: contains, place: linksTo('Place') }),
+  // A reply descends from a comment and inherits its `parent` link.
+  Comment: cardType('Comment', { slug: contains, parent: linksTo('Comment') }),
+  Reply: {
+    ...cardType('Reply', { slug: contains, parent: linksTo('Comment') }),
+    types: [
+      `${MODULE}/Reply`,
+      `${MODULE}/Comment`,
+      'https://base/card-api/CardDef',
+    ],
+  },
 };
 
 function type(name: string): ResolvedCodeRef {
@@ -309,6 +319,41 @@ const tests: SharedTests<unknown> = Object.freeze({
     ]);
   },
 
+  'validateHostRoutes: a redirect target :name must come from its path': async (
+    assert,
+  ) => {
+    let { routes, warnings } = validate([
+      // A top-level redirect whose path has no :name is literal, as it
+      // always was, and its path keeps the old rules.
+      { path: '/old', redirectTo: '/new/:id' },
+      { path: '/Old Page', redirectTo: 'https://example.com/:ref' },
+      // A nested redirect is dynamic, so its target's :names are checked.
+      {
+        path: '/docs',
+        instance: instance('docs'),
+        routes: [{ path: '/old', redirectTo: '/new/:id' }],
+      },
+    ]);
+    assert.deepEqual(hostRoutingMapFromRoutes(routes), [
+      { path: '/old', redirectTo: '/new/:id', statusCode: 302 },
+      {
+        path: '/Old Page',
+        redirectTo: 'https://example.com/:ref',
+        statusCode: 302,
+      },
+      { path: '/docs', id: `${REALM}docs` },
+    ]);
+    assert.deepEqual(codes(warnings), [
+      { code: 'literal-param-segment', path: '/old', dropped: false },
+      { code: 'literal-param-segment', path: '/Old Page', dropped: false },
+      { code: 'redirect-unknown-param', path: '/docs/old', dropped: true },
+    ]);
+    assert.strictEqual(
+      warnings[0]!.message,
+      "The redirect target's :id is sent as literal text, not as a :name: the route's path has no :name",
+    );
+  },
+
   'validateHostRoutes: a field match names a card type': async (assert) => {
     let { routes, warnings } = validate([
       fieldMatch(
@@ -428,6 +473,45 @@ const tests: SharedTests<unknown> = Object.freeze({
       { field: 'author', side: 'child', kind: 'linksTo', inferred: true },
     );
   },
+
+  'validateHostRoutes: a link inherited from the parent type counts once':
+    async (assert) => {
+      let { routes, warnings } = validate([
+        fieldMatch(
+          '/comments/:comment',
+          'Comment',
+          { slug: ':comment' },
+          {
+            routes: [
+              fieldMatch('/:reply', 'Reply', { slug: ':reply' }),
+              fieldMatch(
+                '/named/:reply',
+                'Reply',
+                { slug: ':reply' },
+                { parent: 'parent' },
+              ),
+            ],
+          },
+        ),
+        fieldMatch(
+          '/replies/:reply',
+          'Reply',
+          { slug: ':reply' },
+          {
+            routes: [fieldMatch('/:comment', 'Comment', { slug: ':comment' })],
+          },
+        ),
+      ]);
+      assert.deepEqual(warnings, []);
+      let links = [...routes[0]!.routes, ...routes[1]!.routes].map((route) =>
+        route.kind === 'field-match' ? route.parentLink : undefined,
+      );
+      assert.deepEqual(links, [
+        { field: 'parent', side: 'child', kind: 'linksTo', inferred: true },
+        { field: 'parent', side: 'child', kind: 'linksTo', inferred: false },
+        { field: 'parent', side: 'child', kind: 'linksTo', inferred: true },
+      ]);
+    },
 
   'validateHostRoutes: two links between the types need parent': async (
     assert,
@@ -747,10 +831,18 @@ const tests: SharedTests<unknown> = Object.freeze({
       fieldMatch('/:slug', 'Post', { slug: ':slug' }),
       fieldMatch('/:slug', 'Person', { slug: ':slug' }),
     ]);
+    // A top-level fixed route keeps its path from a nested one: only
+    // top-level routes are in the routing map.
     assert.deepEqual(hostRoutingMapFromRoutes(routes), [
       { path: '/pricing', id: `${REALM}a` },
       { path: '/docs', id: `${REALM}docs` },
+      { path: '/docs/intro', id: `${REALM}intro2` },
     ]);
+    assert.deepEqual(
+      warnings.find((w) => w.path === '/docs/intro')?.position,
+      [3, 0],
+      'the nested route is the one dropped',
+    );
     assert.deepEqual(paths(routes), [
       '/pricing',
       '/docs',

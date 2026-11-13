@@ -769,12 +769,51 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a type whose cached render failed is rendered again in the background', async function (assert) {
-      // A failed render of the module, as the definitions cache holds it,
-      // old enough that its error row has expired.
+    test('a cached definition is found when its row also has an error', async function (assert) {
+      // A row can hold the module's definitions and an error_doc together.
       let rows = (await dbAdapter.execute(
         `UPDATE modules
-            SET error_doc = $1::jsonb, created_at = $2::bigint
+            SET error_doc = $1::jsonb
+          WHERE url LIKE $2
+         RETURNING url`,
+        {
+          bind: [
+            JSON.stringify({
+              type: 'module-error',
+              error: {
+                message: 'a dependency failed',
+                status: 500,
+                additionalErrors: null,
+              },
+            }),
+            `${realmURL.href}places%`,
+          ],
+        },
+      )) as { url: string }[];
+      assert.ok(rows.length > 0, 'the definitions cache holds the module');
+      let ref = { module: rri(`${realmURL.href}places`), name: 'City' };
+      let scoped = definitionLookup.forRealm(testRealm);
+      let definition = await scoped.lookupCachedDefinition(ref);
+      assert.strictEqual(
+        definition?.type,
+        'card-def',
+        'lookupCachedDefinition answers with the definition',
+      );
+      let entry = await scoped.lookupCachedDefinitionEntry(ref);
+      assert.strictEqual(entry.status, 'found');
+      testRealm.clearRealmIndexCaches();
+      let { complete, routes } = await testRealm.getHostRoutes();
+      assert.true(complete, 'the route uses the definition');
+      assert.ok(routes.some((route) => route.fullPath === '/cities/:city'));
+    });
+
+    test('a type whose cached render failed is rendered again in the background', async function (assert) {
+      // A failed render of the module, as the definitions cache holds it
+      // (no definitions), old enough that its error row has expired.
+      let rows = (await dbAdapter.execute(
+        `UPDATE modules
+            SET error_doc = $1::jsonb, created_at = $2::bigint,
+                definitions = '{}'::jsonb
           WHERE url LIKE $3
          RETURNING url`,
         {
