@@ -1,5 +1,6 @@
 ---
-status: proposed
+status: superseded
+superseded-by: 032
 date: 2026-10-21
 scope:
   - packages/runtime-common/loader.ts
@@ -52,9 +53,14 @@ module it loads MUST behave as it would under a native ES module loader, with
 only the exceptions this ADR lists. The Loader's only inputs, and its two
 extension points, are the `fetch` and the `resolveImport` it is constructed
 with. `resolveImport` does only what an import map can, and everything about
-obtaining source happens in `fetch`. [ADR 032](032-evaluate-browser-modules-in-the-browsers-module-loader.md)
-removes the Loader from the browser's module path; where it still evaluates
-modules, this ADR governs it.
+obtaining source happens in `fetch`.
+
+> [!NOTE]
+> Superseded by [ADR 032](032-evaluate-browser-modules-in-the-browsers-module-loader.md),
+> which moves module evaluation to the browser's own module loader and deletes the
+> Loader. Its requirements about how a realm module is compiled and identified
+> (§1.2, §1.4.5) survive in ADR 032 §1.2 and §1.3; its requirements about how the
+> Loader evaluates a module (§1.1, §1.3, §1.4.1–§1.4.4, §1.5) do not.
 
 ## 1. Decision
 
@@ -201,10 +207,9 @@ and `fetch` for transport. A Loader that stays within them can be replaced by
 the browser's, and keeps policy (retries, auth, which host serves a module)
 where the host can change it without touching module semantics.
 
-§1.4.4 is a stopgap. [ADR 032](032-evaluate-browser-modules-in-the-browsers-module-loader.md)
-records what replaces it: in a browser the browser's own module loader
+§1.4.4 was a stopgap. ADR 032 replaced it: the browser's own module loader
 evaluates modules, and re-evaluation is scoped to the edited module's
-dependents.
+transitive importers.
 
 ## 3. Considered options
 
@@ -234,4 +239,5 @@ dependents.
 
 ## 4. Remediation
 
-Known gaps are listed in [remediation/010.md](remediation/010.md).
+None. The gaps this ADR carried were moved to
+[remediation/032.md](remediation/032.md) when ADR 032 superseded it.
