@@ -640,6 +640,7 @@ module(basename(import.meta.filename), function () {
           map,
           'the map built from it is not cached either',
         );
+        await testRealm.__testOnlyHostRouteTypeWarmups();
       });
 
       test('a module whose cached render failed is not final', async function (assert) {
@@ -682,6 +683,7 @@ module(basename(import.meta.filename), function () {
           [['type-unavailable', true]],
           'the route is dropped for now, not as a missing export',
         );
+        await testRealm.__testOnlyHostRouteTypeWarmups();
       });
     },
   );
@@ -689,13 +691,15 @@ module(basename(import.meta.filename), function () {
   module('Realm.getHostRoutes with cached type definitions', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/routing-cached-types/');
     let testRealm: Realm;
+    let definitionLookup: CachingDefinitionLookup;
 
     setupPermissionedRealmCached(hooks, {
       realmURL,
       permissions: { '*': ['read'] },
       fileSystem: makeCachedTypesFixture(),
-      onRealmSetup({ testRealm: realm }) {
+      onRealmSetup({ testRealm: realm, testRealmServer }) {
         testRealm = realm;
+        definitionLookup = serverDefinitionLookup(testRealmServer);
       },
     });
 
@@ -724,6 +728,43 @@ module(basename(import.meta.filename), function () {
         await testRealm.getHostRoutes(),
         first,
         'the next call answers from the cache',
+      );
+    });
+
+    test('reads a type that is not cached into the cache in the background', async function (assert) {
+      // The server clears the definitions cache when it starts, and a realm
+      // that boots on its existing index doesn't render its modules again.
+      await definitionLookup.clearRealmDefinitions(realmURL.href);
+
+      let first = await testRealm.getHostRoutes();
+      assert.false(first.complete, 'the types are not cached yet');
+      let unavailable = first.warnings
+        .filter((w) => w.code === 'type-unavailable')
+        .map((w) => w.path);
+      assert.ok(
+        unavailable.includes('/cities/:city'),
+        'the route is dropped for now',
+      );
+      assert.ok(
+        unavailable.includes('/nope/:slug'),
+        'the route with the missing export is dropped for now',
+      );
+
+      await testRealm.__testOnlyHostRouteTypeWarmups();
+
+      let second = await testRealm.getHostRoutes();
+      assert.true(second.complete, 'the types are cached now');
+      assert.deepEqual(
+        second.warnings.map((w) => [w.code, w.path, w.dropped]),
+        [['not-card-type', '/nope/:slug', true]],
+      );
+      assert.deepEqual(
+        second.routes.map((route) => route.fullPath),
+        ['/cities/:city'],
+      );
+      assert.strictEqual(
+        second.routes[0]?.routes[0]?.fullPath,
+        '/cities/:city/:venue',
       );
     });
   });

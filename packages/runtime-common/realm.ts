@@ -3345,6 +3345,12 @@ export class Realm {
   // they use a type from another realm. A change to that type doesn't
   // reindex this realm, so the cache is dropped when the generation moves.
   #cachedHostRoutesGeneration: number | undefined;
+  // Background reads that put a host route type's definition in the cache,
+  // by type, while they run. A request never waits on one.
+  #hostRouteTypeWarmups = new Map<string, Promise<void>>();
+  // The types whose background read failed. They are not read again in the
+  // background until the next index.
+  #failedHostRouteTypeWarmups = new Set<string>();
 
   // What a card's `read` would answer with — whether it carries a transform
   // stage, how much of the link graph its declaration carries, and which
@@ -5033,6 +5039,7 @@ export class Realm {
     this.#cachedHostRoutingMap = null;
     this.#cachedHostRoutes = null;
     this.#cachedHostRoutesGeneration = undefined;
+    this.#failedHostRouteTypeWarmups.clear();
     this.#readPlanByURL.clear();
     // Any realm's compiled policy may read from this one: a policy card here,
     // or a type its rules name. So the move is announced to all of them, and
@@ -18497,6 +18504,42 @@ export class Realm {
     );
   }
 
+  // Puts the definition of a host route type in the cache in the background,
+  // so a later request can route on it. The definitions cache is cleared when
+  // the server starts, and a realm that boots on its existing index doesn't
+  // render its modules again, so without this a field-match route stays
+  // dropped until some other request happens to render the type's module.
+  // The request that starts the read doesn't wait on it (ADR 015 §1.1).
+  #warmHostRouteType(ref: ResolvedCodeRef): void {
+    let key = typeLookupKey(ref);
+    if (
+      this.#hostRouteTypeWarmups.has(key) ||
+      this.#failedHostRouteTypeWarmups.has(key)
+    ) {
+      return;
+    }
+    let warmup = this.#definitionLookup.lookupDefinitionEntry(ref).then(
+      () => undefined,
+      (e: unknown) => {
+        this.#failedHostRouteTypeWarmups.add(key);
+        this.#log.warn(
+          `could not cache the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
+        );
+      },
+    );
+    this.#hostRouteTypeWarmups.set(key, warmup);
+    void warmup.finally(() => {
+      if (this.#hostRouteTypeWarmups.get(key) === warmup) {
+        this.#hostRouteTypeWarmups.delete(key);
+      }
+    });
+  }
+
+  // Waits for the background reads of host route types that are running.
+  async __testOnlyHostRouteTypeWarmups(): Promise<void> {
+    await Promise.all([...this.#hostRouteTypeWarmups.values()]);
+  }
+
   // Drops the cached host routes and the map built from them when they use
   // a type from another realm whose definitions may have changed since.
   #dropStaleHostRoutes(): void {
@@ -18529,7 +18572,8 @@ export class Realm {
       // while a request waits. A type that isn't cached yet, or whose read
       // fails, or whose cached render failed, is unavailable: its routes are
       // dropped for now, and the validation isn't cached, so a later call
-      // reads again. A cached module with no such export drops the route,
+      // reads again. A type that isn't cached yet is also read into the
+      // cache in the background, which the request doesn't wait on. A cached module with no such export drops the route,
       // and that validation is cached: a module in this realm changes only
       // with a reindex, which clears the cache, and a module in another
       // realm is covered by the definition generation check.
@@ -18554,6 +18598,9 @@ export class Realm {
             // route is dropped until the module changes.
             info = undefined;
           } else {
+            if (result.status === 'not-cached') {
+              this.#warmHostRouteType(ref);
+            }
             info = 'unavailable';
           }
         } catch (e) {
