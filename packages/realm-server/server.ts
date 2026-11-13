@@ -66,8 +66,13 @@ import {
   type SecureOrigin,
 } from './lib/secure-origin.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
+import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
-import { HostURLResolver, resolveHostURLs } from './lib/realm-host-urls.ts';
+import {
+  HostURLResolver,
+  hostURLDomainFilter,
+  resolveHostURLs,
+} from './lib/realm-host-urls.ts';
 import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
@@ -1007,7 +1012,20 @@ export class RealmServer {
       .use(instanceIdHeader)
       // A request on a host URL is made to name its realm's URL here, ahead
       // of every route that looks a realm up (ADR 033 §1.2).
-      .use(resolveHostURLs(new HostURLResolver(this.dbAdapter)))
+      .use(
+        resolveHostURLs(
+          new HostURLResolver(this.dbAdapter, {
+            mayHaveHostURLs: hostURLDomainFilter({
+              ...this.domainsForPublishedRealms,
+              customDomains: Object.values(
+                getPublishedRealmDomainOverrides(
+                  process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
+                ),
+              ),
+            }),
+          }),
+        ),
+      )
       .use(
         cors({
           origin: '*',

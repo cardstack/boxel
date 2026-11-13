@@ -52,6 +52,48 @@ function canSubscribe(
   return typeof (dbAdapter as Partial<Subscribable>).subscribe === 'function';
 }
 
+// The domains a host URL can be on, as `realm_host_urls` kinds give them out:
+// a Boxel Space or a site name is a subdomain of its configured domain, and a
+// custom domain is one the deployment lists. Domains may carry a port, as they
+// do in local development (`localhost:4201`).
+export interface HostURLDomains {
+  boxelSpace?: string;
+  boxelSite?: string;
+  customDomains?: string[];
+}
+
+// Whether a host could carry a host URL under the given domains. Undefined
+// when no domain is configured, which means every host is looked up.
+export function hostURLDomainFilter(
+  domains: HostURLDomains,
+): ((host: string) => boolean) | undefined {
+  let parents = [domains.boxelSpace, domains.boxelSite]
+    .filter((domain): domain is string => Boolean(domain))
+    .map((domain) => `.${domain.toLowerCase()}`);
+  let exact = new Set(
+    (domains.customDomains ?? [])
+      .map(customDomainHost)
+      .filter((host): host is string => host !== undefined),
+  );
+  if (parents.length === 0 && exact.size === 0) {
+    return undefined;
+  }
+  return (host) =>
+    exact.has(host) || parents.some((parent) => host.endsWith(parent));
+}
+
+// A custom domain may be configured as a bare host (`example.test`) or as a
+// URL (`https://example.test/`), as publishing accepts both. Either way it is
+// compared as the host a request names. Undefined when it can't be parsed.
+function customDomainHost(domain: string): string | undefined {
+  try {
+    let url = new URL(domain.includes('://') ? domain : `https://${domain}`);
+    return url.host.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
 // The key a host is cached and stored under: its lowercased host, with the
 // port when it isn't the default one. `URL#host` already drops a default port.
 export function hostKey(url: URL): string {
@@ -62,6 +104,7 @@ export class HostURLResolver {
   #dbAdapter: DBAdapter;
   #ttlMs: number;
   #maxHosts: number;
+  #mayHaveHostURLs: ((host: string) => boolean) | undefined;
   #now: () => number;
   // In least-recently-used order: a `Map` iterates in insertion order, and a
   // host is re-inserted each time it is used.
@@ -74,19 +117,30 @@ export class HostURLResolver {
 
   constructor(
     dbAdapter: DBAdapter,
-    opts: { ttlMs?: number; maxHosts?: number; now?: () => number } = {},
+    opts: {
+      ttlMs?: number;
+      maxHosts?: number;
+      // Hosts this returns false for are never looked up, so a request naming
+      // an arbitrary host costs no query. See `hostURLDomainFilter`.
+      mayHaveHostURLs?: (host: string) => boolean;
+      now?: () => number;
+    } = {},
   ) {
     this.#dbAdapter = dbAdapter;
     this.#ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
     this.#maxHosts = opts.maxHosts ?? DEFAULT_MAX_HOSTS;
+    this.#mayHaveHostURLs = opts.mayHaveHostURLs;
     this.#now = opts.now ?? Date.now;
   }
 
   // The host URL the request falls under, the one with the longest path
   // prefix when more than one does. Undefined when none does.
   async resolve(requestURL: URL): Promise<HostURLMatch | undefined> {
-    this.#ensureSubscribed();
     let host = hostKey(requestURL);
+    if (this.#mayHaveHostURLs && !this.#mayHaveHostURLs(host)) {
+      return undefined;
+    }
+    this.#ensureSubscribed();
     let entries = await this.#entriesFor(host);
     let path = requestURL.pathname;
     let entry = entries.find(
