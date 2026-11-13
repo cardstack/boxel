@@ -41,10 +41,13 @@ module(basename(import.meta.filename), function (hooks) {
     realmURL,
     permissions: {
       [OWNER]: ['read', 'write'],
+      '@node-test_realm:localhost': ['read', 'realm-owner'],
     },
     fileSystem: {
       'notes.txt': 'in the realm',
       'logs/2026-11.jsonl': '{"n":1}\n',
+      'thing.gts': `import { CardDef } from 'https://cardstack.com/base/card-api';
+export class Thing extends CardDef {}`,
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -265,6 +268,50 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(refused.status, 403, `${path}: ${refused.text}`);
     }
     assert.deepEqual(await overlayRows(run.id), []);
+  });
+
+  test('a run may not write a file a module’s name would resolve to', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let refused = await writeText(token, 'thing', `export class Thing {}`);
+    assert.strictEqual(refused.status, 403, refused.text);
+    assert.deepEqual(await overlayRows(run.id), []);
+  });
+
+  test('a run’s card may not name a type from a file that isn’t a module', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let source = `import { Automation } from '@cardstack/catalog/automation/automation';
+export class Mine extends Automation {}`;
+    assert.strictEqual(
+      (await writeText(token, 'mine.txt', source)).status,
+      204,
+      'plain text is staged',
+    );
+    let card = (module: string, name: string) =>
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: { adoptsFrom: { module, name } },
+        },
+      });
+    for (let module of ['./mine.txt', './mine', './nowhere']) {
+      let refused = await writeText(token, 'x.json', card(module, 'Mine'));
+      assert.strictEqual(refused.status, 403, `${module}: ${refused.text}`);
+    }
+    let named = await writeText(token, 'y.json', card('./thing', 'Thing'));
+    assert.strictEqual(named.status, 204, named.text);
+    assert.deepEqual(
+      (await overlayRows(run.id)).map((row) => row.path),
+      ['mine.txt', 'y.json'],
+    );
   });
 
   test('a run’s write through a route that doesn’t stage it is refused, and the realm keeps its file', async function (assert) {
