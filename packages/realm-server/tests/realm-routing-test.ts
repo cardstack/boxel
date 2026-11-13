@@ -801,10 +801,27 @@ module(basename(import.meta.filename), function () {
       );
       let entry = await scoped.lookupCachedDefinitionEntry(ref);
       assert.strictEqual(entry.status, 'found');
+      let missing = await scoped.lookupCachedDefinitionEntry({
+        module: rri(`${realmURL.href}places`),
+        name: 'Nope',
+      });
+      assert.strictEqual(
+        missing.status,
+        'module-error',
+        'the error may explain an export the row lacks',
+      );
       testRealm.clearRealmIndexCaches();
-      let { complete, routes } = await testRealm.getHostRoutes();
-      assert.true(complete, 'the route uses the definition');
-      assert.ok(routes.some((route) => route.fullPath === '/cities/:city'));
+      let { routes, warnings } = await testRealm.getHostRoutes();
+      assert.ok(
+        routes.some((route) => route.fullPath === '/cities/:city'),
+        'the route uses the definition',
+      );
+      assert.deepEqual(
+        warnings.map((w) => [w.code, w.path, w.dropped]),
+        [['type-unavailable', '/nope/:slug', true]],
+        'the missing export is dropped for now, not as final',
+      );
+      await testRealm.__testOnlyHostRouteTypeWarmups();
     });
 
     test('a type whose cached render failed is rendered again in the background', async function (assert) {
