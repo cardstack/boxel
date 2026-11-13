@@ -13,6 +13,7 @@ import {
 } from '@cardstack/runtime-common/realm-identifiers';
 
 import { evaluationSeed } from './eval-seeds/index.ts';
+import type { ExpectedReads } from './routing.ts';
 import {
   ensureTrailingSlash,
   realmPaths,
@@ -54,6 +55,9 @@ export interface Evaluation {
   // contents are already listed in `initialFiles`, and its card lists merged
   // into the fields above.
   seedScript?: string;
+  // Per prompt, the skill files any one of which covers it (routing.ts).
+  // Empty when the evaluation sets no expectations.
+  expectedReads: ExpectedReads[];
   adoptsFrom: { module: string; name: string };
 }
 
@@ -169,6 +173,12 @@ export async function loadEvaluation(
       );
     }
   }
+  let expectedReads = expectedReadsOf(attributes.expectedReads);
+  if (expectedReads.length && expectedReads.length !== followUps.length + 1) {
+    throw new Error(
+      `${cardUrl} has ${expectedReads.length} expectedReads entries for ${followUps.length + 1} prompts`,
+    );
+  }
   return {
     url: id,
     realmUrl: evaluationRealmUrl,
@@ -196,6 +206,7 @@ export async function loadEvaluation(
     automationApprovals,
     expectsNoWrites: attributes.expectsNoWrites === true,
     seedScript,
+    expectedReads,
     adoptsFrom: doc.data.meta.adoptsFrom,
   };
 }
@@ -227,6 +238,20 @@ function automationApprovalsOf(
     }
     return { card: cardIdOf(card), operation: operation.trim(), keyFrom };
   });
+}
+
+// Each entry is a PromptReads field, `{ files: [...] }`.
+function expectedReadsOf(raw: unknown): ExpectedReads[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.map((entry: { files?: unknown } | null) =>
+    Array.isArray(entry?.files)
+      ? entry.files.filter(
+          (f: unknown): f is string => typeof f === 'string' && f.trim() !== '',
+        )
+      : [],
+  );
 }
 
 // A card's id: the id of its instance file without the `.json` suffix.

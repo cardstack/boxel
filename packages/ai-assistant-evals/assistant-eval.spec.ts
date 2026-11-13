@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -7,6 +8,8 @@ import {
   rri,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common/realm-identifiers';
+import { prefixRealmNetworkFor } from '@cardstack/runtime-common/prefix-realm-network';
+import { SKILLS_REALM_PREFIX } from '@cardstack/runtime-common/realm-prefixes';
 
 import {
   allRoomEvents,
@@ -14,6 +17,13 @@ import {
   type MatrixEvent,
 } from './matrix-api.ts';
 import { analyzeRoom } from './room-analysis.ts';
+import { REALM_SERVER_URL } from './eval-config.ts';
+import {
+  routingLines,
+  routingSummary,
+  scoreRouting,
+  skillsPath,
+} from './routing.ts';
 import { grade, type RunResult, type Verdict } from './run-result.ts';
 
 import {
@@ -47,6 +57,12 @@ import { captureWorkspace } from './workspace-snapshot.ts';
 
 const RESULTS_DIR =
   process.env.EVAL_RESULTS_DIR ?? join(import.meta.dirname, 'eval-results');
+// The folder of the boxel-skills clone the stack serves as its skills realm.
+// An expected read that isn't in it can't be checked; without the clone every
+// expected path is taken to exist.
+const SKILLS_DIR =
+  process.env.EVAL_SKILLS_DIR ??
+  join(import.meta.dirname, '..', 'skills-realm', 'contents', 'skills');
 const EVAL_BUNDLE = process.env.EVAL_BUNDLE;
 const SESSION_ID = process.env.EVAL_SESSION_ID;
 const EVAL_PROMPT =
@@ -1260,6 +1276,12 @@ async function runModel(
     result.prompts = prompts;
     result.evalCardUrl = evaluation?.url;
     result.secondsPerPrompt = evaluation?.secondsPerPrompt;
+    setStep('read the realm server prefix map');
+    // Where the stack serves the skills realm, for reads that name a skill by
+    // URL rather than by its prefix.
+    let skillsRealmURL = (
+      await prefixRealmNetworkFor(REALM_SERVER_URL)
+    ).toURLHref(SKILLS_REALM_PREFIX);
     // Human-readable stamp so the workspace list reads "Models Claude Opus
     // 4.8 2026-09-07 12:43"; the endpoint gets the same stamp, slug-safe.
     let now = new Date();
@@ -1503,16 +1525,40 @@ async function runModel(
     );
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;
+    if (evaluation?.expectedReads.length) {
+      let skillsCloned = existsSync(SKILLS_DIR);
+      result.routing = scoreRouting(
+        prompts.slice(0, result.promptsSent),
+        evaluation.expectedReads,
+        result.analysis.readsByPrompt,
+        skillsRealmURL,
+        (path) => !skillsCloned || existsSync(join(SKILLS_DIR, path)),
+      );
+      result.reasons.push(
+        routingSummary(result.routing),
+        ...routingLines(result.routing),
+      );
+      if (result.routing.mismatch) {
+        result.reasons.push(
+          `routing may credit reads to the wrong question: ${result.routing.mismatch}`,
+        );
+      }
+    }
     // An enabled feature whose skill the model never opened means the run
     // did not exercise it, whatever the verdict says. This assumes each
-    // feature's skill lives in a skills/<feature name>/SKILL.md directory.
-    for (let feature of result.skillFeatures) {
-      let read = result.analysis.filesRead.some((url) =>
-        url.endsWith(`/skills/${feature}/SKILL.md`),
+    // feature's skill is <feature name>/SKILL.md in the skills realm. An
+    // evaluation with expected reads skips it: its routing rows say which
+    // skills each question needed and which were opened.
+    let featureSkills = evaluation?.expectedReads.length
+      ? []
+      : result.skillFeatures;
+    for (let feature of featureSkills) {
+      let read = result.analysis.filesRead.some(
+        (url) => skillsPath(url, skillsRealmURL) === `${feature}/SKILL.md`,
       );
       if (!read) {
         result.reasons.push(
-          `skill feature "${feature}" was enabled but skills/${feature}/SKILL.md was never read`,
+          `skill feature "${feature}" was enabled but ${SKILLS_REALM_PREFIX}${feature}/SKILL.md was never read`,
         );
       }
     }

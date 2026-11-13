@@ -1,0 +1,79 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Where am I?",
+      "followUpPrompts": [
+        "What can I do with Boxel?",
+        "How would I create a kanban board with Boxel?",
+        "Can I work with Boxel from Claude Code?",
+        "How much does this cost?"
+      ],
+      "successCriteria": "**\"Where am I?\"**\n\n- It names the workspace, the open card (the \"Harbor app redesign\" Project) and the mode the user is in (interact).\n- It answers from the context it already has: no tool call to find out, and no question back.\n\n**\"What can I do with Boxel?\"**\n\n- It covers what Boxel builds: apps made of linked cards, documents, dashboards, AI-powered cards, reuse from the catalog, and working locally with boxel-cli.\n- It names no feature Boxel doesn't have, and ends with a concrete next step for this workspace.\n\n**\"How would I create a kanban board with Boxel?\"** (graded on the explanation; it isn't expected to build)\n\n- It names a route that works: a `kanban` block in Boxel-flavored markdown for a board inside a document, or a card build with an item card and a board card that holds the items.\n- For a draggable board it names boxel-ui's KanbanPlane (the kanban drag-and-drop pattern, which stores column placements apart from the items).\n- It checks the catalog for an existing board, or says it would before building, and offers to build rather than starting.\n\n**\"Can I work with Boxel from Claude Code?\"**\n\n- It says yes: install boxel-cli (`npm install -g @cardstack/boxel-cli`) and sign in, pull the workspace, edit in Claude Code or any editor, lint, and push back. It doesn't tell someone who hasn't installed the CLI to run `npx boxel`, which then fetches an unrelated npm package.\n- It warns that `realm pull` overwrites local edits that weren't pushed, and doesn't claim the sync merges or resolves conflicts.\n- It mentions boxel-cli's Claude Code plugin, which brings the Boxel skills into Claude Code (`/plugin marketplace add cardstack/boxel`, then `/plugin install boxel-cli`).\n\n**\"How much does this cost?\"** (answered from the user's own numbers)\n\n- It gives the user's plan, credits left and what this conversation's replies have cost, from `room.credits()`, and says that last figure covers only the replies. A figure that isn't available is called that, not estimated.\n- It quotes no plan prices and invents no plan names or credit amounts; for prices it points to Profile → Membership Tier.\n\n**Throughout**\n\n- No file is written and no card is created or changed.\n- Each answer is short and in plain words, not Boxel internals. No narration of tool calls, and no clarifying question back to the user.\n- It reads a skill when the answer isn't already in front of it, and not otherwise.",
+      "expectsNoWrites": true,
+      "skillFeatures": ["catalog-reuse"],
+      "expectedReads": [
+        {
+          "files": []
+        },
+        {
+          "files": []
+        },
+        {
+          "files": [
+            "boxel-patterns/patterns/layout-kanban-drag-drop/",
+            "catalog-reuse/"
+          ]
+        },
+        {
+          "files": [
+            "boxel-environment/",
+            "boxel-patterns/references/integration-surfaces.md"
+          ]
+        },
+        {
+          "files": []
+        }
+      ],
+      "cardInfo": {
+        "name": "Concierge Questions",
+        "summary": "Five questions a new user asks the assistant, in one session, with a Project card open: where they are, what Boxel can do, how to build a kanban board, whether they can work from Claude Code, and what it costs. The assistant only answers; a judge grades each answer, and the runner checks which skill it opened for each.",
+        "notes": "Answer-only, with the catalog-reuse feature on, so the always-loaded index carries its catalog-reuse sections and a guide points to the catalog. EVAL_SKILL_FEATURES=-catalog-reuse runs it on the index without them. The cost question is answered from room.credits() by the always-loaded skills index, so it expects no read; the call is a read-only script, not a write. The Claude Code and cost criteria need boxel-environment/references/questions-about-boxel.md in the served skills, and a host with room.credits().",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../card-mutation/linked-card/Project/harbor-app"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../card-mutation/linked-card/Contact/jonah-park.json"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../card-mutation/linked-card/Contact/mei-lin.json"
+        }
+      },
+      "initialFiles.2": {
+        "links": {
+          "self": "../card-mutation/linked-card/Contact/sara-okafor.json"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

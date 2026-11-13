@@ -59,6 +59,8 @@ interface SessionRow {
   verdict: string;
   turns: number | undefined;
   cost: string;
+  // `met / checked` when the evaluation sets `expectedReads`.
+  routing?: string;
   roomId: string | undefined;
   resultCardUrl: string | undefined;
   screenshot?: string | undefined;
@@ -265,6 +267,14 @@ async function createResultCard(
         turnsCount: a?.turns ?? null,
         cachingRate: cachingRate(result),
         qualityScore: null,
+        routingMet: result.routing?.met ?? null,
+        routingChecked: result.routing?.checked ?? null,
+        routing: (result.routing?.prompts ?? []).map((row) => ({
+          prompt: row.prompt,
+          expected: row.expected,
+          opened: row.opened,
+          outcome: row.outcome,
+        })),
         startedAt: result.startedAt,
         endedAt: result.endedAt ?? new Date().toISOString(),
         toolCalls: toolCallsText(result),
@@ -502,6 +512,9 @@ async function main() {
       verdict: result.verdict,
       turns: result.analysis?.turns,
       cost: result.analysis ? `$${result.analysis.costUsd.toFixed(3)}` : '–',
+      routing: result.routing
+        ? `${result.routing.met} / ${result.routing.checked}`
+        : undefined,
       roomId: result.roomId,
       resultCardUrl,
     });
@@ -540,6 +553,7 @@ async function main() {
   for (let row of rows) {
     console.log(
       `[eval] ${row.grade} ${row.model}: ${row.verdict}, ${row.turns ?? '–'} turns, ${row.cost}` +
+        (row.routing ? `, routing ${row.routing}` : '') +
         (row.roomId ? `, room ${row.roomId}` : '') +
         (row.resultCardUrl ? `\n       result card ${row.resultCardUrl}` : ''),
     );
