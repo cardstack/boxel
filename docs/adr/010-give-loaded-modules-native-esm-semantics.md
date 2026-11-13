@@ -58,9 +58,11 @@ obtaining source happens in `fetch`.
 > [!NOTE]
 > Superseded by [ADR 032](032-evaluate-browser-modules-in-the-browsers-module-loader.md),
 > which moves module evaluation to the browser's own module loader and deletes the
-> Loader. Its requirements about how a realm module is compiled and identified
-> (§1.2, §1.4.5) survive in ADR 032 §1.2 and §1.3; its requirements about how the
-> Loader evaluates a module (§1.1, §1.3, §1.4.1–§1.4.4, §1.5) do not.
+> Loader. Two rules survive in a new form. One URL per module (§1.2) becomes ADR
+> 032 §1.2: the compile step and an import map produce one spelling, where the
+> Loader folded spellings. Identity tags (§1.4.5) become ADR 032 §1.3. The rest of
+> §1.2, and §1.1, §1.3, §1.4.1–§1.4.4 and §1.5, governed the Loader and do not
+> survive.
 
 ## 1. Decision
 
