@@ -47,8 +47,10 @@
 //
 // * `maintain` runs a pass once a realm has committed nothing for `quietMs`
 //   after committing a revision, and when the task loads the realm, so a
-//   repo a crash left unmaintained gets its pass. Its check skips a realm
-//   whose `info/refs` already names HEAD. A pass that leaves loose objects
+//   repo a crash left unmaintained gets its pass. It also comes due every
+//   `everyMs`, so a realm that commits more often than `quietMs` all day
+//   still gets a pass, in a moment between its revisions. Its check skips a
+//   realm whose `info/refs` already names HEAD. A pass that leaves loose objects
 //   younger than the prune expiry runs again once they have passed it, so a
 //   realm that goes quiet after a burst doesn't keep its captures. The
 //   service forgets that rerun when it restarts.
@@ -82,6 +84,9 @@ export const DEFAULT_CONSOLIDATE_AT_PACKS = 32;
 // How long a realm commits nothing, after committing a revision, before a
 // pass runs on it.
 export const DEFAULT_MAINTAIN_AFTER_QUIET_MS = 5 * 60_000;
+
+// How long after its last pass a realm that never goes quiet gets another.
+export const DEFAULT_MAINTAIN_EVERY_MS = 60 * 60_000;
 
 // Git holds the commit-graph's lock for the length of one write, and a
 // pack's temporary name for the length of one repack. A lock or a temporary
@@ -137,6 +142,7 @@ export interface MaintenanceKindsOptions {
   pruneExpiryMs?: number;
   consolidateAtPacks?: number;
   quietMs?: number;
+  everyMs?: number;
   commitGraphEvery?: number;
 }
 
@@ -152,6 +158,7 @@ export function maintenanceKinds({
   pruneExpiryMs = DEFAULT_PRUNE_EXPIRY_MS,
   consolidateAtPacks = DEFAULT_CONSOLIDATE_AT_PACKS,
   quietMs = DEFAULT_MAINTAIN_AFTER_QUIET_MS,
+  everyMs = DEFAULT_MAINTAIN_EVERY_MS,
   commitGraphEvery = COMMIT_GRAPH_EVERY,
 }: MaintenanceKindsOptions): BackgroundKind[] {
   // The realms whose last pass left loose objects younger than the prune
@@ -163,6 +170,7 @@ export function maintenanceKinds({
       atStart: true,
       afterCommits: 1,
       quietMs,
+      everyMs,
       isDue: async (realm) =>
         rerunsDue.has(realm.id) ||
         !(await isMaintained(repoPath(historyRoot, realm.id))),

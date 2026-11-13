@@ -107,8 +107,9 @@ repo small and fast to read, as two kinds of background work:
 
 - `maintain` runs a pass once a realm has committed nothing for 5 minutes
   after committing a revision. It also runs when the task loads the realm,
-  so a repo a crash left unmaintained gets its pass. It skips a realm whose
-  `info/refs` already names HEAD.
+  so a repo a crash left unmaintained gets its pass, and an hour after its
+  last pass, so a realm that never goes quiet gets one between revisions. It
+  skips a realm whose `info/refs` already names HEAD.
 - `commit-graph` writes the commit-graph after every 100 revisions, so a busy
   realm's path-filtered reads stay fast between passes.
 

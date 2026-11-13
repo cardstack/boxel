@@ -1025,7 +1025,11 @@ module('maintenance as background work', (hooks) => {
 
   // A scheduler of the maintenance kinds over the test's realm, whose one
   // recorder reports its revisions to it, as the task's recorders do.
-  function schedule(options: { quietMs?: number; pruneExpiryMs?: number }): {
+  function schedule(options: {
+    quietMs?: number;
+    everyMs?: number;
+    pruneExpiryMs?: number;
+  }): {
     scheduler: BackgroundScheduler;
     recorder: Recorder;
   } {
@@ -1153,6 +1157,31 @@ module('maintenance as background work', (hooks) => {
       undefined,
       'no pass ran: the realm has not been quiet long enough',
     );
+  });
+
+  test('a realm that never goes quiet still gets a pass every `everyMs`, between its revisions', async (assert) => {
+    let { scheduler, recorder } = schedule({ everyMs: 300 });
+    // The realm is loaded before it has a repo, so the pass due at load
+    // finds nothing to do, and the next comes due `everyMs` later.
+    await dispatchUntil(scheduler, async () => true, 'the load check');
+
+    // A revision every 100 ms: never the 5 quiet minutes a pass otherwise
+    // waits for.
+    let i = 0;
+    let passed = false;
+    while (!passed && i < 50) {
+      await revision(recorder, `{"v":${i}}`, i * 1000);
+      scheduler.dispatch();
+      await sleep(100);
+      passed = (await maintainedHead(gitDir)) !== undefined;
+      i++;
+    }
+    assert.true(
+      passed,
+      `a pass ran while revisions kept coming (${i} revisions)`,
+    );
+    await waitUntil(() => scheduler.running === 0, { what: 'the pass to end' });
+    assert.strictEqual(await fsck(gitDir), '');
   });
 
   test('a pass that leaves captures younger than the prune expiry runs again once they have passed it', async (assert) => {
