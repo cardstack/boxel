@@ -106,11 +106,10 @@ rc_invites:
     per_second: 1000
     burst_count: 1000
 
-# These templates run Synapse only on a local machine or in CI. Every
-# realm-server test logs a Matrix user in, and at the default bcrypt cost
+# These templates run Synapse only on a local machine or in CI. The test
+# suites log Matrix users in on most tests, and at the default bcrypt cost
 # (12) each password check takes about 0.25 s. Cost 4 takes about 1 ms.
-# A password hash keeps the cost it was made with, so this applies only to
-# users registered after the change.
+# A Synapse data directory keeps the cost its users were registered with.
 bcrypt_rounds: 4
 
 rc_login:
