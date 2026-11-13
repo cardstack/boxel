@@ -193,7 +193,7 @@ module('Unit | Service | realm | prerender visit sessions', function (hooks) {
     assert.strictEqual(
       (globalThis as any)[inMemorySessionsGlobal],
       undefined,
-      'the tab no longer holds the sessions',
+      'the tab holds none of the run’s sessions',
     );
     assert.strictEqual(
       window.localStorage.getItem(SessionLocalStorageKey),
