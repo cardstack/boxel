@@ -225,13 +225,19 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     let natural = start
       ? await this.#list(gitDir, start, limit + 1, query)
       : { listed: [], more: false };
+    // Only the revisions that can reach the page get their insertions
+    // worked out; any beyond them only say that more follow.
+    let reachable = natural.listed.slice(
+      0,
+      Math.max(limit - pending.length, 0),
+    );
     let items: Listed[] = [...pending];
     let insertions = await this.#insertions(
       gitDir,
-      natural.listed.map(({ record }) => record),
+      reachable.map(({ record }) => record),
       query,
     );
-    for (let listed of natural.listed) {
+    for (let listed of reachable) {
       items.push(listed);
       items.push(...(insertions.get(listed.record.id) ?? []));
     }
@@ -243,7 +249,10 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
       seen.add(record.id);
       return true;
     });
-    let hasMore = natural.more || items.length > limit;
+    let hasMore =
+      natural.more ||
+      natural.listed.length > reachable.length ||
+      items.length > limit;
     let page = items.slice(0, limit);
 
     let sizes = await this.#sizes(gitDir, page);
@@ -757,23 +766,31 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
         )
       ).map((record) => [record.id, record]),
     );
-    for (let { host, revisions } of named) {
-      let listed: Listed[] = [];
-      for (let revision of revisions) {
+    // Each candidate, with whether an older listed revision names it, which
+    // the git processes work out at once, up to the reader's cap.
+    let candidates = named.flatMap(({ host, revisions }) =>
+      revisions.flatMap((revision) => {
         let record = records.get(revision);
-        if (
-          record &&
+        return record &&
           host.parent &&
-          listedChanges(record, query) === undefined &&
-          (await this.#namers(gitDir, record, host.parent, query)).length === 0
-        ) {
-          listed.push({ record, changes: [], inserted: true });
-        }
-      }
-      if (listed.length > 0) {
+          listedChanges(record, query) === undefined
+          ? [{ host, record, below: host.parent }]
+          : [];
+      }),
+    );
+    let namedBelow = await Promise.all(
+      candidates.map(
+        async ({ record, below }) =>
+          (await this.#namers(gitDir, record, below, query)).length > 0,
+      ),
+    );
+    candidates.forEach(({ host, record }, index) => {
+      if (!namedBelow[index]) {
+        let listed = insertions.get(host.id) ?? [];
+        listed.push({ record, changes: [], inserted: true });
         insertions.set(host.id, listed);
       }
-    }
+    });
     return insertions;
   }
 
