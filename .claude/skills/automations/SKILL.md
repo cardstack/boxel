@@ -698,6 +698,12 @@ How a method differs from the interactive surface:
   200-operation or 3-`resolve` limit. The card's caps take their place, and
   the realm server counts each against the run row (_Declared operations and
   the per-run caps_).
+- **A limit on file content held**: a run keeps every file it reads, every
+  version it writes and every card it updates until it ends, in a tab other
+  runs share, so it holds at most `MAX_AUTOMATION_HELD_CHARS` (20,000,000)
+  characters of them. A read, write or update past that throws in the script,
+  before anything is held or written. A file read or written again counts
+  again.
 - **Progress and console are one-way**: they return nothing, so a script
   needn't await them, and an unawaited one doesn't fail the run. A bad
   argument (an empty milestone name, `count(3, 2)`) throws in the script.
