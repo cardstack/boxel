@@ -221,6 +221,26 @@ const tests: SharedTests<unknown> = Object.freeze({
       { reason: 'no-route', route: undefined },
       'another card gets nothing from the fixed route',
     );
+
+    let nested: RawHostRoutingRule[] = [
+      {
+        path: '/blog',
+        instance: instance('Page/blog'),
+        routes: [
+          { path: '/about', name: 'about', instance: instance('Page/about') },
+        ],
+      },
+    ];
+    assert.deepEqual(
+      outcome(lookup(nested, cards('Page/about'))),
+      { address: '/blog/about', route: '/blog/about' },
+      'a fixed route under a fixed route includes its parent path',
+    );
+    assert.deepEqual(
+      outcome(lookup(nested, { kind: 'route-name', name: 'about', args: [] })),
+      { address: '/blog/about', route: '/blog/about' },
+      'the same route by name',
+    );
   },
 
   'hostRouteAddress: the canonical route is the first declared': async (
