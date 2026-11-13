@@ -46,6 +46,7 @@ import {
 } from './instance-filter-matcher.ts';
 import { RealmPaths } from './paths.ts';
 import { resolveRRIReference, rri } from './realm-identifiers.ts';
+import { trimJsonExtension } from './url.ts';
 import {
   fillRoutePathPattern,
   matchCardIdPattern,
@@ -70,7 +71,9 @@ export type HostRouteAddressTarget =
       values: Readonly<Record<string, unknown>>;
     }
   // A route by `name`, with one argument per dynamic level. A card or id
-  // fills its level's segments; a string or number fills one segment.
+  // fills its level's segments; a string or number fills one segment. A
+  // redirect resolves no card, so it takes one value per `:name` in its
+  // full path instead, its parents' included.
   | {
       kind: 'route-name';
       name: string;
@@ -120,10 +123,15 @@ export type HostRouteNoAddressReason =
   // A parent level would come from the child card's link to it, and the
   // link is empty.
   | 'no-parent'
+  // A parent level would come from the child's card id, and the route's
+  // card id template doesn't hold all of the parent's values.
+  | 'parent-not-in-id'
   // Two given cards don't belong together through the child route's link.
   | 'not-member'
   // The number of arguments doesn't fit the route.
-  | 'wrong-argument-count';
+  | 'wrong-argument-count'
+  // The lookup threw. `error` on the result holds what it threw.
+  | 'internal-error';
 
 export type HostRouteAddressResult =
   | {
@@ -138,6 +146,8 @@ export type HostRouteAddressResult =
       reason: HostRouteNoAddressReason;
       // The route the reason is about, when there is one.
       route?: HostRoute;
+      // What the lookup threw, for `internal-error`.
+      error?: unknown;
     };
 
 /**
@@ -159,8 +169,8 @@ export function hostRouteAddress(
       case 'route-name':
         return lookup.forName(target.name, target.args);
     }
-  } catch {
-    return { ok: false, reason: 'no-route' };
+  } catch (error) {
+    return { ok: false, reason: 'internal-error', error };
   }
 }
 
@@ -211,7 +221,7 @@ class Lookup {
       }
     }
     let misses: Miss[] = [];
-    for (let chain of chains(this.options.routes)) {
+    for (let chain of indexOf(this.options.routes).chains) {
       let route = chain[chain.length - 1]!;
       if (route.kind === 'redirect') {
         continue;
@@ -260,7 +270,7 @@ class Lookup {
     let refs = typeRefs(type);
     let given = Object.keys(values).sort();
     let invalid: HostRoute | undefined;
-    for (let chain of chains(this.options.routes)) {
+    for (let chain of indexOf(this.options.routes).chains) {
       let route = chain[chain.length - 1]!;
       if (
         route.kind !== 'field-match' ||
@@ -310,9 +320,7 @@ class Lookup {
     name: string,
     args: readonly (BaseDef | string | number)[],
   ): HostRouteAddressResult {
-    let chain = chains(this.options.routes).find(
-      (c) => c[c.length - 1]!.name === name,
-    );
+    let chain = indexOf(this.options.routes).byName.get(name);
     if (!chain) {
       return { ok: false, reason: 'no-route' };
     }
@@ -390,7 +398,9 @@ class Lookup {
       let ownNames = level.pattern.paramNames;
       let derived = arg === undefined;
       if (derived) {
-        if (ownNames.every((n) => n in params)) {
+        if (
+          ownNames.every((n) => Object.prototype.hasOwnProperty.call(params, n))
+        ) {
           // A card id pattern below already filled this level.
           continue;
         }
@@ -426,8 +436,16 @@ class Lookup {
         }
       }
       // Two given cards must belong together through the child's link.
-      if (!derived && i < levels.length - 1 && given[i + 1] !== undefined) {
-        let member = this.isMember(levels[i + 1]!, given[i + 1]!, arg!);
+      // In the route-name form a string or number is a segment value, not a
+      // card, so there is nothing to check it against.
+      let child = given[i + 1];
+      if (
+        !derived &&
+        i < levels.length - 1 &&
+        child !== undefined &&
+        !(form === 'name' && typeof child !== 'object')
+      ) {
+        let member = this.isMember(levels[i + 1]!, child, arg!);
         if (member === false) {
           return miss('not-member');
         }
@@ -506,7 +524,11 @@ class Lookup {
   ): BaseDef | string | { reason: HostRouteNoAddressReason } {
     let link: HostRouteParentLink | undefined = childLevel.parentLink;
     if (!link) {
-      return { reason: 'parent-holds-link' };
+      // A card id child without a link embeds some of the parent's values
+      // in its template, but not all of them.
+      return {
+        reason: childLevel.kind === 'card-id' ? 'parent-not-in-id' : 'no-route',
+      };
     }
     if (link.side === 'parent') {
       return { reason: 'parent-holds-link' };
@@ -549,7 +571,9 @@ class Lookup {
       }
       let otherId = cardId(other);
       let value = this.options.api.peekAtField(holder, link.field);
-      let ids = (Array.isArray(value) ? value : [value]).map((v) => {
+      // An empty link is read as holding no card, like an empty plural link.
+      let values = Array.isArray(value) ? value : value == null ? [] : [value];
+      let ids = values.map((v) => {
         let target = this.linkTarget(holder, v);
         return target === undefined ? undefined : cardId(target);
       });
@@ -576,7 +600,7 @@ class Lookup {
       if (typeof reference !== 'string' || base === undefined) {
         return undefined;
       }
-      return stripJSON(resolveRRIReference(reference, rri(base)));
+      return trimJsonExtension(resolveRRIReference(reference, rri(base)));
     }
     return typeof value === 'object' ? (value as BaseDef) : undefined;
   }
@@ -622,6 +646,33 @@ class Lookup {
       canonicalModuleKey(b.module, virtualNetwork)
     );
   }
+}
+
+interface RouteIndex {
+  chains: Chain[];
+  // The first chain in authored order that ends at a route with the name.
+  byName: Map<string, Chain>;
+}
+
+// The validated routes don't change between lookups, and a page looks up
+// each of its links, so each routes array is walked once.
+const routeIndexes = new WeakMap<readonly HostRoute[], RouteIndex>();
+
+function indexOf(routes: readonly HostRoute[]): RouteIndex {
+  let index = routeIndexes.get(routes);
+  if (!index) {
+    let all = chains(routes);
+    let byName = new Map<string, Chain>();
+    for (let chain of all) {
+      let name = chain[chain.length - 1]!.name;
+      if (name !== undefined && !byName.has(name)) {
+        byName.set(name, chain);
+      }
+    }
+    index = { chains: all, byName };
+    routeIndexes.set(routes, index);
+  }
+  return index;
 }
 
 // Every route's chain from the top level down to it, in depth-first
@@ -744,7 +795,7 @@ function isString(value: unknown): value is string {
 function typeRefs(type: typeof BaseDef): CodeRef[] {
   let refs: CodeRef[] = [];
   let klass: typeof BaseDef | null = type;
-  while (klass) {
+  while (klass && klass !== Function.prototype) {
     let ref = identifyCard(klass);
     if (ref) {
       refs.push(ref);
@@ -752,8 +803,4 @@ function typeRefs(type: typeof BaseDef): CodeRef[] {
     klass = Object.getPrototypeOf(klass) as typeof BaseDef | null;
   }
   return refs;
-}
-
-function stripJSON(href: string): string {
-  return href.endsWith('.json') ? href.slice(0, -'.json'.length) : href;
 }

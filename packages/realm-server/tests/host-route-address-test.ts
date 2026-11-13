@@ -41,6 +41,14 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRouteAddressTests, assert, {});
   });
 
+  test('hostRouteAddress: a card id template that holds only some parent values', async function (assert) {
+    await runSharedTest(hostRouteAddressTests, assert, {});
+  });
+
+  test('hostRouteAddress: a lookup that throws reports internal-error', async function (assert) {
+    await runSharedTest(hostRouteAddressTests, assert, {});
+  });
+
   test('hostRouteAddress: addresses round-trip through the parser', async function (assert) {
     await runSharedTest(hostRouteAddressTests, assert, {});
   });
