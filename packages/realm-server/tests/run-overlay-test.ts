@@ -306,6 +306,20 @@ export class Mine extends Automation {}`;
       let refused = await writeText(token, 'x.json', card(module, 'Mine'));
       assert.strictEqual(refused.status, 403, `${module}: ${refused.text}`);
     }
+    // A key spelled with escapes names the same type once parsed.
+    for (let [module, name] of [
+      ['@cardstack/catalog/automation/automation', 'Automation'],
+      ['@cardstack/catalog/realm-policy/realm-policy', 'RealmPolicy'],
+      ['./mine.txt', 'Mine'],
+    ]) {
+      let escaped = card(module, name).replace(
+        '"adoptsFrom"',
+        '"\\u0061doptsFrom"',
+      );
+      assert.false(escaped.includes('adoptsFrom'), 'the key is escaped');
+      let refused = await writeText(token, 'x.json', escaped);
+      assert.strictEqual(refused.status, 403, `${module}: ${refused.text}`);
+    }
     let named = await writeText(token, 'y.json', card('./thing', 'Thing'));
     assert.strictEqual(named.status, 204, named.text);
     assert.deepEqual(
