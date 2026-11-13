@@ -121,6 +121,8 @@ const DYNAMIC_ROUTE_RULES: RawHostRoutingRule[] = [
   },
   { path: '/old-pets/:pet', redirectTo: '/pets/:pet', statusCode: 301 },
   { path: '/files/:name', card: './:name' },
+  // Matches a card's own path, `/Pet/<id>`, but names no card there.
+  { path: '/Pet/:pet', card: './Pets/:pet' },
 ];
 
 function dynamicRoutes(): readonly HostRoute[] {
@@ -1584,6 +1586,10 @@ module('Acceptance | host mode tests', function (hooks) {
     // page load of one is resolved by serve-index; here the route resolves
     // it in the browser, with lookups that go through the app's own fetch.
     let lookups: string[];
+    // When set, a route search waits for it, after fulfilling
+    // `searchStarted`.
+    let searchGate: Deferred<void> | undefined;
+    let searchStarted: Deferred<void> | undefined;
     let failingCardURL = `${testHostModeRealmURL}Pet/unavailable`;
     let handler = async (request: Request) => {
       let accept = request.headers.get('Accept') ?? '';
@@ -1594,6 +1600,10 @@ module('Acceptance | host mode tests', function (hooks) {
           request.url.startsWith(`${testHostModeRealmURL}ViewCardDemo/`))
       ) {
         lookups.push(`${request.method} ${request.url}`);
+      }
+      if (searchGate && request.url.endsWith('_search')) {
+        searchStarted?.fulfill();
+        await searchGate.promise;
       }
       if (request.method === 'GET' && request.url === failingCardURL) {
         return new Response('unavailable', { status: 503 });
@@ -1612,6 +1622,8 @@ module('Acceptance | host mode tests', function (hooks) {
         StubDynamicRoutingHostModeService,
       );
       lookups = [];
+      searchGate = undefined;
+      searchStarted = undefined;
       getService('network').virtualNetwork.mount(handler, { prepend: true });
     });
 
@@ -1700,6 +1712,33 @@ module('Acceptance | host mode tests', function (hooks) {
       );
     });
 
+    test('a lookup that finishes after the visitor moved on is not rendered', async function (assert) {
+      searchGate = new Deferred<void>();
+      searchStarted = new Deferred<void>();
+      let first = visit('/test/by-name/Mango').catch(() => {
+        // Aborted by the second visit.
+      });
+      await searchStarted.promise;
+      // The visitor moves on while the first lookup still waits.
+      let gate = searchGate;
+      searchGate = undefined;
+      let second = visit('/test/folders/ViewCardDemo');
+      gate.fulfill();
+      await second;
+      await first;
+      await settled();
+
+      assert.strictEqual(currentURL(), '/test/folders/ViewCardDemo');
+      assert
+        .dom(
+          `[data-test-host-mode-card="${testHostModeRealmURL}ViewCardDemo/index"]`,
+        )
+        .exists();
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .doesNotExist('the late result of the first lookup is dropped');
+    });
+
     test('a dynamic redirect replaces the location with its filled target', async function (assert) {
       await visit('/test/old-pets/mango?utm_source=newsletter');
 
@@ -1778,6 +1817,25 @@ module('Acceptance | host mode tests', function (hooks) {
         .dom('[data-card-error]')
         .containsText('This page could not be loaded.');
       assert.dom('[data-test-host-mode-404]').doesNotExist();
+    });
+
+    test("a card's own path still renders the card while the route set is incomplete", async function (assert) {
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
+        'service:host-mode-service',
+        StubIncompleteDynamicRoutingHostModeService,
+      );
+
+      await visit('/test/Pet/mango');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.dom('[data-card-error]').doesNotExist();
     });
 
     test('a fixed route renders its card without running a lookup', async function (assert) {

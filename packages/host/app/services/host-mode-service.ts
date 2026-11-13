@@ -59,11 +59,15 @@ export interface HostDynamicRoutes {
 // What a path no fixed rule matches resolves to through the dynamic routes.
 // `card` serves the card at `cardHref`; `redirect` navigates to
 // `redirectTo`, which is host-scoped like a fixed redirect rule's target;
-// `error` is a lookup that failed or was refused.
+// `error` is a lookup that failed or was refused. `unavailable` is a path a
+// route matched but that resolved to nothing while the route set is
+// incomplete: when the path is not a card's own path, a route dropped for
+// now might serve it, so it is an error, not a missing page.
 export type DynamicRoutedPath =
   | { kind: 'card'; cardHref: string }
   | { kind: 'redirect'; redirectTo: string }
-  | { kind: 'error'; error: unknown };
+  | { kind: 'error'; error: unknown }
+  | { kind: 'unavailable' };
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -268,6 +272,9 @@ export default class HostModeService extends Service {
     path: string,
   ): Promise<DynamicRoutedPath | undefined> {
     let dynamicRoutes = this.hostDynamicRoutes;
+    // No routes at all, even in an incomplete set (`complete: false` with
+    // every dynamic route dropped), is no dynamic routes: no route can match
+    // the path, and serve-index answers 503 only for a path a route matched.
     if (!dynamicRoutes || dynamicRoutes.routes.length === 0) {
       return undefined;
     }
@@ -322,19 +329,12 @@ export default class HostModeService extends Service {
         );
         return { kind: 'error', error: resolution.error };
       case 'nothing':
-        // With an incomplete route set, a route that would serve this path
-        // may be one validation dropped for now, so the path is not known
-        // to be missing: the server answers 503 here, and so does this.
-        if (dynamicRoutes.complete === false) {
-          log.warn(
-            `host route lookup for ${pathname} found nothing in an incomplete route set`,
-          );
-          return {
-            kind: 'error',
-            error: new Error(
-              `${pathname} resolved to nothing while some routes are not validated yet`,
-            ),
-          };
+        // With an incomplete route set, a route that would serve a path
+        // some route matched may be one validation dropped for now, so the
+        // path is not known to be missing, as on the server. A path no
+        // route matched at all loads as it did before routes.
+        if (dynamicRoutes.complete === false && resolution.trace.length > 0) {
+          return { kind: 'unavailable' };
         }
         return undefined;
     }

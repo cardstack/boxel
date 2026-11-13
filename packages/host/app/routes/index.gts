@@ -10,6 +10,7 @@ import stringify from 'safe-stable-stringify';
 
 import {
   HOST_APP_QUERY_PARAMS,
+  isCardErrorJSONAPI,
   isRedirectRoutingRule,
 } from '@cardstack/runtime-common';
 import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
@@ -23,6 +24,7 @@ import type { StackItemType } from '@cardstack/host/lib/stack-item';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
+import type { DynamicRoutedPath } from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import { AccountSwitchError } from '@cardstack/host/services/matrix-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -137,8 +139,9 @@ export default class Card extends Route {
       // template, a field match, a nested or a dynamic redirect route. A
       // lookup that fails shows an error state, not the not-found page.
       // When no route resolves the path, it loads as a card URL.
+      let dynamic: DynamicRoutedPath | undefined;
       if (!routed) {
-        let dynamic =
+        dynamic =
           await this.hostModeService.resolveDynamicRoutedPath(normalizedPath);
         // The visitor may have moved on while the lookup ran. A result for
         // a transition that was aborted is neither rendered nor followed,
@@ -168,7 +171,21 @@ export default class Card extends Route {
         routed?.id ??
         `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
 
-      return this.store.get(cardUrl);
+      let model = await this.store.get(cardUrl);
+      // A card's own path is still served while the route set is
+      // incomplete; any other path is an error then, as on the server.
+      if (
+        !routed &&
+        dynamic?.kind === 'unavailable' &&
+        isCardErrorJSONAPI(model) &&
+        model.status === 404
+      ) {
+        console.error(
+          `/${normalizedPath} resolved to nothing while a host route is dropped for a type that is not available yet`,
+        );
+        throw new HostRouteResolutionError();
+      }
+      return model;
     }
 
     let { operatorModeState, cardPath } = params;
