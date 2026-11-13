@@ -511,6 +511,12 @@ export class RenderRunner {
       timedOut: false,
     };
     this.#pagePool.resetConsoleErrors(pageId);
+    // An automation run's token goes to the tab in memory only, never into
+    // anything the tab keeps (ADR 026 §1.2). The host drops it as the run
+    // answers, and a run that doesn't answer loses its tab. The run's tab
+    // holds no other session, so its storage is cleared of any. Every other
+    // command takes its sessions from storage.
+    let sessionsInMemory = renderSessionOf(auth).kind === 'run';
     const markTimeout = (status?: RunCommandResponse['status']) => {
       if (!poolInfo.timedOut && status === 'unusable') {
         poolInfo.timedOut = true;
@@ -528,12 +534,6 @@ export class RenderRunner {
       let requestId = randomUUID();
       let nonce = String(this.#nonce);
       let storageKey = `${commandRequestStorageKeyPrefix}${requestId}`;
-      // An automation run's token goes to the tab in memory only, never into
-      // anything the tab keeps (ADR 026 §1.2), and the host drops it before
-      // the run answers. The run's tab holds no other session, so its storage
-      // is cleared of any. Every other command takes its sessions from
-      // storage.
-      let sessionsInMemory = renderSessionOf(auth).kind === 'run';
       await abortable(signal, () =>
         page.evaluate(
           (
@@ -654,6 +654,12 @@ export class RenderRunner {
           error: waitResult.error.message,
         };
         markTimeout(response.status);
+        await this.#closeUnansweredRunTab(
+          sessionsInMemory,
+          affinityKey,
+          poolInfo,
+          'timeout',
+        );
         return {
           response,
           timings: { launchMs, renderMs: Date.now() - renderStart, waits },
@@ -701,6 +707,12 @@ export class RenderRunner {
         throw e;
       }
       log.error('Error running command in headless chrome:', e);
+      await this.#closeUnansweredRunTab(
+        sessionsInMemory,
+        affinityKey,
+        poolInfo,
+        'unusable',
+      );
       let response: RunCommandResponse = {
         status: 'error',
         error: e instanceof Error ? `${e.name}: ${e.message}` : `${e}`,
@@ -3177,6 +3189,22 @@ export class RenderRunner {
       this.#onUnresponsiveTab?.({ affinityKey, browserUnresponsive });
     } catch (e) {
       log.warn(`onUnresponsiveTab subscriber threw for ${affinityKey}:`, e);
+    }
+  }
+
+  // A run that didn't answer may still be running its script in the tab,
+  // holding its token in the page's memory: the host drops a run's sessions
+  // only as the run answers. Closing the tab ends both, so the pool never
+  // hands that page to another visit.
+  async #closeUnansweredRunTab(
+    sessionsInMemory: boolean,
+    affinityKey: string,
+    poolInfo: PoolInfo,
+    reason: 'timeout' | 'unusable',
+  ) {
+    if (sessionsInMemory) {
+      await this.#evictAffinity(affinityKey, 'command-runner', reason);
+      poolInfo.evicted = true;
     }
   }
 

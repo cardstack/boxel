@@ -1129,6 +1129,12 @@ export default class RealmService extends Service {
     // poison it and suppress a later retry.
     this.lastRestoredSessionsString = sessionsString;
     if (startingVisit) {
+      // A tab handed its sessions in memory may have come from another
+      // affinity, whose sessions the auth service worker still holds and
+      // would add to this visit's requests. It forgets them all.
+      if (inMemorySessions()) {
+        clearServiceWorkerTokens();
+      }
       this.dropSessionsNotCarriedBy(tokens);
     }
     for (let [realmURL, token] of Object.entries(tokens)) {

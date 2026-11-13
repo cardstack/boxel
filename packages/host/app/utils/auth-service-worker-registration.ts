@@ -125,7 +125,12 @@ export function syncTokenToServiceWorker(
   realmURL: string,
   token: string | undefined,
 ): void {
-  if (!isServiceWorkerSupported() || realmSessionsAreInMemory()) {
+  // A tab holding its sessions in memory never hands one to the worker, but
+  // still tells it to forget a session it drops.
+  if (
+    !isServiceWorkerSupported() ||
+    (token !== undefined && realmSessionsAreInMemory())
+  ) {
     return;
   }
 
