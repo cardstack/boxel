@@ -580,9 +580,23 @@ export class Mine extends Automation {}`;
     ]);
     assert.strictEqual(answer.status, 200, answer.text);
 
+    let second = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'appendContainsMany',
+        href: './people/ada',
+        data: { field: 'nicknames', items: ['Enchantress'] },
+      },
+    ]);
+    assert.strictEqual(second.status, 200, second.text);
+
     let staged = await readCard(token, 'people/ada');
     assert.strictEqual(staged.status, 200, staged.text);
-    assert.deepEqual(staged.data.attributes.nicknames, ['Countess']);
+    assert.deepEqual(
+      staged.data.attributes.nicknames,
+      ['Countess', 'Enchantress'],
+      'the second append splices into the card as the first staged it',
+    );
     assert.deepEqual(
       (await readCard(session(), 'people/ada')).data.attributes.nicknames,
       [],
@@ -631,6 +645,71 @@ export class Mine extends Automation {}`;
       { 'people/ada': 'Ada' },
       'an ordinary reader’s search sees the indexed card',
     );
+  });
+
+  test('a run’s update operation merges into the card as the run staged it', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let renamed = await atomic(token, [updateAda('Ada Lovelace')]);
+    assert.strictEqual(renamed.status, 201, renamed.text);
+    let update = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'update',
+        href: './people/ada',
+        data: {
+          type: 'card',
+          attributes: { nicknames: ['Countess'] },
+          meta: {
+            adoptsFrom: { module: `${realmURL.href}person`, name: 'Person' },
+          },
+        },
+      },
+    ]);
+    assert.strictEqual(update.status, 200, update.text);
+    let staged = await readCard(token, 'people/ada');
+    assert.strictEqual(staged.data.attributes.name, 'Ada Lovelace');
+    assert.deepEqual(staged.data.attributes.nicknames, ['Countess']);
+  });
+
+  test('a card read of a staged file that isn’t a card document is refused, not answered from the realm', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let write = await writeText(token, 'people/ada.json', 'not a document');
+    assert.strictEqual(write.status, 204, write.text);
+    let read = await readCard(token, 'people/ada');
+    assert.strictEqual(read.status, 422, read.text);
+    assert.strictEqual(
+      (await readCard(session(), 'people/ada')).data.attributes.name,
+      'Ada',
+    );
+  });
+
+  test('a run’s read entry of a staged file that isn’t a card document is refused, not answered from the realm', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let write = await writeText(token, 'people/ada.json', 'not a document');
+    assert.strictEqual(write.status, 204, write.text);
+    let answer = await operations(token, [
+      { op: 'invoke', 'boxel:name': 'read', href: './people/ada' },
+    ]);
+    assert.strictEqual(answer.status, 422, answer.text);
+    assert.strictEqual(answer.json.errors?.[0]?.code, 'target-errored');
+  });
+
+  test('racing writes can’t stage a path both as a file and as a directory', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let answers = await Promise.all([
+      writeText(token, 'drafts', 'a file'),
+      writeText(token, 'drafts/one.md', 'under a directory'),
+    ]);
+    assert.deepEqual(
+      answers.map(({ status }) => status).sort(),
+      [204, 409],
+      'one of the two is staged and the other refused',
+    );
+    assert.strictEqual((await overlayRows(run.id)).length, 1);
   });
 
   test('a card a run creates is read back, and a search does not find it', async function (assert) {

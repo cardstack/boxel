@@ -219,7 +219,6 @@ import {
   releaseRunOverlayCommitClaim,
   readRunOverlayFile,
   runOverlayFiles,
-  runOverlayPathClash,
   runOverlayPathsUnder,
   stageRunOverlayFiles,
   type RunOverlayKey,
@@ -13381,9 +13380,13 @@ export class Realm {
     if (!content) {
       return tooLarge(undefined, readLimit);
     }
-    let refusal = await this.#stageRunFiles(requestContext, run, [
-      { path, content },
-    ]);
+    // Under the realm's write lock on the path, as a run's batch stages, so a
+    // batch's read-merge-write of a file can't straddle this write.
+    let refusal = await this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      [path],
+      () => this.#stageRunFiles(requestContext, run, [{ path, content }]),
+    );
     if (!refusal) {
       return createResponse({
         body: null,
@@ -13443,19 +13446,6 @@ export class Realm {
           detail: `An automation run may not write ${protectedTarget}`,
         };
       }
-      let clash =
-        files.find(
-          (other) =>
-            other.path.startsWith(`${path}/`) ||
-            path.startsWith(`${other.path}/`),
-        )?.path ?? (await runOverlayPathClash(this.#dbAdapter, run, path));
-      if (clash) {
-        return {
-          status: 409,
-          title: 'Conflict',
-          detail: `This run has staged ${clash}, so ${path} can't be both a file and a directory`,
-        };
-      }
     }
     let paths = files.map(({ path }) => path).join(', ');
     let staged = await stageRunOverlayFiles(
@@ -13483,6 +13473,12 @@ export class Realm {
           title: 'Unauthorized',
           detail: 'The automation run is not running',
           notRunning: true,
+        };
+      case 'path-clash':
+        return {
+          status: 409,
+          title: 'Conflict',
+          detail: `This run has staged ${staged.clash}, so ${staged.path} can't be both a file and a directory`,
         };
       case 'staged':
         return undefined;
@@ -13513,75 +13509,105 @@ export class Realm {
         },
         requestContext,
       });
-    let files: { path: LocalPath; content: Uint8Array }[] = [];
-    for (let operation of operations) {
-      let localPath: LocalPath;
-      try {
-        localPath = this.paths.local(
-          new URL(this.#resolveAtomicHref(operation.href), this.paths.url),
-        );
-      } catch (error: any) {
-        return refuse(
-          400,
-          'Invalid atomic:operations format',
-          error?.message ??
-            `Request operation contains invalid href '${operation.href}'`,
-        );
-      }
-      let reserved = reservedWriteDestination(localPath);
-      if (reserved) {
-        return refuse(
-          422,
-          'Reserved path',
-          `Cannot write '${operation.href}': ${reserved}`,
-        );
-      }
-      let exists =
-        (await readRunOverlayFile(this.#dbAdapter, run, localPath)) !==
-          undefined || (await this.#adapter.exists(localPath));
-      if (operation.op === 'add' && exists) {
-        return refuse(
-          409,
-          'Resource already exists',
-          `Resource ${operation.href} already exists`,
-        );
-      }
-      if (operation.op === 'update' && !exists) {
-        return refuse(
-          404,
-          'Resource does not exist',
-          `Resource ${operation.href} does not exist`,
-        );
-      }
-      let resource = operation.data;
-      let content: string;
-      if (isModuleResource(resource)) {
-        content = resource.attributes?.content ?? '';
-      } else if (resource && isCardResource(resource)) {
-        content = JSON.stringify({ data: resource }, null, 2);
-      } else {
-        return refuse(
-          400,
-          'Invalid resource',
-          'Operation data is not a valid card resource or module resource',
-        );
-      }
-      files.push({
-        path: localPath,
-        content: new TextEncoder().encode(content),
-      });
+    // Under the realm's write locks on every path the request names, as a
+    // run's batch stages, so a batch's read-merge-write of one of these files
+    // can't straddle this write.
+    let staged = await this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      this.#atomicWritePaths(operations),
+      async () => {
+        let files: { path: LocalPath; content: Uint8Array }[] = [];
+        for (let operation of operations) {
+          let localPath: LocalPath;
+          try {
+            localPath = this.paths.local(
+              new URL(this.#resolveAtomicHref(operation.href), this.paths.url),
+            );
+          } catch (error: any) {
+            return refuse(
+              400,
+              'Invalid atomic:operations format',
+              error?.message ??
+                `Request operation contains invalid href '${operation.href}'`,
+            );
+          }
+          let reserved = reservedWriteDestination(localPath);
+          if (reserved) {
+            return refuse(
+              422,
+              'Reserved path',
+              `Cannot write '${operation.href}': ${reserved}`,
+            );
+          }
+          let exists =
+            (await readRunOverlayFile(this.#dbAdapter, run, localPath)) !==
+              undefined || (await this.#adapter.exists(localPath));
+          if (operation.op === 'add' && exists) {
+            return refuse(
+              409,
+              'Resource already exists',
+              `Resource ${operation.href} already exists`,
+            );
+          }
+          if (operation.op === 'update' && !exists) {
+            return refuse(
+              404,
+              'Resource does not exist',
+              `Resource ${operation.href} does not exist`,
+            );
+          }
+          let resource = operation.data;
+          let content: string;
+          if (isModuleResource(resource)) {
+            content = resource.attributes?.content ?? '';
+          } else if (resource && isCardResource(resource)) {
+            content = JSON.stringify({ data: resource }, null, 2);
+          } else {
+            return refuse(
+              400,
+              'Invalid resource',
+              'Operation data is not a valid card resource or module resource',
+            );
+          }
+          // A card document is serialized as the atomic write serializes it,
+          // so the run stages the bytes the same request would store outside
+          // a run.
+          let serialized: string | undefined;
+          try {
+            serialized = await this.#serializedCardDocument(
+              content,
+              this.paths.fileURL(localPath),
+            );
+          } catch (error: any) {
+            return refuse(
+              422,
+              'Invalid card document',
+              `Cannot write '${operation.href}': ${error?.message ?? error}`,
+            );
+          }
+          files.push({
+            path: localPath,
+            content: new TextEncoder().encode(serialized ?? content),
+          });
+        }
+        let refusal = await this.#stageRunFiles(requestContext, run, files);
+        if (refusal?.notRunning) {
+          return createResponse({
+            body: 'The automation run is not running',
+            init: { status: 401 },
+            requestContext,
+          });
+        }
+        if (refusal) {
+          return refuse(refusal.status, refusal.title, refusal.detail);
+        }
+        return files;
+      },
+    );
+    if (!Array.isArray(staged)) {
+      return staged;
     }
-    let refusal = await this.#stageRunFiles(requestContext, run, files);
-    if (refusal?.notRunning) {
-      return createResponse({
-        body: 'The automation run is not running',
-        init: { status: 401 },
-        requestContext,
-      });
-    }
-    if (refusal) {
-      return refuse(refusal.status, refusal.title, refusal.detail);
-    }
+    let files = staged;
     return createResponse({
       body: JSON.stringify(
         {
@@ -13604,16 +13630,43 @@ export class Realm {
     });
   }
 
+  // `content` as the atomic write stores it when it holds a card document:
+  // serialized against the card's type, with the realm's URL. Undefined for
+  // content that isn't a card document, which is stored as it is.
+  async #serializedCardDocument(
+    content: string,
+    url: URL,
+  ): Promise<string | undefined> {
+    let doc: { data?: unknown };
+    try {
+      doc = JSON.parse(content);
+    } catch {
+      return undefined;
+    }
+    if (!isCardResource(doc?.data)) {
+      return undefined;
+    }
+    return JSON.stringify(
+      await this.fileSerialization(
+        { data: merge(doc.data, { meta: { realmURL: this.url } }) },
+        url,
+      ),
+      null,
+      2,
+    );
+  }
+
   // The card a run staged at `localPath` (the card's path, without `.json`),
   // as a card read serves it (ADR 027 §1.3): the staged document's resource,
   // with the card's id, its own link, and its type's module resolved against
   // the card. Staged files aren't indexed, so its computed fields are absent
-  // and its links aren't expanded. Undefined when the run staged no card
-  // document there.
+  // and its links aren't expanded. Undefined when the run staged nothing
+  // there, and `not-a-card` when what it staged isn't a card document, which
+  // its reads must not answer with the realm's version instead.
   async #stagedCardResource(
     run: RunOverlayKey,
     localPath: LocalPath,
-  ): Promise<LooseCardResource | undefined> {
+  ): Promise<LooseCardResource | 'not-a-card' | undefined> {
     let bytes = await readRunOverlayFile(
       this.#dbAdapter,
       run,
@@ -13625,21 +13678,21 @@ export class Realm {
   }
 
   // The card resource the staged document `content` at `localPath` (the
-  // card's path, without `.json`) serves as (see `#stagedCardResource`).
-  // Undefined when `content` isn't a card document.
+  // card's path, without `.json`) serves as (see `#stagedCardResource`), or
+  // `not-a-card` when `content` isn't a card document.
   #stagedCardFrom(
     localPath: LocalPath,
     content: string,
-  ): LooseCardResource | undefined {
+  ): LooseCardResource | 'not-a-card' {
     let doc: unknown;
     try {
       doc = JSON.parse(content);
     } catch {
-      return undefined;
+      return 'not-a-card';
     }
     let resource = (doc as { data?: unknown } | null)?.data;
     if (!isCardResource(resource)) {
-      return undefined;
+      return 'not-a-card';
     }
     let url = this.paths.fileURL(localPath);
     let id = this.#virtualNetwork.unresolveURL(url.href);
@@ -13707,7 +13760,10 @@ export class Realm {
         continue;
       }
       let card = await this.#stagedCardResource(run, localPath);
-      if (!card) {
+      // A staged file that isn't a card document has no card to swap in, and
+      // the entry that found it links to this resource, so it keeps the
+      // index's version.
+      if (!card || card === 'not-a-card') {
         continue;
       }
       let found = resource as LooseCardResource;
@@ -13740,6 +13796,10 @@ export class Realm {
   // - The stored text of a file the run staged is the staged text, which is
   //   what a policy predicate reads a card's fields from.
   //
+  // A staged `.json` that isn't a card document is never answered with the
+  // realm's version: the run sees no card row there, and a `read` of it is
+  // refused with 422, as the run's card read refuses it.
+  //
   // A search runs on the index, as the run's search does, so an entry
   // that finds its targets with a query finds the cards the index holds. A
   // read of a file's stored bytes isn't an operation a batch carries; the
@@ -13759,8 +13819,8 @@ export class Realm {
       }
       let content = new TextDecoder().decode(bytes);
       let card = this.#stagedCardFrom(localPath, content);
-      if (!card) {
-        return undefined;
+      if (card === 'not-a-card') {
+        return { notACard: localPath };
       }
       let indexed = await index.instance(url, { includeErrors: true });
       return {
@@ -13776,6 +13836,9 @@ export class Realm {
         let card = await staged(url);
         if (!card) {
           return await index.instance(url, opts);
+        }
+        if ('notACard' in card) {
+          return undefined;
         }
         let row: InstanceOrError = {
           type: 'instance',
@@ -13805,6 +13868,15 @@ export class Realm {
         let card = await staged(url);
         if (!card) {
           return await index.cardDocument(url, opts);
+        }
+        if ('notACard' in card) {
+          throw new OperationFailure({
+            id: url.href,
+            status: 422,
+            code: 'target-errored',
+            title: 'Not a card document',
+            detail: `This run staged ${card.notACard}.json, which isn't a card document`,
+          });
         }
         return {
           type: 'doc',
@@ -13838,12 +13910,22 @@ export class Realm {
   // reads the run's staged copy where it has one, and the commit stages the
   // batch's result in the run's overlay instead of writing the realm. So a
   // write operation runs against the overlay's view of each file, and the
-  // overlay holds its result. The write locks are still the realm's, which
-  // keeps two batches of the same run on one file in order.
+  // overlay holds its result. The write locks are still the realm's, and
+  // every route that stages a run's write takes them, so nothing staged at a
+  // file this batch reads can change between its reads and its commit. That
+  // is also why each staged file is read once per batch: a splice measured on
+  // the staged bytes is read out of the same bytes.
   #runBatchCore(requestContext: RequestContext, run: RunOverlayKey): BatchCore {
     let core = this.batchCore;
-    let staged = (path: LocalPath) =>
-      readRunOverlayFile(this.#dbAdapter, run, path);
+    let reads = new Map<LocalPath, Promise<Uint8Array | undefined>>();
+    let staged = (path: LocalPath) => {
+      let read = reads.get(path);
+      if (!read) {
+        read = readRunOverlayFile(this.#dbAdapter, run, path);
+        reads.set(path, read);
+      }
+      return read;
+    };
     let readRange = async (path: LocalPath, start: number, end: number) => {
       let bytes = await staged(path);
       if (bytes) {
@@ -17169,6 +17251,27 @@ export class Realm {
     let run = this.#runOverlay(requestContext);
     if (run) {
       let staged = await this.#stagedCardResource(run, localPath);
+      if (staged === 'not-a-card') {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '422',
+                title: 'Not a card document',
+                detail: `This run staged ${localPath}.json, which isn't a card document`,
+              },
+            ],
+          }),
+          init: {
+            status: 422,
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              'cache-control': 'no-store',
+            },
+          },
+          requestContext,
+        });
+      }
       if (staged) {
         staged.meta.realmInfo = await this.getRealmInfo();
         return createResponse({

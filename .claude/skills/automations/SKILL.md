@@ -502,7 +502,10 @@ What goes through it, for a run-token call in the run's own realm
   first staged. A `delete` operation is refused (403 `run-write-not-staged`),
   since the overlay can't hold a removal; a result the overlay refuses
   answers `run-write-refused` with the status below. A `callApi` entry still
-  runs at once and isn't staged.
+  runs at once and isn't staged. The envelope still resolves each entry, and
+  runs its `read` and `readSource` entries, against the realm and its index:
+  a declared operation on a card created in this run doesn't resolve, and a
+  read entry answers the realm's version (`docs/adr/remediation/027.md`).
 
 Every staged write meets the same checks (`Realm.#stageRunFiles`). Any file
 may be staged, card instance or not. The realm's size limit for the file's
@@ -518,9 +521,12 @@ can't be staged as both a file and a directory (409). The token's
 `run.writesCap` bounds how many files the attempt stages (403 `Writes cap
 reached`), and `RUN_OVERLAY_MAX_BYTES` (100 MiB) bounds their bytes together
 (413). Rewriting a staged path replaces it and doesn't count again. The run's
-row is locked for the check, so racing writes can't pass the cap, and a write
-after the run stopped running is refused (401). A request that stages several
-files stages all of them or none.
+row is locked for the check, so racing writes can't pass the cap or stage a
+path as both a file and a directory, and a write after the run stopped
+running is refused (401). A request that stages several files stages all of
+them or none. Every staging route takes the realm's write locks on the
+files it stages, as the batch does, so a write can't land between a batch's
+read of a file and its commit.
 
 And the run's reads:
 
@@ -535,7 +541,8 @@ And the run's reads:
   the card's id, its own link, its type's module resolved against the card,
   and `realmURL` and `realmInfo`, never cached. It has no computed fields
   and no expanded links, since staged files aren't indexed. A card the run
-  created is read this way too.
+  created is read this way too. A staged `.json` that isn't a card document
+  answers 422, never the realm's version.
 - **Operations** (`operations.invoke`, `operations.invokeBatchOperation`):
   `handleOperations` resolves a run's batch against `Realm.#runOperationCore`,
   the realm's operation core with each card the attempt staged answered from
@@ -545,12 +552,16 @@ And the run's reads:
   staged type carries runs, and the policy gate matches rules against that
   type), and a predicate reads the staged fields. A `read` entry answers the
   staged document as `cards.get` does, with its generation taken from the
-  realm's index row, or 0 for a card the run created. An entry that finds its
-  targets with a query searches the index, as `cards.search` does.
+  realm's index row, or 0 for a card the run created. A staged `.json` that
+  isn't a card document is no card to an entry, and a `read` of it answers
+  422, as `cards.get` does. An entry that finds its targets with a query
+  searches the index, as `cards.search` does.
 - **`cards.search`** runs on the index, and answers each card the attempt
   staged as staged (`Realm.#withStagedCards`): its attributes,
   relationships and type come from the staged document, and the rest of what
-  the search answered for it stays. Which cards match, and their order, are
+  the search answered for it stays. Its attributes are the staged ones, so a
+  staged hit carries no computed fields, as `cards.get` of it doesn't. A hit
+  whose staged file isn't a card document keeps the index's version. Which cards match, and their order, are
   the index's, so **a search won't find a card created in this run, and
   won't match on a value this run changed**; a card it returns staged may no
   longer match the query. This is the decided shape (ADR 027 §1.3), not a

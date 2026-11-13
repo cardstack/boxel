@@ -45,7 +45,10 @@ export type RunOverlayStageResult =
   // `RUN_OVERLAY_MAX_BYTES`.
   | { kind: 'over-bytes'; limit: number }
   // The run isn't running, another attempt owns it, or its commit is claimed.
-  | { kind: 'not-running' };
+  | { kind: 'not-running' }
+  // `path` and the staged `clash` would be a file and a directory at once,
+  // which no realm can hold.
+  | { kind: 'path-clash'; path: string; clash: string };
 
 // One staged file, as the overlay holds it.
 export interface RunOverlayFile {
@@ -131,6 +134,17 @@ export async function stageRunOverlayFiles(
       param(key.attempt),
     ])) as { path: string; size: number | string }[];
     let stagedBefore = new Set(rows.map((row) => String(row.path)));
+    // Checked under the run's row lock, so two requests racing to stage a
+    // path and a path under it can't both pass.
+    let all = new Set([...stagedBefore, ...byPath.keys()]);
+    for (let path of byPath.keys()) {
+      let clash = [...all].find(
+        (other) => other.startsWith(`${path}/`) || path.startsWith(`${other}/`),
+      );
+      if (clash) {
+        return { kind: 'path-clash', path, clash } as const;
+      }
+    }
     let created = [...byPath.keys()].filter((path) => !stagedBefore.has(path));
     if (created.length > 0 && stagedBefore.size + created.length > writesCap) {
       return { kind: 'over-cap', cap: writesCap } as const;
@@ -198,33 +212,6 @@ export async function runOverlayPathsUnder(
     'ORDER BY path',
   ]);
   return rows.map((row) => String(row.path));
-}
-
-// A path the attempt staged that `path` can't sit beside: a file at one of
-// the directories `path` is under, or a file under `path` as a directory. A
-// realm can't hold both, so the commit would fail. Undefined when there is
-// none.
-export async function runOverlayPathClash(
-  dbAdapter: DBAdapter,
-  key: RunOverlayKey,
-  path: string,
-): Promise<string | undefined> {
-  let parents = path
-    .split('/')
-    .slice(0, -1)
-    .map((_, i, parts) => parts.slice(0, i + 1).join('/'));
-  let [row] = await query(dbAdapter, [
-    'SELECT path FROM run_overlay_files WHERE run_id =',
-    param(key.runId),
-    'AND attempt =',
-    param(key.attempt),
-    'AND (starts_with(path,',
-    param(`${path}/`),
-    ')',
-    ...parents.flatMap((parent) => ['OR path =', param(parent)]),
-    ') ORDER BY path LIMIT 1',
-  ]);
-  return row ? String(row.path) : undefined;
 }
 
 // Every file the attempt staged, in path order.
