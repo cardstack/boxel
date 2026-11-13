@@ -16,7 +16,10 @@ import {
   createJWT,
   realmSecretSeed,
   setupPermissionedRealmCached,
+  automationFixture,
+  TEST_AUTOMATION_PATH,
 } from './helpers/index.ts';
+import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
@@ -135,6 +138,8 @@ const inboxModule = `
 `;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupCatalogTestSubset(hooks);
+
   let realm: Realm;
   let request: SuperTest<Test>;
   let dbAdapter: PgAdapter;
@@ -176,6 +181,11 @@ module(basename(import.meta.filename), function (hooks) {
     },
     fileSystem: {
       'inbox.gts': inboxModule,
+      ...automationFixture({
+        operations: [
+          { type: INBOX, names: ['check', 'shared', 'slow', 'twice', 'both'] },
+        ],
+      }),
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -317,7 +327,11 @@ module(basename(import.meta.filename), function (hooks) {
     user = OWNER,
     token?: string,
   ) {
-    token ??= (await createAutomationRunToken(dbAdapter, realm, user)).token;
+    token ??= (
+      await createAutomationRunToken(dbAdapter, realm, user, {
+        automation: TEST_AUTOMATION_PATH,
+      })
+    ).token;
     let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
@@ -386,6 +400,7 @@ module(basename(import.meta.filename), function (hooks) {
       dbAdapter,
       realm,
       OWNER,
+      { automation: TEST_AUTOMATION_PATH },
     );
     assert.strictEqual(
       (await automationCall('check', OWNER, token)).status,

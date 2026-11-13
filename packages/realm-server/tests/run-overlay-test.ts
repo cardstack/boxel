@@ -11,7 +11,10 @@ import {
   startAutomationRunAttempt,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
+import {
+  RUN_COMMIT_PATH,
+  stageRunOverlayFile,
+} from '@cardstack/runtime-common/run-overlay';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   createAutomationRunToken,
@@ -983,7 +986,7 @@ export class Mine extends Automation {}`;
       },
     ]);
     assert.strictEqual(second.status, 403, second.text);
-    assert.strictEqual(second.json.errors?.[0]?.code, 'run-write-refused');
+    assert.strictEqual(second.json.errors?.[0]?.code, 'writes-cap');
     assert.deepEqual(
       (await overlayRows(run.id)).map((row) => row.path),
       ['logs/2026-11.jsonl'],
@@ -1093,7 +1096,7 @@ export class Mine extends Automation {}`;
       data: {
         type: 'card',
         attributes: { padding },
-        meta: { adoptsFrom: { module: './thing', name: 'Thing' } },
+        meta: { adoptsFrom: { module: '../thing', name: 'Thing' } },
       },
     });
     assert.strictEqual(
@@ -1107,17 +1110,6 @@ export class Mine extends Automation {}`;
       204,
       'a .json file that is not a card takes the file limit',
     );
-  });
-
-  test('a run may not stage at a path the realm reserves', async function (assert) {
-    let { token, run } = await createAutomationRunToken(
-      dbAdapter,
-      realm,
-      OWNER,
-    );
-    let refused = await writeText(token, 'notes.txt.boxel-partial', 'nope');
-    assert.notStrictEqual(refused.status, 204, refused.text);
-    assert.deepEqual(await overlayRows(run.id), []);
   });
 
   test('a path is not staged as both a file and a directory', async function (assert) {
@@ -1137,6 +1129,190 @@ export class Mine extends Automation {}`;
       204,
       'a sibling whose name starts the same is no clash',
     );
+  });
+
+  test('a card the commit would refuse is refused at staging, through each staging route, as the commit refuses it', async function (assert) {
+    // A file at `Person` in the realm, which is where a Person card the
+    // envelope creates gets its directory, so every card below would be under
+    // a path the realm holds as a file.
+    assert.strictEqual(
+      (await writeText(session(), 'Person', 'a file, not a directory')).status,
+      204,
+    );
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let card = {
+      data: {
+        type: 'card',
+        attributes: { name: 'Grace', nicknames: [] },
+        meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+      },
+    };
+
+    // What the commit answers for the same card, staged in the overlay
+    // directly, as a realm that changed since staging would leave it.
+    let other = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    await stageRunOverlayFile(
+      dbAdapter,
+      { runId: other.run.id, attempt: other.run.attempt! },
+      'Person/grace.json',
+      new TextEncoder().encode(JSON.stringify(card)),
+      10,
+    );
+    let committed = await realm.handle(
+      new Request(`${realmURL.href}${RUN_COMMIT_PATH.slice(1)}`, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          Authorization: `Bearer ${other.token}`,
+        },
+      }),
+    );
+    let commitText = await committed!.text();
+    assert.strictEqual(committed!.status, 409, commitText);
+    let commitError = JSON.parse(commitText).errors[0];
+    assert.strictEqual(commitError.code, 'path-clash');
+    assert.ok(
+      commitError.detail.endsWith('; nothing was saved'),
+      commitError.detail,
+    );
+    let reason = commitError.detail.replace(/; nothing was saved$/, '');
+
+    let written = await writeText(
+      token,
+      'Person/grace.json',
+      JSON.stringify(card),
+    );
+    assert.strictEqual(written.status, 409, 'the card+source write');
+    let writeError = JSON.parse(written.text).errors[0];
+    assert.strictEqual(writeError.code, 'path-clash');
+    assert.strictEqual(writeError.detail, reason);
+
+    let added = await atomic(token, [
+      { op: 'add', href: './Person/grace.json', data: card.data },
+    ]);
+    assert.strictEqual(added.status, 409, `the atomic write: ${added.text}`);
+    let addError = JSON.parse(added.text).errors[0];
+    assert.strictEqual(addError.code, 'path-clash');
+    assert.strictEqual(addError.detail, reason);
+
+    let created = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'create',
+        data: {
+          lid: 'grace',
+          attributes: { name: 'Grace', nicknames: [] },
+          meta: {
+            adoptsFrom: { module: `${realmURL.href}person`, name: 'Person' },
+          },
+        },
+      },
+    ]);
+    assert.strictEqual(
+      created.status,
+      409,
+      `the operations envelope: ${created.text}`,
+    );
+    let createError = created.json.errors[0];
+    assert.strictEqual(createError.code, 'path-clash');
+    assert.strictEqual(createError.detail, reason);
+
+    assert.deepEqual(await overlayRows(run.id), [], 'nothing is staged');
+  });
+
+  test('a run may not stage at a path the realm reserves, and is refused as the commit refuses it', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    for (let path of ['notes.txt.boxel-partial', '_capture/notes.txt']) {
+      let written = await writeText(token, path, 'nope');
+      assert.strictEqual(written.status, 403, written.text);
+      assert.strictEqual(
+        JSON.parse(written.text).errors[0].code,
+        'forbidden-path',
+        `the card+source write of ${path}`,
+      );
+      let added = await atomic(token, [
+        {
+          op: 'add',
+          href: `./${path}`,
+          data: { type: 'source', attributes: { content: 'nope' }, meta: {} },
+        },
+      ]);
+      assert.strictEqual(added.status, 403, added.text);
+      assert.strictEqual(
+        JSON.parse(added.text).errors[0].code,
+        'forbidden-path',
+        `the atomic write of ${path}`,
+      );
+      // The realm holds nothing there, and the answer is the reservation,
+      // not that the file doesn't exist.
+      let updated = await atomic(token, [
+        {
+          op: 'update',
+          href: `./${path}`,
+          data: { type: 'source', attributes: { content: 'nope' }, meta: {} },
+        },
+      ]);
+      assert.strictEqual(updated.status, 403, updated.text);
+      assert.strictEqual(
+        JSON.parse(updated.text).errors[0].code,
+        'forbidden-path',
+        `the atomic update of ${path}`,
+      );
+    }
+    let appended = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'appendLine',
+        href: './_capture/log.txt',
+        data: { line: 'nope' },
+      },
+    ]);
+    assert.strictEqual(appended.status, 403, appended.text);
+    assert.strictEqual(appended.json.errors[0].code, 'forbidden-path');
+    assert.deepEqual(await overlayRows(run.id), []);
+  });
+
+  test('a file refused for its path and its size is refused for its path, as the commit refuses it', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    // Past the card limit, within the file limit, so the size check runs on
+    // the staged bytes.
+    let card = JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { padding: 'x'.repeat(600 * 1024) },
+        meta: { adoptsFrom: { module: '../thing', name: 'Thing' } },
+      },
+    });
+    let overCardLimit = await writeText(token, 'notes.txt/huge.json', card);
+    assert.strictEqual(overCardLimit.status, 409, overCardLimit.text);
+    assert.strictEqual(
+      JSON.parse(overCardLimit.text).errors[0].code,
+      'path-clash',
+    );
+    // Past every limit, so the body is never read whole.
+    let overReadLimit = await writeText(
+      token,
+      'notes.txt/huge.txt',
+      'x'.repeat(5 * 1024 * 1024 + 1),
+    );
+    assert.strictEqual(overReadLimit.status, 409, overReadLimit.text);
+    assert.strictEqual(
+      JSON.parse(overReadLimit.text).errors[0].code,
+      'path-clash',
+    );
+    assert.deepEqual(await overlayRows(run.id), []);
   });
 
   for (let [ending, end] of [

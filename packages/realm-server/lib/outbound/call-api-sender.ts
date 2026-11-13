@@ -13,6 +13,7 @@ import {
   type CallApiReadinessLookup,
   type CallApiRequest,
   type CallApiSender,
+  type CallApiSendOptions,
   type CallApiSlotLookup,
   type KeyReadiness,
 } from '@cardstack/runtime-common/card-operations';
@@ -127,7 +128,7 @@ export function createCallApiSender(
       return source ? fixableOnPublishedRealm(answer) : answer;
     },
     recordUse: (use) => recordKeyUses(dbAdapter, use),
-    send: async (request, credentials) => {
+    send: async (request, credentials, options) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
         log.warn(
           `callApi refused: ${recordedURL(request.url)} is one of the platform's token endpoints`,
@@ -143,7 +144,7 @@ export function createCallApiSender(
       let grants = grantsOf(credentials);
       let response: CallApiResponse;
       try {
-        response = await sendCallApiRequest(request, credentials);
+        response = await sendCallApiRequest(request, credentials, options);
       } catch (error) {
         for (let grant of grants.filter(({ probe }) => probe)) {
           emitKeyGrantEvent({
@@ -272,9 +273,12 @@ async function actOnVendorAnswer(
   }
 }
 
+// An automation run's call reads at most `options.responseByteBudget` of
+// the response, and reports what it read to `options.onResponseBytes`.
 export async function sendCallApiRequest(
   request: CallApiRequest,
   credentials: CallApiCredential[],
+  options: CallApiSendOptions = {},
 ): Promise<CallApiResponse> {
   let scrubber = new CredentialScrubber();
   for (let { value, raw } of credentials) {
@@ -291,6 +295,9 @@ export async function sendCallApiRequest(
       headers: request.headers,
       ...(request.body !== undefined ? { body: request.body } : {}),
       sizePath: 'call-api',
+      ...(options.responseByteBudget !== undefined
+        ? { responseByteBudget: options.responseByteBudget }
+        : {}),
       destinationSetBy: 'user',
       scrubber,
       ...(credentials.length > 0
@@ -302,16 +309,61 @@ export async function sendCallApiRequest(
           }
         : {}),
     });
-    let text = await response.text();
+    let text = await readCounted(response, (bytes, budgetReached) =>
+      options.onResponseBytes?.(bytes, budgetReached),
+    );
     return {
       status: response.status,
       headers: safeResponseHeaders(response.headers),
       body: bodyOf(text, response.headers.get('content-type')),
     };
   } catch (error) {
+    if (
+      error instanceof OutboundResponseTooLargeError &&
+      error.measured === 'declared-length'
+    ) {
+      // Refused on its declared length, before any of the body was read.
+      options.onResponseBytes?.(0, error.byBudget);
+    }
     scrubError(error, scrubber);
     throw refusalFor(error, describeOutboundError(error, context));
   }
+}
+
+// Reads the body as text, telling `report` once how many bytes were read:
+// all of them, or as many as arrived before the stream failed, whether it
+// failed for its size or otherwise. A size refusal says whether it was the
+// call's byte budget that refused it.
+async function readCounted(
+  response: Response,
+  report: (bytes: number, budgetReached: boolean) => void,
+): Promise<string> {
+  let reader = response.body?.getReader();
+  if (!reader) {
+    report(0, false);
+    return '';
+  }
+  let chunks: Uint8Array[] = [];
+  let bytes = 0;
+  try {
+    for (;;) {
+      let { done, value } = await reader.read();
+      if (done || !value) {
+        break;
+      }
+      chunks.push(value);
+      bytes += value.byteLength;
+    }
+  } catch (error) {
+    if (error instanceof OutboundResponseTooLargeError) {
+      report(error.bytesRead, error.byBudget);
+    } else {
+      report(bytes, false);
+    }
+    throw error;
+  }
+  report(bytes, false);
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
 function bodyOf(text: string, contentType: string | null) {

@@ -501,25 +501,46 @@ What goes through it, for a run-token call in the run's own realm
   the overlay's view of the file, and a second `appendLine` adds to what the
   first staged. A `delete` operation is refused (403 `run-write-not-staged`),
   since the overlay can't hold a removal; a result the overlay refuses
-  answers `run-write-refused` with the status below. A `callApi` entry still
+  answers with the status and code below (`run-write-refused` where the
+  commit has no code for it). A `callApi` entry still
   runs at once and isn't staged. The envelope still resolves each entry, and
   runs its `read` and `readSource` entries, against the realm and its index:
   a declared operation on a card created in this run doesn't resolve, and a
   read entry answers the realm's version (`docs/adr/remediation/027.md`).
 
-Every staged write meets the same checks (`Realm.#stageRunFiles`). Any file
-may be staged, card instance or not. The realm's size limit for the file's
-kind applies (the card limit for a card document, the file limit otherwise;
-the card+source write checks it before the body is buffered), as do the
-realm's reserved paths. A run may not stage `realm.json`, a module (`.gts`,
-`.ts`, `.gjs`, `.js`), the realm's policy card, a RealmPolicy card or an
-automation card, whether the realm holds one at the path or the run's bytes
-would make one (403). Modules are refused because the module a card's class
-comes from decides whether it's a RealmPolicy or an automation, and the type
-check reads modules from the index, which never sees a staged one. A path
-can't be staged as both a file and a directory (409). The token's
-`run.writesCap` bounds how many files the attempt stages (403 `Writes cap
-reached`), and `RUN_OVERLAY_MAX_BYTES` (100 MiB) bounds their bytes together
+Every staged write meets the same checks (`Realm.#stageRunFiles`), and they
+include every check the commit makes of a file on its own, in the commit's
+order (with one exception through `_operations`, below), so a staged write (a 204 from the card+source write, a 201 from
+`_atomic`, a 200 from `_operations`) is a file the commit takes unless the
+realm changes in between. Any file may be staged, card instance or not.
+First, `Realm.#runFileRefusal`, which the commit asks again of every file,
+refuses the realm's reserved paths and the files a run may not write:
+`realm.json`, a module (`.gts`, `.ts`, `.gjs`, `.js`), the realm's policy
+card, a RealmPolicy card or an automation card, whether the realm holds one
+at the path or the run's bytes would make one (403 `forbidden-path`). It also
+refuses a file under a path the realm holds as a file, or at a path where it
+holds a directory (409 `path-clash`). Modules are refused because the module
+a card's class comes from decides whether it's a RealmPolicy or an
+automation, and the type check reads modules from the index, which never sees
+a staged one. Then the realm's size limit for the file's kind applies,
+through the same `assertWriteSize` the commit's batch applies (the card limit
+for a card document, the file limit otherwise) (413 `payload-too-large`).
+The card+source write refuses a body past the larger of the two before
+buffering it, after asking `#runFileRefusal` what the path alone decides. A
+refusal carries the commit's status, code and reason, without its "nothing
+was saved", on every route: a run's write to a reserved path is answered by
+`#routeRequest` whatever route it names, and in a run's `_operations` batch
+the run's batch core gives the coordinator's reserved-path refusal
+(`BatchCore.reservedWriteRefusal`), and `_atomic` refuses a reserved path
+ahead of whether it exists. The exception: through `_operations` the batch
+checks a file's size before the overlay sees it, so a file refused for its
+size and for its path (409 `path-clash`, or 403 `forbidden-path` for
+anything but a reserved path, such as an oversize automation card) answers
+413 there. A path can't be
+staged as both a file and a directory among the run's own files either (409
+`path-clash`). The token's
+`run.writesCap` bounds how many files the attempt stages (403 `writes-cap`,
+titled `Writes cap reached`), and `RUN_OVERLAY_MAX_BYTES` (100 MiB) bounds their bytes together
 (413). Rewriting a staged path replaces it and doesn't count again. The run's
 row is locked for the check, so racing writes can't pass the cap or stage a
 path as both a file and a directory, and a write after the run stopped
@@ -640,7 +661,13 @@ staged, its precondition:
 
 The batch then writes every file or none for any entry it refuses, under one
 index pass the commit doesn't wait for. A file whose text matches the stored
-file's is left alone and enqueues no indexing. Once it lands, the commit
+file's is left alone and enqueues no indexing. The batch carries the run's
+`automationRun` (its run id, and the automation id from the run's row), so
+the realm records every file it creates in `automation_files` as the
+automation's, in the same transaction as its `realm_file_meta` row (after
+its bytes are on disk, so a write that fails partway still records the files
+that landed); a file the run only changes gets no row. Those rows are what the daily storage charge counts
+(see the `pricing` skill). Once it lands, the commit
 records it (`recordAutomationRunCommitted`), adds the files committed to the
 run's `writes` count (an unchanged file included), discards the overlay, and
 answers `200` with `data.attributes.files`.
@@ -684,6 +711,37 @@ SELECT state, ai_credits_spent, ai_credits_reserved, resolve_calls
 ```
 
 A finished run with `ai_credits_reserved` above 0 has an admitted request that was never settled; `ai_reservations` names it and what it holds.
+
+### Declared operations and the per-run caps
+
+The realm server holds every run-token call to the automation's declaration, which it reads from the card's live index row with `readRunDeclaration` (`packages/runtime-common/automation-run-limits.ts`), never by running the card's code. A card that isn't indexed, failed to index, or doesn't read as an automation declares nothing, so its run may call no outside service and make no AI request.
+
+- **Declared operations.** A run's `callApi` is refused (`operation-not-declared`, 403, nothing sent and nothing counted) unless the card's `operations` names that operation on the type it was resolved on. Both sides are compared as `internalKeyFor` spells them, so a prefix-form declaration matches a URL-form type. The check comes before any key is looked for.
+- **Where each count is kept.** Each is added on the run row by the realm server where it does the work, never taken from the tab:
+
+  | Cap             | Row column                | Counted                                                                   | Where                                                            |
+  | --------------- | ------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+  | `callApiCalls`  | `call_api_calls`          | one per `callApi`, just before it is sent, so a refused call never counts | `callApiOperation`, through the request's `CallApiRunMeter`      |
+  | `responseBytes` | `call_api_response_bytes` | the bytes of each response actually read                                  | `sendCallApiRequest`, where `outboundFetch` caps the response    |
+  | `resolveCalls`  | `resolve_calls`           | one per AI request the run forwards, just before it is sent               | `_request-forward`, through `admitRunForward`                    |
+  | `aiCredits`     | `ai_credits_spent`        | the reservation, then the generation's cost (_The AI spending cap_)       | `_request-forward`, through `admitRunForward`                    |
+  | `writes`        | `writes`                  | the files the run's commit writes                                         | the run overlay's commit; the cap rides the token as `writesCap` |
+  | `seconds`       | —                         | the run token's expiry                                                    | `mintRunToken`                                                   |
+
+- **A call past a cap** is refused (`run-cap-reached`, 403, `meta.cap` naming the cap) and ends the run with `endAutomationRunAtCap`: state `error`, `error_reason = 'hit-a-cap'`, and `error_message` naming the cap. The next call is refused as `The automation run is not running`. `countAutomationRunCall` checks and counts in one conditional `UPDATE`, owner attempt only, so two calls racing for a run's last call can't both make it.
+- **Response bytes** are bounded by a byte budget: what is left of `responseBytes` when the call is admitted, passed to `outboundFetch` as `responseByteBudget` beside the path's own size cap. A response the budget refuses throws `OutboundResponseTooLargeError` with `byBudget`, which ends the run. Every byte read is counted, including those read before a stream fails for any other reason. Calls in flight at once each get the same remaining budget, so with n of them the run can read up to (n − 1) times that remainder past the cap; n is bounded by the `callApiCalls` cap, since each call counts against it when it is admitted. The next call after the cap is passed is refused.
+- **The forwarding path.** A run token reaches `_request-forward` past the session check (the route lets a request carrying one through), and `admitRunForward` (`packages/realm-server/lib/run-token-forward.ts`) checks it: the token verifies, its person's sessions weren't revoked, and the run is running and owned by the token's attempt. Only an unstreamed chat completion to OpenRouter is forwarded for a run, since a `resolve` is the only request a run sends there. The model's price is read from its indexed `OpenRouterModel` card (`openRouterModelPrice` in `lib/openrouter-model-price.ts`); a model with no listed price is refused (422). The request is billed to the person the run acts as. Its reservation, held for the token's attempt, is settled once however the forward ends: 0 when nothing was sent or the upstream answered with an error and no cost, the cost the credit strategy resolved, or the whole reservation when the cost couldn't be learned.
+
+To see a run's counts against its caps:
+
+```sql
+SELECT state, error_reason, error_message,
+       call_api_calls, call_api_response_bytes, resolve_calls, writes,
+       ai_credits_spent, ai_credits_reserved
+  FROM automation_runs WHERE id = '<run id>';
+```
+
+The caps are the card's `caps`, each held to no more than the automation's caps snapshot (`readRunLimits`): a run already going when someone raises a cap on the card keeps to what the payer agreed. A refused call logs on `automation-run-limits` (`run <id>'s callApi refused: …`, `run <id> … hit its <cap> cap and ended`) or on `request-forward` (`run-token request forward to <url> refused: …`).
 
 ## The queue tier and worker lane
 

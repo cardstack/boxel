@@ -339,15 +339,32 @@ export type ResponseSizeMeasure = 'declared-length' | 'stream-reached-cap';
 // refused on its declared length was read; a body refused while streaming
 // ends at the cap with this error, so whatever was read before it is never
 // mistaken for the whole. The message names the host at most.
+//
+// `byBudget` says the cap was the call's byte budget (`responseByteBudget`)
+// rather than its size cap, and `bytesRead` how much of the body was read
+// before it was refused: none for a declared length, the chunks up to and
+// including the one that passed the cap for a stream.
 export class OutboundResponseTooLargeError extends Error {
   readonly cap: number;
   readonly measured: ResponseSizeMeasure;
+  readonly byBudget: boolean;
+  readonly bytesRead: number;
   context?: OutboundErrorContext;
-  constructor(hostname: string, cap: number, measured: ResponseSizeMeasure) {
+  constructor(
+    hostname: string,
+    cap: number,
+    measured: ResponseSizeMeasure,
+    {
+      byBudget = false,
+      bytesRead = 0,
+    }: { byBudget?: boolean; bytesRead?: number } = {},
+  ) {
     super(`The response from ${hostname} is larger than ${cap} bytes`);
     this.name = 'OutboundResponseTooLargeError';
     this.cap = cap;
     this.measured = measured;
+    this.byBudget = byBudget;
+    this.bytesRead = bytesRead;
   }
 }
 
@@ -509,6 +526,11 @@ export interface OutboundRequest {
   // The response size cap for this call in place of its path's, such as a
   // system key's own cap.
   responseSizeCap?: number;
+  // The most of the response this call may read on top of its size cap, such
+  // as what is left of an automation run's `responseBytes` cap. A response
+  // the budget refuses throws `OutboundResponseTooLargeError` with
+  // `byBudget` set.
+  responseByteBudget?: number;
   // Who chose the destination: the platform (a `proxy_endpoints` row, a
   // platform OAuth client, a vendor's fixed token endpoint) or a user (a
   // card's declared request, a user's own OAuth client). A guard refusal of a
@@ -815,12 +837,16 @@ async function send(
       !location ||
       (staysOnOrigin && leavesOrigin(location, current))
     ) {
+      let sizeCap =
+        request.responseSizeCap ?? settings.responseSizeCaps[request.sizePath];
+      let byBudget =
+        request.responseByteBudget !== undefined &&
+        request.responseByteBudget < sizeCap;
       let capped = await capResponseSize(response, {
         destination: recordedURL(request.url),
         sizePath: request.sizePath,
-        cap:
-          request.responseSizeCap ??
-          settings.responseSizeCaps[request.sizePath],
+        cap: byBudget ? request.responseByteBudget! : sizeCap,
+        byBudget,
         timeout,
         hostname,
         callerSignal: request.signal,
@@ -904,6 +930,7 @@ async function capResponseSize(
     destination,
     sizePath,
     cap,
+    byBudget,
     timeout,
     hostname,
     callerSignal,
@@ -913,6 +940,8 @@ async function capResponseSize(
     destination: string;
     sizePath: ResponseSizePath;
     cap: number;
+    // The cap is the call's byte budget rather than its size cap.
+    byBudget: boolean;
     timeout: AbortSignal;
     hostname: string;
     callerSignal: AbortSignal | undefined;
@@ -920,7 +949,7 @@ async function capResponseSize(
     context: OutboundErrorContext;
   },
 ): Promise<Response> {
-  let describe = `path=${sizePath} destination=${destination} status=${response.status} cap=${cap}`;
+  let describe = `path=${sizePath} destination=${destination} status=${response.status} cap=${cap}${byBudget ? ' capBy=budget' : ''}`;
   // Last on the line, so a reader that parses the fields before it is
   // unaffected. `(none)` for a call that attaches no named key.
   let key = `key=${context.keyName ?? '(none)'}`;
@@ -939,7 +968,10 @@ async function capResponseSize(
       `outbound response over size cap: ${describe} declaredBytes=${declared} refused=declared-length ${key}`,
     );
     await source.cancel().catch(() => undefined);
-    throw new OutboundResponseTooLargeError(hostname, cap, 'declared-length');
+    throw new OutboundResponseTooLargeError(hostname, cap, 'declared-length', {
+      byBudget,
+      bytesRead: 0,
+    });
   }
 
   let reader = source.getReader();
@@ -990,6 +1022,7 @@ async function capResponseSize(
               hostname,
               cap,
               'stream-reached-cap',
+              { byBudget, bytesRead: bytes },
             ),
             scrubber,
             context,
