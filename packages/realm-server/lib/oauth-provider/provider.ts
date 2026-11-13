@@ -33,6 +33,8 @@ import {
   type AccountContactLookup,
 } from './consent.ts';
 import type { OAuthProviderConfig } from './config.ts';
+import { finishHandler, resumeHandler, userExists } from './finish.ts';
+import { NON_RENEWING_GRANT_TTL_SECONDS } from './grants.ts';
 import {
   DEFAULT_NEW_CLIENT_LIMIT,
   type NewClientLimit,
@@ -71,11 +73,16 @@ export const OAUTH_REGISTRATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/reg`;
 // `client_secret_basic` (RFC 8414 §2) and registers asking for a secret,
 // which registration refuses. The library lists `none`, from
 // `clientAuthMethods`.
+//
+// `authorization_response_iss_parameter_supported` says the provider sends
+// `iss` with every authorization response (RFC 9207), which lets a client
+// tell which server answered it.
 const DISCOVERY_FIELDS = [
   'issuer',
   'response_types_supported',
   'code_challenge_methods_supported',
   'token_endpoint_auth_methods_supported',
+  'authorization_response_iss_parameter_supported',
 ] as const;
 const GRANT_TYPES_SERVED = ['authorization_code'];
 
@@ -84,16 +91,22 @@ const GRANT_TYPES_SERVED = ['authorization_code'];
 // outlives a flow: Boxel drops it at the start of each (ADR 021 §1.7).
 const INTERACTION_TTL_SECONDS = 10 * 60;
 const SESSION_TTL_SECONDS = 10 * 60;
+// How long an authorization code lasts: long enough for an app to exchange
+// it straight away.
+const AUTHORIZATION_CODE_TTL_SECONDS = 60;
 
 // The running provider: the library, and Boxel's handling of the requests that
 // run before or beside the library's: registration, the start of a flow, the
 // interaction route that hands a flow to the secure origin, the error page's
-// details and "Return", and a flow's consent.
+// details and "Return", a flow's consent, the route that finishes it, and the
+// resume route the library continues it on.
 export interface OAuthProviderService {
   provider: Provider;
   handleRegistration: Koa.Middleware;
   handleAuthorization: Koa.Middleware;
   handleInteraction: Koa.Middleware;
+  handleFinish: Koa.Middleware;
+  handleResume: Koa.Middleware;
   handleErrorDetails: Koa.Middleware;
   handleErrorReturn: Koa.Middleware;
   // Consent's details and decision. They verify the secure window's session
@@ -161,6 +174,7 @@ export function startOAuthProvider({
         `${issuer}${OAUTH_AUTHORIZATION_PATH}/${id}`,
     }),
     renderError: renderLibraryError({ dbAdapter, secureOriginURL }),
+    accountExists: (accountId) => userExists(dbAdapter, accountId),
   });
   // Boxel's own apps, listed in code. None is listed yet.
   let preRegistered: ReadonlySet<string> = new Set();
@@ -176,6 +190,8 @@ export function startOAuthProvider({
       secureOriginURL,
     }),
     handleInteraction: interactionHandler({ secureOriginURL }),
+    handleFinish: finishHandler({ provider, dbAdapter, secureOriginURL }),
+    handleResume: resumeHandler({ provider }),
     handleErrorDetails: errorDetailsHandler({
       provider,
       dbAdapter,
@@ -222,12 +238,16 @@ export function createOAuthProvider({
   registry,
   adapter,
   renderError,
+  accountExists = async () => false,
 }: {
   issuer: string;
   config: OAuthProviderConfig;
   registry: readonly OAuthResource[];
   adapter: AdapterFactory;
   renderError?: Configuration['renderError'];
+  // Whether a user ID (`users.id`) names a user. A flow signs in only as
+  // the user who decided it, by that ID.
+  accountExists?: (accountId: string) => Promise<boolean>;
 }): Provider {
   let scopes = registryScopes(registry);
   let configuration: Configuration = {
@@ -250,9 +270,28 @@ export function createOAuthProvider({
     // Set, rather than left to the library's default, so a client may
     // register for the refresh grant; the library allows the grant only once
     // this is set or `offline_access` is a scope. Refresh tokens follow the
-    // renewal choice a flow's consent decision records, which no grant
-    // carries until a flow finishes into one, so none is issued.
+    // renewal choice a grant records, which the token endpoint reads once it
+    // is served, so none is issued yet.
     issueRefreshToken: async () => false,
+    // The account a flow signs in as: a user's internal ID. The library
+    // reads nothing about the user: the provider issues no ID tokens and
+    // answers no `userinfo`.
+    findAccount: async (_ctx: KoaContextWithOIDC, accountId: string) =>
+      (await accountExists(accountId))
+        ? { accountId, claims: async () => ({ sub: accountId }) }
+        : undefined,
+    // Only the grant the flow's finish created, never one the library's
+    // session remembers for the client: each consent is its own grant
+    // (ADR 021 §1.3).
+    loadExistingGrant: async (ctx: KoaContextWithOIDC) => {
+      let grantId = ctx.oidc.result?.consent?.grantId;
+      return typeof grantId === 'string'
+        ? await ctx.oidc.provider.Grant.find(grantId)
+        : undefined;
+    },
+    // A code or token is never tied to the library's session, which lasts
+    // only through one flow: its grant's expiry and state govern it.
+    expiresWithSession: async () => false,
     // The library accepts only S256 challenges; this makes one required of
     // every client, not just public ones.
     pkce: { required: () => true },
@@ -260,6 +299,12 @@ export function createOAuthProvider({
     ttl: {
       Interaction: INTERACTION_TTL_SECONDS,
       Session: SESSION_TTL_SECONDS,
+      AuthorizationCode: AUTHORIZATION_CODE_TTL_SECONDS,
+      // Boxel creates every grant with the expiry its consent chose
+      // (`grants.ts`), and the library never saves one. Set all the same, to
+      // the shorter of the two, so nothing the library might save outlives
+      // a consent that didn't ask to renew.
+      Grant: NON_RENEWING_GRANT_TTL_SECONDS,
     },
     interactions: {
       // A realm-server route, so the library's interaction cookie is set for

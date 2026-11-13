@@ -1,16 +1,18 @@
 // The provider's short-lived objects, in `oauth_provider_objects`: the
-// library's interactions, the error references Boxel's error page reads
-// (ADR 021 §1.8), and each flow's consent decision and the ticket that
-// finishes it (§1.7).
+// library's interactions, sessions and authorization codes, the error
+// references Boxel's error page reads (ADR 021 §1.8), and each flow's consent
+// decision and the ticket that finishes it (§1.7).
 //
 // Each object's value is a bearer secret: an interaction's ID is in the
-// browser's URL, and an error reference and a ticket are too. A decision is
+// browser's URL, a session's ID is its cookie, and an authorization code, an
+// error reference and a ticket are values a browser carries too. A decision is
 // stored under its flow's interaction ID. A row is stored and found only
 // by the SHA-256 of that value, and never holds the value itself (ADR 021
-// §1.2). The library copies an interaction's ID into its payload twice, as
-// `jti` and in `returnTo`, the URL the flow resumes at. The interaction
-// adapter leaves both out and rebuilds them when it finds the row. A payload
-// that still holds the value anywhere else is refused, never stored.
+// §1.2). The library copies each object's value into its payload as `jti`,
+// and an interaction's ID a second time in `returnTo`, the URL the flow
+// resumes at. The adapters leave these out and rebuild them when they find
+// the row. A payload that still holds the value anywhere else is refused,
+// never stored.
 //
 // A row past its expiry reads as missing, whether or not it has been deleted.
 // Each store first deletes rows that have expired, so abandoned flows and
@@ -127,19 +129,33 @@ function jsonEscaped(value: string): string {
   return JSON.stringify(value).slice(1, -1);
 }
 
-const INTERACTION_KIND = 'Interaction';
-
-// The library's adapter for its interactions. An interaction is stored, found
-// and deleted by its ID; the library looks up nothing else for one.
-// `resumeURL` builds the URL the flow resumes at from the issuer and the ID,
-// never from the request that started the flow.
-export class InteractionAdapter implements Adapter {
+// The library's adapter for a kind of object it stores, finds and deletes by
+// the object's own value, which is a bearer secret. The value is the row's
+// key, hashed, and the library's copy of it in the payload (`jti`) is left
+// out and put back when the row is found. The library looks up nothing else
+// for these kinds, so every other lookup throws.
+class BearerKeyedAdapter implements Adapter {
   #dbAdapter: DBAdapter;
-  #resumeURL: (id: string) => string;
+  #kind: string;
 
-  constructor(dbAdapter: DBAdapter, resumeURL: (id: string) => string) {
+  constructor(dbAdapter: DBAdapter, kind: string) {
     this.#dbAdapter = dbAdapter;
-    this.#resumeURL = resumeURL;
+    this.#kind = kind;
+  }
+
+  // The payload as stored: without `jti`, and without anything else that
+  // holds a bearer value or that `restore` rebuilds.
+  protected stored(payload: AdapterPayload): Record<string, unknown> {
+    let { jti: _jti, ...rest } = payload;
+    return rest;
+  }
+
+  // The payload as the library stored it, from what the row holds.
+  protected restore(
+    id: string,
+    stored: Record<string, unknown>,
+  ): AdapterPayload {
+    return { ...stored, jti: id } as AdapterPayload;
   }
 
   async upsert(
@@ -147,29 +163,22 @@ export class InteractionAdapter implements Adapter {
     payload: AdapterPayload,
     expiresIn: number,
   ): Promise<void> {
-    let { jti: _jti, returnTo: _returnTo, ...rest } = payload;
     await storeObject(
       this.#dbAdapter,
-      INTERACTION_KIND,
+      this.#kind,
       id,
-      rest as Record<string, unknown>,
+      this.stored(payload),
       expiresIn,
     );
   }
 
   async find(id: string): Promise<AdapterPayload | undefined> {
-    let payload = await findObject(this.#dbAdapter, INTERACTION_KIND, id);
-    return payload
-      ? ({
-          ...payload,
-          jti: id,
-          returnTo: this.#resumeURL(id),
-        } as AdapterPayload)
-      : undefined;
+    let payload = await findObject(this.#dbAdapter, this.#kind, id);
+    return payload ? this.restore(id, payload) : undefined;
   }
 
   async destroy(id: string): Promise<void> {
-    await destroyObject(this.#dbAdapter, INTERACTION_KIND, id);
+    await destroyObject(this.#dbAdapter, this.#kind, id);
   }
 
   async findByUserCode(): Promise<never> {
@@ -189,10 +198,64 @@ export class InteractionAdapter implements Adapter {
   }
 
   #unused(method: string) {
-    return new Error(
-      `the OAuth provider's ${INTERACTION_KIND} has no ${method}`,
+    return new OAuthProviderObjectError(
+      `the OAuth provider's ${this.#kind} has no ${method}`,
     );
   }
+}
+
+// The library's adapter for its interactions, stored by their IDs. The library
+// copies the ID into the payload a second time, in `returnTo`, the URL the
+// flow resumes at, which `resumeURL` rebuilds from the issuer and the ID,
+// never from the request that started the flow. An interaction started under
+// a signed-in library session would also hold that session's ID
+// (`session.cookie`), the value of its cookie. Boxel drops the session at the
+// start of every flow, so none does, and the field is left out all the same:
+// the library never reads it back.
+export class InteractionAdapter extends BearerKeyedAdapter {
+  #resumeURL: (id: string) => string;
+
+  constructor(dbAdapter: DBAdapter, resumeURL: (id: string) => string) {
+    super(dbAdapter, 'Interaction');
+    this.#resumeURL = resumeURL;
+  }
+
+  protected stored(payload: AdapterPayload): Record<string, unknown> {
+    let { returnTo: _returnTo, session, ...rest } = super.stored(payload);
+    if (isRecord(session)) {
+      let { cookie: _cookie, ...kept } = session;
+      return { ...rest, session: kept };
+    }
+    return rest;
+  }
+
+  protected restore(
+    id: string,
+    stored: Record<string, unknown>,
+  ): AdapterPayload {
+    return { ...super.restore(id, stored), returnTo: this.#resumeURL(id) };
+  }
+}
+
+// The library's adapter for its sessions, stored by their IDs, which are the
+// values of its session cookie. A session lives only through the end of one
+// flow (ADR 021 §1.7): nothing the library issues outlives it, so it never
+// looks a session up by anything but its cookie.
+export class SessionAdapter extends BearerKeyedAdapter {
+  constructor(dbAdapter: DBAdapter) {
+    super(dbAdapter, 'Session');
+  }
+}
+
+// The library's adapter for its authorization codes, stored by their values.
+export class AuthorizationCodeAdapter extends BearerKeyedAdapter {
+  constructor(dbAdapter: DBAdapter) {
+    super(dbAdapter, 'AuthorizationCode');
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 // Why an authorization request didn't reach consent. Each is a fixed label
@@ -363,4 +426,12 @@ export async function takeConsentTicket(
   return (await takeObject(dbAdapter, CONSENT_TICKET_KIND, ticket)) as
     | ConsentTicketRecord
     | undefined;
+}
+
+// Deletes a flow's decision once the flow has finished or been cancelled.
+export async function destroyConsentDecision(
+  dbAdapter: DBAdapter,
+  interactionId: string,
+): Promise<void> {
+  await destroyObject(dbAdapter, CONSENT_DECISION_KIND, interactionId);
 }

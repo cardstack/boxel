@@ -1,12 +1,18 @@
 // Where the OAuth provider keeps what it stores: a table for each kind of
 // object the library hands its adapter, each arriving with the work that first
-// stores it. A kind with no table yet is refused, never kept in memory, which
+// stores it. Clients registered dynamically and grants have tables of their
+// own. A kind with no table yet is refused, never kept in memory, which
 // would lose it on restart and differ between the realm server's processes.
-// Short-lived objects share `oauth_provider_objects` (`objects.ts`).
+// Short-lived objects (interactions, sessions and authorization codes) share
+// `oauth_provider_objects` (`objects.ts`).
 
 import type { Adapter, AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { InteractionAdapter } from './objects.ts';
+import {
+  AuthorizationCodeAdapter,
+  InteractionAdapter,
+  SessionAdapter,
+} from './objects.ts';
 
 export class OAuthProviderStorageError extends Error {
   name = 'OAuthProviderStorageError';
@@ -30,6 +36,12 @@ export function oauthProviderAdapter(
           break;
         }
         return new InteractionAdapter(dbAdapter, interactionResumeURL);
+      case 'Session':
+        return new SessionAdapter(dbAdapter);
+      case 'AuthorizationCode':
+        return new AuthorizationCodeAdapter(dbAdapter);
+      case 'Grant':
+        return new GrantAdapter(dbAdapter);
     }
     throw new OAuthProviderStorageError(
       `the OAuth provider has no storage for ${name}`,
@@ -99,5 +111,102 @@ class DynamicClientAdapter implements Adapter {
 function unused(method: string) {
   return new OAuthProviderStorageError(
     `the OAuth provider's clients have no ${method}`,
+  );
+}
+
+interface GrantRow {
+  user_id: string;
+  client_id: string;
+  // The approved scopes by resource, as JSON or already parsed.
+  resources: string | Record<string, string[]>;
+  created: number | string;
+  expires: number | string;
+}
+
+// The OAuth grants, in `oauth_provider_grants` (`grants.ts`). Boxel creates
+// every grant itself when a flow finishes. The library saves one only in its
+// development pages, which are off, so a grant the library tries to save is
+// refused. It finds a grant that has neither ended nor expired, as the
+// library's own payload: the user as `accountId`, and each resource's scopes
+// as one space-separated string.
+//
+// The library also counts every scope in its `scopes` setting as one of its
+// own, and consents to a flow only once the grant holds each scope asked for
+// there too (`openid.scope`). The registry's scopes are in that setting, so
+// a registration may name them, and the grant holds every approved scope
+// there as well. The library reads `openid.scope` only for ID tokens and
+// `userinfo`, which the provider never serves.
+class GrantAdapter implements Adapter {
+  #dbAdapter: DBAdapter;
+
+  constructor(dbAdapter: DBAdapter) {
+    this.#dbAdapter = dbAdapter;
+  }
+
+  async find(id: string): Promise<AdapterPayload | undefined> {
+    let [row] = (await this.#dbAdapter.execute(
+      `SELECT user_id, client_id, resources,
+              floor(extract(epoch FROM created_at)) AS created,
+              floor(extract(epoch FROM expires_at)) AS expires
+         FROM oauth_provider_grants
+         WHERE id = $1 AND ended_at IS NULL AND expires_at > now()`,
+      { bind: [id] },
+    )) as unknown as GrantRow[];
+    if (!row) {
+      return undefined;
+    }
+    let resources = (
+      typeof row.resources === 'string'
+        ? JSON.parse(row.resources)
+        : row.resources
+    ) as Record<string, string[]>;
+    let approved = [...new Set(Object.values(resources).flat())];
+    return {
+      jti: id,
+      kind: 'Grant',
+      iat: Number(row.created),
+      exp: Number(row.expires),
+      accountId: row.user_id,
+      clientId: row.client_id,
+      resources: Object.fromEntries(
+        Object.entries(resources).map(([resource, scopes]) => [
+          resource,
+          scopes.join(' '),
+        ]),
+      ),
+      openid: { scope: approved.join(' ') },
+    } as AdapterPayload;
+  }
+
+  async upsert(): Promise<never> {
+    throw new OAuthProviderStorageError(
+      `the OAuth provider's grants are created only when a flow finishes`,
+    );
+  }
+
+  async destroy(): Promise<never> {
+    throw unusedGrant('destroy');
+  }
+
+  async findByUserCode(): Promise<never> {
+    throw unusedGrant('findByUserCode');
+  }
+
+  async findByUid(): Promise<never> {
+    throw unusedGrant('findByUid');
+  }
+
+  async consume(): Promise<never> {
+    throw unusedGrant('consume');
+  }
+
+  async revokeByGrantId(): Promise<never> {
+    throw unusedGrant('revokeByGrantId');
+  }
+}
+
+function unusedGrant(method: string) {
+  return new OAuthProviderStorageError(
+    `the OAuth provider's grants have no ${method}`,
   );
 }

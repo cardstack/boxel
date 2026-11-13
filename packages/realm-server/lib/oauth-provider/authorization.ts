@@ -91,7 +91,7 @@ export function authorizePageURL(secureOriginURL: URL): URL {
   return new URL(`${secureOriginURL.href.replace(/\/*$/, '/')}authorize`);
 }
 
-function errorPageURL(secureOriginURL: URL, error: string): string {
+export function errorPageURL(secureOriginURL: URL, error: string): string {
   let url = authorizePageURL(secureOriginURL);
   url.searchParams.set('error', error);
   return url.href;
@@ -99,7 +99,7 @@ function errorPageURL(secureOriginURL: URL, error: string): string {
 
 // Sends the browser on, top level. The URL it leaves carries an interaction
 // ID or an error reference, which no other site may read from the referrer.
-function navigate(ctxt: Koa.Context, location: string) {
+export function navigate(ctxt: Koa.Context, location: string) {
   ctxt.set('Referrer-Policy', 'no-referrer');
   ctxt.set('Cache-Control', 'no-store');
   ctxt.status = 303;
@@ -313,10 +313,7 @@ export function authorizationHandler({
       `more than ${alertAfter} OAuth flows started within ${overall.windowSeconds} seconds; ` +
       `starting one is refused for everyone at ${overall.requests}`,
   );
-  let sessionCookies = [
-    provider.cookieName('session'),
-    `${provider.cookieName('session')}.sig`,
-  ];
+  let sessionCookies = sessionCookieNames(provider);
   return async function handleAuthorization(ctxt, next) {
     // 1. The limit, before anything is written.
     let address = ctxt.req.headers[CLIENT_IP_HEADER];
@@ -394,9 +391,16 @@ export function authorizationHandler({
   };
 }
 
+// The library's session cookie and its signature, which the start of a flow
+// and its resume drop.
+export function sessionCookieNames(provider: Provider): string[] {
+  let name = provider.cookieName('session');
+  return [name, `${name}.sig`];
+}
+
 // Takes a cookie out of the request, so the library doesn't read it, and
 // expires it in the browser.
-function dropCookies(ctxt: Koa.Context, names: string[]) {
+export function dropCookies(ctxt: Koa.Context, names: string[]) {
   let header = ctxt.req.headers.cookie;
   if (header) {
     let kept = header
@@ -423,9 +427,12 @@ function dropCookies(ctxt: Koa.Context, names: string[]) {
 
 // The library's `renderError`, called when it can't send an error back to the
 // client: the client is unknown, the redirect URI isn't one it registered, or
-// the request names neither. On the authorization endpoint the error goes to
-// Boxel's error page, with nothing to return to. Anywhere else, such as a
-// registration sent by a browser, the library's JSON error is answered.
+// the request names neither. On the authorization endpoint, and on the resume
+// route a finished flow continues on (whose request carries no client, and
+// which fails when its interaction has expired or was already resumed), the
+// error goes to Boxel's error page, with nothing to return to. Anywhere else,
+// such as a registration sent by a browser, the library's JSON error is
+// answered.
 export function renderLibraryError({
   dbAdapter,
   secureOriginURL,
@@ -437,7 +444,8 @@ export function renderLibraryError({
     ctx: KoaContextWithOIDC,
     out: { error: string; error_description?: string },
   ) {
-    if (ctx.oidc?.route !== 'authorization') {
+    let route = ctx.oidc?.route;
+    if (route !== 'authorization' && route !== 'resume') {
       ctx.type = 'json';
       ctx.body = out;
       return;
