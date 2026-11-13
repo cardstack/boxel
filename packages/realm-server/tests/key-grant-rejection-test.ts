@@ -9,7 +9,10 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common';
-import { createJWT, setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  createAutomationRunToken,
+  setupPermissionedRealmCached,
+} from './helpers/index.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
@@ -253,7 +256,7 @@ module(basename(import.meta.filename), function (hooks) {
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${createJWT(realm, user, ['read', 'write'])}`,
+          Authorization: `Bearer ${(await createAutomationRunToken(dbAdapter, realm, user)).token}`,
         },
         body: JSON.stringify({
           'boxel:operations': [

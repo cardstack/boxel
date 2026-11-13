@@ -15,6 +15,7 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 
 // The Workspace edit format drives hosting through the registered
 // publish-realm / unpublish-realm host tools, imported from card code as
@@ -71,7 +72,7 @@ module('Acceptance | workspace hosting', function (hooks) {
       ...testRealmInfo,
       name: 'Hosted Workspace',
       publishable: true,
-      lastPublishedAt: { [publishedRealmURL]: String(Date.now()) },
+      lastPublishedAt: { [publishedRealmURL]: String(TEST_CLOCK_INSTANT) },
     });
 
     let realmServer = getService('realm-server');
@@ -84,7 +85,7 @@ module('Acceptance | workspace hosting', function (hooks) {
         sourceRealmURL,
         publishedRealmURL: publishedURL,
         publishedRealmId: '1',
-        lastPublishedAt: String(Date.now()),
+        lastPublishedAt: String(TEST_CLOCK_INSTANT),
         status: 'published',
       };
     };

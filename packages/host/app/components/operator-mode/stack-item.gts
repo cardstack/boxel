@@ -473,7 +473,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         // Keep modal open for retry option
       } else {
         // All deletions failed
-        this.deleteError = `Failed to delete ${selectedIds.length} items. Please try again.`;
+        this.deleteError = `Failed to delete ${pluralize('item', selectedIds.length, true)}. Please try again.`;
       }
     } catch (error) {
       console.error('Bulk delete operation failed:', error);
@@ -527,24 +527,29 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }),
     );
 
-    menuItems.push(new MenuDivider());
-
-    // Add "Delete N items" option
-    menuItems.push(
-      new MenuItem({
-        label: `Delete ${selectedCount} item${selectedCount > 1 ? 's' : ''}`,
-        action: this.confirmAndDeleteSelected,
-        icon: IconTrash,
-        dangerous: true,
-      }),
+    // Bulk delete is offered only when the user may delete every selected
+    // card, the same check that gates each card's own Delete. Every id is
+    // read before any answer is used, so the cards still to be asked about
+    // go to the realm together rather than one per answer.
+    let deletable = [...this.selectedCards].map((id) =>
+      this.operatorModeStateService.canDeleteCard(id),
     );
+    if (deletable.every(Boolean)) {
+      menuItems.push(new MenuDivider());
+      menuItems.push(
+        new MenuItem({
+          label: `Delete ${pluralize('item', selectedCount, true)}`,
+          action: this.confirmAndDeleteSelected,
+          icon: IconTrash,
+          dangerous: true,
+        }),
+      );
+    }
 
     return {
       selectedCount,
       menuItems,
-      label: `Selection menu, ${selectedCount} card${
-        selectedCount === 1 ? '' : 's'
-      } selected`,
+      label: `Selection menu, ${pluralize('item', selectedCount, true)} selected`,
     };
   }
 
@@ -591,28 +596,30 @@ export default class OperatorModeStackItem extends Component<Signature> {
     if (this.isBuried) {
       return undefined;
     }
-    return [
+    let cardId = this.cardIdentifier;
+    let items = [
       new MenuItem({
         label: 'Copy Card URL',
         action: () =>
-          this.cardIdentifier &&
-          copyOpenableURLToClipboard(
-            this.cardIdentifier,
-            this.network.virtualNetwork,
-          ),
+          cardId &&
+          copyOpenableURLToClipboard(cardId, this.network.virtualNetwork),
         icon: IconLink,
-        disabled: !this.cardIdentifier,
-      }),
-      new MenuItem({
-        label: 'Delete Card',
-        action: () =>
-          this.cardIdentifier &&
-          this.cardCrudFunctions.deleteCard?.(this.cardIdentifier),
-        icon: IconTrash,
-        dangerous: true,
-        disabled: !this.cardCrudFunctions.deleteCard,
+        disabled: !cardId,
       }),
     ];
+    // A card that failed to load is deleted on the same check as any other.
+    if (cardId && this.operatorModeStateService.canDeleteCard(cardId)) {
+      items.push(
+        new MenuItem({
+          label: 'Delete Card',
+          action: () => this.cardCrudFunctions.deleteCard?.(cardId),
+          icon: IconTrash,
+          dangerous: true,
+          disabled: !this.cardCrudFunctions.deleteCard,
+        }),
+      );
+    }
+    return items;
   }
 
   private get moreOptionsMenuItems() {
@@ -623,6 +630,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
     const items = toMenuItems(
       this.card?.[getMenuItems]?.({
         canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
+        canDelete: this.url
+          ? this.operatorModeStateService.canDeleteCard(this.url as string)
+          : false,
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         toolContext: this.args.toolContext,
@@ -1244,7 +1254,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         <:content>
           Delete
           {{this.numberOfCardsToDelete}}
-          {{pluralize 'card' this.numberOfCardsToDelete}}?
+          {{pluralize 'item' this.numberOfCardsToDelete}}?
         </:content>
       </DeleteModal>
     {{/if}}

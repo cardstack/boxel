@@ -892,9 +892,9 @@ export interface CallApiGrantUse {
 }
 
 // How an invocation arrived. An interactive one carries a user's session: a
-// card in the browser, the AI assistant, the CLI. An automation invocation is
-// a run the realm server makes on its own, as a schedule's payer or whoever started it,
-// and is never reached from a request off the network.
+// card in the browser, the AI assistant, the CLI. An automation invocation
+// carries an automation run's token, and acts as the run's identity: a
+// schedule's payer, or whoever started the run.
 export type CallApiMode = 'interactive' | 'automation';
 
 // What names the binding that fills a request's slots.
@@ -917,6 +917,8 @@ export interface CallApiSlotLookup {
   // address, their part of the share's budget, and the key's anonymous cap.
   anonymous?: AnonymousCallApiCaller;
   mode: CallApiMode;
+  // The automation run an `automation` invocation belongs to.
+  runId?: string;
   // The request as the definition cache holds it now, which the binding's
   // fingerprint is checked against.
   request: OperationCallApi;
@@ -970,6 +972,8 @@ export interface CallApiUse {
   operation: string;
   caller: string | null;
   mode: CallApiMode;
+  // The automation run an `automation` use belongs to.
+  runId?: string;
   // The origin and path of the request as declared, or null when it was
   // refused before one was built.
   url: string | null;
@@ -1302,6 +1306,8 @@ export interface CallApiInvocation {
   // Whether the request this invocation arrived in is part of a render.
   duringPrerender: boolean;
   mode: CallApiMode;
+  // The automation run an `automation` invocation belongs to.
+  runId?: string;
   sender: CallApiSender | undefined;
   // Set for a request that authenticated nobody, which the realm's policy
   // admitted from this address.
@@ -1398,6 +1404,7 @@ export async function callApiOperation(
         caller: request.actor || ANONYMOUS_ACTOR,
         ...(anonymous ? { anonymous } : {}),
         mode: invocation.mode,
+        ...(invocation.runId ? { runId: invocation.runId } : {}),
         request: declared,
       });
     } catch (error) {
@@ -1552,6 +1559,7 @@ async function recordKeyUse(
       operation: event.operation,
       caller: event.caller,
       mode: invocation.mode,
+      ...(invocation.runId ? { runId: invocation.runId } : {}),
       url: event.url,
       ...outcome,
       countsAgainst,

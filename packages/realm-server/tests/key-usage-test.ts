@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
@@ -12,6 +12,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common';
 import {
+  createAutomationRunToken,
   createJWT,
   realmSecretSeed,
   setupPermissionedRealmCached,
@@ -311,14 +312,19 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   // Invokes `operation` as an automation the realm server runs as `user`.
-  async function automationCall(operation: string, user = OWNER) {
+  async function automationCall(
+    operation: string,
+    user = OWNER,
+    token?: string,
+  ) {
+    token ??= (await createAutomationRunToken(dbAdapter, realm, user)).token;
     let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${createJWT(realm, user, ['read', 'write'])}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(envelope(operation)),
       }),
@@ -371,6 +377,28 @@ module(basename(import.meta.filename), function (hooks) {
       `SELECT share_id, key_id, caller, mode, outcome, code, status, host FROM key_uses ORDER BY id`,
     )) as Record<string, unknown>[];
   }
+
+  test('an automation call is recorded under the run that made it, and an interactive call under none', async function (assert) {
+    let key = await addKey();
+    await approveInteractive(OWNER, 'check', { userKey: { keyId: key.id } });
+    assert.strictEqual((await call('check')).status, 200);
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    assert.strictEqual(
+      (await automationCall('check', OWNER, token)).status,
+      200,
+    );
+    assert.deepEqual(
+      await dbAdapter.execute(`SELECT mode, run_id FROM key_uses ORDER BY id`),
+      [
+        { mode: 'interactive', run_id: null },
+        { mode: 'automation', run_id: run.id },
+      ],
+    );
+  });
 
   test('a personal key’s usage counts its calls, the budget they spent, and the vendor’s answers', async function (assert) {
     let key = await addKey();
@@ -609,6 +637,31 @@ module(basename(import.meta.filename), function (hooks) {
         [true, 1],
       ],
       'the two identical refusals share a row; the anonymous one has its own',
+    );
+  });
+
+  test('identical refusals of one run share a row', async function (assert) {
+    let key = await addKey();
+    let refusal = {
+      realmURL: realmURL.href,
+      operation: 'check',
+      caller: OWNER,
+      mode: 'automation' as const,
+      runId: randomUUID(),
+      url: null,
+      outcome: 'refused' as const,
+      code: 'rate-limited',
+      countsAgainst: [{ kind: 'key' as const, id: key.id }],
+    };
+    await recordKeyUses(dbAdapter, refusal);
+    await recordKeyUses(dbAdapter, refusal);
+    let rows = (await dbAdapter.execute(
+      `SELECT run_id, count FROM key_uses WHERE key_id = $1 ORDER BY id`,
+      { bind: [key.id] },
+    )) as { run_id: string; count: number }[];
+    assert.deepEqual(
+      rows.map((row) => [row.run_id, Number(row.count)]),
+      [[refusal.runId, 2]],
     );
   });
 

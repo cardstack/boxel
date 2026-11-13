@@ -19,6 +19,8 @@ import {
 import {
   Recorder,
   RecorderFatalError,
+  type BackgroundContext,
+  type BackgroundOutcome,
   type RecorderStep,
 } from '../src/recorder.ts';
 import { Semaphore } from '../src/semaphore.ts';
@@ -126,6 +128,8 @@ module('recorder', (hooks) => {
       sizeOnlyThresholdBytes?: number;
       maxQueuedEvents?: number;
       before?: (step: RecorderStep) => Promise<void>;
+      io?: Semaphore;
+      onCommits?: (count: number) => void;
     } = {},
   ): Recorder {
     let created = new Recorder({
@@ -133,8 +137,9 @@ module('recorder', (hooks) => {
       realm: { id: realm.id, url: realm.url, directory: realmDir, shard: 0 },
       historyRoot,
       holder: options.holder ?? HOLDER,
-      io: new Semaphore(4),
+      io: options.io ?? new Semaphore(4),
       onFatal: options.onFatal ?? ((error) => fatals.push(error)),
+      onCommits: options.onCommits,
       sizeOnlyThresholdBytes: options.sizeOnlyThresholdBytes,
       maxQueuedEvents: options.maxQueuedEvents,
       testHooks: options.before ? { before: options.before } : undefined,
@@ -1171,6 +1176,344 @@ module('recorder', (hooks) => {
       `${events[0].seq}-${events[2].seq}`,
     ]);
     assert.deepEqual(revision.trailers.writeCount, ['3']);
+  });
+
+  test('a background job runs once nothing is captured, given the HEAD the recorder holds', async (assert) => {
+    let target = recorder();
+    await recordInitial(target);
+    let edit = await event({
+      author: ALICE,
+      changes: [await put(PATH, '{"v":1}')],
+      occurredAt: at(0),
+    });
+    await feed(target, [edit]);
+    let contexts: BackgroundContext[] = [];
+    let job = {
+      kind: 'test',
+      run: async (context: BackgroundContext) => void contexts.push(context),
+    };
+
+    assert.strictEqual(
+      await target.runBackground(job),
+      'skipped',
+      'an open group skips the job',
+    );
+    assert.deepEqual(contexts, []);
+
+    target.tick(T0 + quietPeriodMs);
+    await target.settled();
+    let [, second] = await history();
+    assert.strictEqual(await target.runBackground(job), 'ran');
+    assert.strictEqual(contexts.length, 1);
+    assert.strictEqual(contexts[0].head, second.id);
+    assert.strictEqual(contexts[0].gitDir, gitDir);
+    assert.false(contexts[0].signal.aborted);
+  });
+
+  test('a background job asked for during a commit is skipped, and one asked for after it sees the new cursor', async (assert) => {
+    let during: Promise<BackgroundOutcome> | undefined;
+    let ran = false;
+    let target: Recorder = recorder({
+      before: async (step) => {
+        if (step === 'cursor' && !during) {
+          during = target.runBackground({
+            kind: 'during',
+            run: async () => void (ran = true),
+          });
+        }
+      },
+    });
+    let edit = await event({
+      author: ALICE,
+      changes: [await put('a.json', '{"a":1}', 'A')],
+      occurredAt: at(0),
+    });
+    await feed(target, [edit], T0 + quietPeriodMs);
+
+    assert.strictEqual(await during, 'skipped');
+    assert.false(ran);
+    let seen: { cursorSeq: number; head: string | null }[] = [];
+    assert.strictEqual(
+      await target.runBackground({
+        kind: 'after',
+        run: async () => void seen.push(await state()),
+      }),
+      'ran',
+    );
+    let [revision] = await history();
+    assert.deepEqual(seen, [{ cursorSeq: edit.seq, head: revision.id }]);
+  });
+
+  test('a background job with events queued behind it is skipped, and the events are recorded', async (assert) => {
+    let target = recorder();
+    let release!: () => void;
+    let released = new Promise<void>((resolve) => (release = resolve));
+    let started = false;
+    let blocking = target.runBackground({
+      kind: 'blocking',
+      run: async () => {
+        started = true;
+        await released;
+      },
+    });
+    await waitUntil(() => started, { what: 'the first job to start' });
+    let ran = false;
+    let behind = target.runBackground({
+      kind: 'behind',
+      run: async () => void (ran = true),
+    });
+    let edit = await event({
+      author: ALICE,
+      changes: [await put('a.json', '{"a":1}', 'A')],
+      occurredAt: at(0),
+    });
+    await target.record(edit);
+
+    release();
+    assert.strictEqual(await blocking, 'ran');
+    assert.strictEqual(await behind, 'skipped');
+    assert.false(ran);
+    target.tick(T0 + quietPeriodMs);
+    await target.settled();
+    assert.deepEqual(await coveredSeqs(await history()), [[edit.seq]]);
+  });
+
+  test('a background job asked for while the realm has an event in hand is skipped at once', async (assert) => {
+    // Without the fix this waits forever rather than failing.
+    assert.timeout(10_000);
+    let release!: () => void;
+    let released = new Promise<void>((resolve) => (release = resolve));
+    let capturing = false;
+    let target = recorder({
+      before: async (step) => {
+        if (step === 'capture') {
+          capturing = true;
+          await released;
+        }
+      },
+    });
+    let edit = await event({
+      author: ALICE,
+      changes: [await put('a.json', '{"a":1}', 'A')],
+      occurredAt: at(0),
+    });
+    await target.record(edit);
+    await waitUntil(() => capturing, { what: 'the capture to start' });
+    let ran = false;
+    let job = () =>
+      target.runBackground({
+        kind: 'test',
+        run: async () => void (ran = true),
+      });
+
+    assert.strictEqual(await job(), 'skipped', 'while the event is captured');
+    release();
+    await target.settled();
+    assert.strictEqual(
+      await job(),
+      'skipped',
+      'while the event waits in the open group',
+    );
+    target.tick(T0 + quietPeriodMs);
+    await target.settled();
+    assert.strictEqual(await job(), 'ran', 'once the event is committed');
+    assert.true(ran);
+  });
+
+  test('a background job holds no I/O permit, so other realms record beside it', async (assert) => {
+    let io = new Semaphore(1);
+    let target = recorder({ io });
+    let other = await insertRealm(database.db, {
+      url: 'http://localhost:4201/test-user/other/',
+      diskId: 'test-user/other',
+    });
+    let otherDir = join(root, 'other');
+    await mkdir(otherDir, { recursive: true });
+    let neighbour = new Recorder({
+      db: database.db,
+      realm: { id: other.id, url: other.url, directory: otherDir, shard: 0 },
+      historyRoot,
+      holder: HOLDER,
+      io,
+      onFatal: (error) => fatals.push(error),
+    });
+    recorders.push(neighbour);
+    let release!: () => void;
+    let released = new Promise<void>((resolve) => (release = resolve));
+    let started = false;
+    let job = target.runBackground({
+      kind: 'long',
+      run: async () => {
+        started = true;
+        await released;
+      },
+    });
+    await waitUntil(() => started, { what: 'the job to start' });
+
+    await writeFile(join(otherDir, 'card.json'), '{}');
+    let edit = await appendEvent(database.db, other, {
+      author: ALICE,
+      changes: [
+        {
+          path: 'card.json',
+          status: 'A',
+          contentHash: computeContentHash('{}'),
+          size: 2,
+        },
+      ],
+      occurredAt: at(0),
+    });
+    await neighbour.record(edit);
+    neighbour.tick(T0 + quietPeriodMs);
+    await neighbour.settled();
+    let [row] = await database.db.execute(
+      `SELECT cursor_seq::text AS cursor_seq FROM realm_history_state
+       WHERE realm_id = $1`,
+      { bind: [other.id] },
+    );
+    assert.strictEqual(
+      Number(row.cursor_seq),
+      edit.seq,
+      'the other realm recorded while the job ran',
+    );
+
+    release();
+    assert.strictEqual(await job, 'ran');
+    assert.deepEqual(fatals, []);
+  });
+
+  test('stopping a recorder aborts its background job, waits for it, and drops the jobs queued behind it', async (assert) => {
+    let target = recorder();
+    let started = false;
+    let finished = false;
+    let job = target.runBackground({
+      kind: 'long',
+      run: async ({ signal }) => {
+        started = true;
+        await new Promise((resolve) =>
+          signal.addEventListener('abort', resolve),
+        );
+        await sleep(20);
+        finished = true;
+      },
+    });
+    await waitUntil(() => started, { what: 'the job to start' });
+    let queued = target.runBackground({ kind: 'queued', run: async () => {} });
+
+    await target.stop();
+    assert.true(finished, 'the stop waited for the job');
+    assert.strictEqual(await job, 'unavailable', 'it was cut short');
+    assert.strictEqual(await queued, 'unavailable');
+    assert.strictEqual(
+      await target.runBackground({ kind: 'late', run: async () => {} }),
+      'unavailable',
+    );
+  });
+
+  for (let ending of ['throws', 'returns'] as const) {
+    test(`a background job gives way when its realm's queue fills, and counts as skipped when it then ${ending}`, async (assert) => {
+      // Without the fix this waits forever rather than failing.
+      assert.timeout(10_000);
+      let target = recorder({ maxQueuedEvents: 2 });
+      let started = false;
+      let job = target.runBackground({
+        kind: 'long',
+        stallOnFailure: true,
+        run: async ({ signal }) => {
+          started = true;
+          await new Promise((resolve) =>
+            signal.addEventListener('abort', resolve),
+          );
+          if (ending === 'throws') {
+            throw signal.reason;
+          }
+        },
+      });
+      await waitUntil(() => started, { what: 'the job to start' });
+      let events: ChangeEvent[] = [];
+      for (let i = 0; i < 3; i++) {
+        events.push(
+          await event({
+            author: ALICE,
+            changes: [await put(`card-${i}.json`, `{"i":${i}}`, 'A')],
+            occurredAt: at(i * 100),
+          }),
+        );
+      }
+      for (let next of events) {
+        await target.record(next);
+      }
+
+      assert.strictEqual(await job, 'skipped');
+      assert.strictEqual(target.state, 'running', 'the realm did not stall');
+      target.tick(T0 + 200 + quietPeriodMs);
+      await target.settled();
+      assert.deepEqual(await coveredSeqs(await history()), [
+        events.map(({ seq }) => seq),
+      ]);
+      assert.deepEqual(fatals, []);
+    });
+  }
+
+  test('a failing background job fails alone, unless its kind stalls the realm', async (assert) => {
+    let target = recorder();
+    let boom = async () => {
+      throw new Error('boom');
+    };
+
+    await assert.rejects(
+      target.runBackground({ kind: 'broken', run: boom }),
+      /boom/,
+    );
+    assert.strictEqual(target.state, 'running');
+    assert.strictEqual(await statusOf(), 'ok');
+    await recordInitial(target);
+    assert.strictEqual((await history()).length, 1, 'the realm records on');
+
+    await assert.rejects(
+      target.runBackground({ kind: 'broken', stallOnFailure: true, run: boom }),
+      /boom/,
+    );
+    assert.strictEqual(target.state, 'stalled');
+    assert.strictEqual(await statusOf(), 'stalled');
+    assert.strictEqual(
+      await target.runBackground({ kind: 'after', run: async () => {} }),
+      'unavailable',
+    );
+    assert.deepEqual(fatals, []);
+  });
+
+  test('a recorder counts its own revisions and those its HEAD check finds', async (assert) => {
+    let edit = await event({
+      author: ALICE,
+      changes: [await put('a.json', '{"a":1}', 'A')],
+      occurredAt: at(0),
+    });
+    let crashed = recorder({
+      before: async (step) => {
+        if (step === 'cursor') {
+          throw new Error('simulated crash');
+        }
+      },
+    });
+    await feed(crashed, [edit], T0 + quietPeriodMs);
+    assert.strictEqual(fatals.length, 1);
+
+    let counts: number[] = [];
+    let next = await event({
+      author: BOB,
+      changes: [await put('b.json', '{"b":1}', 'A')],
+      occurredAt: at(1000),
+    });
+    let restarted = recorder({ onCommits: (count) => counts.push(count) });
+    await feed(restarted, [edit, next], T0 + 1000 + quietPeriodMs);
+
+    assert.strictEqual((await history()).length, 2);
+    assert.deepEqual(
+      counts,
+      [1, 1],
+      'the crashed revision, found by the HEAD check, then its own',
+    );
   });
 
   test('stopping a recorder mid-commit lets the commit finish', async (assert) => {
