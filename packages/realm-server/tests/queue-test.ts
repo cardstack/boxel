@@ -2276,6 +2276,222 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(ranCount, 0, 'handler never ran');
     });
 
+    // One attempt of `jobId` under a fresh reservation for `workerId` that
+    // stages `urls` (an index pass's pending rows, under the attempt's own
+    // staging id) and then runs its child's heap out: what the worker-manager
+    // does when a child reports it.
+    async function heapOutAttempt(
+      jobId: number,
+      workerId: string,
+      urls: string[],
+    ) {
+      let [{ id: reservationId }] = (await adapter.execute(
+        `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+         VALUES ($1, $2, NOW() + INTERVAL '10 seconds') RETURNING id`,
+        { bind: [jobId, workerId] },
+      )) as unknown as { id: number }[];
+      for (let url of urls) {
+        await adapter.execute(
+          `INSERT INTO boxel_index_pending
+             (url, file_alias, type, generation, realm_url, job_id, staging_id)
+           VALUES ($1, $1, 'instance', 1, 'http://test-realm/', $2, $3)`,
+          {
+            bind: [
+              `http://test-realm/${url}`,
+              jobId,
+              `job:${jobId}.${reservationId}`,
+            ],
+          },
+        );
+      }
+      await finalizeOrphanedReservations(adapter, workerId, 'heap-exhausted');
+    }
+
+    async function completionReasons(jobId: number): Promise<string[]> {
+      let rows = (await adapter.execute(
+        `SELECT completion_reason FROM job_reservations WHERE job_id = $1 ORDER BY id`,
+        { bind: [jobId] },
+      )) as unknown as { completion_reason: string }[];
+      return rows.map((r) => r.completion_reason);
+    }
+
+    test('attempts that ran the heap out do not use up the reservation cap', async function (assert) {
+      // An index job stages its rows as it goes and a retry resumes from them,
+      // so an attempt that ran the child's heap out is progress. Two of them
+      // must not abandon the job the way two kills would.
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      let staged: string[] = [];
+      for (let workerId of ['heap-out-worker-A', 'heap-out-worker-B']) {
+        // Each attempt resumes from what the last one staged and visits one
+        // more file before its heap runs out.
+        staged.push(`${workerId}.json`);
+        await heapOutAttempt(jobId, workerId, staged);
+      }
+      assert.deepEqual(
+        await completionReasons(jobId),
+        ['heap-exhausted', 'heap-exhausted'],
+        'each attempt staged a file the last one had not',
+      );
+
+      let ranCount = 0;
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-heap-out-retried',
+        maxTimeoutSec: 2,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        return null;
+      });
+      await runner.start();
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      let started = Date.now();
+      let status = 'unfulfilled';
+      while (Date.now() - started < 5000) {
+        let rows = (await adapter.execute(`SELECT * FROM jobs WHERE id = $1`, {
+          bind: [jobId],
+        })) as unknown as { status: string }[];
+        status = rows[0].status;
+        if (status !== 'unfulfilled') {
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.strictEqual(status, 'resolved', 'the third attempt ran the job');
+      assert.strictEqual(ranCount, 1, 'handler ran once');
+    });
+
+    test('a job that keeps running the heap out is abandoned at its own cap', async function (assert) {
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      let staged: string[] = [];
+      for (let workerId of [
+        'heap-out-worker-C',
+        'heap-out-worker-D',
+        'heap-out-worker-E',
+      ]) {
+        staged.push(`${workerId}.json`);
+        await heapOutAttempt(jobId, workerId, staged);
+      }
+
+      let ranCount = 0;
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-heap-out-cap',
+        maxTimeoutSec: 2,
+        maxHeapExhaustedCount: 3,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        return null;
+      });
+      await runner.start();
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      let started = Date.now();
+      let result: { message?: string } | null = null;
+      while (Date.now() - started < 5000) {
+        let rows = (await adapter.execute(`SELECT * FROM jobs WHERE id = $1`, {
+          bind: [jobId],
+        })) as unknown as {
+          status: string;
+          result: { message?: string } | null;
+        }[];
+        if (rows[0].status === 'rejected') {
+          result = rows[0].result;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.ok(result, 'job abandoned after three attempts ran the heap out');
+      assert.ok(
+        result?.message?.startsWith(
+          "Job abandoned after 3 attempts ran the worker's heap out (max=3)",
+        ),
+        `job.result.message says the heap ran out, got: ${result?.message}`,
+      );
+      assert.strictEqual(ranCount, 0, 'handler never ran');
+    });
+
+    test('an attempt that ran its heap out without staging anything new counts toward the reservation cap', async function (assert) {
+      // A pass that dies in discovery, before its first visit, stages nothing:
+      // its retry would resume from the same place and die the same way.
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      // The first attempt visits a file; the next only copies it forward; the
+      // third stages nothing at all.
+      await heapOutAttempt(jobId, 'heap-out-worker-F', ['visited.json']);
+      await heapOutAttempt(jobId, 'heap-out-worker-G', ['visited.json']);
+      await heapOutAttempt(jobId, 'heap-out-worker-H', []);
+      assert.deepEqual(
+        await completionReasons(jobId),
+        [
+          'heap-exhausted',
+          'heap-exhausted-without-progress',
+          'heap-exhausted-without-progress',
+        ],
+        'only the attempt that staged a new file made progress',
+      );
+
+      let ranCount = 0;
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-heap-out-no-progress',
+        maxTimeoutSec: 2,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        return null;
+      });
+      await runner.start();
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      let started = Date.now();
+      let result: { message?: string } | null = null;
+      while (Date.now() - started < 5000) {
+        let rows = (await adapter.execute(`SELECT * FROM jobs WHERE id = $1`, {
+          bind: [jobId],
+        })) as unknown as {
+          status: string;
+          result: { message?: string } | null;
+        }[];
+        if (rows[0].status === 'rejected') {
+          result = rows[0].result;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.ok(result, 'job abandoned at the reservation cap');
+      assert.strictEqual(
+        result?.message,
+        "Job abandoned after 2 failed attempts (max=2); 2 attempt(s) ran the worker's heap out before staging anything new",
+      );
+      assert.strictEqual(ranCount, 0, 'handler never ran');
+    });
+
     test('a kill during the manager shutdown does not count toward the cap', async function (assert) {
       // The shutdown's straggler phase SIGKILLs any child still running its
       // handler; that interruption is the deploy's, not the job's.

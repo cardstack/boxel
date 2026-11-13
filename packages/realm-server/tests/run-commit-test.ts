@@ -16,6 +16,7 @@ import {
   runOverlayFiles,
   stageRunOverlayFile,
 } from '@cardstack/runtime-common/run-overlay';
+import { getAutomationStorage } from '@cardstack/runtime-common/automation-files';
 import {
   createAutomationRunToken,
   createJWT,
@@ -169,6 +170,65 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('the files a commit creates are recorded as its run’s automation’s, and a file it only changes is not', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    assert.strictEqual(await stage(token, 'logs/run.jsonl', '{"n":1}\n'), 204);
+    assert.strictEqual(await stage(token, 'deep/nested/file.md', '# hi'), 204);
+    assert.strictEqual(
+      await stage(token, 'notes.txt', 'updated by the run'),
+      204,
+    );
+
+    let committed = await commit(token);
+    assert.strictEqual(committed.status, 200, JSON.stringify(committed.json));
+
+    let rows = (await dbAdapter.execute(
+      `SELECT file_path, automation_id, run_id FROM automation_files
+         WHERE realm_url = $1 ORDER BY file_path`,
+      { bind: [realm.url] },
+    )) as { file_path: string; automation_id: string; run_id: string }[];
+    assert.deepEqual(
+      rows,
+      [
+        {
+          file_path: 'deep/nested/file.md',
+          automation_id: run.automationId,
+          run_id: run.id,
+        },
+        {
+          file_path: 'logs/run.jsonl',
+          automation_id: run.automationId,
+          run_id: run.id,
+        },
+      ],
+      'the created files are the automation’s, from this run; notes.txt, which the realm already held, is not',
+    );
+
+    // The storage the automation's payer is charged for counts the same two
+    // files, at their stored sizes.
+    let storage = await getAutomationStorage(dbAdapter, run.automationId);
+    assert.deepEqual(
+      storage.files.map(({ realmURL, path, runId }) => ({
+        realmURL,
+        path,
+        runId,
+      })),
+      [
+        { realmURL: realm.url, path: 'deep/nested/file.md', runId: run.id },
+        { realmURL: realm.url, path: 'logs/run.jsonl', runId: run.id },
+      ],
+    );
+    assert.strictEqual(
+      storage.fileBytes,
+      Buffer.byteLength('# hi') + Buffer.byteLength('{"n":1}\n'),
+      'the charged file bytes are the two created files’ sizes',
+    );
+  });
+
   test('a run whose paths mix cases commits', async function (assert) {
     let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
     assert.strictEqual(await stage(token, 'index.json', '{"a":1}'), 204);
@@ -189,9 +249,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(await stage(token, 'aaa-first.txt', 'first'), 204);
     // Staged beneath `notes.txt`, which the realm holds as a file. Staging
-    // through the route checks only the run's own files, so this is put in
-    // the overlay directly, as a realm that changed since staging would leave
-    // it.
+    // through a route refuses it, so this is put in the overlay directly, as
+    // a realm that changed since staging would leave it.
     await stageRunOverlayFile(
       dbAdapter,
       { runId: run.id, attempt: 1 },

@@ -17,6 +17,7 @@ import { HIT_A_CAP_REASON } from '@cardstack/runtime-common/automation-runs';
 import { switchOnAutomation } from '@cardstack/runtime-common/automations';
 import {
   addToCreditsLedger,
+  getLedgerEntries,
   getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
 import {
@@ -40,7 +41,8 @@ import { OPENROUTER_CHAT_COMPLETIONS_URL } from '../lib/run-token-forward.ts';
 // a `callApi` for an operation the card doesn't declare is refused, and the
 // run's `callApi` calls, the response bytes they read, its `resolve` calls
 // and their AI spending are counted on the run row against the card's caps.
-// A call past a cap is refused and ends the run.
+// A call past a cap is refused and ends the run. A `resolve` is billed to the
+// person the run acts as, as an AI charge naming the run.
 
 const realmURL = new URL('http://127.0.0.1:4444/automation-run-limits-test/');
 const MODELS_REALM_URL = 'http://127.0.0.1:4444/openrouter/';
@@ -51,8 +53,9 @@ const OWNER = '@limits-owner:localhost';
 const REALM_USER = '@node-test_realm:localhost';
 const FEED = { module: rri(`${realmURL.href}feed`), name: 'Feed' };
 const MODEL = 'anthropic/claude-limits-test';
-// What the stubbed OpenRouter reports each generation cost.
-const GENERATION_COST_USD = 0.0001;
+// What the stubbed OpenRouter reports each generation cost: a whole number of
+// credits, so its spend shows on the ledger.
+const GENERATION_COST_USD = 0.003;
 
 // Each automation's card, by its path in the realm.
 const ROOMY = 'automation/roomy';
@@ -446,6 +449,11 @@ module(basename(import.meta.filename), function (hooks) {
       );
     }
 
+    // The ledger entries charged for the run's AI requests.
+    async function aiChargesOf(runId: string) {
+      return await getLedgerEntries(dbAdapter, { runId, chargeKind: 'ai' });
+    }
+
     async function resolve(token: string) {
       return await request
         .post('/_request-forward')
@@ -480,6 +488,34 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a resolve is billed to the person the run acts as, as an AI charge naming the run and its realm', async function (assert) {
+      let { token, run } = await runOf(ROOMY);
+      let response = await resolve(token);
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+
+      let owner = (await getUserByMatrixUserId(dbAdapter, OWNER))!;
+      let charges = await aiChargesOf(run.id);
+      assert.deepEqual(
+        charges.map(({ userId, chargeKind, realm, runId, creditAmount }) => ({
+          userId,
+          chargeKind,
+          realm,
+          runId,
+          creditAmount,
+        })),
+        [
+          {
+            userId: owner.id,
+            chargeKind: 'ai',
+            realm: run.realm,
+            runId: run.id,
+            creditAmount: -GENERATION_COST_USD * CREDITS_PER_USD,
+          },
+        ],
+        "the generation's cost is one AI charge to the run's person",
+      );
+    });
+
     test('a resolve the upstream answers with an error costs the run nothing', async function (assert) {
       upstreamAnswer = {
         status: 429,
@@ -502,6 +538,11 @@ module(basename(import.meta.filename), function (hooks) {
         0,
         'an error is not charged to the cap',
       );
+      assert.deepEqual(
+        await aiChargesOf(run.id),
+        [],
+        'nothing is billed for an error',
+      );
     });
 
     test('a resolve past the resolveCalls cap is refused and ends the run', async function (assert) {
@@ -521,6 +562,11 @@ module(basename(import.meta.filename), function (hooks) {
         row.aiCreditsReserved,
         0,
         "the refused request's reservation is released",
+      );
+      assert.deepEqual(
+        (await aiChargesOf(run.id)).map((entry) => entry.creditAmount),
+        [-GENERATION_COST_USD * CREDITS_PER_USD],
+        'only the forwarded request is billed',
       );
     });
 

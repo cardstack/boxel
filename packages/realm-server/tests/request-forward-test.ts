@@ -27,6 +27,7 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { logger } from '@cardstack/runtime-common';
 import {
   addToCreditsLedger,
+  getLedgerEntries,
   getUserByMatrixUserId,
   sumUpCreditsLedger,
 } from '@cardstack/billing/billing-queries';
@@ -304,6 +305,18 @@ module(basename(import.meta.filename), function () {
             return credits === 47;
           },
           { timeoutMessage: 'Credits should be deducted (50 - 3 = 47)' },
+        );
+        assert.deepEqual(
+          (await getLedgerEntries(dbAdapter, { userId: user!.id }))
+            .filter((entry) => entry.creditAmount < 0)
+            .map(({ chargeKind, realm, runId, creditAmount }) => ({
+              chargeKind,
+              realm,
+              runId,
+              creditAmount,
+            })),
+          [{ chargeKind: 'ai', realm: null, runId: null, creditAmount: -3 }],
+          "the session's user is billed one AI charge that names no run",
         );
       } finally {
         mockFetch.restore();

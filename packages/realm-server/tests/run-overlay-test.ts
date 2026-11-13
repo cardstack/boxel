@@ -7,10 +7,14 @@ import {
   abandonAutomationRun,
   cancelAutomationRun,
   finishAutomationRun,
+  rri,
   startAutomationRunAttempt,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
+import {
+  RUN_COMMIT_PATH,
+  stageRunOverlayFile,
+} from '@cardstack/runtime-common/run-overlay';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   createAutomationRunToken,
@@ -48,6 +52,19 @@ module(basename(import.meta.filename), function (hooks) {
       'logs/2026-11.jsonl': '{"n":1}\n',
       'thing.gts': `import { CardDef } from 'https://cardstack.com/base/card-api';
 export class Thing extends CardDef {}`,
+      'person.gts': `import { CardDef, field, contains, containsMany } from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+export class Person extends CardDef {
+  @field name = contains(StringField);
+  @field nicknames = containsMany(StringField);
+}`,
+      'people/ada.json': {
+        data: {
+          type: 'card',
+          attributes: { name: 'Ada', nicknames: [] },
+          meta: { adoptsFrom: { module: rri('../person'), name: 'Person' } },
+        },
+      },
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -126,6 +143,108 @@ export class Thing extends CardDef {}`,
       status: 200,
       names: Object.keys(data.relationships ?? {}).sort(),
     };
+  }
+
+  async function operations(token: string, entries: unknown[]) {
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}_operations`, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.BoxelOperations,
+          'Content-Type': SupportedMimeType.BoxelOperations,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 'boxel:operations': entries }),
+      }),
+    ))!;
+    let text = await response.text();
+    return { status: response.status, text, json: JSON.parse(text) };
+  }
+
+  async function atomic(token: string, ops: unknown[]) {
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}_atomic`, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': SupportedMimeType.JSONAPI,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 'atomic:operations': ops }),
+      }),
+    ))!;
+    return { status: response.status, text: await response.text() };
+  }
+
+  function updateAda(name: string) {
+    return {
+      op: 'update',
+      href: './people/ada.json',
+      data: {
+        type: 'source',
+        attributes: {
+          content: JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { name, nicknames: [] },
+              meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+            },
+          }),
+        },
+        meta: {},
+      },
+    };
+  }
+
+  async function readCard(token: string, path: string) {
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}${path}`, {
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+    ))!;
+    let text = await response.text();
+    return {
+      status: response.status,
+      text,
+      data: response.status === 200 ? JSON.parse(text).data : undefined,
+    };
+  }
+
+  // The cards a search for every Person finds, by path, each with its name.
+  async function searchPeople(token: string) {
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}_search`, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+          'X-HTTP-Method-Override': 'QUERY',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          filter: {
+            'item.on': { module: `${realmURL.href}person`, name: 'Person' },
+          },
+          fields: { entry: ['item'] },
+        }),
+      }),
+    ))!;
+    let text = await response.text();
+    if (response.status !== 200) {
+      return { status: response.status, text, names: {} };
+    }
+    let doc = JSON.parse(text);
+    let names: Record<string, unknown> = {};
+    for (let resource of [...(doc.included ?? []), ...(doc.data ?? [])]) {
+      if (resource.type === 'card') {
+        names[String(resource.id).replace(realmURL.href, '')] =
+          resource.attributes?.name;
+      }
+    }
+    return { status: 200, text, names };
   }
 
   async function overlayRows(runId: string) {
@@ -377,7 +496,7 @@ export class Mine extends Automation {}`;
     );
   });
 
-  test('a run’s write through a route that doesn’t stage it is refused, and the realm keeps its file', async function (assert) {
+  test('a run’s removal is refused, and the realm keeps its file', async function (assert) {
     let { token, run } = await createAutomationRunToken(
       dbAdapter,
       realm,
@@ -391,46 +510,280 @@ export class Mine extends Automation {}`;
     ))!;
     assert.strictEqual(removal.status, 403, await removal.text());
 
-    let batch = (await realm.handle(
-      new Request(`${realmURL.href}_operations`, {
-        method: 'POST',
-        headers: {
-          Accept: SupportedMimeType.BoxelOperations,
-          'Content-Type': SupportedMimeType.BoxelOperations,
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          'boxel:operations': [
-            {
-              op: 'invoke',
-              'boxel:name': 'create',
-              data: {
-                type: 'card',
-                attributes: {},
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
-                    name: 'CardDef',
-                  },
-                },
-              },
-            },
-          ],
-        }),
-      }),
-    ))!;
-    let answer = await batch.text();
-    assert.strictEqual(batch.status, 403, answer);
-    assert.strictEqual(
-      JSON.parse(answer).errors?.[0]?.code,
-      'run-write-not-staged',
-    );
+    let batch = await operations(token, [
+      { op: 'invoke', 'boxel:name': 'delete', href: './people/ada' },
+    ]);
+    assert.strictEqual(batch.status, 403, batch.text);
+    assert.strictEqual(batch.json.errors?.[0]?.code, 'run-write-not-staged');
 
     assert.deepEqual(await readText(session(), 'notes.txt'), {
       status: 200,
       text: 'in the realm',
     });
+    assert.strictEqual(
+      (await readCard(session(), 'people/ada')).status,
+      200,
+      'the card the run tried to remove is still there',
+    );
     assert.deepEqual(await overlayRows(run.id), []);
+  });
+
+  test('a run’s appendLine is applied to its overlay, and the run reads the line back', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    for (let n of [2, 3]) {
+      let answer = await operations(token, [
+        {
+          op: 'invoke',
+          'boxel:name': 'appendLine',
+          href: './logs/2026-11.jsonl',
+          data: { line: `{"n":${n}}` },
+        },
+      ]);
+      assert.strictEqual(answer.status, 200, answer.text);
+    }
+    assert.deepEqual(
+      await readText(token, 'logs/2026-11.jsonl'),
+      { status: 200, text: '{"n":1}\n{"n":2}\n{"n":3}\n' },
+      'the second append is made to the file as the first left it',
+    );
+    assert.deepEqual(
+      await readText(session(), 'logs/2026-11.jsonl'),
+      { status: 200, text: '{"n":1}\n' },
+      'an ordinary reader sees the realm’s file',
+    );
+    assert.deepEqual(
+      (await overlayRows(run.id)).map((row) => row.path),
+      ['logs/2026-11.jsonl'],
+    );
+  });
+
+  test('a run’s write operation on a card is applied to its overlay, and the run reads the card back', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let answer = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'appendContainsMany',
+        href: './people/ada',
+        data: { field: 'nicknames', items: ['Countess'] },
+      },
+    ]);
+    assert.strictEqual(answer.status, 200, answer.text);
+
+    let second = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'appendContainsMany',
+        href: './people/ada',
+        data: { field: 'nicknames', items: ['Enchantress'] },
+      },
+    ]);
+    assert.strictEqual(second.status, 200, second.text);
+
+    let staged = await readCard(token, 'people/ada');
+    assert.strictEqual(staged.status, 200, staged.text);
+    assert.deepEqual(
+      staged.data.attributes.nicknames,
+      ['Countess', 'Enchantress'],
+      'the second append splices into the card as the first staged it',
+    );
+    assert.deepEqual(
+      (await readCard(session(), 'people/ada')).data.attributes.nicknames,
+      [],
+      'an ordinary reader sees the indexed card',
+    );
+  });
+
+  test('a run’s cards.update is staged, and its card read and search answer the staged card', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let update = await atomic(token, [updateAda('Ada Lovelace')]);
+    assert.strictEqual(update.status, 201, update.text);
+    assert.deepEqual(
+      (await overlayRows(run.id)).map((row) => row.path),
+      ['people/ada.json'],
+    );
+
+    let staged = await readCard(token, 'people/ada');
+    assert.strictEqual(staged.status, 200, staged.text);
+    assert.strictEqual(staged.data.attributes.name, 'Ada Lovelace');
+    assert.strictEqual(staged.data.id, `${realmURL.href}people/ada`);
+    assert.strictEqual(
+      staged.data.meta.adoptsFrom.module,
+      `${realmURL.href}person`,
+      'the type’s module is resolved against the card',
+    );
+
+    let found = await searchPeople(token);
+    assert.strictEqual(found.status, 200, found.text);
+    assert.deepEqual(
+      found.names,
+      { 'people/ada': 'Ada Lovelace' },
+      'the search hit comes back staged',
+    );
+
+    assert.strictEqual(
+      (await readCard(session(), 'people/ada')).data.attributes.name,
+      'Ada',
+      'an ordinary reader’s card read sees the indexed card',
+    );
+    assert.deepEqual(
+      (await searchPeople(session())).names,
+      { 'people/ada': 'Ada' },
+      'an ordinary reader’s search sees the indexed card',
+    );
+  });
+
+  test('a run’s update operation merges into the card as the run staged it', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let renamed = await atomic(token, [updateAda('Ada Lovelace')]);
+    assert.strictEqual(renamed.status, 201, renamed.text);
+    let update = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'update',
+        href: './people/ada',
+        data: {
+          type: 'card',
+          attributes: { nicknames: ['Countess'] },
+          meta: {
+            adoptsFrom: { module: `${realmURL.href}person`, name: 'Person' },
+          },
+        },
+      },
+    ]);
+    assert.strictEqual(update.status, 200, update.text);
+    let staged = await readCard(token, 'people/ada');
+    assert.strictEqual(staged.data.attributes.name, 'Ada Lovelace');
+    assert.deepEqual(staged.data.attributes.nicknames, ['Countess']);
+  });
+
+  test('a card read of a staged file that isn’t a card document is refused, not answered from the realm', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let write = await writeText(token, 'people/ada.json', 'not a document');
+    assert.strictEqual(write.status, 204, write.text);
+    let read = await readCard(token, 'people/ada');
+    assert.strictEqual(read.status, 422, read.text);
+    assert.strictEqual(
+      (await readCard(session(), 'people/ada')).data.attributes.name,
+      'Ada',
+    );
+  });
+
+  test('racing writes can’t stage a path both as a file and as a directory', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let answers = await Promise.all([
+      writeText(token, 'drafts', 'a file'),
+      writeText(token, 'drafts/one.md', 'under a directory'),
+    ]);
+    assert.deepEqual(
+      answers.map(({ status }) => status).sort(),
+      [204, 409],
+      'one of the two is staged and the other refused',
+    );
+    assert.strictEqual((await overlayRows(run.id)).length, 1);
+  });
+
+  test('a card a run creates is read back, and a search does not find it', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let add = await atomic(token, [
+      {
+        op: 'add',
+        href: './people/grace.json',
+        data: {
+          type: 'card',
+          attributes: { name: 'Grace', nicknames: [] },
+          meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+        },
+      },
+    ]);
+    assert.strictEqual(add.status, 201, add.text);
+    let again = await atomic(token, [
+      {
+        op: 'add',
+        href: './people/grace.json',
+        data: {
+          type: 'card',
+          attributes: { name: 'Grace' },
+          meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+        },
+      },
+    ]);
+    assert.strictEqual(
+      again.status,
+      409,
+      'an add sees the file the run staged',
+    );
+
+    let created = await readCard(token, 'people/grace');
+    assert.strictEqual(created.status, 200, created.text);
+    assert.strictEqual(created.data.attributes.name, 'Grace');
+    assert.deepEqual(
+      (await searchPeople(token)).names,
+      { 'people/ada': 'Ada' },
+      'the search runs on the index, which never sees a staged card',
+    );
+    assert.strictEqual((await readCard(session(), 'people/grace')).status, 404);
+  });
+
+  test('a run’s atomic write stages every file or none', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let answer = await atomic(token, [
+      updateAda('Ada Lovelace'),
+      {
+        op: 'add',
+        href: './sneaky.gts',
+        data: { type: 'source', attributes: { content: '' }, meta: {} },
+      },
+    ]);
+    assert.strictEqual(answer.status, 403, answer.text);
+    assert.deepEqual(await overlayRows(run.id), [], 'nothing is staged');
+  });
+
+  test('a run’s write operation meets the checks a staged write does', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+      { writesCap: 1 },
+    );
+    let first = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'appendLine',
+        href: './logs/2026-11.jsonl',
+        data: { line: '{"n":2}' },
+      },
+    ]);
+    assert.strictEqual(first.status, 200, first.text);
+    let second = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'appendContainsMany',
+        href: './people/ada',
+        data: { field: 'nicknames', items: ['Countess'] },
+      },
+    ]);
+    assert.strictEqual(second.status, 403, second.text);
+    assert.strictEqual(second.json.errors?.[0]?.code, 'writes-cap');
+    assert.deepEqual(
+      (await overlayRows(run.id)).map((row) => row.path),
+      ['logs/2026-11.jsonl'],
+    );
   });
 
   test('a run’s staged files are bounded in bytes together, and a rewrite counts once', async function (assert) {
@@ -536,7 +889,7 @@ export class Mine extends Automation {}`;
       data: {
         type: 'card',
         attributes: { padding },
-        meta: { adoptsFrom: { module: './thing', name: 'Thing' } },
+        meta: { adoptsFrom: { module: '../thing', name: 'Thing' } },
       },
     });
     assert.strictEqual(
@@ -550,17 +903,6 @@ export class Mine extends Automation {}`;
       204,
       'a .json file that is not a card takes the file limit',
     );
-  });
-
-  test('a run may not stage at a path the realm reserves', async function (assert) {
-    let { token, run } = await createAutomationRunToken(
-      dbAdapter,
-      realm,
-      OWNER,
-    );
-    let refused = await writeText(token, 'notes.txt.boxel-partial', 'nope');
-    assert.notStrictEqual(refused.status, 204, refused.text);
-    assert.deepEqual(await overlayRows(run.id), []);
   });
 
   test('a path is not staged as both a file and a directory', async function (assert) {
@@ -580,6 +922,190 @@ export class Mine extends Automation {}`;
       204,
       'a sibling whose name starts the same is no clash',
     );
+  });
+
+  test('a card the commit would refuse is refused at staging, through each staging route, as the commit refuses it', async function (assert) {
+    // A file at `Person` in the realm, which is where a Person card the
+    // envelope creates gets its directory, so every card below would be under
+    // a path the realm holds as a file.
+    assert.strictEqual(
+      (await writeText(session(), 'Person', 'a file, not a directory')).status,
+      204,
+    );
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let card = {
+      data: {
+        type: 'card',
+        attributes: { name: 'Grace', nicknames: [] },
+        meta: { adoptsFrom: { module: '../person', name: 'Person' } },
+      },
+    };
+
+    // What the commit answers for the same card, staged in the overlay
+    // directly, as a realm that changed since staging would leave it.
+    let other = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    await stageRunOverlayFile(
+      dbAdapter,
+      { runId: other.run.id, attempt: other.run.attempt! },
+      'Person/grace.json',
+      new TextEncoder().encode(JSON.stringify(card)),
+      10,
+    );
+    let committed = await realm.handle(
+      new Request(`${realmURL.href}${RUN_COMMIT_PATH.slice(1)}`, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          Authorization: `Bearer ${other.token}`,
+        },
+      }),
+    );
+    let commitText = await committed!.text();
+    assert.strictEqual(committed!.status, 409, commitText);
+    let commitError = JSON.parse(commitText).errors[0];
+    assert.strictEqual(commitError.code, 'path-clash');
+    assert.ok(
+      commitError.detail.endsWith('; nothing was saved'),
+      commitError.detail,
+    );
+    let reason = commitError.detail.replace(/; nothing was saved$/, '');
+
+    let written = await writeText(
+      token,
+      'Person/grace.json',
+      JSON.stringify(card),
+    );
+    assert.strictEqual(written.status, 409, 'the card+source write');
+    let writeError = JSON.parse(written.text).errors[0];
+    assert.strictEqual(writeError.code, 'path-clash');
+    assert.strictEqual(writeError.detail, reason);
+
+    let added = await atomic(token, [
+      { op: 'add', href: './Person/grace.json', data: card.data },
+    ]);
+    assert.strictEqual(added.status, 409, `the atomic write: ${added.text}`);
+    let addError = JSON.parse(added.text).errors[0];
+    assert.strictEqual(addError.code, 'path-clash');
+    assert.strictEqual(addError.detail, reason);
+
+    let created = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'create',
+        data: {
+          lid: 'grace',
+          attributes: { name: 'Grace', nicknames: [] },
+          meta: {
+            adoptsFrom: { module: `${realmURL.href}person`, name: 'Person' },
+          },
+        },
+      },
+    ]);
+    assert.strictEqual(
+      created.status,
+      409,
+      `the operations envelope: ${created.text}`,
+    );
+    let createError = created.json.errors[0];
+    assert.strictEqual(createError.code, 'path-clash');
+    assert.strictEqual(createError.detail, reason);
+
+    assert.deepEqual(await overlayRows(run.id), [], 'nothing is staged');
+  });
+
+  test('a run may not stage at a path the realm reserves, and is refused as the commit refuses it', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    for (let path of ['notes.txt.boxel-partial', '_capture/notes.txt']) {
+      let written = await writeText(token, path, 'nope');
+      assert.strictEqual(written.status, 403, written.text);
+      assert.strictEqual(
+        JSON.parse(written.text).errors[0].code,
+        'forbidden-path',
+        `the card+source write of ${path}`,
+      );
+      let added = await atomic(token, [
+        {
+          op: 'add',
+          href: `./${path}`,
+          data: { type: 'source', attributes: { content: 'nope' }, meta: {} },
+        },
+      ]);
+      assert.strictEqual(added.status, 403, added.text);
+      assert.strictEqual(
+        JSON.parse(added.text).errors[0].code,
+        'forbidden-path',
+        `the atomic write of ${path}`,
+      );
+      // The realm holds nothing there, and the answer is the reservation,
+      // not that the file doesn't exist.
+      let updated = await atomic(token, [
+        {
+          op: 'update',
+          href: `./${path}`,
+          data: { type: 'source', attributes: { content: 'nope' }, meta: {} },
+        },
+      ]);
+      assert.strictEqual(updated.status, 403, updated.text);
+      assert.strictEqual(
+        JSON.parse(updated.text).errors[0].code,
+        'forbidden-path',
+        `the atomic update of ${path}`,
+      );
+    }
+    let appended = await operations(token, [
+      {
+        op: 'invoke',
+        'boxel:name': 'appendLine',
+        href: './_capture/log.txt',
+        data: { line: 'nope' },
+      },
+    ]);
+    assert.strictEqual(appended.status, 403, appended.text);
+    assert.strictEqual(appended.json.errors[0].code, 'forbidden-path');
+    assert.deepEqual(await overlayRows(run.id), []);
+  });
+
+  test('a file refused for its path and its size is refused for its path, as the commit refuses it', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    // Past the card limit, within the file limit, so the size check runs on
+    // the staged bytes.
+    let card = JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { padding: 'x'.repeat(600 * 1024) },
+        meta: { adoptsFrom: { module: '../thing', name: 'Thing' } },
+      },
+    });
+    let overCardLimit = await writeText(token, 'notes.txt/huge.json', card);
+    assert.strictEqual(overCardLimit.status, 409, overCardLimit.text);
+    assert.strictEqual(
+      JSON.parse(overCardLimit.text).errors[0].code,
+      'path-clash',
+    );
+    // Past every limit, so the body is never read whole.
+    let overReadLimit = await writeText(
+      token,
+      'notes.txt/huge.txt',
+      'x'.repeat(5 * 1024 * 1024 + 1),
+    );
+    assert.strictEqual(overReadLimit.status, 409, overReadLimit.text);
+    assert.strictEqual(
+      JSON.parse(overReadLimit.text).errors[0].code,
+      'path-clash',
+    );
+    assert.deepEqual(await overlayRows(run.id), []);
   });
 
   for (let [ending, end] of [
