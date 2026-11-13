@@ -97,6 +97,21 @@ const REALM_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 // author name, author date in seconds, and the message.
 const LOG_FORMAT = '--format=%H%x00%P%x00%an%x00%at%x00%B';
 const LOG_FIELD_COUNT = 5;
+// `git log` as `parseLog` reads it: each revision's fields and its raw
+// entries, a size-only entry's tree among them, with a root revision's
+// paths listed and a rename as a delete and an add.
+const LOG = [
+  '-c',
+  'log.showRoot=true',
+  'log',
+  '--no-color',
+  '-z',
+  '--raw',
+  '-t',
+  '--no-renames',
+  '--no-abbrev',
+  LOG_FORMAT,
+];
 
 // A path filter: `directory` filters end in `/` and match only what is
 // under them; the others match a file of that path or anything under a
@@ -596,18 +611,9 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     filters: Filters,
   ): Promise<LogRecord[]> {
     let { stdout } = await this.#git.run(gitDir, [
-      '-c',
-      'log.showRoot=true',
-      'log',
-      '--no-color',
-      '-z',
-      '--raw',
-      '-t',
-      '--no-renames',
-      '--no-abbrev',
-      `-n`,
+      ...LOG,
+      '-n',
       `${count}`,
-      LOG_FORMAT,
       ...(query.status ? [`--diff-filter=${query.status}`] : []),
       ...(query.correlationId
         ? [
@@ -833,16 +839,7 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
       return [];
     }
     let { stdout } = await this.#git.run(gitDir, [
-      '-c',
-      'log.showRoot=true',
-      'log',
-      '--no-color',
-      '-z',
-      '--raw',
-      '-t',
-      '--no-renames',
-      '--no-abbrev',
-      LOG_FORMAT,
+      ...LOG,
       '--fixed-strings',
       `--grep=${TRAILERS.includesSuperseded}: ${superseded.id} `,
       `${superseded.id}..${through}`,
@@ -863,17 +860,8 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
       return [];
     }
     let { stdout } = await this.#git.run(gitDir, [
-      '-c',
-      'log.showRoot=true',
-      'log',
-      '--no-color',
+      ...LOG,
       '--no-walk=unsorted',
-      '-z',
-      '--raw',
-      '-t',
-      '--no-renames',
-      '--no-abbrev',
-      LOG_FORMAT,
       ...ids,
       '--',
     ]);
@@ -1481,7 +1469,7 @@ function sizeOnlyMarkerOf(
   )?.id;
 }
 
-// Revisions from `git log -z` (with `--raw` or without) and `LOG_FORMAT`.
+// Revisions from `git log` run with `LOG`.
 function parseLog(output: string): LogRecord[] {
   return parseRawLog(output, LOG_FIELD_COUNT).map(({ fields, entries }) => {
     let [id, parents, author, time, message] = fields;
