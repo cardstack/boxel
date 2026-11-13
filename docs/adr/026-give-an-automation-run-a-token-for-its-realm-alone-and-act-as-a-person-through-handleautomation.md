@@ -12,6 +12,8 @@ scope:
   - packages/realm-server/lib/key-uses.ts
   - packages/runtime-common/card-operations/call-api.ts
   - packages/runtime-common/automation-run-limits.ts
+  - packages/runtime-common/tasks/run-automation.ts
+  - packages/runtime-common/automations.ts
   - packages/realm-server/handlers/handle-request-forward.ts
   - packages/realm-server/middleware/index.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
