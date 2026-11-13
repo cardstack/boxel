@@ -12,6 +12,7 @@ import { getSkillSourceTools, type SkillSource } from '../lib/skill-tools';
 import { loadSkillWithLayoutFallback } from '../lib/skills-layout-fallback';
 
 import type MatrixService from '../services/matrix-service';
+import type NetworkService from '../services/network';
 import type StoreService from '../services/store';
 import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
@@ -22,6 +23,7 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
   typeof BaseToolModule.UpdateRoomSkillsInput
 > {
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
   @service declare private store: StoreService;
 
   static actionVerb = 'Update';
@@ -49,27 +51,33 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
       '',
       async (currentSkillsConfig: Record<string, any> = {}) => {
+        // A skill is matched by the key its id folds to, not by its spelling.
+        // A room stores a markdown skill by the URL it is served at, and a
+        // caller can name the same skill by its prefix-form id. The keys stay
+        // in this function: the room state keeps each skill's stored id.
+        let { virtualNetwork } = this.network;
+        let keyOf = (id: string) => virtualNetwork.keyForIdentifier(id);
         let enabledSkillCardMap = new Map<string, SerializedFile>();
         let disabledSkillCardMap = new Map<string, SerializedFile>();
 
         for (let fileDef of currentSkillsConfig.enabledSkillCards ?? []) {
           if (fileDef?.sourceUrl) {
-            enabledSkillCardMap.set(fileDef.sourceUrl, fileDef);
+            enabledSkillCardMap.set(keyOf(fileDef.sourceUrl), fileDef);
           }
         }
 
         for (let fileDef of currentSkillsConfig.disabledSkillCards ?? []) {
           if (fileDef?.sourceUrl) {
-            disabledSkillCardMap.set(fileDef.sourceUrl, fileDef);
+            disabledSkillCardMap.set(keyOf(fileDef.sourceUrl), fileDef);
           }
         }
 
-        let skillIdsToDeactivate = new Set(skillCardIdsToDeactivate);
-        for (let skillId of skillIdsToDeactivate) {
-          if (enabledSkillCardMap.has(skillId)) {
-            let fileDef = enabledSkillCardMap.get(skillId)!;
-            enabledSkillCardMap.delete(skillId);
-            disabledSkillCardMap.set(skillId, fileDef);
+        for (let skillId of new Set(skillCardIdsToDeactivate)) {
+          let key = keyOf(skillId);
+          let fileDef = enabledSkillCardMap.get(key);
+          if (fileDef) {
+            enabledSkillCardMap.delete(key);
+            disabledSkillCardMap.set(key, fileDef);
           }
         }
 
@@ -79,16 +87,16 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
         // in the room's enabled-skills config.
         let skillCardsNeedingUpload: SkillModule.Skill[] = [];
         let markdownSkillsNeedingUpload: FileDef[] = [];
-        let skillIdsToActivate = new Set(skillCardIdsToActivate);
 
-        for (let skillId of skillIdsToActivate) {
-          if (enabledSkillCardMap.has(skillId)) {
+        for (let skillId of new Set(skillCardIdsToActivate)) {
+          let key = keyOf(skillId);
+          if (enabledSkillCardMap.has(key)) {
             continue;
           }
-          if (disabledSkillCardMap.has(skillId)) {
-            let fileDef = disabledSkillCardMap.get(skillId)!;
-            disabledSkillCardMap.delete(skillId);
-            enabledSkillCardMap.set(skillId, fileDef);
+          let disabledFileDef = disabledSkillCardMap.get(key);
+          if (disabledFileDef) {
+            disabledSkillCardMap.delete(key);
+            enabledSkillCardMap.set(key, disabledFileDef);
             continue;
           }
 
@@ -100,7 +108,7 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
               await loadSkillWithLayoutFallback(this.store, skillId)
             )?.source;
             if (source) {
-              skillSourceCache.set(skillId, source);
+              skillSourceCache.set(key, source);
               if (isSkillCard in source) {
                 skillCardsNeedingUpload.push(source as SkillModule.Skill);
               } else {
@@ -134,21 +142,23 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
         for (let uploaded of uploadedSkillFileDefs) {
           let serialized = uploaded.serialize();
           if (serialized.sourceUrl) {
-            enabledSkillCardMap.set(serialized.sourceUrl, serialized);
-            disabledSkillCardMap.delete(serialized.sourceUrl);
+            let key = keyOf(serialized.sourceUrl);
+            enabledSkillCardMap.set(key, serialized);
+            disabledSkillCardMap.delete(key);
           }
         }
 
         // Ensure skills that ended up enabled are not left in the disabled map
-        for (let skillId of enabledSkillCardMap.keys()) {
-          disabledSkillCardMap.delete(skillId);
+        for (let key of enabledSkillCardMap.keys()) {
+          disabledSkillCardMap.delete(key);
         }
 
-        let enabledSkillIds = Array.from(enabledSkillCardMap.keys());
+        let enabledSkills = Array.from(enabledSkillCardMap.entries());
         let loadedEnabledSkills = await Promise.all(
-          enabledSkillIds.map(async (skillId) => {
-            if (skillSourceCache.has(skillId)) {
-              return skillSourceCache.get(skillId)!;
+          enabledSkills.map(async ([key, { sourceUrl: skillId }]) => {
+            let cached = skillSourceCache.get(key);
+            if (cached) {
+              return cached;
             }
             try {
               // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
@@ -156,7 +166,7 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
                 await loadSkillWithLayoutFallback(this.store, skillId)
               )?.source;
               if (source) {
-                skillSourceCache.set(skillId, source);
+                skillSourceCache.set(key, source);
                 return source;
               }
               console.warn(
@@ -202,7 +212,7 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
           } else {
             serializedCommandDefinitions = [];
           }
-        } else if (enabledSkillIds.length === 0) {
+        } else if (enabledSkills.length === 0) {
           serializedCommandDefinitions = [];
         }
 
