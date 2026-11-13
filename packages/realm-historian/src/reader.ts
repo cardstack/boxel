@@ -540,14 +540,24 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     query: ListingQuery,
   ): Promise<{ listed: Listed[]; more: boolean }> {
     let { filters } = query;
+    let byMessage = selectsByMessage(query);
     let listed: Listed[] = [];
     let from: string | undefined = start;
     let more = false;
     while (from && listed.length < count) {
       let records: LogRecord[] =
-        filters !== 'all' && filters.length > 1 && !this.#bloomWithSeveralPaths
+        filters !== 'all' &&
+        filters.length > 1 &&
+        !byMessage &&
+        !this.#bloomWithSeveralPaths
           ? await this.#listOneFilterAtATime(gitDir, from, count, query)
-          : await this.#log(gitDir, from, count, query, filters);
+          : await this.#log(
+              gitDir,
+              from,
+              count,
+              query,
+              byMessage ? 'all' : filters,
+            );
       let below: string | undefined =
         records.length >= count
           ? records[records.length - 1].parent
@@ -712,9 +722,10 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
   // the same on every page, and puts it just below a write to the path it
   // superseded; under a directory or several filters, a revision newer than
   // it that changed another path can come after it. A revision the filters
-  // list on its own, or that a `correlationId` filter leaves out, is never
-  // inserted, and nothing is inserted into a listing by `status`, since the
-  // trailers don't record what kind of change the superseded write made.
+  // list on its own is never inserted. Nothing is inserted into a listing by
+  // `status`, since the trailers don't record what kind of change the
+  // superseded write made, or by `correlationId`, which lists a
+  // correlation's superseded writes in their own place (`selectsByMessage`).
   async #insertions(
     gitDir: string,
     hosts: LogRecord[],
@@ -722,7 +733,7 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
   ): Promise<Map<string, Listed[]>> {
     let insertions = new Map<string, Listed[]>();
     let { filters } = query;
-    if (filters === 'all' || query.status) {
+    if (filters === 'all' || query.status || query.correlationId) {
       return insertions;
     }
     let named = hosts.map((host) => ({
@@ -753,7 +764,6 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
         if (
           record &&
           host.parent &&
-          matchesCorrelation(record, query.correlationId) &&
           listedChanges(record, query) === undefined &&
           (await this.#namers(gitDir, record, host.parent, query)).length === 0
         ) {
@@ -775,11 +785,7 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
     record: LogRecord,
     query: ListingQuery,
   ): Promise<LogRecord | undefined> {
-    if (
-      query.filters === 'all' ||
-      query.status ||
-      !matchesCorrelation(record, query.correlationId)
-    ) {
+    if (query.filters === 'all' || query.status || query.correlationId) {
       return undefined;
     }
     let namers = await this.#namers(gitDir, record, main, query);
@@ -1283,7 +1289,31 @@ function listedChanges(
   if (changes.length > 0 || (query.filters === 'all' && !query.status)) {
     return changes;
   }
+  if (
+    selectsByMessage(query) &&
+    (record.trailers.superseded ?? []).some((path) =>
+      matchesAny(path, query.filters as PathFilter[]),
+    )
+  ) {
+    return [];
+  }
   return undefined;
+}
+
+// A `correlationId` filter on paths is answered from the messages alone,
+// with no pathspec. A write of the correlation that a newer write superseded
+// changed nothing under the paths, so a path-filtered walk would skip it,
+// and the revision whose diff contains it belongs to another correlation,
+// so it can't be inserted after that one. The walk reads each revision's
+// message without the Bloom filters, and lists each revision of the
+// correlation that changed a path under the filters or superseded one,
+// in its own place in history.
+function selectsByMessage(query: ListingQuery): boolean {
+  return (
+    query.correlationId !== undefined &&
+    query.filters !== 'all' &&
+    !query.status
+  );
 }
 
 function matchesCorrelation(

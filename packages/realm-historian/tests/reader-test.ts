@@ -667,6 +667,35 @@ module('reader', (hooks) => {
     );
   });
 
+  test("the correlationId filter with a path lists the correlation's superseded writes to it", async (assert) => {
+    let initial = await record([await put('Author/jane.json', '{"v":0}', 'A')]);
+    let [first, second] = await recordLagging([
+      {
+        changes: async () => [await put('Author/jane.json', '{"v":"x"}')],
+        fields: aiWrite('tool-call-x'),
+      },
+      {
+        changes: async () => [await put('Author/jane.json', '{"v":"y"}')],
+        fields: aiWrite('tool-call-y'),
+      },
+    ]);
+    for (let paths of [['Author/jane.json'], ['Author/'], undefined]) {
+      let listing = await history({ paths, correlationId: 'tool-call-x' });
+      assert.deepEqual(ids(listing), [first], `${paths ?? 'whole realm'}`);
+      assert.deepEqual(listing.revisions[0].changes, []);
+      assert.deepEqual(
+        ids(await history({ paths, correlationId: 'tool-call-y' })),
+        [second],
+      );
+    }
+    assert.deepEqual(
+      ids(await history({ paths: ['Post/'], correlationId: 'tool-call-x' })),
+      [],
+      'a superseded write elsewhere is not listed',
+    );
+    assert.ok(initial);
+  });
+
   test('a diff above the per-file cap is left out, and binary files carry none', async (assert) => {
     await record([
       await put('small.md', 'one\n', 'A'),
