@@ -669,25 +669,25 @@ sent to the run record. The pieces live in `packages/host/app/lib/realm-runner/`
 
 ### The method list
 
-| Group                 | Methods                                                                               | On the automation surface                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Reads                 | `cards.search`, `cards.get`, `entries.search`, `fs.readText`, `fs.list`, `fs.exists`  | yes; `entries.search` refuses any realm but the automation's own                             |
-| Writes                | `fs.writeText`, `fs.writeBytes`, `fs.replace`, `fs.copy`, `cards.update`              | yes; the realm server stages them in the run's overlay (see _The run overlay_)               |
-| Operations            | `operations.invoke`, `operations.invokeBatchOperation`                                | yes; a `callApi` runs as an automation call, admitted only for operations the card declares  |
-| Resolve               | `resolve`                                                                             | yes; no per-run count here, the card's `resolve` and `aiCredits` caps bound it on the server |
-| Progress              | `activity`, `progress.plan`, `progress.milestone`, `progress.count`                   | yes; `progress.*` only here                                                                  |
-| Console               | `console.log`, `console.info`, `console.warn`, `console.error`                        | yes; only here                                                                               |
-| Downloads and deletes | `fs.download`, `fs.delete`                                                            | no                                                                                           |
-| Web, images, capture  | `web.search`, `web.read`, `images.generate`, `capture`                                | no                                                                                           |
-| Session and UI        | `room.*`, `ui.*`, `workspaces.*`, `index.*`, `plan`, `ask`, `operations.capabilities` | no                                                                                           |
-| Transforms            | `transform`                                                                           | not yet; the interactive surface has it                                                      |
+| Group                 | Methods                                                                               | On the automation surface                                                                                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reads                 | `cards.search`, `cards.get`, `entries.search`, `fs.readText`, `fs.list`, `fs.exists`  | yes, in the run's own realm only: `entries.search` refuses any other, and both searches go to the realm's own `_search` (the realm server's `_federated-search` takes only a session token)                     |
+| Writes                | `fs.writeText`, `fs.writeBytes`, `fs.replace`, `fs.copy`                              | yes; card+source writes the realm server stages in the run's overlay (_The run overlay_)                                                                                                                        |
+| Card updates          | `cards.update`                                                                        | yes; saved through `_atomic` when the script finishes, within its time limit. The realm server refuses a run's `_atomic` unless that route stages its writes, and the run then fails at the save                |
+| Operations            | `operations.invoke`, `operations.invokeBatchOperation`                                | yes; the realm server admits a `callApi` only for an operation the card declares, counts it against `callApiCalls`, and refuses a write operation it doesn't stage (_Declared operations and the per-run caps_) |
+| Resolve               | `resolve`                                                                             | yes; counted against `resolveCalls` and priced against `aiCredits` at `_request-forward` when the forward carries the run's token                                                                               |
+| Progress              | `activity`, `progress.plan`, `progress.milestone`, `progress.count`                   | yes; `progress.*` only here                                                                                                                                                                                     |
+| Console               | `console.log`, `console.info`, `console.warn`, `console.error`                        | yes; only here                                                                                                                                                                                                  |
+| Downloads and deletes | `fs.download`, `fs.delete`                                                            | no                                                                                                                                                                                                              |
+| Web, images, capture  | `web.search`, `web.read`, `images.generate`, `capture`                                | no                                                                                                                                                                                                              |
+| Session and UI        | `room.*`, `ui.*`, `workspaces.*`, `index.*`, `plan`, `ask`, `operations.capabilities` | no                                                                                                                                                                                                              |
+| Transforms            | `transform`                                                                           | no; interactive surface only                                                                                                                                                                                    |
 
 The unit test `realm-runner-surfaces-test.ts` pins `AUTOMATION_METHODS` and
 fails when a method on it reaches anything but a realm read, a staged write,
 an operation, the model, progress or the console. Adding a method, or moving
-one between surfaces, changes that test in review. The interactive surface
-is unchanged by any of this: its guest has the same `realm` and `room` as
-before, and no `console` or `progress`.
+one between surfaces, changes that test in review. The interactive surface's
+guest has `realm` and `room`, and no `console` or `progress`.
 
 How a method differs from the interactive surface:
 
@@ -696,10 +696,16 @@ How a method differs from the interactive surface:
   of the content the file already holds is reported as unchanged.
 - **No interactive per-run limits**: no 20-file, 200-card-update,
   200-operation or 3-`resolve` limit. The card's caps take their place, and
-  the realm server enforces them on each call the run's token carries.
+  the realm server counts each against the run row (_Declared operations and
+  the per-run caps_).
 - **Progress and console are one-way**: they return nothing, so a script
   needn't await them, and an unawaited one doesn't fail the run. A bad
   argument (an empty milestone name, `count(3, 2)`) throws in the script.
+  A run reports at most `MAX_RUN_NOTIFICATIONS` (5,000) of them, of
+  `MAX_RUN_NOTIFICATION_CHARS` (2,000,000) characters of arguments together:
+  they cost memory in a tab other runs share. The worker drops the rest
+  before posting them, and the run's progress ends with one `warn` line
+  saying how many it dropped.
 
 For media from an AI vendor, author guidance is boxel-skills'
 `api-integrations` skill, _Images from an AI vendor_: an automation's own AI
@@ -742,14 +748,22 @@ and `console` lines with their level and script line (a value that isn't a
 string is shown as JSON, an `Error` as `Name: message`; a line past 10,000
 characters is cut and says how many it lost). Each event's time is `at`.
 
-Every text in an event passes through `redactSecrets` before the sink sees
-it. It replaces with `[REDACTED]` each value the caller registers in
-`secrets` (the run's own token) and every credential it recognizes by shape:
-a vendor key (a prefix in `CREDENTIAL_PREFIXES`,
-`packages/runtime-common/credential-prefixes.ts`, the list the realm server's
-response scrubber uses too, and a key-like tail), a JWT, an
-`Authorization`-style scheme's value (`Bearer [REDACTED]`), an AWS access key
-id, and a PEM private key. The sink is where the run log takes these lines;
+Every text in an event, the script's result and the message of the error a
+run rejects with pass through `redactSecrets` first. It replaces with
+`[REDACTED]` each value the caller registers in `secrets` (the run's own
+token) and every credential it recognizes:
+
+- by shape: a vendor key (a prefix in `CREDENTIAL_PREFIXES`,
+  `packages/runtime-common/credential-prefixes.ts`, the list the realm
+  server's response scrubber uses too, and a key-like tail), a JWT, a
+  `Bearer` token (only as written, so "the bearer of" stays), an AWS access
+  key id and a PEM private key;
+- by name: the value of an `Authorization` header, and of a JSON field or
+  query parameter named like a credential (`"api_key": "…"`, `"password":
+…`, `?token=…`, `&key=…`).
+
+The name it was found under stays (`Authorization: Bearer [REDACTED]`,
+`"api_key":"[REDACTED]"`). The sink is where the run log takes these lines;
 the scrubber still removes a vendor's own key from a `callApi` response
 before the script sees it.
 

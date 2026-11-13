@@ -108,6 +108,18 @@ module('Unit | Lib | realm-runner surfaces', function () {
       ],
       ['aws AKIAABCDEFGHIJKLMNOP', `aws ${REDACTED}`],
       [
+        'authorization: Basic dXNlcjpwYXNzd29yZA==',
+        `authorization: Basic ${REDACTED}`,
+      ],
+      [
+        '{"api_key":"9f8e7d6c5b4a","name":"Ada","password":"hunter22"}',
+        `{"api_key":"${REDACTED}","name":"Ada","password":"${REDACTED}"}`,
+      ],
+      [
+        'GET https://api.example.com/v1/items?key=9f8e7d6c5b4a&page=2',
+        `GET https://api.example.com/v1/items?key=${REDACTED}&page=2`,
+      ],
+      [
         'pem -----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY----- done',
         `pem ${REDACTED} done`,
       ],
@@ -123,6 +135,11 @@ module('Unit | Lib | realm-runner surfaces', function () {
       'task-list sk- prefix alone',
       'a short registered value stays',
       'risk-assessment is a word with sk- inside',
+      'Using basic configuration for 3 contacts',
+      'token refreshed successfully',
+      'Token refreshed successfully',
+      'the bearer of good news',
+      '{"name":"Ada","page":"2"}',
     ]) {
       assert.strictEqual(redactSecrets(text, ['stays']), text, text);
     }

@@ -136,6 +136,8 @@ export type RealmRunnerResponse =
     }
   // A one-way call (progress, console) that waits for no answer.
   | { type: 'notify'; method: RealmRunnerCallMethod; args: unknown[] }
+  // How many one-way calls the run has dropped past its limit so far.
+  | { type: 'dropped'; count: number }
   | { type: 'success'; result: RealmRunnerResult }
   | { type: 'error'; error: string; scriptError?: RealmScriptErrorInfo };
 

@@ -14,6 +14,8 @@ import {
 import {
   MAX_MILESTONE_CHARS,
   MAX_MILESTONES,
+  MAX_RUN_NOTIFICATION_CHARS,
+  MAX_RUN_NOTIFICATIONS,
   NOTIFY_METHODS,
   surfaceMethods,
 } from './surfaces';
@@ -336,6 +338,18 @@ let pending = new Map<number, QuickJSDeferredPromise>();
 // (realm.ask) does not count: its answer moves this out.
 let deadlineAt = 0;
 let nextCallId = 1;
+// One-way calls posted, the characters of their arguments, and those dropped
+// past the run's limit. They are dropped here, before they are posted, so a
+// script looping on `console.log` can't fill the tab with messages.
+let notified = 0;
+let notifiedChars = 0;
+let dropped = 0;
+
+function reportDropped() {
+  if (dropped > 0) {
+    worker.postMessage({ type: 'dropped', count: dropped });
+  }
+}
 
 function settleCall(
   request: Extract<RealmRunnerRequest, { type: 'callResult' }>,
@@ -422,7 +436,20 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
         if (!methods.has(method) || !NOTIFY_METHODS.has(method)) {
           throw new Error(`Unknown realm call: ${method}`);
         }
-        let args = JSON.parse(context.getString(argsHandle)) as unknown[];
+        let argsJSON = context.getString(argsHandle);
+        if (
+          notified >= MAX_RUN_NOTIFICATIONS ||
+          notifiedChars + argsJSON.length > MAX_RUN_NOTIFICATION_CHARS
+        ) {
+          dropped += 1;
+          if (dropped === 1) {
+            reportDropped();
+          }
+          return;
+        }
+        notified += 1;
+        notifiedChars += argsJSON.length;
+        let args = JSON.parse(argsJSON) as unknown[];
         worker.postMessage({ type: 'notify', method, args });
       },
     );
@@ -471,8 +498,10 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
         'The script returned before all realm calls finished; await every realm call',
       );
     }
+    reportDropped();
     worker.postMessage({ type: 'success', result: { scriptResult } });
   } catch (error) {
+    reportDropped();
     worker.postMessage({
       type: 'error',
       error: error instanceof Error ? error.message : String(error),

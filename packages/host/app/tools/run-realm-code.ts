@@ -27,6 +27,8 @@ import {
   type CapabilityCheck,
   type CardResource,
   type EntryCollectionDocument,
+  isEntryCollectionDocument,
+  X_BOXEL_LINK_SHAPE_HEADER,
   type Format,
   type LooseSingleCardDocument,
   type Query,
@@ -120,6 +122,8 @@ import {
   INTERACTIVE_METHODS,
   MAX_MILESTONE_CHARS,
   MAX_MILESTONES,
+  MAX_RUN_NOTIFICATION_CHARS,
+  MAX_RUN_NOTIFICATIONS,
   NOTIFY_METHODS,
   offSurfaceMessage,
 } from '../lib/realm-runner/surfaces';
@@ -972,6 +976,10 @@ class RealmFsSession {
     return undefined;
   }
 
+  get isClosed() {
+    return this.closed;
+  }
+
   close() {
     this.closed = true;
     this.captures.close();
@@ -1007,11 +1015,32 @@ class RealmFsSession {
       this.refused += 1;
       return;
     }
+    let chars = JSON.stringify(args).length;
+    if (
+      this.progressReported >= MAX_RUN_NOTIFICATIONS ||
+      this.progressChars + chars > MAX_RUN_NOTIFICATION_CHARS
+    ) {
+      this.progressDroppedHere += 1;
+      return;
+    }
     let at = Date.now();
     let event = progressEvent(method, args, at);
     if (event) {
+      this.progressReported += 1;
+      this.progressChars += chars;
       this.onProgress?.(event);
     }
+  }
+
+  // One-way calls reported, the characters of their arguments, and those
+  // dropped past the run's limit, here or in the worker.
+  private progressReported = 0;
+  private progressChars = 0;
+  private progressDroppedHere = 0;
+  progressDroppedInWorker = 0;
+
+  get progressDropped(): number {
+    return this.progressDroppedHere + this.progressDroppedInWorker;
   }
 
   // A step the script reports, such as `Step 2 of 4 · Gather sources`. It
@@ -3107,7 +3136,9 @@ export interface AutomationRunResult {
 // none of the interactive per-run limits, and its progress and console lines
 // sent to `progress` rather than to a chat. A method off the surface rejects
 // in the script with a message that says so. Writes go out through `io`, to
-// be staged; committing them is the caller's step, once this resolves.
+// be staged; committing them is the caller's step, once this resolves. The
+// script's result, its error and every progress event are redacted with
+// `secrets` before they leave here.
 export async function runAutomationScript(
   options: AutomationRunOptions,
 ): Promise<AutomationRunResult> {
@@ -3188,12 +3219,22 @@ export async function runAutomationScript(
   session.onProgress = record;
   session.onActivity = (line) =>
     record({ kind: 'activity', at: Date.now(), line });
+  let endsAt = Date.now() + timeoutMs;
   let settle = async () => {
     session.close();
     await Promise.race([
       session.idle(),
       new Promise((wake) => setTimeout(wake, STOP_GRACE_MS)),
     ]);
+    let dropped = session.progressDropped;
+    if (dropped > 0) {
+      record({
+        kind: 'console',
+        at: Date.now(),
+        level: 'warn',
+        message: `${dropped} console and progress lines were dropped: a run reports at most ${MAX_RUN_NOTIFICATIONS} lines, of ${MAX_RUN_NOTIFICATION_CHARS} characters together`,
+      });
+    }
   };
   let result;
   try {
@@ -3207,18 +3248,74 @@ export async function runAutomationScript(
       },
       (method, args) => session.call(method, args),
       signal,
+      (count) => (session.progressDroppedInWorker = count),
     );
-  } catch (error) {
     await settle();
-    throw automationRunError(error, timeoutMs);
+    // The card updates the script made are saved after it finishes, still
+    // inside the run's time limit.
+    await withinTimeLimit(session.saveCardUpdates(), endsAt, signal);
+  } catch (error) {
+    if (!session.isClosed) {
+      await settle();
+    }
+    throw redactedError(automationRunError(error, timeoutMs), secrets);
   }
-  await settle();
-  await session.saveCardUpdates();
   return {
-    scriptResult: result.scriptResult,
+    scriptResult: redactSecrets(result.scriptResult, secrets),
     written: [...session.saved],
     unchanged: [...session.unchanged],
   };
+}
+
+// Settles as `work` does, or rejects once the run's time limit passes or
+// `signal` aborts, whichever comes first.
+async function withinTimeLimit<T>(
+  work: Promise<T>,
+  endsAt: number,
+  signal?: AbortSignal,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('interrupted')),
+          Math.max(0, endsAt - Date.now()),
+        );
+        onAbort = () =>
+          reject(
+            signal?.reason instanceof Error
+              ? signal.reason
+              : new Error('Realm code was stopped'),
+          );
+        if (signal?.aborted) {
+          onAbort();
+        }
+        signal?.addEventListener('abort', onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+    if (onAbort) {
+      signal?.removeEventListener('abort', onAbort);
+    }
+  }
+}
+
+// The error with its message redacted, so it can go into the run record.
+function redactedError(error: unknown, secrets: readonly string[]): unknown {
+  if (error instanceof RealmScriptError) {
+    return new RealmScriptError(redactSecrets(error.message, secrets), {
+      ...error.scriptError,
+      message: redactSecrets(error.scriptError.message, secrets),
+    });
+  }
+  if (error instanceof Error) {
+    return new Error(redactSecrets(error.message, secrets));
+  }
+  return new Error(redactSecrets(String(error), secrets));
 }
 
 // A run past its time limit says which limit it reached, whichever of
@@ -4406,6 +4503,42 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // serves it as. A body larger than any file realm.fs reads is not
   // downloaded: its content type alone says whether it is binary, and a text
   // one is too large.
+  // One search of one realm, through the realm's own `_search`, which takes
+  // the token the tab holds for that realm. The realm server's federated
+  // search takes only a session token.
+  private async searchRealm(
+    realmURL: string,
+    query: SearchEntryWireQuery,
+    opts?: { linksOnly?: boolean },
+  ): Promise<EntryCollectionDocument> {
+    let response = await this.network.authedFetch(
+      new URL('_search', realmURL).href,
+      {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': 'application/json',
+          ...(opts?.linksOnly
+            ? { [X_BOXEL_LINK_SHAPE_HEADER]: 'links-only' }
+            : {}),
+        },
+        body: JSON.stringify(query),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Searching ${realmURL} failed: ${response.status} ${(await response.text()).slice(0, 500)}`,
+      );
+    }
+    let json = await response.json();
+    if (!isEntryCollectionDocument(json)) {
+      throw new Error(
+        `Searching ${realmURL} answered with something other than an entry collection`,
+      );
+    }
+    return json;
+  }
+
   private async readSource(url: string): ReturnType<ReadSource> {
     // Never from the browser's cache: a conflict check that reads the 404
     // it saw before the run's own save would refuse that file's next edit.
@@ -4762,12 +4895,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
         this.writeBinaryFile(undefined, url, bytes),
       listDirectory: (url) => this.listDirectory(url),
       searchCards: (query) =>
-        this.store.searchEntries(query, [rootURL], { linksOnly: true }),
+        this.searchRealm(rootURL, query, { linksOnly: true }),
       resolveURL: (reference, base) =>
         this.network.virtualNetwork.resolveURL(reference, base).href,
       readCard: (id) => this.readCard(id, rootURL),
       runOperations: (entries) => this.runOperations(entries, rootURL),
-      searchEntries: (query, realms) => this.store.searchEntries(query, realms),
+      // The run searches only its own realm, which `runAutomationScript`
+      // holds it to before a search is sent.
+      searchEntries: (query) => this.searchRealm(rootURL, query),
       cardSizeLimitBytes: this.environmentService.cardSizeLimitBytes,
       resolve: (request, signal) => resolveJSON(request, send, signal),
     };

@@ -184,6 +184,13 @@ export const NOTIFY_METHODS: ReadonlySet<RealmRunnerCallMethod> =
     'console.error',
   ]);
 
+// The most one-way calls (progress and console) one run reports, and the
+// most characters their arguments hold together. They cost memory in the
+// tab that runs the script, which other runs share, so past either limit the
+// rest are dropped and the run's progress says how many.
+export const MAX_RUN_NOTIFICATIONS = 5_000;
+export const MAX_RUN_NOTIFICATION_CHARS = 2_000_000;
+
 // The most milestones `realm.progress.plan` takes, and the longest name of
 // one.
 export const MAX_MILESTONES = 50;

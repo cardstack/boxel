@@ -8,6 +8,7 @@ import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import {
   AUTOMATION_METHODS,
   INTERACTIVE_METHODS,
+  MAX_RUN_NOTIFICATIONS,
   NOTIFY_METHODS,
 } from '@cardstack/host/lib/realm-runner/surfaces';
 import type { AutomationRunContext } from '@cardstack/host/lib/realm-runner/types';
@@ -257,6 +258,25 @@ module('Integration | tools | run-automation-script', function (hooks) {
     );
   });
 
+  test("a script's searches go to its own realm's search", async function (assert) {
+    let { done } = run(`
+      const cards = await realm.cards.search({
+        filter: {
+          on: { module: ${JSON.stringify(`${testRealmURL}pet`)}, name: 'Pet' },
+          eq: { name: 'Mango' },
+        },
+      });
+      const entries = await realm.entries.search({}, { limit: 50 });
+      return {
+        cards: cards.cards.map((card) => card.path),
+        entries: entries.entries.length > 0,
+      };
+    `);
+    let result = JSON.parse((await done).scriptResult);
+    assert.deepEqual(result.cards, ['Pet/mango.json']);
+    assert.true(result.entries);
+  });
+
   test('a script searches only its own realm', async function (assert) {
     let { done } = run(`
       try {
@@ -313,6 +333,46 @@ return 'done';`,
       },
       { kind: 'activity', line: 'Compared the roster' },
     ]);
+  });
+
+  test('a run reports at most its limit of console and progress lines, and says how many it dropped', async function (assert) {
+    let { events, done } = run(`
+      for (let i = 0; i < ${MAX_RUN_NOTIFICATIONS + 25}; i++) {
+        console.log('line ' + i);
+      }
+      return 'done';
+    `);
+    await done;
+    let lines = events.filter((event) => event.kind === 'console');
+    assert.strictEqual(lines.length, MAX_RUN_NOTIFICATIONS + 1);
+    let last = lines[lines.length - 1] as Extract<
+      RunProgressEvent,
+      { kind: 'console' }
+    >;
+    assert.strictEqual(last.level, 'warn');
+    assert.true(
+      last.message.startsWith('25 console and progress lines were dropped'),
+      last.message,
+    );
+  });
+
+  test("the script's result and its error are redacted", async function (assert) {
+    let token = 'the-run-token-0123456789';
+    let { done } = run(`return { echoed: ${JSON.stringify(token)} };`, {
+      secrets: [token],
+    });
+    assert.deepEqual(JSON.parse((await done).scriptResult), {
+      echoed: REDACTED,
+    });
+    let failed = run(
+      `throw new Error('vendor said ' + ${JSON.stringify(token)});`,
+      {
+        secrets: [token],
+      },
+    );
+    await assert.rejects(failed.done, (error: Error) => {
+      return error.message.includes(REDACTED) && !error.message.includes(token);
+    });
   });
 
   test('a bad progress argument throws in the script', async function (assert) {
