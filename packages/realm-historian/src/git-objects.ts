@@ -215,19 +215,23 @@ export class ObjectStore {
 }
 
 // Sets the file's access and modification times to now. False when there is
-// no file.
+// no file, or when its times can't be set, as on a file another user owns or
+// a read-only file system: the caller then writes a fresh copy in its place,
+// as git does when it can't freshen an object.
 async function freshen(path: string): Promise<boolean> {
   try {
     let now = new Date();
     await utimes(path, now, now);
     return true;
   } catch (error: any) {
-    if (error?.code === 'ENOENT') {
+    if (UNFRESHENABLE.has(error?.code)) {
       return false;
     }
     throw error;
   }
 }
+
+const UNFRESHENABLE = new Set(['ENOENT', 'EPERM', 'EACCES', 'EROFS']);
 
 function concat(parts: Uint8Array[]): Uint8Array {
   let length = parts.reduce((sum, part) => sum + part.byteLength, 0);
