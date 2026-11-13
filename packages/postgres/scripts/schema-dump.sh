@@ -52,6 +52,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=key_uses \
   --exclude-table-and-children=automation_runs \
   --exclude-table-and-children=run_overlay_files \
+  --exclude-table-and-children=automation_run_log \
   --exclude-table-and-children=automations \
   --exclude-table-and-children=ai_batches \
   --exclude-table-and-children=automation_files \

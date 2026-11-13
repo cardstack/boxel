@@ -1051,6 +1051,25 @@ export interface CallApiRunMeter {
     bytes: number,
     budgetReached: boolean,
   ): Promise<ConstructorParameters<typeof OperationFailure>[0] | undefined>;
+  // Writes the call's line in the run's log. It never throws.
+  logCall(call: CallApiRunLogEntry): Promise<void>;
+}
+
+// One `callApi` call as a run's log records it. `url` is the request as
+// built, every credential slot still a token; the log masks its query
+// values. Nothing here carries a header value.
+export interface CallApiRunLogEntry {
+  operation: string;
+  method?: string;
+  url?: string;
+  // The vendor's status, for a call that was answered.
+  status?: number;
+  // Why the call was refused or failed, for one that wasn't.
+  code?: string;
+  detail?: string;
+  ms?: number;
+  // The response bytes read.
+  bytes?: number;
 }
 
 // What the request's values are filled from.
@@ -1372,6 +1391,22 @@ export async function callApiOperation(
   // The slots' credentials once `fill` has found them, whose shares and keys
   // each outcome from then on is recorded against.
   let filled: CallApiFilledSlot[] = [];
+  // Set once the request is built and about to be sent.
+  let sending: { method: string; url: string; startedAt: number } | undefined;
+  let bytesRead: number | undefined;
+  let logCall = (entry: Omit<CallApiRunLogEntry, 'operation'>) =>
+    invocation.runMeter?.logCall({
+      operation: request.name,
+      ...(sending
+        ? {
+            method: sending.method,
+            url: sending.url,
+            ms: Date.now() - sending.startedAt,
+          }
+        : {}),
+      ...(bytesRead !== undefined ? { bytes: bytesRead } : {}),
+      ...entry,
+    });
   let refuse = async (
     error: ConstructorParameters<typeof OperationFailure>[0],
     url?: string,
@@ -1379,6 +1414,11 @@ export async function callApiOperation(
     await recordKeyUse(request, invocation, url, filled, {
       outcome: 'refused',
       code: error.code,
+    });
+    await logCall({
+      ...(url && !sending ? { url } : {}),
+      code: error.code ?? 'refused',
+      ...(error.detail ? { detail: error.detail } : {}),
     });
     throw new OperationFailure({ ...(id ? { id } : {}), ...error });
   };
@@ -1553,9 +1593,11 @@ export async function callApiOperation(
       responseByteBudget: admission.responseByteBudget,
       onResponseBytes: (bytes, budgetReached) => {
         responseBytes = { bytes, budgetReached };
+        bytesRead = bytes;
       },
     };
   }
+  sending = { method: built.method, url: built.url, startedAt: Date.now() };
   let recordResponseBytes = async () =>
     runMeter && responseBytes
       ? await runMeter.recordResponse(
@@ -1577,6 +1619,10 @@ export async function callApiOperation(
     await recordKeyUse(request, invocation, built.url, filled, {
       outcome: 'failed',
     });
+    await logCall({
+      code: 'failed',
+      detail: error instanceof Error ? error.message : String(error),
+    });
     throw error;
   }
   await recordResponseBytes();
@@ -1584,6 +1630,7 @@ export async function callApiOperation(
     outcome: 'sent',
     status: response.status,
   });
+  await logCall({ status: response.status });
   return { callApi: response };
 }
 

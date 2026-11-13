@@ -116,6 +116,7 @@ import {
 import runRealmCode, {
   DeadlineExtension,
   RealmScriptError,
+  scriptLocationOf,
 } from '../lib/realm-runner/runner';
 import {
   AUTOMATION_METHODS,
@@ -3072,6 +3073,12 @@ function redactEvent(
       return { ...event, message: redactSecrets(event.message, secrets) };
     case 'count':
       return event;
+    case 'error':
+      return {
+        ...event,
+        message: redactSecrets(event.message, secrets),
+        ...(event.stack ? { stack: redactSecrets(event.stack, secrets) } : {}),
+      };
   }
 }
 
@@ -3258,7 +3265,23 @@ export async function runAutomationScript(
     if (!session.isClosed) {
       await settle();
     }
-    throw redactedError(automationRunError(error, timeoutMs), secrets);
+    let failure = automationRunError(error, timeoutMs);
+    // The run's log ends with the error it ended with, where the script
+    // threw it.
+    let location = scriptLocationOf(error);
+    let line =
+      location?.line ??
+      (failure instanceof RealmScriptError
+        ? failure.scriptError.line
+        : undefined);
+    record({
+      kind: 'error',
+      at: Date.now(),
+      message: failure instanceof Error ? failure.message : String(failure),
+      ...(line !== undefined ? { line } : {}),
+      ...(location?.stack ? { stack: location.stack } : {}),
+    });
+    throw redactedError(failure, secrets);
   }
   return {
     scriptResult: redactSecrets(result.scriptResult, secrets),
