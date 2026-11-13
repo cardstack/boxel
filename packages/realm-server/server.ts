@@ -58,6 +58,8 @@ import {
 } from './lib/oauth-provider/provider.ts';
 import type { NewClientLimit } from './lib/oauth-provider/new-client-limit.ts';
 import type { CallerLimit } from './lib/oauth-provider/caller-limit.ts';
+import type { TokenLimit } from './lib/oauth-provider/token-limit.ts';
+import { leaveCORSToOAuthProvider } from './lib/oauth-provider/serve.ts';
 import type { OAuthResourceDefinition } from './lib/oauth-provider/registry.ts';
 import {
   appOrigin,
@@ -786,6 +788,7 @@ export class RealmServer {
     oauthProvider,
     oauthNewClientLimit,
     oauthAuthorizationLimit,
+    oauthTokenLimit,
     __testOnlyOAuthResources,
   }: {
     serverURL: URL;
@@ -867,6 +870,9 @@ export class RealmServer {
     // The provider's limit on starting a flow. Unset, the default
     // (`authorization.ts`).
     oauthAuthorizationLimit?: CallerLimit;
+    // The provider's limits on its token endpoint. Unset, the default
+    // (`token-limit.ts`).
+    oauthTokenLimit?: TokenLimit;
     // Resources a test adds to the provider's registry. main.ts never passes
     // it: production resources are declared in the registry's code.
     __testOnlyOAuthResources?: OAuthResourceDefinition[];
@@ -960,6 +966,7 @@ export class RealmServer {
         ].filter((domain): domain is string => Boolean(domain)),
         newClientLimit: oauthNewClientLimit,
         authorizationLimit: oauthAuthorizationLimit,
+        tokenLimit: oauthTokenLimit,
         testOnlyResources: __testOnlyOAuthResources,
       });
     }
@@ -1005,70 +1012,72 @@ export class RealmServer {
       .use(httpLogging)
       .use(instanceIdHeader)
       .use(
-        cors({
-          origin: '*',
-          // Range/If-Range are here for native media playback: <audio>/<video>
-          // elements cannot attach Authorization, so the host's auth service
-          // worker re-issues their requests as mode:'cors' with the token
-          // injected. That rewrite turns the media element's Range header into
-          // an author header needing preflight approval — without Range in
-          // this list the preflight fails and the player errors before any
-          // bytes flow.
-          //
-          // Accept is here for the same reason, and it is easy to miss because
-          // Accept is normally CORS-safelisted. The safelist only covers
-          // *values* free of `"` `:` and the rest of the forbidden set, and the
-          // operations envelope's media type is
-          // `application/vnd.api+json;ext="https://boxel.ai/ext/operations"` —
-          // which carries both. So that request preflights, and without Accept
-          // here the preflight fails and no browser client can invoke a card
-          // operation cross-origin at all.
-          //
-          // MCP-Protocol-Version is the header an MCP client sends on every
-          // request after initialization, discovery included; a browser-based
-          // client (MCP Inspector) needs it allowed to reach the server at
-          // all.
-          //
-          // The write context headers (`WRITE_CONTEXT_HEADERS`) name how a
-          // write was made, for its change event. A browser write that
-          // carries them cross-origin fails its preflight unless they are
-          // allowed here.
-          allowHeaders: [
-            'Accept, Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Policy-Audit-Confirmation, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Realm-Events, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Boxel-Link-Shape, X-Grafana-Device-Id, X-Grafana-Action, MCP-Protocol-Version',
-            ...WRITE_CONTEXT_HEADERS,
-          ].join(', '),
-          // Without an explicit expose list, @koa/cors only emits the
-          // CORS-safelisted response headers (cache-control, content-*,
-          // expires, last-modified, pragma). ETag is not on that list,
-          // so cross-origin browser callers (the host SPA inside a
-          // prerender tab, or any in-DevTools fetch) get a response
-          // whose `headers.get('ETag')` is `null` even though the
-          // server emitted one — making the entire revalidation
-          // protocol invisible to JS. Location/Retry-After are likewise
-          // non-safelisted; expose them so a cross-origin client can read
-          // the async-publish status monitor target off the 202 response.
-          // Content-Range/Accept-Ranges are what a cross-origin caller needs
-          // to reason about a 206 byte-range response (Content-Length is
-          // safelisted, but is listed for symmetry with the range pair).
-          // X-Boxel-Live-Search-Cache names how the live-search cache served a
-          // `_federated-search` response (miss/join/hit); expose it so the
-          // outcome is legible to a browser caller (host DevTools, client
-          // telemetry), not just to server-side supertest/curl.
-          // WWW-Authenticate carries an OAuth resource's challenge, naming
-          // its metadata and scopes, which a browser-based OAuth client reads
-          // to start or restart its flow.
-          exposeHeaders:
-            'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache, WWW-Authenticate',
-          allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
-          // Cache the preflight response for 24 h. Without this @koa/cors
-          // omits Access-Control-Max-Age and Chrome falls back to its
-          // ~5 s default, which forces a fresh OPTIONS round-trip in front
-          // of nearly every cross-origin QUERY the host fires during a
-          // long indexing run. The doubled HTTP-arrival count translates
-          // directly to wall-clock since each preflight is a serial RTT
-          // blocking the QUERY behind it.
-          maxAge: 86400,
-        }),
+        leaveCORSToOAuthProvider(
+          cors({
+            origin: '*',
+            // Range/If-Range are here for native media playback: <audio>/<video>
+            // elements cannot attach Authorization, so the host's auth service
+            // worker re-issues their requests as mode:'cors' with the token
+            // injected. That rewrite turns the media element's Range header into
+            // an author header needing preflight approval — without Range in
+            // this list the preflight fails and the player errors before any
+            // bytes flow.
+            //
+            // Accept is here for the same reason, and it is easy to miss because
+            // Accept is normally CORS-safelisted. The safelist only covers
+            // *values* free of `"` `:` and the rest of the forbidden set, and the
+            // operations envelope's media type is
+            // `application/vnd.api+json;ext="https://boxel.ai/ext/operations"` —
+            // which carries both. So that request preflights, and without Accept
+            // here the preflight fails and no browser client can invoke a card
+            // operation cross-origin at all.
+            //
+            // MCP-Protocol-Version is the header an MCP client sends on every
+            // request after initialization, discovery included; a browser-based
+            // client (MCP Inspector) needs it allowed to reach the server at
+            // all.
+            //
+            // The write context headers (`WRITE_CONTEXT_HEADERS`) name how a
+            // write was made, for its change event. A browser write that
+            // carries them cross-origin fails its preflight unless they are
+            // allowed here.
+            allowHeaders: [
+              'Accept, Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Policy-Audit-Confirmation, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Skip-Index-Wait, X-Boxel-Realm-Events, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Boxel-Link-Shape, X-Grafana-Device-Id, X-Grafana-Action, MCP-Protocol-Version',
+              ...WRITE_CONTEXT_HEADERS,
+            ].join(', '),
+            // Without an explicit expose list, @koa/cors only emits the
+            // CORS-safelisted response headers (cache-control, content-*,
+            // expires, last-modified, pragma). ETag is not on that list,
+            // so cross-origin browser callers (the host SPA inside a
+            // prerender tab, or any in-DevTools fetch) get a response
+            // whose `headers.get('ETag')` is `null` even though the
+            // server emitted one — making the entire revalidation
+            // protocol invisible to JS. Location/Retry-After are likewise
+            // non-safelisted; expose them so a cross-origin client can read
+            // the async-publish status monitor target off the 202 response.
+            // Content-Range/Accept-Ranges are what a cross-origin caller needs
+            // to reason about a 206 byte-range response (Content-Length is
+            // safelisted, but is listed for symmetry with the range pair).
+            // X-Boxel-Live-Search-Cache names how the live-search cache served a
+            // `_federated-search` response (miss/join/hit); expose it so the
+            // outcome is legible to a browser caller (host DevTools, client
+            // telemetry), not just to server-side supertest/curl.
+            // WWW-Authenticate carries an OAuth resource's challenge, naming
+            // its metadata and scopes, which a browser-based OAuth client reads
+            // to start or restart its flow.
+            exposeHeaders:
+              'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache, WWW-Authenticate',
+            allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
+            // Cache the preflight response for 24 h. Without this @koa/cors
+            // omits Access-Control-Max-Age and Chrome falls back to its
+            // ~5 s default, which forces a fresh OPTIONS round-trip in front
+            // of nearly every cross-origin QUERY the host fires during a
+            // long indexing run. The doubled HTTP-arrival count translates
+            // directly to wall-clock since each preflight is a serial RTT
+            // blocking the QUERY behind it.
+            maxAge: 86400,
+          }),
+        ),
       )
       .use(searchAdmission)
       .use(orderConnectionsByRealm({ reconciler: this.reconciler }))

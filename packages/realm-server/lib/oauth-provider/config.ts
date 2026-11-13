@@ -13,6 +13,13 @@ import {
   parseNewClientLimit,
   type NewClientLimit,
 } from './new-client-limit.ts';
+import {
+  DEFAULT_TOKEN_LIMIT,
+  OAUTH_TOKEN_RATE_LIMIT_VAR,
+  parseTokenLimit,
+  tokenLimitFormat,
+  type TokenLimit,
+} from './token-limit.ts';
 
 // What the OAuth provider needs from its environment. The provider runs only
 // where `BOXEL_OAUTH_PROVIDER_ENABLED=true`; anywhere else nothing here is
@@ -136,6 +143,25 @@ export function readAuthorizationLimit(
   if (!limit) {
     throw new OAuthProviderConfigError(
       `${OAUTH_AUTHORIZATION_RATE_LIMIT_VAR} must be ${callerLimitFormat(DEFAULT_AUTHORIZATION_LIMIT)}, not "${spec}"`,
+    );
+  }
+  return limit;
+}
+
+// The token endpoint's limits (see `token-limit.ts`). Read only when the
+// provider is on. Unset, the default; a value that is not a limit stops the
+// server.
+export function readTokenLimit(
+  env: Record<string, string | undefined>,
+): TokenLimit {
+  let spec = env[OAUTH_TOKEN_RATE_LIMIT_VAR]?.trim();
+  if (!spec) {
+    return DEFAULT_TOKEN_LIMIT;
+  }
+  let limit = parseTokenLimit(spec);
+  if (!limit) {
+    throw new OAuthProviderConfigError(
+      `${OAUTH_TOKEN_RATE_LIMIT_VAR} must be ${tokenLimitFormat()}, not "${spec}"`,
     );
   }
   return limit;

@@ -475,9 +475,10 @@ module(basename(import.meta.filename), function () {
         code_challenge_methods_supported: ['S256'],
         token_endpoint_auth_methods_supported: ['none'],
         authorization_response_iss_parameter_supported: true,
-        grant_types_supported: ['authorization_code'],
+        grant_types_supported: ['authorization_code', 'refresh_token'],
         scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
         authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
+        token_endpoint: 'http://127.0.0.1:0/_oauth-provider/token',
         registration_endpoint: 'http://127.0.0.1:0/_oauth-provider/reg',
       });
       assert.strictEqual(
@@ -500,7 +501,8 @@ module(basename(import.meta.filename), function () {
       for (let path of [
         OPENID_DISCOVERY,
         '/_oauth-provider/jwks',
-        '/_oauth-provider/token',
+        '/_oauth-provider/token/revocation',
+        '/_oauth-provider/device/auth',
       ]) {
         let response = await request.get(path);
         assert.strictEqual(response.status, 404, `${path} is not found`);
