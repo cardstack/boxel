@@ -62,6 +62,11 @@ import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts'
 import handleInviteCheck from './handlers/handle-invite-check.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
+import {
+  handleAIBatchStatus,
+  handleSubmitAIBatch,
+} from './handlers/handle-ai-batches.ts';
+import { AI_BATCHES_PATH } from './lib/openrouter-batches.ts';
 import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
@@ -127,6 +132,7 @@ import {
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
+  accountContactLookup,
   handleCheckSecureSession,
   handleEndSecureSession,
   handleEndWindowSessions,
@@ -143,7 +149,7 @@ import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
 import { PREFIX_REALMS_ENDPOINT } from '@cardstack/runtime-common/prefix-realm-network';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
-import type Provider from 'oidc-provider';
+import type { OAuthProviderService } from './lib/oauth-provider/provider.ts';
 import { registerOAuthProviderRoutes } from './lib/oauth-provider/serve.ts';
 import {
   handleAddUserKey,
@@ -286,7 +292,7 @@ export type CreateRoutesArgs = {
   googleSignIn?: GoogleSignInConfig;
   // Boxel's OAuth provider (see `lib/oauth-provider/`). Unset, the provider
   // is off and none of its routes are served.
-  oauthProvider?: Provider;
+  oauthProvider?: OAuthProviderService;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -313,7 +319,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   };
 
   if (args.oauthProvider) {
-    registerOAuthProviderRoutes(router, args.oauthProvider);
+    registerOAuthProviderRoutes(router, args.oauthProvider, {
+      realmSecretSeed: args.realmSecretSeed,
+      accountContact: accountContactLookup(args),
+    });
   }
 
   router.get(
@@ -615,6 +624,25 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
+    }),
+  );
+  // An automation run's calls to OpenRouter's Batch API. They carry a run
+  // token, which the handler checks itself, since an ordinary session is
+  // refused.
+  router.post(
+    AI_BATCHES_PATH,
+    handleSubmitAIBatch({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
+    }),
+  );
+  router.get(
+    `${AI_BATCHES_PATH}/:batchId`,
+    handleAIBatchStatus({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
     }),
   );
   // Batched client performance beacons. The host sends its server session

@@ -74,6 +74,41 @@ module('Unit | CardDef menu items', function (hooks) {
     assert.ok(texts.includes('Delete'), 'contains Delete');
   });
 
+  test('interact context offers Delete by canDelete where it is given, apart from editing', function (assert: Assert) {
+    let card = new DummyCard(
+      'https://example.com/realm/card-1',
+      'One',
+    ) as unknown as CardDef;
+    let labels = (canEdit: boolean, canDelete: boolean) =>
+      getDefaultCardMenuItems(card, {
+        canEdit,
+        canDelete,
+        cardCrudFunctions: {},
+        menuContext: 'interact',
+        toolContext: {} as any,
+      }).map((i: MenuItemOptions) => i.label);
+
+    let deleteOnly = labels(false, true);
+    assert.ok(
+      deleteOnly.includes('Delete'),
+      'Delete, for a user who may delete',
+    );
+    assert.notOk(
+      deleteOnly.includes('New Card of This Type'),
+      'no New Card of This Type, for a user who may not edit',
+    );
+
+    let editOnly = labels(true, false);
+    assert.notOk(
+      editOnly.includes('Delete'),
+      'no Delete, for a user who may edit but not delete',
+    );
+    assert.ok(
+      editOnly.includes('New Card of This Type'),
+      'New Card of This Type, for a user who may edit',
+    );
+  });
+
   test('Copy Card URL copies the URL a browser can open', async function (assert: Assert) {
     let id = '@cardstack/base/Person/1';
     let card = new DummyCard(id, 'One') as unknown as CardDef;

@@ -20,12 +20,40 @@ import { CREDITS_PER_USD } from './constants.ts';
 export interface AIModelPrice {
   modelId: string;
   promptUsdPerToken: number;
+  // The highest rate the model charges for writing input to its prompt
+  // cache, when it lists one: a token written to the cache is charged at
+  // this rate in place of the prompt rate.
+  cacheWriteUsdPerToken?: number;
   completionUsdPerToken: number;
   // Charged once per request.
   requestUsd: number;
   // The model's context window: the most tokens it reads and writes in all,
   // whichever provider serves it.
   contextLength: number | null;
+  // The other rates the model lists (OpenRouter's `pricing.overrides`), each
+  // charged in place of the rates above when its conditions hold: a prompt of
+  // more than `minPromptTokens` tokens, or a time of day or week.
+  tiers?: AIModelPriceTier[];
+}
+
+type AIModelRates = Pick<
+  AIModelPrice,
+  | 'promptUsdPerToken'
+  | 'cacheWriteUsdPerToken'
+  | 'completionUsdPerToken'
+  | 'requestUsd'
+>;
+
+// One of a model's other listed rates. A rate the tier doesn't list is the
+// model's base rate.
+export interface AIModelPriceTier {
+  // The tier charges a prompt of more than this many tokens, or this is null
+  // when the tier's conditions don't depend on the prompt's length.
+  minPromptTokens: number | null;
+  promptUsdPerToken: number;
+  cacheWriteUsdPerToken?: number;
+  completionUsdPerToken: number;
+  requestUsd: number;
 }
 
 // The most an AI request can cost, and the quantities it was priced at.
@@ -58,10 +86,14 @@ export const TOOL_PROMPT_ALLOWANCE_TOKENS = 1000;
 // Reads a model's price from an indexed `OpenRouterModel` card's attributes.
 // OpenRouter lists prices as decimal strings in USD per token, and per
 // request for `request`. The prompt and completion prices are required; a
-// missing request price is 0, since most models list none. Returns
-// undefined when the card names no model or a price isn't a number 0 or more
-// (a variable price is listed as `-1`), since a request can't be bounded at a
-// price that can't be read.
+// missing request price is 0, since most models list none. The cache-write
+// rate is the higher of `inputCacheWrite` and `inputCacheWrite1h` (the rate
+// for a one-hour cache), or none when the card lists neither. Each of the
+// card's `pricing.overrides` is read as a tier, and a rate a tier doesn't
+// list is the base rate. Returns undefined when the card names no model or
+// a price, the base's or a tier's, isn't a number 0 or more (a variable
+// price is listed as `-1`), since a request can't be bounded at a price that
+// can't be read.
 export function readOpenRouterModelPrice(
   attributes: Record<string, unknown> | undefined,
 ): AIModelPrice | undefined {
@@ -72,21 +104,56 @@ export function readOpenRouterModelPrice(
   let promptUsdPerToken = price(pricing.prompt);
   let completionUsdPerToken = price(pricing.completion);
   let requestUsd = isAbsent(pricing.request) ? 0 : price(pricing.request);
+  let cacheWriteUsdPerToken = cacheWritePrice(pricing, null);
   if (
     promptUsdPerToken === undefined ||
     completionUsdPerToken === undefined ||
-    requestUsd === undefined
+    requestUsd === undefined ||
+    cacheWriteUsdPerToken === undefined
   ) {
     return undefined;
+  }
+  let tiers: AIModelPriceTier[] = [];
+  let overrides = Array.isArray(pricing.overrides) ? pricing.overrides : [];
+  for (let override of overrides.map(record)) {
+    let tierPrompt = isAbsent(override.prompt)
+      ? promptUsdPerToken
+      : price(override.prompt);
+    let tierCompletion = isAbsent(override.completion)
+      ? completionUsdPerToken
+      : price(override.completion);
+    let tierRequest = isAbsent(override.request)
+      ? requestUsd
+      : price(override.request);
+    let tierCacheWrite = cacheWritePrice(override, cacheWriteUsdPerToken);
+    if (
+      tierPrompt === undefined ||
+      tierCompletion === undefined ||
+      tierRequest === undefined ||
+      tierCacheWrite === undefined
+    ) {
+      return undefined;
+    }
+    tiers.push({
+      minPromptTokens: tokenLimit(override.minPromptTokens),
+      promptUsdPerToken: tierPrompt,
+      ...(tierCacheWrite !== null
+        ? { cacheWriteUsdPerToken: tierCacheWrite }
+        : {}),
+      completionUsdPerToken: tierCompletion,
+      requestUsd: tierRequest,
+    });
   }
   return {
     modelId: attributes.modelId,
     promptUsdPerToken,
+    ...(cacheWriteUsdPerToken !== null ? { cacheWriteUsdPerToken } : {}),
     completionUsdPerToken,
     requestUsd,
     contextLength:
       tokenLimit(attributes.contextLength) ??
       tokenLimit(record(attributes.topProvider).contextLength),
+    tiers,
   };
 }
 
@@ -101,12 +168,20 @@ export function readOpenRouterModelPrice(
 //   template adds per message. A request with `tools` also gets
 //   `TOOL_PROMPT_ALLOWANCE_TOKENS`: providers wrap tool definitions in a
 //   tool-use system prompt of a few hundred tokens that isn't in the body.
+//   Input is priced at the higher of the prompt rate and the cache-write
+//   rate, since a request can mark any of its input to be written to the
+//   prompt cache.
 // - **Output**: the request's `max_completion_tokens` or `max_tokens`, plus
 //   its `reasoning.max_tokens` when it sets one, no more than the model's
 //   context window. A request that sets no limit is priced at the context
 //   window. The limit a provider lists isn't used: OpenRouter can route a
 //   request to another provider with a higher one.
 // - **Per request**: the model's request price.
+// - **Rates**: the highest of the model's base rates and each tier the
+//   request can reach. A tier with a `minPromptTokens` is reachable when the
+//   input bound is more than that many tokens. A tier set by the time of day
+//   or week is always reachable, since a request can be sent, or a batch's
+//   requests worked through, at any time.
 //
 // Output is priced at the completion rate, so a request asking for audio or
 // image output, which bills at other rates, is refused.
@@ -171,10 +246,22 @@ export function aiRequestCostCeiling(
     (Array.isArray(request.tools) && request.tools.length > 0
       ? TOOL_PROMPT_ALLOWANCE_TOKENS
       : 0);
-  let usd =
-    inputTokens * price.promptUsdPerToken +
-    outputTokens * price.completionUsdPerToken +
-    price.requestUsd;
+  let reachable: AIModelRates[] = [
+    price,
+    ...(price.tiers ?? []).filter(
+      (tier) =>
+        tier.minPromptTokens === null || inputTokens > tier.minPromptTokens,
+    ),
+  ];
+  let usd = Math.max(
+    ...reachable.map(
+      (rates) =>
+        inputTokens *
+          Math.max(rates.promptUsdPerToken, rates.cacheWriteUsdPerToken ?? 0) +
+        outputTokens * rates.completionUsdPerToken +
+        rates.requestUsd,
+    ),
+  );
   return {
     ok: true,
     ceiling: { credits: usd * CREDITS_PER_USD, inputTokens, outputTokens },
@@ -227,6 +314,25 @@ function refuse(
 
 function isAbsent(value: unknown): boolean {
   return value === null || value === undefined || value === '';
+}
+
+// The higher of a pricing's cache-write rates (`inputCacheWrite`, and
+// `inputCacheWrite1h` for a one-hour cache). `inherited` when it lists
+// neither, null for no rate, undefined when a listed rate can't be read.
+function cacheWritePrice(
+  pricing: Record<string, unknown>,
+  inherited: number | null,
+): number | null | undefined {
+  let listed = [pricing.inputCacheWrite, pricing.inputCacheWrite1h].filter(
+    (value) => !isAbsent(value),
+  );
+  if (listed.length === 0) {
+    return inherited;
+  }
+  let rates = listed.map(price);
+  return rates.some((rate) => rate === undefined)
+    ? undefined
+    : Math.max(...(rates as number[]));
 }
 
 function price(value: unknown): number | undefined {
