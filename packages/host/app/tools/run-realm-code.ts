@@ -810,9 +810,10 @@ class RealmFsSession {
   ) as Record<LimitedIndexCall, number>;
   private researchBytes = 0;
   // Characters of file content held in `known`, `edits` and `cardUpdates`,
-  // counted against the surface's `heldChars`. A file read or written again
-  // counts again, so this is at least what the session holds.
+  // counted against the surface's `heldChars`, and the part of it each file
+  // holds in `known` and `edits`: the version first read and the latest one.
   private heldChars = 0;
+  private heldByFile = new Map<string, number>();
   private researchSlots = MAX_PARALLEL_RESEARCH;
   private researchWaiters: (() => void)[] = [];
   // Research calls and transforms run outside the queue: they touch no file,
@@ -1323,6 +1324,13 @@ class RealmFsSession {
       );
     }
     this.webCalls += 1;
+  }
+
+  // Sets what one file holds in `known` and `edits`, counting only the change
+  // from what it held, so a file rewritten many times counts as two versions.
+  private holdFile(url: string, chars: number, what: string) {
+    this.hold(chars - (this.heldByFile.get(url) ?? 0), what);
+    this.heldByFile.set(url, chars);
   }
 
   // Counts file content the session is about to hold, and refuses it past
@@ -2926,7 +2934,7 @@ class RealmFsSession {
     if (content !== undefined && content.length > MAX_FILE_SIZE) {
       throw new Error(`File is too large: ${url}`);
     }
-    this.hold(content?.length ?? 0, `reading ${url}`);
+    this.holdFile(url, content?.length ?? 0, `reading ${url}`);
     this.known.set(url, content);
     return content;
   }
@@ -2944,7 +2952,9 @@ class RealmFsSession {
       this.refused += 1;
       throw new Error(`The run has ended; ${url} was not saved`);
     }
-    this.hold(content.length, `writing ${url}`);
+    // `edits` keeps the file's first version, and `known` the latest.
+    let first = this.edits.has(url) ? this.edits.get(url)?.before : expected;
+    this.holdFile(url, (first?.length ?? 0) + content.length, `writing ${url}`);
     let saved = await this.writeFile(url, content, expected, options);
     if (saved === undefined) {
       if (!this.saved.has(url)) {
