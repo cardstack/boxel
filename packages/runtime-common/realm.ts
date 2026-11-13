@@ -9893,6 +9893,40 @@ export class Realm {
         handle: () => this.serveHashedScopedCSS(request, requestContext),
       };
     }
+    // A run's write to a reserved path is refused as the run's commit
+    // refuses it (see `#runFileRefusal`), whichever route the request names.
+    // The route takes the run's write, so the refusal is this answer rather
+    // than the run gate's.
+    let runReserved =
+      this.#runOverlay(requestContext) &&
+      ['PUT', 'PATCH', 'POST'].includes(request.method)
+        ? reservedWriteDestination(localPath)
+        : undefined;
+    if (runReserved) {
+      let detail = runReserved;
+      return {
+        consumesCoarseOutcome: false,
+        takesRunWrites: true,
+        handle: async () =>
+          createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  status: '403',
+                  code: 'forbidden-path',
+                  title: 'Forbidden',
+                  detail,
+                },
+              ],
+            }),
+            init: {
+              status: 403,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          }),
+      };
+    }
     // A file the realm is part-way through assembling, or one a write that
     // died left behind. It is never indexed, so serving it would hand back
     // content the realm does not otherwise acknowledge exists. Its `HEAD` is
@@ -13390,6 +13424,17 @@ export class Realm {
       : fileLimit;
     let content = await readBodyWithin(request, readLimit);
     if (!content) {
+      // The commit refuses a file for its path before its size, so a body
+      // too large to read is first asked what its path alone decides.
+      let refusal = await this.#runFileRefusal(path, undefined);
+      if (refusal) {
+        return refuse(
+          refusal.status,
+          refusal.title,
+          refusal.detail,
+          refusal.code,
+        );
+      }
       return tooLarge(undefined, readLimit);
     }
     // Under the realm's write lock on the path, as a run's batch stages, so a
@@ -13418,10 +13463,11 @@ export class Realm {
 
   // Stages `files` in the run's overlay, all of them or none, after the
   // checks the run's commit makes of each file on its own, so a file staged
-  // here is one the commit takes unless the realm changes in between: the
-  // realm's size limit for the file's kind, as the commit's batch classifies
-  // the bytes it sends, and `#runFileRefusal` (reserved paths, the files a
-  // run may not write, a file or directory the realm holds in the way). No
+  // here is one the commit takes unless the realm changes in between:
+  // `#runFileRefusal` (reserved paths, the files a run may not write, a file
+  // or directory the realm holds in the way), then the realm's size limit
+  // for the file's kind, as the commit's batch classifies the bytes it
+  // sends. No
   // path may be both a file and a directory among the run's staged files and
   // these, and the run's `writes` cap and the overlay's byte bound hold for
   // the overlay as these files leave it. Answers undefined once every file
@@ -13432,13 +13478,24 @@ export class Realm {
     run: RunOverlayKey,
     files: { path: LocalPath; content: Uint8Array }[],
   ): Promise<RunStageRefusal | undefined> {
-    for (let { path, content } of files) {
-      let text = path.endsWith('.json') ? utf8OrUndefined(content) : undefined;
+    let texts = files.map(({ path, content }) =>
+      path.endsWith('.json') ? utf8OrUndefined(content) : undefined,
+    );
+    // In the commit's order: its precondition asks `#runFileRefusal` of
+    // every file before its batch checks any file's size, so a request
+    // refused for both reasons is refused here for the one the commit gives.
+    for (let [index, { path }] of files.entries()) {
+      let refusal = await this.#runFileRefusal(path, texts[index]);
+      if (refusal) {
+        return refusal;
+      }
+    }
+    for (let [index, { path, content }] of files.entries()) {
       // The commit sends a file's bytes as text when they decode, and its
       // batch holds them to the ceiling `writeSizeType` picks for that.
       // Only a `.json` can be classified as a card, so any other file is
       // measured by its bytes, which is the length its text encodes to.
-      let sent = text ?? content;
+      let sent = texts[index] ?? content;
       try {
         this.assertWriteSize(sent, writeSizeType(path, sent), path);
       } catch (err: unknown) {
@@ -13451,10 +13508,6 @@ export class Realm {
           title: err.title ?? 'Payload Too Large',
           detail: err.message,
         };
-      }
-      let refusal = await this.#runFileRefusal(path, text);
-      if (refusal) {
-        return refusal;
       }
     }
     let paths = files.map(({ path }) => path).join(', ');
@@ -13833,6 +13886,15 @@ export class Realm {
     };
     return {
       ...core,
+      // A run's write to a reserved path is refused as the run's commit
+      // refuses it (see `#runFileRefusal`).
+      reservedWriteRefusal: (path, reason) =>
+        new OperationFailure({
+          status: 403,
+          code: 'forbidden-path',
+          title: 'Forbidden',
+          detail: reservedWriteDestination(path) ?? reason,
+        }),
       fileExists: async (path) =>
         (await staged(path)) !== undefined || (await core.fileExists(path)),
       readSourceFile: async (path) => {
@@ -13887,7 +13949,8 @@ export class Realm {
         if (refusal) {
           throw new OperationFailure({
             status: refusal.status,
-            code: 'run-write-refused',
+            // The commit's code where the commit makes the same refusal.
+            code: refusal.code ?? 'run-write-refused',
             title: refusal.title,
             detail: refusal.detail,
           });
@@ -21135,7 +21198,7 @@ function includedCardOf(
 // refusal with, where the commit makes it.
 interface RunStageRefusal {
   status: number;
-  code?: string;
+  code?: 'forbidden-path' | 'path-clash' | 'writes-cap' | 'payload-too-large';
   title: string;
   detail: string;
   notRunning?: true;

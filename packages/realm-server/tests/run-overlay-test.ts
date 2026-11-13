@@ -779,7 +779,7 @@ export class Mine extends Automation {}`;
       },
     ]);
     assert.strictEqual(second.status, 403, second.text);
-    assert.strictEqual(second.json.errors?.[0]?.code, 'run-write-refused');
+    assert.strictEqual(second.json.errors?.[0]?.code, 'writes-cap');
     assert.deepEqual(
       (await overlayRows(run.id)).map((row) => row.path),
       ['logs/2026-11.jsonl'],
@@ -889,7 +889,7 @@ export class Mine extends Automation {}`;
       data: {
         type: 'card',
         attributes: { padding },
-        meta: { adoptsFrom: { module: './thing', name: 'Thing' } },
+        meta: { adoptsFrom: { module: '../thing', name: 'Thing' } },
       },
     });
     assert.strictEqual(
@@ -1011,7 +1011,7 @@ export class Mine extends Automation {}`;
       `the operations envelope: ${created.text}`,
     );
     let createError = created.json.errors[0];
-    assert.strictEqual(createError.code, 'run-write-refused');
+    assert.strictEqual(createError.code, 'path-clash');
     assert.strictEqual(createError.detail, reason);
 
     assert.deepEqual(await overlayRows(run.id), [], 'nothing is staged');
@@ -1023,19 +1023,73 @@ export class Mine extends Automation {}`;
       realm,
       OWNER,
     );
-    // A part-written file's name routes to no staging route, so a run's
-    // write there is refused before it is routed.
-    let written = await writeText(token, 'notes.txt.boxel-partial', 'nope');
-    assert.strictEqual(written.status, 403, written.text);
-    let added = await atomic(token, [
+    for (let path of ['notes.txt.boxel-partial', '_capture/notes.txt']) {
+      let written = await writeText(token, path, 'nope');
+      assert.strictEqual(written.status, 403, written.text);
+      assert.strictEqual(
+        JSON.parse(written.text).errors[0].code,
+        'forbidden-path',
+        `the card+source write of ${path}`,
+      );
+      let added = await atomic(token, [
+        {
+          op: 'add',
+          href: `./${path}`,
+          data: { type: 'source', attributes: { content: 'nope' }, meta: {} },
+        },
+      ]);
+      assert.strictEqual(added.status, 403, added.text);
+      assert.strictEqual(
+        JSON.parse(added.text).errors[0].code,
+        'forbidden-path',
+        `the atomic write of ${path}`,
+      );
+    }
+    let appended = await operations(token, [
       {
-        op: 'add',
-        href: './notes.txt.boxel-partial',
-        data: { type: 'source', attributes: { content: 'nope' }, meta: {} },
+        op: 'invoke',
+        'boxel:name': 'appendLine',
+        href: './_capture/log.txt',
+        data: { line: 'nope' },
       },
     ]);
-    assert.strictEqual(added.status, 403, added.text);
-    assert.strictEqual(JSON.parse(added.text).errors[0].code, 'forbidden-path');
+    assert.strictEqual(appended.status, 403, appended.text);
+    assert.strictEqual(appended.json.errors[0].code, 'forbidden-path');
+    assert.deepEqual(await overlayRows(run.id), []);
+  });
+
+  test('a file refused for its path and its size is refused for its path, as the commit refuses it', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    // Past the card limit, within the file limit, so the size check runs on
+    // the staged bytes.
+    let card = JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { padding: 'x'.repeat(600 * 1024) },
+        meta: { adoptsFrom: { module: '../thing', name: 'Thing' } },
+      },
+    });
+    let overCardLimit = await writeText(token, 'notes.txt/huge.json', card);
+    assert.strictEqual(overCardLimit.status, 409, overCardLimit.text);
+    assert.strictEqual(
+      JSON.parse(overCardLimit.text).errors[0].code,
+      'path-clash',
+    );
+    // Past every limit, so the body is never read whole.
+    let overReadLimit = await writeText(
+      token,
+      'notes.txt/huge.txt',
+      'x'.repeat(5 * 1024 * 1024 + 1),
+    );
+    assert.strictEqual(overReadLimit.status, 409, overReadLimit.text);
+    assert.strictEqual(
+      JSON.parse(overReadLimit.text).errors[0].code,
+      'path-clash',
+    );
     assert.deepEqual(await overlayRows(run.id), []);
   });
 
