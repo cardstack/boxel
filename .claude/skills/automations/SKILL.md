@@ -568,8 +568,9 @@ index pass the commit doesn't wait for. A file whose text matches the stored
 file's is left alone and enqueues no indexing. The batch carries the run's
 `automationRun` (its run id, and the automation id from the run's row), so
 the realm records every file it creates in `automation_files` as the
-automation's, in the same transaction as the write; a file the run only
-changes gets no row. Those rows are what the daily storage charge counts
+automation's, in the same transaction as its `realm_file_meta` row (after
+its bytes are on disk, so a write that fails partway still records the files
+that landed); a file the run only changes gets no row. Those rows are what the daily storage charge counts
 (see the `pricing` skill). Once it lands, the commit
 records it (`recordAutomationRunCommitted`), adds the files committed to the
 run's `writes` count (an unchanged file included), discards the overlay, and
