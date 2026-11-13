@@ -969,14 +969,16 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       configFields.hostRoutingMap = hostScopedMap;
     }
 
-    if (dynamicRoutes && routedRealm) {
+    if ((dynamicRoutes || !hostRoutesComplete) && routedRealm) {
       // The realm's validated routes, the whole tree, fixed routes
       // included, as plain JSON: what the resolver takes, so the host app
       // can resolve a path the way this server does. `realmURL` is the URL
       // card id templates are filled under; a request path is resolved
       // relative to its pathname. `complete` is false while a route is
       // dropped for a type that can't be read yet, so a path that resolves
-      // to nothing is an error then, not a not-found page.
+      // to nothing is an error then, not a not-found page. It is injected
+      // then even when no dynamic route survived, so the host app can tell
+      // a route that isn't available yet from no route.
       // `hostRoutingMap` above stays the fixed routes the host resolves
       // synchronously.
       configFields.hostDynamicRoutes = {

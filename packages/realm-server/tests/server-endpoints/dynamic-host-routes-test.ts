@@ -5,6 +5,7 @@ import type { Test, SuperTest } from 'supertest';
 import { rri } from '@cardstack/runtime-common';
 import type {
   CachingDefinitionLookup,
+  HostRoute,
   LooseSingleCardDocument,
   Realm,
 } from '@cardstack/runtime-common';
@@ -213,17 +214,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     }
 
     // Answers the realm's host routes as an incomplete validation, as it is
-    // while a field-match route's type isn't cached yet: the `/posts/:slug`
-    // route is dropped.
-    function withIncompleteHostRoutes() {
+    // while a field-match route's type isn't cached yet: the routes `keep`
+    // rejects are dropped, by default the `/posts/:slug` route.
+    function withIncompleteHostRoutes(
+      keep: (route: HostRoute) => boolean = (route) =>
+        route.fullPath !== '/posts/:slug',
+    ) {
       let getHostRoutes = testRealm.getHostRoutes;
       testRealm.getHostRoutes = async function (this: Realm) {
         let validation = await getHostRoutes.call(this);
         return {
           ...validation,
-          routes: validation.routes.filter(
-            (route) => route.fullPath !== '/posts/:slug',
-          ),
+          routes: validation.routes.filter(keep),
           complete: false,
         };
       };
@@ -488,6 +490,27 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.false(
           hostConfig(served.text).hostDynamicRoutes.complete,
           'the injected routes say the validation is incomplete',
+        );
+      } finally {
+        restore();
+      }
+    });
+
+    test('while every dynamic route is dropped, the injected routes still say the validation is incomplete', async function (assert) {
+      let restore = withIncompleteHostRoutes(
+        (route) => route.kind === 'fixed-card' || route.fullPath === '/tos',
+      );
+      try {
+        let response = await page('people/robin');
+        assert.strictEqual(response.status, 200, 'the page is served');
+        let config = hostConfig(response.text);
+        assert.false(config.hostDynamicRoutes?.complete, 'incomplete');
+        assert.deepEqual(
+          config.hostDynamicRoutes?.routes.map(
+            (route: { fullPath: string }) => route.fullPath,
+          ),
+          ['/fixed', '/tos'],
+          'only the fixed routes survived',
         );
       } finally {
         restore();
