@@ -53,6 +53,7 @@ import {
   type FileResource,
 } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
+import type CapabilitiesService from '@cardstack/host/services/capabilities';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -299,6 +300,7 @@ export default class OperatorModeStateService extends Service {
   // mode only. When collapsed, the inline header reappears.
   @tracked expandedCardHeaderElement: HTMLElement | null = null;
 
+  @service declare private capabilities: CapabilitiesService;
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
   @service declare private errorDisplay: ErrorDisplayService;
@@ -572,6 +574,26 @@ export default class OperatorModeStateService extends Service {
     });
     this.replaceItemInStack(item, newItem);
     return newItem;
+  }
+
+  // Whether to offer the user `deleteCard` for this id. The realm's
+  // permissions answer at once for a user who may write it. A card can also
+  // be deleted on a grant in the realm's policy, which the realm alone can
+  // tell, so for a card the user can't write the realm is asked, and this
+  // reads `false` until it answers. A file's delete takes the source route,
+  // which only the permissions admit. Advisory, like every capability answer:
+  // the realm decides again when the delete is sent.
+  canDeleteCard(cardId: string): boolean {
+    if (this.realm.canWrite(cardId)) {
+      return true;
+    }
+    if (takesFileDeleteRoute(undefined, cardId, this.store)) {
+      return false;
+    }
+    return (
+      this.capabilities.canInvoke('delete', cardId.replace(/\.json$/, '')) ===
+      true
+    );
   }
 
   // Deletes a card instance, or a file when the id names one (a FileDef row
