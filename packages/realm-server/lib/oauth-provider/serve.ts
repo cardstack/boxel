@@ -1,6 +1,12 @@
+import type { IncomingMessage } from 'http';
 import type Koa from 'koa';
 import type Router from '@koa/router';
 import { fullRequestURL } from '../../middleware/index.ts';
+import {
+  OAUTH_AUTHORIZATION_PATH,
+  OAUTH_ERROR_PATH,
+  OAUTH_INTERACTION_PATH,
+} from './authorization.ts';
 import {
   OAUTH_DISCOVERY_PATH,
   OAUTH_REGISTRATION_PATH,
@@ -20,18 +26,28 @@ import {
 // sets its flow cookies on whatever host a request names. A request on any
 // other host goes on to the realm server's own routing.
 //
-// A registration goes through Boxel's own handling first, which hands it on
-// to the library only once Boxel allows it.
+// A registration, and the request that starts a flow, go through Boxel's own
+// handling first, which hands them on to the library only once Boxel allows
+// them. The interaction and error routes are Boxel's alone.
 export function registerOAuthProviderRoutes(
   router: Router,
-  { provider, handleRegistration }: OAuthProviderService,
+  {
+    provider,
+    handleRegistration,
+    handleAuthorization,
+    handleInteraction,
+    handleErrorDetails,
+    handleErrorReturn,
+  }: OAuthProviderService,
 ) {
-  let issuerHost = new URL(provider.issuer).host;
+  let issuerURL = new URL(provider.issuer);
+  let issuerHost = issuerURL.host;
   let callback = provider.callback();
   let serve = async (ctxt: Koa.Context) => {
     // The library writes the response itself. Headers already set on it,
     // such as CORS, stay.
     ctxt.respond = false;
+    asTheIssuerServes(ctxt.req, issuerURL);
     await callback(ctxt.req, ctxt.res);
   };
   let onIssuerHost =
@@ -42,10 +58,41 @@ export function registerOAuthProviderRoutes(
       }
       await handle(ctxt);
     };
+  let boxelOnly =
+    (handle: Koa.Middleware) =>
+    (ctxt: Koa.Context): Promise<void> =>
+      Promise.resolve(handle(ctxt, async () => {}));
 
   router.get(OAUTH_DISCOVERY_PATH, onIssuerHost(serve));
   router.post(
     OAUTH_REGISTRATION_PATH,
     onIssuerHost((ctxt) => handleRegistration(ctxt, () => serve(ctxt))),
   );
+  router.get(
+    OAUTH_AUTHORIZATION_PATH,
+    onIssuerHost((ctxt) => handleAuthorization(ctxt, () => serve(ctxt))),
+  );
+  router.get(
+    `${OAUTH_INTERACTION_PATH}/:uid`,
+    onIssuerHost(boxelOnly(handleInteraction)),
+  );
+  router.get(
+    `${OAUTH_ERROR_PATH}/:ref`,
+    onIssuerHost(boxelOnly(handleErrorDetails)),
+  );
+  router.get(
+    `${OAUTH_ERROR_PATH}/:ref/return`,
+    onIssuerHost(boxelOnly(handleErrorReturn)),
+  );
+}
+
+// The library runs in proxy mode (`provider.ts`), so it reads the request's
+// scheme and host from forwarding headers. Before it sees a request, the
+// scheme is set to the issuer's, whatever the caller or a load balancer sent,
+// so its cookies are `Secure` exactly when the issuer is HTTPS. The forwarded
+// host is removed, so the library reads the host from `Host`, which has
+// already been checked against the issuer's.
+export function asTheIssuerServes(req: IncomingMessage, issuerURL: URL) {
+  req.headers['x-forwarded-proto'] = issuerURL.protocol.slice(0, -1);
+  delete req.headers['x-forwarded-host'];
 }

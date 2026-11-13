@@ -242,6 +242,55 @@ const keyRouteQuery = new RegExp(
   'gi',
 );
 
+// The OAuth provider's routes whose path names a bearer secret: a flow's
+// interaction ID (the interaction route and those beneath it, and the
+// library's resume route) and an error reference. Telemetry names each such
+// route by a fixed label in place of the secret, wherever its path is
+// written.
+const oauthProviderSecretSegment = new RegExp(
+  `(${escapeRegExp(OAUTH_PROVIDER_PATH)}/(interaction|auth|error)/)[^/\\s?#"'<>]+`,
+  'gi',
+);
+
+export function withOAuthProviderSecretsLabeled(value: string): string {
+  return value.replace(
+    oauthProviderSecretSegment,
+    (_match, prefix: string, route: string) =>
+      `${prefix}${route.toLowerCase() === 'error' ? ':ref' : ':uid'}`,
+  );
+}
+
+// Every string in an event, labeled as above. An event is plain data, so this
+// walks it whole, down to a depth no event reaches.
+function withOAuthProviderSecretsLabeledDeep(
+  value: unknown,
+  depth = 0,
+): unknown {
+  if (typeof value === 'string') {
+    return withOAuthProviderSecretsLabeled(value);
+  }
+  if (depth > 16 || value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      withOAuthProviderSecretsLabeledDeep(item, depth + 1),
+    );
+  }
+  // Only plain data: anything else (a class instance the SDK keeps for its own
+  // processing) is never sent as it is.
+  let prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      withOAuthProviderSecretsLabeledDeep(item, depth + 1),
+    ]),
+  );
+}
+
 function withoutProxyRouteQueries(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') {
     return value
@@ -522,15 +571,14 @@ export function scrubRequestTelemetry<
     );
   }
   scrubSpans(event, methodAndPathOnly);
-  if (!request) {
-    return event;
+  if (request) {
+    let parsed = parseURL(request.url);
+    (event as { request?: SentryRequestData }).request = methodAndPathOnly
+      ? {
+          ...(request.method ? { method: request.method } : {}),
+          ...(parsed ? { url: `${parsed.origin}${parsed.pathname}` } : {}),
+        }
+      : withoutCredentials(request);
   }
-  let parsed = parseURL(request.url);
-  (event as { request?: SentryRequestData }).request = methodAndPathOnly
-    ? {
-        ...(request.method ? { method: request.method } : {}),
-        ...(parsed ? { url: `${parsed.origin}${parsed.pathname}` } : {}),
-      }
-    : withoutCredentials(request);
-  return event;
+  return withOAuthProviderSecretsLabeledDeep(event) as E;
 }

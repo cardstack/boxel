@@ -1,29 +1,39 @@
-// Where the OAuth provider keeps what it stores: one table per kind of object
-// the library hands its adapter, each arriving with the work that first
+// Where the OAuth provider keeps what it stores: a table for each kind of
+// object the library hands its adapter, each arriving with the work that first
 // stores it. A kind with no table yet is refused, never kept in memory, which
 // would lose it on restart and differ between the realm server's processes.
+// Short-lived objects share `oauth_provider_objects` (`objects.ts`).
 
 import type { Adapter, AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
+import { InteractionAdapter } from './objects.ts';
 
 export class OAuthProviderStorageError extends Error {
   name = 'OAuthProviderStorageError';
 }
 
 // The library's `adapter` setting: called with each kind's name the first
-// time the library stores or finds one of that kind.
+// time the library stores or finds one of that kind. `interactionResumeURL`
+// builds the URL an interaction resumes at, from the issuer.
 export function oauthProviderAdapter(
   dbAdapter: DBAdapter,
+  {
+    interactionResumeURL,
+  }: { interactionResumeURL?: (id: string) => string } = {},
 ): (name: string) => Adapter {
   return function adapterFor(name: string): Adapter {
     switch (name) {
       case 'Client':
         return new DynamicClientAdapter(dbAdapter);
-      default:
-        throw new OAuthProviderStorageError(
-          `the OAuth provider has no storage for ${name}`,
-        );
+      case 'Interaction':
+        if (!interactionResumeURL) {
+          break;
+        }
+        return new InteractionAdapter(dbAdapter, interactionResumeURL);
     }
+    throw new OAuthProviderStorageError(
+      `the OAuth provider has no storage for ${name}`,
+    );
   };
 }
 
