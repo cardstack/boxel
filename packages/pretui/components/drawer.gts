@@ -66,7 +66,7 @@ export class Drawer extends Component<DrawerSignature> {
         {{#if (has-block 'title')}}
           <header class='pretui-drawer-title'>{{yield to='title'}}</header>
         {{/if}}
-        <div class='pretui-drawer-body'>{{yield}}</div>
+        <div class='pretui-drawer-body' data-test-pretui-drawer-body>{{yield}}</div>
         {{#if (has-block 'footer')}}
           <footer class='pretui-drawer-footer'>{{yield to='footer'}}</footer>
         {{/if}}
@@ -129,10 +129,12 @@ export class Drawer extends Component<DrawerSignature> {
           }
         }
         .pretui-drawer-inner {
+          --_pretui-drawer-pad: var(--space-6, 19px);
+
           display: grid;
           grid-template-rows: auto 1fr auto;
           gap: var(--space-4, 11px);
-          padding: var(--space-6, 19px);
+          padding: var(--_pretui-drawer-pad);
           height: 100%;
           box-sizing: border-box;
           align-content: start;
@@ -143,7 +145,14 @@ export class Drawer extends Component<DrawerSignature> {
           letter-spacing: var(--track-heading, -0.02em);
         }
         .pretui-drawer-body {
+          /* The body reaches into the shell's inline-end padding, so the
+             scrollbar sits at the drawer edge and the content keeps that
+             padding as clearance; a stable gutter stops the width jumping
+             when the body starts to scroll. */
+          margin-inline-end: calc(-1 * var(--_pretui-drawer-pad));
+          padding-inline-end: var(--_pretui-drawer-pad);
           overflow-y: auto;
+          scrollbar-gutter: stable;
           color: var(--muted-foreground);
           line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
         }

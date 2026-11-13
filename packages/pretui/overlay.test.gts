@@ -24,6 +24,8 @@ class Sink {
   };
 }
 
+const noop = () => {};
+
 function q(sel: string): HTMLElement | null {
   return document.querySelector(sel);
 }
@@ -132,6 +134,29 @@ module('Pretui | React-dialect aliases — overlay', function (hooks) {
     );
     await click(drawer);
     assert.strictEqual(sink.last, false, '@onOpenChange fired');
+  });
+
+  test('Drawer body keeps scrolling content clear of the scrollbar', async function (assert) {
+    let lines = Array.from({ length: 60 }, (_, i) => i);
+    await render(<template>
+      <Drawer @open={{true}} @onClose={{noop}} @label='Long drawer'>
+        <:default>
+          {{#each lines as |i|}}<p data-test-line>Line {{i}}</p>{{/each}}
+        </:default>
+      </Drawer>
+    </template>);
+    let body = q('[data-test-pretui-drawer-body]')!;
+    let line = q('[data-test-line]')!;
+    assert.true(body.scrollHeight > body.clientHeight, 'the body scrolls');
+    let pad = parseFloat(getComputedStyle(body).paddingInlineEnd);
+    assert.true(pad > 0, 'the body keeps inline-end padding');
+    let bodyBox = body.getBoundingClientRect();
+    // clientWidth excludes the scrollbar, so this is the scrollbar's start edge
+    let scrollbarStart = bodyBox.left + body.clientLeft + body.clientWidth;
+    assert.true(
+      line.getBoundingClientRect().right <= scrollbarStart - pad + 0.5,
+      'content ends a full padding before the scrollbar',
+    );
   });
 
   test('Popover is now a hybrid: defaultOpen + onOpenChange, uncontrolled still works', async function (assert) {
