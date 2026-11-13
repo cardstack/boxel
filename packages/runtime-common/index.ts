@@ -1556,6 +1556,16 @@ export type RunCommandArgs = {
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
   priority?: number;
+  // Set for an automation run: the URL of the automation's realm. `auth` is
+  // then the run's token alone, and the command runs on the realm's run
+  // affinity (`realm:<url>#run:<userId>`) rather than the user's, in a tab
+  // that serves runs of that realm and identity only (ADR 025 §1.2).
+  runRealm?: string;
+  // How long the command may run, in ms, in place of the render timeout.
+  // Every layer between the caller and the tab widens its own timeout to
+  // cover it, up to an automation run's longest time limit
+  // (`MAX_RUN_SECONDS`).
+  timeoutMs?: number;
 };
 
 export type RunCommandResponse = {
@@ -2584,6 +2594,7 @@ export {
 export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
 export * from './automation-runs.ts';
+export * from './automation-run-command.ts';
 export * from './ai-batches.ts';
 export * from './automation-files.ts';
 export * from './automation-storage-charge.ts';

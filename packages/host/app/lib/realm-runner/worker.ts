@@ -291,6 +291,11 @@ const BOOTSTRAP = `
   })();
 `;
 
+// The name a realm call's error has in the script, so a run can tell a call
+// that failed from an error the script threw. `instanceof Error` still holds,
+// and its message is the call's.
+const REALM_CALL_ERROR_NAME = 'RealmCallError';
+
 // What a script error throws out of the run, so the host learns which error
 // it was, where, and whether the script got to run at all.
 class ScriptFailure extends Error {
@@ -311,22 +316,53 @@ function scriptFailure(
     name?: string;
     message?: string;
     lineNumber?: number;
+    stack?: string;
   };
   let message = describeScriptError(dumped, code);
   let name = error.name ?? 'Error';
-  if (
-    !['SyntaxError', 'TypeError', 'ReferenceError', 'RangeError'].includes(name)
-  ) {
+  // QuickJS's own InternalError is the engine stopping the script (an
+  // interrupt at its time limit, memory or stack), and a realm call's error
+  // that the script let through is the call failing the run. Neither is
+  // something the script threw. Anything else, including an error the script
+  // throws itself, is the script's error and keeps its line.
+  if (name === 'InternalError' || name === REALM_CALL_ERROR_NAME) {
     return new Error(message);
   }
+  let line = scriptLineOf(error, code);
   return new ScriptFailure(message, {
     name,
     message: error.message ?? String(dumped),
-    ...(typeof error.lineNumber === 'number'
-      ? { line: error.lineNumber - REALM_RUNNER_WRAPPER_LINES }
-      : {}),
+    ...(line !== undefined ? { line } : {}),
     phase,
   });
+}
+
+// The line of its own script an error points at. QuickJS gives an error it
+// raises a `lineNumber`, kept as it is. An error the script constructs
+// itself carries its line only in its stack, whose frames in the script's
+// file include the wrapper's own call to the script: only a frame on one of
+// the script's lines counts, and the first such frame is where it was thrown.
+function scriptLineOf(
+  error: { lineNumber?: number; stack?: string },
+  code: string,
+): number | undefined {
+  let lineCount = code.split('\n').length;
+  let onScript = (wrapped: number) => {
+    let line = wrapped - REALM_RUNNER_WRAPPER_LINES;
+    return line >= 1 && line <= lineCount ? line : undefined;
+  };
+  if (typeof error.lineNumber === 'number') {
+    return error.lineNumber - REALM_RUNNER_WRAPPER_LINES;
+  }
+  for (let found of (error.stack ?? '').matchAll(
+    new RegExp(`${SCRIPT_FILE_PATTERN}:(\\d+)`, 'g'),
+  )) {
+    let line = onScript(Number(found[1]));
+    if (line !== undefined) {
+      return line;
+    }
+  }
+  return undefined;
 }
 
 // A worker runs one script. These hold that run's open host calls so a
@@ -363,7 +399,10 @@ function settleCall(
     deadlineAt += request.extendMs;
   }
   if (request.error !== undefined) {
-    let error = vm.newError(request.error);
+    let error = vm.newError({
+      name: REALM_CALL_ERROR_NAME,
+      message: request.error,
+    });
     deferred.reject(error);
     error.dispose();
   } else {

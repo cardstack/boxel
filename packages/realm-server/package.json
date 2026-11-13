@@ -154,6 +154,7 @@
     "check-user-pg-connections": "./scripts/check-user-pg-connections.sh",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-stripe-products.ts",
     "sync-openrouter-models": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-openrouter-models.ts",
+    "run-automation": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/run-automation.ts",
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest",
     "build:secure-origin": "pnpm --dir=../secure-origin build",
     "build:secure-origin:if-stale": "pnpm --dir=../secure-origin build:if-stale"

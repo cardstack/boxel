@@ -683,6 +683,32 @@ module(basename(import.meta.filename), function () {
         assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
       });
 
+      test("a command takes a realm's affinity only with a run token as its whole auth", async function (assert) {
+        let auth = testCreatePrerenderAuth(testUserId, {
+          [realmURL.href]: ['read', 'write'],
+        });
+        let res = await request
+          .post('/run-command')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'command-request',
+              attributes: {
+                auth,
+                command: '@cardstack/boxel-host/tools/run-automation/default',
+                affinityType: 'realm',
+                affinityValue: realmURL.href,
+              },
+            },
+          });
+        assert.strictEqual(
+          res.status,
+          400,
+          "a person's sessions never reach a run's affinity",
+        );
+      });
+
       test('it captures run-command error state', async function (assert) {
         let permissions = {
           [realmURL.href]: ['read', 'write', 'realm-owner'] as (

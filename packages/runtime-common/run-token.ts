@@ -77,13 +77,26 @@ export function presentsAsRunToken(token: string): boolean {
 }
 
 /**
+ * The run token a request's `Authorization` header carries, with or without
+ * its `Bearer` prefix, as the realm reads any other session; otherwise
+ * undefined. The host's fetch sends a realm's session bare, so a run token
+ * in a prerender tab reaches the realm that way.
+ */
+export function runTokenOf(authorization: string | null): string | undefined {
+  if (!authorization) {
+    return undefined;
+  }
+  let token = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : authorization;
+  return presentsAsRunToken(token) ? token : undefined;
+}
+
+/**
  * Whether a request's `Authorization` header carries a run token.
  */
 export function carriesRunToken(authorization: string | null): boolean {
-  if (!authorization?.startsWith('Bearer ')) {
-    return false;
-  }
-  return presentsAsRunToken(authorization.slice('Bearer '.length));
+  return runTokenOf(authorization) !== undefined;
 }
 
 /**

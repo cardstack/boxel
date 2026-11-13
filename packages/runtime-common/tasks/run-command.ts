@@ -3,7 +3,12 @@ import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index.ts';
 
 import { jobIdentity, type RunCommandResponse } from '../index.ts';
+import {
+  isAutomationCommand,
+  isAutomationJobInput,
+} from '../automation-run-command.ts';
 import { prepareRunCommand } from '../run-command-request.ts';
+import { runAutomationAttempt } from './run-automation.ts';
 import { isEqual } from 'lodash-es';
 import {
   registerQueueJobDefinition,
@@ -84,6 +89,11 @@ export { runCommand };
 // an `incremental-index` job (see `DURING_PRERENDER_HEADER`). What is still
 // unsafe is any command that waits for indexed state to catch up — a drain, a
 // read-back of a card it just wrote, a full reindex it awaits.
+//
+// A job that names the automation command runs one attempt of an automation
+// run instead (`runAutomationAttempt`): its input names the run, and the run's
+// own row, token and time limit take the place of `runAs`'s prerender auth and
+// the render timeout.
 const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
   reportStatus,
   log,
@@ -91,6 +101,9 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
   prerenderer,
   createPrerenderAuth,
   matrixServerName,
+  definitionLookup,
+  virtualNetwork,
+  mintRunToken,
 }) =>
   async function (args) {
     let { jobInfo, realmURL, realmUsername, runAs, command, commandInput } =
@@ -104,6 +117,40 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       })}`,
     );
     reportStatus(jobInfo, 'start');
+
+    if (isAutomationCommand(command)) {
+      try {
+        if (!isAutomationJobInput(commandInput)) {
+          let message = `${jobIdentity(jobInfo)} an automation run's job names no run`;
+          log.error(message);
+          return { status: 'error', error: message };
+        }
+        let result = await runAutomationAttempt(
+          {
+            dbAdapter,
+            definitionLookup,
+            virtualNetwork,
+            prerenderer,
+            mintRunToken,
+            log,
+          },
+          commandInput,
+          args.dedupeKey,
+          jobInfo,
+        );
+        // The run row holds the outcome; the job answers it too, for a
+        // caller that waits on the job.
+        return {
+          status: 'ready',
+          cardResultString: JSON.stringify({
+            runId: commandInput.runId,
+            ...result,
+          }),
+        };
+      } finally {
+        reportStatus(jobInfo, 'finish');
+      }
+    }
 
     let outcome = await prepareRunCommand({
       dbAdapter,

@@ -140,15 +140,18 @@ const CAPTURE_FETCH_FAILURE_RE =
 
 // Who a render runs as, read from the auth this server hands its tab: the
 // user every session names, when they all name one user and none carries
-// the `realmAuthority` claim. A realm rendering its own cards, an anonymous
-// render, and anything that cannot be read run as nobody.
+// the `realmAuthority` claim, or the identity an automation run's token acts
+// as. A realm rendering its own cards, an anonymous render, and anything that
+// cannot be read run as nobody.
 //
 // It is answered here and pinned on the tab, rather than read back in the tab
 // from the sessions it holds, because those sessions live in localStorage,
 // which the tab shares with every other tab of its BrowserContext.
 export function renderActorFor(auth: string): string | null {
   let session = renderSessionOf(auth);
-  return session.kind === 'user' ? session.user : null;
+  return session.kind === 'user' || session.kind === 'run'
+    ? session.user
+    : null;
 }
 
 // A render timeout's diagnostics say whether the tab was still answering when

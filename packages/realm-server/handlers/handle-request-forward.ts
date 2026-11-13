@@ -5,7 +5,7 @@ import type {
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
-import { carriesRunToken } from '@cardstack/runtime-common/run-token';
+import { runTokenOf } from '@cardstack/runtime-common/run-token';
 import {
   sendResponseForBadRequest,
   sendResponseForError,
@@ -186,9 +186,7 @@ export default function handleRequestForward({
     try {
       // 1. Validate JWT token and extract user
       let authorization = ctxt.req.headers['authorization'] ?? null;
-      let runToken = carriesRunToken(authorization)
-        ? authorization!.slice('Bearer '.length)
-        : undefined;
+      let runToken = runTokenOf(authorization);
       const token = ctxt.state.token;
       if (!token && !runToken) {
         await sendResponseForForbiddenRequest(

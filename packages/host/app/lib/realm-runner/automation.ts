@@ -14,6 +14,10 @@ export function automationTimeLimitMs(secondsCap: number): number {
   return Math.min(secondsCap, MAX_RUN_SECONDS) * 1000;
 }
 
+// What an automation run rejects with when it reaches its time limit, so a
+// caller can tell a run out of time from a script that failed.
+export class AutomationTimeLimitError extends Error {}
+
 export type ConsoleLevel = 'log' | 'info' | 'warn' | 'error';
 
 // What an automation run reports while it runs, in the order it happens.
