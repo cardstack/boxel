@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -298,6 +298,56 @@ added to it, since Preview is charged to whoever clicks, not the payer.
 The result also breaks the ceiling into its parts (`perRun`) and the runs
 into `unboundedRunsPerMonth`, `boundedRunsPerMonth`, `onceRuns` and one entry
 per trigger, so the screen can show where the number comes from.
+
+## A run's AI requests
+
+A run's `resolve` call is a chat completion it forwards to OpenRouter through
+`_request-forward` with its run token, the same path a person's own AI
+requests take. It is billed the same way, at the cost OpenRouter reports, and
+differs in who pays and what the ledger row names:
+
+| A request made by      | Billed to                                      | Its ledger rows                                      |
+| ---------------------- | ---------------------------------------------- | ---------------------------------------------------- |
+| a person, in their tab | the session's user                             | `charge_kind = 'ai'`, no `realm`, no `run_id`        |
+| an automation run      | the run's identity (`automation_runs.acts_as`) | `charge_kind = 'ai'`, the run's `realm` and `run_id` |
+
+`admitRunForward` (`packages/realm-server/lib/run-token-forward.ts`) admits
+the request for the run, and the handler passes the run's charge,
+`{ kind: 'ai', realm, runId }`, to `withBillableCall`
+(`packages/realm-server/lib/billable-call.ts`), which hands it to the credit
+strategy's `spendUsageCost` when it records the cost. The request is held to
+the person's credits like any AI request (the minimum balance to start one,
+and the per-user in-flight limit), and also to the run's caps: it counts as
+one of the run's `resolveCalls` just before it is sent, and its worst case at
+the model's listed price is reserved against the run's `aiCredits` until its
+cost is known. A request past either cap is refused, nothing is sent or
+billed, and the run ends as an error, `hit-a-cap`. The `automations` skill
+has how the caps are counted.
+
+The run row and the ledger record the same spend twice, for different
+readers, and the two can differ. `automation_runs.ai_credits_spent` is
+exact (fractional credits), and it is what the `aiCredits` cap reads. The
+ledger is what the person pays:
+
+- It rounds each call to whole credits, as every AI charge does, so a call
+  that cost less than half a credit writes no row.
+- A request whose cost can't be learned (no inline `usage.cost`, and the
+  generation lookup fails) spends its whole reservation on the run row and
+  writes no ledger row.
+- A charge draws only what the person's credit buckets hold, so a call that
+  costs more than the balance left writes less than its cost.
+- An upstream error with no cost writes neither.
+
+So a run's ledger total can read below its `ai_credits_spent`, never above
+it beyond rounding. Each call is its own `ai` charge, with no identity, so a
+run's AI requests are `charge_kind = 'ai' AND run_id = '<run id>'`, one
+charge per request.
+
+```sql
+-- A run's AI requests: how many were billed, and what they cost.
+SELECT COUNT(DISTINCT charge_id) AS requests, -SUM(credit_amount) AS credits
+FROM credits_ledger WHERE run_id = '<run id>' AND charge_kind = 'ai';
+```
 
 ## Batches: recorded at submit, billed when they end
 
@@ -600,7 +650,9 @@ lock of its own.
 
 **Where a kind comes from.** `spendCredits(dbAdapter, userId, credits,
 charge)` takes the kind and reference; it defaults to `{ kind: 'ai' }`.
-`spendUsageCost` charges an AI provider's cost as `ai` or `batched_ai`.
+`spendUsageCost` charges an AI provider's cost as `ai` or `batched_ai`; a
+billable call (`withBillableCall`) passes the `ai` charge its caller gives,
+which names the run for a run's request (see [A run's AI requests](#a-runs-ai-requests)).
 `addToCreditsLedger` defaults a row's kind from its credit type, so the
 Stripe handlers record purchases, plan allowances and expiries without naming
 a kind. An operator's top-up (`handle-add-credit`) and the daily grant task

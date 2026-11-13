@@ -4,6 +4,7 @@ import {
   logger,
   type DBAdapter,
   type DefinitionLookup,
+  type RealmIdentifier,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -49,7 +50,9 @@ export interface RunForwardRefusal {
 }
 
 export interface AdmittedRunForward {
-  run: LimitedRun & { actsAs: string };
+  // The run, with the person it acts as, who is billed for the request, and
+  // the realm its automation lives in, which the request's charge names.
+  run: LimitedRun & { actsAs: string; realm: RealmIdentifier };
   // Counts the request against the run's `resolveCalls` cap. A refusal has
   // released the request's reservation; send it as the answer.
   countCall(): Promise<{ ok: true } | ({ ok: false } & RunForwardRefusal)>;
@@ -134,6 +137,7 @@ export async function admitRunForward(
     attempt: context.attempt,
     automationId: call.run.automationId,
     actsAs: context.actsAs,
+    realm: call.run.realm,
   };
   if (
     url !== OPENROUTER_CHAT_COMPLETIONS_URL ||

@@ -7,7 +7,7 @@ import {
 } from '@cardstack/billing/billing-queries';
 import * as Sentry from '@sentry/node';
 
-import type { CreditStrategy } from './credit-strategies.ts';
+import type { AICallCharge, CreditStrategy } from './credit-strategies.ts';
 
 const log = logger('billable-call');
 
@@ -43,6 +43,9 @@ export interface BillableCallOptions {
   signal: AbortSignal;
   // The allowlisted destination the call goes to, named in the timing line.
   destination: string;
+  // What the call's spend is recorded as paying for. Omitted, it is an AI call
+  // with no reference; a call an automation run makes names the run.
+  charge?: AICallCharge;
   // Told what the upstream response cost in USD once the credit strategy has
   // priced it, or undefined when it couldn't be. Not called for a call that
   // returned nothing to price.
@@ -167,6 +170,7 @@ async function settle(
     dbAdapter,
     matrixUserId,
     creditStrategy,
+    charge,
     onCostResolved,
   }: BillableCallOptions,
   reservationId: string,
@@ -191,7 +195,7 @@ async function settle(
   let lockRequestedAt = Date.now();
   await dbAdapter.withUserCostLock(matrixUserId, async () => {
     timing.lockWaitMs += Date.now() - lockRequestedAt;
-    await creditStrategy.spendUsageCost(dbAdapter, matrixUserId, cost);
+    await creditStrategy.spendUsageCost(dbAdapter, matrixUserId, cost, charge);
     // Given back in the same critical section as the spend, so the next
     // admission sees either both or neither.
     await releaseBillableCall(dbAdapter, reservationId);
