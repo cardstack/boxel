@@ -22,6 +22,42 @@ export function orphanedReservationReason(
     : 'interrupted';
 }
 
+// Whether a child's stderr is V8 reporting that its heap ran out. V8 prints
+// this and aborts the process, so no handler in the child runs: the parent
+// sees only the text and then the exit.
+export function isHeapExhaustion(stderr: string): boolean {
+  return (
+    stderr.includes('JavaScript heap out of memory') ||
+    stderr.includes('Reached heap limit')
+  );
+}
+
+// Whether the attempt under reservation `r` staged a row no earlier attempt of
+// its job had: its staging (`job:<job>.<reservation>`, see `jobStagingId`)
+// holds a URL and type that no other staging of the job holds. A resumed
+// attempt starts by copying earlier attempts' rows into its own staging, and
+// those keep their rows too, so a copied row always has a match and only a
+// file this attempt visited counts. An attempt that ran its heap out without
+// one (a pass that dies in discovery, before its first visit) would resume
+// from nothing and die the same way again, so it is closed as
+// `'heap-exhausted-without-progress'` and counts toward the ordinary cap.
+const STAGED_PROGRESS = ['boxel_index_pending', 'prerendered_html_pending']
+  .map(
+    (table) => `EXISTS (
+      SELECT 1 FROM ${table} AS mine
+      WHERE mine.job_id = r.job_id
+        AND mine.staging_id = 'job:' || r.job_id || '.' || r.id
+        AND NOT EXISTS (
+          SELECT 1 FROM ${table} AS earlier
+          WHERE earlier.job_id = mine.job_id
+            AND earlier.url = mine.url
+            AND earlier.type = mine.type
+            AND earlier.staging_id <> mine.staging_id
+        )
+    )`,
+  )
+  .join(' OR ');
+
 // Free any reservations belonging to a worker that exited unexpectedly so the
 // next worker can claim the job immediately, rather than waiting for the
 // 7200s lease (locked_until) to age out. Without this, a worker dying via
@@ -58,7 +94,11 @@ export function orphanedReservationReason(
 export async function finalizeOrphanedReservations(
   dbAdapter: DBAdapter,
   workerId: string | undefined,
-  reason: 'interrupted' | 'killed' | 'timeout-expired' = 'interrupted',
+  reason:
+    | 'interrupted'
+    | 'killed'
+    | 'heap-exhausted'
+    | 'timeout-expired' = 'interrupted',
 ): Promise<void> {
   if (!workerId) {
     return;
@@ -66,12 +106,16 @@ export async function finalizeOrphanedReservations(
 
   try {
     await runQuery(dbAdapter, [
-      `UPDATE job_reservations
+      `UPDATE job_reservations AS r
        SET completed_at = NOW(), completion_reason =`,
-      param(reason),
-      `WHERE worker_id =`,
+      ...(reason === 'heap-exhausted'
+        ? [
+            `CASE WHEN ${STAGED_PROGRESS} THEN 'heap-exhausted' ELSE 'heap-exhausted-without-progress' END`,
+          ]
+        : [param(reason)]),
+      `WHERE r.worker_id =`,
       param(workerId),
-      `AND completed_at IS NULL`,
+      `AND r.completed_at IS NULL`,
     ] as Expression);
   } catch (e) {
     Sentry.captureException(e);
