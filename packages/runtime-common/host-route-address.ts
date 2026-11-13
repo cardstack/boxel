@@ -107,6 +107,9 @@ export type HostRouteNoAddressReason =
   // A field-match level was given only an id. It gets an address once the
   // card is loaded.
   | 'card-not-loaded'
+  // A field a field-match route reads goes through a link that isn't
+  // loaded.
+  | 'value-not-loaded'
   // A parent level comes from the child card's link to it, and the child
   // card, or the parent card the link points to, isn't loaded where the
   // parent's route needs it.
@@ -167,6 +170,7 @@ type DynamicRoute = HostCardIdRoute | HostFieldMatchRoute;
 // because a card or a value it needs isn't loaded.
 const UNDECIDED: ReadonlySet<HostRouteNoAddressReason> = new Set([
   'card-not-loaded',
+  'value-not-loaded',
   'parent-not-loaded',
   'where-unresolvable',
 ]);
@@ -217,7 +221,10 @@ class Lookup {
           cards.length === 1 &&
           this.sameId(cardId(cards[0]!), route.cardHref)
         ) {
-          return { ok: true, address: fixedAddress(route), route };
+          let address = fixedChainAddress(chain);
+          if (address !== undefined) {
+            return { ok: true, address, route };
+          }
         }
         continue;
       }
@@ -314,7 +321,7 @@ class Lookup {
       // A top-level fixed route or redirect whose path the parser rejects
       // routes at its path as written.
       return args.length === 0
-        ? { ok: true, address: fixedAddress(route), route }
+        ? { ok: true, address: route.fullPath, route }
         : { ok: false, reason: 'wrong-argument-count', route };
     }
     if (route.kind === 'redirect') {
@@ -476,7 +483,14 @@ class Lookup {
     }
     let params: RouteParams = {};
     for (let { field, param } of level.match) {
-      let value = segmentValue(readPath(card, field, api));
+      let read = readPath(card, field, api);
+      if (read === NOT_LOADED) {
+        return {
+          reason: derived ? 'parent-not-loaded' : 'value-not-loaded',
+          fits: true,
+        };
+      }
+      let value = segmentValue(read);
       if (value === undefined) {
         return { reason: 'invalid-segment-value', fits: true };
       }
@@ -645,10 +659,13 @@ function fillChainPath(chain: Chain, params: RouteParams): string | undefined {
   return path || '/';
 }
 
-function fixedAddress(route: HostRoute): string {
-  return route.pattern
-    ? (fillChainPath([route], {}) ?? route.fullPath)
-    : route.fullPath;
+// The address of a fixed card route: its chain's paths joined. A fixed route
+// under a dynamic route has no address from its card alone.
+function fixedChainAddress(chain: Chain): string | undefined {
+  if (chain.some(isDynamic)) {
+    return undefined;
+  }
+  return fillChainPath(chain, {}) ?? chain[chain.length - 1]!.fullPath;
 }
 
 // A field or argument value as a segment value, or `undefined` when it
@@ -669,17 +686,26 @@ function segmentValue(value: unknown): string | undefined {
   return text !== '' && text !== '.' && text !== '..' ? text : undefined;
 }
 
-// Reads a field, or a dotted path through contained fields and loaded
-// links, from a card. `undefined` where a step isn't there or isn't loaded,
-// and for a plural value, which has no single segment.
-function readPath(card: BaseDef, path: string, api: CardAPIForMatching) {
+const NOT_LOADED = Symbol('not-loaded');
+
+// Reads a field, or a dotted path through contained fields and links, from a
+// card. `NOT_LOADED` where a step goes through a link that isn't loaded, so
+// the value may still fit once it loads. `undefined` where a step isn't
+// there, and for a plural value, which has no single segment.
+function readPath(
+  card: BaseDef,
+  path: string,
+  api: CardAPIForMatching,
+): unknown {
   let node: unknown = card;
   for (let name of path.split('.')) {
+    if (api.isNonPresentLink(node)) {
+      return NOT_LOADED;
+    }
     if (
       node == null ||
       typeof node !== 'object' ||
       Array.isArray(node) ||
-      api.isNonPresentLink(node) ||
       !getField(node as BaseDef, name)
     ) {
       return undefined;

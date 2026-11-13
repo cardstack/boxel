@@ -299,6 +299,55 @@ module('Unit | host-route-address', function (hooks) {
     );
   });
 
+  test('a field read through a link that is not loaded ends the search', function (assert) {
+    let rules: RawHostRoutingRule[] = [
+      {
+        path: '/by-category/:category',
+        type: ref('Product'),
+        match: { 'category.slug': ':category' },
+      },
+      {
+        path: '/products/:slug',
+        type: ref('Product'),
+        match: { slug: ':slug' },
+      },
+    ];
+    let shoes = make('Category', 'Category/shoes', { slug: 'shoes' });
+    let runner = make('Product', 'Product/runner', {
+      slug: 'trail-runner',
+      category: shoes,
+    });
+    assert.deepEqual(
+      outcome(lookup(rules, { kind: 'cards', cards: [runner] })),
+      { address: '/by-category/shoes', route: '/by-category/:category' },
+      'a loaded link',
+    );
+
+    let lazy = make('Product', 'Product/lazy', { slug: 'lazy' });
+    let unloaded = { type: 'not-loaded', reference: '../Category/shoes' };
+    let lazyAPI: CardAPIForMatching = {
+      ...api,
+      peekAtField: (card, name) =>
+        card === lazy && name === 'category'
+          ? unloaded
+          : api.peekAtField(card, name),
+      isNonPresentLink: (value) =>
+        value === unloaded || api.isNonPresentLink(value),
+    };
+    assert.deepEqual(
+      outcome(lookup(rules, { kind: 'cards', cards: [lazy] }, lazyAPI)),
+      { reason: 'value-not-loaded', route: '/by-category/:category' },
+      'a link that is not loaded does not take a later route',
+    );
+
+    let orphan = make('Product', 'Product/orphan', { slug: 'orphan' });
+    assert.deepEqual(
+      outcome(lookup(rules, { kind: 'cards', cards: [orphan] })),
+      { address: '/products/orphan', route: '/products/:slug' },
+      'an empty link is a decided miss, so a later route is taken',
+    );
+  });
+
   test('a 301 alias is never canonical for a field match', function (assert) {
     let rules: RawHostRoutingRule[] = [
       {
