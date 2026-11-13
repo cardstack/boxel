@@ -390,6 +390,29 @@ export async function hasExtensionlessSourceModule(
   return false;
 }
 
+// Whether `url` names a file or directory of its realm on disk, or a module
+// by its path without the extension. A page request for such a path is not
+// one a host route answers with not found: the path is the file's own.
+export async function isRealmFilePath(
+  url: URL,
+  deps: RealmRoutingDeps,
+): Promise<boolean> {
+  let realm = await findOrMountRealm(url, deps);
+  if (!realm?.dir) {
+    return false;
+  }
+  let localPath: string;
+  try {
+    localPath = realm.paths.local(url);
+  } catch {
+    return false;
+  }
+  if (localPath && existsSync(join(realm.dir, localPath))) {
+    return true;
+  }
+  return await hasExtensionlessSourceModule(url, deps);
+}
+
 export async function hasPublicPermissions(
   realm: Realm | undefined,
   deps: RealmRoutingDeps,

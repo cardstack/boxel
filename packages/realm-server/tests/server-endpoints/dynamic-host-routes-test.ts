@@ -9,6 +9,7 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached } from '../helpers/index.ts';
+import type { PgAdapter } from '@cardstack/postgres';
 import {
   HostRouteLookupError,
   visitorHostRouteLookups,
@@ -187,6 +188,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     let request: SuperTest<Test>;
     let testRealm: Realm;
     let definitionLookup: CachingDefinitionLookup;
+    let dbAdapter: PgAdapter;
 
     setupPermissionedRealmCached(hooks, {
       realmURL,
@@ -196,8 +198,39 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         request = args.request;
         testRealm = args.testRealm;
         definitionLookup = serverDefinitionLookup(args.testRealmServer);
+        dbAdapter = args.dbAdapter;
       },
     });
+
+    function hostConfig(text: string) {
+      let match = text.match(
+        /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)"/,
+      );
+      if (!match) {
+        throw new Error('the page has no config meta tag');
+      }
+      return JSON.parse(decodeURIComponent(match[1]));
+    }
+
+    // Answers the realm's host routes as an incomplete validation, as it is
+    // while a field-match route's type isn't cached yet: the `/posts/:slug`
+    // route is dropped.
+    function withIncompleteHostRoutes() {
+      let getHostRoutes = testRealm.getHostRoutes;
+      testRealm.getHostRoutes = async function (this: Realm) {
+        let validation = await getHostRoutes.call(this);
+        return {
+          ...validation,
+          routes: validation.routes.filter(
+            (route) => route.fullPath !== '/posts/:slug',
+          ),
+          complete: false,
+        };
+      };
+      return () => {
+        testRealm.getHostRoutes = getHostRoutes;
+      };
+    }
 
     hooks.beforeEach(async function () {
       await testRealm.indexing();
@@ -327,6 +360,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.ok(match, 'the config meta tag is there');
       let config = JSON.parse(decodeURIComponent(match![1]));
       assert.strictEqual(config.hostDynamicRoutes?.realmURL, realmURL.href);
+      assert.true(
+        config.hostDynamicRoutes?.complete,
+        'the validation is complete',
+      );
       assert.deepEqual(
         config.hostDynamicRoutes?.routes.map(
           (route: { kind: string; fullPath: string }) => [
@@ -437,6 +474,73 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
+    test('while a route is dropped for an unavailable type, a path that resolves to nothing answers 503', async function (assert) {
+      let before = await page('c/no-such-category');
+      assert.strictEqual(before.status, 404, 'a complete validation: 404');
+
+      let restore = withIncompleteHostRoutes();
+      try {
+        let missing = await page('c/no-such-category');
+        assert.strictEqual(missing.status, 503, 'an incomplete one: 503');
+
+        let served = await page('people/robin');
+        assert.strictEqual(served.status, 200, 'a route that resolves serves');
+        assert.false(
+          hostConfig(served.text).hostDynamicRoutes.complete,
+          'the injected routes say the validation is incomplete',
+        );
+      } finally {
+        restore();
+      }
+    });
+
+    test('a file of the realm a route pattern covers is served as before', async function (assert) {
+      for (let path of ['site', 'site.gts']) {
+        let response = await page(path);
+        assert.strictEqual(response.status, 200, `${path} gets the page`);
+      }
+      let missing = await page('no-such-thing');
+      assert.strictEqual(missing.status, 404, 'a path no file has: 404');
+    });
+
+    test('a generic-Accept request of a published realm goes through the dynamic routes', async function (assert) {
+      // The generic-Accept gate serves pages only for a published realm.
+      await dbAdapter.execute(`DELETE FROM realm_registry WHERE url = $1`, {
+        bind: [realmURL.href],
+      });
+      await dbAdapter.execute(
+        `INSERT INTO realm_registry (url, kind, disk_id, owner_username, source_url, last_published_at) VALUES ($1, 'published', $2, $3, $4, $5)`,
+        {
+          bind: [
+            realmURL.href,
+            'dynamic-routes-published',
+            'owner',
+            'http://127.0.0.1:4444/dynamic-routes-source/',
+            Date.now(),
+          ],
+        },
+      );
+      let generic = (path: string) =>
+        request.get(`${realmPath}${path}`).set('Accept', '*/*');
+
+      let served = await generic('posts/hello');
+      assert.strictEqual(served.status, 200, 'a routed path is served');
+      assert.true(served.text.includes('Served Post A'));
+
+      let redirected = await generic('u/robin');
+      assert.strictEqual(redirected.status, 301, 'a dynamic redirect answers');
+
+      let module = await generic('site');
+      assert.strictEqual(module.status, 200, 'a module is still served');
+      assert.false(
+        module.text.includes('<meta name="@cardstack'),
+        'as the module, not the page',
+      );
+
+      let missing = await generic('posts/no-such-post');
+      assert.strictEqual(missing.status, 404, 'a path that finds nothing: 404');
+    });
+
     test('a failed lookup answers 503, and a rate-limited one 429', async function (assert) {
       let handle = testRealm.handle;
       let status = 500;
@@ -495,6 +599,37 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       onRealmSetup(args) {
         testRealm = args.testRealm;
       },
+    });
+
+    test('an address that holds a file other than a card is a miss', async function (assert) {
+      let handle = testRealm.handle;
+      testRealm.handle = async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              type: 'file-meta',
+              id: `${privateRealmURL.href}docs/readme.md`,
+              attributes: {},
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      try {
+        let { load } = visitorHostRouteLookups({
+          realm: testRealm,
+          visitorHeaders: {},
+        });
+        assert.strictEqual(
+          await load({
+            cardHref: `${privateRealmURL.href}docs/readme.md`,
+            linkFields: [],
+          }),
+          undefined,
+          'the load resolves to no card',
+        );
+      } finally {
+        testRealm.handle = handle;
+      }
     });
 
     test('a card the visitor cannot read is a miss, and a search the realm refuses is an error', async function (assert) {

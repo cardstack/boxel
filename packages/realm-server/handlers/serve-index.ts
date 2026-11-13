@@ -41,9 +41,11 @@ import {
   hasDynamicHostRoutes,
   hasPublicPermissions,
   isIndexedCardInstance,
+  isRealmFilePath,
   matchHostRoutingRule,
   resolveDynamicHostRoute,
   type RealmRoutingDeps,
+  type ResolvedHostRoute,
 } from '../lib/realm-routing.ts';
 import {
   HostRouteLookupError,
@@ -387,6 +389,47 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // http-vs-https mismatch and mis-serve a module URL as the HTML page.
     let requestURL = fullRequestURL(ctxt);
 
+    // The request's resolution through its realm's dynamic host routes, run
+    // at most once: the generic-Accept gate below may need it before the
+    // page is built.
+    let dynamicResolution: Promise<ResolvedHostRoute | undefined> | undefined;
+    let resolveDynamic = (realm: Realm, routes: readonly HostRoute[]) =>
+      (dynamicResolution ??= resolveDynamicHostRoute(
+        requestURL,
+        realm,
+        routes,
+        visitorHostRouteLookups({
+          realm,
+          visitorHeaders: ctxt.req.headers,
+        }),
+      ));
+    // For a generic-Accept request of a path that is no card's own and no
+    // fixed route's: whether a dynamic route answers it, with a card, a
+    // redirect or an error, so it gets what a browser gets. A path that
+    // names a file of the realm (a module import asks for one this way) is
+    // left to the realm.
+    let dynamicRouteAnswers = async () => {
+      let realm = await findOrMountRealm(requestURL, routingDeps);
+      if (!realm || !(await hasPublicPermissions(realm, routingDeps))) {
+        return false;
+      }
+      let { routes, complete } = await realm.getHostRoutes();
+      if (
+        !hasDynamicHostRoutes(routes) ||
+        (await isRealmFilePath(requestURL, routingDeps))
+      ) {
+        return false;
+      }
+      let resolution = (await resolveDynamic(realm, routes))?.resolution;
+      if (!resolution) {
+        return false;
+      }
+      return (
+        resolution.kind !== 'nothing' ||
+        (!complete && resolution.trace.length > 0)
+      );
+    };
+
     if (
       isDocumentEmbedRequest(ctxt) ||
       (await isCaptureServingRequest(ctxt, requestURL, routingDeps)) ||
@@ -460,10 +503,11 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           // Requiring public read makes routed and non-routed bare paths
           // behave identically (both next() → 404) on a non-public realm.
           let matchedRule = await matchHostRoutingRule(requestURL, routingDeps);
-          if (
-            !matchedRule ||
-            !(await hasPublicPermissions(matchedRule.realm, routingDeps))
-          ) {
+          if (matchedRule) {
+            if (!(await hasPublicPermissions(matchedRule.realm, routingDeps))) {
+              return next();
+            }
+          } else if (!(await dynamicRouteAnswers())) {
             return next();
           }
         }
@@ -648,9 +692,13 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // child routes) resolves the path through all of its validated routes.
     // The lookups run as the visitor, against the live realm, so a route
     // resolves only to a card the visitor's own card request would get.
-    let hostRoutes: readonly HostRoute[] = routedRealm
-      ? (await routedRealm.getHostRoutes()).routes
-      : [];
+    let hostRoutesValidation = routedRealm
+      ? await routedRealm.getHostRoutes()
+      : undefined;
+    let hostRoutes: readonly HostRoute[] = hostRoutesValidation?.routes ?? [];
+    // False while a route is dropped because its type's definition can't be
+    // read yet: a path that route would have answered may resolve to nothing.
+    let hostRoutesComplete = hostRoutesValidation?.complete ?? true;
     let dynamicRoutes = hasDynamicHostRoutes(hostRoutes);
     let notFound = false;
     // The serve rule for a path a dynamic route resolved, added to the
@@ -660,15 +708,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // page.
     let dynamicServeRule: { path: string; id: string } | undefined;
     if (!fixedRouteMatched && dynamicRoutes && routedRealm) {
-      let resolved = await resolveDynamicHostRoute(
-        requestURL,
-        routedRealm,
-        hostRoutes,
-        visitorHostRouteLookups({
-          realm: routedRealm,
-          visitorHeaders: ctxt.req.headers,
-        }),
-      );
+      let resolved = await resolveDynamic(routedRealm, hostRoutes);
       let resolution = resolved?.resolution;
       if (resolved && resolution) {
         hostRoutesLog.debug(
@@ -739,13 +779,26 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         return;
       }
       // A path some route matched that resolved to nothing answers 404,
-      // unless it is a card's own path, which is still served there. A path
-      // no route matched at all is served as it was before routes.
+      // unless it is a card's own path or names a file of the realm, which
+      // are still served there. While a route is dropped for a type that
+      // can't be read yet, the dropped route might have answered the path,
+      // so it answers 503 rather than not found. A path no route matched at
+      // all is served as it was before routes.
       if (
         resolution?.kind === 'nothing' &&
         resolution.trace.length > 0 &&
-        !(await isIndexedCardInstance(cardURL, routingDeps))
+        !(await isIndexedCardInstance(cardURL, routingDeps)) &&
+        !(await isRealmFilePath(requestURL, routingDeps))
       ) {
+        if (!hostRoutesComplete) {
+          hostRoutesLog.warn(
+            `${requestURL.href} resolved to nothing while a host route is dropped for a type that is not available yet`,
+          );
+          ctxt.status = 503;
+          ctxt.type = 'text';
+          ctxt.body = 'Service Unavailable';
+          return;
+        }
         notFound = true;
       }
     }
@@ -876,6 +929,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       responseHTML = injectHeadHTML(responseHTML, headFragments.join('\n'));
     }
 
+    // The per-request fields merged into the already-rewritten config meta
+    // tag. The retrieveIndexHTML rewrite is cached process-wide because the
+    // fields it touches are global; these are per-realm and per-request, so
+    // they can't share that cache. They go on the same typed channel the host
+    // already reads for hostsOwnAssets / realmServerURL / matrixURL etc.,
+    // rather than through a separate `window` global.
+    let configFields: Record<string, unknown> = {};
+
     if ((routingMap.length > 0 || dynamicServeRule) && routedRealm) {
       // Rules are stored realm-relative ('/whitepaper'). The client sees URL
       // paths that include the realm's mount segment ('/routing/whitepaper'
@@ -905,22 +966,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         // not decode a star segment.
         hostScopedMap.push(dynamicServeRule);
       }
-      // Per-request merge into the already-rewritten config meta tag.
-      // The retrieveIndexHTML rewrite is cached process-wide because the
-      // fields it touches are global; the routing map is per-realm so it
-      // can't share that cache. This second regex pass parses the URL-
-      // encoded JSON, sets hostRoutingMap, and re-encodes — keeping the
-      // routing data on the same typed channel the host already reads
-      // for hostsOwnAssets / realmServerURL / matrixURL etc., rather
-      // than via a separate `window.__hostRoutingMap` global.
-      responseHTML = responseHTML.replace(
-        /(<meta name="@cardstack\/host\/config\/environment" content=")([^"]+)("\s*\/?>)/,
-        (_match, g1, g2, g3) => {
-          let cfg = JSON.parse(decodeURIComponent(g2));
-          cfg.hostRoutingMap = hostScopedMap;
-          return `${g1}${encodeURIComponent(JSON.stringify(cfg))}${g3}`;
-        },
-      );
+      configFields.hostRoutingMap = hostScopedMap;
     }
 
     if (dynamicRoutes && routedRealm) {
@@ -928,17 +974,24 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       // included, as plain JSON: what the resolver takes, so the host app
       // can resolve a path the way this server does. `realmURL` is the URL
       // card id templates are filled under; a request path is resolved
-      // relative to its pathname. `hostRoutingMap` above stays the fixed
-      // routes the host resolves synchronously.
-      let hostDynamicRoutes = {
+      // relative to its pathname. `complete` is false while a route is
+      // dropped for a type that can't be read yet, so a path that resolves
+      // to nothing is an error then, not a not-found page.
+      // `hostRoutingMap` above stays the fixed routes the host resolves
+      // synchronously.
+      configFields.hostDynamicRoutes = {
         realmURL: routedRealm.url,
         routes: hostRoutes,
+        complete: hostRoutesComplete,
       };
+    }
+
+    if (Object.keys(configFields).length > 0) {
       responseHTML = responseHTML.replace(
         /(<meta name="@cardstack\/host\/config\/environment" content=")([^"]+)("\s*\/?>)/,
         (_match, g1, g2, g3) => {
           let cfg = JSON.parse(decodeURIComponent(g2));
-          cfg.hostDynamicRoutes = hostDynamicRoutes;
+          Object.assign(cfg, configFields);
           return `${g1}${encodeURIComponent(JSON.stringify(cfg))}${g3}`;
         },
       );

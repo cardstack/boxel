@@ -12,7 +12,11 @@ import {
   searchEntryWireQueryFromQuery,
 } from '@cardstack/runtime-common';
 import { SEARCH_SHED_RETRY_AFTER_SECONDS } from '../middleware/index.ts';
-import { admitSearch, beginSearchRequest } from '../search-inflight.ts';
+import {
+  admitSearch,
+  beginSearchRequest,
+  type SearchRequest,
+} from '../search-inflight.ts';
 
 // A host route lookup the realm refused or failed to answer. `status` is the
 // status the page answers with: 429 when the realm rate-limited the visitor or
@@ -38,8 +42,9 @@ export class HostRouteLookupError extends Error {
 // the search takes its slot under the server's in-flight search ceiling here,
 // as an HTTP search does in the admission middleware.
 //
-// A card the visitor may not read (401, 403) and a card that isn't there (404)
-// are misses: the resolver goes on to the next route. A search the realm
+// A card the visitor may not read (401, 403), a card that isn't there (404)
+// and an address that holds a file other than a card are misses: the
+// resolver goes on to the next route. A search the realm
 // refuses (401, 403) is not a card the visitor can't read but a visitor the
 // realm turns away, so it is an error, as is every other failure. A rate limit
 // or a search the ceiling sheds answers 429, and any other error 503, rather
@@ -86,6 +91,10 @@ export function visitorHostRouteLookups({
         503,
       );
     }
+    if (resource.type !== 'card') {
+      // A file that isn't a card instance: no card is at this address.
+      return undefined;
+    }
     return toHostRouteCard(realm, resource, linkFields);
   };
 
@@ -101,10 +110,11 @@ export function visitorHostRouteLookups({
         String(SEARCH_SHED_RETRY_AFTER_SECONDS),
       );
     }
-    let searchRequest = beginSearchRequest();
-    searchRequest.attribute([realm.url]);
+    let searchRequest: SearchRequest | undefined;
     let doc: unknown;
     try {
+      searchRequest = beginSearchRequest();
+      searchRequest.attribute([realm.url]);
       let response = await handle(
         realm,
         new Request(searchURL, {
@@ -120,7 +130,7 @@ export function visitorHostRouteLookups({
       doc = await readJSON(response, searchURL);
     } finally {
       release();
-      searchRequest.end();
+      searchRequest?.end();
     }
     if (!isEntryCollectionDocument(doc)) {
       throw new HostRouteLookupError(
