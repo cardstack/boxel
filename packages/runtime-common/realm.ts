@@ -12844,6 +12844,7 @@ export class Realm {
               realmPermissions,
               user,
               this.#matrixClient.serverName,
+              new URL(this.url),
             )
           : await realmPermissionChecker.can(user, requiredPermission))
       ) {
@@ -18095,7 +18096,12 @@ export class Realm {
     // leaves the realm with none would leave no one able to change them back.
     let administers = (permissions: RealmPermissions) =>
       Object.keys(permissions).some((user) =>
-        isRealmAdministrator(permissions, user, this.#matrixClient.serverName),
+        isRealmAdministrator(
+          permissions,
+          user,
+          this.#matrixClient.serverName,
+          new URL(this.url),
+        ),
       );
     let patched: RealmPermissions = { ...currentPermissions };
     for (let [user, permissions] of Object.entries(patch)) {

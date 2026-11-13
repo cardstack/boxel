@@ -248,9 +248,28 @@ function isDirectWriterRow(
   );
 }
 
+// Whether `realmURL` is a realm `userId` created under its own name: the
+// `/<localpart>/<endpoint>/` URL `_create-realm` gives every realm it makes.
+function isInOwnNamespace(
+  realmURL: URL,
+  userId: string,
+  matrixServerName: string,
+): boolean {
+  let localpart = localpartOn(userId, matrixServerName);
+  let segments = realmURL.pathname.split('/').filter(Boolean);
+  return (
+    localpart !== undefined &&
+    segments.length >= 2 &&
+    segments[segments.length - 2] === localpart
+  );
+}
+
 /**
- * Whether `userId` administers the realm whose permissions these are: they
- * are a direct writer of it, as `isDirectWriter` answers it (ADR 024 §1.3).
+ * Whether `userId` administers the realm at `realmURL`, whose permissions
+ * these are: their own row grants `write` (ADR 024 §1.3), and they are a
+ * person, as `isDirectWriter` answers it. A service account's `write` admits
+ * administering only a realm it created under its own name, so the write it
+ * holds on a shared realm never lets it delete, archive or publish that realm.
  * `realm-owner` plays no part: it names the user the realm is indexed as, not
  * an authority (ADR 006 §1.2).
  */
@@ -258,11 +277,14 @@ export function isRealmAdministrator(
   permissions: RealmPermissions,
   userId: string,
   matrixServerName: string,
+  realmURL: URL,
 ): boolean {
-  return isDirectWriterRow(
-    userId,
-    permissions[userId]?.includes('write') ?? false,
-    matrixServerName,
+  let write = permissions[userId]?.includes('write') ?? false;
+  return (
+    isDirectWriterRow(userId, write, matrixServerName) ||
+    (write &&
+      isBotAccount(userId, matrixServerName) &&
+      isInOwnNamespace(realmURL, userId, matrixServerName))
   );
 }
 

@@ -139,7 +139,12 @@ export default function handleDeleteRealm({
       let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
       let { user: ownerUserId } = token;
       if (
-        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+        !isRealmAdministrator(
+          permissions,
+          ownerUserId,
+          matrixClient.serverName,
+          parsedRealmURL,
+        )
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,

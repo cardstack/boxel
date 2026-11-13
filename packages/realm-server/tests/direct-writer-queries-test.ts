@@ -8,6 +8,7 @@ import {
   fetchDirectWriters,
   insertPermissions,
   isDirectWriter,
+  isRealmAdministrator,
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -15,6 +16,7 @@ import type {
   QueuePublisher,
   QueueRunner,
   Realm,
+  RealmPermissions,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
@@ -261,6 +263,97 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         await fetchDirectWriters(dbAdapter, realmURL, 'localhost'),
         ['@owner:localhost'],
+      );
+    });
+  });
+
+  // Administering a realm is direct write, with one addition: a service
+  // account administers a realm it created under its own name.
+  module('administering', function () {
+    const server = 'localhost';
+    const sharedRealmURL = new URL('http://127.0.0.1:4444/mango/shared/');
+    const botRealmURL = new URL('http://127.0.0.1:4444/submissionbot/preview/');
+    const bot = '@submissionbot:localhost';
+
+    test('a person whose own row grants write administers the realm', function (assert) {
+      let permissions: RealmPermissions = {
+        '@writer:localhost': ['read', 'write'],
+        '@reader:localhost': ['read'],
+        users: ['read', 'write'],
+      };
+      let administers = (userId: string) =>
+        isRealmAdministrator(permissions, userId, server, sharedRealmURL);
+      assert.true(administers('@writer:localhost'), 'a writer administers');
+      assert.false(administers('@reader:localhost'), 'a reader does not');
+      assert.false(administers('users'), 'a wildcard row names no one');
+      assert.false(administers('@stranger:localhost'), 'no row, no authority');
+    });
+
+    test('a service account administers a realm under its own name', function (assert) {
+      assert.true(
+        isRealmAdministrator(
+          { [bot]: ['read', 'write'] },
+          bot,
+          server,
+          botRealmURL,
+        ),
+      );
+    });
+
+    test('a service account with write on a realm under another name does not administer it', function (assert) {
+      assert.false(
+        isRealmAdministrator(
+          { [bot]: ['read', 'write'] },
+          bot,
+          server,
+          sharedRealmURL,
+        ),
+        'a realm another user created',
+      );
+      assert.false(
+        isRealmAdministrator(
+          { [bot]: ['read', 'write'] },
+          bot,
+          server,
+          new URL('http://127.0.0.1:4444/submissions/'),
+        ),
+        'a bootstrap realm',
+      );
+      assert.false(
+        isRealmAdministrator(
+          { [bot]: ['read', 'write'] },
+          bot,
+          server,
+          new URL('http://127.0.0.1:4444/submissionbot/'),
+        ),
+        'a realm merely named after the account',
+      );
+    });
+
+    test('a service account needs its own write row even under its own name', function (assert) {
+      assert.false(
+        isRealmAdministrator({ [bot]: ['read'] }, bot, server, botRealmURL),
+        'a read row',
+      );
+      assert.false(
+        isRealmAdministrator(
+          { users: ['read', 'write'] },
+          bot,
+          server,
+          botRealmURL,
+        ),
+        'a wildcard write row',
+      );
+    });
+
+    test("one service account does not administer a realm under another service account's name", function (assert) {
+      assert.false(
+        isRealmAdministrator(
+          { '@aibot:localhost': ['read', 'write'] },
+          '@aibot:localhost',
+          server,
+          botRealmURL,
+        ),
       );
     });
   });

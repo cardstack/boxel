@@ -115,7 +115,14 @@ export async function resolveAndAuthorizeArchiveTarget(
   let { user: requesterUserId } = token;
   let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
 
-  if (!isRealmAdministrator(permissions, requesterUserId, matrixServerName)) {
+  if (
+    !isRealmAdministrator(
+      permissions,
+      requesterUserId,
+      matrixServerName,
+      parsedRealmURL,
+    )
+  ) {
     await sendResponseForForbiddenRequest(
       ctxt,
       `${requesterUserId} does not have enough permission to ${action} realm ${realmURL}`,

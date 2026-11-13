@@ -2384,6 +2384,32 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('POST /_publish-realm refuses a platform service account with write on a realm another user created', async function (assert) {
+        let serviceAccountUserId = '@submissionbot:localhost';
+        await dbAdapter.execute(`
+          INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+          VALUES ('${sourceRealmUrlString}', '${serviceAccountUserId}', true, true, false)
+        `);
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: serviceAccountUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
+            }),
+          );
+        assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      });
+
       test('POST /_unpublish-realm returns forbidden for a user who does not administer the source realm', async function (assert) {
         // First publish a realm as the owner
         let publishResponse = await request

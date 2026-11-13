@@ -565,7 +565,12 @@ export default function handlePublishRealm({
         new URL(sourceRealmURL),
       );
       if (
-        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+        !isRealmAdministrator(
+          permissions,
+          ownerUserId,
+          matrixClient.serverName,
+          new URL(sourceRealmURL),
+        )
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,

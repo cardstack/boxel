@@ -98,7 +98,12 @@ export default function handleUnpublishRealm({
         new URL(publishedRealmInfo.source_url),
       );
       if (
-        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+        !isRealmAdministrator(
+          permissions,
+          ownerUserId,
+          matrixClient.serverName,
+          new URL(publishedRealmInfo.source_url),
+        )
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,
