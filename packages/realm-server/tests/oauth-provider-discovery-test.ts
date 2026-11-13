@@ -19,6 +19,7 @@ import {
 import {
   testOAuthProviderConfig,
   testOAuthSecureOriginURL,
+  unusedDBAdapter,
 } from './helpers/oauth-provider.ts';
 import {
   OAuthProviderConfigError,
@@ -273,6 +274,9 @@ module(basename(import.meta.filename), function () {
           issuer: 'https://a.test',
           config: { ...config, jwks: { keys: [key] } },
           registry: buildRegistry('https://a.test'),
+          adapter: () => {
+            throw new Error('the provider never stored anything');
+          },
         });
       } catch (error) {
         thrown = error;
@@ -300,7 +304,8 @@ module(basename(import.meta.filename), function () {
           startOAuthProvider({
             serverURL: new URL('https://realms.example.test/'),
             config: testOAuthProviderConfig(),
-            hasSecureOrigin: false,
+            dbAdapter: unusedDBAdapter,
+            secureOriginURL: undefined,
           }),
         (error: unknown) =>
           error instanceof OAuthProviderConfigError &&
@@ -314,7 +319,8 @@ module(basename(import.meta.filename), function () {
           startOAuthProvider({
             serverURL: new URL('https://realms.example.test/boxel/'),
             config: testOAuthProviderConfig(),
-            hasSecureOrigin: true,
+            dbAdapter: unusedDBAdapter,
+            secureOriginURL: testOAuthSecureOriginURL,
           }),
         (error: unknown) =>
           error instanceof OAuthProviderConfigError &&
@@ -323,10 +329,11 @@ module(basename(import.meta.filename), function () {
     });
 
     test('takes its issuer from the server URL, with no trailing slash', function (assert) {
-      let provider = startOAuthProvider({
+      let { provider } = startOAuthProvider({
         serverURL: new URL('https://realms.example.test/'),
         config: testOAuthProviderConfig(),
-        hasSecureOrigin: true,
+        dbAdapter: unusedDBAdapter,
+        secureOriginURL: testOAuthSecureOriginURL,
       });
       assert.strictEqual(provider.issuer, 'https://realms.example.test');
     });
@@ -465,9 +472,12 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(response.body, {
         issuer: 'http://127.0.0.1:0',
         response_types_supported: ['code'],
-        grant_types_supported: ['authorization_code'],
         code_challenge_methods_supported: ['S256'],
+        token_endpoint_auth_methods_supported: ['none'],
+        grant_types_supported: ['authorization_code'],
         scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
+        authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
+        registration_endpoint: 'http://127.0.0.1:0/_oauth-provider/reg',
       });
       assert.strictEqual(
         response.headers['access-control-allow-origin'],
@@ -489,7 +499,6 @@ module(basename(import.meta.filename), function () {
       for (let path of [
         OPENID_DISCOVERY,
         '/_oauth-provider/jwks',
-        '/_oauth-provider/auth',
         '/_oauth-provider/token',
       ]) {
         let response = await request.get(path);

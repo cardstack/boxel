@@ -127,6 +127,7 @@ import {
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
+  accountContactLookup,
   handleCheckSecureSession,
   handleEndSecureSession,
   handleEndWindowSessions,
@@ -143,7 +144,7 @@ import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
 import { PREFIX_REALMS_ENDPOINT } from '@cardstack/runtime-common/prefix-realm-network';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
-import type Provider from 'oidc-provider';
+import type { OAuthProviderService } from './lib/oauth-provider/provider.ts';
 import { registerOAuthProviderRoutes } from './lib/oauth-provider/serve.ts';
 import {
   handleAddUserKey,
@@ -286,7 +287,7 @@ export type CreateRoutesArgs = {
   googleSignIn?: GoogleSignInConfig;
   // Boxel's OAuth provider (see `lib/oauth-provider/`). Unset, the provider
   // is off and none of its routes are served.
-  oauthProvider?: Provider;
+  oauthProvider?: OAuthProviderService;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -313,7 +314,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   };
 
   if (args.oauthProvider) {
-    registerOAuthProviderRoutes(router, args.oauthProvider);
+    registerOAuthProviderRoutes(router, args.oauthProvider, {
+      realmSecretSeed: args.realmSecretSeed,
+      accountContact: accountContactLookup(args),
+    });
   }
 
   router.get(
