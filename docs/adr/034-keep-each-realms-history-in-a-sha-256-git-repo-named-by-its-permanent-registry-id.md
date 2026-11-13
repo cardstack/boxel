@@ -173,10 +173,22 @@ ADR 002 §1.2 and §1.3 when they turn those IDs into paths.
 ## 3. Considered options
 
 - **One SHA-256 repo per realm, named by registry id (chosen).**
-- **The SHA-1 object format.** It is git's default. GitHub and most git
-  libraries read only SHA-1, so exporting history to GitHub means converting
-  it, which gives the copy new revision IDs. Rejected for the collisions in
-  §2.
+- **The SHA-1 object format.** It is git's default. When this ADR was
+  written, GitHub hosted only SHA-1 repos, so only a SHA-1 repo could be
+  pushed there as it is. A SHA-256 repo is exported with `git fast-export`
+  and `git fast-import`, which keep every path, file and trailer but give
+  each commit a new ID. The export's marks files map each new ID to its
+  revision. An export that maps authors to GitHub accounts, or leaves out
+  content the owner deleted, changes the IDs under either format. A repo
+  holding a colliding pair can't be pushed to GitHub at all, because GitHub
+  hashes with collision detection. Moving from SHA-1 to SHA-256 later would
+  rewrite every repo and every revision ID that clients hold. Rejected for
+  that, and for the collisions in §2.
+- **SHA-1 with collision detection.** realm-historian would hash with the
+  collision-detecting SHA-1 that git uses, and record a file that fails the
+  check as a size-only entry. That closes the collisions in §2. Node has no
+  such hash, so Boxel would maintain a port of git's C code. A move to
+  SHA-256 would still lie ahead.
 - **Naming the repo by the realm's URL.** Every URL change would become a repo
   move, and a re-created realm would inherit the history of the realm before
   it.
@@ -216,6 +228,9 @@ ADR 002 §1.2 and §1.3 when they turn those IDs into paths.
   where `git_SHA1DCFinal` dies on a detected collision, and
   [`BreakingChanges`](https://git-scm.com/docs/BreakingChanges), which plans
   SHA-256 as the default object format for new repos.
+- GitHub,
+  [SHA-1 collision detection on GitHub.com](https://github.blog/engineering/platform-security/sha-1-collision-detection-on-github-com/)
+  (2017): GitHub rejects an object that looks like half of a colliding pair.
 
 ## 5. Remediation
 
