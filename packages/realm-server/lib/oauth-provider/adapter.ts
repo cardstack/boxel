@@ -129,13 +129,7 @@ interface GrantRow {
 // refused. It finds a grant that has neither ended nor expired, as the
 // library's own payload: the user as `accountId`, and each resource's scopes
 // as one space-separated string.
-//
-// The library also counts every scope in its `scopes` setting as one of its
-// own, and consents to a flow only once the grant holds each scope asked for
-// there too (`openid.scope`). The registry's scopes are in that setting, so
-// a registration may name them, and the grant holds every approved scope
-// there as well. The library reads `openid.scope` only for ID tokens and
-// `userinfo`, which the provider never serves.
+
 class GrantAdapter implements Adapter {
   #dbAdapter: DBAdapter;
 
@@ -160,7 +154,6 @@ class GrantAdapter implements Adapter {
         ? JSON.parse(row.resources)
         : row.resources
     ) as Record<string, string[]>;
-    let approved = [...new Set(Object.values(resources).flat())];
     return {
       jti: id,
       kind: 'Grant',
@@ -174,7 +167,6 @@ class GrantAdapter implements Adapter {
           scopes.join(' '),
         ]),
       ),
-      openid: { scope: approved.join(' ') },
     } as AdapterPayload;
   }
 

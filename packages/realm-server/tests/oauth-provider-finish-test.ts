@@ -299,16 +299,58 @@ module(basename(import.meta.filename), function (hooks) {
       codeFrom(assert, landed);
     });
 
-    test('a ticket works once', async function (assert) {
+    test('a ticket works once, even on a request that finishes nothing', async function (assert) {
       let ada = await user();
       let app = browser();
       let uid = await startOAuthFlow(app, await register());
       let ticket = await decide(uid, ada);
-      codeFrom(assert, (await finishAndFollow(app, uid, { ticket })).landed);
 
-      let again = await finishRequest(app, uid, { ticket });
-      assert.strictEqual(again.headers.location, EXPIRED_PAGE);
-      assert.strictEqual((await grants()).length, 1, 'still one grant');
+      // Presented beside another ticket, in the browser holding the cookie:
+      // the request finishes nothing, and spends both.
+      let alongside = await finishRequest(
+        app,
+        uid,
+        new URLSearchParams([
+          ['ticket', ticket],
+          ['ticket', randomBytes(32).toString('base64url')],
+        ]).toString(),
+      );
+      assert.strictEqual(
+        alongside.headers.location,
+        EXPIRED_PAGE,
+        'two tickets finish nothing',
+      );
+      let alone = await finishRequest(app, uid, { ticket });
+      assert.strictEqual(
+        alone.headers.location,
+        EXPIRED_PAGE,
+        'the ticket was spent, though its flow is still open',
+      );
+      assert.ok(
+        await new InteractionAdapter(db, (id) => `${RESUME_PREFIX}${id}`).find(
+          uid,
+        ),
+        'precondition: the flow is still open',
+      );
+      assert.deepEqual(await grants(), [], 'no grant');
+    });
+
+    test("finish and resume answer only on the issuer's host", async function (assert) {
+      let ada = await user();
+      let app = browser();
+      let uid = await startOAuthFlow(app, await register());
+      let ticket = await decide(uid, ada);
+      for (let path of [
+        `/_oauth-provider/interaction/${uid}/finish?ticket=${ticket}`,
+        `/_oauth-provider/auth/${uid}`,
+      ]) {
+        let response = await app
+          .get(path)
+          .set('Host', 'published.example.test');
+        assert.strictEqual(response.status, 404, `${path.split('?')[0]}`);
+      }
+      // The ticket never reached the finish route, so it still works.
+      codeFrom(assert, (await finishAndFollow(app, uid, { ticket })).landed);
     });
 
     test('the cookie, the route and the ticket must name the same flow', async function (assert) {
@@ -570,7 +612,15 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   module('the resume route', function () {
-    test('a resume URL used again ends on the error page, never the library’s JSON', async function (assert) {
+    async function errorReferences(): Promise<number> {
+      let [{ count }] = (await db.execute(
+        `SELECT count(*)::int AS count FROM oauth_provider_objects
+           WHERE kind = 'ErrorReference'`,
+      )) as { count: number }[];
+      return count;
+    }
+
+    test('a resume URL used again ends on the expired page, never the library’s JSON, and stores nothing', async function (assert) {
       let ada = await user();
       let app = browser();
       let uid = await startOAuthFlow(app, await register());
@@ -582,13 +632,42 @@ module(basename(import.meta.filename), function (hooks) {
         .get(new URL(finished.headers.location).pathname)
         .set('Host', serverURL.host);
       assert.strictEqual(again.status, 303);
-      let url = sentTo(again.headers.location);
-      assert.strictEqual(
-        `${url.origin}${url.pathname}`,
-        AUTHORIZE_PAGE,
-        "the browser goes to Boxel's error page",
-      );
-      assert.ok(url.searchParams.get('error'), 'with an error reference');
+      assert.strictEqual(again.headers.location, EXPIRED_PAGE);
+      assert.strictEqual(await errorReferences(), 0, 'no error is stored');
+    });
+
+    test('a resume request never redirects to an address its query names', async function (assert) {
+      let clientId = await register();
+      for (let extra of [{}, { response_mode: 'form_post' }] as Record<
+        string,
+        string
+      >[]) {
+        let query = new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: OAUTH_TEST_WEB_REDIRECT_URI,
+          response_type: 'code',
+          state: OAUTH_TEST_STATE,
+          ...extra,
+        });
+        // No resume cookie: the library fails the request, and would report
+        // the error to the redirect URI the query names.
+        let response = await supertest(server!)
+          .get(
+            `/_oauth-provider/auth/${randomBytes(16).toString('hex')}?${query}`,
+          )
+          .set('Host', serverURL.host);
+        assert.strictEqual(response.status, 303, JSON.stringify(extra));
+        assert.strictEqual(
+          response.headers.location,
+          EXPIRED_PAGE,
+          'the browser goes to the expired page, not the app',
+        );
+        assert.false(
+          response.text.includes(OAUTH_TEST_WEB_REDIRECT_URI),
+          'no page posts to the app',
+        );
+      }
+      assert.strictEqual(await errorReferences(), 0, 'no error is stored');
     });
   });
 

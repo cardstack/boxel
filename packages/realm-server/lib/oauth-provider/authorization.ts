@@ -427,12 +427,14 @@ export function dropCookies(ctxt: Koa.Context, names: string[]) {
 
 // The library's `renderError`, called when it can't send an error back to the
 // client: the client is unknown, the redirect URI isn't one it registered, or
-// the request names neither. On the authorization endpoint, and on the resume
-// route a finished flow continues on (whose request carries no client, and
-// which fails when its interaction has expired or was already resumed), the
-// error goes to Boxel's error page, with nothing to return to. Anywhere else,
-// such as a registration sent by a browser, the library's JSON error is
-// answered.
+// the request names neither. On the authorization endpoint the error goes to
+// Boxel's error page, with nothing to return to. On the resume route a
+// finished flow continues on, whose request carries no client and which fails
+// only when its interaction has expired or was already resumed, the browser
+// goes to the page for an expired request, and nothing is stored: that route
+// is not behind the limit on starting a flow, which bounds how many error
+// references are kept. Anywhere else, such as a registration sent by a
+// browser, the library's JSON error is answered.
 export function renderLibraryError({
   dbAdapter,
   secureOriginURL,
@@ -445,7 +447,14 @@ export function renderLibraryError({
     out: { error: string; error_description?: string },
   ) {
     let route = ctx.oidc?.route;
-    if (route !== 'authorization' && route !== 'resume') {
+    if (route === 'resume') {
+      log.info(`resume refused (${out.error})`);
+      return navigate(
+        ctx,
+        errorPageURL(secureOriginURL, FIXED_ERROR_PAGES.expired),
+      );
+    }
+    if (route !== 'authorization') {
       ctx.type = 'json';
       ctx.body = out;
       return;

@@ -485,9 +485,18 @@ export function createOAuthProvider({
 // ask for them, since Boxel drops its session cookie and each consent makes a
 // new grant; this keeps a flow from skipping either should that change. A
 // resumed flow is left to the library's checks, which see the decision.
+//
+// The library's check that every OpenID scope asked for was granted
+// (`op_scopes_missing`) is removed. The library counts every scope in its
+// `scopes` setting as an OpenID scope, and the registry's scopes are there so
+// a registration may name them. Each of them belongs to a resource, so the
+// check that every resource scope asked for was granted (`rs_scopes_missing`)
+// covers it, and a grant holds scopes only by resource: none for the whole
+// provider, which a token naming no resource would carry.
 function alwaysPromptingPolicy() {
   let { base, Check } = interactionPolicy;
   let policy = base();
+  policy.get('consent')!.checks.remove('op_scopes_missing');
   for (let name of ['login', 'consent']) {
     policy
       .get(name)!

@@ -38,7 +38,7 @@ import {
   destroyConsentDecision,
   findConsentDecision,
   sha256Hex,
-  takeConsentTicket,
+  takeConsentTickets,
 } from './objects.ts';
 
 const log = logger('boxel:oauth-provider');
@@ -70,11 +70,10 @@ export function finishHandler({
     ctxt.set('Cache-Control', 'no-store');
     let uid: string = ctxt.params.uid;
 
-    // Every ticket presented is spent, before any check.
+    // Every ticket presented is spent, before any check, in one statement
+    // however many there are.
     let tickets = presented(ctxt.query.ticket);
-    let taken = await Promise.all(
-      tickets.map((ticket) => takeConsentTicket(dbAdapter, ticket)),
-    );
+    let taken = await takeConsentTickets(dbAdapter, tickets);
 
     let refuse = (reason: FinishRefusal) => {
       log.info(`flow not finished: ${reason}`);
@@ -108,6 +107,8 @@ export function finishHandler({
       return refuse('no-ticket');
     }
     if (tickets.length > 1 || taken[0]?.interaction !== sha256Hex(uid)) {
+      // A request carrying several tickets finishes nothing, even when one
+      // of them is this flow's: that one is spent all the same.
       return refuse('ticket-mismatch');
     }
     let decision = await findConsentDecision(dbAdapter, uid);
@@ -146,9 +147,17 @@ export function finishHandler({
   };
 }
 
-// The resume route, `GET /_oauth-provider/auth/:uid`, before the library: it
-// drops any library session the browser brings, so the flow signs in only as
-// the user its finish named. A session left by another flow in the same
+// The resume route, `GET /_oauth-provider/auth/:uid`, before the library.
+//
+// It drops the request's query. A resumed flow takes its parameters from the
+// interaction the library stored, never from the URL, so the query is never
+// needed, and the library reads one it is given when it reports an error: a
+// request with no resume cookie that names a client and one of its redirect
+// URIs would be sent to that URI by the library, before Boxel has checked
+// anything (ADR 021 §1.8).
+//
+// It drops any library session the browser brings, so the flow signs in only
+// as the user its finish named. A session left by another flow in the same
 // browser would otherwise make the library answer with its logout
 // confirmation, which Boxel doesn't serve. Its response sends the browser to
 // the app with the code, so it sends no referrer.
@@ -160,6 +169,7 @@ export function resumeHandler({
   let sessionCookies = sessionCookieNames(provider);
   return async function handleResume(ctxt, next) {
     ctxt.set('Referrer-Policy', 'no-referrer');
+    ctxt.req.url = new URL(ctxt.req.url!, 'http://request.invalid').pathname;
     dropCookies(ctxt, sessionCookies);
     await next();
   };
@@ -197,15 +207,20 @@ async function internalUserId(
   return row?.id;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Whether `users` has a user with this internal ID, for the library's
-// `findAccount`.
+// `findAccount`. An ID that isn't a UUID names no user; checking its form
+// first lets the lookup compare `id` as it is, by its primary key.
 export async function userExists(
   dbAdapter: DBAdapter,
   userId: string,
 ): Promise<boolean> {
-  let rows = await dbAdapter.execute(
-    `SELECT 1 FROM users WHERE id::text = $1`,
-    { bind: [userId] },
-  );
+  if (!UUID.test(userId)) {
+    return false;
+  }
+  let rows = await dbAdapter.execute(`SELECT 1 FROM users WHERE id = $1`, {
+    bind: [userId],
+  });
   return rows.length > 0;
 }

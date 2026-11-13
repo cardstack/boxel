@@ -239,8 +239,15 @@ export class InteractionAdapter extends BearerKeyedAdapter {
 
 // The library's adapter for its sessions, stored by their IDs, which are the
 // values of its session cookie. A session lives only through the end of one
-// flow (ADR 021 §1.7): nothing the library issues outlives it, so it never
-// looks a session up by anything but its cookie.
+// flow (ADR 021 §1.7). The library looks one up by its `uid` (`findByUid`) in
+// two places, and neither is reached:
+// - checking a code or token tied to its session, and none is, since
+//   `expiresWithSession` is false (`provider.ts`);
+// - reading an interaction started under a signed-in session
+//   (`interactionDetails`, `interactionFinished`), and none is, since both
+//   routes that start an interaction, the authorization endpoint and the
+//   resume route, drop the session cookie first.
+// So `findByUid` throws, which a change that reaches either would show.
 export class SessionAdapter extends BearerKeyedAdapter {
   constructor(dbAdapter: DBAdapter) {
     super(dbAdapter, 'Session');
@@ -426,6 +433,27 @@ export async function takeConsentTicket(
   return (await takeObject(dbAdapter, CONSENT_TICKET_KIND, ticket)) as
     | ConsentTicketRecord
     | undefined;
+}
+
+// Deletes every ticket presented, in one statement, and answers those that
+// were current, in no particular order.
+export async function takeConsentTickets(
+  dbAdapter: DBAdapter,
+  tickets: readonly string[],
+): Promise<ConsentTicketRecord[]> {
+  if (tickets.length === 0) {
+    return [];
+  }
+  let rows = (await dbAdapter.execute(
+    `DELETE FROM oauth_provider_objects
+       WHERE kind = $1
+         AND id_hash IN (SELECT decode(hash, 'hex') FROM unnest($2::text[]) AS hash)
+       RETURNING payload, expires_at > now() AS current`,
+    { bind: [CONSENT_TICKET_KIND, tickets.map(sha256Hex)] },
+  )) as { payload: unknown; current: boolean }[];
+  return rows
+    .filter(({ current }) => current)
+    .map(({ payload }) => asRecord(payload) as unknown as ConsentTicketRecord);
 }
 
 // Deletes a flow's decision once the flow has finished or been cancelled.
