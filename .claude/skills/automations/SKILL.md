@@ -959,12 +959,17 @@ tab's storage, so the tab holds no other session. While that global is set the
 host reads and writes the tab's sessions there and nowhere else: the realm
 service's session store and `restoreSessionsFromStorage`
 (`host/app/utils/realm-sessions.ts`), `RealmAuthClient.getJWT` in a render
-context, and the realm-server service's session read. Nothing is synced to the
-auth service worker, which would keep the token past the run. The
+context, and the realm-server service's session read. No session is synced to
+the auth service worker, which would keep the token past the run, and the
+visit's start clears the worker's tokens (`clearServiceWorkerTokens`), since a
+tab taken from another affinity brings that affinity's worker with it. The
 `command-runner` route answers through `#answer`, which first calls
 `RealmService.dropInMemorySessions`: every realm holding a session is removed,
 along with its token and refresher, and the global is deleted, so nothing of
-the run is left in the tab once the run answers. Every other prerender visit
+the run is left in the tab once the run answers. A run that doesn't answer
+(the tab's wait times out, or the attempt throws) may still be running its
+script with the token, so `runCommandAttempt` evicts the run's affinity and
+the page never goes back to the pool. Every other prerender visit
 (render, module, capture, ordinary command) sets `boxel-session` and deletes
 the global, so a tab that served a run and is then handed to another affinity
 never reads the run's sessions in place of its own.

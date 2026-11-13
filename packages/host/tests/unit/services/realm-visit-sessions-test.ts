@@ -162,6 +162,25 @@ module('Unit | Service | realm | prerender visit sessions', function (hooks) {
     );
   });
 
+  test('a session a run’s tab stores goes to its in-memory sessions, never to storage', function (assert) {
+    handInMemorySessions({ [OTHER_REALM]: sessionToken(OTHER_REALM, 'run') });
+    realm.restoreSessionsFromStorage({ startingVisit: true });
+
+    let refreshed = sessionToken(OTHER_REALM, 'refreshed');
+    realm.realms.get(OTHER_REALM)!.token = refreshed;
+
+    assert.deepEqual(
+      (globalThis as any)[inMemorySessionsGlobal],
+      { [OTHER_REALM]: refreshed },
+      'the in-memory sessions hold the stored session',
+    );
+    assert.strictEqual(
+      window.localStorage.getItem(SessionLocalStorageKey),
+      null,
+      'storage holds no sessions',
+    );
+  });
+
   test('a run’s in-memory sessions replace the sessions an earlier visit left in storage', function (assert) {
     writeVisitSessions({ [ROOT_REALM]: sessionToken(ROOT_REALM) });
     realm.restoreSessionsFromStorage({ startingVisit: true });
