@@ -5,6 +5,7 @@ scope:
   - packages/runtime-common/realm.ts
   - packages/runtime-common/**/*run-token*
   - packages/realm-server/**/*run-token*
+  - packages/realm-server/handlers/handle-ai-batches.ts
   - packages/runtime-common/**/*run-overlay*
   - packages/realm-server/**/*run-overlay*
   - packages/realm-server/lib/key-bindings.ts
@@ -63,7 +64,11 @@ MUST be refused, and the refusal MUST name that realm.
 ### 1.3. Every call goes through `Realm.handleAutomation`
 
 The realm server MUST handle each request that carries a run token through
-`Realm.handleAutomation`, and through no other entry point.
+`Realm.handleAutomation`, and through no other entry point, except a
+realm-server route that accepts only a run token, such as the batch path
+(ADR 030). Such a route MUST verify the token, MUST refuse it once its
+identity's sessions are revoked, and MUST check the run's row as
+`Realm.handleAutomation` does.
 `Realm.handleAutomation` MUST refuse a call unless the run's row says the run
 is still running, its time limit has not passed, and its caps are not spent.
 A cancel or a pause MUST stop the run's next call.
