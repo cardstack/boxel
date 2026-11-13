@@ -17,8 +17,11 @@ import type { VirtualNetwork } from '../virtual-network.ts';
 // its origin, so those keys are shared by every card that has them.
 export type CanonicalURLMemo = Map<string, string>;
 
-// A ceiling on one pass's memo, should its keys ever stop repeating: past it
-// the memo starts over, which costs only recomputation.
+// The bound on one pass's memo. Its keys repeat across cards, but not all of
+// them: the relationship extractor runs every card's own URL through it, an
+// absolute key per card, and each relationship target adds one key. So on a
+// realm past this size the memo does reach the ceiling, and starts over each
+// time it does, which costs only recomputation.
 export const CANONICAL_URL_MEMO_MAX_ENTRIES = 50_000;
 
 // An absolute http(s) URL, the only scheme-prefixed reference that ignores
@@ -66,7 +69,13 @@ function memoKey(
   }
   let path = base.split(/[?#]/)[0] ?? base;
   let slash = path.lastIndexOf('/');
-  return slash >= 0 ? `${path.slice(0, slash + 1)}\n${url}` : `${base}\n${url}`;
+  // A base with no path (`http://a`) has its last `/` inside `://`, and its
+  // directory would be the scheme alone, shared by every origin.
+  let authority = ORIGIN.exec(path)?.[0];
+  if (slash < 0 || (authority !== undefined && slash < authority.length)) {
+    return `${base}\n${url}`;
+  }
+  return `${path.slice(0, slash + 1)}\n${url}`;
 }
 
 export function canonicalURL(

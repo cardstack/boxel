@@ -110,6 +110,9 @@ module(basename(import.meta.filename), function () {
         'http://test/Pet/b.json',
         'http://test/a.json',
         'http://elsewhere/dir/a.gts',
+        // No path: the last `/` is inside `://`, so there is no directory.
+        'http://a',
+        'http://b',
       ];
       let refs = [
         './b.gts',
@@ -175,8 +178,8 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a realm-sized pass keeps the memo to its references, not its cards', function (assert) {
-      let { network } = makeStubNetwork();
+    test('a realm-sized pass keeps one entry per card and one per reference', function (assert) {
+      let { network, resolveCount } = makeStubNetwork();
       let memo: CanonicalURLMemo = new Map();
       let deps = [
         'http://test/person.gts',
@@ -186,11 +189,20 @@ module(basename(import.meta.filename), function () {
         '/shared.gts',
       ];
       for (let i = 0; i < 10_000; i++) {
+        let card = `http://test/Person/${i}.json`;
+        // The relationship extractor resolves each card's own URL against
+        // itself, which is an absolute key of its own for every card.
+        canonicalURL(card, card, network, memo);
         for (let dep of deps) {
-          canonicalURL(dep, `http://test/Person/${i}.json`, network, memo);
+          canonicalURL(dep, card, network, memo);
         }
       }
-      assert.strictEqual(memo.size, deps.length);
+      assert.strictEqual(memo.size, 10_000 + deps.length);
+      assert.strictEqual(
+        resolveCount(),
+        10_000 + deps.length,
+        'each card and each reference resolves once',
+      );
     });
 
     test('the memo starts over past its ceiling', function (assert) {
