@@ -149,7 +149,8 @@ interface RequestForwardBody {
 // A request carrying an automation run's token takes the run's path: the
 // route lets it past the session check, and `admitRunForward` checks the
 // token and holds the request to the run's caps before it is sent (see
-// `lib/run-token-forward.ts`). It is billed to the person the run acts as.
+// `lib/run-token-forward.ts`). It is billed to the person the run acts as,
+// and its ledger entry is an AI charge naming the run and its realm.
 export default function handleRequestForward({
   dbAdapter,
   definitionLookup,
@@ -382,6 +383,13 @@ export default function handleRequestForward({
           creditStrategy: destinationConfig.creditStrategy,
           signal: clientGone,
           destination: destinationConfig.url,
+          charge: runForward
+            ? {
+                kind: 'ai',
+                realm: runForward.run.realm,
+                runId: runForward.run.runId,
+              }
+            : undefined,
           onCostResolved: (cost) => {
             costInUsd = cost;
           },

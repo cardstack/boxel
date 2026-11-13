@@ -1,5 +1,6 @@
 import {
   type DBAdapter,
+  type SpendCharge,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
   logger,
 } from '@cardstack/runtime-common';
@@ -16,6 +17,10 @@ import {
 } from './outbound/client.ts';
 
 const log = logger('credit-strategies');
+
+// What an AI call's spend paid for. Without a run it is the call alone; a call
+// an automation run makes names the run and its realm.
+export type AICallCharge = Extract<SpendCharge, { kind: 'ai' }>;
 
 // The cost lookup sends the system key, so it goes out through the guarded
 // outbound client like every other call that does. The client attaches the key
@@ -80,13 +85,15 @@ export interface CreditStrategy {
     matrixUserId: string,
     response: any,
   ): Promise<number | undefined>;
-  // Records `costInUsd` against the user's credits. The ledger write reads
-  // the balance of each credit bucket before debiting it, so callers hold the
-  // user's cost lock around this.
+  // Records `costInUsd` against the user's credits, as `charge` (an AI call
+  // with no reference when it is omitted). The ledger write reads the balance
+  // of each credit bucket before debiting it, so callers hold the user's cost
+  // lock around this.
   spendUsageCost(
     dbAdapter: DBAdapter,
     matrixUserId: string,
     costInUsd: number,
+    charge?: AICallCharge,
   ): Promise<void>;
 }
 
@@ -168,8 +175,9 @@ export class OpenRouterCreditStrategy implements CreditStrategy {
     dbAdapter: DBAdapter,
     matrixUserId: string,
     costInUsd: number,
+    charge?: AICallCharge,
   ): Promise<void> {
-    await spendUsageCostFromBilling(dbAdapter, matrixUserId, costInUsd);
+    await spendUsageCostFromBilling(dbAdapter, matrixUserId, costInUsd, charge);
   }
 }
 
@@ -196,6 +204,7 @@ export class NoCreditStrategy implements CreditStrategy {
     _dbAdapter: DBAdapter,
     _matrixUserId: string,
     _costInUsd: number,
+    _charge?: AICallCharge,
   ): Promise<void> {
     // No-op for no-credit strategy
   }
