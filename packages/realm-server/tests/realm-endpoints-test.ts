@@ -1612,30 +1612,6 @@ module(basename(import.meta.filename), function () {
                   kind: 'file',
                 },
               },
-              'multiple-default-exports-card.gts': {
-                links: {
-                  related: `${testRealmHref}multiple-default-exports-card.gts`,
-                },
-                meta: {
-                  kind: 'file',
-                },
-              },
-              'multiple-default-exports-card.json': {
-                links: {
-                  related: `${testRealmHref}multiple-default-exports-card.json`,
-                },
-                meta: {
-                  kind: 'file',
-                },
-              },
-              'multiple-default-exports.gts': {
-                links: {
-                  related: `${testRealmHref}multiple-default-exports.gts`,
-                },
-                meta: {
-                  kind: 'file',
-                },
-              },
               'nested/': {
                 links: {
                   related: `${testRealmHref}nested/`,
