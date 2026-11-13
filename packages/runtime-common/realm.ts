@@ -13879,9 +13879,12 @@ export class Realm {
         // Resolution and the gate read the type and the stored values; the
         // rest of a row describes an indexed version the run's card doesn't
         // have.
+        // Each answer is its own copy: a read assembles its document by
+        // rewriting the resource it is handed, and the scope keeps a peeked
+        // row for the rest of the batch.
         let row: InstanceOrError = {
           type: 'instance',
-          instance: staged.card,
+          instance: structuredClone(staged.card),
           canonicalURL: url.href,
           lastModified: null,
           resourceCreatedAt: Math.floor(Date.now() / 1000),
@@ -13920,7 +13923,7 @@ export class Realm {
         let indexed = await index.instance(url, { includeErrors: true });
         return {
           type: 'doc',
-          doc: { data: staged.card },
+          doc: { data: structuredClone(staged.card) },
           generation: indexed?.generation ?? 0,
           version: null,
           indexedAt: null,

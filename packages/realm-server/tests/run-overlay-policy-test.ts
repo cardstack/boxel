@@ -73,6 +73,13 @@ export class Notice extends CardDef {
   @field status = contains(StringField);
   @operation static close = { base: 'transform', set: { status: 'closed' } };
 }`,
+      'notices/drill.json': {
+        data: {
+          type: 'card',
+          attributes: { body: 'Drill at noon', status: 'open' },
+          meta: { adoptsFrom: { module: rri('../notice'), name: 'Notice' } },
+        },
+      },
       'people/ada.json': {
         data: {
           type: 'card',
@@ -175,21 +182,48 @@ export class Notice extends CardDef {
     );
   });
 
-  test('a policy predicate reads the fields of the card a run staged', async function (assert) {
+  test('a policy predicate reads the fields of the card a run staged, not the realm’s', async function (assert) {
     let { token, run } = await createAutomationRunToken(
       dbAdapter,
       realm,
       READER,
     );
-    await stageAdaAsNotice(run, 'draft');
+    // The realm's drill notice is open, which the predicate would admit; the
+    // run's staged copy is a draft.
+    let staged = await stageRunOverlayFile(
+      dbAdapter,
+      { runId: run.id, attempt: run.attempt! },
+      'notices/drill.json',
+      new TextEncoder().encode(
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { body: 'Drill at noon', status: 'draft' },
+            meta: { adoptsFrom: { module: '../notice', name: 'Notice' } },
+          },
+        }),
+      ),
+      100,
+    );
+    assert.strictEqual(staged.kind, 'staged');
 
-    let refused = await operations(token, [close]);
+    let refused = await operations(token, [
+      { op: 'invoke', 'boxel:name': 'close', href: './notices/drill' },
+    ]);
     assert.strictEqual(
       refused.status,
       403,
-      'the staged notice is a draft, which the grant’s predicate refuses',
+      `the staged notice is a draft, which the grant’s predicate refuses: ${refused.text}`,
     );
-    let staged = await readCard(token, 'people/ada');
-    assert.strictEqual(staged.data.attributes.status, 'draft');
+    assert.strictEqual(
+      (await readCard(token, 'notices/drill')).data.attributes.status,
+      'draft',
+    );
+    assert.strictEqual(
+      (await readCard(createJWT(realm, READER, ['read']), 'notices/drill')).data
+        .attributes.status,
+      'open',
+      'the realm’s notice is open',
+    );
   });
 });

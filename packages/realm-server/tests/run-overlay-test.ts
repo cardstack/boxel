@@ -59,12 +59,28 @@ export class Person extends CardDef {
       // only on a card whose type is Notice.
       'notice.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import { operation } from 'https://cardstack.com/base/operations';
+import { operation, bxl } from 'https://cardstack.com/base/operations';
 export class Notice extends CardDef {
   @field body = contains(StringField);
   @field status = contains(StringField);
+  @field headline = contains(StringField, {
+    computeVia: function (this: Notice) {
+      return 'Notice: ' + (this.body ?? '');
+    },
+  });
   @operation static close = { base: 'transform', set: { status: 'closed' } };
+  @operation static stampHeadline = {
+    base: 'transform',
+    transformations: bxl\`.status = .headline;\`,
+  };
 }`,
+      'notices/drill.json': {
+        data: {
+          type: 'card',
+          attributes: { body: 'Drill at noon', status: 'open' },
+          meta: { adoptsFrom: { module: rri('../notice'), name: 'Notice' } },
+        },
+      },
       'people/ada.json': {
         data: {
           type: 'card',
@@ -863,6 +879,28 @@ export class Mine extends Automation {}`;
     assert.strictEqual(
       (await readCard(session(), 'people/ada')).data.attributes.name,
       'Ada',
+    );
+  });
+
+  test('a run’s transform reads a card it staged as not indexed, never the realm row’s computed values', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let update = await atomic(token, [
+      notice('update', './notices/drill.json', 'Drill moved to two'),
+    ]);
+    assert.strictEqual(update.status, 201, update.text);
+
+    let stamped = await operations(token, [
+      { op: 'invoke', 'boxel:name': 'stampHeadline', href: './notices/drill' },
+    ]);
+    assert.strictEqual(
+      stamped.status,
+      400,
+      `the computed headline of the staged notice isn't indexed, so the program can't read it: ${stamped.text}`,
+    );
+    assert.strictEqual(
+      (await readCard(token, 'notices/drill')).data.attributes.status,
+      'open',
+      'the staged notice is left as the run staged it',
     );
   });
 
