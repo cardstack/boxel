@@ -1,14 +1,53 @@
 import type { VirtualNetwork } from '../virtual-network.ts';
 
-// Pass-scoped cache for `canonicalURL`, keyed on the two string inputs
-// `(relativeTo, url)`. A hit returns the cached canonical string and skips
-// `resolveURL` (and its transient `URL` allocation) entirely. Across one index
-// pass the same `(base, dep)` pairs recur on nearly every card, so almost all
-// calls are duplicates. The set of registered realm prefixes is stable within a
-// pass, so `(relativeTo, url)` fully determines the result; the owner clears the
-// map at each pass boundary. It is a string → string map — every consumer uses
-// the returned string — so no `URL` instances are ever retained.
+// Pass-scoped cache for `canonicalURL`. A hit returns the cached canonical
+// string and skips `resolveURL` (and its transient `URL` allocation) entirely.
+// The set of registered realm prefixes is stable within a pass, so the inputs
+// determine the result; the owner clears the map at each pass boundary. It is a
+// string → string map — every consumer uses the returned string — so no `URL`
+// instances are ever retained.
+//
+// The key holds only the part of `relativeTo` the result depends on
+// (`memoKey`). `relativeTo` is usually the card being indexed, which differs
+// for every card, so a key holding all of it never repeats across cards: the
+// map gained an entry per (card, dependency) and held about a quarter of a
+// megabyte per file until the pass ended, which ran a realm-sized pass out of
+// heap. An absolute URL or a registered prefix ignores the base, a relative
+// path depends only on the base's directory, and a root-relative one only on
+// its origin, so those keys are shared by every card that has them.
 export type CanonicalURLMemo = Map<string, string>;
+
+// A ceiling on one pass's memo, should its keys ever stop repeating: past it
+// the memo starts over, which costs only recomputation.
+export const CANONICAL_URL_MEMO_MAX_ENTRIES = 50_000;
+
+const SCHEME = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
+const ORIGIN = /^[a-zA-Z][a-zA-Z\d+.-]*:\/\/[^/?#]*/;
+
+// The memo key for `(url, relativeTo)`: the URL, with the part of the base its
+// resolution reads.
+function memoKey(
+  url: string,
+  relativeTo: string | undefined,
+  virtualNetwork: VirtualNetwork,
+): string {
+  if (SCHEME.test(url) || virtualNetwork.isRegisteredPrefix(url)) {
+    return `\n${url}`;
+  }
+  let base = relativeTo ?? '';
+  if (url === '' || url.startsWith('?') || url.startsWith('#')) {
+    return `${base}\n${url}`;
+  }
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    let origin = ORIGIN.exec(base)?.[0];
+    return origin !== undefined ? `${origin}\n${url}` : `${base}\n${url}`;
+  }
+  let path = base.split(/[?#]/)[0] ?? base;
+  let slash = path.lastIndexOf('/');
+  return slash >= 0
+    ? `${path.slice(0, slash + 1)}\n${url}`
+    : `${base}\n${url}`;
+}
 
 export function canonicalURL(
   url: string,
@@ -19,14 +58,17 @@ export function canonicalURL(
   if (!memo) {
     return computeCanonicalURL(url, relativeTo, virtualNetwork);
   }
-  // `relativeTo` and `url` are URL strings that never contain a newline, so a
-  // newline-joined key cannot collide across distinct input pairs.
-  let key = `${relativeTo ?? ''}\n${url}`;
+  // URL strings never contain a newline, so a newline-joined key cannot
+  // collide across inputs that resolve differently.
+  let key = memoKey(url, relativeTo, virtualNetwork);
   let cached = memo.get(key);
   if (cached !== undefined) {
     return cached;
   }
   let result = computeCanonicalURL(url, relativeTo, virtualNetwork);
+  if (memo.size >= CANONICAL_URL_MEMO_MAX_ENTRIES) {
+    memo.clear();
+  }
   memo.set(key, result);
   return result;
 }
