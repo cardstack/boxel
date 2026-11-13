@@ -77,9 +77,9 @@ import {
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import {
   finalizeOrphanedReservations,
-  isHeapExhaustion,
   orphanedReservationReason,
 } from './lib/finalize-orphan-reservations.ts';
+import { StderrLines, classifyStderrLine } from './lib/fatal-stderr.ts';
 import { findStuckReservations } from './lib/stuck-reservations.ts';
 import {
   taskMemoryLimitMb,
@@ -900,9 +900,15 @@ async function startWorker(
   let watchdog: NodeJS.Timeout;
   let workerId: string | undefined;
   let currentState: IndexState | undefined;
-  // Set when the child reports that its V8 heap ran out, so the exit that
+  // Set when the child reports that its V8 heap ran out, so the close that
   // follows closes its reservation as that rather than as an interruption.
   let heapExhausted = false;
+  // A child reports a fatal error once; later lines of the same report are
+  // not a second failure to act on.
+  let fatalHandled = false;
+  // The child's recent stderr, for the message a fatal error is recorded
+  // with: the diagnostic line alone drops the stack V8 prints around it.
+  let recentStderr = '';
 
   workers.push(worker);
 
@@ -928,19 +934,24 @@ async function startWorker(
       );
       startWorker(priority, urlMappings, opts);
     }
+  });
 
-    // Free orphan reservations in the background. The new worker won't be
-    // able to claim the dead worker's reservation until completed_at is
-    // set, so this still races to be useful — but if it stalls, the
-    // existing 60s monitorWorker / 7200s lease-expiry path is the
-    // backstop, not this exit handler.
-    //
-    // A child that exits while still holding a reservation never finished
-    // the work, so the row is normally marked 'interrupted' and does not
-    // count toward the per-job cap. A SIGKILL from outside our own shutdown
-    // is marked 'killed', which the cap counts, so a job that exhausts the
-    // container's memory is abandoned after a bounded number of attempts
-    // instead of killing workers on every task it is retried on.
+  // Free orphan reservations once the child's stdio has closed, which is
+  // after `exit` and after the last of its stderr has been read. `exit` can
+  // come first, and a heap exhaustion reported in stderr that has not been
+  // read yet would then close the reservation as an interruption, which the
+  // cap does not count. The new worker won't be able to claim the dead
+  // worker's reservation until completed_at is set, so this still races to
+  // be useful — but if it stalls, the existing 60s monitorWorker / 7200s
+  // lease-expiry path is the backstop, not this handler.
+  //
+  // A child that exits while still holding a reservation never finished
+  // the work, so the row is normally marked 'interrupted' and does not
+  // count toward the per-job cap. A SIGKILL from outside our own shutdown
+  // is marked 'killed', which the cap counts, so a job that exhausts the
+  // container's memory is abandoned after a bounded number of attempts
+  // instead of killing workers on every task it is retried on.
+  worker.on('close', (_code, signal) => {
     finalizeOrphanedReservations(
       adapter,
       workerId,
@@ -962,13 +973,16 @@ async function startWorker(
     );
   }
   if (worker.stderr) {
-    worker.stderr.on('data', (data: Buffer) => {
-      let message = data.toString();
+    let stderrLines = new StderrLines();
+    let classify = (line: string) => {
+      let kind = classifyStderrLine(line);
+      if (!kind || fatalHandled) {
+        return;
+      }
+      fatalHandled = true;
       let maybeLogUrl = currentState?.url ? ` (for ${currentState.url})` : '';
-      log.error(
-        `[worker ${name} priority ${priority}]${maybeLogUrl}: ${message}`,
-      );
-      if (message.includes('FATAL ERROR') && isHeapExhaustion(message)) {
+      let message = recentStderr;
+      if (kind === 'heap-exhausted') {
         // The child's heap ran out. That is not a verdict on the job: an
         // index job stages its rows as it goes, and a retry of the same job
         // resumes from them, so rejecting it here would throw away every
@@ -990,7 +1004,7 @@ async function startWorker(
             );
           },
         );
-      } else if (message.includes('FATAL ERROR')) {
+      } else {
         // Snapshot the render state before any await: a `status|…` message
         // from the child can replace `currentState` mid-flight, and this error
         // belongs to whatever the child was rendering when it died.
@@ -1012,7 +1026,7 @@ async function startWorker(
           // `not-ours` is the only case that yields those rows to someone
           // else. With no reservation to attribute the failure to, nothing
           // else owns them, so the error doc is still worth writing — the
-          // child's own exit handler closing the reservation first is a race
+          // child's own close handler closing the reservation first is a race
           // this path can lose.
           if (outcome !== 'not-ours' && url && realm) {
             await markFailedIndexEntry({ url, realm, deps, message });
@@ -1024,6 +1038,24 @@ async function startWorker(
             e,
           );
         });
+      }
+    };
+    worker.stderr.on('data', (data: Buffer) => {
+      let chunk = data.toString();
+      recentStderr = `${recentStderr}${chunk}`.slice(-4000);
+      let maybeLogUrl = currentState?.url ? ` (for ${currentState.url})` : '';
+      log.error(
+        `[worker ${name} priority ${priority}]${maybeLogUrl}: ${chunk}`,
+      );
+      for (let line of stderrLines.push(chunk)) {
+        classify(line);
+      }
+    });
+    // The last line may have no newline: it is read once the stream ends,
+    // which is before the child's `close`.
+    worker.stderr.on('end', () => {
+      for (let line of stderrLines.flush()) {
+        classify(line);
       }
     });
   }
