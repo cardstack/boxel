@@ -1,15 +1,6 @@
 {
   "main": [
     {
-      "run": 42288605858,
-      "at": "2026-11-06T20:28:09Z",
-      "minutes": 223.1,
-      "slowestShard": 16.9,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
       "run": 42355660030,
       "at": "2026-11-07T08:28:54Z",
       "minutes": 221.4,
@@ -359,36 +350,18 @@
       "shards": 16,
       "runsOn": true,
       "indexCache": false
+    },
+    {
+      "run": 43371776310,
+      "at": "2026-11-13T05:24:02Z",
+      "minutes": 242.2,
+      "slowestShard": 17.4,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": false
     }
   ],
   "pullRequest": [
-    {
-      "run": 42655436507,
-      "at": "2026-11-09T16:30:19Z",
-      "minutes": 171.9,
-      "slowestShard": 13.1,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
-      "run": 42656292727,
-      "at": "2026-11-09T16:35:20Z",
-      "minutes": 212.4,
-      "slowestShard": 14.1,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": true
-    },
-    {
-      "run": 42661476180,
-      "at": "2026-11-09T17:07:13Z",
-      "minutes": 171.3,
-      "slowestShard": 12.3,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
     {
       "run": 42665071406,
       "at": "2026-11-09T17:29:11Z",
@@ -3020,6 +2993,33 @@
       "at": "2026-11-13T03:44:23Z",
       "minutes": 239.3,
       "slowestShard": 18.1,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": false
+    },
+    {
+      "run": 43368273935,
+      "at": "2026-11-13T04:52:12Z",
+      "minutes": 180.2,
+      "slowestShard": 13.2,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": false
+    },
+    {
+      "run": 43369159932,
+      "at": "2026-11-13T05:00:40Z",
+      "minutes": 177,
+      "slowestShard": 14.7,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": false
+    },
+    {
+      "run": 43371917149,
+      "at": "2026-11-13T05:25:18Z",
+      "minutes": 192.5,
+      "slowestShard": 14.1,
       "shards": 16,
       "runsOn": true,
       "indexCache": false
