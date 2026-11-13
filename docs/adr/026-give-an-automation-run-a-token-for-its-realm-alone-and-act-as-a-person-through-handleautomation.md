@@ -56,9 +56,8 @@ leaked token gives away:
   identity's ordinary realm session, or the prerender auth that
   `prepareRunCommand` mints for every realm its `runAs` user can reach.
 - A run's cards MUST load modules only from the automation's realm, the base
-  realm and the catalog realm. A run MUST NOT start while a policy grant
-  gives write to a module that it loads from its own realm, directly or
-  through an import.
+  realm and the catalog realm. A run MUST NOT be refused because a policy
+  grant gives write to a module that it loads from its own realm.
 
 Switching on an automation whose cards load a module from any other realm
 MUST be refused, and the refusal MUST name that realm.
@@ -127,13 +126,18 @@ the identity's wider session, would hand it to any module loaded beside it.
 The prerender pool already keeps each affinity's tabs to one session for the
 same reason.
 
-Module code runs with the payer's direct write and credit. A policy grant can
-give write to module source, and the owner of a public realm needs no
-permission in this realm at all. Either could then act with more authority
-than they hold. So a run loads modules only from its own realm, which only
-direct writers can change while it runs, and from the base and catalog
-realms, which the platform deploys from reviewed source. An author who wants
-a card from another realm copies it into their own.
+Module code runs with the payer's direct write and credit, so whoever can
+change a module a run loads can act with that authority. The owner of a
+public realm needs no permission in this realm at all. So a run loads modules
+only from its own realm and from the base and catalog realms, which the
+platform deploys from reviewed source. An author who wants a card from
+another realm copies it into their own.
+
+Who can change a realm's own modules is its administrators' decision. A
+policy grant that gives write to module source widens who can change the
+realm's code, and the administrator who writes it accepts what that code can
+then do, in a run as anywhere else. A run isn't refused for it: that would
+second-guess a choice the realm's administrators already made.
 
 Calls from the tab reach the server over the network, like any other
 request, so the token is the only thing that can mark one as an
@@ -179,6 +183,10 @@ every run, so it is refused once, when it is switched on.
 - **Load modules from any public realm.** Their owners need no permission in
   the automation's realm, yet their code would run with the payer's
   authority.
+- **Refuse a run while a policy grant can write a module it loads.** Granting
+  write to module source is the realm administrators' choice, and its risk
+  comes with it, runs included. A refusal would second-guess that choice and
+  stop every automation in the realm while the grant stands.
 - **Enforcement in the tab.** The tab runs code that the realm doesn't
   trust, and its counts would be reported by the party they bound.
 - **A run with its identity's full direct write.** The run could rewrite the
