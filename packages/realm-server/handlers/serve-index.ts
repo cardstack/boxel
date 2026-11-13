@@ -653,6 +653,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       : [];
     let dynamicRoutes = hasDynamicHostRoutes(hostRoutes);
     let notFound = false;
+    // The serve rule for a path a dynamic route resolved, added to the
+    // routing map this response injects. The host app resolves its first
+    // render from that map synchronously, so without it the app would load
+    // the path as a card URL and replace the served card with a not-found
+    // page.
+    let dynamicServeRule: { path: string; id: string } | undefined;
     if (!fixedRouteMatched && dynamicRoutes && routedRealm) {
       let resolved = await resolveDynamicHostRoute(
         requestURL,
@@ -708,6 +714,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           return;
         }
         cardURL = new URL(resolution.cardHref);
+        dynamicServeRule = {
+          path: resolved.canonicalPathname,
+          id: resolution.cardHref,
+        };
       }
       if (resolution?.kind === 'error') {
         // A failed or refused lookup is never answered as not found, so a
@@ -866,7 +876,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       responseHTML = injectHeadHTML(responseHTML, headFragments.join('\n'));
     }
 
-    if (routingMap.length > 0 && routedRealm) {
+    if ((routingMap.length > 0 || dynamicServeRule) && routedRealm) {
       // Rules are stored realm-relative ('/whitepaper'). The client sees URL
       // paths that include the realm's mount segment ('/routing/whitepaper'
       // when the realm is mounted at '/routing/' on the published host). For
@@ -888,6 +898,11 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         }
         return { path, id: rule.id };
       });
+      if (dynamicServeRule) {
+        // Already host-scoped: the request's own path, with the mount
+        // pathname, in the form the resolver answered it.
+        hostScopedMap.push(dynamicServeRule);
+      }
       // Per-request merge into the already-rewritten config meta tag.
       // The retrieveIndexHTML rewrite is cached process-wide because the
       // fields it touches are global; the routing map is per-realm so it

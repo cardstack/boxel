@@ -327,8 +327,50 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
       assert.deepEqual(
         config.hostRoutingMap.map((rule: { path: string }) => rule.path),
+        [`${realmPath}fixed`, `${realmPath}tos`, `${realmPath}posts/hello`],
+        'the fixed routing map keeps its shape, with the served path last',
+      );
+    });
+
+    test('a path a dynamic route serves is a serve rule in the injected routing map', async function (assert) {
+      function routingMap(text: string) {
+        let match = text.match(
+          /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)"/,
+        );
+        assert.ok(match, 'the config meta tag is there');
+        return JSON.parse(decodeURIComponent(match![1])).hostRoutingMap as {
+          path: string;
+          id?: string;
+          redirectTo?: string;
+        }[];
+      }
+
+      let response = await page('c/shoes/trail-runner');
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        routingMap(response.text).find(
+          (rule) => rule.path === `${realmPath}c/shoes/trail-runner`,
+        ),
+        {
+          path: `${realmPath}c/shoes/trail-runner`,
+          id: `${realmURL.href}Product/trail`,
+        },
+        'the host app finds the served card for this path on first render',
+      );
+
+      let fixed = await page('fixed');
+      assert.deepEqual(
+        routingMap(fixed.text).map((rule) => rule.path),
         [`${realmPath}fixed`, `${realmPath}tos`],
-        'the fixed routing map keeps its shape',
+        'a fixed route adds no rule',
+      );
+
+      let missing = await page('posts/unpublished');
+      assert.strictEqual(missing.status, 404);
+      assert.deepEqual(
+        routingMap(missing.text).map((rule) => rule.path),
+        [`${realmPath}fixed`, `${realmPath}tos`],
+        'a path that resolves to nothing adds no rule',
       );
     });
 
