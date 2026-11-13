@@ -45,6 +45,22 @@ export type ErrorModel = {
   operatorModeState: string;
 };
 
+// A dynamic route whose lookup failed or was refused. The index route's
+// error state shows it, so the visitor sees that the page could not be
+// loaded rather than that it does not exist.
+class HostRouteResolutionError extends Error implements ErrorModel {
+  loadType = 'card' as const;
+  operatorModeState = '';
+  constructor(cause: unknown) {
+    super(
+      `This page could not be loaded. Try again in a moment.\n${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+    );
+    this.name = 'HostRouteResolutionError';
+  }
+}
+
 export default class Card extends Route {
   queryParams = {
     hostModeStack: {
@@ -117,6 +133,28 @@ export default class Card extends Route {
           this.forwardableQueryParams(transition),
         );
         return;
+      }
+      // A path no fixed rule matches goes through the realm's dynamic
+      // routes, as a full page load of it does on the server: a card id
+      // template, a field match, a nested or a dynamic redirect route. A
+      // lookup that fails shows an error state, not the not-found page.
+      // When no route resolves the path, it loads as a card URL.
+      if (!routed) {
+        let dynamic =
+          await this.hostModeService.resolveDynamicRoutedPath(normalizedPath);
+        if (dynamic?.kind === 'redirect') {
+          this.hostModeService.redirectTo(
+            dynamic.redirectTo,
+            this.forwardableQueryParams(transition),
+          );
+          return;
+        }
+        if (dynamic?.kind === 'error') {
+          throw new HostRouteResolutionError(dynamic.error);
+        }
+        if (dynamic?.kind === 'card') {
+          return this.store.get(dynamic.cardHref);
+        }
       }
       let cardUrl =
         routed?.id ??
