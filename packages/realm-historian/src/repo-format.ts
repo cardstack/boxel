@@ -330,7 +330,8 @@ export function parseJournalSeq(value: string): JournalSeqRange | undefined {
 // `Boxel-Includes-Superseded`: a path whose diff in this revision also
 // contains a superseded write's change, and the revision that recorded that
 // write, as `<revision> <path>`. The revision comes first because a path may
-// hold a space.
+// hold a space. A path superseded more than once since it was last recorded
+// has one value per superseding revision, newest first.
 export interface IncludedSuperseded {
   revision: string;
   path: string;
