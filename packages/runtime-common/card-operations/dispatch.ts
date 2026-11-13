@@ -8,6 +8,7 @@ import {
   callApiOperation,
   type AnonymousCallApiCaller,
   type CallApiMode,
+  type CallApiRunMeter,
   type CallApiSender,
 } from './call-api.ts';
 import { readSourceOperation } from './read-source.ts';
@@ -354,6 +355,9 @@ export interface RunOperationOptions {
   // The automation run an `automation` invocation belongs to, which each use
   // of a key it makes is recorded under.
   automationRunId?: string;
+  // Holds an `automation` invocation to its automation's declaration and its
+  // run's caps (see `CallApiRunMeter`).
+  callApiRunMeter?: CallApiRunMeter;
   // Where a `callApi` invoked by a caller who isn't signed in was admitted
   // from, which the share filling its slots counts them by. A request the
   // realm admitted without a session from an address it couldn't place sets
@@ -1617,6 +1621,7 @@ async function runBaseOperation(
         duringPrerender: opts.duringPrerender ?? false,
         mode: opts.callApiMode ?? 'interactive',
         ...(opts.automationRunId ? { runId: opts.automationRunId } : {}),
+        ...(opts.callApiRunMeter ? { runMeter: opts.callApiRunMeter } : {}),
         sender: core.callApi,
         ...(opts.callApiAnonymous ? { anonymous: opts.callApiAnonymous } : {}),
         type: () => resolvedTypeOf(core, canonical.target, scope),
