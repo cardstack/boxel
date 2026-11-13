@@ -536,6 +536,17 @@ And the run's reads:
   and `realmURL` and `realmInfo`, never cached. It has no computed fields
   and no expanded links, since staged files aren't indexed. A card the run
   created is read this way too.
+- **Operations** (`operations.invoke`, `operations.invokeBatchOperation`):
+  `handleOperations` resolves a run's batch against `Realm.#runOperationCore`,
+  the realm's operation core with each card the attempt staged answered from
+  the overlay. Its index row is built from the staged document, with the
+  adoption chain its `adoptsFrom` names, so an operation on a card the run
+  created or re-typed resolves against the staged type (a declared name the
+  staged type carries runs, and the policy gate matches rules against that
+  type), and a predicate reads the staged fields. A `read` entry answers the
+  staged document as `cards.get` does, with its generation taken from the
+  realm's index row, or 0 for a card the run created. An entry that finds its
+  targets with a query searches the index, as `cards.search` does.
 - **`cards.search`** runs on the index, and answers each card the attempt
   staged as staged (`Realm.#withStagedCards`): its attributes,
   relationships and type come from the staged document, and the rest of what
