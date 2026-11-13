@@ -23,6 +23,7 @@ const passThroughLint: LintSubmissionFilesFn = async (files) => ({
   })),
   lintErrors: [],
   fixedFileCount: 0,
+  lintRanOutOfMemory: false,
 });
 
 const SUBMISSION_REALM_URL = 'http://localhost:4201/submissions/';
@@ -1491,6 +1492,7 @@ module('command runner', () => {
       })),
       lintErrors: [lintError],
       fixedFileCount: 0,
+      lintRanOutOfMemory: false,
     });
 
     let publishedJobs: Array<{
@@ -1664,6 +1666,7 @@ module('command runner', () => {
         })),
         lintErrors: [],
         fixedFileCount: 0,
+        lintRanOutOfMemory: false,
       };
     };
 
@@ -1871,6 +1874,7 @@ module('command runner', () => {
       })),
       lintErrors: [],
       fixedFileCount: 1,
+      lintRanOutOfMemory: false,
     });
 
     let publishedJobs: Array<{

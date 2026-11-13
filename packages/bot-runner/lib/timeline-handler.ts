@@ -26,6 +26,7 @@ export interface TimelineHandlerOptions {
   queuePublisher: QueuePublisher;
   githubClient: GitHubClient;
   startTime: number;
+  captureException?: (error: unknown) => void;
 }
 
 export function onTimelineEvent({
@@ -34,6 +35,7 @@ export function onTimelineEvent({
   queuePublisher,
   githubClient,
   startTime,
+  captureException = (error) => Sentry.captureException(error),
 }: TimelineHandlerOptions) {
   let workflowHandler = new PrListingWorkflowHandler({
     submissionBotUserId: authUserId,
@@ -116,15 +118,13 @@ export function onTimelineEvent({
         );
       }
     } catch (error) {
+      // A rejected submission is already shown to the user on the workflow
+      // card, and CommandRunner has logged it.
       if (isSubmissionRejection(error)) {
-        // The handler has already shown the reason to the user.
-        log.warn('bot command rejected the submission', {
-          error: error instanceof Error ? error.message : String(error),
-        });
         return;
       }
       log.error('error handling timeline event', error);
-      Sentry.captureException(error);
+      captureException(error);
     }
   };
 }

@@ -129,8 +129,10 @@ export class CommandRunner {
         commandInput: eventContent.input as Record<string, unknown>,
       });
     } catch (error) {
-      let logAt = isSubmissionRejection(error) ? log.warn : log.error;
-      logAt.call(log, 'error in maybeEnqueueCommand', {
+      let level = isSubmissionRejection(error)
+        ? ('warn' as const)
+        : ('error' as const);
+      log[level]('error in maybeEnqueueCommand', {
         runAs,
         eventType: eventContent.type,
         error,
