@@ -203,22 +203,26 @@ export async function createRealm(
       param(null),
       `) ON CONFLICT (url) DO UPDATE SET publishable = true, show_as_catalog = NULL, updated_at = now()`,
     ]);
-    writeJSONSync(join(realmPath, 'realm.json'), {
-      data: {
-        type: 'card',
-        attributes: {
-          cardInfo: { name },
-          ...(iconURL ? { iconURL } : {}),
-          ...(backgroundURL ? { backgroundURL } : {}),
-        },
-        meta: {
-          adoptsFrom: {
-            module: '@cardstack/base/realm-config',
-            name: 'RealmConfig',
+    writeJSONSync(
+      join(realmPath, 'realm.json'),
+      {
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name },
+            ...(iconURL ? { iconURL } : {}),
+            ...(backgroundURL ? { backgroundURL } : {}),
+          },
+          meta: {
+            adoptsFrom: {
+              module: '@cardstack/base/realm-config',
+              name: 'RealmConfig',
+            },
           },
         },
       },
-    });
+      { spaces: 2 },
+    );
     let indexCard: Record<string, any> = {
       data: {
         type: 'card',
@@ -251,7 +255,7 @@ export async function createRealm(
         Sentry.captureException(err);
       }
     }
-    writeJSONSync(join(realmPath, 'index.json'), indexCard);
+    writeJSONSync(join(realmPath, 'index.json'), indexCard, { spaces: 2 });
 
     // Register the source realm in realm_registry. The INSERT emits
     // NOTIFY realm_registry; the reconciler on every instance picks
