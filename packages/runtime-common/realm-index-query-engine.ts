@@ -1000,6 +1000,12 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getInstance(url, opts);
   }
 
+  // The dependencies the instance's HTML renders read, which `instance()`'s
+  // `deps` (the index visit's) can miss.
+  async instanceRenderDeps(url: URL, opts?: QueryOptions): Promise<string[]> {
+    return await this.#indexQueryEngine.getInstanceRenderDeps(url, opts);
+  }
+
   async instanceSource(
     url: URL,
     opts?: QueryOptions,

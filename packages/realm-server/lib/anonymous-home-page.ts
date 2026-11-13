@@ -127,24 +127,30 @@ async function homePage(
 
 // The modules in this realm that rendering the card loads, as URLs.
 //
-// They come from the card's index entry: its `deps` are what the index visit
-// loaded while it rendered the card, so they hold the module the card adopts
-// from, every module that module imports in turn, and the modules of the
-// fields and linked cards it renders. Reading the card's `adoptsFrom` alone
-// would miss all but the first. `deps` also lists the cards and files the
-// render read, and scoped CSS, which are not modules, so a dep counts as a
-// module only where the realm holds a module file for it. Deps in other realms
-// are left out: their own realm's access decides them.
+// They come from the card's dependencies on both index channels. The index
+// visit's `deps` hold the module the card adopts from, every module that
+// module imports in turn, and the modules of the fields and linked cards its
+// search doc reads. The HTML renders' deps add what only rendering loads, such
+// as a linked card the search doc doesn't follow. Reading the card's
+// `adoptsFrom` alone would miss all but the first. Deps also list the cards
+// and files the card read, and scoped CSS, which are not modules, so a dep
+// counts as a module only where the realm holds a module file for it. Deps in
+// other realms are left out: their own realm's access decides them.
 async function homeCardModules(
   realm: Realm,
   cardId: string,
 ): Promise<string[]> {
-  let entry = await realm.realmIndexQueryEngine.instance(new URL(cardId));
+  let cardURL = new URL(cardId);
+  let entry = await realm.realmIndexQueryEngine.instance(cardURL);
   if (!entry) {
     return [];
   }
+  let deps = [
+    ...(entry.deps ?? []),
+    ...(await realm.realmIndexQueryEngine.instanceRenderDeps(cardURL)),
+  ];
   let modules = new Set<string>();
-  for (let dep of entry.deps ?? []) {
+  for (let dep of deps) {
     if (isScopedCSSRequest(dep)) {
       continue;
     }

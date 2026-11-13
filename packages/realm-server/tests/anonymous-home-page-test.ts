@@ -50,6 +50,12 @@ const GREETING_MODULE = `
   export const greeting = 'Welcome';
 `;
 
+// A module nothing imports. A test lists it among the home card's render
+// deps, as a module only the card's HTML render loaded.
+const RENDER_ONLY_MODULE = `
+  export const footnote = 'Rendered only';
+`;
+
 const HOME_MODULE = `
   import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
   import StringField from "@cardstack/base/string";
@@ -83,6 +89,7 @@ function siteFiles(name: string, realmJSON = realmConfigCardJSON({ name })) {
     'realm.json': realmJSON,
     'greeting.ts': GREETING_MODULE,
     'home.gts': HOME_MODULE,
+    'render-only.ts': RENDER_ONLY_MODULE,
     'index.json': home(`${name} home`),
   };
 }
@@ -127,6 +134,7 @@ const ROUTED_REALM_CONFIG = JSON.stringify({
 module(basename(import.meta.filename), function (hooks) {
   let realms: Realm[] = [];
   let server: Server;
+  let db: PgAdapter;
 
   setupCatalogTestSubset(hooks);
 
@@ -214,6 +222,7 @@ module(basename(import.meta.filename), function (hooks) {
   setupDB(hooks, {
     templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
+      db = dbAdapter;
       await start({ dbAdapter, publisher, runner });
     },
     afterEach: stop,
@@ -271,6 +280,31 @@ module(basename(import.meta.filename), function (hooks) {
       'only modules from the realm itself are named',
     );
     assert.false(report.anonymousCanView, 'the realm fails');
+  });
+
+  test("a module only the home card's HTML render loaded is checked too", async function (assert) {
+    let renderOnly = `${GOVERNED}render-only`;
+    await db.execute(
+      `UPDATE prerendered_html
+       SET deps = COALESCE(deps, '[]'::jsonb) || jsonb_build_array($1::text)
+       WHERE url = $2 AND type = 'instance'`,
+      { bind: [renderOnly, `${GOVERNED}index.json`] },
+    );
+    let rows = (await db.execute(
+      `SELECT 1 FROM prerendered_html
+       WHERE url = $1 AND type = 'instance' AND deps @> jsonb_build_array($2::text)`,
+      { bind: [`${GOVERNED}index.json`, renderOnly] },
+    )) as unknown[];
+    assert.strictEqual(rows.length, 1, "the home card's render deps name it");
+
+    let report = await checkAnonymousHomePage(realm(GOVERNED));
+
+    assert.true(
+      report.unloadableModules.some(({ url }) => url === renderOnly),
+      `the render-only module is named as unloadable (${JSON.stringify(
+        report.unloadableModules,
+      )})`,
+    );
   });
 
   test('a routing rule for the root makes its card the one checked', async function (assert) {
