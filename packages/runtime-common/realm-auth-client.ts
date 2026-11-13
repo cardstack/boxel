@@ -1,6 +1,7 @@
 import { unixTime, delay, isBrowserTestEnv } from './index.ts';
 
 import type { TokenClaims } from './realm.ts';
+import { inMemorySessions } from './in-memory-sessions.ts';
 
 // iat - issued at (seconds since epoch)
 // exp - expires at (seconds since epoch)
@@ -96,19 +97,24 @@ export class RealmAuthClient {
     let tokenRefreshLeadTimeSeconds = 60;
     let jwt: string;
 
-    // the prerenderer relies solely on the JWT's in local storage
+    // the prerenderer relies solely on the JWTs it hands the tab: in memory
+    // for an automation run, in local storage for everything else
     if ((globalThis as any).__boxelRenderContext) {
-      let sessionStr = globalThis.localStorage.getItem('boxel-session') ?? '{}';
-      let session: { [realmURL: string]: string } = JSON.parse(sessionStr);
+      let inMemory = inMemorySessions();
+      let session: { [realmURL: string]: string } =
+        inMemory ??
+        JSON.parse(globalThis.localStorage.getItem('boxel-session') ?? '{}');
       let jwt = session[this.realmURL.href];
       if (!jwt) {
         if (isBrowserTestEnv()) {
           jwt = await this.createRealmSession();
           session[this.realmURL.href] = jwt;
-          globalThis.localStorage.setItem(
-            'boxel-session',
-            JSON.stringify(session),
-          );
+          if (!inMemory) {
+            globalThis.localStorage.setItem(
+              'boxel-session',
+              JSON.stringify(session),
+            );
+          }
         } else {
           throw new Error(
             `Error: Prerenderer did not set a JWT for realm ${this.realmURL.href}`,

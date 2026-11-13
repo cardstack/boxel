@@ -3,6 +3,8 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
+import { inMemorySessionsGlobal } from '@cardstack/runtime-common/in-memory-sessions';
+
 import type RealmService from '@cardstack/host/services/realm';
 import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
@@ -40,6 +42,7 @@ module('Unit | Service | realm | prerender visit sessions', function (hooks) {
 
   hooks.afterEach(function () {
     delete (globalThis as any).__boxelRenderContext;
+    delete (globalThis as any)[inMemorySessionsGlobal];
   });
 
   test('a visit drops the sessions an earlier visit left that its own sessions do not carry', function (assert) {
@@ -132,6 +135,108 @@ module('Unit | Service | realm | prerender visit sessions', function (hooks) {
     assert.true(
       realm.realms.has(PUBLIC_REALM),
       'a session-less realm is not taken for another caller’s',
+    );
+  });
+
+  // What the prerender server does before an automation run: hand the tab the
+  // run's sessions in memory, with nothing in storage.
+  function handInMemorySessions(sessions: Record<string, string>) {
+    window.localStorage.removeItem(SessionLocalStorageKey);
+    (globalThis as any)[inMemorySessionsGlobal] = sessions;
+  }
+
+  test('a run’s sessions handed in memory are used, and never written to storage', function (assert) {
+    let runToken = sessionToken(OTHER_REALM, 'run');
+    handInMemorySessions({ [OTHER_REALM]: runToken });
+    realm.restoreSessionsFromStorage({ startingVisit: true });
+
+    assert.strictEqual(
+      realm.realms.get(OTHER_REALM)?.token,
+      runToken,
+      'the realm holds the session handed in memory',
+    );
+    assert.strictEqual(
+      window.localStorage.getItem(SessionLocalStorageKey),
+      null,
+      'storage holds no sessions',
+    );
+  });
+
+  test('a session a run’s tab stores goes to its in-memory sessions, never to storage', function (assert) {
+    handInMemorySessions({ [OTHER_REALM]: sessionToken(OTHER_REALM, 'run') });
+    realm.restoreSessionsFromStorage({ startingVisit: true });
+
+    let refreshed = sessionToken(OTHER_REALM, 'refreshed');
+    realm.realms.get(OTHER_REALM)!.token = refreshed;
+
+    assert.deepEqual(
+      (globalThis as any)[inMemorySessionsGlobal],
+      { [OTHER_REALM]: refreshed },
+      'the in-memory sessions hold the stored session',
+    );
+    assert.strictEqual(
+      window.localStorage.getItem(SessionLocalStorageKey),
+      null,
+      'storage holds no sessions',
+    );
+  });
+
+  test('a run’s in-memory sessions replace the sessions an earlier visit left in storage', function (assert) {
+    writeVisitSessions({ [ROOT_REALM]: sessionToken(ROOT_REALM) });
+    realm.restoreSessionsFromStorage({ startingVisit: true });
+
+    handInMemorySessions({ [OTHER_REALM]: sessionToken(OTHER_REALM, 'run') });
+    realm.restoreSessionsFromStorage({ startingVisit: true });
+
+    assert.false(
+      realm.realms.has(ROOT_REALM),
+      'the realm the earlier visit held a session for is gone',
+    );
+  });
+
+  test('dropping a run’s in-memory sessions forgets them and every realm holding one', function (assert) {
+    handInMemorySessions({ [OTHER_REALM]: sessionToken(OTHER_REALM, 'run') });
+    realm.restoreSessionsFromStorage({ startingVisit: true });
+    realm.getOrCreateRealmResource(PUBLIC_REALM);
+
+    realm.dropInMemorySessions();
+
+    assert.false(
+      realm.realms.has(OTHER_REALM),
+      'the realm holding the run’s session is gone',
+    );
+    assert.true(
+      realm.realms.has(PUBLIC_REALM),
+      'a realm identified without a session stays',
+    );
+    assert.strictEqual(
+      (globalThis as any)[inMemorySessionsGlobal],
+      undefined,
+      'the tab holds none of the run’s sessions',
+    );
+    assert.strictEqual(
+      window.localStorage.getItem(SessionLocalStorageKey),
+      null,
+      'nothing was written to storage on the way out',
+    );
+  });
+
+  test('dropping in-memory sessions leaves a tab whose sessions are in storage alone', function (assert) {
+    let rootToken = sessionToken(ROOT_REALM);
+    writeVisitSessions({ [ROOT_REALM]: rootToken });
+    realm.restoreSessionsFromStorage({ startingVisit: true });
+
+    realm.dropInMemorySessions();
+
+    assert.strictEqual(
+      realm.realms.get(ROOT_REALM)?.token,
+      rootToken,
+      'the realm keeps its session',
+    );
+    assert.deepEqual(
+      JSON.parse(window.localStorage.getItem(SessionLocalStorageKey)!),
+      { [ROOT_REALM]: rootToken },
+      'storage keeps its sessions',
     );
   });
 });

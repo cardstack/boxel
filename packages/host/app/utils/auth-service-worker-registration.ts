@@ -9,6 +9,7 @@ import { isTesting } from '@embroider/macros';
 import window from 'ember-window-mock';
 
 import { SessionLocalStorageKey } from './local-storage-keys';
+import { realmSessionsAreInMemory } from './realm-sessions';
 
 // Structural so tests can stub without the full service surface.
 export interface AuthServiceWorkerDeps {
@@ -124,7 +125,12 @@ export function syncTokenToServiceWorker(
   realmURL: string,
   token: string | undefined,
 ): void {
-  if (!isServiceWorkerSupported()) {
+  // A tab holding its sessions in memory never hands one to the worker, but
+  // still tells it to forget a session it drops.
+  if (
+    !isServiceWorkerSupported() ||
+    (token !== undefined && realmSessionsAreInMemory())
+  ) {
     return;
   }
 
@@ -152,7 +158,7 @@ export function syncTokenToServiceWorker(
 export function syncAllTokensToServiceWorker(
   tokens: Record<string, string>,
 ): void {
-  if (!isServiceWorkerSupported()) {
+  if (!isServiceWorkerSupported() || realmSessionsAreInMemory()) {
     return;
   }
 
@@ -180,7 +186,12 @@ export function clearServiceWorkerTokens(): void {
   controller.postMessage({ type: 'clear-tokens' });
 }
 
+// A tab holding its sessions in memory hands none of them to the service
+// worker, which keeps them past the tab's visit.
 function readTokensFromStorage(): Record<string, string> | undefined {
+  if (realmSessionsAreInMemory()) {
+    return undefined;
+  }
   try {
     let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
     if (sessionsString) {

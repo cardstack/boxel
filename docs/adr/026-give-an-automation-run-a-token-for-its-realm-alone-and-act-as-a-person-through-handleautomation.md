@@ -17,6 +17,12 @@ scope:
   - packages/realm-server/middleware/multi-realm-authorization.ts
   - packages/realm-server/prerender/render-runner.ts
   - packages/realm-server/prerender/affinity.ts
+  - packages/runtime-common/in-memory-sessions.ts
+  - packages/runtime-common/realm-auth-client.ts
+  - packages/host/app/utils/realm-sessions.ts
+  - packages/host/app/utils/auth-service-worker-registration.ts
+  - packages/host/app/routes/command-runner.ts
+  - packages/host/app/services/realm.ts
 ---
 
 # 026. Give an automation run a token for its realm alone, and act as a person through `Realm.handleAutomation`
