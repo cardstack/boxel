@@ -1,10 +1,28 @@
+import { randomBytes } from 'crypto';
+import type Koa from 'koa';
 import * as Sentry from '@sentry/node';
 import Provider, { errors } from 'oidc-provider';
-import type { Configuration, KoaContextWithOIDC } from 'oidc-provider';
-import { logger } from '@cardstack/runtime-common';
+import type {
+  AdapterFactory,
+  Configuration,
+  KoaContextWithOIDC,
+} from 'oidc-provider';
+import {
+  DBRateLimitStore,
+  logger,
+  type DBAdapter,
+  type RateLimitStore,
+} from '@cardstack/runtime-common';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
+import { oauthProviderAdapter } from './adapter.ts';
 import { OAuthProviderConfigError } from './config.ts';
 import type { OAuthProviderConfig } from './config.ts';
+import {
+  DEFAULT_NEW_CLIENT_LIMIT,
+  type NewClientLimit,
+} from './new-client-limit.ts';
+import { boxelHosts } from './redirect-uris.ts';
+import { registrationHandler } from './registration.ts';
 import type { OAuthResource, OAuthResourceDefinition } from './registry.ts';
 import { buildRegistry, oauthIssuer, registryScopes } from './registry.ts';
 
@@ -14,6 +32,7 @@ export const log = logger('boxel:oauth-provider');
 // strips of its query strings and bodies.
 export const OAUTH_PROVIDER_PATH_PREFIX = OAUTH_PROVIDER_PATH;
 export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
+export const OAUTH_REGISTRATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/reg`;
 
 // The fields discovery copies from the library's document. That document
 // also lists every endpoint it mounts, `jwks_uri`, and OpenID Connect
@@ -27,31 +46,58 @@ export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
 // field is set from the issuer and its registered route instead.
 //
 // `grant_types_supported` is listed because a client that finds it missing
-// assumes the implicit grant is supported (RFC 8414 §2). The library derives
-// it from `responseTypes`, so it holds only `authorization_code`.
+// assumes the implicit grant is supported (RFC 8414 §2). It is set, not
+// copied: the library lists `refresh_token` as soon as a client may register
+// for it, before the token endpoint serves a refresh.
+//
+// `token_endpoint_auth_methods_supported` is listed, before the token
+// endpoint is, because a client that finds it missing assumes
+// `client_secret_basic` (RFC 8414 §2) and registers asking for a secret,
+// which registration refuses. The library lists `none`, from
+// `clientAuthMethods`.
 const DISCOVERY_FIELDS = [
   'issuer',
   'response_types_supported',
-  'grant_types_supported',
   'code_challenge_methods_supported',
-  'scopes_supported',
+  'token_endpoint_auth_methods_supported',
 ] as const;
+const GRANT_TYPES_SERVED = ['authorization_code'];
+
+// The running provider: the library, and Boxel's handling of a registration,
+// which runs before the library's.
+export interface OAuthProviderService {
+  provider: Provider;
+  handleRegistration: Koa.Middleware;
+}
 
 // Starts the provider for a realm server. Its issuer is the server's URL
 // (ADR 021 §1.1), so every resource's identifier and every URL it publishes
-// are built from that, never from a request.
+// are built from that, never from a request. The hosts a client may not
+// redirect to come from the server's own settings: its URL, the secure
+// origin, the app origins listed for the secure origin, and the domains users
+// publish sites on.
 export function startOAuthProvider({
   serverURL,
   config,
-  hasSecureOrigin,
+  dbAdapter,
+  secureOriginURL,
+  appOrigins = [],
+  publishedDomains = [],
+  newClientLimit = DEFAULT_NEW_CLIENT_LIMIT,
+  rateLimitStore = new DBRateLimitStore(dbAdapter),
   testOnlyResources,
 }: {
   serverURL: URL;
   config: OAuthProviderConfig;
-  hasSecureOrigin: boolean;
+  dbAdapter: DBAdapter;
+  secureOriginURL: URL | undefined;
+  appOrigins?: readonly string[];
+  publishedDomains?: readonly string[];
+  newClientLimit?: NewClientLimit;
+  rateLimitStore?: RateLimitStore;
   testOnlyResources?: readonly OAuthResourceDefinition[];
-}): Provider {
-  if (!hasSecureOrigin) {
+}): OAuthProviderService {
+  if (!secureOriginURL) {
     throw new OAuthProviderConfigError(
       `the OAuth provider needs a secure origin for its pages: this realm server has no secureOriginURL`,
     );
@@ -64,27 +110,63 @@ export function startOAuthProvider({
     );
   }
   let issuer = oauthIssuer(serverURL);
-  return createOAuthProvider({
+  let registry = buildRegistry(issuer, testOnlyResources);
+  let provider = createOAuthProvider({
     issuer,
     config,
-    registry: buildRegistry(issuer, testOnlyResources),
+    registry,
+    adapter: oauthProviderAdapter(dbAdapter),
   });
+  return {
+    provider,
+    handleRegistration: registrationHandler({
+      hosts: boxelHosts({
+        serverURL,
+        secureOriginURL,
+        appOrigins,
+        publishedDomains,
+      }),
+      scopes: registryScopes(registry),
+      rateLimitStore,
+      newClientLimit,
+    }),
+  };
 }
 
 export function createOAuthProvider({
   issuer,
   config,
   registry,
+  adapter,
 }: {
   issuer: string;
   config: OAuthProviderConfig;
   registry: readonly OAuthResource[];
+  adapter: AdapterFactory;
 }): Provider {
   let scopes = registryScopes(registry);
   let configuration: Configuration = {
+    adapter,
     cookies: { keys: config.cookieKeys },
     jwks: config.jwks as Configuration['jwks'],
     responseTypes: ['code'],
+    // Every client is public (ADR 021 §1.4): it proves itself by its
+    // redirect URI and PKCE, never a secret.
+    clientAuthMethods: ['none'],
+    // What a client that leaves a field out is registered with. Boxel also
+    // writes `token_endpoint_auth_method` into every registration itself,
+    // since the library decides whether to issue a secret before these apply.
+    clientDefaults: {
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+      id_token_signed_response_alg: 'RS256',
+    },
+    // Set, rather than left to the library's default, so a client may
+    // register for the refresh grant; the library allows the grant only once
+    // this is set or `offline_access` is a scope. Refresh tokens follow the
+    // user's choice at consent, which no flow records yet, so none is issued.
+    issueRefreshToken: async () => false,
     // The library accepts only S256 challenges; this makes one required of
     // every client, not just public ones.
     pkce: { required: () => true },
@@ -140,8 +222,25 @@ export function createOAuthProvider({
           };
         },
       },
+      // Dynamic client registration, open to any caller (ADR 021 §1.4) and
+      // checked by Boxel before the library sees it (`registration.ts`).
+      registration: {
+        enabled: true,
+        // Open: a client needs no token issued ahead of time to register.
+        initialAccessToken: false,
+        policies: undefined,
+        // A registration can't be read, changed or deleted afterwards, so
+        // there is no token to do it with. On by default.
+        issueRegistrationAccessToken: false,
+        idFactory: () => randomBytes(24).toString('base64url'),
+        // No client is ever issued a secret. Should the library ask for one
+        // all the same, the registration is refused rather than a secret
+        // stored.
+        secretFactory: () => {
+          throw new Error('the OAuth provider issues no client secrets');
+        },
+      },
       // Off: nothing serves them.
-      registration: { enabled: false },
       clientIdMetadataDocument: { enabled: false },
       deviceFlow: { enabled: false },
       revocation: { enabled: false },
@@ -195,7 +294,8 @@ export function createOAuthProvider({
 
   // Runs around the library's own routing: after it builds the discovery
   // document, publish only the fields Boxel serves, with the registry's
-  // scopes in place of the library's list (which always adds `openid`).
+  // scopes in place of the library's list (which always adds `openid`), and
+  // each endpoint built from the issuer.
   provider.use(async (ctx, next) => {
     await next();
     if (ctx.oidc?.route === 'discovery' && isRecord(ctx.body)) {
@@ -204,7 +304,9 @@ export function createOAuthProvider({
       for (let field of DISCOVERY_FIELDS) {
         document[field] = body[field];
       }
+      document.grant_types_supported = GRANT_TYPES_SERVED;
       document.scopes_supported = scopes;
+      document.registration_endpoint = `${issuer}${OAUTH_REGISTRATION_PATH}`;
       ctx.body = document;
     }
   });

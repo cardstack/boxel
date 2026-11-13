@@ -1831,6 +1831,9 @@ export async function runTestRealmServer({
   googleSignIn,
   oauthProvider,
   oauthTestResources,
+  oauthNewClientLimit,
+  secureOriginAppOrigins,
+  clientAddress,
   cardDocumentCache,
   published,
   history,
@@ -1872,6 +1875,15 @@ export async function runTestRealmServer({
   oauthTestResources?: ConstructorParameters<
     typeof RealmServer
   >[0]['__testOnlyOAuthResources'];
+  // The provider's limit on new clients; omit for the production default.
+  oauthNewClientLimit?: ConstructorParameters<
+    typeof RealmServer
+  >[0]['oauthNewClientLimit'];
+  // App origins listed for the secure origin, as `--secureOriginAppOrigin`.
+  secureOriginAppOrigins?: string[];
+  // How the server works out a caller's address. Omit for none in front of
+  // it, which makes every supertest request the same loopback caller.
+  clientAddress?: ConstructorParameters<typeof RealmServer>[0]['clientAddress'];
   // Inject a cache configured for the test; omit for the production default.
   cardDocumentCache?: CardDocumentCache;
   // Builds the realm as a published one (see `createRealm`).
@@ -1978,6 +1990,9 @@ export async function runTestRealmServer({
     ...(oauthTestResources
       ? { __testOnlyOAuthResources: oauthTestResources }
       : {}),
+    ...(oauthNewClientLimit ? { oauthNewClientLimit } : {}),
+    ...(secureOriginAppOrigins ? { secureOriginAppOrigins } : {}),
+    ...(clientAddress ? { clientAddress } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(realmURL.port)),

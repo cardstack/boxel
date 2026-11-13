@@ -2,7 +2,10 @@ import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
-import { readOAuthProviderConfig } from './lib/oauth-provider/config.ts';
+import {
+  readNewClientLimit,
+  readOAuthProviderConfig,
+} from './lib/oauth-provider/config.ts';
 import { writeSync } from 'node:fs';
 import {
   CardDocumentCache,
@@ -493,6 +496,9 @@ const secureOriginURL =
 const oauthProvider = readOAuthProviderConfig(process.env, {
   secureOriginURL,
 });
+const oauthNewClientLimit = oauthProvider
+  ? readNewClientLimit(process.env)
+  : undefined;
 
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
@@ -1013,7 +1019,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
     ...(googleSignIn ? { googleSignIn } : {}),
-    ...(oauthProvider ? { oauthProvider } : {}),
+    ...(oauthProvider ? { oauthProvider, oauthNewClientLimit } : {}),
   });
 
   const secureHttpServer =

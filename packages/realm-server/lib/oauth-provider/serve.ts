@@ -1,8 +1,11 @@
 import type Koa from 'koa';
 import type Router from '@koa/router';
-import type Provider from 'oidc-provider';
 import { fullRequestURL } from '../../middleware/index.ts';
-import { OAUTH_DISCOVERY_PATH } from './provider.ts';
+import {
+  OAUTH_DISCOVERY_PATH,
+  OAUTH_REGISTRATION_PATH,
+  type OAuthProviderService,
+} from './provider.ts';
 
 // Registers the provider's routes on the realm server's router. The library
 // is a whole Koa app that answers every path it knows (its signing keys, its
@@ -16,24 +19,33 @@ import { OAUTH_DISCOVERY_PATH } from './provider.ts';
 // published sites on other hosts, whose pages users write, and the library
 // sets its flow cookies on whatever host a request names. A request on any
 // other host goes on to the realm server's own routing.
+//
+// A registration goes through Boxel's own handling first, which hands it on
+// to the library only once Boxel allows it.
 export function registerOAuthProviderRoutes(
   router: Router,
-  provider: Provider,
+  { provider, handleRegistration }: OAuthProviderService,
 ) {
-  let handle = serveFromOAuthProvider(provider);
-  router.get(OAUTH_DISCOVERY_PATH, handle);
-}
-
-function serveFromOAuthProvider(provider: Provider) {
-  let callback = provider.callback();
   let issuerHost = new URL(provider.issuer).host;
-  return async function (ctxt: Koa.Context, next: Koa.Next) {
-    if (fullRequestURL(ctxt).host !== issuerHost) {
-      return next();
-    }
+  let callback = provider.callback();
+  let serve = async (ctxt: Koa.Context) => {
     // The library writes the response itself. Headers already set on it,
     // such as CORS, stay.
     ctxt.respond = false;
     await callback(ctxt.req, ctxt.res);
   };
+  let onIssuerHost =
+    (handle: (ctxt: Koa.Context) => Promise<void>): Koa.Middleware =>
+    async (ctxt, next) => {
+      if (fullRequestURL(ctxt).host !== issuerHost) {
+        return next();
+      }
+      await handle(ctxt);
+    };
+
+  router.get(OAUTH_DISCOVERY_PATH, onIssuerHost(serve));
+  router.post(
+    OAUTH_REGISTRATION_PATH,
+    onIssuerHost((ctxt) => handleRegistration(ctxt, () => serve(ctxt))),
+  );
 }
