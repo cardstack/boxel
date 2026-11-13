@@ -388,6 +388,109 @@ function makeOtherRealmTypeFixture(): Record<
   };
 }
 
+// Field-match routes whose cards share values: posts with the same slug,
+// one of them failing the route's `where`, and products nested in
+// categories, where a slug only has to be unique within its category.
+function makeDuplicatesFixture(): Record<
+  string,
+  string | LooseSingleCardDocument
+> {
+  let card = (
+    name: string,
+    attributes: Record<string, unknown>,
+    relationships?: Record<string, { links: { self: string } }>,
+  ): LooseSingleCardDocument => ({
+    data: {
+      type: 'card',
+      attributes,
+      ...(relationships ? { relationships } : {}),
+      meta: { adoptsFrom: { module: rri('./shop'), name } },
+    },
+  });
+  return {
+    'shop.gts': `
+      import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      export class Post extends CardDef {
+        static displayName = 'Post';
+        @field slug = contains(StringField);
+        @field status = contains(StringField);
+      }
+      export class Category extends CardDef {
+        static displayName = 'Category';
+        @field slug = contains(StringField);
+      }
+      export class Product extends CardDef {
+        static displayName = 'Product';
+        @field slug = contains(StringField);
+        @field category = linksTo(Category);
+      }
+    `,
+    'post-a.json': card('Post', { slug: 'hello', status: 'published' }),
+    'post-b.json': card('Post', { slug: 'hello', status: 'published' }),
+    'post-c.json': card('Post', { slug: 'hello', status: 'draft' }),
+    'post-d.json': card('Post', { slug: 'draft-twin', status: 'published' }),
+    'post-e.json': card('Post', { slug: 'draft-twin', status: 'draft' }),
+    'post-f.json': card('Post', { slug: 'unique', status: 'published' }),
+    'shoes.json': card('Category', { slug: 'shoes' }),
+    'hats.json': card('Category', { slug: 'hats' }),
+    'shoe-classic.json': card(
+      'Product',
+      { slug: 'classic' },
+      { category: { links: { self: './shoes' } } },
+    ),
+    'hat-classic.json': card(
+      'Product',
+      { slug: 'classic' },
+      { category: { links: { self: './hats' } } },
+    ),
+    'trail-1.json': card(
+      'Product',
+      { slug: 'trail' },
+      { category: { links: { self: './shoes' } } },
+    ),
+    'trail-2.json': card(
+      'Product',
+      { slug: 'trail' },
+      { category: { links: { self: './shoes' } } },
+    ),
+    'realm.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Duplicates Realm' },
+          hostRoutingRules: [
+            {
+              path: '/posts/:slug',
+              type: { module: './shop', name: 'Post' },
+              where: { eq: { status: 'published' } },
+              match: { slug: ':slug' },
+            },
+            {
+              path: '/c/:category',
+              type: { module: './shop', name: 'Category' },
+              match: { slug: ':category' },
+              routes: [
+                {
+                  path: '/:product',
+                  type: { module: './shop', name: 'Product' },
+                  match: { slug: ':product' },
+                },
+              ],
+            },
+          ],
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('@cardstack/base/realm-config'),
+            name: 'RealmConfig',
+          },
+        },
+      },
+    },
+  };
+}
+
 // The definition lookup the test realm server and its realm read through.
 // The server keeps it private; tests need it to fill the definition cache and
 // to record a definition change.
@@ -903,6 +1006,117 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         second.routes[0]?.routes[0]?.fullPath,
         '/cities/:city/:venue',
+      );
+    });
+  });
+
+  module('Realm.getHostRouteDuplicates', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/routing-duplicates/');
+    let testRealm: Realm;
+    let definitionLookup: CachingDefinitionLookup;
+
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
+      permissions: { '*': ['read'] },
+      fileSystem: makeDuplicatesFixture(),
+      onRealmSetup({ testRealm: realm, testRealmServer }) {
+        testRealm = realm;
+        definitionLookup = serverDefinitionLookup(testRealmServer);
+      },
+    });
+
+    hooks.beforeEach(async function () {
+      await testRealm.indexing();
+      // A host route reads only cached definitions, so cache the route
+      // types first, then check again as after an index.
+      let scoped = definitionLookup.forRealm(testRealm);
+      for (let name of ['Post', 'Category', 'Product']) {
+        await scoped.lookupDefinition({
+          module: rri(`${realmURL.href}shop`),
+          name,
+        });
+      }
+      testRealm.clearRealmIndexCaches();
+      expectCompleteRoutes(await testRealm.getHostRoutes());
+    });
+
+    function expectCompleteRoutes(validation: { complete: boolean }) {
+      if (!validation.complete) {
+        throw new Error('the host routes were expected to be validated');
+      }
+    }
+
+    function summary(
+      duplicates: Awaited<
+        ReturnType<Realm['getHostRouteDuplicates']>
+      >['duplicates'],
+    ) {
+      return duplicates.map((d) => ({
+        fullPath: d.fullPath,
+        values: d.values,
+        parentCardId: d.parentCardId,
+        cardIds: d.cardIds,
+        servedCardId: d.servedCardId,
+      }));
+    }
+
+    test('reports cards that share a value, and the one that is served', async function (assert) {
+      let result = await testRealm.getHostRouteDuplicates();
+      assert.true(result.complete);
+      assert.deepEqual(
+        summary(result.duplicates.filter((d) => d.fullPath === '/posts/:slug')),
+        [
+          {
+            fullPath: '/posts/:slug',
+            values: { slug: 'hello' },
+            parentCardId: undefined,
+            cardIds: [`${realmURL.href}post-a`, `${realmURL.href}post-b`],
+            servedCardId: `${realmURL.href}post-a`,
+          },
+        ],
+        'the draft post fails the where, so it is not counted, and a value only a draft shares is not reported',
+      );
+    });
+
+    test('compares nested cards only within their parent', async function (assert) {
+      let result = await testRealm.getHostRouteDuplicates();
+      assert.deepEqual(
+        summary(
+          result.duplicates.filter(
+            (d) => d.fullPath === '/c/:category/:product',
+          ),
+        ),
+        [
+          {
+            fullPath: '/c/:category/:product',
+            values: { product: 'trail' },
+            parentCardId: `${realmURL.href}shoes`,
+            cardIds: [`${realmURL.href}trail-1`, `${realmURL.href}trail-2`],
+            servedCardId: `${realmURL.href}trail-1`,
+          },
+        ],
+        'the same slug in two categories is not reported',
+      );
+    });
+
+    test('the result is cached until the next index, which finds them again', async function (assert) {
+      let first = await testRealm.getHostRouteDuplicates();
+      assert.strictEqual(
+        testRealm.getHostRouteDuplicates(),
+        testRealm.getHostRouteDuplicates(),
+        'concurrent calls share one check',
+      );
+      assert.deepEqual(await testRealm.getHostRouteDuplicates(), first);
+
+      await testRealm.delete('post-b.json');
+      await testRealm.indexing();
+
+      let after = await testRealm.getHostRouteDuplicates();
+      assert.notStrictEqual(after, first, 'checked again after the index');
+      assert.deepEqual(
+        summary(after.duplicates).map((d) => d.fullPath),
+        ['/c/:category/:product'],
+        'the removed duplicate is no longer reported',
       );
     });
   });
