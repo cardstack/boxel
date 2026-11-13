@@ -291,6 +291,11 @@ const BOOTSTRAP = `
   })();
 `;
 
+// The name a realm call's error has in the script, so a run can tell a call
+// that failed from an error the script threw. `instanceof Error` still holds,
+// and its message is the call's.
+const REALM_CALL_ERROR_NAME = 'RealmCallError';
+
 // What a script error throws out of the run, so the host learns which error
 // it was, where, and whether the script got to run at all.
 class ScriptFailure extends Error {
@@ -316,10 +321,11 @@ function scriptFailure(
   let message = describeScriptError(dumped, code);
   let name = error.name ?? 'Error';
   // QuickJS's own InternalError is the engine stopping the script (an
-  // interrupt at its time limit, memory or stack), not something the script
-  // threw. Anything else, including an error the script throws itself, is the
-  // script's error and keeps its line.
-  if (name === 'InternalError') {
+  // interrupt at its time limit, memory or stack), and a realm call's error
+  // that the script let through is the call failing the run. Neither is
+  // something the script threw. Anything else, including an error the script
+  // throws itself, is the script's error and keeps its line.
+  if (name === 'InternalError' || name === REALM_CALL_ERROR_NAME) {
     return new Error(message);
   }
   let line = scriptLineOf(error, code);
@@ -393,7 +399,10 @@ function settleCall(
     deadlineAt += request.extendMs;
   }
   if (request.error !== undefined) {
-    let error = vm.newError(request.error);
+    let error = vm.newError({
+      name: REALM_CALL_ERROR_NAME,
+      message: request.error,
+    });
     deferred.reject(error);
     error.dispose();
   } else {

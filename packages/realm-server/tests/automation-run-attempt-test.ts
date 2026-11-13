@@ -151,12 +151,31 @@ module(basename(import.meta.filename), function (hooks) {
       input = {},
       dedupeKey = automationRunDedupeKey(run),
       reservationId = 7,
+      commit,
     }: {
       input?: Partial<AutomationJobInput>;
       dedupeKey?: string | null;
       reservationId?: number;
+      // Stands in for the network on the worker's commit requests only;
+      // `send` sends one to the realm.
+      commit?: (send: () => Promise<Response>) => Promise<Response>;
     } = {},
   ) {
+    let network = commit
+      ? (new Proxy(virtualNetwork, {
+          get(target, property) {
+            if (property === 'fetch') {
+              return (url: string | URL | Request, init?: RequestInit) => {
+                let href = String(url instanceof Request ? url.url : url);
+                let send = () => target.fetch(url, init);
+                return href.endsWith('_run-commit') ? commit(send) : send();
+              };
+            }
+            let value = Reflect.get(target, property, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        }) as VirtualNetwork)
+      : virtualNetwork;
     let jobInfo: JobInfo = {
       jobId: 1,
       reservationId,
@@ -174,7 +193,7 @@ module(basename(import.meta.filename), function (hooks) {
           virtualNetwork,
           testCreatePrerenderAuth,
         ),
-        virtualNetwork,
+        virtualNetwork: network,
         prerenderer,
         mintRunToken: buildMintRunToken(realmSecretSeed),
         log,
@@ -285,6 +304,12 @@ module(basename(import.meta.filename), function (hooks) {
       capInWindow,
       'the tab holds the script to what is left of the time limit',
     );
+    let started = Date.parse(after!.startedAt!);
+    assert.strictEqual(
+      Date.parse(input.endsAt),
+      started + 300_000,
+      "the tab is told when the run's time limit passes, counted from its start",
+    );
     assert.deepEqual(input.automation.trigger, {
       label: 'manual',
       kind: 'manual',
@@ -390,6 +415,96 @@ module(basename(import.meta.filename), function (hooks) {
       'the run token is redacted from the message',
     );
     assert.ok(after?.errorMessage?.includes('[REDACTED]'));
+  });
+
+  test('a commit whose answer is lost is sent again, and the run completes', async function (assert) {
+    let run = await newRun();
+    let sends = 0;
+    await attempt(
+      run,
+      stubTab([], {
+        writes: { 'out/lost-answer.txt': 'landed once' },
+        answer: { state: 'complete' },
+      }),
+      {
+        async commit(send) {
+          sends++;
+          let response = await send();
+          if (sends === 1) {
+            await response.text();
+            throw new Error('socket hang up');
+          }
+          return response;
+        },
+      },
+    );
+    assert.strictEqual(sends, 2, 'the commit was sent again');
+    let after = await getAutomationRun(dbAdapter, run.id);
+    assert.strictEqual(after?.state, 'complete');
+    assert.ok(after?.committedAt);
+    assert.strictEqual(await readFile('out/lost-answer.txt'), 'landed once');
+  });
+
+  test("a commit whose every answer is lost finishes from the run's row", async function (assert) {
+    let run = await newRun();
+    let sends = 0;
+    await attempt(
+      run,
+      stubTab([], {
+        writes: { 'out/all-lost.txt': 'landed' },
+        answer: { state: 'complete' },
+      }),
+      {
+        async commit(send) {
+          sends++;
+          let response = await send();
+          await response.text();
+          throw new Error('socket hang up');
+        },
+      },
+    );
+    assert.strictEqual(
+      sends,
+      3,
+      'the commit was sent as many times as allowed',
+    );
+    let after = await getAutomationRun(dbAdapter, run.id);
+    assert.strictEqual(
+      after?.state,
+      'complete',
+      'the batch landed, so the run is complete rather than left running',
+    );
+    assert.strictEqual(await readFile('out/all-lost.txt'), 'landed');
+  });
+
+  test('a commit refused because a write was staged while it started is sent again', async function (assert) {
+    let run = await newRun();
+    let sends = 0;
+    await attempt(
+      run,
+      stubTab([], {
+        writes: { 'out/raced.txt': 'after the race' },
+        answer: { state: 'complete' },
+      }),
+      {
+        async commit(send) {
+          sends++;
+          if (sends === 1) {
+            return new Response(
+              JSON.stringify({
+                errors: [{ code: 'overlay-changed', detail: 'staged since' }],
+              }),
+              { status: 409 },
+            );
+          }
+          return await send();
+        },
+      },
+    );
+    assert.strictEqual(sends, 2);
+    let after = await getAutomationRun(dbAdapter, run.id);
+    assert.strictEqual(after?.state, 'complete');
+    assert.strictEqual(await readFile('out/raced.txt'), 'after the race');
   });
 
   test('a Preview runs the script and commits nothing', async function (assert) {

@@ -102,8 +102,12 @@ export interface AutomationScriptInput extends JSONTypes.Object {
     webhookPayload?: JSONTypes.Value;
     dryRun: boolean;
   };
-  // The automation's `seconds` cap.
+  // What's left of the run's time limit when the worker sends the script.
   secondsCap: number;
+  // When the run's time limit passes, as an ISO date. The script runs no
+  // later than this, so time spent waiting for the tab counts against it,
+  // and the run's token expires at the same moment.
+  endsAt: string;
 }
 
 export function isAutomationScriptInput(
@@ -120,6 +124,8 @@ export function isAutomationScriptInput(
     typeof input.realmURL === 'string' &&
     typeof input.secondsCap === 'number' &&
     input.secondsCap > 0 &&
+    typeof input.endsAt === 'string' &&
+    !Number.isNaN(Date.parse(input.endsAt)) &&
     !!automation &&
     typeof automation === 'object' &&
     typeof automation.url === 'string' &&
@@ -146,9 +152,10 @@ export type AutomationScriptOutcome =
       line?: number;
     };
 
-// `script-error`: the script threw or didn't compile.
+// `script-error`: the script threw an error of its own or didn't compile.
 // `timed-out`: the run reached its time limit.
-// `run-failed`: a realm call or the runner itself failed the run.
+// `run-failed`: a realm call whose error the script didn't catch, or the
+// runner itself, failed the run.
 export type AutomationScriptErrorReason =
   | 'script-error'
   | 'timed-out'
@@ -173,6 +180,12 @@ export function isAutomationScriptOutcome(
     (outcome.line === undefined || typeof outcome.line === 'number')
   );
 }
+
+// Time the tab is given past the script's own time limit, to send what the
+// script staged through `cards.update` and flush its progress before it
+// answers. Every layer that carries the command allows for it, even for a
+// run at `MAX_RUN_SECONDS`.
+export const AUTOMATION_TAB_GRACE_MS = 30_000;
 
 // How long past its time limit a run's job may go before the queue gives up
 // on it: the worker's own steps around the script (starting the run, reading

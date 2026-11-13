@@ -1,4 +1,5 @@
 import { MAX_RUN_SECONDS } from '@cardstack/runtime-common/automation-declaration';
+import { AUTOMATION_TAB_GRACE_MS } from '@cardstack/runtime-common/automation-run-command';
 
 export const PRERENDER_SERVER_STATUS_HEADER = 'X-Boxel-Prerender-Server-Status';
 export const PRERENDER_SERVER_STATUS_DRAINING = 'draining';
@@ -229,8 +230,10 @@ export function resolvePrerenderServerProxyTimeoutMs(): number {
 }
 
 // The longest a command may be given to run (`RunCommandArgs.timeoutMs`): an
-// automation run's longest time limit.
-export const MAX_COMMAND_TIMEOUT_MS = MAX_RUN_SECONDS * 1000;
+// automation run's longest time limit, plus the time its tab is given past
+// it to answer.
+export const MAX_COMMAND_TIMEOUT_MS =
+  MAX_RUN_SECONDS * 1000 + AUTOMATION_TAB_GRACE_MS;
 
 // A command's own time limit, when it was given a valid one, held to
 // `MAX_COMMAND_TIMEOUT_MS`.

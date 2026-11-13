@@ -824,14 +824,18 @@ for a run row its trigger has already made with `createAutomationRun`:
 5. Sends the script to a prerender tab with `prerenderer.runCommand`, with
    `runRealm` set to the automation's realm, the run's token as the whole of
    the tab's auth, the `AutomationScriptInput` as a `JsonCard`'s `json`, and
-   `timeoutMs` of what's left of the time limit plus 30 s.
+   `timeoutMs` of what's left of the time limit plus 30 s
+   (`AUTOMATION_TAB_GRACE_MS`). The input carries `endsAt`, when the time
+   limit passes, so time spent waiting for the tab comes off the script's.
 6. Finishes the run from what the tab answers:
    - `complete`, Preview: finishes complete without a commit, which discards
      the overlay;
    - `complete`: commits with `POST /_run-commit` carrying the token, sent
-     again up to three times on `overlay-changed`, and finishes complete on
-     `200`. Any other answer finishes the run as an error named by the
-     refusal's code (_Committing the overlay_);
+     again up to three times on `overlay-changed` or when its answer is lost
+     (the realm answers this attempt's commit again with the same success),
+     and finishes complete on `200`. Any other answer finishes the run as an
+     error named by the refusal's code (_Committing the overlay_), unless
+     the row says the batch landed, which finishes it complete;
    - `error`: finishes the run as an error with the outcome's reason
      (`script-error`, `timed-out`, `run-failed`) and its message, prefixed
      `line N:` for a script error that has a line. The finish discards the
@@ -857,16 +861,19 @@ tab is a warm one, never one the run starts itself (ADR 025 §1.2); see the
 `timeoutMs` widens every layer's timeout for this one request: the worker's
 request to the manager, the manager's proxy, and the tab's wait on the
 command (`commandRequestTimeoutMs` in `prerender-constants.ts`, up to
-`MAX_COMMAND_TIMEOUT_MS`, which is `MAX_RUN_SECONDS`).
+`MAX_COMMAND_TIMEOUT_MS`, which is `MAX_RUN_SECONDS` plus the tab's grace).
 
 In the tab, the `run-automation` tool (`host/app/tools/run-automation.ts`)
 refuses to run unless the tab's session for the realm is a run token. It runs
 the script with `runAutomationScript` on `automationRealmIO`, with `resolve`
 sent to the realm server's `_request-forward` carrying the run's token, so it
 is counted and priced against the run's caps. It answers an
-`AutomationScriptOutcome`: a script that throws (`RealmScriptError`) is
-`script-error` with its line, and a run out of time
-(`AutomationTimeLimitError`) is `timed-out`. It flushes the run's progress
+`AutomationScriptOutcome`: an error the script throws itself
+(`RealmScriptError`) is `script-error` with its line, a run out of time
+(`AutomationTimeLimitError`) is `timed-out`, and a realm call's error the
+script didn't catch is `run-failed`. In the script, a realm call's error is
+an `Error` named `RealmCallError`. A script that couldn't start before the
+run's `endsAt` is `timed-out`. It flushes the run's progress
 sink before it answers, while the run is still running.
 
 ### Running one automation by hand in development

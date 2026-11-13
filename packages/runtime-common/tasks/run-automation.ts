@@ -7,6 +7,7 @@ import {
   type AutomationScriptInput,
   type AutomationScriptOutcome,
   AUTOMATION_COMMAND,
+  AUTOMATION_TAB_GRACE_MS,
   MAX_AUTOMATION_SCRIPT_CHARS,
   automationRunDedupeKey,
   isAutomationScriptOutcome,
@@ -49,11 +50,6 @@ export type MintRunToken = (args: {
 // The realms a run's cards' modules load from, which its token lets it read.
 // Each realm resolves the prefix form through its own mappings.
 export const RUN_READ_REALMS = ['@cardstack/base/', '@cardstack/catalog/'];
-
-// Time the tab is given past the script's own time limit, to send what the
-// script staged through `cards.update` and flush its progress before it
-// answers.
-const TAB_GRACE_MS = 30_000;
 
 // How many times a commit is sent again when a write was staged while it
 // started (`overlay-changed`).
@@ -231,6 +227,7 @@ export async function runAutomationAttempt(
       dryRun: input.dryRun,
     },
     secondsCap: remainingMs / 1000,
+    endsAt: new Date(deadline).toISOString(),
   };
 
   let outcome: AutomationScriptOutcome;
@@ -242,7 +239,7 @@ export async function runAutomationAttempt(
       command: AUTOMATION_COMMAND,
       commandInput: { json: scriptInput },
       priority: jobInfo.priority,
-      timeoutMs: remainingMs + TAB_GRACE_MS,
+      timeoutMs: remainingMs + AUTOMATION_TAB_GRACE_MS,
     });
     outcome = outcomeOf(result, redact);
   } catch (e: any) {
@@ -287,10 +284,14 @@ async function commit(
         },
       });
     } catch (e: any) {
-      // Whether the batch landed is unknown. A retry of the job finds the
-      // commit claimed and finishes the run as `commit-interrupted`; the
-      // next run compares with the realm and catches up.
-      return await finish(ctx, tag, run.id, attempt, {
+      // Whether the batch landed is unknown. The realm answers this
+      // attempt's commit again with the same success once it has landed, so
+      // it is sent again; when every try fails, the run's row says whether
+      // it landed.
+      if (tries < MAX_COMMIT_ATTEMPTS) {
+        continue;
+      }
+      return await finishAfterCommit(ctx, tag, run.id, attempt, {
         state: 'error',
         reason: 'commit-failed',
         message: `The commit could not be sent: ${e?.message ?? e}`,
@@ -306,13 +307,30 @@ async function commit(
     // A 401 means the run stopped running (a cancel, a cap, a newer
     // attempt) or its time ran out; the finish below is refused unless this
     // attempt still owns a running run.
-    return await finish(ctx, tag, run.id, attempt, {
+    return await finishAfterCommit(ctx, tag, run.id, attempt, {
       state: 'error',
       reason:
         code ?? (response.status === 401 ? 'not-running' : 'commit-failed'),
       message: `The commit was refused (${response.status}): ${detail}`,
     });
   }
+}
+
+// Finishes a run whose commit was sent as an error, unless its batch landed
+// after all: a run whose commit landed can't finish as an error, so it
+// finishes as complete instead of staying running.
+async function finishAfterCommit(
+  ctx: AutomationAttemptContext,
+  tag: string,
+  runId: string,
+  attempt: number,
+  outcome: AutomationRunOutcome,
+): Promise<AutomationAttemptResult> {
+  let run = await getAutomationRun(ctx.dbAdapter, runId);
+  if (run?.committedAt) {
+    return await finish(ctx, tag, runId, attempt, { state: 'complete' });
+  }
+  return await finish(ctx, tag, runId, attempt, outcome);
 }
 
 async function finish(

@@ -88,20 +88,35 @@ export default class RunAutomationTool extends HostBaseTool<
       resolve: (request, signal) => resolveJSON(request, send, signal),
     };
 
+    // The run's time limit counts from its start, so the time it waited for
+    // this tab comes off what the script gets.
+    let secondsCap = Math.min(
+      scriptInput.secondsCap,
+      (Date.parse(scriptInput.endsAt) - Date.now()) / 1000,
+    );
     let outcome: AutomationScriptOutcome;
-    try {
-      await runAutomationScript({
-        code: scriptInput.code,
-        realmURL,
-        automation: scriptInput.automation,
-        secondsCap: scriptInput.secondsCap,
-        io,
-        progress,
-        secrets,
-      });
-      outcome = { state: 'complete' };
-    } catch (error) {
-      outcome = errorOutcome(error, secrets);
+    if (secondsCap <= 0) {
+      outcome = {
+        state: 'error',
+        reason: 'timed-out',
+        message:
+          'The automation run reached its time limit before its script could start',
+      };
+    } else {
+      try {
+        await runAutomationScript({
+          code: scriptInput.code,
+          realmURL,
+          automation: scriptInput.automation,
+          secondsCap,
+          io,
+          progress,
+          secrets,
+        });
+        outcome = { state: 'complete' };
+      } catch (error) {
+        outcome = errorOutcome(error, secrets);
+      }
     }
     // The run's progress is sent before the run answers, while the run is
     // still running: the worker finishes the run once it has the answer.

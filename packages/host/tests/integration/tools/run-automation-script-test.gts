@@ -388,6 +388,26 @@ return 'done';`,
     });
   });
 
+  test("a realm call's error is the call failing the run, not the script's error", async function (assert) {
+    let caught = run(`
+      try {
+        await realm.cards.get('no/such-card');
+        return 'read';
+      } catch (error) {
+        return { name: error.name, isError: error instanceof Error };
+      }
+    `);
+    assert.deepEqual(JSON.parse((await caught.done).scriptResult), {
+      name: 'RealmCallError',
+      isError: true,
+    });
+
+    let uncaught = run(`await realm.cards.get('no/such-card');`);
+    await assert.rejects(uncaught.done, (error: unknown) => {
+      return error instanceof Error && !(error instanceof RealmScriptError);
+    });
+  });
+
   test('a bad progress argument throws in the script', async function (assert) {
     let { done } = run(`
       const errors = [];
