@@ -33,6 +33,10 @@ import {
 } from './caller-limit.ts';
 import { appName, type AppName } from './app-name.ts';
 import {
+  clientIdForLogs,
+  metadataDocumentLimited,
+} from './client-metadata-document.ts';
+import {
   findAuthorizationError,
   storeAuthorizationError,
   takeAuthorizationError,
@@ -343,6 +347,16 @@ export function authorizationHandler({
     let clientId = single(query, 'client_id');
     let client =
       clientId === REPEATED ? undefined : await findClient(provider, clientId);
+    // A document client whose download the new-client limit refused is no
+    // client to the library. The caller is told they were limited, as at
+    // step 1, so they know trying again later can work.
+    if (!client && metadataDocumentLimited()) {
+      log.info('authorization refused by the new-client limit');
+      return navigate(
+        ctxt,
+        errorPageURL(secureOriginURL, FIXED_ERROR_PAGES.rateLimited),
+      );
+    }
     let check = checkAuthorizationRequest(query, {
       client,
       registry,
@@ -357,7 +371,7 @@ export function authorizationHandler({
         state !== REPEATED &&
         client.redirectUriAllowed(redirectUri);
       log.info(
-        `authorization refused: ${check.reason} (${check.error}), client ${client?.clientId ?? 'unknown'}`,
+        `authorization refused: ${check.reason} (${check.error}), client ${client ? clientIdForLogs(client.clientId) : 'unknown'}`,
       );
       let reference = await storeAuthorizationError(dbAdapter, {
         error: check.error,
@@ -382,13 +396,13 @@ export function authorizationHandler({
       }
       ctxt.req.url = `${url.pathname}${url.search}`;
       log.info(
-        `authorization given its resource from its scopes, client ${client!.clientId}`,
+        `authorization given its resource from its scopes, client ${clientIdForLogs(client!.clientId)}`,
       );
     }
     log.info(
       `authorization started: resources ${check.resources
         .map(({ id }) => id)
-        .join(', ')}, client ${client!.clientId}`,
+        .join(', ')}, client ${clientIdForLogs(client!.clientId)}`,
     );
     await next();
   };
@@ -450,7 +464,7 @@ export function renderLibraryError({
           : 'library';
     let clientId = ctx.oidc.client?.clientId;
     log.info(
-      `authorization refused: ${reason} (${out.error}), client ${clientId ?? 'unknown'}`,
+      `authorization refused: ${reason} (${out.error}), client ${clientId ? clientIdForLogs(clientId) : 'unknown'}`,
     );
     let reference = await storeAuthorizationError(dbAdapter, {
       error: out.error,
@@ -560,7 +574,7 @@ export function errorReturnHandler({
     }
     destination.searchParams.set('iss', provider.issuer);
     log.info(
-      `authorization error returned to the client: ${record.reason}, client ${record.clientId}`,
+      `authorization error returned to the client: ${record.reason}, client ${record.clientId ? clientIdForLogs(record.clientId) : 'unknown'}`,
     );
     navigate(ctxt, destination.href);
   };

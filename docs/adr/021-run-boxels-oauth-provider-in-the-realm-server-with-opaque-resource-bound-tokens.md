@@ -130,7 +130,11 @@ registered one exactly, except for the port of a loopback address (RFC 8252
 §7.3). A CIMD client ID or a redirect URI MUST NOT be on a host where Boxel
 serves its own pages or users' files: the realm server, the secure origin, the
 published-site domains, and every app origin the realm server lists for the
-deployment (ADR 005 §1.7), other than a loopback address.
+deployment (ADR 005 §1.7), other than a loopback address. A CIMD client ID
+MUST NOT be under the registrable domain of any of those hosts either, since
+consent names a CIMD client by that domain and any Boxel host may serve JSON
+an account holder controls. A CIMD client ID's scheme MUST be written
+`https://` in lower case, the form consent recognizes as a CIMD client.
 
 Consent MUST take what the access means (each resource's name, what it covers
 and what each scope allows) from the registry. Consent MUST name a CIMD client
