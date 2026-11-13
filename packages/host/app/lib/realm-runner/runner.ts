@@ -82,7 +82,8 @@ export class RealmScriptError extends Error {
 }
 
 // `onCall` does the work of each `realm.*` call the script makes. Its answer,
-// or the message of what it throws, goes back into the sandbox.
+// or the message of what it throws, goes back into the sandbox. A one-way
+// call (progress, console) reaches `onCall` too, and its answer goes nowhere.
 // `signal` ends the run from outside: the worker stops and the promise
 // rejects with the signal's reason, so a caller with its own deadline is never
 // outlived by the run.
@@ -200,6 +201,10 @@ export default function runRealmCode(
             });
           },
         );
+        return;
+      }
+      if (message.type === 'notify') {
+        onCall(message.method, message.args).catch(() => undefined);
         return;
       }
       if (message.type === 'ready') {
