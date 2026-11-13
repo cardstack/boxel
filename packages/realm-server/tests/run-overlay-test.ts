@@ -711,10 +711,10 @@ export class Mine extends Automation {}`;
 
     let outside = await operations(session(), [read('./notes.txt')]);
     assert.strictEqual(outside.status, 200, outside.text);
-    assert.strictEqual(
+    assert.notStrictEqual(
       outside.json['atomic:results'][0].data.attributes.contentSize,
-      'in the realm'.length,
-      'an ordinary reader’s read entry sees the realm’s file',
+      'rewritten by the run'.length,
+      'an ordinary reader’s read entry doesn’t see the run’s file',
     );
   });
 

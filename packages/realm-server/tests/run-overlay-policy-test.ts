@@ -163,10 +163,11 @@ export class Notice extends CardDef {
 
     let reader = createJWT(realm, READER, ['read']);
     let outside = await operations(reader, [close]);
+    assert.strictEqual(outside.status, 404, outside.text);
     assert.strictEqual(
-      outside.status,
-      403,
-      'outside the run the card is a Person, which no rule grants anything on',
+      outside.json.errors?.[0]?.code,
+      'unknown-operation',
+      'outside the run the card is a Person, which declares no close',
     );
     assert.strictEqual(
       (await readCard(reader, 'people/ada')).data.attributes.name,
