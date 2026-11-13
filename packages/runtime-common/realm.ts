@@ -5798,15 +5798,18 @@ export class Realm {
     if (!codeRef) {
       return undefined;
     }
-    let types = [internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
+    let own = internalKeyFor(codeRef, undefined, this.#virtualNetwork);
+    let types: string[];
     try {
-      types.push(
-        ...(await this.#definitionLookup.lookupDefinitionEntry(codeRef)).types,
-      );
+      types = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
+        .types;
     } catch {
       // A type with no definition is known only by its own name.
+      return [own];
     }
-    return types;
+    // The definition's chain starts with the type itself, which the index
+    // records once.
+    return types.includes(own) ? types : [own, ...types];
   }
 
   // What the document `content` holds at `data.meta.adoptsFrom`, as a parse
@@ -13781,18 +13784,20 @@ export class Realm {
   }
 
   // The operation core a run's batch resolves, gates and reads through (ADR
-  // 027 §1.3): the realm's own, except that a card the run staged is the card
+  // 027 §1.3): the realm's own, except that a file the run staged is the file
   // as the run staged it.
   //
-  // - Its index row is built from the staged document, with the adoption
-  //   chain its `adoptsFrom` names. So an operation on a card the run created
-  //   or re-typed resolves against the staged card's type, and the policy
-  //   gate matches rules against that type.
-  // - A `read` of it answers the staged document, as the run's card read
-  //   does. Staged files aren't indexed, so it carries no computed fields, no
-  //   expanded links, no rendering and no source version. Its generation is
-  //   the index row's where the realm holds one, and 0 for a card the run
-  //   created.
+  // - A staged card's index row is built from the staged document, with the
+  //   adoption chain its `adoptsFrom` names. So an operation on a card the run
+  //   created or re-typed resolves against the staged card's type, and the
+  //   policy gate matches rules against that type.
+  // - A `read` of a staged card answers the staged document, as the run's
+  //   card read does. Staged files aren't indexed, so it carries no computed
+  //   fields, no expanded links, no rendering and no source version. Its
+  //   generation is the realm's row's where the realm holds one, and 0 for a
+  //   card the run created.
+  // - A `read` of a staged file that isn't a card answers that file's
+  //   metadata, derived from the staged bytes.
   // - The stored text of a file the run staged is the staged text, which is
   //   what a policy predicate reads a card's fields from.
   //
@@ -13800,52 +13805,86 @@ export class Realm {
   // realm's version: the run sees no card row there, and a `read` of it is
   // refused with 422, as the run's card read refuses it.
   //
-  // A search runs on the index, as the run's search does, so an entry
-  // that finds its targets with a query finds the cards the index holds. A
-  // read of a file's stored bytes isn't an operation a batch carries; the
-  // byte routes serve a run's staged files themselves.
+  // A search runs on the index, as the run's search does, so an entry that
+  // finds its targets with a query finds the cards the index holds. A read of
+  // a file's stored bytes isn't an operation a batch carries; the byte routes
+  // serve a run's staged files themselves.
+  //
+  // A core serves one batch. The run's staged paths are listed once, so a
+  // path the run hasn't staged costs no overlay read, and each staged file is
+  // read once.
   #runOperationCore(run: RunOverlayKey): OperationCore {
     let core = this.operationCore;
     let index = core.indexQueryEngine;
-    let staged = async (url: URL) => {
-      if (!this.paths.inRealm(url)) {
+    let paths: Promise<Set<string>> | undefined;
+    let reads = new Map<LocalPath, Promise<Uint8Array | undefined>>();
+    let stagedBytes = async (path: LocalPath) => {
+      paths ??= runOverlayPathsUnder(this.#dbAdapter, run, '').then(
+        (list) => new Set(list),
+      );
+      if (!(await paths).has(path)) {
         return undefined;
       }
-      let localPath = this.paths.local(url);
-      let path = `${localPath}.json` as LocalPath;
-      let bytes = await readRunOverlayFile(this.#dbAdapter, run, path);
-      if (!bytes) {
-        return undefined;
+      let read = reads.get(path);
+      if (!read) {
+        read = readRunOverlayFile(this.#dbAdapter, run, path);
+        reads.set(path, read);
       }
-      let content = new TextDecoder().decode(bytes);
-      let card = this.#stagedCardFrom(localPath, content);
-      if (card === 'not-a-card') {
-        return { notACard: localPath };
+      return await read;
+    };
+    let cards = new Map<
+      string,
+      Promise<
+        | { card: CardResource; types: string[] | null }
+        | { notACard: LocalPath }
+        | undefined
+      >
+    >();
+    let stagedCard = (url: URL) => {
+      let card = cards.get(url.href);
+      if (!card) {
+        card = (async () => {
+          if (!this.paths.inRealm(url)) {
+            return undefined;
+          }
+          let localPath = this.paths.local(url);
+          let path = `${localPath}.json` as LocalPath;
+          let bytes = await stagedBytes(path);
+          if (!bytes) {
+            return undefined;
+          }
+          let content = new TextDecoder().decode(bytes);
+          let resource = this.#stagedCardFrom(localPath, content);
+          if (resource === 'not-a-card') {
+            return { notACard: localPath };
+          }
+          return {
+            card: resource as unknown as CardResource,
+            types: (await this.#adoptedTypes(path, content)) ?? null,
+          };
+        })();
+        cards.set(url.href, card);
       }
-      let indexed = await index.instance(url, { includeErrors: true });
-      return {
-        card: card as unknown as CardResource,
-        types: (await this.#adoptedTypes(path, content)) ?? null,
-        generation: indexed?.generation ?? 0,
-        resourceCreatedAt:
-          indexed?.resourceCreatedAt ?? Math.floor(Date.now() / 1000),
-      };
+      return card;
     };
     let indexQueryEngine: OperationIndexQueryEngine = {
       instance: async (url, opts) => {
-        let card = await staged(url);
-        if (!card) {
+        let staged = await stagedCard(url);
+        if (!staged) {
           return await index.instance(url, opts);
         }
-        if ('notACard' in card) {
+        if ('notACard' in staged) {
           return undefined;
         }
+        // Resolution and the gate read the type and the stored values; the
+        // rest of a row describes an indexed version the run's card doesn't
+        // have.
         let row: InstanceOrError = {
           type: 'instance',
-          instance: card.card,
+          instance: staged.card,
           canonicalURL: url.href,
           lastModified: null,
-          resourceCreatedAt: card.resourceCreatedAt,
+          resourceCreatedAt: Math.floor(Date.now() / 1000),
           isolatedHtml: null,
           headHtml: null,
           embeddedHtml: null,
@@ -13853,10 +13892,10 @@ export class Realm {
           atomHtml: null,
           markdown: null,
           searchDoc: null,
-          types: card.types,
+          types: staged.types,
           deps: null,
           captures: null,
-          generation: card.generation,
+          generation: 0,
           realmURL: this.url,
           indexedAt: null,
           sourceContentHash: null,
@@ -13865,23 +13904,24 @@ export class Realm {
         return row;
       },
       cardDocument: async (url, opts) => {
-        let card = await staged(url);
-        if (!card) {
+        let staged = await stagedCard(url);
+        if (!staged) {
           return await index.cardDocument(url, opts);
         }
-        if ('notACard' in card) {
+        if ('notACard' in staged) {
           throw new OperationFailure({
             id: url.href,
             status: 422,
             code: 'target-errored',
             title: 'Not a card document',
-            detail: `This run staged ${card.notACard}.json, which isn't a card document`,
+            detail: `This run staged ${staged.notACard}.json, which isn't a card document`,
           });
         }
+        let indexed = await index.instance(url, { includeErrors: true });
         return {
           type: 'doc',
-          doc: { data: card.card },
-          generation: card.generation,
+          doc: { data: staged.card },
+          generation: indexed?.generation ?? 0,
           version: null,
           indexedAt: null,
           deps: null,
@@ -13897,10 +13937,29 @@ export class Realm {
       ...core,
       indexQueryEngine,
       readFileAsText: async (localPath) => {
-        let bytes = await readRunOverlayFile(this.#dbAdapter, run, localPath);
+        let bytes = await stagedBytes(localPath);
         return bytes
           ? new TextDecoder().decode(bytes)
           : await core.readFileAsText(localPath);
+      },
+      // A path whose `.json` the run staged is that card's, not a file.
+      fileMetaDocument: async (localPath) => {
+        if (await stagedBytes(`${localPath}.json` as LocalPath)) {
+          return undefined;
+        }
+        let bytes = localPath.endsWith('.json')
+          ? undefined
+          : await stagedBytes(localPath);
+        if (!bytes) {
+          return await core.fileMetaDocument(localPath);
+        }
+        let lastModified = Math.floor(Date.now() / 1000);
+        return await this.#fileMetaDocumentOf(localPath, {
+          lastModified,
+          createdAt: (await this.getCreatedTime(localPath)) ?? lastModified,
+          contentHash: computeContentHash(bytes),
+          contentSize: bytes.byteLength,
+        });
       },
     };
   }
@@ -13946,6 +14005,15 @@ export class Realm {
     };
     return {
       ...core,
+      // A program reads a card's computed and linked values off its index
+      // row, which describes the realm's version of the card. A card the run
+      // staged has no row for its staged version, so it reads as not indexed,
+      // as a card the run created does.
+      indexedCardValues: async (url) =>
+        this.paths.inRealm(url) &&
+        (await staged(`${this.paths.local(url)}.json` as LocalPath))
+          ? undefined
+          : await core.indexedCardValues(url),
       fileExists: async (path) =>
         (await staged(path)) !== undefined || (await core.fileExists(path)),
       readSourceFile: async (path) => {
@@ -15175,19 +15243,40 @@ export class Realm {
     if (!fileRef) {
       return undefined;
     }
+    let createdAt = await this.getCreatedTime(localPath);
+    let persistedMeta = this.#dbAdapter
+      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+      : { contentHash: undefined, contentSize: undefined };
+    return await this.#fileMetaDocumentOf(localPath, {
+      lastModified: fileRef.lastModified,
+      createdAt: createdAt ?? fileRef.lastModified,
+      contentHash:
+        persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef)),
+      contentSize:
+        persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef)),
+    });
+  }
+
+  // A file's metadata document, from what is known about its bytes.
+  async #fileMetaDocumentOf(
+    localPath: LocalPath,
+    {
+      lastModified,
+      createdAt,
+      contentHash,
+      contentSize,
+    }: {
+      lastModified: number;
+      createdAt: number;
+      contentHash: string | undefined;
+      contentSize: number | undefined;
+    },
+  ): Promise<SingleFileMetaDocument> {
     let fileURL = this.paths.fileURL(localPath).href;
     let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
-    let createdAt = await this.getCreatedTime(localPath);
     let { info: realmInfo } = await this.parseRealmInfo();
-    let persistedMeta = this.#dbAdapter
-      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
-      : { contentHash: undefined, contentSize: undefined };
-    let contentHash =
-      persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef));
-    let contentSize =
-      persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef));
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
@@ -15199,8 +15288,8 @@ export class Realm {
           contentType: inferredContentType,
           contentHash,
           contentSize,
-          lastModified: fileRef.lastModified,
-          createdAt: createdAt ?? fileRef.lastModified,
+          lastModified,
+          createdAt,
         },
         meta: {
           adoptsFrom: fileDefCodeRef,
@@ -15208,10 +15297,7 @@ export class Realm {
           realmURL: this.url as RealmIdentifier,
           // This un-indexed fallback must stamp the timestamps too, so a file's
           // `meta` timestamps don't hinge on whether the row is in the index yet.
-          ...fileMetaTimestamps(
-            fileRef.lastModified,
-            createdAt ?? fileRef.lastModified,
-          ),
+          ...fileMetaTimestamps(lastModified, createdAt),
         },
         links: { self: fileURL },
       },

@@ -683,6 +683,41 @@ export class Mine extends Automation {}`;
     );
   });
 
+  test('a run’s read entry of a file it staged answers the staged file’s metadata', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let created = await writeText(token, 'notes/new.txt', 'brand new');
+    assert.strictEqual(created.status, 204, created.text);
+    let updated = await writeText(token, 'notes.txt', 'rewritten by the run');
+    assert.strictEqual(updated.status, 204, updated.text);
+
+    let read = (href: string) => ({ op: 'invoke', 'boxel:name': 'read', href });
+    let answer = await operations(token, [
+      read('./notes/new.txt'),
+      read('./notes.txt'),
+    ]);
+    assert.strictEqual(answer.status, 200, answer.text);
+    let [fresh, rewritten] = answer.json['atomic:results'];
+    assert.strictEqual(fresh.data.type, 'file-meta');
+    assert.strictEqual(
+      fresh.data.attributes.contentSize,
+      'brand new'.length,
+      'a file the run created is read',
+    );
+    assert.strictEqual(
+      rewritten.data.attributes.contentSize,
+      'rewritten by the run'.length,
+      'a file the run rewrote is read as the run staged it',
+    );
+
+    let outside = await operations(session(), [read('./notes.txt')]);
+    assert.strictEqual(outside.status, 200, outside.text);
+    assert.strictEqual(
+      outside.json['atomic:results'][0].data.attributes.contentSize,
+      'in the realm'.length,
+      'an ordinary reader’s read entry sees the realm’s file',
+    );
+  });
+
   test('a run’s read entry of a staged file that isn’t a card document is refused, not answered from the realm', async function (assert) {
     let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
     let write = await writeText(token, 'people/ada.json', 'not a document');
