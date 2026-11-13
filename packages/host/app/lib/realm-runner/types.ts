@@ -1,7 +1,7 @@
-// The guest's `realm.*` and `room.*` calls leave the sandbox as `call`
-// messages. The host
-// does the work and answers with `callResult`; the value is JSON-encoded so it
-// crosses into QuickJS as one string.
+// The guest's `realm.*`, `room.*` and `console.*` calls leave the sandbox as
+// `call` messages. The host does the work and answers with `callResult`; the
+// value is JSON-encoded so it crosses into QuickJS as one string. Which of
+// these a script can make depends on its surface (`surfaces.ts`).
 export type RealmRunnerCallMethod =
   | 'fs.readText'
   | 'fs.exists'
@@ -41,7 +41,44 @@ export type RealmRunnerCallMethod =
   | 'transform'
   | 'activity'
   | 'plan'
-  | 'ask';
+  | 'ask'
+  | 'progress.plan'
+  | 'progress.milestone'
+  | 'progress.count'
+  | 'console.log'
+  | 'console.info'
+  | 'console.warn'
+  | 'console.error';
+
+// The interactive surface serves the assistant's scripts in a chat room; the
+// automation surface serves an automation's runs, with no person and no room.
+// Both run on the same engine, with the same names for the methods they share.
+export type RealmRunnerSurface = 'interactive' | 'automation';
+
+// What an automation run tells its script about itself, as
+// `realm.current.automation`. Times are ISO 8601 strings.
+export interface AutomationRunContext {
+  // The URL of the automation card.
+  url: string;
+  // The trigger that started the run. A run started by hand (Preview, Run
+  // now) has kind `manual`; a follow-up to a batch of AI requests has kind
+  // `batch`.
+  trigger: {
+    label?: string;
+    kind: 'cron' | 'once' | 'webhook' | 'manual' | 'batch';
+  };
+  // When the trigger was due; for a run started by hand, when it was asked
+  // for.
+  scheduledAt: string;
+  // When the automation's last complete run started, if it has had one.
+  lastSuccessAt?: string;
+  // The card's params with the trigger's own merged over them.
+  params: Record<string, string>;
+  // The delivery's JSON body, for a run a webhook started.
+  webhookPayload?: unknown;
+  // True for a Preview: the run's writes are shown and then discarded.
+  dryRun: boolean;
+}
 
 export type RealmRunnerCallHandler = (
   method: RealmRunnerCallMethod,
@@ -68,6 +105,10 @@ export type RealmRunnerRequest =
       code: string;
       realmURL: string;
       timeoutMs: number;
+      // The interactive surface when absent.
+      surface?: RealmRunnerSurface;
+      // Given only on the automation surface.
+      automation?: AutomationRunContext;
       // Absolute URL of QuickJS's WASM file. The host resolves it because the
       // worker cannot: started from a `blob:` URL, it has no base to resolve
       // a root-relative asset path against.
@@ -93,6 +134,10 @@ export type RealmRunnerResponse =
       method: RealmRunnerCallMethod;
       args: unknown[];
     }
+  // A one-way call (progress, console) that waits for no answer.
+  | { type: 'notify'; method: RealmRunnerCallMethod; args: unknown[] }
+  // How many one-way calls the run has dropped past its limit so far.
+  | { type: 'dropped'; count: number }
   | { type: 'success'; result: RealmRunnerResult }
   | { type: 'error'; error: string; scriptError?: RealmScriptErrorInfo };
 

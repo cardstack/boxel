@@ -82,7 +82,10 @@ export class RealmScriptError extends Error {
 }
 
 // `onCall` does the work of each `realm.*` call the script makes. Its answer,
-// or the message of what it throws, goes back into the sandbox.
+// or the message of what it throws, goes back into the sandbox. A one-way
+// call (progress, console) reaches `onCall` too, and its answer goes nowhere.
+// `onDropped` hears how many one-way calls the worker has dropped past the
+// run's limit so far.
 // `signal` ends the run from outside: the worker stops and the promise
 // rejects with the signal's reason, so a caller with its own deadline is never
 // outlived by the run.
@@ -93,6 +96,7 @@ export default function runRealmCode(
   >,
   onCall: RealmRunnerCallHandler,
   signal?: AbortSignal,
+  onDropped?: (count: number) => void,
 ): Promise<RealmRunnerResult> {
   return new Promise((resolve, reject) => {
     let workerURL = resolveAssetURL(WorkerURL);
@@ -200,6 +204,14 @@ export default function runRealmCode(
             });
           },
         );
+        return;
+      }
+      if (message.type === 'notify') {
+        onCall(message.method, message.args).catch(() => undefined);
+        return;
+      }
+      if (message.type === 'dropped') {
+        onDropped?.(message.count);
         return;
       }
       if (message.type === 'ready') {
