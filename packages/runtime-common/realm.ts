@@ -384,6 +384,7 @@ import {
 import type {
   CoarseDeclined,
   OperationCore,
+  OperationIndexQueryEngine,
   OperationScope,
   OperationStoredFile,
   OperationStoredFileMeta,
@@ -592,6 +593,7 @@ import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import type { SearchResultDoc } from './realm-index-query-engine.ts';
+import type { InstanceOrError } from './index-query-engine.ts';
 import {
   REALM_IGNORE_FILES,
   RealmIndexUpdater,
@@ -7612,7 +7614,16 @@ export class Realm {
     // target's stored type.
     let caller = this.#callerOf(request, requestContext);
     let coarseDeclined = this.#coarseDeclined(requestContext);
-    let scope = newOperationScope(this.operationCore, {
+    // A run's batch resolves, is gated and reads against the realm as the run
+    // sees it, with the cards it staged as it staged them (see
+    // `#runOperationCore`), and its writes stage in its overlay (see
+    // `#runBatchCore`).
+    let run = this.#runOverlay(requestContext);
+    let core = run ? this.#runOperationCore(run) : this.operationCore;
+    let batchCore = run
+      ? this.#runBatchCore(requestContext, run)
+      : this.batchCore;
+    let scope = newOperationScope(core, {
       caller: scopeCallerFor(caller.actor),
       coarseDeclined,
       route: ENVELOPE_ROUTE,
@@ -7632,12 +7643,7 @@ export class Realm {
     // the realm ACL would not let read the realm, it is an ad-hoc search, and
     // it finds only the cards a `query` grant on its type admits. Each card it
     // finds is then gated for the entry's own operation like a named one.
-    let tree = await resolveQueryTargets(
-      this.operationCore,
-      scope,
-      parsed,
-      envelopeOptions,
-    );
+    let tree = await resolveQueryTargets(core, scope, parsed, envelopeOptions);
     let entries = invocationsIn(tree);
     // Settled rather than raced, so the entry a refusal names is the earliest
     // one the caller got wrong rather than whichever index read came back
@@ -7652,7 +7658,7 @@ export class Realm {
     // batch would put that many point reads on the pool at once and reach the
     // staging limiter only after the pool was already spent.
     let outcomes = await settledWithin(STAGING_WIDTH, entries, (entry) =>
-      this.#resolveEnvelopeEntry(entry, scope),
+      this.#resolveEnvelopeEntry(core, entry, scope),
     );
     let fulfilled = (outcome: (typeof outcomes)[number]) =>
       (outcome as PromiseFulfilledResult<ResolvedEnvelopeEntry>).value;
@@ -7667,7 +7673,7 @@ export class Realm {
       // Nothing has reached the write lock, so it has decided nothing.
       throw await this.#disclosableFailure(
         (outcomes[refusedAt] as PromiseRejectedResult).reason,
-        { coarseDeclined, tree, caller },
+        { coarseDeclined, tree, caller, core, batchCore },
         outcomes.slice(0, refusedAt).map(fulfilled),
         new Map(),
       );
@@ -7724,7 +7730,6 @@ export class Realm {
       // stages against the overlay's view of each file and the overlay holds
       // the result (see `#runBatchCore`). The overlay can't hold a removal,
       // so a run's batch removes nothing.
-      let run = this.#runOverlay(requestContext);
       if (requestContext.automationRun) {
         let removal = resolved.find(
           ({ definition }) => definition.base === 'delete',
@@ -7863,7 +7868,7 @@ export class Realm {
           // On the decision the entry resolved to, so the gate decides each
           // entry once.
           result = await runOperation(
-            this.operationCore,
+            core,
             {
               target,
               name: entry.name,
@@ -7913,11 +7918,7 @@ export class Realm {
             caller,
             async (pending, judged, position) => {
               try {
-                await dischargePendingDecision(
-                  this.operationCore,
-                  pending,
-                  judged,
-                );
+                await dischargePendingDecision(core, pending, judged);
               } catch (refusal: unknown) {
                 decided.set(position, refusal);
                 throw refusal;
@@ -7937,28 +7938,24 @@ export class Realm {
         // refusal from the coordinator names that one rather than the position
         // it took among the entries that write — in the key, in the key beside
         // it naming a conflicting entry, and in the prose.
-        let committed = await commitBatch(
-          run ? this.#runBatchCore(requestContext, run) : this.batchCore,
-          stagedTree(tree, staged),
-          {
-            clientRequestId: caller.clientRequestId || null,
-            actor: caller.actor || undefined,
-            history: writeContextFromHeaders(request.headers),
-            ...(caller.policyAudit ? { policyAudit: caller.policyAudit } : {}),
-            // One request, several cards, and not all of them from the same
-            // place — which is the case the event's authorship naming exists
-            // for, and the only front door that produces it.
-            reportAuthorship: true,
-            // The caller is waiting on this request, and the batch's own index
-            // pass waits on the prerender pool. The wait is bounded, or skipped
-            // when the caller asks, so a stalled pool costs the caller a
-            // pending generation rather than an answer to a write that has
-            // already landed.
-            ...indexWaitOptions(request, { bounded: true }),
-            ...this.#mintPosture(coarseDeclined),
-            ...anonymousCommit,
-          },
-        );
+        let committed = await commitBatch(batchCore, stagedTree(tree, staged), {
+          clientRequestId: caller.clientRequestId || null,
+          actor: caller.actor || undefined,
+          history: writeContextFromHeaders(request.headers),
+          ...(caller.policyAudit ? { policyAudit: caller.policyAudit } : {}),
+          // One request, several cards, and not all of them from the same
+          // place — which is the case the event's authorship naming exists
+          // for, and the only front door that produces it.
+          reportAuthorship: true,
+          // The caller is waiting on this request, and the batch's own index
+          // pass waits on the prerender pool. The wait is bounded, or skipped
+          // when the caller asks, so a stalled pool costs the caller a
+          // pending generation rather than an answer to a write that has
+          // already landed.
+          ...indexWaitOptions(request, { bounded: true }),
+          ...this.#mintPosture(coarseDeclined),
+          ...anonymousCommit,
+        });
         // The coordinator answers in the flat order of the entries it staged,
         // which is the order they were sent in.
         for (let [index, { entry, definition }] of writes.entries()) {
@@ -8002,7 +7999,7 @@ export class Realm {
     } catch (err: unknown) {
       throw await this.#disclosableFailure(
         err,
-        { coarseDeclined, tree, caller },
+        { coarseDeclined, tree, caller, core, batchCore },
         resolved,
         decided,
       );
@@ -8054,6 +8051,7 @@ export class Realm {
   // the wire — the envelope carries the operation's name, and what a `delete`
   // does is whatever the card's type says it does.
   async #resolveEnvelopeEntry(
+    core: OperationCore,
     entry: EnvelopeEntry,
     scope: OperationScope,
   ): Promise<ResolvedEnvelopeEntry> {
@@ -8065,16 +8063,13 @@ export class Realm {
       // exact URL — so resolving the raw spelling would report a declared
       // operation as unknown on a card whose type declares it, and would leave
       // the entry's result carrying an id no other surface spells that way.
-      let target = canonicalizeTarget(
-        this.operationCore,
-        targetFor(entry, this.url),
-      );
+      let target = canonicalizeTarget(core, targetFor(entry, this.url));
       let canonical =
         target.kind === 'instance' && target.url !== entry.href
           ? { ...entry, href: target.url }
           : entry;
       let { definition, decision } = await resolveGatedOperation(
-        this.operationCore,
+        core,
         target,
         canonical.name,
         scope,
@@ -8135,10 +8130,16 @@ export class Realm {
       coarseDeclined,
       tree,
       caller,
+      core,
+      batchCore,
     }: {
       coarseDeclined: CoarseDeclined;
       tree: readonly EnvelopeNode[];
       caller: OperationsCaller;
+      // What the batch resolved and staged against: the realm's own, or a
+      // run's view of it (see `#runOperationCore`, `#runBatchCore`).
+      core: OperationCore;
+      batchCore: BatchCore;
     },
     resolved: readonly ResolvedEnvelopeEntry[],
     // The lock's decisions, for a batch that reached it.
@@ -8165,7 +8166,7 @@ export class Realm {
         } else {
           let refusal = decided.has(position)
             ? decided.get(position)
-            : await storedWriteRefusal(this.operationCore, pending);
+            : await storedWriteRefusal(core, pending);
           if (refusal !== undefined) {
             refused = { position, refusal };
             break;
@@ -8187,6 +8188,8 @@ export class Realm {
         ahead,
         caller,
         coarseDeclined,
+        core,
+        batchCore,
       );
       for (let entry of ahead) {
         let { position } = entry.entry;
@@ -8212,7 +8215,8 @@ export class Realm {
   // undefined where it would admit the write.
   //
   // The writes are staged in request order as the lock stages them, against
-  // the realm as stored now, and nothing is committed. What they are staged
+  // the realm as stored now (for a run, as the run sees it: `core` and
+  // `batchCore`), and nothing is committed. What they are staged
   // with is `resolved` and nothing else, local ids included. A write that
   // cannot be staged ends the rehearsal there, since nothing can say what it
   // would leave its card. So does anything staging refuses, as it ends the
@@ -8226,6 +8230,8 @@ export class Realm {
     // under (see `#mintPosture`), so a card a write is judged by is the card
     // the lock would judge it by.
     coarseDeclined: CoarseDeclined,
+    core: OperationCore,
+    batchCore: BatchCore,
   ): Promise<Map<EntryPosition, OperationFailure | undefined>> {
     let rehearsed = new Map<EntryPosition, OperationFailure | undefined>();
     let admit = async (
@@ -8233,11 +8239,7 @@ export class Realm {
       judged: AdmissionSubject | undefined,
       position: EntryPosition,
     ) => {
-      let refusal = await pendingWriteRefusal(
-        this.operationCore,
-        pending,
-        judged,
-      );
+      let refusal = await pendingWriteRefusal(core, pending, judged);
       rehearsed.set(position, refusal);
       if (refusal) {
         throw refusal;
@@ -8256,7 +8258,7 @@ export class Realm {
       }
     }
     try {
-      await rehearseBatch(this.batchCore, stagedTree(tree, staged), {
+      await rehearseBatch(batchCore, stagedTree(tree, staged), {
         actor: caller.actor || undefined,
         ...this.#mintPosture(coarseDeclined),
       });
@@ -13617,12 +13619,21 @@ export class Realm {
       run,
       `${localPath}.json` as LocalPath,
     );
-    if (!bytes) {
-      return undefined;
-    }
+    return bytes
+      ? this.#stagedCardFrom(localPath, new TextDecoder().decode(bytes))
+      : undefined;
+  }
+
+  // The card resource the staged document `content` at `localPath` (the
+  // card's path, without `.json`) serves as (see `#stagedCardResource`).
+  // Undefined when `content` isn't a card document.
+  #stagedCardFrom(
+    localPath: LocalPath,
+    content: string,
+  ): LooseCardResource | undefined {
     let doc: unknown;
     try {
-      doc = JSON.parse(new TextDecoder().decode(bytes));
+      doc = JSON.parse(content);
     } catch {
       return undefined;
     }
@@ -13711,6 +13722,115 @@ export class Realm {
       } as LooseCardResource['meta'];
     }
     return doc;
+  }
+
+  // The operation core a run's batch resolves, gates and reads through (ADR
+  // 027 §1.3): the realm's own, except that a card the run staged is the card
+  // as the run staged it.
+  //
+  // - Its index row is built from the staged document, with the adoption
+  //   chain its `adoptsFrom` names. So an operation on a card the run created
+  //   or re-typed resolves against the staged card's type, and the policy
+  //   gate matches rules against that type.
+  // - A `read` of it answers the staged document, as the run's card read
+  //   does. Staged files aren't indexed, so it carries no computed fields, no
+  //   expanded links, no rendering and no source version. Its generation is
+  //   the index row's where the realm holds one, and 0 for a card the run
+  //   created.
+  // - The stored text of a file the run staged is the staged text, which is
+  //   what a policy predicate reads a card's fields from.
+  //
+  // A search runs on the index, as the run's search does, so an entry
+  // that finds its targets with a query finds the cards the index holds. A
+  // read of a file's stored bytes isn't an operation a batch carries; the
+  // byte routes serve a run's staged files themselves.
+  #runOperationCore(run: RunOverlayKey): OperationCore {
+    let core = this.operationCore;
+    let index = core.indexQueryEngine;
+    let staged = async (url: URL) => {
+      if (!this.paths.inRealm(url)) {
+        return undefined;
+      }
+      let localPath = this.paths.local(url);
+      let path = `${localPath}.json` as LocalPath;
+      let bytes = await readRunOverlayFile(this.#dbAdapter, run, path);
+      if (!bytes) {
+        return undefined;
+      }
+      let content = new TextDecoder().decode(bytes);
+      let card = this.#stagedCardFrom(localPath, content);
+      if (!card) {
+        return undefined;
+      }
+      let indexed = await index.instance(url, { includeErrors: true });
+      return {
+        card: card as unknown as CardResource,
+        types: (await this.#adoptedTypes(path, content)) ?? null,
+        generation: indexed?.generation ?? 0,
+        resourceCreatedAt:
+          indexed?.resourceCreatedAt ?? Math.floor(Date.now() / 1000),
+      };
+    };
+    let indexQueryEngine: OperationIndexQueryEngine = {
+      instance: async (url, opts) => {
+        let card = await staged(url);
+        if (!card) {
+          return await index.instance(url, opts);
+        }
+        let row: InstanceOrError = {
+          type: 'instance',
+          instance: card.card,
+          canonicalURL: url.href,
+          lastModified: null,
+          resourceCreatedAt: card.resourceCreatedAt,
+          isolatedHtml: null,
+          headHtml: null,
+          embeddedHtml: null,
+          fittedHtml: null,
+          atomHtml: null,
+          markdown: null,
+          searchDoc: null,
+          types: card.types,
+          deps: null,
+          captures: null,
+          generation: card.generation,
+          realmURL: this.url,
+          indexedAt: null,
+          sourceContentHash: null,
+          renderError: null,
+        };
+        return row;
+      },
+      cardDocument: async (url, opts) => {
+        let card = await staged(url);
+        if (!card) {
+          return await index.cardDocument(url, opts);
+        }
+        return {
+          type: 'doc',
+          doc: { data: card.card },
+          generation: card.generation,
+          version: null,
+          indexedAt: null,
+          deps: null,
+          captures: null,
+          renderError: null,
+          queryBacked: false,
+        };
+      },
+      file: (url) => index.file(url),
+      searchEntries: (query, opts) => index.searchEntries(query, opts),
+    };
+    return {
+      ...core,
+      indexQueryEngine,
+      readFileAsText: async (localPath) => {
+        let bytes = await readRunOverlayFile(this.#dbAdapter, run, localPath);
+        return bytes
+          ? new TextDecoder().decode(bytes)
+          : await core.readFileAsText(localPath);
+      },
+    };
   }
 
   // The batch coordinator's collaborators for a run's batch (ADR 027 §1.2):
