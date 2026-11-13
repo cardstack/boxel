@@ -647,6 +647,9 @@ export default class OperatorModeOverlays extends Overlays {
     const cardMenuItems =
       (cardDefOrId as CardDef)[getMenuItems]?.({
         canEdit: this.realm.canWrite(cardId),
+        // A field overlay offers no Delete, so it asks the realm nothing.
+        canDelete:
+          !isField && this.operatorModeStateService.canDeleteCard(cardId),
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
         toolContext: this.toolContext,

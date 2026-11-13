@@ -34,6 +34,33 @@ import {
   testRealm3URL,
 } from '../helpers/interact-submode-setup';
 
+// These test realms judge no request by permissions, so they would tell a user
+// who may only read one that a delete is allowed. A deployed realm with no
+// policy refuses such a user every write, so the realm answers its delete
+// checks here as a deployed one would.
+function refuseDeleteChecksIn(realmURL: string) {
+  getService('network').mount(
+    async (req) => {
+      if (req.method !== 'POST' || req.url !== `${realmURL}_capabilities`) {
+        return null;
+      }
+      let { checks } = (await req.json()) as {
+        checks: { operation: string }[];
+      };
+      return new Response(
+        JSON.stringify({
+          checks: checks.map((check) => ({
+            ...check,
+            allowed: check.operation !== 'delete',
+          })),
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    },
+    { prepend: true },
+  );
+}
+
 module(
   'Acceptance | interact submode creation & permissions',
   function (hooks) {
@@ -431,6 +458,7 @@ module(
           [testRealmURL]: ['read'],
           [testRealm2URL]: ['read', 'write'],
         });
+        refuseDeleteChecksIn(testRealmURL);
       });
 
       test('the edit button is hidden when the user lacks permissions', async function (assert) {
@@ -695,6 +723,7 @@ module(
           [testRealmURL]: ['read'],
           [testRealm2URL]: ['read', 'write'],
         });
+        refuseDeleteChecksIn(testRealmURL);
       });
 
       test('the edit button respects the realm permissions of the cards in differing realms', async function (assert) {
