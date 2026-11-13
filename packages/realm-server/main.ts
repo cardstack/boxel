@@ -4,6 +4,7 @@ import './lib/wtfnode-on-signal.ts';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
 import {
   readAuthorizationLimit,
+  readTokenLimit,
   readNewClientLimit,
   readOAuthProviderConfig,
 } from './lib/oauth-provider/config.ts';
@@ -503,6 +504,7 @@ const oauthNewClientLimit = oauthProvider
 const oauthAuthorizationLimit = oauthProvider
   ? readAuthorizationLimit(process.env)
   : undefined;
+const oauthTokenLimit = oauthProvider ? readTokenLimit(process.env) : undefined;
 
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
@@ -1024,7 +1026,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
     ...(googleSignIn ? { googleSignIn } : {}),
     ...(oauthProvider
-      ? { oauthProvider, oauthNewClientLimit, oauthAuthorizationLimit }
+      ? {
+          oauthProvider,
+          oauthNewClientLimit,
+          oauthAuthorizationLimit,
+          oauthTokenLimit,
+        }
       : {}),
   });
 

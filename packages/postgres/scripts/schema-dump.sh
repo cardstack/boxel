@@ -65,6 +65,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=oauth_provider_dynamic_clients \
   --exclude-table-and-children=oauth_provider_objects \
   --exclude-table-and-children=oauth_provider_grants \
+  --exclude-table-and-children=oauth_provider_tokens \
   --exclude-table-and-children=secure_sessions \
   --exclude-table-and-children=password_change_device_sweeps \
   --exclude-table-and-children=proxy_endpoint_history \

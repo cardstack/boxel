@@ -19,8 +19,11 @@
 // error pages nobody opened don't pile up.
 
 import { createHash, randomBytes } from 'crypto';
-import type { Adapter, AdapterPayload } from 'oidc-provider';
-import type { DBAdapter } from '@cardstack/runtime-common';
+import { errors, type Adapter, type AdapterPayload } from 'oidc-provider';
+import { logger, type DBAdapter } from '@cardstack/runtime-common';
+import { endGrant } from './grants.ts';
+
+const log = logger('boxel:oauth-provider');
 
 const ERROR_REFERENCE_KIND = 'ErrorReference';
 
@@ -189,11 +192,11 @@ class BearerKeyedAdapter implements Adapter {
     throw this.#unused('findByUid');
   }
 
-  async consume(): Promise<never> {
+  async consume(_id: string): Promise<void> {
     throw this.#unused('consume');
   }
 
-  async revokeByGrantId(): Promise<never> {
+  async revokeByGrantId(_grantId: string): Promise<void> {
     throw this.#unused('revokeByGrantId');
   }
 
@@ -255,9 +258,56 @@ export class SessionAdapter extends BearerKeyedAdapter {
 }
 
 // The library's adapter for its authorization codes, stored by their values.
+// A code is exchanged once. The library checks that a code is unused and then
+// marks it used, so two exchanges at once could both pass its check: marking
+// it used here is atomic, and the exchange that loses ends the grant as reuse,
+// as presenting a used code does (ADR 021 §1.9). A code that expired in
+// between is refused without ending its grant.
 export class AuthorizationCodeAdapter extends BearerKeyedAdapter {
+  #dbAdapter: DBAdapter;
+
   constructor(dbAdapter: DBAdapter) {
     super(dbAdapter, 'AuthorizationCode');
+    this.#dbAdapter = dbAdapter;
+  }
+
+  async consume(id: string): Promise<void> {
+    let hash = sha256Hex(id);
+    let marked = await this.#dbAdapter.execute(
+      `UPDATE oauth_provider_objects
+          SET payload = payload || jsonb_build_object(
+                'consumed', floor(extract(epoch FROM now()))::bigint
+              )
+        WHERE kind = 'AuthorizationCode' AND id_hash = decode($1, 'hex')
+          AND payload->'consumed' IS NULL AND expires_at > now()
+        RETURNING 1`,
+      { bind: [hash] },
+    );
+    if (marked.length > 0) {
+      return;
+    }
+    let [row] = (await this.#dbAdapter.execute(
+      `SELECT payload->>'grantId' AS grant_id FROM oauth_provider_objects
+        WHERE kind = 'AuthorizationCode' AND id_hash = decode($1, 'hex')
+          AND payload->'consumed' IS NOT NULL`,
+      { bind: [hash] },
+    )) as { grant_id: string | null }[];
+    if (!row) {
+      throw new errors.InvalidGrant('authorization code is expired');
+    }
+    if (row.grant_id) {
+      log.info('authorization code reused');
+      await endGrant(this.#dbAdapter, row.grant_id, 'reuse');
+    }
+    throw new errors.InvalidGrant('authorization code already consumed');
+  }
+
+  async revokeByGrantId(grantId: string): Promise<void> {
+    await this.#dbAdapter.execute(
+      `DELETE FROM oauth_provider_objects
+        WHERE kind = 'AuthorizationCode' AND payload->>'grantId' = $1`,
+      { bind: [grantId] },
+    );
   }
 }
 
@@ -423,6 +473,20 @@ export async function findConsentDecision(
   return (await findObject(dbAdapter, CONSENT_DECISION_KIND, interactionId)) as
     | ConsentDecisionRecord
     | undefined;
+}
+
+// When a flow was decided: when its decision was first stored, which a
+// second decision never moves.
+export async function consentDecidedAt(
+  dbAdapter: DBAdapter,
+  interactionId: string,
+): Promise<Date | undefined> {
+  let [row] = (await dbAdapter.execute(
+    `SELECT created_at FROM oauth_provider_objects
+       WHERE kind = $1 AND id_hash = decode($2, 'hex') AND expires_at > now()`,
+    { bind: [CONSENT_DECISION_KIND, sha256Hex(interactionId)] },
+  )) as { created_at: string | Date }[];
+  return row ? new Date(row.created_at) : undefined;
 }
 
 // Finds a ticket and deletes it, so it is spent on its first presentation.

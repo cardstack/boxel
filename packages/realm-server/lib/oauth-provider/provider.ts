@@ -34,13 +34,23 @@ import {
 } from './consent.ts';
 import type { OAuthProviderConfig } from './config.ts';
 import { finishHandler, resumeHandler, userExists } from './finish.ts';
-import { NON_RENEWING_GRANT_TTL_SECONDS } from './grants.ts';
+import {
+  NON_RENEWING_GRANT_TTL_SECONDS,
+  readGrantTerms,
+  type GrantTerms,
+} from './grants.ts';
 import {
   DEFAULT_NEW_CLIENT_LIMIT,
   type NewClientLimit,
 } from './new-client-limit.ts';
 import { boxelHosts } from './redirect-uris.ts';
+import { browserOriginAllowed } from './client-cors.ts';
 import { registrationHandler } from './registration.ts';
+import {
+  DEFAULT_TOKEN_LIMIT,
+  tokenHandler,
+  type TokenLimit,
+} from './token-limit.ts';
 import type { OAuthResource, OAuthResourceDefinition } from './registry.ts';
 import { buildRegistry, oauthIssuer, registryScopes } from './registry.ts';
 
@@ -51,6 +61,7 @@ export const log = logger('boxel:oauth-provider');
 export const OAUTH_PROVIDER_PATH_PREFIX = OAUTH_PROVIDER_PATH;
 export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
 export const OAUTH_REGISTRATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/reg`;
+export const OAUTH_TOKEN_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/token`;
 
 // The fields discovery copies from the library's document. That document
 // also lists every endpoint it mounts, `jwks_uri`, and OpenID Connect
@@ -65,14 +76,12 @@ export const OAUTH_REGISTRATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/reg`;
 //
 // `grant_types_supported` is listed because a client that finds it missing
 // assumes the implicit grant is supported (RFC 8414 §2). It is set, not
-// copied: the library lists `refresh_token` as soon as a client may register
-// for it, before the token endpoint serves a refresh.
+// copied, so it lists only the grants the token endpoint serves.
 //
-// `token_endpoint_auth_methods_supported` is listed, before the token
-// endpoint is, because a client that finds it missing assumes
-// `client_secret_basic` (RFC 8414 §2) and registers asking for a secret,
-// which registration refuses. The library lists `none`, from
-// `clientAuthMethods`.
+// `token_endpoint_auth_methods_supported` is listed because a client that
+// finds it missing assumes `client_secret_basic` (RFC 8414 §2) and registers
+// asking for a secret, which registration refuses. The library lists `none`,
+// from `clientAuthMethods`.
 //
 // `authorization_response_iss_parameter_supported` says the provider sends
 // `iss` with every authorization response (RFC 9207), which lets a client
@@ -84,7 +93,7 @@ const DISCOVERY_FIELDS = [
   'token_endpoint_auth_methods_supported',
   'authorization_response_iss_parameter_supported',
 ] as const;
-const GRANT_TYPES_SERVED = ['authorization_code'];
+const GRANT_TYPES_SERVED = ['authorization_code', 'refresh_token'];
 
 // How long the library keeps a flow's interaction, and its own session: long
 // enough for a person to sign in and consent, and no longer. The session never
@@ -94,6 +103,22 @@ const SESSION_TTL_SECONDS = 10 * 60;
 // How long an authorization code lasts: long enough for an app to exchange
 // it straight away.
 const AUTHORIZATION_CODE_TTL_SECONDS = 60;
+// How long an access token lasts (ADR 021 §1.9): short on a grant that
+// renews, since its client can refresh, and as long as the grant itself on
+// one that doesn't. Never past its grant's expiry.
+export const RENEWING_ACCESS_TOKEN_TTL_SECONDS = 10 * 60;
+export const NON_RENEWING_ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
+
+// The terms of the grant each exchange is issuing from, read when the
+// library looks the exchange's account up, which it does on every code and
+// refresh exchange before it builds a token. The library's lifetime settings
+// can't wait on the database, and its grant drops any field it doesn't know,
+// so the terms are kept beside the request for them to read.
+const exchangeTerms = new WeakMap<object, GrantTerms>();
+
+function secondsUntil(epochSeconds: number): number {
+  return Math.max(1, epochSeconds - Math.floor(Date.now() / 1000));
+}
 
 // The running provider: the library, and Boxel's handling of the requests that
 // run before or beside the library's: registration, the start of a flow, the
@@ -104,6 +129,7 @@ export interface OAuthProviderService {
   provider: Provider;
   handleRegistration: Koa.Middleware;
   handleAuthorization: Koa.Middleware;
+  handleToken: Koa.Middleware;
   handleInteraction: Koa.Middleware;
   handleFinish: Koa.Middleware;
   handleResume: Koa.Middleware;
@@ -137,6 +163,7 @@ export function startOAuthProvider({
   publishedDomains = [],
   newClientLimit = DEFAULT_NEW_CLIENT_LIMIT,
   authorizationLimit = DEFAULT_AUTHORIZATION_LIMIT,
+  tokenLimit = DEFAULT_TOKEN_LIMIT,
   rateLimitStore = new DBRateLimitStore(dbAdapter),
   testOnlyResources,
 }: {
@@ -148,6 +175,7 @@ export function startOAuthProvider({
   publishedDomains?: readonly string[];
   newClientLimit?: NewClientLimit;
   authorizationLimit?: CallerLimit;
+  tokenLimit?: TokenLimit;
   rateLimitStore?: RateLimitStore;
   testOnlyResources?: readonly OAuthResourceDefinition[];
 }): OAuthProviderService {
@@ -175,6 +203,8 @@ export function startOAuthProvider({
     }),
     renderError: renderLibraryError({ dbAdapter, secureOriginURL }),
     accountExists: (accountId) => userExists(dbAdapter, accountId),
+    grantTerms: (grantId, accountId) =>
+      readGrantTerms(dbAdapter, grantId, accountId),
   });
   // Boxel's own apps, listed in code. None is listed yet.
   let preRegistered: ReadonlySet<string> = new Set();
@@ -188,6 +218,12 @@ export function startOAuthProvider({
       rateLimitStore,
       limit: authorizationLimit,
       secureOriginURL,
+    }),
+    handleToken: tokenHandler({
+      provider,
+      dbAdapter,
+      rateLimitStore,
+      limit: tokenLimit,
     }),
     handleInteraction: interactionHandler({ secureOriginURL }),
     handleFinish: finishHandler({ provider, dbAdapter, secureOriginURL }),
@@ -239,6 +275,7 @@ export function createOAuthProvider({
   adapter,
   renderError,
   accountExists = async () => false,
+  grantTerms = async () => undefined,
 }: {
   issuer: string;
   config: OAuthProviderConfig;
@@ -248,6 +285,12 @@ export function createOAuthProvider({
   // Whether a user ID (`users.id`) names a user. A flow signs in only as
   // the user who decided it, by that ID.
   accountExists?: (accountId: string) => Promise<boolean>;
+  // The terms of a user's grant, by its ID: undefined when the grant isn't
+  // that user's.
+  grantTerms?: (
+    grantId: string,
+    accountId: string,
+  ) => Promise<GrantTerms | undefined>;
 }): Provider {
   let scopes = registryScopes(registry);
   let configuration: Configuration = {
@@ -267,19 +310,49 @@ export function createOAuthProvider({
       token_endpoint_auth_method: 'none',
       id_token_signed_response_alg: 'RS256',
     },
-    // Set, rather than left to the library's default, so a client may
-    // register for the refresh grant; the library allows the grant only once
-    // this is set or `offline_access` is a scope. Refresh tokens follow the
-    // renewal choice a grant records, which the token endpoint reads once it
-    // is served, so none is issued yet.
-    issueRefreshToken: async () => false,
+    // Refresh tokens follow the renewal choice the grant records (ADR 021
+    // §1.9), not `offline_access`, which the library's default reads and
+    // drops from any request without `prompt=consent`: a grant the user chose
+    // to keep issues them, to a client that may use the refresh grant, and
+    // one they didn't issues none. Set, too, so a client may register for
+    // the refresh grant; the library allows the grant only once this is set
+    // or `offline_access` is a scope.
+    issueRefreshToken: async (ctx: KoaContextWithOIDC, client) =>
+      client.grantTypeAllowed('refresh_token') &&
+      exchangeTerms.get(ctx)?.renewing === true,
+    // Every refresh rotates its token: the library's default rotates only
+    // some clients' (§1.9).
+    rotateRefreshToken: true,
+    // Revoking any token of a grant revokes the whole grant, which
+    // `GrantAdapter` ends rather than deletes (ADR 021 §1.9). Not the
+    // library's default, which leaves the grant live when its client revokes
+    // an access token.
+    revokeGrantPolicy: () => true,
     // The account a flow signs in as: a user's internal ID. The library
     // reads nothing about the user: the provider issues no ID tokens and
-    // answers no `userinfo`.
-    findAccount: async (_ctx: KoaContextWithOIDC, accountId: string) =>
-      (await accountExists(accountId))
-        ? { accountId, claims: async () => ({ sub: accountId }) }
-        : undefined,
+    // answers no `userinfo`. On a code or refresh exchange it also reads
+    // the terms of the exchange's grant, for the tokens it issues.
+    findAccount: async (
+      ctx: KoaContextWithOIDC,
+      accountId: string,
+      token?: { grantId?: string },
+    ) => {
+      if (token?.grantId) {
+        let terms = await grantTerms(token.grantId, accountId);
+        if (!terms) {
+          return undefined;
+        }
+        exchangeTerms.set(ctx, terms);
+      } else if (!(await accountExists(accountId))) {
+        return undefined;
+      }
+      return { accountId, claims: async () => ({ sub: accountId }) };
+    },
+    // A browser may call the token endpoint only from a page on the origin
+    // of one of the client's redirect URIs, and only for a public client.
+    // The library's default, set so an upgrade can't change it.
+    clientBasedCORS: (_ctx: KoaContextWithOIDC, origin: string, client) =>
+      browserOriginAllowed(origin, client),
     // Only the grant the flow's finish created, never one the library's
     // session remembers for the client: each consent is its own grant
     // (ADR 021 §1.3).
@@ -300,6 +373,28 @@ export function createOAuthProvider({
       Interaction: INTERACTION_TTL_SECONDS,
       Session: SESSION_TTL_SECONDS,
       AuthorizationCode: AUTHORIZATION_CODE_TTL_SECONDS,
+      AccessToken: (ctx: KoaContextWithOIDC) => {
+        let terms = exchangeTerms.get(ctx);
+        if (!terms) {
+          return RENEWING_ACCESS_TOKEN_TTL_SECONDS;
+        }
+        return Math.min(
+          terms.renewing
+            ? RENEWING_ACCESS_TOKEN_TTL_SECONDS
+            : NON_RENEWING_ACCESS_TOKEN_TTL_SECONDS,
+          secondsUntil(terms.expiresAt),
+        );
+      },
+      // Until the grant expires: the grant's expiry is the connection's end.
+      RefreshToken: (ctx: KoaContextWithOIDC) => {
+        let terms = exchangeTerms.get(ctx);
+        if (!terms) {
+          throw new Error(
+            'the OAuth provider issues a refresh token only from a grant it has read',
+          );
+        }
+        return secondsUntil(terms.expiresAt);
+      },
       // Boxel creates every grant with the expiry its consent chose
       // (`grants.ts`), and the library never saves one. Set all the same, to
       // the shorter of the two, so nothing the library might save outlives
@@ -328,7 +423,7 @@ export function createOAuthProvider({
       pushed_authorization_request: `${OAUTH_PROVIDER_PATH_PREFIX}/request`,
       registration: `${OAUTH_PROVIDER_PATH_PREFIX}/reg`,
       revocation: `${OAUTH_PROVIDER_PATH_PREFIX}/token/revocation`,
-      token: `${OAUTH_PROVIDER_PATH_PREFIX}/token`,
+      token: OAUTH_TOKEN_PATH,
       userinfo: `${OAUTH_PROVIDER_PATH_PREFIX}/me`,
     },
     // Every feature is set here, including those whose default is the
@@ -457,10 +552,30 @@ export function createOAuthProvider({
       document.grant_types_supported = GRANT_TYPES_SERVED;
       document.scopes_supported = scopes;
       document.authorization_endpoint = `${issuer}${OAUTH_AUTHORIZATION_PATH}`;
+      document.token_endpoint = `${issuer}${OAUTH_TOKEN_PATH}`;
       document.registration_endpoint = `${issuer}${OAUTH_REGISTRATION_PATH}`;
       ctx.body = document;
     }
   });
+
+  // The token endpoint's outcomes, by fixed labels: never a code, token or
+  // verifier. A refused request is named by its OAuth error code alone.
+  provider.on('grant.success', (ctx: KoaContextWithOIDC) => {
+    let refresh = ctx.oidc.params?.grant_type === 'refresh_token';
+    log.info(
+      `token ${refresh ? 'refreshed' : 'issued'}: client ${ctx.oidc.client?.clientId}`,
+    );
+  });
+  provider.on(
+    'grant.error',
+    (ctx: KoaContextWithOIDC, error: { error?: string }) => {
+      log.info(
+        `token refused: ${error.error ?? 'server_error'}, client ${
+          ctx.oidc?.client?.clientId ?? 'unknown'
+        }`,
+      );
+    },
+  );
 
   // An unexpected error in the library's own handling. The library answers
   // the request itself, so the realm server's error handler never sees it.
