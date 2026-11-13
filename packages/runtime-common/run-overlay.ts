@@ -77,6 +77,37 @@ export async function stageRunOverlayFile(
   writesCap: number,
   maxBytes = RUN_OVERLAY_MAX_BYTES,
 ): Promise<RunOverlayStageResult> {
+  let result = await stageRunOverlayFiles(
+    dbAdapter,
+    key,
+    [{ path, content }],
+    writesCap,
+    maxBytes,
+  );
+  return result.kind === 'staged'
+    ? { kind: 'staged', created: result.created.length > 0 }
+    : result;
+}
+
+export type RunOverlayStageFilesResult =
+  // Every file is staged. `created` names the paths the attempt had not
+  // staged before.
+  | { kind: 'staged'; created: string[] }
+  | Exclude<RunOverlayStageResult, { kind: 'staged' }>;
+
+// Stages every one of `files` in the attempt's overlay, or none of them: one
+// transaction holds the run's row lock for the checks and every insert. The
+// checks are `stageRunOverlayFile`'s, applied to the overlay as these files
+// leave it: the files it holds, these included, stay within `writesCap`, and
+// their bytes within `maxBytes`. A path named twice stages its last content.
+export async function stageRunOverlayFiles(
+  dbAdapter: DBAdapter,
+  key: RunOverlayKey,
+  files: { path: string; content: Uint8Array }[],
+  writesCap: number,
+  maxBytes = RUN_OVERLAY_MAX_BYTES,
+): Promise<RunOverlayStageFilesResult> {
+  let byPath = new Map(files.map(({ path, content }) => [path, content]));
   return await dbAdapter.withTransaction(async (txQuery) => {
     let [run] = await txQuery([
       'SELECT state, attempt, commit_started_at FROM automation_runs WHERE id =',
@@ -93,36 +124,41 @@ export async function stageRunOverlayFile(
     ) {
       return { kind: 'not-running' } as const;
     }
-    let [{ files, staged, others }] = (await txQuery([
-      'SELECT count(*)::int AS files, count(*) FILTER (WHERE path =',
-      param(path),
-      ')::int AS staged, coalesce(sum(size) FILTER (WHERE path <>',
-      param(path),
-      '), 0)::bigint AS others FROM run_overlay_files WHERE run_id =',
+    let rows = (await txQuery([
+      'SELECT path, size FROM run_overlay_files WHERE run_id =',
       param(key.runId),
       'AND attempt =',
       param(key.attempt),
-    ])) as { files: number; staged: number; others: number | string }[];
-    let created = Number(staged) === 0;
-    if (created && Number(files) >= writesCap) {
+    ])) as { path: string; size: number | string }[];
+    let stagedBefore = new Set(rows.map((row) => String(row.path)));
+    let created = [...byPath.keys()].filter((path) => !stagedBefore.has(path));
+    if (created.length > 0 && stagedBefore.size + created.length > writesCap) {
       return { kind: 'over-cap', cap: writesCap } as const;
     }
-    if (Number(others) + content.byteLength > maxBytes) {
+    let bytes = rows
+      .filter((row) => !byPath.has(String(row.path)))
+      .reduce((sum, row) => sum + Number(row.size), 0);
+    for (let content of byPath.values()) {
+      bytes += content.byteLength;
+    }
+    if (bytes > maxBytes) {
       return { kind: 'over-bytes', limit: maxBytes } as const;
     }
-    await txQuery([
-      'INSERT INTO run_overlay_files (run_id, attempt, path, content, size) VALUES (',
-      param(key.runId),
-      ',',
-      param(key.attempt),
-      ',',
-      param(path),
-      ', decode(',
-      param(toBase64(content)),
-      ", 'base64'),",
-      param(content.byteLength),
-      ') ON CONFLICT (run_id, attempt, path) DO UPDATE SET content = EXCLUDED.content, size = EXCLUDED.size, updated_at = now()',
-    ]);
+    for (let [path, content] of byPath) {
+      await txQuery([
+        'INSERT INTO run_overlay_files (run_id, attempt, path, content, size) VALUES (',
+        param(key.runId),
+        ',',
+        param(key.attempt),
+        ',',
+        param(path),
+        ', decode(',
+        param(toBase64(content)),
+        ", 'base64'),",
+        param(content.byteLength),
+        ') ON CONFLICT (run_id, attempt, path) DO UPDATE SET content = EXCLUDED.content, size = EXCLUDED.size, updated_at = now()',
+      ]);
+    }
     return { kind: 'staged', created } as const;
   });
 }

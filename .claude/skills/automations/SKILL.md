@@ -34,7 +34,9 @@ description: >-
   `Realm.handleAutomation` admits a call against the run row, and how to trace
   a refused run-token call or a run's `key_uses`. Also covers the run
   overlay (`run-overlay.ts`, `run_overlay_files`): how a run's writes are
-  staged, how its reads and listings read through them, the `writes` cap, and
+  staged (file writes, `_atomic` and write operations in `_operations`), how
+  its reads, listings, card reads and searches read through them, the search
+  limit and how scripts work around it, the `writes` cap, and
   how to inspect a run's staged files; and the commit (`/_run-commit`), its
   checks and its failure modes. Also covers how an automation run
   reaches a worker — the automation priority tier (`automationInitiatedPriority
@@ -465,45 +467,90 @@ check, and `exp` is when the run's time limit passes.
 
 ### The run overlay
 
-A run's card+source writes, and their octet-stream spelling, don't reach the
-realm while it runs (ADR 027 §1.2). They are the only writes a run makes: a
-run-token write (any `PUT`, `PATCH`, `POST` or `DELETE`) to a route without
-`takesRunWrites` is refused with 403 before the route runs, and logged as
-`run-token call <method> <url> refused: … wrote through a route that doesn't
-stage its writes`. So `fs.delete`, `cards.update`, `operations.*`, `_atomic`
-and the card+json writes are refused for a run until they stage (see
-`docs/adr/remediation/027.md`). Each one is staged in the run's **overlay**, `run_overlay_files` in Postgres, one row per
-file keyed by run, attempt and realm-local path, with the bytes inline. The
-functions are in `packages/runtime-common/run-overlay.ts`. Every realm-server
-instance reads the same overlay, so a run's calls can land on any of them.
+A run's writes don't reach the realm while it runs (ADR 027 §1.2). Three
+routes stage them: the card+source write and its octet-stream spelling, the
+operations envelope (`_operations`) and the atomic write (`_atomic`). Every
+other run-token write (any `PUT`, `PATCH`, `POST` or `DELETE`) to a route
+without `takesRunWrites` is refused with 403 before the route runs, and logged
+as `run-token call <method> <url> refused: … wrote through a route that
+doesn't stage its writes`. So `fs.delete` and the card+json writes are refused
+for a run (see `docs/adr/remediation/027.md`). Each staged write lands in the
+run's **overlay**, `run_overlay_files` in Postgres, one row per file keyed by
+run, attempt and realm-local path, with the bytes inline. The functions are in
+`packages/runtime-common/run-overlay.ts`. Every realm-server instance reads
+the same overlay, so a run's calls can land on any of them.
 
 What goes through it, for a run-token call in the run's own realm
 (`requestContext.automationRun`, not `readOnly`):
 
-- **Writes** (`realm.fs.writeText`, `writeBytes`, and the writes behind
+- **File writes** (`realm.fs.writeText`, `writeBytes`, and the writes behind
   `replace` and `copy`): a card+source `POST`, or its octet-stream spelling,
-  is staged with `stageRunOverlayFile` instead of written. Any file may be
-  staged, card instance or not. The realm's size limit for the file's kind
-  applies (the card limit for a card document, the file limit otherwise,
-  checked before the body is buffered), as do the realm's reserved paths. A
-  run may not stage `realm.json`, a module (`.gts`, `.ts`, `.gjs`, `.js`), the
-  realm's policy card, a RealmPolicy card or an automation card, whether the
-  realm holds one at the path or the run's bytes would make one (403). Modules
-  are refused because the module a card's class comes from decides whether
-  it's a RealmPolicy or an automation, and the type check reads modules from
-  the index, which never sees a staged one. A path can't be staged as both a file and
-  a directory (409). The token's `run.writesCap` bounds how many files the
-  attempt stages (403 `Writes cap reached`), and `RUN_OVERLAY_MAX_BYTES`
-  (100 MiB) bounds their bytes together (413). Rewriting a staged
-  path replaces it and doesn't count again. The run's row is locked for the
-  check, so racing writes can't pass the cap, and a write after the run
-  stopped running is refused.
-- **Reads** (`realm.fs.readText`, `exists`): a card+source `GET` or `HEAD` of a
-  path the attempt staged answers with the staged bytes; any other path reads
-  the realm as usual.
+  is staged with `stageRunOverlayFile` instead of written.
+- **`cards.update`**, which the Realm Runner saves through `_atomic`:
+  `Realm.#stageRunAtomic` stages every file the request adds or updates, all
+  or none. An `add` of a path the run sees (staged or in the realm) is 409,
+  an `update` of one it doesn't see is 404, as the atomic write answers.
+- **Write operations** (`operations.invoke` and
+  `operations.invokeBatchOperation` on `appendLine`, `appendContainsMany`,
+  `update`, `create`, `transform`): `handleOperations` hands a run's batch to
+  `commitBatch` with `Realm.#runBatchCore` in place of the realm's batch
+  core. It is the realm's own, except that every file the batch reads (whole,
+  in byte ranges, or for whether it exists) is read through the overlay, and
+  its commit stages the batch's result with `stageRunOverlayFiles`, in one
+  transaction, instead of writing the realm. So the operation runs against
+  the overlay's view of the file, and a second `appendLine` adds to what the
+  first staged. A `delete` operation is refused (403 `run-write-not-staged`),
+  since the overlay can't hold a removal; a result the overlay refuses
+  answers `run-write-refused` with the status below. A `callApi` entry still
+  runs at once and isn't staged.
+
+Every staged write meets the same checks (`Realm.#stageRunFiles`). Any file
+may be staged, card instance or not. The realm's size limit for the file's
+kind applies (the card limit for a card document, the file limit otherwise;
+the card+source write checks it before the body is buffered), as do the
+realm's reserved paths. A run may not stage `realm.json`, a module (`.gts`,
+`.ts`, `.gjs`, `.js`), the realm's policy card, a RealmPolicy card or an
+automation card, whether the realm holds one at the path or the run's bytes
+would make one (403). Modules are refused because the module a card's class
+comes from decides whether it's a RealmPolicy or an automation, and the type
+check reads modules from the index, which never sees a staged one. A path
+can't be staged as both a file and a directory (409). The token's
+`run.writesCap` bounds how many files the attempt stages (403 `Writes cap
+reached`), and `RUN_OVERLAY_MAX_BYTES` (100 MiB) bounds their bytes together
+(413). Rewriting a staged path replaces it and doesn't count again. The run's
+row is locked for the check, so racing writes can't pass the cap, and a write
+after the run stopped running is refused (401). A request that stages several
+files stages all of them or none.
+
+And the run's reads:
+
+- **File reads** (`realm.fs.readText`, `exists`): a card+source `GET` or
+  `HEAD` of a path the attempt staged answers with the staged bytes; any other
+  path reads the realm as usual.
 - **Listings** (`realm.fs.list`): a directory listing adds the files the
   attempt staged under it, and the directories they make, beside the realm's
   own entries. A directory only staged files make is listed for the run.
+- **`cards.get`**: a card+json `GET` of a card the attempt staged answers
+  with the staged document (`Realm.#stagedCardResource`): its resource with
+  the card's id, its own link, its type's module resolved against the card,
+  and `realmURL` and `realmInfo`, never cached. It has no computed fields
+  and no expanded links, since staged files aren't indexed. A card the run
+  created is read this way too.
+- **`cards.search`** runs on the index, and answers each card the attempt
+  staged as staged (`Realm.#withStagedCards`): its attributes,
+  relationships and type come from the staged document, and the rest of what
+  the search answered for it stays. Which cards match, and their order, are
+  the index's, so **a search won't find a card created in this run, and
+  won't match on a value this run changed**; a card it returns staged may no
+  longer match the query. This is the decided shape (ADR 027 §1.3), not a
+  gap: indexing staged cards would cost a render each.
+
+A script works around the search limit by keeping what it writes in memory:
+it builds each card's path from a stable key in the upstream data, so it
+reads a card it may have written with `cards.get` (which sees the staged
+version) instead of searching for it, and it keeps the cards it creates in
+this run in a map of its own rather than finding them again. A search is for
+what the realm held when the run started.
 
 No other caller sees a staged file. Staged files aren't indexed.
 

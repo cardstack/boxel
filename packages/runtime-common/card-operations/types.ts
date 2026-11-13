@@ -1699,11 +1699,16 @@ export type OperationErrorCode =
   // it is planned and run on the search engine, so reaching the operation core
   // with one means the caller used the wrong entry point.
   | 'wrong-entry-point'
-  // An automation run's batch carries a write. A run's writes are staged in
-  // its overlay and committed together, and a batch writes the realm
-  // directly, so the run writes through the card+source write instead.
-  // Carries a 403. Nothing was written.
+  // An automation run's batch removes a file, or writes a realm the run may
+  // only read. A run's writes are staged in its own realm's overlay, which
+  // holds a file's bytes with nothing to mark a removal. Carries a 403.
+  // Nothing was staged.
   | 'run-write-not-staged'
+  // An automation run's batch whose result its overlay refuses: a file the
+  // run may not write, one over the realm's size limit or the overlay's byte
+  // bound, a path both a file and a directory, the run's `writes` cap, or a
+  // run that is no longer running (401). Nothing was staged.
+  | 'run-write-refused'
   // Two entries of one parallel group stage a change to the same file. The
   // members of a parallel group are evaluated against the state the group
   // started from, so neither of the two composes over the other and only one

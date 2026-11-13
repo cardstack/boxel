@@ -221,7 +221,7 @@ import {
   runOverlayFiles,
   runOverlayPathClash,
   runOverlayPathsUnder,
-  stageRunOverlayFile,
+  stageRunOverlayFiles,
   type RunOverlayKey,
 } from './run-overlay.ts';
 import {
@@ -471,7 +471,11 @@ import type {
   BatchEntryResult,
   CommitBatchOptions,
 } from './card-operations/coordinator.ts';
-import type { BatchEntry } from './card-operations/executors.ts';
+import type {
+  BatchEntry,
+  SourceBytes,
+  StagedContent,
+} from './card-operations/executors.ts';
 import type {
   DeferredPrerenderHtml,
   FromScratchResult,
@@ -603,7 +607,11 @@ import {
   validateByteLength,
   validateWriteSize,
 } from './write-size-validation.ts';
-import { isSplicedSource, type SplicedSource } from './spliced-content.ts';
+import {
+  isSplicedSource,
+  streamSpliced,
+  type SplicedSource,
+} from './spliced-content.ts';
 import {
   POLICY_OPENS_SHARES_CODE,
   policyAuditOptionsFor,
@@ -3822,11 +3830,13 @@ export class Realm {
       )
       // Answered on the realm ACL alone: its writes are verbatim replacements,
       // which no policy grant reaches (see `CONSUMES_COARSE_OUTCOME`).
+      // An automation run's atomic write is staged in its overlay (see
+      // `#stageRunAtomic`).
       .post(
         '/_atomic',
         SupportedMimeType.JSONAPI,
         this.handleAtomicOperations.bind(this),
-        ACL_ONLY,
+        { ...ACL_ONLY, takesRunWrites: true },
       )
       // An automation run's commit of its overlay. It is answered on the
       // realm ACL alone, like the verbatim writes it is made of, and it is
@@ -3850,9 +3860,10 @@ export class Realm {
       // `POST` needs realm write, `QUERY` needs realm read, and a `QUERY`
       // carrying a write is refused by the handler.
       //
-      // An automation run sends its `callApi` entries here as a `POST`, so the
-      // route takes a run's writes, and the handler refuses a run's batch
-      // that writes the realm, since it doesn't stage one.
+      // An automation run sends its `callApi` entries and its write
+      // operations here as a `POST`, so the route takes a run's writes: the
+      // handler stages a run's batch in its overlay, and refuses one that
+      // removes a card, which the overlay can't hold.
       .post(
         '/_operations',
         SupportedMimeType.BoxelOperations,
@@ -7283,6 +7294,10 @@ export class Realm {
       });
     }
     let atomicOperations = json['atomic:operations'] as AtomicOperation[];
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      return await this.#stageRunAtomic(requestContext, run, atomicOperations);
+    }
     let atomicWritePaths = this.#atomicWritePaths(atomicOperations);
 
     // Take the advisory lock on every file the operations name, from the
@@ -7705,21 +7720,29 @@ export class Realm {
         }
       }
 
-      // A run's writes are staged in its overlay (ADR 027 §1.2), and a batch
-      // writes the realm directly, so a run's batch carries no write. Its
-      // `callApi` entries write nothing in the realm and still go through.
+      // A run's writes are staged in its overlay (ADR 027 §1.2): its batch
+      // stages against the overlay's view of each file and the overlay holds
+      // the result (see `#runBatchCore`). The overlay can't hold a removal,
+      // so a run's batch removes nothing.
+      let run = this.#runOverlay(requestContext);
       if (requestContext.automationRun) {
-        let write = resolved.find(({ definition }) => isWrite(definition.base));
+        let removal = resolved.find(
+          ({ definition }) => definition.base === 'delete',
+        );
+        let write = run
+          ? removal
+          : resolved.find(({ definition }) => isWrite(definition.base));
         if (write) {
           throw new OperationFailure({
             ...(write.entry.href ? { id: write.entry.href } : {}),
             status: 403,
             code: 'run-write-not-staged',
             title: 'Forbidden',
-            detail:
-              `operation "${write.entry.name}" writes the realm, and an ` +
-              `automation run's writes go through the card+source write alone, ` +
-              `so they can be committed together`,
+            detail: run
+              ? `operation "${write.entry.name}" removes a card, and an ` +
+                `automation run's overlay can't hold a removal`
+              : `operation "${write.entry.name}" writes a realm the ` +
+                `automation run may only read`,
             meta: { entry: write.entry.position },
           });
         }
@@ -7915,7 +7938,7 @@ export class Realm {
         // it took among the entries that write — in the key, in the key beside
         // it naming a conflicting entry, and in the prose.
         let committed = await commitBatch(
-          this.batchCore,
+          run ? this.#runBatchCore(requestContext, run) : this.batchCore,
           stagedTree(tree, staged),
           {
             clientRequestId: caller.clientRequestId || null,
@@ -13356,67 +13379,442 @@ export class Realm {
     if (!content) {
       return tooLarge(undefined, readLimit);
     }
-    let text = path.endsWith('.json') ? utf8OrUndefined(content) : undefined;
-    let limit =
-      text !== undefined && isCardDocumentString(text)
-        ? this.#cardSizeLimitBytes
-        : fileLimit;
-    if (content.byteLength > limit) {
-      return tooLarge(content.byteLength, limit);
+    let refusal = await this.#stageRunFiles(requestContext, run, [
+      { path, content },
+    ]);
+    if (!refusal) {
+      return createResponse({
+        body: null,
+        init: { status: 204 },
+        requestContext,
+      });
     }
-    let reserved = reservedWriteDestination(path);
-    if (reserved) {
-      return refuse(403, 'Forbidden', reserved);
+    if (refusal.notRunning) {
+      return createResponse({
+        body: 'The automation run is not running',
+        init: { status: 401 },
+        requestContext,
+      });
     }
-    let protectedTarget = await this.#runMayNotWrite(path, text);
-    if (protectedTarget) {
-      return refuse(
-        403,
-        'Forbidden',
-        `An automation run may not write ${protectedTarget}`,
-      );
+    return refuse(refusal.status, refusal.title, refusal.detail);
+  }
+
+  // Stages `files` in the run's overlay, all of them or none, after the
+  // checks a run's write of each one meets (see `#stageRunWrite`): the realm's
+  // size limit for the file's kind, its reserved paths, the files a run may
+  // not write, and no path both a file and a directory among the run's
+  // staged files and these. The run's `writes` cap and the overlay's byte
+  // bound hold for the overlay as these files leave it. Answers undefined
+  // once every file is staged, or why none was.
+  async #stageRunFiles(
+    requestContext: RequestContext,
+    run: RunOverlayKey,
+    files: { path: LocalPath; content: Uint8Array }[],
+  ): Promise<RunStageRefusal | undefined> {
+    for (let { path, content } of files) {
+      let fileLimit = fileSizeLimitFor(path, {
+        default: this.#fileSizeLimitBytes,
+        audio: this.#audioSizeLimitBytes,
+        video: this.#videoSizeLimitBytes,
+      });
+      let text = path.endsWith('.json') ? utf8OrUndefined(content) : undefined;
+      let limit =
+        text !== undefined && isCardDocumentString(text)
+          ? this.#cardSizeLimitBytes
+          : fileLimit;
+      if (content.byteLength > limit) {
+        return {
+          status: 413,
+          title: 'Payload Too Large',
+          detail: `File size (${content.byteLength} bytes) exceeds maximum allowed size (${limit} bytes)`,
+        };
+      }
+      let reserved = reservedWriteDestination(path);
+      if (reserved) {
+        return { status: 403, title: 'Forbidden', detail: reserved };
+      }
+      let protectedTarget = await this.#runMayNotWrite(path, text);
+      if (protectedTarget) {
+        return {
+          status: 403,
+          title: 'Forbidden',
+          detail: `An automation run may not write ${protectedTarget}`,
+        };
+      }
+      let clash =
+        files.find(
+          (other) =>
+            other.path.startsWith(`${path}/`) ||
+            path.startsWith(`${other.path}/`),
+        )?.path ?? (await runOverlayPathClash(this.#dbAdapter, run, path));
+      if (clash) {
+        return {
+          status: 409,
+          title: 'Conflict',
+          detail: `This run has staged ${clash}, so ${path} can't be both a file and a directory`,
+        };
+      }
     }
-    let clash = await runOverlayPathClash(this.#dbAdapter, run, path);
-    if (clash) {
-      return refuse(
-        409,
-        'Conflict',
-        `This run has staged ${clash}, so ${path} can't be both a file and a directory`,
-      );
-    }
-    let staged = await stageRunOverlayFile(
+    let paths = files.map(({ path }) => path).join(', ');
+    let staged = await stageRunOverlayFiles(
       this.#dbAdapter,
       run,
-      path,
-      content,
+      files,
       requestContext.automationRun!.writesCap,
     );
     switch (staged.kind) {
       case 'over-cap':
-        return refuse(
-          403,
-          'Writes cap reached',
-          `This run may write at most ${staged.cap} files, and has written them all; ${path} was not written`,
-        );
+        return {
+          status: 403,
+          title: 'Writes cap reached',
+          detail: `This run may write at most ${staged.cap} files, and has written them all; ${paths} was not written`,
+        };
       case 'over-bytes':
-        return refuse(
-          413,
-          'Payload Too Large',
-          `This run's staged files may come to at most ${staged.limit} bytes together; ${path} was not written`,
-        );
+        return {
+          status: 413,
+          title: 'Payload Too Large',
+          detail: `This run's staged files may come to at most ${staged.limit} bytes together; ${paths} was not written`,
+        };
       case 'not-running':
-        return createResponse({
-          body: 'The automation run is not running',
-          init: { status: 401 },
-          requestContext,
-        });
+        return {
+          status: 401,
+          title: 'Unauthorized',
+          detail: 'The automation run is not running',
+          notRunning: true,
+        };
       case 'staged':
-        return createResponse({
-          body: null,
-          init: { status: 204 },
-          requestContext,
-        });
+        return undefined;
     }
+  }
+
+  // A run's atomic write (ADR 027 §1.2): every file it adds or updates is
+  // staged in the run's overlay, all or none, and the realm is left as it
+  // is. The checks are the atomic write's own, against the files as the run
+  // sees them (an `add` of a path that exists, an `update` of one that
+  // doesn't, a reserved path, a resource that is neither a card nor
+  // source), and then the ones every staged write meets (see
+  // `#stageRunFiles`). It answers as the atomic write does, with each file's
+  // id.
+  async #stageRunAtomic(
+    requestContext: RequestContext,
+    run: RunOverlayKey,
+    operations: AtomicOperation[],
+  ): Promise<Response> {
+    let refuse = (status: number, title: string, detail: string) =>
+      createResponse({
+        body: JSON.stringify({
+          errors: [{ status: String(status), title, detail }],
+        }),
+        init: {
+          status,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    let files: { path: LocalPath; content: Uint8Array }[] = [];
+    for (let operation of operations) {
+      let localPath: LocalPath;
+      try {
+        localPath = this.paths.local(
+          new URL(this.#resolveAtomicHref(operation.href), this.paths.url),
+        );
+      } catch (error: any) {
+        return refuse(
+          400,
+          'Invalid atomic:operations format',
+          error?.message ??
+            `Request operation contains invalid href '${operation.href}'`,
+        );
+      }
+      let reserved = reservedWriteDestination(localPath);
+      if (reserved) {
+        return refuse(
+          422,
+          'Reserved path',
+          `Cannot write '${operation.href}': ${reserved}`,
+        );
+      }
+      let exists =
+        (await readRunOverlayFile(this.#dbAdapter, run, localPath)) !==
+          undefined || (await this.#adapter.exists(localPath));
+      if (operation.op === 'add' && exists) {
+        return refuse(
+          409,
+          'Resource already exists',
+          `Resource ${operation.href} already exists`,
+        );
+      }
+      if (operation.op === 'update' && !exists) {
+        return refuse(
+          404,
+          'Resource does not exist',
+          `Resource ${operation.href} does not exist`,
+        );
+      }
+      let resource = operation.data;
+      let content: string;
+      if (isModuleResource(resource)) {
+        content = resource.attributes?.content ?? '';
+      } else if (resource && isCardResource(resource)) {
+        content = JSON.stringify({ data: resource }, null, 2);
+      } else {
+        return refuse(
+          400,
+          'Invalid resource',
+          'Operation data is not a valid card resource or module resource',
+        );
+      }
+      files.push({
+        path: localPath,
+        content: new TextEncoder().encode(content),
+      });
+    }
+    let refusal = await this.#stageRunFiles(requestContext, run, files);
+    if (refusal?.notRunning) {
+      return createResponse({
+        body: 'The automation run is not running',
+        init: { status: 401 },
+        requestContext,
+      });
+    }
+    if (refusal) {
+      return refuse(refusal.status, refusal.title, refusal.detail);
+    }
+    return createResponse({
+      body: JSON.stringify(
+        {
+          'atomic:results': files.map(({ path }) => ({
+            data: {
+              id: this.#virtualNetwork.unresolveURL(
+                this.paths.fileURL(path).href,
+              ),
+            },
+          })),
+        },
+        null,
+        2,
+      ),
+      init: {
+        status: 201,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
+  // The card a run staged at `localPath` (the card's path, without `.json`),
+  // as a card read serves it (ADR 027 §1.3): the staged document's resource,
+  // with the card's id, its own link, and its type's module resolved against
+  // the card. Staged files aren't indexed, so its computed fields are absent
+  // and its links aren't expanded. Undefined when the run staged no card
+  // document there.
+  async #stagedCardResource(
+    run: RunOverlayKey,
+    localPath: LocalPath,
+  ): Promise<LooseCardResource | undefined> {
+    let bytes = await readRunOverlayFile(
+      this.#dbAdapter,
+      run,
+      `${localPath}.json` as LocalPath,
+    );
+    if (!bytes) {
+      return undefined;
+    }
+    let doc: unknown;
+    try {
+      doc = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      return undefined;
+    }
+    let resource = (doc as { data?: unknown } | null)?.data;
+    if (!isCardResource(resource)) {
+      return undefined;
+    }
+    let url = this.paths.fileURL(localPath);
+    let id = this.#virtualNetwork.unresolveURL(url.href);
+    let adoptsFrom = resource.meta?.adoptsFrom;
+    if (
+      adoptsFrom &&
+      'module' in adoptsFrom &&
+      typeof adoptsFrom.module === 'string' &&
+      adoptsFrom.module.startsWith('.')
+    ) {
+      adoptsFrom = {
+        ...adoptsFrom,
+        module: this.#virtualNetwork.resolveRRI(
+          adoptsFrom.module,
+          rri(url.href),
+        ),
+      };
+    }
+    return {
+      ...resource,
+      id,
+      links: { self: id },
+      meta: {
+        ...resource.meta,
+        ...(adoptsFrom ? { adoptsFrom } : {}),
+        realmURL: this.url,
+      },
+    } as unknown as LooseCardResource;
+  }
+
+  // A search's answer with each card the run staged swapped for its staged
+  // version (ADR 027 §1.3): which cards match, and their order, are the
+  // index's, so a card returned staged may no longer match the query, and a
+  // card the run created isn't found. The card's attributes, relationships
+  // and type come from what the run staged, and the rest of what the search
+  // answered for it stays.
+  async #withStagedCards<T>(run: RunOverlayKey, doc: T): Promise<T> {
+    let staged = new Set(await runOverlayPathsUnder(this.#dbAdapter, run, ''));
+    if (staged.size === 0) {
+      return doc;
+    }
+    let { data, included } = doc as {
+      data?: unknown;
+      included?: unknown;
+    };
+    let resources = [
+      ...(Array.isArray(data) ? data : data ? [data] : []),
+      ...(Array.isArray(included) ? included : []),
+    ] as { type?: unknown; id?: unknown }[];
+    for (let resource of resources) {
+      if (resource?.type !== 'card' || typeof resource.id !== 'string') {
+        continue;
+      }
+      let localPath: LocalPath;
+      try {
+        let url = this.#virtualNetwork.toURL(resource.id);
+        if (!this.paths.inRealm(url)) {
+          continue;
+        }
+        localPath = this.paths.local(url);
+      } catch {
+        continue;
+      }
+      if (!staged.has(`${localPath}.json`)) {
+        continue;
+      }
+      let card = await this.#stagedCardResource(run, localPath);
+      if (!card) {
+        continue;
+      }
+      let found = resource as LooseCardResource;
+      found.attributes = card.attributes;
+      found.relationships = card.relationships;
+      let meta = { ...found.meta } as Record<string, unknown>;
+      delete meta.fields;
+      found.meta = {
+        ...meta,
+        adoptsFrom: card.meta.adoptsFrom,
+        ...(card.meta.fields ? { fields: card.meta.fields } : {}),
+      } as LooseCardResource['meta'];
+    }
+    return doc;
+  }
+
+  // The batch coordinator's collaborators for a run's batch (ADR 027 §1.2):
+  // the realm's own, except that every read of a file the batch stages from
+  // reads the run's staged copy where it has one, and the commit stages the
+  // batch's result in the run's overlay instead of writing the realm. So a
+  // write operation runs against the overlay's view of each file, and the
+  // overlay holds its result. The write locks are still the realm's, which
+  // keeps two batches of the same run on one file in order.
+  #runBatchCore(requestContext: RequestContext, run: RunOverlayKey): BatchCore {
+    let core = this.batchCore;
+    let staged = (path: LocalPath) =>
+      readRunOverlayFile(this.#dbAdapter, run, path);
+    let readRange = async (path: LocalPath, start: number, end: number) => {
+      let bytes = await staged(path);
+      if (bytes) {
+        return bytesIterable(bytes.subarray(start, end));
+      }
+      return this.#adapter.readRange(path, start, end);
+    };
+    let openSourceBytes = async (
+      path: LocalPath,
+    ): Promise<SourceBytes | undefined> => {
+      let bytes = await staged(path);
+      return bytes
+        ? {
+            size: bytes.byteLength,
+            read: (start, end) => bytesIterable(bytes.subarray(start, end)),
+          }
+        : await core.openSourceBytes(path);
+    };
+    return {
+      ...core,
+      fileExists: async (path) =>
+        (await staged(path)) !== undefined || (await core.fileExists(path)),
+      readSourceFile: async (path) => {
+        let bytes = await staged(path);
+        return bytes
+          ? {
+              content: new TextDecoder().decode(bytes),
+              lastModified: Math.floor(Date.now() / 1000),
+            }
+          : await core.readSourceFile(path);
+      },
+      openSourceBytes,
+      commitUnlocked: async ({ writes, appends, deletes }) => {
+        // An overlay row holds a file's bytes, with nothing to mark a staged
+        // removal, so a run's batch removes nothing.
+        if (deletes && deletes.length > 0) {
+          throw new OperationFailure({
+            status: 403,
+            code: 'run-write-not-staged',
+            title: 'Forbidden',
+            detail: `an automation run may not remove ${deletes.join(', ')}`,
+          });
+        }
+        let files = new Map<LocalPath, Uint8Array>();
+        for (let [path, content] of writes ?? []) {
+          files.set(
+            path,
+            await runBatchBytes(content, (start, end) =>
+              readRange(path, start, end),
+            ),
+          );
+        }
+        for (let [path, addition] of appends ?? []) {
+          let base = files.get(path);
+          if (!base) {
+            let source = await openSourceBytes(path);
+            base = source
+              ? await collectBytes(source.read(0, source.size))
+              : new Uint8Array();
+          }
+          let added =
+            typeof addition === 'string'
+              ? new TextEncoder().encode(addition)
+              : addition;
+          let joined = new Uint8Array(base.byteLength + added.byteLength);
+          joined.set(base);
+          joined.set(added, base.byteLength);
+          files.set(path, joined);
+        }
+        let list = [...files].map(([path, content]) => ({ path, content }));
+        let refusal = await this.#stageRunFiles(requestContext, run, list);
+        if (refusal) {
+          throw new OperationFailure({
+            status: refusal.status,
+            code: 'run-write-refused',
+            title: refusal.title,
+            detail: refusal.detail,
+          });
+        }
+        let lastModified = Math.floor(Date.now() / 1000);
+        return {
+          writes: list.map(({ path, content }) => ({
+            path,
+            lastModified,
+            created: null,
+            contentHash: computeContentHash(content),
+          })),
+          generation: null,
+        };
+      },
+    };
   }
 
   // Commits a run's overlay to the realm as one all-or-nothing batch (ADR
@@ -16646,6 +17044,25 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
+    // A run reads its own writes: a card it staged is served as it staged
+    // it, never from a cache.
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      let staged = await this.#stagedCardResource(run, localPath);
+      if (staged) {
+        staged.meta.realmInfo = await this.getRealmInfo();
+        return createResponse({
+          body: JSON.stringify({ data: staged }, null, 2),
+          init: {
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              'cache-control': 'no-store',
+            },
+          },
+          requestContext,
+        });
+      }
+    }
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
     try {
@@ -17877,6 +18294,12 @@ export class Realm {
           : await runSearch(),
         scopedRealms,
       );
+      // A run's search runs on the index and answers each card it staged
+      // as staged (see `#withStagedCards`).
+      let run = this.#runOverlay(requestContext);
+      if (run) {
+        doc = await this.#withStagedCards(run, doc);
+      }
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -20563,4 +20986,70 @@ function includedCardOf(
     return included as { lid: string; id?: string; adoptsFrom?: unknown };
   }
   return undefined;
+}
+
+// Why a run's write was not staged, as the route that staged it answers.
+// `notRunning` marks the refusal of a run that has stopped running, or that
+// another attempt owns.
+interface RunStageRefusal {
+  status: number;
+  title: string;
+  detail: string;
+  notRunning?: true;
+}
+
+async function* bytesIterable(bytes: Uint8Array): AsyncIterable<Uint8Array> {
+  yield bytes;
+}
+
+async function collectBytes(
+  chunks: AsyncIterable<Uint8Array>,
+): Promise<Uint8Array> {
+  let parts: Uint8Array[] = [];
+  let size = 0;
+  for await (let chunk of chunks) {
+    parts.push(chunk);
+    size += chunk.byteLength;
+  }
+  let bytes = new Uint8Array(size);
+  let offset = 0;
+  for (let part of parts) {
+    bytes.set(part, offset);
+    offset += part.byteLength;
+  }
+  return bytes;
+}
+
+// The bytes a run's batch stages for one file. A described edit is read out
+// through `readRange`, which reads the file as the run sees it.
+async function runBatchBytes(
+  content: StagedContent,
+  readRange: (start: number, end: number) => Promise<AsyncIterable<Uint8Array>>,
+): Promise<Uint8Array> {
+  if (typeof content === 'string') {
+    return new TextEncoder().encode(content);
+  }
+  if (isSplicedSource(content)) {
+    return await collectBytes(
+      streamSpliced(content, (start, end) =>
+        lazyIterable(readRange(start, end)),
+      ),
+    );
+  }
+  if (isStagedFile(content)) {
+    // Only an upload stages a file on disk, and an upload is not a batch.
+    throw new OperationFailure({
+      status: 500,
+      code: 'internal-error',
+      title: 'Unexpected staged file',
+      detail: 'a batch staged an uploaded file, which a run cannot stage',
+    });
+  }
+  return content;
+}
+
+async function* lazyIterable(
+  pending: Promise<AsyncIterable<Uint8Array>>,
+): AsyncIterable<Uint8Array> {
+  yield* await pending;
 }
