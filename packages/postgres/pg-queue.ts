@@ -496,6 +496,14 @@ export class PgQueuePublisher implements QueuePublisher {
 // 7200s leases.
 const MAX_RESERVATION_COUNT_PER_JOB = 2;
 
+// Cap on attempts that ended with the child's V8 heap exhausted. Counted apart
+// from the cap above: an index job stages its rows as it goes and a retry of
+// the same job resumes from them, skipping every file an earlier attempt
+// finished, so each attempt on a large realm gets further than the last
+// rather than repeating it. A job that cannot make progress still stops after
+// this many.
+const MAX_HEAP_EXHAUSTED_COUNT_PER_JOB = 8;
+
 // How many of one family's writer lanes may hold a worker at once. Writer lanes
 // exist so one person's cheap save is not queued behind another person's long
 // pass, and two lanes are the fewest that give that: the long pass keeps one
@@ -600,6 +608,7 @@ export class PgQueueRunner implements QueueRunner {
   #workerId: string;
   #maxTimeoutSec: number;
   #maxReservationCount: number;
+  #maxHeapExhaustedCount: number;
   #maxWriterLanesPerFamily: number;
   #pollInterval = 10000;
   #handlers: Map<string, Function> = new Map();
@@ -612,6 +621,7 @@ export class PgQueueRunner implements QueueRunner {
     workerId,
     maxTimeoutSec = MAX_JOB_TIMEOUT_SEC,
     maxReservationCount = MAX_RESERVATION_COUNT_PER_JOB,
+    maxHeapExhaustedCount = MAX_HEAP_EXHAUSTED_COUNT_PER_JOB,
     maxWriterLanesPerFamily = MAX_CONCURRENT_WRITER_LANES_PER_FAMILY,
     priority = 0,
     observeJob,
@@ -621,6 +631,7 @@ export class PgQueueRunner implements QueueRunner {
     priority?: number;
     maxTimeoutSec?: number;
     maxReservationCount?: number;
+    maxHeapExhaustedCount?: number;
     maxWriterLanesPerFamily?: number;
     observeJob?: JobObserver;
   }) {
@@ -628,6 +639,7 @@ export class PgQueueRunner implements QueueRunner {
     this.#workerId = workerId;
     this.#maxTimeoutSec = maxTimeoutSec;
     this.#maxReservationCount = maxReservationCount;
+    this.#maxHeapExhaustedCount = maxHeapExhaustedCount;
     this.#maxWriterLanesPerFamily = maxWriterLanesPerFamily;
     this.#priority = priority;
     this.#observeJob = observeJob;
@@ -911,20 +923,35 @@ export class PgQueueRunner implements QueueRunner {
           // so re-trying isn't a failed attempt. A kill does count: a job
           // that exhausts its container's memory does so again on every
           // retry, and each time the kernel kills workers running other jobs
-          // on that task too.
+          // on that task too. An attempt that ran the child's own V8 heap out
+          // (`'heap-exhausted'`) is counted on its own against
+          // #maxHeapExhaustedCount instead: the next attempt resumes from the
+          // rows this one staged, so it is progress, not a repeat.
           let [priorReservations] = (await query([
-            `SELECT COUNT(*)::int as count,
-                    COUNT(*) FILTER (WHERE completion_reason = 'killed')::int as killed
+            `SELECT COUNT(*) FILTER (WHERE completion_reason IS NULL OR completion_reason IN ('completed', 'killed'))::int as count,
+                    COUNT(*) FILTER (WHERE completion_reason = 'killed')::int as killed,
+                    COUNT(*) FILTER (WHERE completion_reason = 'heap-exhausted')::int as "heapExhausted"
              FROM job_reservations
              WHERE job_id =`,
             param(jobToRun.id),
-            `AND (completion_reason IS NULL OR completion_reason IN ('completed', 'killed'))`,
-          ])) as unknown as { count: number; killed: number }[];
-          if (priorReservations.count >= this.#maxReservationCount) {
+          ])) as unknown as {
+            count: number;
+            killed: number;
+            heapExhausted: number;
+          }[];
+          let heapCapHit =
+            priorReservations.heapExhausted >= this.#maxHeapExhaustedCount;
+          if (
+            priorReservations.count >= this.#maxReservationCount ||
+            heapCapHit
+          ) {
             let killedNote =
               priorReservations.killed > 0
                 ? `; the worker running it was killed ${priorReservations.killed} time(s), which usually means the job ran its container out of memory`
                 : '';
+            let heapNote = heapCapHit
+              ? `; ${priorReservations.heapExhausted} attempt(s) ran the worker's heap out (max=${this.#maxHeapExhaustedCount})`
+              : '';
             await query([
               `UPDATE jobs SET `,
               ...separatedByCommas([
@@ -932,7 +959,7 @@ export class PgQueueRunner implements QueueRunner {
                   `result =`,
                   param({
                     status: 500,
-                    message: `Job abandoned after ${priorReservations.count} failed attempts (max=${this.#maxReservationCount})${killedNote}`,
+                    message: `Job abandoned after ${priorReservations.count} failed attempts (max=${this.#maxReservationCount})${killedNote}${heapNote}`,
                   }),
                 ],
                 [`status = 'rejected'`],

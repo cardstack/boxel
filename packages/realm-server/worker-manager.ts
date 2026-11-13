@@ -77,6 +77,7 @@ import {
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import {
   finalizeOrphanedReservations,
+  isHeapExhaustion,
   orphanedReservationReason,
 } from './lib/finalize-orphan-reservations.ts';
 import { findStuckReservations } from './lib/stuck-reservations.ts';
@@ -899,6 +900,9 @@ async function startWorker(
   let watchdog: NodeJS.Timeout;
   let workerId: string | undefined;
   let currentState: IndexState | undefined;
+  // Set when the child reports that its V8 heap ran out, so the exit that
+  // follows closes its reservation as that rather than as an interruption.
+  let heapExhausted = false;
 
   workers.push(worker);
 
@@ -940,7 +944,9 @@ async function startWorker(
     finalizeOrphanedReservations(
       adapter,
       workerId,
-      orphanedReservationReason(signal, isExiting),
+      heapExhausted
+        ? 'heap-exhausted'
+        : orphanedReservationReason(signal, isExiting),
     ).catch((e) => {
       Sentry.captureException(e);
       log.error(
@@ -962,7 +968,29 @@ async function startWorker(
       log.error(
         `[worker ${name} priority ${priority}]${maybeLogUrl}: ${message}`,
       );
-      if (message.includes('FATAL ERROR')) {
+      if (message.includes('FATAL ERROR') && isHeapExhaustion(message)) {
+        // The child's heap ran out. That is not a verdict on the job: an
+        // index job stages its rows as it goes, and a retry of the same job
+        // resumes from them, so rejecting it here would throw away every
+        // file this attempt finished. Close the reservation as
+        // 'heap-exhausted' instead, which leaves the job unfulfilled for the
+        // next worker and counts toward the queue's own cap for heap
+        // exhaustion. No error doc either: the retry owns the job's rows, and
+        // it re-visits the file this attempt died on.
+        heapExhausted = true;
+        log.error(
+          `worker ${name} ran its heap out${maybeLogUrl}; leaving job ${currentState?.jobId ?? '(none)'} for a retry`,
+        );
+        finalizeOrphanedReservations(adapter, workerId, 'heap-exhausted').catch(
+          (e) => {
+            Sentry.captureException(e);
+            log.error(
+              `worker: finalizeOrphanedReservations threw for worker ${workerId}`,
+              e,
+            );
+          },
+        );
+      } else if (message.includes('FATAL ERROR')) {
         // Snapshot the render state before any await: a `status|…` message
         // from the child can replace `currentState` mid-flight, and this error
         // belongs to whatever the child was rendering when it died.

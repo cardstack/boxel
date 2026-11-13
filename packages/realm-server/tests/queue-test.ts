@@ -2276,6 +2276,120 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(ranCount, 0, 'handler never ran');
     });
 
+    test('attempts that ran the heap out do not use up the reservation cap', async function (assert) {
+      // An index job stages its rows as it goes and a retry resumes from them,
+      // so an attempt that ran the child's heap out is progress. Two of them
+      // must not abandon the job the way two kills would.
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      for (let workerId of ['heap-out-worker-A', 'heap-out-worker-B']) {
+        await adapter.execute(
+          `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+           VALUES ($1, $2, NOW() + INTERVAL '10 seconds')`,
+          { bind: [jobId, workerId] },
+        );
+        // What the worker-manager does when a child reports its heap ran out.
+        await finalizeOrphanedReservations(adapter, workerId, 'heap-exhausted');
+      }
+
+      let ranCount = 0;
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-heap-out-retried',
+        maxTimeoutSec: 2,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        return null;
+      });
+      await runner.start();
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      let started = Date.now();
+      let status = 'unfulfilled';
+      while (Date.now() - started < 5000) {
+        let rows = (await adapter.execute(`SELECT * FROM jobs WHERE id = $1`, {
+          bind: [jobId],
+        })) as unknown as { status: string }[];
+        status = rows[0].status;
+        if (status !== 'unfulfilled') {
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.strictEqual(status, 'resolved', 'the third attempt ran the job');
+      assert.strictEqual(ranCount, 1, 'handler ran once');
+    });
+
+    test('a job that keeps running the heap out is abandoned at its own cap', async function (assert) {
+      await runner.destroy();
+
+      let [{ id: jobId }] = (await adapter.execute(
+        `INSERT INTO jobs (job_type, args, status, timeout)
+         VALUES ('logJob', '{}'::jsonb, 'unfulfilled', 1) RETURNING id`,
+      )) as unknown as { id: number }[];
+
+      for (let workerId of [
+        'heap-out-worker-C',
+        'heap-out-worker-D',
+        'heap-out-worker-E',
+      ]) {
+        await adapter.execute(
+          `INSERT INTO job_reservations (job_id, worker_id, locked_until)
+           VALUES ($1, $2, NOW() + INTERVAL '10 seconds')`,
+          { bind: [jobId, workerId] },
+        );
+        await finalizeOrphanedReservations(adapter, workerId, 'heap-exhausted');
+      }
+
+      let ranCount = 0;
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q-heap-out-cap',
+        maxTimeoutSec: 2,
+        maxHeapExhaustedCount: 3,
+      });
+      runner.register('logJob', async () => {
+        ranCount++;
+        return null;
+      });
+      await runner.start();
+      await new Promise((r) => setTimeout(r, 250));
+      await adapter.execute(`NOTIFY jobs`);
+
+      let started = Date.now();
+      let result: { message?: string } | null = null;
+      while (Date.now() - started < 5000) {
+        let rows = (await adapter.execute(`SELECT * FROM jobs WHERE id = $1`, {
+          bind: [jobId],
+        })) as unknown as {
+          status: string;
+          result: { message?: string } | null;
+        }[];
+        if (rows[0].status === 'rejected') {
+          result = rows[0].result;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      assert.ok(result, 'job abandoned after three attempts ran the heap out');
+      assert.ok(
+        result?.message?.includes(
+          "3 attempt(s) ran the worker's heap out (max=3)",
+        ),
+        `job.result.message says the heap ran out, got: ${result?.message}`,
+      );
+      assert.strictEqual(ranCount, 0, 'handler never ran');
+    });
+
     test('a kill during the manager shutdown does not count toward the cap', async function (assert) {
       // The shutdown's straggler phase SIGKILLs any child still running its
       // handler; that interruption is the deploy's, not the job's.

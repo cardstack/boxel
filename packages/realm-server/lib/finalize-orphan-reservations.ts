@@ -22,6 +22,16 @@ export function orphanedReservationReason(
     : 'interrupted';
 }
 
+// Whether a child's stderr is V8 reporting that its heap ran out. V8 prints
+// this and aborts the process, so no handler in the child runs: the parent
+// sees only the text and then the exit.
+export function isHeapExhaustion(stderr: string): boolean {
+  return (
+    stderr.includes('JavaScript heap out of memory') ||
+    stderr.includes('Reached heap limit')
+  );
+}
+
 // Free any reservations belonging to a worker that exited unexpectedly so the
 // next worker can claim the job immediately, rather than waiting for the
 // 7200s lease (locked_until) to age out. Without this, a worker dying via
@@ -58,7 +68,11 @@ export function orphanedReservationReason(
 export async function finalizeOrphanedReservations(
   dbAdapter: DBAdapter,
   workerId: string | undefined,
-  reason: 'interrupted' | 'killed' | 'timeout-expired' = 'interrupted',
+  reason:
+    | 'interrupted'
+    | 'killed'
+    | 'heap-exhausted'
+    | 'timeout-expired' = 'interrupted',
 ): Promise<void> {
   if (!workerId) {
     return;
