@@ -16,9 +16,17 @@ import { getPageTitle } from 'ember-page-title/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { Deferred, type HostRoutingRule } from '@cardstack/runtime-common';
+import {
+  Deferred,
+  validateHostRoutes,
+  type HostRoute,
+  type HostRoutingRule,
+  type RawHostRoutingRule,
+} from '@cardstack/runtime-common';
 
-import HostModeService from '@cardstack/host/services/host-mode-service';
+import HostModeService, {
+  type HostDynamicRoutes,
+} from '@cardstack/host/services/host-mode-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import {
@@ -91,6 +99,66 @@ class StubRoutingHostModeService extends StubHostModeService {
 class StubHijackedOriginHostModeService extends StubRoutingHostModeService {
   get hostModeOrigin() {
     return 'https://attacker.example';
+  }
+}
+
+// Dynamic routes arrive on the same config meta tag as the routing map,
+// validated, so stub the getter that reads them, with routes validated
+// here the way the server validates them. The fixed rule stays in
+// `hostRoutingMap`, where the server puts it.
+const DYNAMIC_ROUTE_RULES: RawHostRoutingRule[] = [
+  { path: '/terms', instance: { id: `${testHostModeRealmURL}Pet/mango` } },
+  { path: '/pets/:pet', card: './Pet/:pet' },
+  {
+    path: '/by-name/:name',
+    type: { module: `${testHostModeRealmURL}pet`, name: 'Pet' },
+    match: { name: ':name' },
+  },
+  {
+    path: '/folders/:folder',
+    card: './:folder/index',
+    routes: [{ path: '/:item', card: './:folder/:item' }],
+  },
+  { path: '/old-pets/:pet', redirectTo: '/pets/:pet', statusCode: 301 },
+  { path: '/files/:name', card: './:name' },
+  // Matches a card's own path, `/Pet/<id>`, but names no card there.
+  { path: '/Pet/:pet', card: './Pets/:pet' },
+];
+
+function dynamicRoutes(): readonly HostRoute[] {
+  let petKey = `${testHostModeRealmURL}pet/Pet`;
+  let { routes, warnings } = validateHostRoutes(DYNAMIC_ROUTE_RULES, {
+    realmURL: new URL(testHostModeRealmURL),
+    lookupType: (ref) =>
+      ref.module === `${testHostModeRealmURL}pet` && ref.name === 'Pet'
+        ? {
+            key: petKey,
+            types: [petKey],
+            isCardType: true,
+            fields: { name: { type: 'contains', isPrimitive: true } },
+          }
+        : undefined,
+  });
+  let dropped = warnings.filter((w) => w.dropped);
+  if (dropped.length > 0) {
+    throw new Error(`test routes were dropped: ${JSON.stringify(dropped)}`);
+  }
+  return routes;
+}
+
+class StubDynamicRoutingHostModeService extends StubHostModeService {
+  get hostRoutingMap(): HostRoutingRule[] {
+    return [{ path: '/test/terms', id: `${testHostModeRealmURL}Pet/mango` }];
+  }
+
+  get hostDynamicRoutes(): HostDynamicRoutes {
+    return { realmURL: testHostModeRealmURL, routes: dynamicRoutes() };
+  }
+}
+
+class StubIncompleteDynamicRoutingHostModeService extends StubDynamicRoutingHostModeService {
+  get hostDynamicRoutes(): HostDynamicRoutes {
+    return { ...super.hostDynamicRoutes, complete: false };
   }
 }
 
@@ -1510,6 +1578,284 @@ module('Acceptance | host mode tests', function (hooks) {
         'https://boxel.example/posts?utm_source=newsletter',
         'foreign params ride along; app-internal ones are dropped',
       );
+    });
+  });
+
+  module('with dynamic routes', function (hooks) {
+    // In-app transitions to paths only a dynamic route resolves. A full
+    // page load of one is resolved by serve-index; here the route resolves
+    // it in the browser, with lookups that go through the app's own fetch.
+    let lookups: string[];
+    // When set, a route search waits for it, after fulfilling
+    // `searchStarted`.
+    let searchGate: Deferred<void> | undefined;
+    let searchStarted: Deferred<void> | undefined;
+    let failingCardURL = `${testHostModeRealmURL}Pet/unavailable`;
+    let handler = async (request: Request) => {
+      let accept = request.headers.get('Accept') ?? '';
+      if (
+        accept.includes('card+json') &&
+        (request.url.endsWith('_search') ||
+          request.url.startsWith(`${testHostModeRealmURL}Pet/`) ||
+          request.url.startsWith(`${testHostModeRealmURL}ViewCardDemo/`))
+      ) {
+        lookups.push(`${request.method} ${request.url}`);
+      }
+      if (searchGate && request.url.endsWith('_search')) {
+        searchStarted?.fulfill();
+        await searchGate.promise;
+      }
+      if (request.method === 'GET' && request.url === failingCardURL) {
+        return new Response('unavailable', { status: 503 });
+      }
+      return null;
+    };
+
+    hooks.beforeEach(function (this) {
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
+        'service:host-mode-service',
+        StubDynamicRoutingHostModeService,
+      );
+      lookups = [];
+      searchGate = undefined;
+      searchStarted = undefined;
+      getService('network').virtualNetwork.mount(handler, { prepend: true });
+    });
+
+    hooks.afterEach(function () {
+      getService('network').virtualNetwork.unmount(handler);
+    });
+
+    test('a card id template route renders the card its path names', async function (assert) {
+      await visit('/test/pets/mango');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.dom('[data-test-pet-isolated="Mango"]').exists();
+      assert.strictEqual(currentURL(), '/test/pets/mango');
+    });
+
+    test('a field-match route renders the card whose field matches', async function (assert) {
+      await visit('/test/by-name/Mango');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.ok(
+        lookups.some((l) => l.endsWith('_search')),
+        'the route searched the realm',
+      );
+    });
+
+    test('a nested route renders the card its child route names', async function (assert) {
+      await visit('/test/folders/ViewCardDemo/secondary');
+
+      assert
+        .dom(
+          `[data-test-host-mode-card="${testHostModeRealmURL}ViewCardDemo/secondary"]`,
+        )
+        .exists();
+    });
+
+    test('moving from one dynamic page to another inside the app renders each card', async function (assert) {
+      await visit('/test/folders/ViewCardDemo');
+      assert
+        .dom(
+          `[data-test-host-mode-card="${testHostModeRealmURL}ViewCardDemo/index"]`,
+        )
+        .exists();
+
+      await visit('/test/pets/mango');
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.dom('[data-test-host-mode-404]').doesNotExist();
+    });
+
+    test('a stack change on a dynamic page runs no lookup again', async function (assert) {
+      await visit('/test/by-name/Mango');
+      lookups = [];
+
+      let hostModeStackValue = encodeURIComponent(
+        JSON.stringify([`${testHostModeRealmURL}ViewCardDemo/secondary`]),
+      );
+      await visit(`/test/by-name/Mango?hostModeStack=${hostModeStackValue}`);
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.notOk(
+        lookups.some((l) => l.endsWith('_search')),
+        'the current page keeps its card',
+      );
+    });
+
+    test('coming back to a dynamic page runs its lookup again', async function (assert) {
+      await visit('/test/by-name/Mango');
+      await visit('/test/folders/ViewCardDemo');
+      lookups = [];
+
+      await visit('/test/by-name/Mango');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.ok(
+        lookups.some((l) => l.endsWith('_search')),
+        'a path from an earlier page is resolved again',
+      );
+    });
+
+    test('a lookup that finishes after the visitor moved on is not rendered', async function (assert) {
+      searchGate = new Deferred<void>();
+      searchStarted = new Deferred<void>();
+      let first = visit('/test/by-name/Mango').catch(() => {
+        // Aborted by the second visit.
+      });
+      await searchStarted.promise;
+      // The visitor moves on while the first lookup still waits.
+      let gate = searchGate;
+      searchGate = undefined;
+      let second = visit('/test/folders/ViewCardDemo');
+      gate.fulfill();
+      await second;
+      await first;
+      await settled();
+
+      assert.strictEqual(currentURL(), '/test/folders/ViewCardDemo');
+      assert
+        .dom(
+          `[data-test-host-mode-card="${testHostModeRealmURL}ViewCardDemo/index"]`,
+        )
+        .exists();
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .doesNotExist('the late result of the first lookup is dropped');
+    });
+
+    test('a dynamic redirect replaces the location with its filled target', async function (assert) {
+      await visit('/test/old-pets/mango?utm_source=newsletter');
+
+      assert.strictEqual(
+        window.location.href,
+        `${window.location.origin}/test/pets/mango?utm_source=newsletter`,
+      );
+    });
+
+    test('a path no route resolves shows the not-found page', async function (assert) {
+      await visit('/test/pets/nobody');
+
+      await waitFor('[data-test-host-mode-404]');
+      assert
+        .dom('[data-test-host-mode-404]')
+        .containsText('This page could not be found.');
+    });
+
+    test('a failed lookup shows an error, not the not-found page', async function (assert) {
+      try {
+        await visit('/test/pets/unavailable');
+      } catch (e) {
+        // The transition ends in the index route's error state.
+        assert.strictEqual(
+          (e as Error).name,
+          'HostRouteResolutionError',
+          'the lookup error ends the transition',
+        );
+      }
+      await settled();
+
+      assert.dom('[data-card-error]').exists();
+      assert
+        .dom('[data-card-error]')
+        .containsText('This page could not be loaded.');
+      assert
+        .dom('[data-card-error]')
+        .doesNotContainText(failingCardURL, 'the lookup URL is not shown');
+      assert
+        .dom('[data-card-error]')
+        .doesNotContainText('503', 'the lookup status is not shown');
+      assert.dom('[data-test-host-mode-404]').doesNotExist();
+    });
+
+    test('a card id that names a file that is not a card is a miss', async function (assert) {
+      await visit('/test/files/spring-guide.md');
+
+      await waitFor('[data-test-host-mode-404]');
+      assert.dom('[data-test-host-mode-404]').exists();
+      assert.dom('[data-card-error]').doesNotExist();
+    });
+
+    test('a miss on an incomplete route set shows an error, not the not-found page', async function (assert) {
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
+        'service:host-mode-service',
+        StubIncompleteDynamicRoutingHostModeService,
+      );
+
+      try {
+        await visit('/test/pets/nobody');
+      } catch (e) {
+        assert.strictEqual(
+          (e as Error).name,
+          'HostRouteResolutionError',
+          'the miss ends the transition',
+        );
+      }
+      await settled();
+
+      assert
+        .dom('[data-card-error]')
+        .containsText('This page could not be loaded.');
+      assert.dom('[data-test-host-mode-404]').doesNotExist();
+    });
+
+    test("a card's own path still renders the card while the route set is incomplete", async function (assert) {
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
+        'service:host-mode-service',
+        StubIncompleteDynamicRoutingHostModeService,
+      );
+
+      await visit('/test/Pet/mango');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.dom('[data-card-error]').doesNotExist();
+    });
+
+    test('a fixed route renders its card without running a lookup', async function (assert) {
+      await visit('/test/terms');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.notOk(
+        lookups.some((l) => l.endsWith('_search')),
+        'no route search ran',
+      );
+    });
+
+    test("a card's own path still renders the card", async function (assert) {
+      await visit('/test/Pet/mango.json');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
     });
   });
 

@@ -10,6 +10,7 @@ import stringify from 'safe-stable-stringify';
 
 import {
   HOST_APP_QUERY_PARAMS,
+  isCardErrorJSONAPI,
   isRedirectRoutingRule,
 } from '@cardstack/runtime-common';
 import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
@@ -23,6 +24,7 @@ import type { StackItemType } from '@cardstack/host/lib/stack-item';
 import type BillingService from '@cardstack/host/services/billing-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
+import type { DynamicRoutedPath } from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import { AccountSwitchError } from '@cardstack/host/services/matrix-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -44,6 +46,20 @@ export type ErrorModel = {
   loadType: 'index' | 'card' | 'stack';
   operatorModeState: string;
 };
+
+// A dynamic route whose lookup failed or was refused. The index route's
+// error state shows it, so the visitor sees that the page could not be
+// loaded rather than that it does not exist. The message is for a site
+// visitor: the lookup's detail (its URL and status) goes to the console
+// and the host-mode log only.
+class HostRouteResolutionError extends Error implements ErrorModel {
+  loadType = 'card' as const;
+  operatorModeState = '';
+  constructor() {
+    super('This page could not be loaded. Try again in a moment.');
+    this.name = 'HostRouteResolutionError';
+  }
+}
 
 export default class Card extends Route {
   queryParams = {
@@ -118,11 +134,61 @@ export default class Card extends Route {
         );
         return;
       }
+      // A path no fixed rule matches goes through the realm's dynamic
+      // routes, as a full page load of it does on the server: a card id
+      // template, a field match, a nested or a dynamic redirect route. A
+      // lookup that fails shows an error state, not the not-found page.
+      // When no route resolves the path, it loads as a card URL.
+      let dynamic: DynamicRoutedPath | undefined;
+      if (!routed) {
+        dynamic =
+          await this.hostModeService.resolveDynamicRoutedPath(normalizedPath);
+        // The visitor may have moved on while the lookup ran. A result for
+        // a transition that was aborted is neither rendered nor followed,
+        // so a late redirect cannot replace the page they went to.
+        if (transition.isAborted) {
+          return;
+        }
+        if (dynamic?.kind === 'redirect') {
+          this.hostModeService.redirectTo(
+            dynamic.redirectTo,
+            this.forwardableQueryParams(transition),
+          );
+          return;
+        }
+        if (dynamic?.kind === 'error') {
+          console.error(
+            `host route lookup for /${normalizedPath} failed`,
+            dynamic.error,
+          );
+          throw new HostRouteResolutionError();
+        }
+        if (dynamic?.kind === 'card') {
+          return this.store.get(dynamic.cardHref);
+        }
+      }
       let cardUrl =
         routed?.id ??
         `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
 
-      return this.store.get(cardUrl);
+      let model = await this.store.get(cardUrl);
+      // A card's own path is still served while the route set is
+      // incomplete; any other path is an error then, as on the server.
+      // The server also serves a realm file there (`isRealmFilePath`); the
+      // host has no counterpart, so a realm file the store does not load
+      // shows the error page here while a full page load serves the file.
+      if (
+        !routed &&
+        dynamic?.kind === 'unavailable' &&
+        isCardErrorJSONAPI(model) &&
+        model.status === 404
+      ) {
+        console.error(
+          `/${normalizedPath} resolved to nothing while a host route is dropped for a type that is not available yet`,
+        );
+        throw new HostRouteResolutionError();
+      }
+      return model;
     }
 
     let { operatorModeState, cardPath } = params;

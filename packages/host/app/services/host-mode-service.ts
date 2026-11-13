@@ -11,13 +11,17 @@ import {
   logger,
   type RealmIdentifier,
   normalizeRoutingPath,
+  resolveHostRoute,
+  resolveRedirectTarget,
   sanitizeHeadHTML,
+  type HostRoute,
   type HostRoutingRule,
 } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import config from '@cardstack/host/config/environment';
+import { visitorHostRouteLookups } from '@cardstack/host/lib/host-route-lookups';
 
 const log = logger('host-mode-service');
 
@@ -40,6 +44,31 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SessionService from '@cardstack/host/services/session';
 
+// The routing realm's validated routes, the whole tree, as the realm server
+// injects them next to the fixed routing map, for a realm with dynamic
+// routes. `realmURL` is the URL the realm is served at, ending with `/`.
+// `complete` is false when validation dropped routes for now because a type
+// definition could not be read; the route set is then not final, so a path
+// it does not resolve may still be one a route serves.
+export interface HostDynamicRoutes {
+  realmURL: string;
+  routes: readonly HostRoute[];
+  complete?: boolean;
+}
+
+// What a path no fixed rule matches resolves to through the dynamic routes.
+// `card` serves the card at `cardHref`; `redirect` navigates to
+// `redirectTo`, which is host-scoped like a fixed redirect rule's target;
+// `error` is a lookup that failed or was refused. `unavailable` is a path a
+// route matched but that resolved to nothing while the route set is
+// incomplete: when the path is not a card's own path, a route dropped for
+// now might serve it, so it is an error, not a missing page.
+export type DynamicRoutedPath =
+  | { kind: 'card'; cardHref: string }
+  | { kind: 'redirect'; redirectTo: string }
+  | { kind: 'error'; error: unknown }
+  | { kind: 'unavailable' };
+
 interface PublishedRealmMetadata {
   urlString: string;
   publishedAt: number;
@@ -53,6 +82,15 @@ export default class HostModeService extends Service {
   @service declare realmServer: RealmServerService;
   @service declare session: SessionService;
   @service declare private network: NetworkService;
+
+  // The path the dynamic routes last resolved to a card, by canonical path,
+  // so a change to the stack, which refreshes the route on the same page,
+  // runs no lookup again. Only the current page is kept: a visitor who
+  // moves to another path, or comes back to this one, gets a fresh lookup,
+  // so a slug or route the author changed is never served from memory.
+  private currentDynamicRoutedPath:
+    | { path: string; result: DynamicRoutedPath }
+    | undefined;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
@@ -74,6 +112,7 @@ export default class HostModeService extends Service {
     this.headUpdateRequestId = 0;
     this.headTemplateContainsTitle = false;
     this.publishDialogRealm = undefined;
+    this.currentDynamicRoutedPath = undefined;
     // A Publish still opening its workspace doesn't carry into the next
     // session.
     this.openToPublishTask.cancelAll();
@@ -200,6 +239,105 @@ export default class HostModeService extends Service {
       (r) => normalizeRoutingPath(r.path) === canonical,
     );
     return rule ?? null;
+  }
+
+  // The routing realm's routes, when it has dynamic routes; see
+  // `HostDynamicRoutes`.
+  get hostDynamicRoutes(): HostDynamicRoutes | undefined {
+    let value = (config as { hostDynamicRoutes?: unknown }).hostDynamicRoutes;
+    if (
+      value &&
+      typeof value === 'object' &&
+      typeof (value as HostDynamicRoutes).realmURL === 'string' &&
+      Array.isArray((value as HostDynamicRoutes).routes)
+    ) {
+      return value as HostDynamicRoutes;
+    }
+    return undefined;
+  }
+
+  // Resolves a path no fixed rule matches through the realm's dynamic
+  // routes, the way the realm server resolves a full page load of it, with
+  // lookups that run as the visitor. `path` is what `resolveRoutedPath`
+  // takes. Resolves to `undefined` when the realm has no dynamic routes,
+  // the path is outside the realm, or no route resolves it: the caller then
+  // loads the path as a card URL, which is also what the server serves for
+  // a card's own path.
+  //
+  // `path` is relative to `hostModeOrigin`, the same base the caller
+  // resolves a card URL against, so the realm's mount pathname is taken
+  // relative to it before it is stripped, and a realm-relative redirect
+  // target is prefixed with it, as the server prefixes a fixed rule's.
+  async resolveDynamicRoutedPath(
+    path: string,
+  ): Promise<DynamicRoutedPath | undefined> {
+    let dynamicRoutes = this.hostDynamicRoutes;
+    // No routes at all, even in an incomplete set (`complete: false` with
+    // every dynamic route dropped), is no dynamic routes: no route can match
+    // the path, and serve-index answers 503 only for a path a route matched.
+    if (!dynamicRoutes || dynamicRoutes.routes.length === 0) {
+      return undefined;
+    }
+    let realmURL = new URL(dynamicRoutes.realmURL);
+    let originPathname = new URL(`${this.hostModeOrigin}/`).pathname;
+    if (!realmURL.pathname.startsWith(originPathname)) {
+      return undefined;
+    }
+    let mountPathname = `/${realmURL.pathname.slice(originPathname.length)}`;
+    let pathname = path.startsWith('/') ? path : `/${path}`;
+    let canonical = normalizeRoutingPath(pathname);
+    if (this.currentDynamicRoutedPath?.path === canonical) {
+      return this.currentDynamicRoutedPath.result;
+    }
+    this.currentDynamicRoutedPath = undefined;
+    let realmRoot = mountPathname.replace(/\/$/, '');
+    if (pathname !== realmRoot && !pathname.startsWith(mountPathname)) {
+      return undefined;
+    }
+    let resolution = await resolveHostRoute({
+      path: `/${pathname.slice(mountPathname.length)}`,
+      routes: dynamicRoutes.routes,
+      realmURL,
+      ...visitorHostRouteLookups({
+        fetch: this.network.authedFetch,
+        virtualNetwork: this.network.virtualNetwork,
+        realmURL: realmURL.href,
+      }),
+    });
+    let result: DynamicRoutedPath;
+    switch (resolution.kind) {
+      // An alias serves its card for now: redirecting to the card's
+      // canonical address needs the reverse lookup from a card to its
+      // address.
+      case 'card':
+      case 'alias':
+        result = { kind: 'card', cardHref: resolution.cardHref };
+        this.currentDynamicRoutedPath = { path: canonical, result };
+        return result;
+      case 'redirect':
+        return {
+          kind: 'redirect',
+          redirectTo: resolveRedirectTarget(resolution.location, mountPathname),
+        };
+      case 'error':
+        log.warn(
+          `host route lookup for ${pathname} failed: ${
+            resolution.error instanceof Error
+              ? resolution.error.message
+              : String(resolution.error)
+          }`,
+        );
+        return { kind: 'error', error: resolution.error };
+      case 'nothing':
+        // With an incomplete route set, a route that would serve a path
+        // some route matched may be one validation dropped for now, so the
+        // path is not known to be missing, as on the server. A path no
+        // route matched at all loads as it did before routes.
+        if (dynamicRoutes.complete === false && resolution.trace.length > 0) {
+          return { kind: 'unavailable' };
+        }
+        return undefined;
+    }
   }
 
   // SPA-side counterpart of the server's HTTP redirect for a redirect
