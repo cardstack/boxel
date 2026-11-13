@@ -301,11 +301,14 @@ export class GitRealmHistoryReader implements RealmHistoryReader {
       return { kind: 'path-not-found-at-revision' };
     }
     if (range) {
-      if (range.length > this.#maxFileResponseBytes) {
-        return { kind: 'too-large', size: object.size };
-      }
+      // The bytes the range covers in the file, so a range that runs past
+      // the end, as `{ start, length: Number.MAX_SAFE_INTEGER }` does to
+      // mean "to the end", is judged by what it returns.
       let start = Math.min(range.start, object.size);
       let length = Math.min(range.length, object.size - start);
+      if (length > this.#maxFileResponseBytes) {
+        return { kind: 'too-large', size: object.size };
+      }
       let bytes =
         length > 0
           ? await this.#readRange(gitDir, object.id, start, length)

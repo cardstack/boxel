@@ -882,6 +882,20 @@ module('reader', (hooks) => {
       { kind: 'too-large', size: 10 },
       'a range longer than the response limit',
     );
+    assert.deepEqual(
+      await read(first, 'Author/jane.json', {
+        start: 2,
+        length: Number.MAX_SAFE_INTEGER,
+      }),
+      {
+        kind: 'file',
+        content: Buffer.from('v":1}').toString('base64'),
+        binary: true,
+        size: 7,
+        range: { start: 2, length: 5 },
+      },
+      'a range past the end is judged by the bytes it covers',
+    );
     assert.deepEqual(await read(first, '/'), {
       kind: 'directory',
       entries: [
