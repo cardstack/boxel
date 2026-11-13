@@ -16,6 +16,7 @@ import {
   runOverlayFiles,
   stageRunOverlayFile,
 } from '@cardstack/runtime-common/run-overlay';
+import { getAutomationStorage } from '@cardstack/runtime-common/automation-files';
 import {
   createAutomationRunToken,
   createJWT,
@@ -205,6 +206,26 @@ module(basename(import.meta.filename), function (hooks) {
         },
       ],
       'the created files are the automation’s, from this run; notes.txt, which the realm already held, is not',
+    );
+
+    // The storage the automation's payer is charged for counts the same two
+    // files, at their stored sizes.
+    let storage = await getAutomationStorage(dbAdapter, run.automationId);
+    assert.deepEqual(
+      storage.files.map(({ realmURL, path, runId }) => ({
+        realmURL,
+        path,
+        runId,
+      })),
+      [
+        { realmURL: realm.url, path: 'deep/nested/file.md', runId: run.id },
+        { realmURL: realm.url, path: 'logs/run.jsonl', runId: run.id },
+      ],
+    );
+    assert.strictEqual(
+      storage.fileBytes,
+      Buffer.byteLength('# hi') + Buffer.byteLength('{"n":1}\n'),
+      'the charged file bytes are the two created files’ sizes',
     );
   });
 
