@@ -56,11 +56,13 @@ leaked token gives away:
   identity's ordinary realm session, or the prerender auth that
   `prepareRunCommand` mints for every realm its `runAs` user can reach.
 - A run's cards MUST load modules only from the automation's realm, the base
-  realm and the catalog realm. A run MUST NOT be refused because a policy
-  grant gives write to a module that it loads from its own realm.
+  realm and the catalog realm.
 
 Switching on an automation whose cards load a module from any other realm
 MUST be refused, and the refusal MUST name that realm.
+
+A run, and switching an automation on, MUST NOT be refused because a policy
+grant gives write to a module in the automation's realm that the run loads.
 
 ### 1.3. Every call goes through `Realm.handleAutomation`
 
@@ -126,8 +128,8 @@ the identity's wider session, would hand it to any module loaded beside it.
 The prerender pool already keeps each affinity's tabs to one session for the
 same reason.
 
-Module code runs with the payer's direct write and credit, so whoever can
-change a module a run loads can act with that authority. The owner of a
+Module code runs with the run identity's direct write and credit, so whoever
+can change a module a run loads can act with that authority. The owner of a
 public realm needs no permission in this realm at all. So a run loads modules
 only from its own realm and from the base and catalog realms, which the
 platform deploys from reviewed source. An author who wants a card from
@@ -135,9 +137,18 @@ another realm copies it into their own.
 
 Who can change a realm's own modules is its administrators' decision. A
 policy grant that gives write to module source widens who can change the
-realm's code, and the administrator who writes it accepts what that code can
-then do, in a run as anywhere else. A run isn't refused for it: that would
-second-guess a choice the realm's administrators already made.
+realm's code, and that code runs wherever the realm's cards are opened: in
+every visitor's browser, administrators' included, with that visitor's own
+sessions. A run gives the grantee nothing that the grant didn't already give
+them. Every run identity is a direct writer, who can read the policy and
+remove the grant, and a run's module code spends only within the caps its
+payer agreed to. So the administrators who keep the grant accept what that
+code can do, in a run as anywhere else, and a run isn't refused for it.
+
+The script file is different (ADR 028 §1.2). Only runs execute it, so
+keeping it out of every grant takes nothing from the realm's other users,
+while refusing module writes would take a choice away from the realm's
+administrators.
 
 Calls from the tab reach the server over the network, like any other
 request, so the token is the only thing that can mark one as an
@@ -183,10 +194,14 @@ every run, so it is refused once, when it is switched on.
 - **Load modules from any public realm.** Their owners need no permission in
   the automation's realm, yet their code would run with the payer's
   authority.
-- **Refuse a run while a policy grant can write a module it loads.** Granting
-  write to module source is the realm administrators' choice, and its risk
-  comes with it, runs included. A refusal would second-guess that choice and
-  stop every automation in the realm while the grant stands.
+- **Refuse a run, or switching an automation on, while a policy grant can
+  write a module the run loads.** Granting write to module source is the
+  realm administrators' choice, and its risk comes with it, runs included.
+  A refusal would second-guess that choice, and stop every automation whose
+  cards load such a module while the grant stands, without taking from the
+  grantee anything the grant gave them.
+- **Make module writes non-grantable.** It would take the choice from
+  administrators in every realm, including the many that run no automation.
 - **Enforcement in the tab.** The tab runs code that the realm doesn't
   trust, and its counts would be reported by the party they bound.
 - **A run with its identity's full direct write.** The run could rewrite the
