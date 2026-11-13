@@ -25,6 +25,25 @@ The following are important concepts:
 - [Spec](spec.md): A Spec card documents an exported definition through its code ref, with examples, so the definition is searchable and can be packaged in a listing.
 - [Commands in headless Chrome](commands-in-headless-chrome.md): how a bot trigger becomes a `run-command` job that the prerenderer runs in a headless host tab through the `command-runner` route.
 
+## The card contract
+
+What a card is, from the point of view of the person who writes one and the
+person who implements the environment that runs it:
+
+- [Card Contract overview](card-contract/README.md): the boundary the contract
+  is drawn at, the two tests that decide what belongs on which side, and how to
+  read the rest.
+- [Vocabulary](card-contract/vocabulary.md): the durable nouns, and the four
+  representations of one card.
+- [The author API](card-contract/author-api.md): what a card author writes and
+  what it promises.
+- [The runtime contract](card-contract/runtime-contract.md): the lower-level
+  contracts between a card and its environment.
+- [Conformance](card-contract/conformance.md): the profiles a compatible runtime
+  implements, and the corpus that checks them.
+- [Boundary findings](card-contract/boundary-findings.md): where the line is
+  blurred today, and what to do about each.
+
 ## Operations
 
 - [AWS operations](aws-operations.md): runbooks for boxel services on AWS, each with pre-requisites, steps, verification and rollback.
