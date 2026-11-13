@@ -146,7 +146,7 @@ export async function handleDebugCommands(
         ? `Features enabled in this room: ${features.map(code).join(', ')}.`
         : 'No features are enabled in this room.') +
       `\n\nAvailable features: ${available}.`;
-    if (command && !(command.feature in SKILL_FEATURES)) {
+    if (command && !Object.hasOwn(SKILL_FEATURES, command.feature)) {
       status = `There is no feature named ${code(command.feature)}.\n\n${status}`;
     } else if (command) {
       status = `**${code(command.feature)} is now ${command.enable ? 'enabled' : 'disabled'}** for this room, from your next message.\n\n${status}`;

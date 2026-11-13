@@ -4,7 +4,12 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { SupportedMimeType, type Realm } from '@cardstack/runtime-common';
+import {
+  CATALOG_REALM_PREFIX,
+  SupportedMimeType,
+  type Realm,
+} from '@cardstack/runtime-common';
+import { SKILL_FEATURE_REALMS } from '@cardstack/runtime-common/ai/debug';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -4590,8 +4595,9 @@ await images.generate({ prompt: 'a dot', path: 'dot.png' });`;
   });
 });
 
-// The catalog-reuse feature is read from the room's messages, which reach the
-// room resources only for a signed-in user.
+// A realm gated behind a skill feature, with the catalog standing in for it:
+// no feature gates the catalog itself. The feature is read from the room's
+// messages, which reach the room resources only for a signed-in user.
 module(
   'Integration | tools | run-realm-code | catalog-reuse',
   function (hooks) {
@@ -4602,8 +4608,15 @@ module(
       setCatalogRealmURL(
         getService('network').virtualNetwork.toURL('@cardstack/catalog/').href,
       );
+      // The registry is read-only by type; the module gates the catalog.
+      (SKILL_FEATURE_REALMS as Record<string, string[]>)['catalog-reuse'] = [
+        CATALOG_REALM_PREFIX,
+      ];
     });
     hooks.afterEach(function () {
+      delete (SKILL_FEATURE_REALMS as Record<string, string[]>)[
+        'catalog-reuse'
+      ];
       resetCatalogRealmURL();
     });
     setupLocalIndexing(hooks);
@@ -5044,6 +5057,154 @@ module(
     });
   },
 );
+
+// A script's searches reach the catalog in any room, with nothing enabled
+// first.
+module('Integration | tools | run-realm-code | catalog', function (hooks) {
+  setupRenderingTest(hooks);
+  // The test build lists no catalog, so list one for the default realms
+  // to include. It must be listed before the user signs in.
+  hooks.beforeEach(function () {
+    setCatalogRealmURL(
+      getService('network').virtualNetwork.toURL('@cardstack/catalog/').href,
+    );
+  });
+  hooks.afterEach(function () {
+    resetCatalogRealmURL();
+  });
+  setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+  setupRealmCacheTeardown(hooks);
+
+  hooks.beforeEach(async function () {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: { 'note.md': '# Note\n' },
+    });
+  });
+
+  test('realm.entries.search reaches the catalog without the room enabling anything', async function (assert) {
+    await getService('matrix-service').ready;
+    let roomId = mockMatrixUtils.createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'catalog',
+    });
+    let { virtualNetwork } = getService('network');
+    let sentRealms: string[][] = [];
+    let spy = async (request: Request) => {
+      if (new URL(request.url).pathname.endsWith('/_federated-search')) {
+        sentRealms.push(JSON.parse(await request.clone().text()).realms);
+      }
+      return null;
+    };
+    virtualNetwork.mount(spy, { prepend: true });
+    let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+    try {
+      let realmServer = getService('realm-server');
+      await realmServer.ready;
+      let isCatalog = (realm: string) =>
+        realm === '@cardstack/catalog/' || realm === catalogURL;
+      assert.ok(
+        realmServer.availableRealmIdentifiers.some(isCatalog),
+        'the catalog is one of the available realms',
+      );
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+      let search = (code: string) =>
+        command.execute({ realm: testRealmURL, roomId, code });
+
+      await search(
+        `await realm.entries.search({}, { realms: ['@cardstack/catalog/'] });`,
+      );
+      await search(`await realm.entries.search({});`);
+      assert.deepEqual(
+        sentRealms[0],
+        ['@cardstack/catalog/'],
+        'a named catalog is searched',
+      );
+      assert.ok(
+        sentRealms[1].some(isCatalog),
+        'the default realms include the catalog',
+      );
+    } finally {
+      virtualNetwork.unmount(spy);
+    }
+  });
+
+  test('realm.cards.search reaches the catalog without the room enabling anything', async function (assert) {
+    await getService('matrix-service').ready;
+    let roomId = mockMatrixUtils.createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'catalog',
+    });
+    let { virtualNetwork } = getService('network');
+    let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+    let searches = 0;
+    // Stands in for the catalog: a public realm whose searches are counted.
+    let catalog = async (request: Request) => {
+      let { pathname } = new URL(request.url);
+      if (request.url === `${catalogURL}_info`) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              id: catalogURL,
+              type: 'realm-info',
+              attributes: { name: 'Catalog' },
+            },
+          }),
+          {
+            headers: {
+              'content-type': SupportedMimeType.RealmInfo,
+              'x-boxel-realm-public-readable': 'true',
+            },
+          },
+        );
+      }
+      if (
+        pathname.endsWith('_search') ||
+        pathname.endsWith('_federated-search')
+      ) {
+        searches++;
+        return new Response(
+          JSON.stringify({ data: [], meta: { page: { total: 0 } } }),
+          { headers: { 'content-type': SupportedMimeType.CardJson } },
+        );
+      }
+      return null;
+    };
+    virtualNetwork.mount(catalog, { prepend: true });
+    try {
+      await getService('realm').ensureRealmMeta(catalogURL);
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+      let search = async () =>
+        JSON.parse(
+          (
+            await command.execute({
+              realm: '@cardstack/catalog/',
+              roomId,
+              code: `return await realm.cards.search({});`,
+            })
+          ).scriptResult!,
+        );
+
+      assert.deepEqual(await search(), {
+        cards: [],
+        total: 0,
+        truncated: false,
+      });
+      assert.strictEqual(searches, 1, 'the catalog is searched');
+    } finally {
+      virtualNetwork.unmount(catalog);
+    }
+  });
+});
 
 // `realm.web.search`, `realm.web.read` and `realm.resolve` send their requests
 // through the realm server's proxy, which needs a realm server session, so

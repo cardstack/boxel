@@ -72,13 +72,17 @@ import {
   toolSourceEventIdsToCarry,
   isMarkdownSkillFile,
   parseMarkdownSkill,
+  realmsOfDisabledFeatures,
   sessionSkillFeatures,
+  SKILL_FEATURE_REALMS,
+  SKILL_FEATURES,
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
   TRAILING_CONTEXT_PREAMBLE,
   VIEW_ATTACHMENT_TOOL_NAME,
 } from '@cardstack/runtime-common/ai';
 import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
+import { CATALOG_REALM_PREFIX } from '@cardstack/runtime-common/realm-prefixes';
 import { fulfillViewAttachmentCall } from '../lib/bot-tools/view-attachment/fulfillment.ts';
 import { roomAttachments } from '../lib/bot-tools/view-attachment/view.ts';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
@@ -11714,5 +11718,44 @@ module('skill feature sections', () => {
       [],
       'the bot cannot enable a feature',
     );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(user, 'boxel-debug:feature:enable:constructor')],
+        bot,
+      ),
+      [],
+      'a name inherited from Object.prototype is not a feature',
+    );
+  });
+
+  // The type of SKILL_FEATURE_REALMS rejects an unregistered key only while
+  // SKILL_FEATURES has an entry: against an empty registry TypeScript skips
+  // the excess-property check. A realm under an unregistered key would be
+  // left out of every room's searches, with no command that can enable it.
+  test('every feature that gates realms is a registered feature', () => {
+    assert.deepEqual(
+      Object.keys(SKILL_FEATURE_REALMS).filter(
+        (feature) => !Object.hasOwn(SKILL_FEATURES, feature),
+      ),
+      [],
+    );
+  });
+
+  test('the catalog is searched in a room that enabled no feature', () => {
+    assert.false(realmsOfDisabledFeatures([]).includes(CATALOG_REALM_PREFIX));
+  });
+
+  test("a feature's realms are left out until the room enables it", () => {
+    // The registry is read-only by type; the test gates a stand-in realm.
+    let featureRealms = SKILL_FEATURE_REALMS as Record<string, string[]>;
+    featureRealms['catalog-reuse'] = ['@cardstack/some-realm/'];
+    try {
+      assert.deepEqual(realmsOfDisabledFeatures([]), [
+        '@cardstack/some-realm/',
+      ]);
+      assert.deepEqual(realmsOfDisabledFeatures(['catalog-reuse']), []);
+    } finally {
+      delete featureRealms['catalog-reuse'];
+    }
   });
 });
