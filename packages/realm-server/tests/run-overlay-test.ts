@@ -1044,6 +1044,21 @@ export class Mine extends Automation {}`;
         'forbidden-path',
         `the atomic write of ${path}`,
       );
+      // The realm holds nothing there, and the answer is the reservation,
+      // not that the file doesn't exist.
+      let updated = await atomic(token, [
+        {
+          op: 'update',
+          href: `./${path}`,
+          data: { type: 'source', attributes: { content: 'nope' }, meta: {} },
+        },
+      ]);
+      assert.strictEqual(updated.status, 403, updated.text);
+      assert.strictEqual(
+        JSON.parse(updated.text).errors[0].code,
+        'forbidden-path',
+        `the atomic update of ${path}`,
+      );
     }
     let appended = await operations(token, [
       {

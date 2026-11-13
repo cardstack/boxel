@@ -13552,12 +13552,13 @@ export class Realm {
 
   // A run's atomic write (ADR 027 §1.2): every file it adds or updates is
   // staged in the run's overlay, all or none, and the realm is left as it
-  // is. The checks are the atomic write's own, against the files as the run
-  // sees them (an `add` of a path that exists, an `update` of one that
-  // doesn't, a resource that is neither a card nor source), and then the
-  // ones every staged write meets (see `#stageRunFiles`), which answer as
-  // the run's commit would, a reserved path among them. It answers as the
-  // atomic write does, with each file's id.
+  // is. A reserved path is refused first, as the run's commit refuses it
+  // (403 `forbidden-path`). Then come the atomic write's own checks, against
+  // the files as the run sees them (an `add` of a path that exists, an
+  // `update` of one that doesn't, a resource that is neither a card nor
+  // source), and then the ones every staged write meets (see
+  // `#stageRunFiles`), which answer as the run's commit would. It answers as
+  // the atomic write does, with each file's id.
   async #stageRunAtomic(
     requestContext: RequestContext,
     run: RunOverlayKey,
@@ -13607,6 +13608,13 @@ export class Realm {
               error?.message ??
                 `Request operation contains invalid href '${operation.href}'`,
             );
+          }
+          // Ahead of whether the path exists, so a reserved path is refused
+          // as the run's commit refuses it (see `#runFileRefusal`) whether or
+          // not the realm holds a file there.
+          let reserved = reservedWriteDestination(localPath);
+          if (reserved) {
+            return refuse(403, 'Forbidden', reserved, 'forbidden-path');
           }
           let exists =
             (await readRunOverlayFile(this.#dbAdapter, run, localPath)) !==

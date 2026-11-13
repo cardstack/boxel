@@ -510,7 +510,7 @@ What goes through it, for a run-token call in the run's own realm
 
 Every staged write meets the same checks (`Realm.#stageRunFiles`), and they
 include every check the commit makes of a file on its own, in the commit's
-order, so a staged write (a 204 from the card+source write, a 201 from
+order (with one exception through `_operations`, below), so a staged write (a 204 from the card+source write, a 201 from
 `_atomic`, a 200 from `_operations`) is a file the commit takes unless the
 realm changes in between. Any file may be staged, card instance or not.
 First, `Realm.#runFileRefusal`, which the commit asks again of every file,
@@ -531,9 +531,12 @@ refusal carries the commit's status, code and reason, without its "nothing
 was saved", on every route: a run's write to a reserved path is answered by
 `#routeRequest` whatever route it names, and in a run's `_operations` batch
 the run's batch core gives the coordinator's reserved-path refusal
-(`BatchCore.reservedWriteRefusal`). Through `_operations` the batch checks a
-file's size before the overlay sees it, so a file refused for both its path
-clashing with the realm and its size answers 413 there. A path can't be
+(`BatchCore.reservedWriteRefusal`), and `_atomic` refuses a reserved path
+ahead of whether it exists. The exception: through `_operations` the batch
+checks a file's size before the overlay sees it, so a file refused for its
+size and for its path (409 `path-clash`, or 403 `forbidden-path` for
+anything but a reserved path, such as an oversize automation card) answers
+413 there. A path can't be
 staged as both a file and a directory among the run's own files either (409
 `path-clash`). The token's
 `run.writesCap` bounds how many files the attempt stages (403 `writes-cap`,
