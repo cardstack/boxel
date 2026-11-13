@@ -56,9 +56,12 @@ export interface HostRouteTypeInfo {
   types: readonly string[];
   // Whether the type is a card type (not a field or file type).
   isCardType: boolean;
-  // The type's own fields by name. `isPrimitive` is false for a link or a
-  // compound field. `target` is the key of the card type a `linksTo` or
-  // `linksToMany` field points to.
+  // All of the type's fields by name, including the ones it inherits (as
+  // `Definition.fields` lists them): the link dedupe in `linkCandidates`
+  // relies on a child type having the link field it inherits from its
+  // parent type. `isPrimitive` is false for a link or a compound field.
+  // `target` is the key of the card type a `linksTo` or `linksToMany`
+  // field points to.
   fields: Readonly<Record<string, HostRouteTypeField>>;
 }
 
@@ -981,23 +984,18 @@ class Validator {
   }
 
   // Unique names, unique fixed paths and the dynamic route limit, applied
-  // in depth-first authored order: the earlier route wins. The one
-  // exception is a fixed path that a top-level fixed route has: the first
+  // in depth-first authored order: the earlier route wins. Names and the
+  // limit are applied first, and fixed paths then only among the routes
+  // they keep, so a dropped route holds no path. A fixed path that a kept
+  // top-level fixed route has is the one exception to the order: the first
   // such top-level route keeps it, even after a nested fixed route with the
   // same path. Only top-level fixed routes are in the routing map, so a
   // nested route must not take a path from one.
   private applyRealmWideRules(routes: HostRoute[]): HostRoute[] {
     let names = new Set<string>();
-    let fixedPaths = new Set<string>();
-    let topLevelFixed = new Map<string, HostRoute>();
-    for (let route of routes) {
-      if (!isDynamic(route) && !topLevelFixed.has(route.fullPath)) {
-        topLevelFixed.set(route.fullPath, route);
-      }
-    }
     let dynamicCount = 0;
     let max = this.options.maxDynamicRoutes ?? MAX_DYNAMIC_HOST_ROUTES;
-    return this.filterTree(routes, (route) => {
+    let kept = this.filterTree(routes, (route) => {
       if (route.name !== undefined && names.has(route.name)) {
         return {
           code: 'duplicate-name',
@@ -1012,19 +1010,32 @@ class Validator {
           };
         }
         dynamicCount++;
-      } else {
-        let owner = topLevelFixed.get(route.fullPath);
-        if (fixedPaths.has(route.fullPath) || (owner && owner !== route)) {
-          return {
-            code: 'duplicate-path',
-            message: `Another fixed route already has the path ${route.fullPath}`,
-          };
-        }
-        fixedPaths.add(route.fullPath);
       }
       if (route.name !== undefined) {
         names.add(route.name);
       }
+      return undefined;
+    });
+
+    let fixedPaths = new Set<string>();
+    let topLevelFixed = new Map<string, HostRoute>();
+    for (let route of kept) {
+      if (!isDynamic(route) && !topLevelFixed.has(route.fullPath)) {
+        topLevelFixed.set(route.fullPath, route);
+      }
+    }
+    return this.filterTree(kept, (route) => {
+      if (isDynamic(route)) {
+        return undefined;
+      }
+      let owner = topLevelFixed.get(route.fullPath);
+      if (fixedPaths.has(route.fullPath) || (owner && owner !== route)) {
+        return {
+          code: 'duplicate-path',
+          message: `Another fixed route already has the path ${route.fullPath}`,
+        };
+      }
+      fixedPaths.add(route.fullPath);
       return undefined;
     });
   }

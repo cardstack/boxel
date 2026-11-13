@@ -85,6 +85,10 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(hostRoutesTests, assert, {});
   });
 
+  test('validateHostRoutes: a route dropped for its name holds no path', async function (assert) {
+    await runSharedTest(hostRoutesTests, assert, {});
+  });
+
   test('validateHostRoutes: at most 20 dynamic routes', async function (assert) {
     await runSharedTest(hostRoutesTests, assert, {});
   });

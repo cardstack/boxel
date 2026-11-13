@@ -857,6 +857,24 @@ const tests: SharedTests<unknown> = Object.freeze({
     ]);
   },
 
+  'validateHostRoutes: a route dropped for its name holds no path': async (
+    assert,
+  ) => {
+    let { routes, warnings } = validate([
+      { path: '/x', instance: instance('x'), name: 'home' },
+      // Dropped for its name, so the next route keeps /a.
+      { path: '/a', instance: instance('a1'), name: 'home' },
+      { path: '/a', instance: instance('a2') },
+    ]);
+    assert.deepEqual(hostRoutingMapFromRoutes(routes), [
+      { path: '/x', id: `${REALM}x` },
+      { path: '/a', id: `${REALM}a2` },
+    ]);
+    assert.deepEqual(codes(warnings), [
+      { code: 'duplicate-name', path: '/a', dropped: true },
+    ]);
+  },
+
   'validateHostRoutes: at most 20 dynamic routes': async (assert) => {
     let rules: RawHostRoutingRule[] = [
       { path: '/', instance: instance('home') },
