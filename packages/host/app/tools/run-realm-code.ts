@@ -165,6 +165,7 @@ import UpdateRoomSkillsTool from './update-room-skills';
 
 import type {
   ConsoleLevel,
+  FlushableRunProgressSink,
   RunProgressEvent,
   RunProgressSink,
 } from '../lib/realm-runner/automation';
@@ -3150,6 +3151,20 @@ export async function runAutomationScript(
   options: AutomationRunOptions,
 ): Promise<AutomationRunResult> {
   let { code, automation, io, progress, signal } = options;
+  // The realm server logs each call it makes for the run as it makes it, so
+  // the script's lines recorded before a call are sent first, and the run's
+  // log keeps one order.
+  let flushProgress = async () => {
+    if ('flush' in progress) {
+      await (progress as FlushableRunProgressSink).flush();
+    }
+  };
+  let afterFlush =
+    <A extends unknown[], R>(call: (...args: A) => Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      await flushProgress();
+      return await call(...args);
+    };
   let secrets = options.secrets ?? [];
   let timeoutMs = automationTimeLimitMs(options.secondsCap);
   let realmURL = ensureTrailingSlash(options.realmURL);
@@ -3177,7 +3192,7 @@ export async function runAutomationScript(
     io.searchCards,
     io.resolveURL,
     io.readCard,
-    io.runOperations,
+    afterFlush(io.runOperations),
     io.searchEntries,
     // Every search stays in the automation's realm.
     (realms) => {
@@ -3215,7 +3230,7 @@ export async function runAutomationScript(
     {
       search: refused('realm.web.search'),
       read: refused('realm.web.read'),
-      resolve: io.resolve,
+      resolve: afterFlush(io.resolve),
     },
     () => undefined,
     refused('realm.operations.capabilities'),
@@ -3267,8 +3282,9 @@ export async function runAutomationScript(
     }
     let failure = automationRunError(error, timeoutMs);
     // The run's log ends with the error it ended with, where the script
-    // threw it.
-    let location = scriptLocationOf(error);
+    // threw it. A run stopped at its time limit was stopped wherever it was,
+    // which names no line of the script's own doing.
+    let location = failure === error ? scriptLocationOf(error) : undefined;
     let line =
       location?.line ??
       (failure instanceof RealmScriptError

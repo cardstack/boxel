@@ -2,7 +2,10 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import type { RunProgressEvent } from '@cardstack/host/lib/realm-runner/automation';
+import type {
+  FlushableRunProgressSink,
+  RunProgressEvent,
+} from '@cardstack/host/lib/realm-runner/automation';
 import { REDACTED } from '@cardstack/host/lib/realm-runner/automation';
 import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import {
@@ -435,6 +438,10 @@ return 'done';`,
       (last.stack ?? '').includes('realm-code.js'),
       "no frame names the wrapper's file",
     );
+    assert.false(
+      /script line [05-9]/.test(last.stack ?? ''),
+      `no frame is outside the script's 4 lines: ${last.stack}`,
+    );
   });
 
   test("a TypeError's line is reported too", async function (assert) {
@@ -453,12 +460,37 @@ return 'done';`,
   test('a run stopped at its time limit ends its progress with that error', async function (assert) {
     let { events, done } = run('while (true) {}', { secondsCap: 1 });
     await assert.rejects(done);
-    let last = events[events.length - 1];
+    let last = events[events.length - 1] as Extract<
+      RunProgressEvent,
+      { kind: 'error' }
+    >;
     assert.strictEqual(last.kind, 'error');
+    assert.true(/reached its time limit/.test(last.message), last.message);
+    assert.strictEqual(last.line, undefined, 'a time limit names no line');
+    assert.strictEqual(last.stack, undefined);
+  });
+  test("the progress sink is flushed before each call the realm server logs, so the run's log keeps one order", async function (assert) {
+    let order: string[] = [];
+    let { done } = run(
+      `console.log('before');
+       try {
+         await realm.operations.invoke('Pet/mango.json', 'missing', {});
+       } catch (e) {}
+       return 'done';`,
+      {
+        progress: {
+          record: (event) =>
+            order.push(event.kind === 'console' ? event.message : event.kind),
+          flush: async () => {
+            order.push('flush');
+          },
+        } as FlushableRunProgressSink,
+      },
+    );
+    await done;
     assert.true(
-      /reached its time limit/.test(
-        (last as Extract<RunProgressEvent, { kind: 'error' }>).message,
-      ),
+      order.indexOf('flush') > order.indexOf('before'),
+      `the sink is flushed after the line before the call: ${order.join(', ')}`,
     );
   });
 });

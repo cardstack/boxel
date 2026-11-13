@@ -1,4 +1,4 @@
-// An automation run's log (ADR 025 §1.4): the script's console lines,
+// An automation run's log (ADR 025 §1.1): the script's console lines,
 // activity lines, run milestones and uncaught error, beside the platform's
 // own lines for what the realm server did on the run's behalf. Each line is
 // stored in `automation_run_log` for the console, and written once to the
@@ -15,7 +15,7 @@
 // saying how many (`readRunLog`).
 
 import type { DBAdapter } from './db.ts';
-import { param, query } from './expression.ts';
+import { param, query, type Expression } from './expression.ts';
 import { logger } from './log.ts';
 import { redactSecrets } from './redact-secrets.ts';
 
@@ -50,7 +50,7 @@ export const RUN_LOG_PLATFORM_KINDS = [
   'call-api',
   'resolve',
   'commit',
-  'cap',
+  'finish',
 ] as const;
 
 export type RunLogKind =
@@ -118,7 +118,7 @@ export async function appendRunLog(
   let redacted = lines.map((line) => redactLine(line, secrets));
   let result = await dbAdapter.withTransaction(async (txQuery) => {
     let [run] = (await txQuery([
-      'SELECT r.automation_id, r.attempt, r.log_lines, r.log_bytes, r.log_dropped, jr.job_id',
+      'SELECT r.automation_id, r.attempt, r.log_lines, r.log_chars, r.log_dropped, jr.job_id',
       'FROM automation_runs r LEFT JOIN job_reservations jr ON jr.id = r.attempt',
       'WHERE r.id =',
       param(runId),
@@ -127,7 +127,7 @@ export async function appendRunLog(
       automation_id: string;
       attempt: number | string | null;
       log_lines: number;
-      log_bytes: number | string;
+      log_chars: number | string;
       log_dropped: number;
       job_id: number | string | null;
     }[];
@@ -135,7 +135,7 @@ export async function appendRunLog(
       return undefined;
     }
     let seq = Number(run.log_lines);
-    let chars = Number(run.log_bytes);
+    let chars = Number(run.log_chars);
     let stored: StoredRunLogLine[] = [];
     let dropped = 0;
     for (let line of redacted) {
@@ -148,33 +148,40 @@ export async function appendRunLog(
       seq++;
       chars += size;
     }
-    for (let line of stored) {
+    if (stored.length > 0) {
+      let values: Expression = [];
+      for (let [index, line] of stored.entries()) {
+        values.push(
+          index === 0 ? '(' : ', (',
+          param(runId),
+          ',',
+          param(line.seq),
+          ',',
+          param(new Date(line.at).toISOString()),
+          '::timestamptz,',
+          param(line.source),
+          ',',
+          param(line.kind),
+          ',',
+          param(line.level ?? null),
+          ',',
+          param(line.message),
+          ',',
+          param(line.scriptLine ?? null),
+          ',',
+          param(line.data ? JSON.stringify(line.data) : null),
+          '::jsonb)',
+        );
+      }
       await txQuery([
-        'INSERT INTO automation_run_log (run_id, seq, at, source, kind, level, message, script_line, data) VALUES (',
-        param(runId),
-        ',',
-        param(line.seq),
-        ',',
-        param(new Date(line.at).toISOString()),
-        '::timestamptz,',
-        param(line.source),
-        ',',
-        param(line.kind),
-        ',',
-        param(line.level ?? null),
-        ',',
-        param(line.message),
-        ',',
-        param(line.scriptLine ?? null),
-        ',',
-        param(line.data ? JSON.stringify(line.data) : null),
-        '::jsonb)',
+        'INSERT INTO automation_run_log (run_id, seq, at, source, kind, level, message, script_line, data) VALUES',
+        ...values,
       ]);
     }
     await txQuery([
       'UPDATE automation_runs SET log_lines =',
       param(seq),
-      ', log_bytes =',
+      ', log_chars =',
       param(chars),
       ', log_dropped = log_dropped +',
       param(dropped),
@@ -366,9 +373,12 @@ export function runLogTags({
   return `automation=${automationId} run=${runId}${jobId !== undefined ? ` job=${jobId}` : ''}`;
 }
 
-// One run log line as the realm server logs it for Loki: the tags, then the
-// line's fields as `key=value`, the message last and JSON-quoted, so a
-// message can't forge another field.
+// One run log line as the realm server logs it for Loki: the tags right after
+// the prefix, then the line's fields as `key=value`, the message last and
+// JSON-quoted. A query that anchors on the prefix and the tags
+// (`\[automation-run-log\] automation=\S+ run=<id> `) reads the tags the
+// platform wrote; a plain substring match can also find a message that
+// quotes them.
 export function runLogLokiLine(tags: string, line: StoredRunLogLine): string {
   return `[automation-run-log] ${tags} ${describeForLoki(line)}`;
 }
@@ -418,6 +428,10 @@ export function scriptRunLogLines(
   return { ok: true, lines };
 }
 
+// The furthest from the epoch a `Date` reaches, in ms.
+const MAX_DATE_MS = 8.64e15;
+const MAX_SCRIPT_LINE = 2 ** 31 - 1;
+
 const LEVELS: readonly RunLogLevel[] = ['log', 'info', 'warn', 'error'];
 
 function scriptLine(event: unknown): RunLogLine | undefined {
@@ -425,12 +439,18 @@ function scriptLine(event: unknown): RunLogLine | undefined {
     return undefined;
   }
   let e = event as Record<string, unknown>;
-  let at = typeof e.at === 'number' && Number.isFinite(e.at) ? e.at : undefined;
-  if (at === undefined) {
+  if (typeof e.at !== 'number' || !Number.isFinite(e.at)) {
     return undefined;
   }
+  // A time no `Date` can hold is the tab's mistake, not a reason to lose the
+  // batch: the line is stored at the time it arrived.
+  let at = Math.abs(e.at) <= MAX_DATE_MS ? e.at : Date.now();
+  // Only a line Postgres's integer can hold is kept.
   let line =
-    typeof e.line === 'number' && Number.isInteger(e.line) && e.line > 0
+    typeof e.line === 'number' &&
+    Number.isInteger(e.line) &&
+    e.line > 0 &&
+    e.line <= MAX_SCRIPT_LINE
       ? { scriptLine: e.line }
       : {};
   let text = (value: unknown) =>

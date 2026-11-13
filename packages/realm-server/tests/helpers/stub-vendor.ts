@@ -225,7 +225,7 @@ export async function startStubVendor({
         let leak = url.pathname.slice('/leak/'.length);
         if (leak === 'redirect') {
           res.writeHead(302, {
-            location: `http://localhost:${(server.address() as { port: number }).port}/landing?key=${credential}`,
+            location: `http://localhost:${(server.address() as { port: number }).port}/landing/${credential}`,
           });
           res.end();
         } else {

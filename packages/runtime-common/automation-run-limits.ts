@@ -247,14 +247,6 @@ export async function endRunAtCap(
       ? `run ${run.runId} attempt ${run.attempt} of ${run.automationId} hit its ${cap} cap and ended`
       : `run ${run.runId} attempt ${run.attempt} of ${run.automationId} hit its ${cap} cap after it stopped running`,
   );
-  if (ended) {
-    await logRunPlatformLine(dbAdapter, run.runId, {
-      kind: 'cap',
-      level: 'error',
-      message: `The run reached its ${cap} cap and ended`,
-      data: { cap },
-    });
-  }
 }
 
 function runNotRunning(): OperationError {

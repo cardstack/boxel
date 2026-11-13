@@ -13560,6 +13560,14 @@ export class Realm {
   ): Promise<Response> {
     let run = requestContext.automationRun;
     let startedAt = Date.now();
+    // A repeat of a commit that already landed answers as it did, and its
+    // line is already in the log.
+    let repeat =
+      run && !run.readOnly
+        ? Boolean(
+            (await getAutomationRun(this.#dbAdapter, run.runId))?.committedAt,
+          )
+        : false;
     let response: Response;
     try {
       response = await this.#commitRunOverlay(request, requestContext);
@@ -13574,7 +13582,7 @@ export class Realm {
       }
       throw err;
     }
-    if (run && !run.readOnly) {
+    if (run && !run.readOnly && !repeat) {
       let body = (await response
         .clone()
         .json()

@@ -236,6 +236,10 @@ module(basename(import.meta.filename), function (hooks) {
         answer.text.includes(VALUE),
         `the script sees: ${answer.text}`,
       );
+      assert.true(
+        answer.text.includes('[REDACTED]'),
+        `the vendor's echo reached the answer, scrubbed: ${answer.text}`,
+      );
 
       // The script prints what it was handed.
       let logged = await asRun(token, RUN_LOG_PATH.slice(1), {

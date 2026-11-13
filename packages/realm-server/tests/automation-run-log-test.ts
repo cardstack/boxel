@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  cancelAutomationRun,
   finishAutomationRun,
   rri,
   SupportedMimeType,
@@ -341,7 +342,13 @@ module(basename(import.meta.filename), function (hooks) {
     });
     let afterFinish = await sendLog(token, { events: [line] });
     assert.strictEqual(afterFinish.status, 401, 'a finished run is refused');
-    assert.strictEqual((await logOf(run.id)).lines.length, 0);
+    assert.deepEqual(
+      (await logOf(run.id)).lines.map(
+        ({ source, kind }) => `${source} ${kind}`,
+      ),
+      ['platform finish'],
+      "only the platform's line for how the run ended",
+    );
   });
 
   test("a body that isn't the script's events is refused, and nothing it carries can claim to be the platform's", async function (assert) {
@@ -455,18 +462,83 @@ module(basename(import.meta.filename), function (hooks) {
     assert.notOk(refused.text.includes('Secretville'));
   });
 
-  test('a cap that ends the run is logged on it', async function (assert) {
-    let { token, run } = await runOf(TIGHT);
-    await callApi(token, 'latest', { city: 'a' });
-    await callApi(token, 'latest', { city: 'b' });
-    let lines = (await logOf(run.id)).lines;
-    let cap = lines.find(({ kind }) => kind === 'cap');
-    assert.ok(cap, JSON.stringify(lines));
+  test('the log ends with how the run ended: a cap that ended it, a finish, a cancel', async function (assert) {
+    let capped = await runOf(TIGHT);
+    await callApi(capped.token, 'latest', { city: 'a' });
+    await callApi(capped.token, 'latest', { city: 'b' });
+    let lines = (await logOf(capped.run.id)).lines;
+    // The cap ends the run as it refuses the call, so the finish line comes
+    // before the refused call's own line.
+    let last = lines.find(({ kind }) => kind === 'finish')!;
+    assert.ok(last, JSON.stringify(lines));
     assert.strictEqual(
-      cap!.message,
-      'The run reached its callApiCalls cap and ended',
+      lines.filter(({ kind }) => kind === 'finish').length,
+      1,
+      'one finish line',
     );
-    assert.strictEqual(cap!.level, 'error');
+    assert.strictEqual(last.level, 'error');
+    assert.strictEqual(
+      last.message,
+      'The run ended with an error (hit-a-cap): The run hit its callApiCalls cap',
+    );
+
+    let finished = await runOf();
+    await finishAutomationRun(
+      dbAdapter,
+      finished.run.id,
+      finished.run.attempt!,
+      {
+        state: 'complete',
+      },
+    );
+    let [done] = (await logOf(finished.run.id)).lines;
+    assert.strictEqual(done.message, 'The run finished');
+    assert.strictEqual(done.level, 'info');
+
+    let timedOut = await runOf();
+    await finishAutomationRun(
+      dbAdapter,
+      timedOut.run.id,
+      timedOut.run.attempt!,
+      {
+        state: 'error',
+        reason: 'timed-out',
+        message:
+          'The automation run reached its time limit of 30 s (its seconds cap)',
+      },
+    );
+    let [late] = (await logOf(timedOut.run.id)).lines;
+    assert.strictEqual(
+      late.message,
+      'The run ended with an error (timed-out): The automation run reached its time limit of 30 s (its seconds cap)',
+      'a run whose tab can no longer send still ends its log with why',
+    );
+
+    let canceled = await runOf();
+    await cancelAutomationRun(dbAdapter, canceled.run.id, OWNER);
+    let [stopped] = (await logOf(canceled.run.id)).lines;
+    assert.strictEqual(stopped.message, `The run was canceled by ${OWNER}`);
+    assert.strictEqual(stopped.level, 'warn');
+  });
+
+  test('a time no Date holds is stored at the time it arrived, and a script line past an integer is left off', async function (assert) {
+    let { token, run } = await runOf();
+    let before = Date.now();
+    let sent = await sendLog(token, {
+      events: [
+        {
+          kind: 'console',
+          at: 1e300,
+          level: 'log',
+          message: 'far future',
+          line: 2 ** 40,
+        },
+      ],
+    });
+    assert.strictEqual(sent.status, 200, JSON.stringify(sent.json));
+    let [line] = (await logOf(run.id)).lines;
+    assert.true(line.at >= before, `stored at ${line.at}`);
+    assert.strictEqual(line.scriptLine, undefined);
   });
 
   test('the commit is logged on the run: the files it saved, or why it was refused', async function (assert) {
@@ -494,6 +566,24 @@ module(basename(import.meta.filename), function (hooks) {
       'The commit saved 1 file: out/report.txt',
     );
     assert.strictEqual(line?.data?.files, 1);
+
+    let again = (await realm.handle(
+      new Request(`${realmURL.href}${RUN_COMMIT_PATH.slice(1)}`, {
+        method: 'POST',
+        headers: { Accept: JSONAPI, Authorization: `Bearer ${token}` },
+      }),
+    ))!;
+    assert.strictEqual(
+      again.status,
+      200,
+      'a repeated commit answers as it did',
+    );
+    assert.strictEqual(
+      (await logOf(run.id)).lines.filter(({ kind }) => kind === 'commit')
+        .length,
+      1,
+      'and adds no second commit line',
+    );
 
     // The realm holds notes.txt as a file, so a file under it clashes.
     let refused = await runOf();
