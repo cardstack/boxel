@@ -28,6 +28,7 @@ export default function handleArchiveRealm({
   dbAdapter,
   matrixClient,
   sendEvent,
+  serverURL,
   virtualNetwork,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
@@ -36,6 +37,7 @@ export default function handleArchiveRealm({
       dbAdapter,
       'archive',
       matrixClient.serverName,
+      serverURL,
     );
     if (!target) {
       return;

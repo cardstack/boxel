@@ -28,6 +28,7 @@ export default function handleUnarchiveRealm({
   matrixClient,
   queue,
   sendEvent,
+  serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let target = await resolveAndAuthorizeArchiveTarget(
@@ -35,6 +36,7 @@ export default function handleUnarchiveRealm({
       dbAdapter,
       'unarchive',
       matrixClient.serverName,
+      serverURL,
     );
     if (!target) {
       return;

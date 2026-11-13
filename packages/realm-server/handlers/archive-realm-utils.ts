@@ -43,6 +43,7 @@ export async function resolveAndAuthorizeArchiveTarget(
   dbAdapter: DBAdapter,
   action: 'archive' | 'unarchive',
   matrixServerName: string,
+  serverURL: string,
 ): Promise<ArchiveTarget | null> {
   let token = ctxt.state.token as RealmServerTokenClaim;
   if (!token) {
@@ -121,6 +122,7 @@ export async function resolveAndAuthorizeArchiveTarget(
       requesterUserId,
       matrixServerName,
       parsedRealmURL,
+      new URL(serverURL),
     )
   ) {
     await sendResponseForForbiddenRequest(

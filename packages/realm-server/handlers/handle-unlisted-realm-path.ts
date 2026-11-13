@@ -28,6 +28,7 @@ import {
 export default function handleUnlistedRealmPathRequest({
   dbAdapter,
   matrixClient,
+  serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
@@ -58,16 +59,18 @@ export default function handleUnlistedRealmPathRequest({
       let sourceRealmURL = ensureTrailingSlash(json.sourceRealmURL);
       let regenerate = json.regenerate === true;
 
+      let parsedSourceRealmURL = new URL(sourceRealmURL);
       let permissions = await fetchRealmPermissions(
         dbAdapter,
-        new URL(sourceRealmURL),
+        parsedSourceRealmURL,
       );
       if (
         !isRealmAdministrator(
           permissions,
           ownerUserId,
           matrixClient.serverName,
-          new URL(sourceRealmURL),
+          parsedSourceRealmURL,
+          new URL(serverURL),
         )
       ) {
         await sendResponseForForbiddenRequest(

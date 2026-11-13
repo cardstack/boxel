@@ -37,6 +37,7 @@ export default function handleUnpublishRealm({
   matrixClient,
   realmsRootPath,
   reconciler,
+  serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -93,16 +94,18 @@ export default function handleUnpublishRealm({
       let publishedRealmInfo = publishedRealmData[0];
 
       let { user: ownerUserId } = token;
+      let parsedSourceRealmURL = new URL(publishedRealmInfo.source_url);
       let permissions = await fetchRealmPermissions(
         dbAdapter,
-        new URL(publishedRealmInfo.source_url),
+        parsedSourceRealmURL,
       );
       if (
         !isRealmAdministrator(
           permissions,
           ownerUserId,
           matrixClient.serverName,
-          new URL(publishedRealmInfo.source_url),
+          parsedSourceRealmURL,
+          new URL(serverURL),
         )
       ) {
         await sendResponseForForbiddenRequest(

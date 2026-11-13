@@ -248,19 +248,33 @@ function isDirectWriterRow(
   );
 }
 
-// Whether `realmURL` is a realm `userId` created under its own name: the
-// `/<localpart>/<endpoint>/` URL `_create-realm` gives every realm it makes.
+// The realm endpoints `_create-realm` accepts.
+export const realmEndpointPattern = /^[a-z0-9-]+$/;
+
+// Where the realm an owner makes at an endpoint lives on a realm server.
+export function realmURLFor(
+  realmServerURL: URL,
+  ownerUserId: string,
+  endpoint: string,
+): string {
+  return new URL(
+    `${realmServerURL.pathname.replace(/\/$/, '')}/${getMatrixUsername(ownerUserId)}/${endpoint}/`,
+    realmServerURL,
+  ).href;
+}
+
+// Whether `realmURL` is where `_create-realm` puts a realm `userId` makes on
+// the realm server at `realmServerURL`.
 function isInOwnNamespace(
   realmURL: URL,
   userId: string,
-  matrixServerName: string,
+  realmServerURL: URL,
 ): boolean {
-  let localpart = localpartOn(userId, matrixServerName);
-  let segments = realmURL.pathname.split('/').filter(Boolean);
+  let endpoint = realmURL.pathname.split('/').filter(Boolean).pop();
   return (
-    localpart !== undefined &&
-    segments.length >= 2 &&
-    segments[segments.length - 2] === localpart
+    endpoint !== undefined &&
+    realmEndpointPattern.test(endpoint) &&
+    realmURL.href === realmURLFor(realmServerURL, userId, endpoint)
   );
 }
 
@@ -268,8 +282,10 @@ function isInOwnNamespace(
  * Whether `userId` administers the realm at `realmURL`, whose permissions
  * these are: their own row grants `write` (ADR 024 §1.3), and they are a
  * person, as `isDirectWriter` answers it. A service account's `write` admits
- * administering only a realm it created under its own name, so the write it
- * holds on a shared realm never lets it delete, archive or publish that realm.
+ * administering only a realm it created under its own name on this realm
+ * server, so the write it holds on a shared realm never lets it delete,
+ * archive or publish that realm. It is still no direct writer there: nothing
+ * a realm takes on in a person's name is taken on in a service account's.
  * `realm-owner` plays no part: it names the user the realm is indexed as, not
  * an authority (ADR 006 §1.2).
  */
@@ -278,13 +294,14 @@ export function isRealmAdministrator(
   userId: string,
   matrixServerName: string,
   realmURL: URL,
+  realmServerURL: URL,
 ): boolean {
   let write = permissions[userId]?.includes('write') ?? false;
   return (
     isDirectWriterRow(userId, write, matrixServerName) ||
     (write &&
       isBotAccount(userId, matrixServerName) &&
-      isInOwnNamespace(realmURL, userId, matrixServerName))
+      isInOwnNamespace(realmURL, userId, realmServerURL))
   );
 }
 

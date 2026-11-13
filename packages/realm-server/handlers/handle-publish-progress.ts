@@ -62,6 +62,7 @@ interface PublishProgressRow {
 export default function handlePublishProgress({
   dbAdapter,
   matrixClient,
+  serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
@@ -116,6 +117,7 @@ export default function handlePublishProgress({
           ownerUserId,
           matrixClient.serverName,
           sourceRealmURL,
+          new URL(serverURL),
         )
       ) {
         await sendResponseForForbiddenRequest(
