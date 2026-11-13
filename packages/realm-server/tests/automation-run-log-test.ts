@@ -21,7 +21,10 @@ import {
   scriptRunLogLines,
 } from '@cardstack/runtime-common/automation-run-log';
 import { callApiLogLine } from '@cardstack/runtime-common/automation-run-limits';
-import { RUN_COMMIT_PATH } from '@cardstack/runtime-common/run-overlay';
+import {
+  RUN_COMMIT_PATH,
+  stageRunOverlayFile,
+} from '@cardstack/runtime-common/run-overlay';
 import { REDACTED } from '@cardstack/runtime-common/redact-secrets';
 import {
   automationFixture,
@@ -585,16 +588,18 @@ module(basename(import.meta.filename), function (hooks) {
       'and adds no second commit line',
     );
 
-    // The realm holds notes.txt as a file, so a file under it clashes.
+    // The realm holds notes.txt as a file, so a file under it clashes. The
+    // stage route refuses that path itself, so the file goes straight into
+    // the overlay, where the commit's own check finds it.
     let refused = await runOf();
-    let clashing = (await realm.handle(
-      new Request(`${realmURL.href}notes.txt/inner.txt`, {
-        method: 'POST',
-        headers: { Accept: SOURCE, Authorization: `Bearer ${refused.token}` },
-        body: 'inner',
-      }),
-    ))!;
-    assert.strictEqual(clashing.status, 204);
+    let overlaid = await stageRunOverlayFile(
+      dbAdapter,
+      { runId: refused.run.id, attempt: refused.run.attempt! },
+      'notes.txt/inner.txt',
+      new TextEncoder().encode('inner'),
+      100,
+    );
+    assert.strictEqual(overlaid.kind, 'staged', JSON.stringify(overlaid));
     let answer = (await realm.handle(
       new Request(`${realmURL.href}${RUN_COMMIT_PATH.slice(1)}`, {
         method: 'POST',
