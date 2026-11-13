@@ -325,12 +325,23 @@ billed, and the run ends as an error, `hit-a-cap`. The `automations` skill
 has how the caps are counted.
 
 The run row and the ledger record the same spend twice, for different
-readers. `automation_runs.ai_credits_spent` is exact (fractional credits),
-and it is what the `aiCredits` cap reads. The ledger rows round each call to
-whole credits, as every AI charge does, so a call that cost less than half a
-credit writes no row. An upstream error with no cost writes neither. Each
-call is its own `ai` charge, with no identity, so a run's AI requests are
-`charge_kind = 'ai' AND run_id = '<run id>'`, one charge per request.
+readers, and the two can differ. `automation_runs.ai_credits_spent` is
+exact (fractional credits), and it is what the `aiCredits` cap reads. The
+ledger is what the person pays:
+
+- It rounds each call to whole credits, as every AI charge does, so a call
+  that cost less than half a credit writes no row.
+- A request whose cost can't be learned (no inline `usage.cost`, and the
+  generation lookup fails) spends its whole reservation on the run row and
+  writes no ledger row.
+- A charge draws only what the person's credit buckets hold, so a call that
+  costs more than the balance left writes less than its cost.
+- An upstream error with no cost writes neither.
+
+So a run's ledger total can read below its `ai_credits_spent`, never above
+it beyond rounding. Each call is its own `ai` charge, with no identity, so a
+run's AI requests are `charge_kind = 'ai' AND run_id = '<run id>'`, one
+charge per request.
 
 ```sql
 -- A run's AI requests: how many were billed, and what they cost.
