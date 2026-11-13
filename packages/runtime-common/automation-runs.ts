@@ -163,6 +163,37 @@ export async function getAutomationRun(
   return row ? runFromRow(row) : undefined;
 }
 
+// Why a run-token call was refused by the run's row: there is no such run,
+// it isn't running (it finished, was canceled or hasn't started), or another
+// attempt owns it.
+export type AutomationRunCallRefusal = 'missing' | 'not-running' | 'superseded';
+
+// The run a run-token call belongs to, when the row lets the call through:
+// the run is running and `attempt`, the attempt the token was minted for,
+// still owns it. A cancel, a pause that cancels the run, a finish or a
+// takeover by a newer attempt refuses every later call. The row is read on
+// every call, so a change made by any process takes effect at the next one.
+export async function automationRunForCall(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+): Promise<
+  | { ok: true; run: AutomationRun }
+  | { ok: false; reason: AutomationRunCallRefusal; run?: AutomationRun }
+> {
+  let run = await getAutomationRun(dbAdapter, id);
+  if (!run) {
+    return { ok: false, reason: 'missing' };
+  }
+  if (run.state !== 'running') {
+    return { ok: false, reason: 'not-running', run };
+  }
+  if (run.attempt !== attempt) {
+    return { ok: false, reason: 'superseded', run };
+  }
+  return { ok: true, run };
+}
+
 // Makes `attempt` the owner of a pending or running run, and says what it must
 // do next. A running run is taken over by an attempt at least as new as its
 // owner: the attempt that owned it is refused from then on. `started_at` keeps
@@ -172,15 +203,32 @@ export async function startAutomationRunAttempt(
   id: string,
   attempt: number,
 ): Promise<AutomationRunAttemptStart> {
-  let [row] = await query(dbAdapter, [
-    "UPDATE automation_runs SET state = 'running', attempt =",
-    param(attempt),
-    ', started_at = COALESCE(started_at, now()) WHERE id =',
-    param(id),
-    "AND state IN ('pending', 'running') AND (attempt IS NULL OR attempt <=",
-    param(attempt),
-    ') RETURNING *',
-  ]);
+  // The same transaction drops what any other attempt staged, so the attempt
+  // that owns the run starts from an empty overlay. The drop is its own
+  // statement, which sees a file a replaced attempt staged while it held the
+  // run's row, since the takeover waited on that lock. A run whose commit was
+  // already claimed keeps its files: the claiming attempt may still be
+  // reading them to send its batch.
+  let row = await dbAdapter.withTransaction(async (txQuery) => {
+    let [started] = await txQuery([
+      "UPDATE automation_runs SET state = 'running', attempt =",
+      param(attempt),
+      ', started_at = COALESCE(started_at, now()) WHERE id =',
+      param(id),
+      "AND state IN ('pending', 'running') AND (attempt IS NULL OR attempt <=",
+      param(attempt),
+      ') RETURNING *',
+    ]);
+    if (started && started.commit_started_at == null) {
+      await txQuery([
+        'DELETE FROM run_overlay_files WHERE run_id =',
+        param(id),
+        'AND attempt <>',
+        param(attempt),
+      ]);
+    }
+    return started;
+  });
   if (!row) {
     let run = await getAutomationRun(dbAdapter, id);
     if (!run) {
@@ -276,6 +324,7 @@ export async function finishAutomationRun(
       attempt,
       ["state = 'complete', finished_at = now()"],
       ['AND (commit_started_at IS NULL OR committed_at IS NOT NULL)'],
+      { ends: true },
     );
   }
   return await updateOwned(
@@ -289,6 +338,7 @@ export async function finishAutomationRun(
       param(outcome.message ?? null),
     ],
     ['AND committed_at IS NULL'],
+    { ends: true },
   );
 }
 
@@ -301,7 +351,7 @@ export async function abandonAutomationRun(
   id: string,
   reason: string,
 ): Promise<AutomationRun | undefined> {
-  let [row] = await query(dbAdapter, [
+  let row = await endRun(dbAdapter, [
     'UPDATE automation_runs SET finished_at = now(),',
     "state = CASE WHEN committed_at IS NOT NULL THEN 'complete' ELSE 'error' END,",
     'error_reason = CASE WHEN committed_at IS NOT NULL THEN NULL ELSE',
@@ -320,7 +370,7 @@ export async function cancelAutomationRun(
   id: string,
   canceledBy: string,
 ): Promise<AutomationRun | undefined> {
-  let [row] = await query(dbAdapter, [
+  let row = await endRun(dbAdapter, [
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
     param(canceledBy),
     'WHERE id =',
@@ -385,6 +435,82 @@ export async function addAutomationRunCounts(
   ]);
 }
 
+// The counts a run's caps bound one call at a time: each `callApi` and each
+// `resolve` is one call against its cap.
+export type AutomationRunCallCounter = 'callApiCalls' | 'resolveCalls';
+
+// What came of counting one call against a run's cap:
+//
+// - `counted`: the call is within the cap and is counted. Make it.
+// - `over-cap`: the run has made as many of these calls as its cap allows.
+//   Refuse the call.
+// - `not-running`: the run is pending, finished or canceled, or another
+//   attempt owns it.
+// - `missing`: there is no such run.
+export type AutomationRunCallCount =
+  | { kind: 'counted'; run: AutomationRun }
+  | { kind: 'over-cap' | 'not-running'; run: AutomationRun }
+  | { kind: 'missing' };
+
+// Counts one call against a running run's cap on `counter`, for the attempt
+// that owns it. The check and the count are one statement, so two calls
+// racing for a run's last call can't both make it.
+export async function countAutomationRunCall(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+  counter: AutomationRunCallCounter,
+  cap: number,
+): Promise<AutomationRunCallCount> {
+  if (!Number.isSafeInteger(cap) || cap < 0) {
+    throw new Error(
+      `a run's ${counter} cap must be a whole number, not ${cap}`,
+    );
+  }
+  let column = COUNT_COLUMNS[counter];
+  let run = await updateOwned(
+    dbAdapter,
+    id,
+    attempt,
+    [`${column} = ${column} + 1`],
+    [`AND ${column} + 1 <=`, param(cap)],
+  );
+  if (run) {
+    return { kind: 'counted', run };
+  }
+  let current = await getAutomationRun(dbAdapter, id);
+  if (!current) {
+    return { kind: 'missing' };
+  }
+  return {
+    kind:
+      current.state === 'running' && current.attempt === attempt
+        ? 'over-cap'
+        : 'not-running',
+    run: current,
+  };
+}
+
+// The error reason of a run that a call past one of its caps ended.
+export const HIT_A_CAP_REASON = 'hit-a-cap';
+
+// Ends a run that a call past one of its caps stopped: an error with reason
+// `hit-a-cap`, whose message names the cap. Owner only, like any finish; a
+// run that already finished, or that another attempt took over, is left as
+// it is.
+export async function endAutomationRunAtCap(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+  cap: string,
+): Promise<AutomationRun | undefined> {
+  return await finishAutomationRun(dbAdapter, id, attempt, {
+    state: 'error',
+    reason: HIT_A_CAP_REASON,
+    message: `The run hit its ${cap} cap`,
+  });
+}
+
 // What came of asking to reserve credits for one of a run's AI requests:
 //
 // - `reserved`: the credits count against the run's AI spending cap.
@@ -405,11 +531,16 @@ export type AutomationRunAIReservation =
 // credits can't both get them. Each reservation is held on the row under its
 // own id (`ai_reservations`) and counts against the cap until
 // `settleAutomationRunAICredits` replaces it with what the request cost.
+//
+// With `attempt`, only that attempt may reserve: a request admitted for an
+// attempt a retry has since taken the run over from is refused as
+// `not-running`.
 export async function reserveAutomationRunAICredits(
   dbAdapter: DBAdapter,
   id: string,
   credits: number,
   cap: number,
+  { attempt }: { attempt?: number } = {},
 ): Promise<AutomationRunAIReservation> {
   assertCredits('reserve', credits);
   assertCredits('cap a run at', cap);
@@ -424,6 +555,7 @@ export async function reserveAutomationRunAICredits(
     'AS numeric)) WHERE id =',
     param(id),
     "AND state = 'running'",
+    ...(attempt !== undefined ? ['AND attempt =', param(attempt)] : []),
     'AND ai_credits_spent + ai_credits_reserved +',
     param(credits),
     '<=',
@@ -437,7 +569,10 @@ export async function reserveAutomationRunAICredits(
   if (!run) {
     return { kind: 'missing' };
   }
-  return { kind: run.state === 'running' ? 'over-cap' : 'not-running', run };
+  let owned =
+    run.state === 'running' &&
+    (attempt === undefined || run.attempt === attempt);
+  return { kind: owned ? 'over-cap' : 'not-running', run };
 }
 
 // Settles the AI request that holds `reservationId`: releases its
@@ -489,15 +624,18 @@ function assertCredits(action: string, credits: number) {
 }
 
 // Changes a running run that `attempt` owns, and returns it, or returns
-// undefined when the run isn't running or `attempt` doesn't own it.
+// undefined when the run isn't running or `attempt` doesn't own it. With
+// `ends`, the change ends the run, and the same statement discards its
+// overlay.
 async function updateOwned(
   dbAdapter: DBAdapter,
   id: string,
   attempt: number,
   set: Expression,
   where: Expression = [],
+  { ends = false }: { ends?: boolean } = {},
 ): Promise<AutomationRun | undefined> {
-  let [row] = await query(dbAdapter, [
+  let update: Expression = [
     'UPDATE automation_runs SET',
     ...set,
     'WHERE id =',
@@ -506,8 +644,33 @@ async function updateOwned(
     param(attempt),
     ...where,
     'RETURNING *',
-  ]);
+  ];
+  let row = ends
+    ? await endRun(dbAdapter, update)
+    : (await query(dbAdapter, update))[0];
   return row ? runFromRow(row) : undefined;
+}
+
+// Runs an `UPDATE … RETURNING *` that ends a run, and in the same transaction
+// discards the overlay of the run it ended (`run-overlay.ts`), so a run never
+// ends with staged files left behind. The discard is its own statement after
+// the update: a file staged while the update waited on the run's row lock has
+// committed by then, and a later stage waits on the lock and then finds the
+// run no longer running.
+async function endRun(
+  dbAdapter: DBAdapter,
+  update: Expression,
+): Promise<Record<string, PgPrimitive> | undefined> {
+  return await dbAdapter.withTransaction(async (txQuery) => {
+    let [row] = await txQuery(update);
+    if (row) {
+      await txQuery([
+        'DELETE FROM run_overlay_files WHERE run_id =',
+        param(String(row.id)),
+      ]);
+    }
+    return row;
+  });
 }
 
 function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {

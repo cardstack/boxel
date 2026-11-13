@@ -360,6 +360,11 @@ export class Worker {
           `daily-credit-grant`,
           Tasks['dailyCreditGrant'](taskArgs),
         ),
+      'automation-storage-charge': () =>
+        this.#queue.register(
+          `automation-storage-charge`,
+          Tasks['automationStorageCharge'](taskArgs),
+        ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
       capture: () =>

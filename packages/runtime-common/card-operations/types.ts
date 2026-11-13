@@ -1699,6 +1699,11 @@ export type OperationErrorCode =
   // it is planned and run on the search engine, so reaching the operation core
   // with one means the caller used the wrong entry point.
   | 'wrong-entry-point'
+  // An automation run's batch carries a write. A run's writes are staged in
+  // its overlay and committed together, and a batch writes the realm
+  // directly, so the run writes through the card+source write instead.
+  // Carries a 403. Nothing was written.
+  | 'run-write-not-staged'
   // Two entries of one parallel group stage a change to the same file. The
   // members of a parallel group are evaluated against the state the group
   // started from, so neither of the two composes over the other and only one
@@ -1771,6 +1776,15 @@ export type OperationErrorCode =
   // The vendor's response was larger than the realm server carries for a
   // `callApi`.
   | 'response-too-large'
+  // An automation run's `callApi` for an operation its automation doesn't
+  // declare, or whose declaration can't be read. Nothing was sent.
+  | 'operation-not-declared'
+  // An automation run's call past one of the run's caps, named in `meta.cap`.
+  // The run has ended as an error, reason `hit-a-cap`.
+  | 'run-cap-reached'
+  // An automation run's call made once the run had stopped running, or after
+  // another attempt took it over.
+  | 'run-not-running'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.

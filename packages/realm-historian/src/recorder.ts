@@ -62,6 +62,19 @@
 // so a stall cleared by hand takes effect when a task next starts or takes
 // over the realm's shard, and reads the realm's events again from its
 // cursor. A lost lease or a failed query ends the task through `onFatal`.
+//
+// Background work on the realm, such as a reconcile pass or maintenance,
+// runs in the same queue as the events (`runBackground`), so it never runs
+// between a commit and its cursor update, and never while the realm has
+// events in hand: a job asked for while the realm has events captured, being
+// handled or queued is skipped at once, and one that reaches the front of
+// the queue with events queued behind it is skipped then, so a job neither
+// waits out a backlog nor holds up a realm that has woken. A job holds no
+// I/O permit: the task limits background work with its own concurrency, so
+// a long job doesn't take a permit recording needs. Its signal fires when the
+// recorder stops, and when the realm's events fill the queue behind it,
+// since a full queue holds up every realm the task records; either way the
+// job counts as not having run.
 
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
@@ -159,7 +172,35 @@ export interface ManagedRecorder extends RealmRecorder {
   // Finishes the step in progress, then stops. Events not yet committed are
   // left to the next recorder, which reads them again from the cursor.
   stop?(): Promise<void>;
+  // Runs `job` in the recorder's queue, once nothing is captured. Resolves
+  // with how it ended, or rejects with the error the job threw.
+  runBackground?(job: BackgroundJob): Promise<BackgroundOutcome>;
 }
+
+// What a background job is given: the realm's repo, the HEAD the recorder
+// holds, and a signal that fires when the recorder stops, so a job that runs
+// a long child process can end it.
+export interface BackgroundContext {
+  gitDir: string;
+  head: string | undefined;
+  signal: AbortSignal;
+}
+
+export interface BackgroundJob {
+  // Names the job in logs.
+  kind: string;
+  // Whether a failure stalls the realm, as a failed commit does. Otherwise
+  // only the job fails, and the realm records on. A lost lease or a failed
+  // query (`LeaseLostError`, `RecorderFatalError`) ends the task either way.
+  stallOnFailure?: boolean;
+  run(context: BackgroundContext): Promise<void>;
+}
+
+// How a background job ended, when it didn't throw: it ran; it was skipped,
+// because the realm had events in hand, or cut short because its queue
+// filled, and is for a later turn; or the recorder couldn't run it, or
+// stopped it, because it had stalled or stopped.
+export type BackgroundOutcome = 'ran' | 'skipped' | 'unavailable';
 
 export interface RecorderOptions {
   db: DBAdapter;
@@ -177,6 +218,10 @@ export interface RecorderOptions {
   maxQueuedEvents?: number;
   // Called as capture makes progress, for the task's health check.
   beat?: () => void;
+  // Called whenever HEAD moves: with 1 for each revision this recorder
+  // commits, and with the number of revisions another writer committed when
+  // the HEAD check finds HEAD has moved.
+  onCommits?: (count: number) => void;
   testHooks?: { before?(step: RecorderStep): Promise<void> };
 }
 
@@ -185,6 +230,15 @@ export class RecorderFatalError extends Error {
   constructor(message: string, options?: { cause: unknown }) {
     super(message, options);
     this.name = 'RecorderFatalError';
+  }
+}
+
+// Why a background job's signal fired when its realm's queue filled: the
+// realm's events need the queue back.
+class BackgroundPreemptedError extends Error {
+  constructor(realmURL: string) {
+    super(`the events of ${realmURL} need the recorder back`);
+    this.name = 'BackgroundPreemptedError';
   }
 }
 
@@ -245,9 +299,17 @@ interface Supersession {
   lastSeq: number | undefined;
 }
 
+interface BackgroundWork {
+  kind: 'background';
+  job: BackgroundJob;
+  resolve: (outcome: BackgroundOutcome) => void;
+  reject: (error: unknown) => void;
+}
+
 type Work =
   | { kind: 'event'; event: ChangeEvent }
-  | { kind: 'tick'; at: number };
+  | { kind: 'tick'; at: number }
+  | BackgroundWork;
 
 type CommitOutcome = 'committed' | 'waiting' | 'regrouped';
 
@@ -263,7 +325,13 @@ export class Recorder implements ManagedRecorder {
   #queue: Work[] = [];
   #spaceWaiters: (() => void)[] = [];
   #draining: Promise<void> | undefined;
-  #lastActiveAt: number;
+  // When the recorder last handled an event: background work doesn't count,
+  // so a recorder started only for a job is dropped once the job is done.
+  #lastActiveAt = -Infinity;
+  // Aborts the background job in progress.
+  #backgroundAbort: AbortController | undefined;
+  // Set while an event is handled, before its capture is in `#captured`.
+  #handlingEvent = false;
 
   #loaded = false;
   // The last event recorded, as Postgres holds it.
@@ -293,7 +361,6 @@ export class Recorder implements ManagedRecorder {
     this.#maxQueued = options.maxQueuedEvents ?? DEFAULT_MAX_QUEUED_EVENTS;
     this.#gitDir = repoPath(options.historyRoot, options.realm.id);
     this.#store = new ObjectStore(this.#gitDir);
-    this.#lastActiveAt = Date.now();
   }
 
   get state(): 'running' | 'stalled' | 'stopped' {
@@ -302,6 +369,12 @@ export class Recorder implements ManagedRecorder {
 
   async record(event: ChangeEvent): Promise<void> {
     while (this.#state === 'running' && this.#queue.length >= this.#maxQueued) {
+      // A background job in progress holds the queue until it ends, and a
+      // full queue holds up the consumer and every other realm with it, so
+      // the job is asked to give way.
+      this.#backgroundAbort?.abort(
+        new BackgroundPreemptedError(this.#options.realm.url),
+      );
       await new Promise<void>((resolve) => this.#spaceWaiters.push(resolve));
     }
     if (this.#state !== 'running') {
@@ -359,7 +432,24 @@ export class Recorder implements ManagedRecorder {
       this.#state = 'stopped';
     }
     this.#discard();
+    this.#backgroundAbort?.abort();
     await this.settled();
+  }
+
+  runBackground(job: BackgroundJob): Promise<BackgroundOutcome> {
+    if (this.#state !== 'running') {
+      return Promise.resolve('unavailable');
+    }
+    // A job queued behind the realm's events would be skipped once they are
+    // handled, so it is skipped now, rather than hold its place in the
+    // task's background work while it waits for them.
+    if (this.#hasEventsInHand()) {
+      return Promise.resolve('skipped');
+    }
+    return new Promise((resolve, reject) => {
+      this.#queue.push({ kind: 'background', job, resolve, reject });
+      this.#kick();
+    });
   }
 
   #kick(): void {
@@ -376,6 +466,10 @@ export class Recorder implements ManagedRecorder {
 
   async #drain(): Promise<void> {
     while (this.#queue.length > 0 && this.#state === 'running') {
+      if (this.#queue[0].kind === 'background') {
+        await this.#runBackgroundWork();
+        continue;
+      }
       let release = await this.#options.io.acquire();
       try {
         // Loaded before the work leaves the queue, so a load that fails and
@@ -391,8 +485,13 @@ export class Recorder implements ManagedRecorder {
         }
         if (work.kind === 'event') {
           this.#lastActiveAt = Date.now();
-          await this.#handleEvent(work.event);
-        } else {
+          this.#handlingEvent = true;
+          try {
+            await this.#handleEvent(work.event);
+          } finally {
+            this.#handlingEvent = false;
+          }
+        } else if (work.kind === 'tick') {
           await this.#handleTick(work.at);
         }
       } catch (error) {
@@ -409,9 +508,77 @@ export class Recorder implements ManagedRecorder {
     }
   }
 
+  // Runs the background job at the front of the queue. The realm's state is
+  // loaded first, under an I/O permit like any other step, so the job is
+  // given the HEAD the recorder holds; the job itself holds no permit.
+  async #runBackgroundWork(): Promise<void> {
+    if (!this.#loaded) {
+      let release = await this.#options.io.acquire();
+      try {
+        await this.#ensureLoaded();
+      } catch (error) {
+        await this.#recover(error);
+      } finally {
+        release();
+      }
+      if (this.#state !== 'running') {
+        // The load stalled or stopped the recorder, which settled the job.
+        return;
+      }
+    }
+    let work = this.#queue.shift() as BackgroundWork;
+    this.#wakeSpaceWaiters();
+    if (this.#hasEventsInHand()) {
+      work.resolve('skipped');
+      return;
+    }
+    let abort = new AbortController();
+    this.#backgroundAbort = abort;
+    try {
+      await work.job.run({
+        gitDir: this.#gitDir,
+        head: this.#head,
+        signal: abort.signal,
+      });
+      work.resolve(abortedOutcome(abort.signal) ?? 'ran');
+    } catch (error) {
+      // A failure that ends the task, or that stalls the realm, takes effect
+      // before the job's caller hears of it. A job that ends however it
+      // likes once its signal fires has only been cut short.
+      let fatal =
+        error instanceof LeaseLostError || error instanceof RecorderFatalError;
+      let aborted = fatal ? undefined : abortedOutcome(abort.signal);
+      if (aborted) {
+        work.resolve(aborted);
+        return;
+      }
+      if (fatal || work.job.stallOnFailure) {
+        await this.#failed(error);
+      }
+      work.reject(error);
+    } finally {
+      this.#backgroundAbort = undefined;
+    }
+  }
+
+  // Whether the realm has events captured and not yet committed, being
+  // handled, or queued.
+  #hasEventsInHand(): boolean {
+    return (
+      this.#handlingEvent ||
+      this.#captured.length > 0 ||
+      this.#queue.some((work) => work.kind === 'event')
+    );
+  }
+
   // Drops everything not yet committed. A later recorder reads it again from
-  // the cursor.
+  // the cursor. Background jobs still queued end as `unavailable`.
   #discard(): void {
+    for (let work of this.#queue) {
+      if (work.kind === 'background') {
+        work.resolve('unavailable');
+      }
+    }
     this.#queue = [];
     this.#captured = [];
     this.#closed = [];
@@ -912,6 +1079,7 @@ export class Recorder implements ManagedRecorder {
       // HEAD names the commit whether or not the cursor moved with it.
       this.#head = commit;
       this.#tree = tree;
+      this.#options.onCommits?.(1);
     }
     this.#settleSuperseded(finals.keys());
     for (let path of supersededPaths) {
@@ -1058,6 +1226,7 @@ export class Recorder implements ManagedRecorder {
     } finally {
       this.#head = commit;
       this.#tree = tree;
+      this.#options.onCommits?.(1);
     }
     this.#settleSuperseded(net.map(({ path }) => path));
     log.info(
@@ -1155,6 +1324,7 @@ export class Recorder implements ManagedRecorder {
     );
     this.#head = actual;
     this.#tree = tree;
+    this.#options.onCommits?.(revisions.length);
     await this.#learnSuperseded(revisions);
     return true;
   }
@@ -1310,6 +1480,18 @@ export class Recorder implements ManagedRecorder {
       (captured) => !covered.has(captured),
     );
   }
+}
+
+// How a background job whose signal fired ended: cut short for the realm's
+// events, so it is tried again soon, or by the recorder stopping. Either way
+// it may not have done its work. Undefined when the signal didn't fire.
+function abortedOutcome(signal: AbortSignal): BackgroundOutcome | undefined {
+  if (!signal.aborted) {
+    return undefined;
+  }
+  return signal.reason instanceof BackgroundPreemptedError
+    ? 'skipped'
+    : 'unavailable';
 }
 
 function positionOf(event: ChangeEvent): ReadPosition {

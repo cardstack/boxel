@@ -711,8 +711,45 @@ export async function deleteRoom(page: Page, roomId: string) {
 
 export async function openRoom(page: Page, roomId: string) {
   await page.locator(`[data-test-past-sessions-button]`).click(); // toggle past sessions on
-  await page.locator(`[data-test-enter-room="${roomId}"]`).click();
+  try {
+    // Shorter than the test's own timeout, so the state below is printed
+    // before the test is stopped.
+    await page
+      .locator(`[data-test-enter-room="${roomId}"]`)
+      .click({ timeout: 30_000 });
+  } catch (error) {
+    console.log(
+      `[openRoom] could not enter room ${roomId}: ${JSON.stringify(
+        await pastSessionsState(page),
+      )}`,
+    );
+    throw error;
+  }
   await isInRoom(page, roomId);
+}
+
+// What the AI assistant panel shows, for a failure message: whether the
+// past-sessions list is open, whether the panel is still loading its rooms,
+// which room it shows, and which rooms the list offers.
+async function pastSessionsState(page: Page) {
+  return await page.evaluate(() => {
+    let button = document.querySelector('[data-test-past-sessions-button]');
+    return {
+      pastSessionsExpanded: button?.getAttribute('aria-expanded') ?? null,
+      roomsLoading: button?.hasAttribute('data-test-rooms-loading') ?? null,
+      pastSessionsListShown: Boolean(
+        document.querySelector('[data-test-past-sessions]'),
+      ),
+      currentRoom:
+        document
+          .querySelector('[data-test-room]')
+          ?.getAttribute('data-test-room') ?? null,
+      roomSettled: Boolean(document.querySelector('[data-test-room-settled]')),
+      listedRooms: [...document.querySelectorAll('[data-test-enter-room]')].map(
+        (el) => el.getAttribute('data-test-enter-room'),
+      ),
+    };
+  });
 }
 
 export async function openRenameMenu(page: Page, roomId: string) {

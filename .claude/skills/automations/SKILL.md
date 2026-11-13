@@ -29,7 +29,14 @@ description: >-
   `packages/runtime-common/automation-runs.ts`, writing the run-command task or
   the `Realm.handleAutomation` checks that read the run row, adding a column to
   `automation_runs`, or diagnosing a run that is stuck, errored with
-  `commit-interrupted`, or committed twice. Also covers how an automation run
+  `commit-interrupted`, or committed twice. Also covers the run token a run's
+  calls carry (`run-token.ts`, `mintRunToken`, `verifyRunToken`), how
+  `Realm.handleAutomation` admits a call against the run row, and how to trace
+  a refused run-token call or a run's `key_uses`. Also covers the run
+  overlay (`run-overlay.ts`, `run_overlay_files`): how a run's writes are
+  staged, how its reads and listings read through them, the `writes` cap, and
+  how to inspect a run's staged files; and the commit (`/_run-commit`), its
+  checks and its failure modes. Also covers how an automation run
   reaches a worker — the automation priority tier (`automationInitiatedPriority
   = 5` in runtime-common's queue.ts), the automation worker lane
   (`--automationCount` on the worker manager, `WORKER_AUTOMATION_PRIORITY_COUNT`
@@ -404,13 +411,195 @@ SELECT state, attempt, error_reason, error_message, canceled_by,
 The row holds run state only. A run's log (its console lines and platform
 calls) doesn't go on it.
 
+### The run token
+
+Every call a run makes carries the run's token (ADR 026 §1.2), minted per
+attempt by `mintRunToken` (`packages/realm-server/lib/run-token.ts`) once the
+attempt has started the run. It names the run (`run.id`) and the attempt
+(`run.attempt`), acts as the run's `acts_as` (`user`), and expires at the run's
+time limit. It carries the automation's `writes` cap (`run.writesCap`),
+which bounds the files the run stages. It admits read and write in the
+automation's realm (`realm`) and
+read in `run.readRealms`, the base and catalog realms its cards' modules load
+from. It carries no permissions; every call is checked as `acts_as`. It is
+signed under `runTokenSecret(seed)`, so no ordinary session verifier accepts it
+(the `realm-auth` skill).
+
+A realm hands any request carrying a run token to `Realm.handleAutomation`,
+which refuses it unless:
+
+- the token verifies and hasn't expired (`Token expired` once the time limit
+  passes);
+- this realm is the token's `realm`, or one of `run.readRealms` for a read
+  (a write there is 403);
+- `acts_as`'s sessions weren't revoked after the token was minted;
+- `automationRunForCall` finds the run `running`, owned by the token's attempt,
+  in the token's realm and acting as the token's user. A cancel, a pause that
+  cancels the run, its finish, or a newer attempt taking it over refuses the
+  next call with `The automation run is not running`.
+
+An admitted call takes the ACL check as `acts_as` and sets
+`requestContext.automationRun` (`{ runId, attempt, automationId, actsAs,
+readOnly }`). A `callApi` in it is an automation call: a binding approved for
+automations fills it, and its `key_uses` row carries `mode = 'automation'` and
+the run's id in `run_id`. `handleAutomation` refuses a request without a run
+token, so only a run token reaches automation mode.
+
+A realm-server route that serves run tokens verifies one with
+`verifyRunToken(token, seed)`, which answers `{ runId, attempt, actsAs, realm,
+readRealms, writesCap, iat, exp }` or nothing, and then checks the run's row with
+`automationRunForCall` itself.
+
+Tracing a run-token call: every refusal logs on the realm's log as
+`run-token call <method> <url> refused: <why>`, naming the run and attempt.
+To see what a run's calls did with keys:
+
+```sql
+SELECT created_at, operation, outcome, code, status, host, count
+  FROM key_uses WHERE run_id = '<run id>' ORDER BY created_at;
+```
+
+To read a token you have in hand, decode its payload (the middle segment,
+base64url) without verifying it: `run.id` and `run.attempt` name the row to
+check, and `exp` is when the run's time limit passes.
+
+### The run overlay
+
+A run's card+source writes, and their octet-stream spelling, don't reach the
+realm while it runs (ADR 027 §1.2). They are the only writes a run makes: a
+run-token write (any `PUT`, `PATCH`, `POST` or `DELETE`) to a route without
+`takesRunWrites` is refused with 403 before the route runs, and logged as
+`run-token call <method> <url> refused: … wrote through a route that doesn't
+stage its writes`. So `fs.delete`, `cards.update`, `operations.*`, `_atomic`
+and the card+json writes are refused for a run until they stage (see
+`docs/adr/remediation/027.md`). Each one is staged in the run's **overlay**, `run_overlay_files` in Postgres, one row per
+file keyed by run, attempt and realm-local path, with the bytes inline. The
+functions are in `packages/runtime-common/run-overlay.ts`. Every realm-server
+instance reads the same overlay, so a run's calls can land on any of them.
+
+What goes through it, for a run-token call in the run's own realm
+(`requestContext.automationRun`, not `readOnly`):
+
+- **Writes** (`realm.fs.writeText`, `writeBytes`, and the writes behind
+  `replace` and `copy`): a card+source `POST`, or its octet-stream spelling,
+  is staged with `stageRunOverlayFile` instead of written. Any file may be
+  staged, card instance or not. The realm's size limit for the file's kind
+  applies (the card limit for a card document, the file limit otherwise,
+  checked before the body is buffered), as do the realm's reserved paths. A
+  run may not stage `realm.json`, a module (`.gts`, `.ts`, `.gjs`, `.js`), the
+  realm's policy card, a RealmPolicy card or an automation card, whether the
+  realm holds one at the path or the run's bytes would make one (403). Modules
+  are refused because the module a card's class comes from decides whether
+  it's a RealmPolicy or an automation, and the type check reads modules from
+  the index, which never sees a staged one. A path can't be staged as both a file and
+  a directory (409). The token's `run.writesCap` bounds how many files the
+  attempt stages (403 `Writes cap reached`), and `RUN_OVERLAY_MAX_BYTES`
+  (100 MiB) bounds their bytes together (413). Rewriting a staged
+  path replaces it and doesn't count again. The run's row is locked for the
+  check, so racing writes can't pass the cap, and a write after the run
+  stopped running is refused.
+- **Reads** (`realm.fs.readText`, `exists`): a card+source `GET` or `HEAD` of a
+  path the attempt staged answers with the staged bytes; any other path reads
+  the realm as usual.
+- **Listings** (`realm.fs.list`): a directory listing adds the files the
+  attempt staged under it, and the directories they make, beside the realm's
+  own entries. A directory only staged files make is listed for the run.
+
+No other caller sees a staged file. Staged files aren't indexed.
+
+An overlay is per attempt. `startAutomationRunAttempt` drops what any other
+attempt staged, in the transaction that makes the new attempt the owner, so a
+retry starts from an empty overlay and a replaced attempt's writes never
+reach its commit. A run whose commit was already claimed keeps its files,
+since the claiming attempt may still be sending them. Every way a run ends
+(`finishAutomationRun`, `cancelAutomationRun`, `abandonAutomationRun`)
+discards its overlay in the transaction that ends it, as a statement of its
+own after the update, so it also catches a file staged while the end waited
+on the run's row lock. Deleting a run row deletes its overlay
+(`ON DELETE CASCADE`).
+
+The bound on a run's overlay is `writesCap` files, each within the realm's
+limit for its kind, and `RUN_OVERLAY_MAX_BYTES` together. Binary content is
+stored inline rather than as a reference, since the overlay lives only as
+long as its run and stays within that byte bound. A row holds a file's bytes
+and nothing else, so the overlay can't record a delete. A run's deletes are
+refused rather than staged.
+
+Inspecting what a run has staged:
+
+```sql
+SELECT attempt, path, size, updated_at
+  FROM run_overlay_files WHERE run_id = '<run id>' ORDER BY attempt, path;
+```
+
+A finished run has no rows. Rows from more than one attempt would mean a
+start that didn't drop its predecessors' files. To read a staged file's text:
+`SELECT convert_from(content, 'UTF8') FROM run_overlay_files WHERE run_id = …
+AND path = …`.
+
+### Committing the overlay
+
+When the script finishes, the run commits its overlay with a `POST` to the
+realm's `/_run-commit` (`RUN_COMMIT_PATH` in `run-overlay.ts`), carrying the
+run's token and no body (ADR 027 §1.4). `Realm.commitRunOverlay` refuses
+anything but the run's own call in its own realm (403 `not-a-run`); the call
+was admitted as the run's identity under their current permissions. It reads
+the attempt's staged files and sends them as one `commitBatch` of `rawSource`
+updates, one per file. Inside the batch's write lock, before anything is
+staged, its precondition:
+
+1. re-confirms that the identity is a **direct writer** of the realm
+   (`isDirectWriter`), so a person who lost direct write but keeps a policy
+   or wildcard grant can't write through it (403 `not-a-direct-writer`);
+2. checks the files again: no more than `run.writesCap` (403 `writes-cap`);
+   none at a reserved path, `realm.json`, the policy card, a RealmPolicy card
+   or an automation card (403 `forbidden-path`); none where the realm holds a
+   directory, or under a path it holds as a file (409 `path-clash`). Paths
+   are realm-local, so every file is in the run's realm, and the batch has no
+   `callApi` entry;
+3. claims the commit with `claimRunOverlayCommit`, which locks the run row,
+   checks the run is running under this attempt and has never claimed one,
+   and checks the overlay still holds exactly the files read (409
+   `overlay-changed` when a write was staged in between). Staging refuses a
+   run whose commit is claimed.
+
+The batch then writes every file or none for any entry it refuses, under one
+index pass the commit doesn't wait for. A file whose text matches the stored
+file's is left alone and enqueues no indexing. The batch carries the run's
+`automationRun` (its run id, and the automation id from the run's row), so
+the realm records every file it creates in `automation_files` as the
+automation's, in the same transaction as its `realm_file_meta` row (after
+its bytes are on disk, so a write that fails partway still records the files
+that landed); a file the run only changes gets no row. Those rows are what the daily storage charge counts
+(see the `pricing` skill). Once it lands, the commit
+records it (`recordAutomationRunCommitted`), adds the files committed to the
+run's `writes` count (an unchanged file included), discards the overlay, and
+answers `200` with `data.attributes.files`.
+
+Failure modes, and what the caller does:
+
+| Answer                                                    | Claim                        | What happened                                                                    | Next                                                                                             |
+| --------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 403 `not-a-direct-writer`, `writes-cap`, `forbidden-path` | none                         | the identity or the overlay breaks the run's limits                              | finish the run as an error                                                                       |
+| 409 `path-clash`                                          | none                         | the realm holds a file or directory in the way                                   | finish as an error; the next run compares and catches up                                         |
+| 409 `overlay-changed`                                     | none                         | a write was staged while the commit started                                      | commit again                                                                                     |
+| a batch refusal of an entry (4xx)                         | released                     | nothing was written                                                              | finish as an error                                                                               |
+| 409 `commit-refused`                                      | earlier, unrecorded, or none | this attempt's earlier commit hasn't landed, or the run isn't under this attempt | finish as an error, or stop when another attempt owns the run                                    |
+| 401                                                       | none                         | the token's run isn't running, or the token expired                              | stop                                                                                             |
+| 5xx from a failure while writing                          | kept, unrecorded             | some files may have landed                                                       | finish as an error; a retry finds `commit-interrupted`, and the next run compares and catches up |
+| 200 again                                                 | recorded                     | the commit landed earlier (a repeat after a lost answer)                         | finish complete                                                                                  |
+
+A Preview never commits: it finishes complete, and the finish discards its
+overlay. A run with nothing staged commits an empty batch, which claims and
+records the commit and writes nothing.
+
 ### The AI spending cap
 
 A cap on `resolve` calls holds no price, since one AI request can cost a fraction of a cent or several dollars, so the card also caps what a run's AI may cost: `caps.aiCredits`, in credits (ADR 029 §1.5). It is required like every run limit; 0 forbids AI spending. The switch-on estimate counts it in full as the most one run's AI can cost (`runCostCeiling`, the `pricing` skill), and ADR 029 §1.5 has the minimum balance count it the same way.
 
 Before the server sends an AI request for a run, `admitAutomationRunAIRequest` (`packages/realm-server/lib/automation-ai-spending.ts`) prices its worst case and reserves it on the run row:
 
-- **The worst case** is `aiRequestCostCeiling(body, price)` in `packages/runtime-common/automation-ai-cost.ts`: one input token per byte of the request body (no tokenizer encodes text in fewer bytes than tokens), plus `TOOL_PROMPT_ALLOWANCE_TOKENS` (1,000) when the request has `tools` for the tool-use system prompt a provider adds outside the body, at the input price, the request's `max_completion_tokens` or `max_tokens` plus any `reasoning.max_tokens` (the model's context window when it sets none, and never more than that window) at the output price, plus the per-request price. A provider's own output limit isn't used, since OpenRouter can route to a provider with a higher one.
+- **The worst case** is `aiRequestCostCeiling(body, price)` in `packages/runtime-common/automation-ai-cost.ts`: one input token per byte of the request body (no tokenizer encodes text in fewer bytes than tokens), plus `TOOL_PROMPT_ALLOWANCE_TOKENS` (1,000) when the request has `tools` for the tool-use system prompt a provider adds outside the body, at the input price, the request's `max_completion_tokens` or `max_tokens` plus any `reasoning.max_tokens` (the model's context window when it sets none, and never more than that window) at the output price, plus the per-request price. The prices are the highest of the model's base rates and each tier in its `pricing.overrides` (synced onto its `OpenRouterModel` card) the request can reach: a prompt-length tier once the input bound passes its `minPromptTokens`, and a time-of-day tier always. A provider's own output limit isn't used, since OpenRouter can route to a provider with a higher one.
 - **What it refuses rather than prices**: a body that names another model or lists fallback `models` (`model-mismatch`); web search (`:online`, `plugins`, `web_search_options`) any non-text content part, and audio or image output (`modalities` beyond `text`, or `audio`), which bill in ways the body's bytes and the completion rate don't bound (`unpriced-input`); and a request with no output limit to a model with no listed context window (`unbounded-output`).
 - **Media goes through the author's own key.** Boxel's AI requests carry text only, and the refusal says so. An automation that sends or receives images, audio or files declares a `callApi` operation to the AI vendor with a `{{userKey}}` slot (the `call-api` skill). The vendor bills the key's owner directly, and the run's `callApiCalls` and `responseBytes` caps bound those calls in place of `aiCredits`.
 - **The price** is the model's OpenRouter listing, read from its indexed `OpenRouterModel` card with `readOpenRouterModelPrice`. The prompt and completion prices are required; a missing one, or a variable price (`-1`, as `openrouter/auto` lists), can't be read, so that model can't be priced.
@@ -426,6 +615,37 @@ SELECT state, ai_credits_spent, ai_credits_reserved, resolve_calls
 ```
 
 A finished run with `ai_credits_reserved` above 0 has an admitted request that was never settled; `ai_reservations` names it and what it holds.
+
+### Declared operations and the per-run caps
+
+The realm server holds every run-token call to the automation's declaration, which it reads from the card's live index row with `readRunDeclaration` (`packages/runtime-common/automation-run-limits.ts`), never by running the card's code. A card that isn't indexed, failed to index, or doesn't read as an automation declares nothing, so its run may call no outside service and make no AI request.
+
+- **Declared operations.** A run's `callApi` is refused (`operation-not-declared`, 403, nothing sent and nothing counted) unless the card's `operations` names that operation on the type it was resolved on. Both sides are compared as `internalKeyFor` spells them, so a prefix-form declaration matches a URL-form type. The check comes before any key is looked for.
+- **Where each count is kept.** Each is added on the run row by the realm server where it does the work, never taken from the tab:
+
+  | Cap             | Row column                | Counted                                                                   | Where                                                            |
+  | --------------- | ------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+  | `callApiCalls`  | `call_api_calls`          | one per `callApi`, just before it is sent, so a refused call never counts | `callApiOperation`, through the request's `CallApiRunMeter`      |
+  | `responseBytes` | `call_api_response_bytes` | the bytes of each response actually read                                  | `sendCallApiRequest`, where `outboundFetch` caps the response    |
+  | `resolveCalls`  | `resolve_calls`           | one per AI request the run forwards, just before it is sent               | `_request-forward`, through `admitRunForward`                    |
+  | `aiCredits`     | `ai_credits_spent`        | the reservation, then the generation's cost (_The AI spending cap_)       | `_request-forward`, through `admitRunForward`                    |
+  | `writes`        | `writes`                  | the files the run's commit writes                                         | the run overlay's commit; the cap rides the token as `writesCap` |
+  | `seconds`       | —                         | the run token's expiry                                                    | `mintRunToken`                                                   |
+
+- **A call past a cap** is refused (`run-cap-reached`, 403, `meta.cap` naming the cap) and ends the run with `endAutomationRunAtCap`: state `error`, `error_reason = 'hit-a-cap'`, and `error_message` naming the cap. The next call is refused as `The automation run is not running`. `countAutomationRunCall` checks and counts in one conditional `UPDATE`, owner attempt only, so two calls racing for a run's last call can't both make it.
+- **Response bytes** are bounded by a byte budget: what is left of `responseBytes` when the call is admitted, passed to `outboundFetch` as `responseByteBudget` beside the path's own size cap. A response the budget refuses throws `OutboundResponseTooLargeError` with `byBudget`, which ends the run. Every byte read is counted, including those read before a stream fails for any other reason. Calls in flight at once each get the same remaining budget, so with n of them the run can read up to (n − 1) times that remainder past the cap; n is bounded by the `callApiCalls` cap, since each call counts against it when it is admitted. The next call after the cap is passed is refused.
+- **The forwarding path.** A run token reaches `_request-forward` past the session check (the route lets a request carrying one through), and `admitRunForward` (`packages/realm-server/lib/run-token-forward.ts`) checks it: the token verifies, its person's sessions weren't revoked, and the run is running and owned by the token's attempt. Only an unstreamed chat completion to OpenRouter is forwarded for a run, since a `resolve` is the only request a run sends there. The model's price is read from its indexed `OpenRouterModel` card (`openRouterModelPrice` in `lib/openrouter-model-price.ts`); a model with no listed price is refused (422). The request is billed to the person the run acts as. Its reservation, held for the token's attempt, is settled once however the forward ends: 0 when nothing was sent or the upstream answered with an error and no cost, the cost the credit strategy resolved, or the whole reservation when the cost couldn't be learned.
+
+To see a run's counts against its caps:
+
+```sql
+SELECT state, error_reason, error_message,
+       call_api_calls, call_api_response_bytes, resolve_calls, writes,
+       ai_credits_spent, ai_credits_reserved
+  FROM automation_runs WHERE id = '<run id>';
+```
+
+The caps are the card's `caps`, each held to no more than the automation's caps snapshot (`readRunLimits`): a run already going when someone raises a cap on the card keeps to what the payer agreed. A refused call logs on `automation-run-limits` (`run <id>'s callApi refused: …`, `run <id> … hit its <cap> cap and ended`) or on `request-forward` (`run-token request forward to <url> refused: …`).
 
 ## The queue tier and worker lane
 

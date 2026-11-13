@@ -35,6 +35,7 @@ import {
 import {
   isKeyRoutePath,
   keepsMethodAndPathOnly,
+  withOAuthProviderSecretsLabeled,
   withCredentialHeadersMasked,
 } from '../lib/request-telemetry.ts';
 import {
@@ -244,6 +245,10 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 const MASKED_QUERY_PARAMS = ['token', 'loginToken'];
 
 function loggableRequestURL(ctxt: Koa.Context): string {
+  return withOAuthProviderSecretsLabeled(unlabeledRequestURL(ctxt));
+}
+
+function unlabeledRequestURL(ctxt: Koa.Context): string {
   let url = fullRequestURL(ctxt);
   // A key route takes nothing in its query string, so whatever a client put
   // there (a misplaced ticket or value) is left out.
