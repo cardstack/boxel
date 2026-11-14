@@ -2120,17 +2120,14 @@ module(basename(import.meta.filename), function (hooks) {
       });
     });
 
-    test('a route that does not reach the gate keeps the realm ACL’s refusal', async function (assert) {
+    test('a realm with no policy answers a verbatim write as the realm ACL refused it', async function (assert) {
+      await pointAt(null);
       let source = await request
         .post(`${path(BULLETIN_1)}.json`)
         .set('Accept', SupportedMimeType.CardSource)
         .set('Authorization', AUTH.reader())
         .send(card(adoptsFrom(BULLETIN), { body: 'Patched' }));
-      assert.strictEqual(
-        source.status,
-        403,
-        'a card+source write, though the policy grants update',
-      );
+      assert.strictEqual(source.status, 403, 'a card+source write');
       assert.strictEqual(source.text, INSUFFICIENT);
       let atomic = await request
         .post(`${path(EDUCATION)}_atomic`)

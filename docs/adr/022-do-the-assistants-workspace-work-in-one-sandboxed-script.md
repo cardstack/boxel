@@ -84,10 +84,14 @@ realm makes the permission decision. Each call method MUST have an entry in
 
 The runner MAY refuse a call before it reaches the realm, to say why before
 any work. Such a refusal MUST be one the realm would make too: a method MUST
-be in `REQUIRES_WRITE` or `REQUIRES_READ` only if every realm route it reaches
-admits a caller by the realm's own permissions alone, never by a policy grant.
-A change that lets a policy grant reach such a route MUST take the methods
-that reach it out of the table in the same change.
+be in `REQUIRES_WRITE` or `REQUIRES_READ` only if the realm admits what it
+does there by its own permissions alone, never by a policy grant. That holds
+where every realm route the method reaches admits a caller by the
+permissions alone, and where every write the method makes is one no grant
+can admit, such as a file the call creates, since a file's type carries no
+`create`. A change that lets a policy
+grant reach what a method does MUST take the method out of the table in the
+same change.
 
 ### 1.5. Confirmation
 

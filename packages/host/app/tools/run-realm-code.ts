@@ -591,18 +591,25 @@ function notNamedError(name: ClickRequiredCall) {
 // Calls that need write access to the run's workspace. A Record over every
 // method, so a new method does not type-check until it is listed here. The
 // workspace calls act on other workspaces and keep their own checks.
+//
+// The file and card writes are not listed: the realm judges each by its
+// policy, for a user its permissions don't let write, as the operation it
+// amounts to (a card's create, update or delete, or a file's update), so it
+// decides them. An image a run generates is always saved as a new file,
+// which no grant creates, so the realm refuses that save to such a user
+// too, and the run refuses it before the image spends the user's credit.
 const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'fs.readText': false,
   'fs.exists': false,
   'fs.list': false,
-  'fs.replace': true,
-  'fs.writeText': true,
-  'fs.copy': true,
-  'fs.writeBytes': true,
-  'fs.download': true,
+  'fs.replace': false,
+  'fs.writeText': false,
+  'fs.copy': false,
+  'fs.writeBytes': false,
+  'fs.download': false,
   'cards.search': false,
   'cards.get': false,
-  'cards.update': true,
+  'cards.update': false,
   // An operation is authorized by the realm's policy for the operation, not
   // by write access to the workspace, so it can run where the user can only
   // read. The realm refuses one the policy does not allow.
@@ -611,7 +618,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   // Asking runs nothing, and the realm answers a caller who can only read.
   'operations.capabilities': false,
   'entries.search': false,
-  'fs.delete': true,
+  'fs.delete': false,
   capture: false,
   'images.generate': true,
   'workspaces.create': false,
@@ -968,9 +975,9 @@ class RealmFsSession {
   // Why a call needs access the user's permissions don't give, or undefined
   // for one they cover. The realm refuses such a call anyway; this says why
   // before any work. A user who can neither read nor write runs here only
-  // where the realm's policy judges them, and a change it grants reaches the
-  // realm as an operation: the write calls send bytes or whole documents,
-  // which only the realm's own write permission admits.
+  // where the realm's policy judges them, and the calls refused here are the
+  // ones no grant reaches: the index calls, which administer the realm, and
+  // the image save, which creates a file.
   private refusalFor(method: RealmRunnerCallMethod): string | undefined {
     if (REQUIRES_WRITE[method] && !this.access.mayWrite) {
       return this.access.mayRead
