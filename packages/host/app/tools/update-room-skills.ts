@@ -8,8 +8,11 @@ import {
 import { isSkillCard } from '../lib/file-def-manager';
 
 import HostBaseTool from '../lib/host-base-tool';
-import { getSkillSourceTools, type SkillSource } from '../lib/skill-tools';
-import { loadSkillWithLayoutFallback } from '../lib/skills-layout-fallback';
+import {
+  getSkillSourceTools,
+  loadSkillSource,
+  type SkillSource,
+} from '../lib/skill-tools';
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
@@ -93,12 +96,7 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
           }
 
           try {
-            // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
-            // The uploaded file keeps the id it loaded from, so the room
-            // stores that id.
-            let source = (
-              await loadSkillWithLayoutFallback(this.store, skillId)
-            )?.source;
+            let source = await loadSkillSource(this.store, skillId);
             if (source) {
               skillSourceCache.set(skillId, source);
               if (isSkillCard in source) {
@@ -151,10 +149,7 @@ export default class UpdateRoomSkillsTool extends HostBaseTool<
               return skillSourceCache.get(skillId)!;
             }
             try {
-              // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
-              let source = (
-                await loadSkillWithLayoutFallback(this.store, skillId)
-              )?.source;
+              let source = await loadSkillSource(this.store, skillId);
               if (source) {
                 skillSourceCache.set(skillId, source);
                 return source;
