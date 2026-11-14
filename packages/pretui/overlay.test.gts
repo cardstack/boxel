@@ -24,6 +24,8 @@ class Sink {
   };
 }
 
+const noop = () => {};
+
 function q(sel: string): HTMLElement | null {
   return document.querySelector(sel);
 }
@@ -132,6 +134,16 @@ module('Pretui | React-dialect aliases — overlay', function (hooks) {
     );
     await click(drawer);
     assert.strictEqual(sink.last, false, '@onOpenChange fired');
+  });
+
+  test('Drawer wraps its content in the scrolling body', async function (assert) {
+    await render(<template>
+      <Drawer @open={{true}} @onClose={{noop}} @label='Long drawer'>
+        <:default><p data-test-line>Line</p></:default>
+      </Drawer>
+    </template>);
+    // the harness delivers no stylesheet, so the scrollbar clearance itself is checked in a real render
+    assert.dom('[data-test-pretui-drawer-body] [data-test-line]').exists();
   });
 
   test('Popover is now a hybrid: defaultOpen + onOpenChange, uncontrolled still works', async function (assert) {
