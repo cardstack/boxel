@@ -825,7 +825,7 @@ return { title: card.attributes.title, refused };`,
     );
   });
 
-  test('a Realm Runner script run by a user the realm admits only through its policy saves a card update the policy grants, and not one it refuses', async function (assert) {
+  test('a Realm Runner script run by a user the realm admits only through its policy saves a card update the policy grants', async function (assert) {
     let adapter = await setupSchool({
       enforcePermissions: true,
       policy: classroomUpdatePolicy,
@@ -841,6 +841,14 @@ return 'ok';`,
       'Renamed',
       'the update to the classroom the user teaches is saved',
     );
+  });
+
+  test('a Realm Runner script run by a user the realm admits only through its policy is refused a card update the policy does not grant', async function (assert) {
+    let adapter = await setupSchool({
+      enforcePermissions: true,
+      policy: classroomUpdatePolicy,
+    });
+    await signInToSchoolAfresh();
 
     await assert.rejects(
       runInSchool(
