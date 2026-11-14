@@ -2062,6 +2062,70 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(badBearer.status, 401, 'HTTP 401 with a bad bearer');
       });
 
+      test('remove-realm-user-permission refuses the realm-wide * and users grants', async function (assert) {
+        await insertPermissions(context.dbAdapter, testRealmURL, {
+          users: ['read'],
+        });
+        for (let sentinel of ['*', 'users']) {
+          let response = await context.request
+            .post(
+              `/_grafana-remove-realm-user-permission` +
+                `?realm=${encodeURIComponent(testRealmURL.href)}` +
+                `&user=${encodeURIComponent(sentinel)}`,
+            )
+            .set('Authorization', `Bearer ${grafanaSecret}`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(
+            response.status,
+            400,
+            `HTTP 400 for "${sentinel}"`,
+          );
+        }
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms['*'],
+          ['read', 'write'],
+          'the * row is untouched',
+        );
+        assert.deepEqual(
+          perms['users'],
+          ['read'],
+          'the users row is untouched',
+        );
+      });
+
+      // A stored event room the realm server isn't in shows that a removal
+      // retires the realm's room before answering: the room is no longer the
+      // realm's by the time the response arrives.
+      test('a removal retires the realm event room before answering', async function (assert) {
+        let user = '@op-test-remove-event-room:localhost';
+        await insertPermissions(context.dbAdapter, testRealmURL, {
+          [user]: ['read'],
+        });
+        await insertRealmEventRoom(
+          context.dbAdapter,
+          testRealmURL.href,
+          '!not-a-room:localhost',
+        );
+        let response = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let { roomId } = await fetchRealmEventRoom(
+          context.dbAdapter,
+          testRealmURL.href,
+        );
+        assert.notOk(roomId, 'the room is retired');
+      });
+
       test('grafana remove takes the realm out of the user account_data', async function (assert) {
         let localpart = `grafana-remove-${uuidv4().slice(0, 8)}`;
         let userId = `@${localpart}:localhost`;

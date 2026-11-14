@@ -493,7 +493,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator action: take a user's `read` or `read/write` access to this realm away. Pick from the users that hold a permission row on this realm (sourced from `realm_user_permissions`; the list leaves out the realm owner). POSTs to `/_grafana-remove-realm-user-permission` through the realm-server-operator datasource proxy. The removal deletes the user's permission row, takes the realm out of the user's workspace list, and refuses the user's existing realm sessions on the next request. The removal does not touch access the user holds through a `*` or `users` grant or a realm policy, and does not touch the user's Matrix account.",
+        "description": "Operator action: take a user's `read` or `read/write` access to this realm away. Pick from the users that hold a permission row on this realm (sourced from `realm_user_permissions`; the list leaves out the realm owner and the realm-wide `*` and `users` grants, which the endpoint refuses). POSTs to `/_grafana-remove-realm-user-permission` through the realm-server-operator datasource proxy. The removal deletes the user's permission row, takes the realm out of the user's workspace list, and refuses the user's existing realm sessions on the next request. The removal does not touch access the user holds through a `*` or `users` grant or a realm policy, and does not touch the user's Matrix account.",
         "fieldConfig": {
           "defaults": {},
           "overrides": []
@@ -531,7 +531,7 @@
               "id": "matrix_username",
               "type": "select",
               "title": "Matrix username",
-              "tooltip": "Users that hold a permission row on this realm. The list leaves out the realm owner.",
+              "tooltip": "Users that hold a permission row on this realm. The list leaves out the realm owner and the realm-wide `*` and `users` grants.",
               "labelWidth": 28,
               "section": "input",
               "value": "",
@@ -643,7 +643,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT username FROM realm_user_permissions WHERE realm_url = ${realm_url:sqlstring} AND realm_owner = false ORDER BY username;",
+            "rawSql": "SELECT username FROM realm_user_permissions WHERE realm_url = ${realm_url:sqlstring} AND realm_owner = false AND username LIKE '@%:%' ORDER BY username;",
             "refId": "B"
           }
         ],

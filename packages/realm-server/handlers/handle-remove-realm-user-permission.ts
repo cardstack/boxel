@@ -13,7 +13,7 @@ import {
 import type { CreateRoutesArgs } from '../routes.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { realmEventDispatcher } from '../realm-event-dispatcher.ts';
-import { syncRealmEventRoom } from '../realm-event-rooms.ts';
+import { retireRealmEventRoom } from '../realm-event-rooms.ts';
 import {
   impersonateAsMatrixAdmin,
   logoutMatrixAccessToken,
@@ -23,16 +23,16 @@ import {
 
 const log = logger('realm-server');
 
-// Only fully-qualified matrix user-ids carry account_data. The public-read
-// sentinel `*`, the `users` grant and bare localparts have no synapse account
-// to write to, so the matrix sync is skipped for them; the DB row is still
-// deleted.
 function isMatrixUserId(user: string): boolean {
   return user.startsWith('@') && user.includes(':');
 }
 
-// Takes one user's `read` / `write` row off a realm. The realm owner's row is
-// refused: no grant endpoint changes an owner's permissions (ADR 006 §1.2).
+// Takes one user's `read` / `write` row off a realm. The `*` and `users` rows
+// are refused: those grants are realm-wide, and deleting one changes the
+// realm's visibility for everyone rather than one user's access. The realm
+// owner's row is refused: a row delete can't keep the owner's `read` and
+// `realm-owner`, which every permission endpoint must preserve (ADR 006
+// §1.2).
 //
 // No session is revoked here. A per-realm session token names the permission
 // set it was minted with, and the realm compares that set against the user's
@@ -55,6 +55,13 @@ export default function handleRemoveRealmUserPermission({
     let user = ctxt.URL.searchParams.get('user');
     if (!user) {
       await sendResponseForBadRequest(ctxt, `user param must be specified`);
+      return;
+    }
+    if (!isMatrixUserId(user)) {
+      await sendResponseForBadRequest(
+        ctxt,
+        `user param must be a fully-qualified matrix user id (got "${user}"); the "*" and "users" grants are realm-wide and are changed through the realm's permissions endpoint`,
+      );
       return;
     }
 
@@ -87,16 +94,19 @@ export default function handleRemoveRealmUserPermission({
     });
 
     // The realm's event room holds exactly the users its grants name, so a
-    // room this user is a member of is retired and the remaining grantees
-    // are told to ask for a new one. Through the realm server's own matrix
-    // client, the one every realm it serves sends its events with. Not
-    // awaited: it is paced behind the realm's events and never rejects.
-    void syncRealmEventRoom({
-      realmURL: normalizedRealmHref,
-      matrixClient,
-      dbAdapter,
-      dispatcher: realmEventDispatcher(),
-    });
+    // revoked grant retires the room before this answers: the realm's events
+    // stop going to the room at once, in every process, the room is emptied
+    // in the background, and the remaining grantees are told to ask for a
+    // new one. Through the realm server's own matrix client, the one every
+    // realm it serves sends its events with.
+    if (hadPermissionRow) {
+      await retireRealmEventRoom({
+        realmURL: normalizedRealmHref,
+        matrixClient,
+        dbAdapter,
+        dispatcher: realmEventDispatcher(),
+      });
+    }
 
     // A running session re-derives its realm list from `_realm-auth` on this
     // signal, so the realm leaves the workspace chooser without a reload.
@@ -117,7 +127,7 @@ export default function handleRemoveRealmUserPermission({
     // both sides.
     let matrixAccountDataWarning: string | undefined;
     let removedFromAccountData = false;
-    if (isMatrixUserId(user)) {
+    {
       let creds = resolveAdminCreds(
         matrixClient.matrixURL,
         matrixAdminUsername,
@@ -168,8 +178,6 @@ export default function handleRemoveRealmUserPermission({
       } else {
         matrixAccountDataWarning = `account_data sync skipped: ${creds.reason}`;
       }
-    } else {
-      matrixAccountDataWarning = `account_data sync skipped: "${user}" is not a fully-qualified matrix user-id`;
     }
 
     let responseBody: Record<string, unknown> = {
