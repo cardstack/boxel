@@ -42,6 +42,10 @@ import {
   isOpenRouterBatchURL,
 } from '../lib/openrouter-batches.ts';
 import * as Sentry from '@sentry/node';
+import {
+  logRunPlatformLine,
+  type RunLogLine,
+} from '@cardstack/runtime-common/automation-run-log';
 
 const log = logger('request-forward');
 
@@ -179,6 +183,9 @@ export default function handleRequestForward({
     // once however the request ends.
     let runForward: AdmittedRunForward | undefined;
     let sent = false;
+    let sentAt: number | undefined;
+    // The model a run's request named, for its line in the run's log.
+    let runModel: string | undefined;
     let costInUsd: number | undefined;
     // The upstream's status, once it has answered.
     let upstreamStatus: number | undefined;
@@ -358,6 +365,9 @@ export default function handleRequestForward({
         }
         runForward = admission.admitted;
         matrixUserId = runForward.run.actsAs;
+        let model = (parsedRequestBody as { model?: unknown } | undefined)
+          ?.model;
+        runModel = typeof model === 'string' ? model : undefined;
       } else {
         matrixUserId = token.user;
       }
@@ -437,6 +447,7 @@ export default function handleRequestForward({
           }
           const upstreamCall = upstreamCallSignal(clientGone);
           sent = true;
+          sentAt = Date.now();
           const externalResponse = await outboundFetch({
             url: json.url,
             method: json.method,
@@ -512,6 +523,18 @@ export default function handleRequestForward({
             error,
           ),
         );
+      if (runForward && sent) {
+        await logRunPlatformLine(
+          dbAdapter,
+          runForward.run.runId,
+          resolveLogLine({
+            model: runModel,
+            status: upstreamStatus,
+            ms: sentAt !== undefined ? Date.now() - sentAt : undefined,
+            costInUsd: settledCost,
+          }),
+        );
+      }
     }
   };
 }
@@ -522,3 +545,33 @@ const STATUS_TEXT = {
   422: 'Unprocessable Content',
   503: 'Service Unavailable',
 } as const;
+
+// A run's `resolve` call as its line in the run's log: the model, the
+// provider's status and time, and what the call cost.
+export function resolveLogLine({
+  model,
+  status,
+  ms,
+  costInUsd,
+}: {
+  model?: string;
+  status?: number;
+  ms?: number;
+  costInUsd?: number;
+}): Omit<RunLogLine, 'source' | 'at'> {
+  let measured = [
+    ...(ms !== undefined ? [`${ms} ms`] : []),
+    ...(costInUsd !== undefined ? [`$${costInUsd.toFixed(6)}`] : []),
+  ].join(', ');
+  return {
+    kind: 'resolve',
+    level: status === undefined ? 'error' : status >= 400 ? 'warn' : 'info',
+    message: `resolve${model ? ` ${model}` : ''}: ${status ?? 'failed'}${measured ? ` (${measured})` : ''}`,
+    data: {
+      ...(model ? { model } : {}),
+      ...(status !== undefined ? { status } : {}),
+      ...(ms !== undefined ? { ms } : {}),
+      ...(costInUsd !== undefined ? { costInUsd } : {}),
+    },
+  };
+}

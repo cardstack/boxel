@@ -224,6 +224,13 @@ import {
   type RunOverlayKey,
 } from './run-overlay.ts';
 import { automationRunCallApiMeter } from './automation-run-limits.ts';
+import {
+  RUN_LOG_MAX_REQUEST_BYTES,
+  RUN_LOG_PATH,
+  appendRunLog,
+  logRunPlatformLine,
+  scriptRunLogLines,
+} from './automation-run-log.ts';
 import type { CallApiRunMeter } from './card-operations/call-api.ts';
 import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
@@ -3850,6 +3857,15 @@ export class Realm {
         RUN_COMMIT_PATH,
         SupportedMimeType.JSONAPI,
         this.commitRunOverlay.bind(this),
+        { ...ACL_ONLY, takesRunWrites: true },
+      )
+      // An automation run's script lines: its console, activity, milestones
+      // and uncaught error, which the run's tab sends as they happen. They go
+      // to the run's log, never the realm.
+      .post(
+        RUN_LOG_PATH,
+        SupportedMimeType.JSONAPI,
+        this.appendScriptRunLog.bind(this),
         { ...ACL_ONLY, takesRunWrites: true },
       )
       // The operations envelope, under the media type that carries its
@@ -14241,7 +14257,137 @@ export class Realm {
   // the batch lands, the run row records it, the files committed are added to
   // the run's `writes`, and the overlay is discarded. Asking again after the
   // batch landed answers the same success.
+  private async appendScriptRunLog(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let answer = (status: number, body: unknown) =>
+      createResponse({
+        body: JSON.stringify(body),
+        init: {
+          status,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    let refuse = (status: number, code: string, detail: string) =>
+      answer(status, { errors: [{ status: String(status), code, detail }] });
+    let call = requestContext.automationRun;
+    if (!call || call.readOnly) {
+      return refuse(
+        403,
+        'not-a-run',
+        "Only an automation run writes its log, in the run's own realm",
+      );
+    }
+    let declared = Number(request.headers.get('content-length'));
+    if (declared > RUN_LOG_MAX_REQUEST_BYTES) {
+      return refuse(
+        413,
+        'too-large',
+        `A run's log request carries at most ${RUN_LOG_MAX_REQUEST_BYTES} bytes`,
+      );
+    }
+    let text = await request.text();
+    if (text.length > RUN_LOG_MAX_REQUEST_BYTES) {
+      return refuse(
+        413,
+        'too-large',
+        `A run's log request carries at most ${RUN_LOG_MAX_REQUEST_BYTES} bytes`,
+      );
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return refuse(400, 'invalid-body', 'The body is not JSON');
+    }
+    let parsed = scriptRunLogLines(body);
+    if (!parsed.ok) {
+      return refuse(400, 'invalid-body', parsed.error);
+    }
+    let token = request.headers.get('Authorization')?.replace(/^Bearer /, '');
+    let result = await appendRunLog(this.#dbAdapter, call.runId, parsed.lines, {
+      secrets: token ? [token] : [],
+    });
+    return answer(200, {
+      data: {
+        type: 'run-log',
+        id: call.runId,
+        attributes: { stored: result.stored, dropped: result.dropped },
+      },
+    });
+  }
+
+  // Commits a run's overlay, and logs on the run what the commit did.
   private async commitRunOverlay(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let run = requestContext.automationRun;
+    let startedAt = Date.now();
+    // A repeat of a commit that already landed answers as it did, and its
+    // line is already in the log.
+    let repeat =
+      run && !run.readOnly
+        ? Boolean(
+            (await getAutomationRun(this.#dbAdapter, run.runId))?.committedAt,
+          )
+        : false;
+    let response: Response;
+    try {
+      response = await this.#commitRunOverlay(request, requestContext);
+    } catch (err: unknown) {
+      if (run && !run.readOnly) {
+        await logRunPlatformLine(this.#dbAdapter, run.runId, {
+          kind: 'commit',
+          level: 'error',
+          message: `The commit failed while writing, so some files may have been saved: ${err instanceof Error ? err.message : String(err)}`,
+          data: { ms: Date.now() - startedAt },
+        });
+      }
+      throw err;
+    }
+    if (run && !run.readOnly && !repeat) {
+      let body = (await response
+        .clone()
+        .json()
+        .catch(() => undefined)) as
+        | {
+            data?: { attributes?: { files?: string[] } };
+            errors?: { code?: string; detail?: string }[];
+          }
+        | undefined;
+      let ms = Date.now() - startedAt;
+      if (response.ok) {
+        let files = body?.data?.attributes?.files ?? [];
+        await logRunPlatformLine(this.#dbAdapter, run.runId, {
+          kind: 'commit',
+          level: 'info',
+          message:
+            files.length === 0
+              ? 'The commit saved no files'
+              : `The commit saved ${files.length} ${files.length === 1 ? 'file' : 'files'}: ${files.join(', ')}`,
+          data: { status: response.status, files: files.length, ms },
+        });
+      } else {
+        let error = body?.errors?.[0];
+        await logRunPlatformLine(this.#dbAdapter, run.runId, {
+          kind: 'commit',
+          level: 'error',
+          message: `The commit was refused (${error?.code ?? response.status}): ${error?.detail ?? response.statusText}`,
+          data: {
+            status: response.status,
+            ...(error?.code ? { code: error.code } : {}),
+            ms,
+          },
+        });
+      }
+    }
+    return response;
+  }
+
+  async #commitRunOverlay(
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {

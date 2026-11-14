@@ -33,6 +33,7 @@ import {
 import type {
   CallApiRunMeter,
   CallApiRunAdmission,
+  CallApiRunLogEntry,
 } from './card-operations/call-api.ts';
 import type { OperationError } from './card-operations/types.ts';
 import { OperationFailure } from './card-operations/types.ts';
@@ -40,6 +41,11 @@ import type { DBAdapter } from './db.ts';
 import type { DefinitionLookup } from './definition-lookup.ts';
 import { internalKeyFor } from './index.ts';
 import { logger } from './log.ts';
+import {
+  logRunPlatformLine,
+  maskedRunLogURL,
+  type RunLogLine,
+} from './automation-run-log.ts';
 import { IndexQueryEngine } from './index-query-engine.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -340,6 +346,47 @@ export function automationRunCallApiMeter({
         return runCapReached('responseBytes');
       }
       return undefined;
+    },
+    async logCall(call) {
+      await logRunPlatformLine(dbAdapter, run.runId, callApiLogLine(call));
+    },
+  };
+}
+
+// A `callApi` call as its line in the run's log: the operation, the request's
+// method and destination with its query values masked, and the vendor's
+// status, time and size, or why it was refused or failed.
+export function callApiLogLine(
+  call: CallApiRunLogEntry,
+): Omit<RunLogLine, 'source' | 'at'> {
+  let destination = call.url
+    ? ` ${call.method ? `${call.method} ` : ''}${maskedRunLogURL(call.url)}`
+    : '';
+  let measured = [
+    ...(call.ms !== undefined ? [`${call.ms} ms`] : []),
+    ...(call.bytes !== undefined ? [`${call.bytes} bytes`] : []),
+  ].join(', ');
+  let outcome =
+    call.status !== undefined
+      ? `${call.status}${measured ? ` in ${measured}` : ''}`
+      : `${call.code === 'failed' ? 'failed' : `refused (${call.code})`}${call.detail ? `: ${call.detail}` : ''}${measured ? ` after ${measured}` : ''}`;
+  return {
+    kind: 'call-api',
+    level:
+      call.status === undefined
+        ? 'error'
+        : call.status >= 400
+          ? 'warn'
+          : 'info',
+    message: `callApi ${call.operation}${destination}: ${outcome}`,
+    data: {
+      operation: call.operation,
+      ...(call.method ? { method: call.method } : {}),
+      ...(call.url ? { destination: maskedRunLogURL(call.url) } : {}),
+      ...(call.status !== undefined ? { status: call.status } : {}),
+      ...(call.code ? { code: call.code } : {}),
+      ...(call.ms !== undefined ? { ms: call.ms } : {}),
+      ...(call.bytes !== undefined ? { bytes: call.bytes } : {}),
     },
   };
 }

@@ -2,7 +2,10 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import type { RunProgressEvent } from '@cardstack/host/lib/realm-runner/automation';
+import type {
+  FlushableRunProgressSink,
+  RunProgressEvent,
+} from '@cardstack/host/lib/realm-runner/automation';
 import { REDACTED } from '@cardstack/host/lib/realm-runner/automation';
 import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import {
@@ -470,6 +473,90 @@ return 'done';`,
     await assert.rejects(
       done,
       /reached its time limit of 1 s \(its seconds cap\)/,
+    );
+  });
+  test("an uncaught error ends the run's progress with its message, its script line and its stack in the script's lines", async function (assert) {
+    let { events, done } = run(
+      [
+        'function fetchRoster() {',
+        "  throw new Error('no roster sk-live-0123456789abcdefgh');",
+        '}',
+        'fetchRoster();',
+      ].join('\n'),
+    );
+    await assert.rejects(done, /no roster/);
+    let last = events[events.length - 1] as Extract<
+      RunProgressEvent,
+      { kind: 'error' }
+    >;
+    assert.strictEqual(last.kind, 'error');
+    assert.true(last.message.includes('no roster'), last.message);
+    assert.false(
+      last.message.includes('sk-live-0123456789abcdefgh'),
+      'the message is redacted',
+    );
+    assert.strictEqual(last.line, 2, 'the line it was thrown on');
+    assert.true(
+      /script line 2[\s\S]*script line 4/.test(last.stack ?? ''),
+      `each frame names the script's own line: ${last.stack}`,
+    );
+    assert.false(
+      (last.stack ?? '').includes('realm-code.js'),
+      "no frame names the wrapper's file",
+    );
+    assert.false(
+      /script line [05-9]/.test(last.stack ?? ''),
+      `no frame is outside the script's 4 lines: ${last.stack}`,
+    );
+  });
+
+  test("a TypeError's line is reported too", async function (assert) {
+    let { events, done } = run(
+      ['const roster = null;', 'roster.items;'].join('\n'),
+    );
+    await assert.rejects(done);
+    let last = events[events.length - 1] as Extract<
+      RunProgressEvent,
+      { kind: 'error' }
+    >;
+    assert.strictEqual(last.kind, 'error');
+    assert.strictEqual(last.line, 2);
+  });
+
+  test('a run stopped at its time limit ends its progress with that error', async function (assert) {
+    let { events, done } = run('while (true) {}', { secondsCap: 1 });
+    await assert.rejects(done);
+    let last = events[events.length - 1] as Extract<
+      RunProgressEvent,
+      { kind: 'error' }
+    >;
+    assert.strictEqual(last.kind, 'error');
+    assert.true(/reached its time limit/.test(last.message), last.message);
+    assert.strictEqual(last.line, undefined, 'a time limit names no line');
+    assert.strictEqual(last.stack, undefined);
+  });
+  test("the progress sink is flushed before each call the realm server logs, so the run's log keeps one order", async function (assert) {
+    let order: string[] = [];
+    let { done } = run(
+      `console.log('before');
+       try {
+         await realm.operations.invoke('Pet/mango.json', 'missing', {});
+       } catch (e) {}
+       return 'done';`,
+      {
+        progress: {
+          record: (event) =>
+            order.push(event.kind === 'console' ? event.message : event.kind),
+          flush: async () => {
+            order.push('flush');
+          },
+        } as FlushableRunProgressSink,
+      },
+    );
+    await done;
+    assert.true(
+      order.indexOf('flush') > order.indexOf('before'),
+      `the sink is flushed after the line before the call: ${order.join(', ')}`,
     );
   });
 });

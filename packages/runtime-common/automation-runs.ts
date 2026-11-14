@@ -22,6 +22,7 @@
 
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
+import { logRunPlatformLine } from './automation-run-log.ts';
 import type { DBAdapter } from './db.ts';
 import { param, query, type Expression, type Querier } from './expression.ts';
 import type { PgPrimitive } from './index.ts';
@@ -317,28 +318,59 @@ export async function finishAutomationRun(
   attempt: number,
   outcome: AutomationRunOutcome,
 ): Promise<AutomationRun | undefined> {
-  if (outcome.state === 'complete') {
-    return await updateOwned(
-      dbAdapter,
-      id,
-      attempt,
-      ["state = 'complete', finished_at = now()"],
-      ['AND (commit_started_at IS NULL OR committed_at IS NOT NULL)'],
-      { ends: true },
-    );
+  let run =
+    outcome.state === 'complete'
+      ? await updateOwned(
+          dbAdapter,
+          id,
+          attempt,
+          ["state = 'complete', finished_at = now()"],
+          ['AND (commit_started_at IS NULL OR committed_at IS NOT NULL)'],
+          { ends: true },
+        )
+      : await updateOwned(
+          dbAdapter,
+          id,
+          attempt,
+          [
+            "state = 'error', finished_at = now(), error_reason =",
+            param(outcome.reason),
+            ', error_message =',
+            param(outcome.message ?? null),
+          ],
+          ['AND committed_at IS NULL'],
+          { ends: true },
+        );
+  if (run) {
+    await logRunEnded(dbAdapter, run);
   }
-  return await updateOwned(
+  return run;
+}
+
+// The run log's last line: how the run ended, as its row says. The realm
+// server writes it, so a run whose tab can no longer send (its token expired
+// at its time limit, say) still ends its log with why.
+async function logRunEnded(
+  dbAdapter: DBAdapter,
+  run: AutomationRun,
+): Promise<void> {
+  await logRunPlatformLine(
     dbAdapter,
-    id,
-    attempt,
-    [
-      "state = 'error', finished_at = now(), error_reason =",
-      param(outcome.reason),
-      ', error_message =',
-      param(outcome.message ?? null),
-    ],
-    ['AND committed_at IS NULL'],
-    { ends: true },
+    run.id,
+    run.state === 'complete'
+      ? { kind: 'finish', level: 'info', message: 'The run finished' }
+      : run.state === 'canceled'
+        ? {
+            kind: 'finish',
+            level: 'warn',
+            message: `The run was canceled${run.canceledBy ? ` by ${run.canceledBy}` : ''}`,
+          }
+        : {
+            kind: 'finish',
+            level: 'error',
+            message: `The run ended with an error (${run.errorReason ?? 'error'})${run.errorMessage ? `: ${run.errorMessage}` : ''}`,
+            ...(run.errorReason ? { data: { reason: run.errorReason } } : {}),
+          },
   );
 }
 
@@ -360,7 +392,11 @@ export async function abandonAutomationRun(
     param(id),
     "AND state IN ('pending', 'running') RETURNING *",
   ]);
-  return row ? runFromRow(row) : undefined;
+  let run = row ? runFromRow(row) : undefined;
+  if (run) {
+    await logRunEnded(dbAdapter, run);
+  }
+  return run;
 }
 
 // Cancels a pending or running run, for `canceledBy`. A run whose commit was
@@ -377,7 +413,11 @@ export async function cancelAutomationRun(
     param(id),
     "AND state IN ('pending', 'running') AND commit_started_at IS NULL RETURNING *",
   ]);
-  return row ? runFromRow(row) : undefined;
+  let run = row ? runFromRow(row) : undefined;
+  if (run) {
+    await logRunEnded(dbAdapter, run);
+  }
+  return run;
 }
 
 // Cancels every run of the automation that hasn't started, as pausing or
