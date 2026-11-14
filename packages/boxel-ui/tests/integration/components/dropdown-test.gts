@@ -1,6 +1,7 @@
 import {
   type BoxelDropdownAPI,
   BoxelDropdown,
+  BoxelSelect,
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -15,6 +16,7 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
+import { setConfig as setBasicDropdownConfig } from 'ember-basic-dropdown/config';
 import { module, test } from 'qunit';
 
 import { setupRenderingTest } from '../../helpers';
@@ -265,6 +267,83 @@ module('Integration | Component | dropdown', function (hooks) {
       document.documentElement.style.removeProperty(
         '--boxel-dropdown-background-color',
       );
+    }
+  });
+
+  test('a menu starts from its own colors after a select has used the wormhole', async function (assert) {
+    // BoxelSelect copies its trigger's --boxel-dropdown-* overrides onto the
+    // shared wormhole on open. A menu rendered in that wormhole afterwards
+    // resolves the same properties for its hovered item, so the dropdown has
+    // to drop the select's values before its content paints.
+    //
+    // The harness points ember-basic-dropdown at the test root, so the
+    // wormhole both components sync against is stood up here.
+    setBasicDropdownConfig({ destination: 'ember-basic-dropdown-wormhole' });
+    let style = document.createElement('style');
+    style.textContent = `
+      .select-scope { --boxel-dropdown-selected-text-color: rgb(1, 2, 3); }
+      .menu-scope { --boxel-dropdown-text-color: rgb(4, 5, 6); }
+    `;
+    document.head.append(style);
+    const options = ['Green', 'Oolong'];
+    const noop = () => {};
+    const menuOptions = [new MenuItem({ label: 'Option 1', action: noop })];
+    try {
+      await render(
+        <template>
+          <div id='ember-basic-dropdown-wormhole'></div>
+          <div class='select-scope'>
+            <BoxelSelect
+              @options={{options}}
+              @onChange={{noop}}
+              data-test-select
+              as |option|
+            >
+              {{option}}
+            </BoxelSelect>
+          </div>
+          <BoxelDropdown @contentClass='menu-scope'>
+            <:trigger as |dd|>
+              <button data-test-dropdown-trigger {{dd}}>Open</button>
+            </:trigger>
+            <:content as |dd|>
+              <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
+            </:content>
+          </BoxelDropdown>
+        </template>,
+      );
+      await click('[data-test-select]');
+      await waitFor('.ember-power-select-option');
+      let wormhole = document.querySelector(
+        '#ember-basic-dropdown-wormhole',
+      ) as HTMLElement;
+      assert.strictEqual(
+        wormhole.style.getPropertyValue('--boxel-dropdown-selected-text-color'),
+        'rgb(1, 2, 3)',
+        'the select copies its selected-text color onto the wormhole',
+      );
+      await click('[data-test-select]');
+      await waitFor('.ember-power-select-option', { count: 0 });
+
+      await click('[data-test-dropdown-trigger]');
+      await waitFor('[data-test-boxel-dropdown-content]');
+      let content = document.querySelector(
+        '[data-test-boxel-dropdown-content]',
+      ) as HTMLElement;
+      assert.ok(
+        wormhole.contains(content),
+        'the menu renders in the wormhole the select wrote to',
+      );
+      assert.strictEqual(
+        getComputedStyle(content)
+          .getPropertyValue('--dropdown-selected-text-color')
+          .trim(),
+        'rgb(4, 5, 6)',
+        "a hovered item's text falls back to the dropdown's own text color, not the select's",
+      );
+    } finally {
+      style.remove();
+      setBasicDropdownConfig({ destination: 'ember-testing' });
     }
   });
 });
