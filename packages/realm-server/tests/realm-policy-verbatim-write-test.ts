@@ -811,6 +811,24 @@ module(basename(import.meta.filename), function (hooks) {
         200,
         `the envelope refuses it: ${status(enveloped)}`,
       );
+      let withMalformedIncluded = await operations(AUTH.reader(), {
+        op: 'invoke',
+        'boxel:name': 'update',
+        href: `${EDUCATION}data/schedule.json`,
+        data: {
+          content: JSON.stringify({
+            ...JSON.parse(policyCardDocument),
+            included: [{ id: 'x', type: 'junk' }],
+          }),
+        },
+      });
+      assert.notStrictEqual(
+        withMalformedIncluded.status,
+        200,
+        `as it does a card document whose included is malformed: ${status(
+          withMalformedIncluded,
+        )}`,
+      );
       let source = await writeSource(
         'data/schedule.json',
         AUTH.reader(),

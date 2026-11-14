@@ -1050,18 +1050,19 @@ async function stageFileUpdate(
     if (
       path.endsWith('.json') &&
       (typeof content === 'string' || content instanceof Uint8Array) &&
-      isSingleCardDocument(
-        parsed(
-          typeof content === 'string'
-            ? content
-            : new TextDecoder().decode(content),
-        ),
-      )
+      cardResourceIn(
+        typeof content === 'string'
+          ? content
+          : new TextDecoder().decode(content),
+      ) !== undefined
     ) {
       // The bytes would turn a data file into a card's stored source. A file's
       // update leaves it the kind of file it is: a grant on a data file's type
       // admits it, and a card a grant admits is made by a create of its own
-      // type, which is the one place its grants are matched.
+      // type, which is the one place its grants are matched. Classified the
+      // way the indexer classifies a `.json` — by its `data` alone — so a
+      // document that is a card to the indexer is one here too, whatever else
+      // it carries beside its `data`.
       refuse(
         `${url.href} would hold a card's stored source; a card is made by a ` +
           `create, not by an update on a file`,
