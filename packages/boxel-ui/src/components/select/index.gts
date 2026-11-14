@@ -134,7 +134,6 @@ export default class BoxelSelect<ItemT = any> extends Component<
       '--muted-foreground',
       '--destructive',
       '--destructive-foreground',
-      'font-family',
     ];
 
     themeVars.forEach((varName) => {

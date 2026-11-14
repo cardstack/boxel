@@ -281,7 +281,10 @@ module('Integration | Component | dropdown', function (hooks) {
     setBasicDropdownConfig({ destination: 'ember-basic-dropdown-wormhole' });
     let style = document.createElement('style');
     style.textContent = `
-      .select-scope { --boxel-dropdown-selected-text-color: rgb(1, 2, 3); }
+      .select-scope {
+        --boxel-dropdown-selected-text-color: rgb(1, 2, 3);
+        font-family: 'Courier New', monospace;
+      }
       .menu-scope { --boxel-dropdown-text-color: rgb(4, 5, 6); }
     `;
     document.head.append(style);
@@ -313,7 +316,7 @@ module('Integration | Component | dropdown', function (hooks) {
         </template>,
       );
       await click('[data-test-select]');
-      await waitFor('.ember-power-select-option');
+      await waitFor('[role="option"]');
       let wormhole = document.querySelector(
         '#ember-basic-dropdown-wormhole',
       ) as HTMLElement;
@@ -323,7 +326,7 @@ module('Integration | Component | dropdown', function (hooks) {
         'the select copies its selected-text color onto the wormhole',
       );
       await click('[data-test-select]');
-      await waitFor('.ember-power-select-option', { count: 0 });
+      await waitFor('[role="option"]', { count: 0 });
 
       await click('[data-test-dropdown-trigger]');
       await waitFor('[data-test-boxel-dropdown-content]');
@@ -340,6 +343,10 @@ module('Integration | Component | dropdown', function (hooks) {
           .trim(),
         'rgb(4, 5, 6)',
         "a hovered item's text falls back to the dropdown's own text color, not the select's",
+      );
+      assert.false(
+        getComputedStyle(content).fontFamily.includes('Courier New'),
+        "the menu's font comes from the page, not the select's trigger",
       );
     } finally {
       style.remove();
