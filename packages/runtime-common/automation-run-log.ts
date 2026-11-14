@@ -16,6 +16,7 @@
 
 import type { DBAdapter } from './db.ts';
 import { param, query, type Expression } from './expression.ts';
+import { sanitizeForJsonb } from './error.ts';
 import { logger } from './log.ts';
 import { redactSecrets } from './redact-secrets.ts';
 
@@ -317,6 +318,10 @@ export function maskedRunLogURL(url: string): string {
   }
 }
 
+// A line as it is stored: redacted, cut to its limits, then cleared of what
+// Postgres refuses in `text` and `jsonb` (a NUL, or a surrogate left unpaired,
+// including one a cut split from its pair), so one such character can't fail
+// the batch's insert.
 function redactLine(line: RunLogLine, secrets: readonly string[]): RunLogLine {
   let message = redactSecrets(line.message, secrets);
   if (message.length > RUN_LOG_MAX_MESSAGE_CHARS) {
@@ -348,9 +353,9 @@ function redactLine(line: RunLogLine, secrets: readonly string[]): RunLogLine {
     source: line.source,
     kind: line.kind,
     ...(line.level ? { level: line.level } : {}),
-    message,
+    message: sanitizeForJsonb(message),
     ...(line.scriptLine !== undefined ? { scriptLine: line.scriptLine } : {}),
-    ...(data ? { data } : {}),
+    ...(data ? { data: sanitizeForJsonb(data) } : {}),
   };
 }
 

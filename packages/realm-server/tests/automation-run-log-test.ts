@@ -303,6 +303,38 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(stored.includes(REDACTED));
   });
 
+  test("a NUL or an unpaired surrogate in a script's line is replaced, and the batch is stored", async function (assert) {
+    let { token, run } = await runOf();
+    let pair = '\u{1F600}';
+    let sent = await sendLog(token, {
+      events: [
+        {
+          kind: 'console',
+          at: Date.now(),
+          level: 'log',
+          message: 'binary\u0000body',
+        },
+        { kind: 'milestone', at: Date.now(), name: 'lone \uD83D surrogate' },
+        {
+          kind: 'console',
+          at: Date.now(),
+          level: 'log',
+          // A pair the message limit cuts in half.
+          message: `${'x'.repeat(RUN_LOG_MAX_MESSAGE_CHARS - 1)}${pair}`,
+        },
+      ],
+    });
+    assert.strictEqual(sent.status, 200, JSON.stringify(sent.json));
+    let { lines } = await logOf(run.id);
+    assert.strictEqual(lines.length, 3, 'the whole batch is stored');
+    assert.strictEqual(lines[0].message, 'binary\uFFFDbody');
+    assert.strictEqual(lines[1].data?.name, 'lone \uFFFD surrogate');
+    assert.false(
+      /[\uD800-\uDFFF]/.test(lines[2].message.slice(-30)),
+      'the half pair the cut left is replaced',
+    );
+  });
+
   test('a line past the message limit is cut and says how much it lost', async function (assert) {
     let { token, run } = await runOf();
     await sendLog(token, {
