@@ -54,6 +54,15 @@ const GTS_FILE_DEF = {
   module: rri('@cardstack/base/gts-file-def'),
   name: 'GtsFileDef',
 };
+const MARKDOWN_DEF = {
+  module: rri('@cardstack/base/markdown-file-def'),
+  name: 'MarkdownDef',
+};
+const JSON_FILE_DEF = {
+  module: rri('@cardstack/base/json-file-def'),
+  name: 'JsonFileDef',
+};
+const FILE_DEF = { module: rri('@cardstack/base/card-api'), name: 'FileDef' };
 const TEXT_FILE_DEF = {
   module: rri('@cardstack/base/text-file-def'),
   name: 'TextFileDef',
@@ -124,10 +133,18 @@ const EDUCATION_RULES: Rule[] = [
     ],
   },
   { targetType: GTS_FILE_DEF, grants: [{ operation: 'update' }] },
+  { targetType: MARKDOWN_DEF, grants: [{ operation: 'update' }] },
+  { targetType: JSON_FILE_DEF, grants: [{ operation: 'update' }] },
   {
     targetType: TEXT_FILE_DEF,
     grants: [{ operation: 'update', where: TEACHES }],
   },
+];
+
+// Every file's update, which reaches a file whose extension names no file
+// def of its own, such as a stylesheet.
+const FILE_RULES: Rule[] = [
+  { targetType: FILE_DEF, grants: [{ operation: 'update' }] },
 ];
 
 function policyCard(rules: Rule[]) {
@@ -193,6 +210,9 @@ module(basename(import.meta.filename), function (hooks) {
             'bulletin.gts': BULLETIN_MODULE,
             'notice.gts': NOTICE_MODULE,
             'notes.txt': 'Bring a coat',
+            'notes.md': '# Notes',
+            'styles.css': 'body { color: black; }',
+            'data/schedule.json': JSON.stringify({ day: 'Friday' }),
             'minutes.txt': 'Approved',
             'classrooms/room-204.json': classroom('Room 204', [TEACHER]),
             'classrooms/room-205.json': classroom('Room 205', [COLLEAGUE]),
@@ -213,6 +233,7 @@ module(basename(import.meta.filename), function (hooks) {
           fileSystem: {
             'realm.json': realmConfigCardJSON({ name: 'Org' }),
             'policies/education.json': policyCard(EDUCATION_RULES),
+            'policies/files.json': policyCard(FILE_RULES),
           },
           permissions: {
             [ORG_ADMIN]: ['read', 'write', 'realm-owner'],
@@ -231,6 +252,7 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   async function stop() {
+    education.__testOnlySetBeforeBatchLock(undefined);
     for (let realm of [education, org]) {
       realm.__testOnlyClearCaches();
       realm.unsubscribe();
@@ -352,6 +374,25 @@ module(basename(import.meta.filename), function (hooks) {
         },
       },
     };
+  }
+
+  // Runs `change` after the gate has judged a request's writes and before
+  // the request takes its write lock.
+  function betweenGateAndLock(change: () => Promise<unknown>) {
+    education.__testOnlySetBeforeBatchLock(async () => {
+      education.__testOnlySetBeforeBatchLock(undefined);
+      await change();
+    });
+  }
+
+  // Points the Education realm at the policy card `card` names in the Org
+  // realm.
+  async function pointAt(card: string) {
+    await education.write(
+      'realm.json',
+      realmConfigCardJSON({ name: 'Education', policy: `${ORG}${card}` }),
+    );
+    await education.indexing();
   }
 
   function status(response: Response) {
@@ -683,6 +724,143 @@ module(basename(import.meta.filename), function (hooks) {
         204,
         'a caller the ACL allows is not judged',
       );
+    });
+  });
+  module('the write lock', function () {
+    test('a predicate the gate admitted is judged again against the card the lock finds', async function (assert) {
+      betweenGateAndLock(() =>
+        education.write(
+          'classrooms/room-204.json',
+          classroom('Room 204', [COLLEAGUE]),
+        ),
+      );
+      let response = await writeSource(
+        'classrooms/room-204.json',
+        AUTH.teacher(),
+        classroom('Room 204, renamed', [TEACHER]),
+      );
+      assert.strictEqual(
+        response.status,
+        404,
+        `the card another writer handed over is refused: ${status(response)}`,
+      );
+      assert.deepEqual(
+        await storedAttributes('classrooms/room-204.json'),
+        { title: 'Room 204', teacherIds: [COLLEAGUE] },
+        'and the other writer’s card stands',
+      );
+    });
+
+    test('a write the gate judged as one type is refused once the card is another', async function (assert) {
+      betweenGateAndLock(() =>
+        education.write(
+          'bulletins/b1.json',
+          card(relative.notice, { body: 'Now a notice' }),
+        ),
+      );
+      let response = await atomic(AUTH.reader(), {
+        op: 'update',
+        href: './bulletins/b1.json',
+        text: card(relative.bulletin, { body: 'Picture day moved' }),
+      });
+      assert.strictEqual(response.status, 403, status(response));
+      assert.deepEqual(
+        JSON.parse((await stored('bulletins/b1.json'))!).data.meta.adoptsFrom,
+        relative.notice,
+        'the card keeps the type the other writer gave it',
+      );
+    });
+  });
+
+  module('a data file', function () {
+    test('a grant on its type updates it through every route, as through the envelope', async function (assert) {
+      let source = await writeSource('notes.md', AUTH.teacher(), '# Source');
+      assert.strictEqual(source.status, 204, status(source));
+      assert.strictEqual(await stored('notes.md'), '# Source');
+      let bytes = await writeBytes('notes.md', AUTH.teacher(), '# Bytes');
+      assert.strictEqual(bytes.status, 204, status(bytes));
+      assert.strictEqual(await stored('notes.md'), '# Bytes');
+      let viaAtomic = await atomic(AUTH.teacher(), {
+        op: 'update',
+        href: './notes.md',
+        text: '# Atomic',
+      });
+      assert.strictEqual(viaAtomic.status, 201, status(viaAtomic));
+      assert.strictEqual(await stored('notes.md'), '# Atomic');
+      let enveloped = await operations(AUTH.teacher(), {
+        op: 'invoke',
+        'boxel:name': 'update',
+        href: `${EDUCATION}notes.md`,
+        data: { content: '# Envelope' },
+      });
+      assert.strictEqual(enveloped.status, 200, status(enveloped));
+      assert.strictEqual(await stored('notes.md'), '# Envelope');
+    });
+
+    test('a grant on its type never turns it into a card, on any route', async function (assert) {
+      let before = await stored('data/schedule.json');
+      let policyCardDocument = policyCard([]);
+      let enveloped = await operations(AUTH.reader(), {
+        op: 'invoke',
+        'boxel:name': 'update',
+        href: `${EDUCATION}data/schedule.json`,
+        data: { content: policyCardDocument },
+      });
+      assert.notStrictEqual(
+        enveloped.status,
+        200,
+        `the envelope refuses it: ${status(enveloped)}`,
+      );
+      let source = await writeSource(
+        'data/schedule.json',
+        AUTH.reader(),
+        policyCardDocument,
+      );
+      assert.strictEqual(
+        source.status,
+        403,
+        `and so does a card+source write: ${status(source)}`,
+      );
+      let viaAtomic = await atomic(AUTH.reader(), {
+        op: 'update',
+        href: './data/schedule.json',
+        text: policyCardDocument,
+      });
+      assert.strictEqual(
+        viaAtomic.status,
+        403,
+        `and /_atomic: ${status(viaAtomic)}`,
+      );
+      assert.strictEqual(
+        await stored('data/schedule.json'),
+        before,
+        'the data file is untouched',
+      );
+      let data = await writeSource(
+        'data/schedule.json',
+        AUTH.reader(),
+        JSON.stringify({ day: 'Monday' }),
+      );
+      assert.strictEqual(
+        data.status,
+        204,
+        `while a write of data is its update: ${status(data)}`,
+      );
+    });
+
+    test('a file whose extension names no file def of its own is judged as the file it is', async function (assert) {
+      await pointAt('policies/files');
+      let response = await writeSource(
+        'styles.css',
+        AUTH.teacher(),
+        'body { color: blue; }',
+      );
+      assert.strictEqual(
+        response.status,
+        204,
+        `a grant on FileDef updates a stylesheet: ${status(response)}`,
+      );
+      assert.strictEqual(await stored('styles.css'), 'body { color: blue; }');
     });
   });
 });

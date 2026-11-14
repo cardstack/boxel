@@ -97,7 +97,7 @@ permissions refuse MUST judge each write by the policy as the operation it
 amounts to, so a grant admits through one route what it admits through any
 other. An automation run's commit is the exception: only a direct writer
 makes one (ADR 026 §1.5). A grant MUST NOT admit a write that changes the type
-of what it writes, since the grant was matched on the type the write replaces.
+of what it writes.
 
 A grant MAY admit a write to module source, which a policy types as
 `TsFileDef` or `GtsFileDef`, as it admits a write to any other file. The

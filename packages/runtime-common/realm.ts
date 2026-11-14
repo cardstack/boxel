@@ -7407,7 +7407,10 @@ export class Realm {
     let atomicOperations = json['atomic:operations'] as AtomicOperation[];
     let run = this.#runOverlay(requestContext);
     if (run) {
-      return await this.#stageRunAtomic(requestContext, run, atomicOperations);
+      return (
+        this.#runWriteWithoutDirectWrite(requestContext) ??
+        (await this.#stageRunAtomic(requestContext, run, atomicOperations))
+      );
     }
     let atomicWritePaths = this.#atomicWritePaths(atomicOperations);
     // For a caller the realm ACL declined, each write is judged by the policy
@@ -14164,6 +14167,37 @@ export class Realm {
   // the batch lands, the run row records it, the files committed are added to
   // the run's `writes`, and the overlay is discarded. Asking again after the
   // batch landed answers the same success.
+  // A run acts as a direct writer of its realm (ADR 026 §1.5), so a run's
+  // write that the realm ACL declines is refused before it stages, in the
+  // words the run's commit refuses it in. The verbatim write routes take such
+  // a write to the realm's policy for anyone else, and a policy grant never
+  // reaches a run's writes.
+  #runWriteWithoutDirectWrite(
+    requestContext: RequestContext,
+  ): Response | undefined {
+    if (this.#coarseDeclined(requestContext) === 'none') {
+      return undefined;
+    }
+    return createResponse({
+      body: JSON.stringify({
+        errors: [
+          {
+            status: '403',
+            code: 'not-a-direct-writer',
+            title: 'Forbidden',
+            detail:
+              "The person this run acts as is not a direct writer of this workspace, so the run's write was not staged",
+          },
+        ],
+      }),
+      init: {
+        status: 403,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
   private async commitRunOverlay(
     _request: Request,
     requestContext: RequestContext,
@@ -14565,7 +14599,10 @@ export class Realm {
   ): Promise<Response> {
     let run = this.#runOverlay(requestContext);
     if (run) {
-      return await this.#stageRunWrite(request, requestContext, run);
+      return (
+        this.#runWriteWithoutDirectWrite(requestContext) ??
+        (await this.#stageRunWrite(request, requestContext, run))
+      );
     }
     let text = await request.text();
     // The gate's refusal and the batch's are answered from this one place,
@@ -14642,7 +14679,10 @@ export class Realm {
   ): Promise<Response> {
     let run = this.#runOverlay(requestContext);
     if (run) {
-      return await this.#stageRunWrite(request, requestContext, run);
+      return (
+        this.#runWriteWithoutDirectWrite(requestContext) ??
+        (await this.#stageRunWrite(request, requestContext, run))
+      );
     }
     let path = this.paths.local(new URL(request.url));
     // A `.json` document is read as text by the write path (the policy-share
@@ -15212,6 +15252,12 @@ export class Realm {
       let admission = COARSE_VERBATIM_WRITE;
       try {
         if (!handle) {
+          // The gate loads the policy before it resolves anything for a
+          // caller who may not read the realm, so a policy that won't load
+          // answers a missing path as it answers one that holds a card.
+          if (this.#coarseDeclined(requestContext) === 'all') {
+            await loadPolicy(this.operationCore);
+          }
           throw notPermitted({ kind: 'instance', url: request.url }, 'delete');
         }
         let path = handle.path;
@@ -16985,6 +17031,7 @@ export class Realm {
       return false;
     };
     let sealedAnswer: unknown;
+    await this.#testOnlyBeforeBatchLock?.();
     return {
       locked: async () => {
         try {

@@ -1047,6 +1047,26 @@ async function stageFileUpdate(
           `the merge its document describes, not a replacement of its bytes`,
       );
     }
+    if (
+      path.endsWith('.json') &&
+      (typeof content === 'string' || content instanceof Uint8Array) &&
+      isSingleCardDocument(
+        parsed(
+          typeof content === 'string'
+            ? content
+            : new TextDecoder().decode(content),
+        ),
+      )
+    ) {
+      // The bytes would turn a data file into a card's stored source. A file's
+      // update leaves it the kind of file it is: a grant on a data file's type
+      // admits it, and a card a grant admits is made by a create of its own
+      // type, which is the one place its grants are matched.
+      refuse(
+        `${url.href} would hold a card's stored source; a card is made by a ` +
+          `create, not by an update on a file`,
+      );
+    }
     if (!meta && (await ctx.fileExists(`${path}.json` as LocalPath))) {
       // The URL names a card rather than a file, so there are no bytes at it
       // to replace. Said as a refusal rather than as "nothing is there",

@@ -4198,6 +4198,12 @@ return { refused, text: await realm.fs.readText('task.json') };`,
         2,
         'both writes reach the realm, which refuses them: its policy, not the run, decides a write',
       );
+      for (let message of refused) {
+        assert.false(
+          /You can only read this workspace/.test(message),
+          `the realm refuses the write, not the run: ${message}`,
+        );
+      }
       assert.strictEqual(text, '{ "title": "Old title" }\n');
       let source = await cardService.getSource(
         new URL(`${testRealmURL}new.json`),
