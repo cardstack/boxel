@@ -147,6 +147,8 @@ module('Pretui | React-dialect aliases — overlay', function (hooks) {
     </template>);
     let body = q('[data-test-pretui-drawer-body]')!;
     let line = q('[data-test-line]')!;
+    // the drawer is viewport-tall (100dvh), so cap the body to make it scroll on any runner viewport
+    body.style.maxHeight = '10rem';
     assert.true(body.scrollHeight > body.clientHeight, 'the body scrolls');
     let pad = parseFloat(getComputedStyle(body).paddingInlineEnd);
     assert.true(pad > 0, 'the body keeps inline-end padding');

@@ -152,6 +152,7 @@ export class Drawer extends Component<DrawerSignature> {
           margin-inline-end: calc(-1 * var(--_pretui-drawer-pad));
           padding-inline-end: var(--_pretui-drawer-pad);
           overflow-y: auto;
+          overscroll-behavior: contain;
           scrollbar-gutter: stable;
           color: var(--muted-foreground);
           line-height: calc(var(--leading-body, 24px) / var(--text-body, 15px));
