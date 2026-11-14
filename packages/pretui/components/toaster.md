@@ -59,7 +59,7 @@ Governing pattern: APG **Alert** for the announcement, plus the live-region rule
 
 Surface: `--popover` and `--popover-foreground` (the toast reads as "floating above", like **Menu** and **Popover**, not like **Panel**), `--pretui-shadow-raised`, `--border`, `--radius-surface`, `--font-sans`, `--text-ui-md` (title) and `--text-ui-sm` (message, queue pill), `--muted-foreground`, `--foreground`, `--hover`, `--ring`, `--radius-control` (the two buttons), `--space-3` / `--space-4`.
 
-The tone stripe and the life bar share one hue per severity through `--pretui-toast-tone`: `--pretui-info`, `--success`, `--warning`, `--destructive`, and `--muted-foreground` for neutral. The opt-in glyph paints the tone's ink instead (`--info-ink`, `--success-ink`, `--warning-ink`, `--destructive-ink`), which holds contrast on `--popover` in light and dark; `--pretui-toast-icon-color` overrides it. A neutral toast paints no tone, so it is genuinely neutral.
+The tone stripe and the life bar share one hue per severity through `--pretui-toast-tone`: `--pretui-info`, `--success`, `--warning`, `--destructive`, and `--muted-foreground` for neutral. The opt-in glyph paints the tone's ink instead (`--info-ink`, `--success-ink`, `--warning-ink`, `--destructive-ink`), the color the theme pairs with text and icons; `--pretui-toast-icon-color` overrides it. A neutral toast paints no tone, so it is genuinely neutral.
 
 The host's own knobs: `--pretui-z-toast` (stacking, default 100), `--pretui-toaster-width` (380px, capped to the viewport less 24px), and `--pretui-toast-remaining` / `--pretui-toast-tick`, which the component sets on each life bar from its countdown — a theme does not set them. Entrance motion is `--pretui-dur-enter` / `--pretui-ease-enter`.
 

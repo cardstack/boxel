@@ -212,7 +212,7 @@ class ToasterUsage extends ToasterState {
         />
         <Args.Bool
           @name='icon (per toast)'
-          @description='A field on each toast, not a Toaster argument: icon: true shows the tone glyph before the title — a check on success, an info mark, a warning triangle, a circled alert on danger. It is aria-hidden, because the title already says what happened, and painted in the tone ink so it holds contrast on the popover surface. Neutral toasts have none.'
+          @description='A field on each toast, not a Toaster argument: icon: true shows the tone glyph before the title — a check on success, an info mark, a warning triangle, a circled alert on danger. It is aria-hidden, because the title already says what happened, and painted in the tone ink, the color the theme pairs with text and icons. Neutral toasts have none.'
           @value={{this.icon}}
           @defaultValue={{false}}
           @onInput={{this.setIcon}}

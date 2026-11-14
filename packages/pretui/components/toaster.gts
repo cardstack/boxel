@@ -744,8 +744,6 @@ export class Toaster extends Component<ToasterSignature> {
                 {{#if Icon}}
                   <Icon
                     class='pretui-toast-icon'
-                    width='16'
-                    height='16'
                     aria-hidden='true'
                     data-test-pretui-toast-icon
                   />
@@ -891,6 +889,8 @@ export class Toaster extends Component<ToasterSignature> {
         }
         .pretui-toast-icon {
           flex: none;
+          inline-size: 1rem;
+          block-size: 1rem;
           /* centres the 1rem glyph on the title's first line */
           margin-block-start: 0.0625rem;
           color: var(--pretui-toast-icon-color, var(--pretui-toast-ink));
