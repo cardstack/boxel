@@ -17,6 +17,8 @@ import { logger } from '@cardstack/runtime-common';
 import { Historian } from './src/historian.ts';
 import { Heartbeat, startHealthServer } from './src/health.ts';
 import { DEFAULT_BACKGROUND_CONCURRENCY } from './src/background.ts';
+import { probeGit } from './src/git-capabilities.ts';
+import { maintenanceKinds } from './src/maintenance.ts';
 
 const log = logger('realm-historian');
 
@@ -96,7 +98,10 @@ let historian = new Historian({
     expiryMs: leaseExpiryMs,
     holder,
   },
-  background: { concurrency: backgroundConcurrency },
+  background: {
+    concurrency: backgroundConcurrency,
+    kinds: maintenanceKinds({ historyRoot }),
+  },
 });
 
 let health = await startHealthServer({
@@ -106,6 +111,23 @@ let health = await startHealthServer({
 });
 log.info(
   `realm-historian started: pid=${process.pid} holder=${holder} port=${health.port} historyRoot=${historyRoot}`,
+);
+
+// What the git on PATH can do for path-filtered history reads. Recording and
+// maintenance don't depend on the answer, so a probe that fails is only
+// logged.
+probeGit().then(
+  ({ version, bloomWithOnePath, bloomWithSeveralPaths }) =>
+    log.info(
+      `git ${version}: changed-path Bloom filters serve ${
+        bloomWithSeveralPaths
+          ? 'several path filters'
+          : bloomWithOnePath
+            ? 'one path filter only'
+            : 'no path filter'
+      }`,
+    ),
+  (error) => log.warn(`probing git failed: ${String(error)}`),
 );
 
 for (let signal of ['SIGTERM', 'SIGINT'] as const) {
