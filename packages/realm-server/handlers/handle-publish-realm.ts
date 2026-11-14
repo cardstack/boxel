@@ -560,12 +560,19 @@ export default function handlePublishRealm({
         return;
       }
 
+      let parsedSourceRealmURL = new URL(sourceRealmURL);
       let permissions = await fetchRealmPermissions(
         dbAdapter,
-        new URL(sourceRealmURL),
+        parsedSourceRealmURL,
       );
       if (
-        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+        !isRealmAdministrator(
+          permissions,
+          ownerUserId,
+          matrixClient.serverName,
+          parsedSourceRealmURL,
+          new URL(serverURL),
+        )
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,

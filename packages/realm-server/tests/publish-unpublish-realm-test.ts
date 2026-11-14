@@ -2384,6 +2384,89 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a platform service account publishes a realm it created under its own name, reads its progress and unpublishes it', async function (assert) {
+        let serviceAccountUserId = '@submissionbot:localhost';
+        let auth = `Bearer ${createRealmServerJWT(
+          { user: serviceAccountUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`;
+        let endpoint = `preview-${uuidv4()}`;
+        let createResponse = await request
+          .post('/_create-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', auth)
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'realm',
+                attributes: { name: 'Preview Realm', endpoint },
+              },
+            }),
+          );
+        assert.strictEqual(createResponse.status, 201, 'realm is created');
+        let botRealmURL = createResponse.body.data.id;
+
+        let publishResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', auth)
+          .send(
+            JSON.stringify({
+              sourceRealmURL: botRealmURL,
+              publishedRealmURL: `http://submissionbot.localhost:4445/${endpoint}/`,
+            }),
+          );
+        assert.strictEqual(publishResponse.status, 202, 'publish is accepted');
+        let publishedRealmURL =
+          publishResponse.body.data.attributes.publishedRealmURL;
+
+        let progressResponse = await request
+          .get(
+            `/_publish-progress?published_realm_url=${encodeURIComponent(
+              publishedRealmURL,
+            )}`,
+          )
+          .set('Accept', 'application/vnd.api+json')
+          .set('Authorization', auth);
+        assert.strictEqual(progressResponse.status, 200, 'progress is read');
+
+        let unpublishResponse = await request
+          .post('/_unpublish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', auth)
+          .send(JSON.stringify({ publishedRealmURL }));
+        assert.strictEqual(unpublishResponse.status, 200, 'unpublish succeeds');
+      });
+
+      test('POST /_publish-realm refuses a platform service account with write on a realm another user created', async function (assert) {
+        let serviceAccountUserId = '@submissionbot:localhost';
+        await dbAdapter.execute(`
+          INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+          VALUES ('${sourceRealmUrlString}', '${serviceAccountUserId}', true, true, false)
+        `);
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: serviceAccountUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
+            }),
+          );
+        assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      });
+
       test('POST /_unpublish-realm returns forbidden for a user who does not administer the source realm', async function (assert) {
         // First publish a realm as the owner
         let publishResponse = await request

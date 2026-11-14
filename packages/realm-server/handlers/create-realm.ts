@@ -18,6 +18,8 @@ import {
   logger,
   param,
   query,
+  realmEndpointPattern,
+  realmURLFor,
   stringifyErrorForLog,
   SupportedMimeType,
   userInitiatedPriority,
@@ -82,17 +84,7 @@ interface RealmCreationJSON {
   };
 }
 
-// Where the realm an owner makes at an endpoint lives on this server.
-export function realmURLFor(
-  serverURL: URL,
-  ownerUserId: string,
-  endpoint: string,
-): string {
-  return new URL(
-    `${serverURL.pathname.replace(/\/$/, '')}/${getMatrixUsername(ownerUserId)}/${endpoint}/`,
-    serverURL,
-  ).href;
-}
+export { realmURLFor };
 
 export async function createRealm(
   deps: CreateRealmDeps,
@@ -137,7 +129,7 @@ export async function createRealm(
       `Cannot create a realm: a realm is already mounted at the origin of this server: ${serverRootRows[0].url}`,
     );
   }
-  if (!endpoint.match(/^[a-z0-9-]+$/)) {
+  if (!realmEndpointPattern.test(endpoint)) {
     throw errorWithStatus(
       400,
       `realm endpoint '${endpoint}' contains invalid characters`,

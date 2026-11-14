@@ -51,6 +51,7 @@ export default function handleDeleteRealm({
   matrixClient,
   realmsRootPath,
   sendEvent,
+  serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -139,7 +140,13 @@ export default function handleDeleteRealm({
       let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
       let { user: ownerUserId } = token;
       if (
-        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+        !isRealmAdministrator(
+          permissions,
+          ownerUserId,
+          matrixClient.serverName,
+          parsedRealmURL,
+          new URL(serverURL),
+        )
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,
