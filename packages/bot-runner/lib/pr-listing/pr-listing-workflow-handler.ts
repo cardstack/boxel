@@ -1,5 +1,6 @@
 import {
   isPrefixForm,
+  isSubmissionBranchName,
   logger,
   resolveRRIReference,
   toBranchName,
@@ -153,9 +154,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     let workflowCardRealm = optionalString(input.workflowCardRealm) ?? realmURL;
     // Prefer the trigger's explicit branchName so PrCard, GitHub commit,
     // and the persisted card attribute all use the exact same string.
-    let branchName =
+    let branchName = requireSubmissionBranchName(
       optionalString(input.branchName) ??
-      toBranchName(listingName ?? 'UntitledListing');
+        toBranchName(listingName ?? 'UntitledListing'),
+    );
 
     return {
       runAs,
@@ -218,9 +220,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     let listingName =
       optionalString(attrs.listingName) ??
       stripSubmitPrefix(optionalString(attrs.title));
-    let branchName =
+    let branchName = requireSubmissionBranchName(
       optionalString(attrs.branchName) ??
-      toBranchName(listingName ?? 'UntitledListing');
+        toBranchName(listingName ?? 'UntitledListing'),
+    );
     let rawPrCardSelf = optionalString(rels.prCard?.links?.self);
     let existingPrCardUrl = rawPrCardSelf
       ? requireCardId(
@@ -714,6 +717,15 @@ function requireCardId(
 function sameCardId(a: string, b: string): boolean {
   let strip = (id: string) => id.replace(/\.json$/, '');
   return strip(a) === strip(b);
+}
+
+// The branch name is also the folder the submission's files land in, and the
+// caller supplies it, so it has to be one `toBranchName` could have made.
+function requireSubmissionBranchName(branchName: string): string {
+  if (!isSubmissionBranchName(branchName)) {
+    throw new Error(`'${branchName}' is not a submission branch name`);
+  }
+  return branchName;
 }
 
 function optionalString(value: unknown): string | null {

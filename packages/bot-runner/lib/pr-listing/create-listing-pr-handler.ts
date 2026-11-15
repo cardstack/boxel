@@ -1,4 +1,8 @@
-import { logger, toBranchName } from '@cardstack/runtime-common';
+import {
+  isSubmissionBranchName,
+  logger,
+  toBranchName,
+} from '@cardstack/runtime-common';
 import type { BotTriggerContent } from '@cardstack/base/matrix-event';
 import { createHash } from 'node:crypto';
 import type { GitHubClient, OpenPullRequestResult } from '../github.ts';
@@ -58,8 +62,10 @@ function getCreateListingPRContext(
       : '';
   let headBranch = explicitBranchName || toBranchName(listingDisplayName);
 
-  if (!headBranch) {
-    throw new Error('pr-listing-create trigger must include a valid branch');
+  if (!isSubmissionBranchName(headBranch)) {
+    throw new Error(
+      `pr-listing-create trigger names '${headBranch}', which is not a submission branch`,
+    );
   }
 
   if (!title) {
@@ -125,12 +131,12 @@ export class CreateListingPRHandler {
     let folderName = buildSubmissionFolderName(context);
     let textFiles = (files ?? []).map((file) => ({
       ...file,
-      path: `${folderName}/${file.path}`,
+      path: pathInFolder(folderName, file.path),
       isBinary: false as const,
     }));
     let binaryFilesWithFolder = (binaryFiles ?? []).map((file) => ({
       ...file,
-      path: `${folderName}/${file.path}`,
+      path: pathInFolder(folderName, file.path),
       isBinary: true as const,
     }));
     let allFiles = [...textFiles, ...binaryFilesWithFolder];
@@ -148,6 +154,8 @@ export class CreateListingPRHandler {
       // drops paths that fell out of the fresh collection (deleted or
       // renamed files) instead of layering onto the previous tree.
       syncFolder: folderName,
+      // A folder the base branch already has is another submission's.
+      folderMustBeNewOn: DEFAULT_BASE_BRANCH,
     });
   }
 
@@ -254,6 +262,20 @@ export class CreateListingPRHandler {
 
 function buildSubmissionFolderName(context: CreateListingPRContext): string {
   return context.head;
+}
+
+// Where a submission's file lands: inside the submission folder, or nowhere.
+function pathInFolder(folderName: string, filePath: string): string {
+  let segments = filePath.split('/');
+  if (
+    filePath.includes('\\') ||
+    segments.some((segment) => !segment || segment === '.' || segment === '..')
+  ) {
+    throw new Error(
+      `submission file '${filePath}' is not a path inside the submission folder`,
+    );
+  }
+  return `${folderName}/${filePath}`;
 }
 
 function mapOpenPullRequestResult(

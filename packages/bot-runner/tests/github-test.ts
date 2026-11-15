@@ -92,6 +92,56 @@ module('github client', (hooks) => {
     );
   });
 
+  test('writeFilesToBranch refuses a folder the base branch already holds', async (assert) => {
+    let wrote = false;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      let url = typeof input === 'string' ? input : input.toString();
+      let method = init?.method ?? 'GET';
+      if (url.includes('/git/ref/heads/main')) {
+        return jsonResponse({ object: { sha: 'main-commit-sha' } });
+      }
+      if (url.includes('/git/ref/heads/')) {
+        return jsonResponse({ object: { sha: 'branch-commit-sha' } });
+      }
+      if (url.includes('/git/commits/main-commit-sha')) {
+        return jsonResponse({ tree: { sha: 'main-tree-sha' } });
+      }
+      if (url.includes('/git/commits/branch-commit-sha')) {
+        return jsonResponse({ tree: { sha: 'branch-tree-sha' } });
+      }
+      if (url.includes('/git/trees/main-tree-sha') && method === 'GET') {
+        return jsonResponse({
+          tree: [{ path: 'a1b2c3-listing', type: 'tree', sha: 'folder-sha' }],
+        });
+      }
+      if (url.includes('/git/trees/folder-sha?recursive=1')) {
+        return jsonResponse({
+          tree: [{ path: 'CardListing/abc.json', type: 'blob' }],
+        });
+      }
+      if (method !== 'GET') {
+        wrote = true;
+        return jsonResponse({ sha: 'x' });
+      }
+      throw new Error(`unexpected request: ${method} ${url}`);
+    };
+
+    let client = new OctokitGitHubClient('test-token');
+    await assert.rejects(
+      client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'a1b2c3-listing',
+        files: [{ path: 'a1b2c3-listing/kept.json', content: '{}' }],
+        message: 'update listing',
+        syncFolder: 'a1b2c3-listing',
+        folderMustBeNewOn: 'main',
+      }),
+      /already exists on main/,
+    );
+    assert.false(wrote, 'no blob, tree or commit is created');
+  });
+
   test('writeFilesToBranch with syncFolder is a no-op deletion-wise when the folder is new', async (assert) => {
     let createdTreeBodies: any[] = [];
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {

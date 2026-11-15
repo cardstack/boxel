@@ -51,6 +51,9 @@ export interface WriteFilesToBranchParams {
   // deleted in the same commit. Without it, a rewrite of an existing branch
   // layers onto the previous tree and stale paths survive.
   syncFolder?: string;
+  // When set with `syncFolder`, the write is refused if this branch already
+  // holds a file under the folder.
+  folderMustBeNewOn?: string;
 }
 
 export interface WriteFilesToBranchResult {
@@ -203,6 +206,31 @@ export class OctokitGitHubClient implements GitHubClient {
       path: `/repos/${params.owner}/${params.repo}/git/commits/${parentCommitSha}`,
     });
     let baseTreeSha = parentCommit.tree.sha;
+
+    if (params.syncFolder && params.folderMustBeNewOn) {
+      let base = normalizeBranchName(params.folderMustBeNewOn);
+      let baseRef = await this.request<{ object: { sha: string } }>({
+        action: 'get base branch ref',
+        method: 'GET',
+        path: `/repos/${params.owner}/${params.repo}/git/ref/heads/${encodeURIComponent(base)}`,
+      });
+      let baseCommit = await this.request<{ tree: { sha: string } }>({
+        action: 'get base commit',
+        method: 'GET',
+        path: `/repos/${params.owner}/${params.repo}/git/commits/${baseRef.object.sha}`,
+      });
+      let onBase = await this.listBlobPathsUnder(
+        params.owner,
+        params.repo,
+        baseCommit.tree.sha,
+        params.syncFolder,
+      );
+      if (onBase.length > 0) {
+        throw new Error(
+          `folder '${params.syncFolder}' already exists on ${base}`,
+        );
+      }
+    }
 
     let tree: {
       path: string;
