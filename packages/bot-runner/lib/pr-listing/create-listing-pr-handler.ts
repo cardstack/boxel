@@ -121,6 +121,7 @@ export class CreateListingPRHandler {
 
   async addContentsToCommit(
     eventContent: BotTriggerEventContent,
+    submitter: string,
     files?: { path: string; content: string }[],
     binaryFiles?: { path: string; content: string }[],
   ): Promise<void> {
@@ -149,13 +150,15 @@ export class CreateListingPRHandler {
       repo: context.repoName,
       branch: context.head,
       files: allFiles,
-      message: `add ${context.listingDisplayName} changes [boxel-content-hash:${hash}]`,
+      message: `add ${context.listingDisplayName} changes [boxel-content-hash:${hash}] [boxel-submitter:${submitterTag(submitter)}]`,
       // A retry rewrites an existing branch; syncing the submission folder
       // drops paths that fell out of the fresh collection (deleted or
       // renamed files) instead of layering onto the previous tree.
       syncFolder: folderName,
-      // A folder the base branch already has is another submission's.
+      // A folder the base branch already has is another submission's, and
+      // so is one another submitter's commits fill on this branch.
       folderMustBeNewOn: DEFAULT_BASE_BRANCH,
+      submitterTag: submitterTag(submitter),
     });
   }
 
@@ -269,7 +272,13 @@ function pathInFolder(folderName: string, filePath: string): string {
   let segments = filePath.split('/');
   if (
     filePath.includes('\\') ||
-    segments.some((segment) => !segment || segment === '.' || segment === '..')
+    segments.some(
+      (segment) =>
+        !segment ||
+        segment === '.' ||
+        segment === '..' ||
+        segment !== segment.trim(),
+    )
   ) {
     throw new Error(
       `submission file '${filePath}' is not a path inside the submission folder`,
@@ -291,6 +300,11 @@ function mapOpenPullRequestResult(
     branchName,
     summary,
   };
+}
+
+// Names the submitter in a commit message without spelling out their id.
+function submitterTag(submitter: string): string {
+  return createHash('sha256').update(submitter).digest('hex').slice(0, 16);
 }
 
 function hashFiles(files: { path: string; content: string }[]): string {

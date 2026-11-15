@@ -466,6 +466,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     );
     await this.createListingPRHandler.addContentsToCommit(
       ctx.syntheticCreateEvent,
+      ctx.runAs,
       prCardData.textFiles.map((f) => ({
         path: f.filename,
         content: f.contents,

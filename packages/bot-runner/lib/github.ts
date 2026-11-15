@@ -52,8 +52,13 @@ export interface WriteFilesToBranchParams {
   // layers onto the previous tree and stale paths survive.
   syncFolder?: string;
   // When set with `syncFolder`, the write is refused if this branch already
-  // holds a file under the folder.
+  // holds anything by the folder's name.
   folderMustBeNewOn?: string;
+  // When set with `syncFolder`, the write is refused if a commit on the
+  // branch that touches the folder ends its message with a
+  // `[boxel-submitter:…]` tag other than this one. The caller puts the tag
+  // at the end of `message`.
+  submitterTag?: string;
 }
 
 export interface WriteFilesToBranchResult {
@@ -219,16 +224,33 @@ export class OctokitGitHubClient implements GitHubClient {
         method: 'GET',
         path: `/repos/${params.owner}/${params.repo}/git/commits/${baseRef.object.sha}`,
       });
-      let onBase = await this.listBlobPathsUnder(
-        params.owner,
-        params.repo,
-        baseCommit.tree.sha,
-        params.syncFolder,
-      );
-      if (onBase.length > 0) {
+      if (
+        await this.pathExists(
+          params.owner,
+          params.repo,
+          baseCommit.tree.sha,
+          params.syncFolder,
+        )
+      ) {
         throw new Error(
           `folder '${params.syncFolder}' already exists on ${base}`,
         );
+      }
+    }
+
+    if (params.syncFolder && params.submitterTag) {
+      let commits = await this.request<{ commit: { message: string } }[]>({
+        action: 'list commits touching the folder',
+        method: 'GET',
+        path: `/repos/${params.owner}/${params.repo}/commits?sha=${encodeURIComponent(branch)}&path=${encodeURIComponent(params.syncFolder)}&per_page=100`,
+      });
+      for (let { commit } of commits) {
+        let tag = commit.message.match(/\[boxel-submitter:([0-9a-f]+)\]\s*$/);
+        if (tag && tag[1] !== params.submitterTag) {
+          throw new Error(
+            `folder '${params.syncFolder}' on ${branch} holds another submitter's files`,
+          );
+        }
       }
     }
 
@@ -316,6 +338,37 @@ export class OctokitGitHubClient implements GitHubClient {
   // recursively, so only the folder's subtree — never the whole repo — is
   // subject to the recursive listing (and its truncation limit). Returns []
   // when the folder doesn't exist on the branch yet.
+  // Whether the tree holds anything, file or folder, at `path`. A listing
+  // GitHub cut short counts as holding it.
+  private async pathExists(
+    owner: string,
+    repo: string,
+    rootTreeSha: string,
+    path: string,
+  ): Promise<boolean> {
+    let treeSha = rootTreeSha;
+    let segments = path.split('/').filter(Boolean);
+    for (let [index, segment] of segments.entries()) {
+      let { tree, truncated } = await this.request<{
+        tree: { path: string; type: string; sha: string }[];
+        truncated?: boolean;
+      }>({
+        action: 'get tree',
+        method: 'GET',
+        path: `/repos/${owner}/${repo}/git/trees/${treeSha}`,
+      });
+      let entry = tree.find((e) => e.path === segment);
+      if (!entry) {
+        return !!truncated;
+      }
+      if (index === segments.length - 1 || entry.type !== 'tree') {
+        return true;
+      }
+      treeSha = entry.sha;
+    }
+    return false;
+  }
+
   private async listBlobPathsUnder(
     owner: string,
     repo: string,

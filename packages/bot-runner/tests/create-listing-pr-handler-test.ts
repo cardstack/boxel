@@ -210,7 +210,7 @@ module('create-listing-pr handler', () => {
     };
 
     let handler = new CreateListingPRHandler(githubClient);
-    await handler.addContentsToCommit(eventContent, [
+    await handler.addContentsToCommit(eventContent, '@alice:localhost', [
       { path: 'CardListing/abc.json', content: '{}' },
       { path: 'Spec/def.json', content: '{}' },
       { path: 'Recipe.gts', content: 'export const x = 1;' },
@@ -279,11 +279,16 @@ module('create-listing-pr handler', () => {
         `'${branchName}' creates no branch`,
       );
       await assert.rejects(
-        handler.addContentsToCommit(eventContent, [
+        handler.addContentsToCommit(eventContent, '@alice:localhost', [
           { path: 'Recipe.gts', content: 'x' },
         ]),
         /is not a submission branch/,
         `'${branchName}' writes no files`,
+      );
+      await assert.rejects(
+        handler.openCreateListingPR(eventContent, '@alice:localhost', 1),
+        /is not a submission branch/,
+        `'${branchName}' opens no pull request`,
       );
     }
     assert.deepEqual(calls, [], 'GitHub is never called');
@@ -320,14 +325,24 @@ module('create-listing-pr handler', () => {
       'nested//Recipe.gts',
       'nested\\Recipe.gts',
       '',
+      ' ',
+      'nested/.. ',
+      ' ../Recipe.gts',
     ]) {
       await assert.rejects(
-        handler.addContentsToCommit(eventContent, [{ path, content: 'x' }]),
+        handler.addContentsToCommit(eventContent, '@alice:localhost', [
+          { path, content: 'x' },
+        ]),
         /is not a path inside the submission folder/,
         `'${path}' is refused as a text file`,
       );
       await assert.rejects(
-        handler.addContentsToCommit(eventContent, [], [{ path, content: 'x' }]),
+        handler.addContentsToCommit(
+          eventContent,
+          '@alice:localhost',
+          [],
+          [{ path, content: 'x' }],
+        ),
         /is not a path inside the submission folder/,
         `'${path}' is refused as a binary file`,
       );
@@ -335,14 +350,22 @@ module('create-listing-pr handler', () => {
     assert.strictEqual(writes, 0, 'nothing is written');
   });
 
-  test('addContentsToCommit asks for the submission folder to be new on the base branch', async (assert) => {
+  test('addContentsToCommit asks for a folder new on the base branch and tags the commit with its submitter', async (assert) => {
     let asked: (string | undefined)[] = [];
+    let tagged: boolean[] = [];
     let githubClient: GitHubClient = {
       openPullRequest: async () => ({ number: 1, html_url: 'x' }),
       createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
       writeFileToBranch: async () => ({ commitSha: 'def456' }),
       writeFilesToBranch: async (params) => {
         asked.push(params.folderMustBeNewOn);
+        tagged.push(
+          !!params.submitterTag &&
+            params.message.endsWith(
+              `[boxel-submitter:${params.submitterTag}]`,
+            ) &&
+            !params.message.includes('@alice'),
+        );
         return { commitSha: 'def456' };
       },
     };
@@ -358,9 +381,15 @@ module('create-listing-pr handler', () => {
           branchName: 'a1b2c3-my-listing',
         },
       },
+      '@alice:localhost',
       [{ path: 'Recipe.gts', content: 'x' }],
     );
     assert.deepEqual(asked, ['main']);
+    assert.deepEqual(
+      tagged,
+      [true],
+      'the message ends with the tag and does not spell out the submitter',
+    );
   });
 
   test('addContentsToCommit produces the same folder when branchName is persisted (idempotency)', async (assert) => {
@@ -388,8 +417,8 @@ module('create-listing-pr handler', () => {
 
     let handler = new CreateListingPRHandler(githubClient);
     let files = [{ path: 'Recipe.gts', content: 'x' }];
-    await handler.addContentsToCommit(eventContent, files);
-    await handler.addContentsToCommit(eventContent, files);
+    await handler.addContentsToCommit(eventContent, '@alice:localhost', files);
+    await handler.addContentsToCommit(eventContent, '@alice:localhost', files);
 
     assert.strictEqual(writeCalls.length, 2, 'writes twice');
     assert.deepEqual(
@@ -421,6 +450,7 @@ module('create-listing-pr handler', () => {
         userId: '@alice:localhost',
         input: { roomId: '!room-a:localhost', listingName: 'My Listing' },
       },
+      '@alice:localhost',
       files,
     );
 
