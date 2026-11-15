@@ -32,10 +32,12 @@ const ButtonBusyPublish: TemplateOnlyComponent = <template>
   </Row>
 </template>;
 
+const longName = btnSupplier + ' Wholesale Provisions and Trading';
+
 const ButtonLongLabel: TemplateOnlyComponent = <template>
   <div class='lane'>
-    <Button @tone='neutral' @appearance='outlined' class='who'>
-      <span class='who-name'>{{btnSupplier}} Wholesale Provisions and Trading</span>
+    <Button @tone='neutral' @appearance='outlined' title={{longName}} class='who'>
+      <span class='who-name'>{{longName}}</span>
     </Button>
   </div>
   <style scoped>
