@@ -575,14 +575,14 @@ export class Button extends Component<ButtonSignature> {
         .pretui-btn[data-state='busy'] {
           cursor: progress;
         }
-        /* Busy: the label keeps its box (and its place in the accessible
-           name) and the busy layer sits on top of it, so the width never
-           changes. fitBusyContent picks what the layer shows. */
         /* the label may shrink below its content, so a long child that sets
            its own ellipsis truncates instead of overflowing both edges */
         .pretui-btn-label {
           min-inline-size: 0;
         }
+        /* Busy: the label keeps its box (and its place in the accessible
+           name) and the busy layer sits on top of it, so the width never
+           changes. fitBusyContent picks what the layer shows. */
         /* an icon, from @icon or passed as a child, sits on the label's
            centre line rather than its text baseline */
         .pretui-btn-label:has(> svg) {
