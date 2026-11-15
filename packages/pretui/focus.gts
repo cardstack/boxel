@@ -38,18 +38,12 @@ export const focusWhen = modifier((el: HTMLElement, [should]: [boolean]) => {
 });
 
 /** Roving tabindex, set as a property rather than an attribute: exactly one
- * member of a composite is in the tab sequence, the rest are -1; undefined
- * leaves the element out. Set as a
+ * member of a composite is in the tab sequence, the rest are -1. Set as a
  * property because the no-positive-tabindex lint rule cannot statically
  * verify a dynamic template attribute. */
 export const rovingTabindex = modifier(
-  (el: HTMLElement, [active]: [boolean | undefined]) => {
-    // undefined: not a member at all, so no tabindex
-    if (active === undefined) {
-      el.removeAttribute('tabindex');
-    } else {
-      el.tabIndex = active ? 0 : -1;
-    }
+  (el: HTMLElement, [active]: [boolean]) => {
+    el.tabIndex = active ? 0 : -1;
   },
 );
 

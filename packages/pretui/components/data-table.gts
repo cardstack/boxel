@@ -1,6 +1,7 @@
 // Pretui — DataTable: the record listing: sort, filter, select, paginate and column visibility.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
@@ -38,6 +39,16 @@ import { resolveSize } from '../pretui-primitives';
 // ═════════════════════════════════════════════════════════════════════════
 
 /** Where a column's content sits. Logical, so RTL is free. */
+// rovingTabindex, plus undefined: a row that is not activatable has no
+// tabindex at all. Set as a property for the no-positive-tabindex lint rule.
+const rowStop = modifier((el: HTMLElement, [active]: [boolean | undefined]) => {
+  if (active === undefined) {
+    el.removeAttribute('tabindex');
+  } else {
+    el.tabIndex = active ? 0 : -1;
+  }
+});
+
 export type ColumnAlign = 'start' | 'end' | 'center';
 /** Which edge a column pins to. */
 export type ColumnPin = 'start' | 'end';
@@ -1149,7 +1160,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                     aria-selected={{line.ariaSelected}}
                     data-selected={{line.selectedFlag}}
                     data-activatable={{this.activatable}}
-                    {{rovingTabindex (this.isRoving line.index)}}
+                    {{rowStop (this.isRoving line.index)}}
                     {{focusWhen (this.isFocusTarget line.index)}}
                     {{listen 'focusin' (fn this.onRowFocusIn line.index)}}
                     {{listen 'click' (fn this.onRowClick line.row line.index)}}
