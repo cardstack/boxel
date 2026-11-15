@@ -208,7 +208,6 @@ export const OptionCard: TemplateOnlyComponent<OptionCardSignature> = <template>
         border-end-end-radius: var(--oc-radius);
       }
       .pretui-optioncard[data-variant='list'][data-selected='true'] {
-        box-shadow: none;
         background-color: color-mix(in oklch, var(--oc-tone) 8%, var(--card));
       }
       .pretui-optioncard[data-variant='list']:has(.pretui-optioncard-input:focus-visible) {
@@ -278,7 +277,8 @@ export const ChoiceGrid: TemplateOnlyComponent<ChoiceGridSignature> = <template>
         grid-template-columns: repeat(4, minmax(0, 1fr));
       }
       /* list stacks its rows in one bordered group, whatever the orientation */
-      .pretui-choicecards[data-variant='list'] {
+      /* [data-orientation] lifts it over the horizontal column rules */
+      .pretui-choicecards[data-variant='list'][data-orientation] {
         grid-template-columns: minmax(0, 1fr);
         gap: 0;
         border-radius: var(--radius-surface, 0.625rem);
