@@ -2404,7 +2404,7 @@ module(basename(import.meta.filename), function () {
               },
             }),
           );
-        assert.strictEqual(createResponse.status, 201, 'realm is created');
+        assert.strictEqual(createResponse.status, 202, 'realm is created');
         let botRealmURL = createResponse.body.data.id;
 
         let publishResponse = await request
