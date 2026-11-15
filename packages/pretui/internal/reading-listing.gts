@@ -124,7 +124,6 @@ export type ListingSizeArg =
   | 'large'
   | 'middle';
 
-
 /**
  * Sets `indeterminate` — a PROPERTY with no content attribute at all, which
  * is why it cannot be bound as `indeterminate={{...}}`: Glimmer would call
@@ -145,10 +144,9 @@ export const setsIndeterminate = modifier(
  *
  * It is a plain class, not a component and not a modifier, for the reason
  * `DataSource` is one: it is testable without a DOM and it can be held by
- * anything. `<List>` holds one. `<DataTable>` deliberately does NOT — a
- * plain `<table>` must leave Tab alone so the links, buttons and checkboxes
- * inside its cells stay reachable in document order. Roving row focus is a
- * `role='grid'` behaviour, and this file does not claim that role.
+ * anything. `<List>` holds one, and so does `<DataTable>` when its rows
+ * are activatable: only the rows rove, so the links, buttons and checkboxes
+ * inside cells stay in the Tab order in document order.
  */
 export class RowCursor {
   constructor(private readCount: () => number) {}
