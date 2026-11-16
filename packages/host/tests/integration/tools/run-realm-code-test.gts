@@ -4602,21 +4602,25 @@ module(
   'Integration | tools | run-realm-code | catalog-reuse',
   function (hooks) {
     setupRenderingTest(hooks);
+    // The registry is read-only by type; the module gates the catalog, and
+    // puts back what the registry held for the feature before it.
+    let featureRealms = SKILL_FEATURE_REALMS as Record<string, string[]>;
+    let savedRealms: string[] | undefined;
     // The test build lists no catalog, so list one for the default realms
     // to leave out. It must be listed before the user signs in.
     hooks.beforeEach(function () {
       setCatalogRealmURL(
         getService('network').virtualNetwork.toURL('@cardstack/catalog/').href,
       );
-      // The registry is read-only by type; the module gates the catalog.
-      (SKILL_FEATURE_REALMS as Record<string, string[]>)['catalog-reuse'] = [
-        CATALOG_REALM_PREFIX,
-      ];
+      savedRealms = featureRealms['catalog-reuse'];
+      featureRealms['catalog-reuse'] = [CATALOG_REALM_PREFIX];
     });
     hooks.afterEach(function () {
-      delete (SKILL_FEATURE_REALMS as Record<string, string[]>)[
-        'catalog-reuse'
-      ];
+      if (savedRealms) {
+        featureRealms['catalog-reuse'] = savedRealms;
+      } else {
+        delete featureRealms['catalog-reuse'];
+      }
       resetCatalogRealmURL();
     });
     setupLocalIndexing(hooks);
@@ -5122,6 +5126,7 @@ module('Integration | tools | run-realm-code | catalog', function (hooks) {
         `await realm.entries.search({}, { realms: ['@cardstack/catalog/'] });`,
       );
       await search(`await realm.entries.search({});`);
+      assert.strictEqual(sentRealms.length, 2, 'both searches were sent');
       assert.deepEqual(
         sentRealms[0],
         ['@cardstack/catalog/'],

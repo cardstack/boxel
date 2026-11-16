@@ -11748,6 +11748,7 @@ module('skill feature sections', () => {
   test("a feature's realms are left out until the room enables it", () => {
     // The registry is read-only by type; the test gates a stand-in realm.
     let featureRealms = SKILL_FEATURE_REALMS as Record<string, string[]>;
+    let savedRealms = featureRealms['catalog-reuse'];
     featureRealms['catalog-reuse'] = ['@cardstack/some-realm/'];
     try {
       assert.deepEqual(realmsOfDisabledFeatures([]), [
@@ -11755,7 +11756,11 @@ module('skill feature sections', () => {
       ]);
       assert.deepEqual(realmsOfDisabledFeatures(['catalog-reuse']), []);
     } finally {
-      delete featureRealms['catalog-reuse'];
+      if (savedRealms) {
+        featureRealms['catalog-reuse'] = savedRealms;
+      } else {
+        delete featureRealms['catalog-reuse'];
+      }
     }
   });
 });
