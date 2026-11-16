@@ -1,5 +1,6 @@
 import QUnit from 'qunit';
 import type { Readable } from 'stream';
+import type { Page } from 'puppeteer';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { randomUUID } from 'crypto';
@@ -15,6 +16,9 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { enqueueAutomationRunJob } from '@cardstack/runtime-common/jobs/run-command';
+import { inMemorySessionsGlobal } from '@cardstack/runtime-common/in-memory-sessions';
+import { PagePool } from '../prerender/page-pool.ts';
+import { isRunAffinityKey } from '../prerender/affinity.ts';
 import {
   automationFixture,
   setupPermissionedRealmCached,
@@ -33,6 +37,48 @@ const realmURL = new URL('http://127.0.0.1:4444/automation-run-command-test/');
 const OWNER = '@run-command-owner:localhost';
 const REALM_USER = '@node-test_realm:localhost';
 const SOURCE = 'application/vnd.card+source';
+
+// Keeps every tab the pool hands an automation run, so a test can read what
+// the tab holds once the run has answered. Answers the tabs and how to stop.
+function keepRunTabs(): { tabs: Set<Page>; restore: () => void } {
+  let originalGetPage = PagePool.prototype.getPage;
+  let tabs = new Set<Page>();
+  PagePool.prototype.getPage = async function (
+    this: PagePool,
+    ...args: Parameters<PagePool['getPage']>
+  ) {
+    let pageInfo = await originalGetPage.apply(this, args);
+    if (isRunAffinityKey(args[0])) {
+      tabs.add(pageInfo.page);
+    }
+    return pageInfo;
+  } as PagePool['getPage'];
+  return {
+    tabs,
+    restore: () => {
+      PagePool.prototype.getPage = originalGetPage;
+    },
+  };
+}
+
+// The claims of every JWT in `text`.
+function jwtClaimsIn(text: string): Record<string, unknown>[] {
+  let claims: Record<string, unknown>[] = [];
+  for (let [token] of text.matchAll(
+    /eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*/g,
+  )) {
+    try {
+      claims.push(
+        JSON.parse(
+          Buffer.from(token.split('.')[1], 'base64url').toString('utf8'),
+        ),
+      );
+    } catch {
+      // not a JWT after all
+    }
+  }
+  return claims;
+}
 
 const WRITES = 'automation/writes';
 const THROWS = 'automation/throws';
@@ -144,6 +190,62 @@ module(basename(import.meta.filename), function (hooks) {
       'written by a manual run',
       "the script's write is in the realm, and it saw its run context",
     );
+  });
+
+  test("a run's token never reaches its tab's storage or cookies, and is gone from the tab once the run answers", async function (assert) {
+    let { tabs, restore } = keepRunTabs();
+    let run: AutomationRun;
+    try {
+      run = await runAutomation(WRITES, 600);
+    } finally {
+      restore();
+    }
+    // The automation command refuses to run without a run token for its
+    // realm, so a complete run is one whose token reached the tab.
+    assert.strictEqual(
+      run.state,
+      'complete',
+      `the run completes (${run.errorReason}: ${run.errorMessage})`,
+    );
+    assert.strictEqual(tabs.size, 1, 'the run ran in one tab');
+    for (let tab of tabs) {
+      let held = await tab.evaluate((sessionsGlobal: string) => {
+        let storage: Record<string, string | null> = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          let key = localStorage.key(i)!;
+          storage[key] = localStorage.getItem(key);
+        }
+        return {
+          storage,
+          documentCookie: document.cookie,
+          inMemorySessions: (globalThis as any)[sessionsGlobal] ?? null,
+        };
+      }, inMemorySessionsGlobal);
+      let cookies = await tab.browserContext().cookies();
+      assert.false(
+        'boxel-session' in held.storage,
+        "the tab's storage holds no sessions",
+      );
+      let runTokens = [
+        ...Object.entries(held.storage).flatMap(([key, value]) =>
+          jwtClaimsIn(`${key} ${value ?? ''}`),
+        ),
+        ...jwtClaimsIn(held.documentCookie),
+        ...cookies.flatMap((cookie) =>
+          jwtClaimsIn(`${cookie.name} ${cookie.value}`),
+        ),
+      ].filter((claims) => claims.run !== undefined);
+      assert.deepEqual(
+        runTokens,
+        [],
+        "no run token is in the tab's storage or its cookies",
+      );
+      assert.strictEqual(
+        held.inMemorySessions,
+        null,
+        "the run's in-memory sessions are dropped once it answers",
+      );
+    }
   });
 
   test('a script that throws commits nothing and records its line', async function (assert) {

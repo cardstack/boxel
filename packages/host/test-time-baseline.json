@@ -1,15 +1,6 @@
 {
   "main": [
     {
-      "run": 42734120092,
-      "at": "2026-11-10T01:12:40Z",
-      "minutes": 215.2,
-      "slowestShard": 15.2,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
       "run": 42751476816,
       "at": "2026-11-10T03:45:23Z",
       "minutes": 216.5,
@@ -359,45 +350,18 @@
       "shards": 16,
       "runsOn": true,
       "indexCache": false
+    },
+    {
+      "run": 43779917285,
+      "at": "2026-11-16T00:21:50Z",
+      "minutes": 241.3,
+      "slowestShard": 17.7,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": false
     }
   ],
   "pullRequest": [
-    {
-      "run": 42913975589,
-      "at": "2026-11-10T22:22:34Z",
-      "minutes": 214.5,
-      "slowestShard": 14.9,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
-      "run": 42914104715,
-      "at": "2026-11-10T22:23:24Z",
-      "minutes": 167.7,
-      "slowestShard": 12.3,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": true
-    },
-    {
-      "run": 42914441831,
-      "at": "2026-11-10T22:25:34Z",
-      "minutes": 173.2,
-      "slowestShard": 12.4,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
-      "run": 42914742664,
-      "at": "2026-11-10T22:27:34Z",
-      "minutes": 199.8,
-      "slowestShard": 14.3,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
     {
       "run": 42914966042,
       "at": "2026-11-10T22:29:04Z",
@@ -3035,6 +2999,42 @@
       "shards": 16,
       "runsOn": false,
       "indexCache": false
+    },
+    {
+      "run": 43708573712,
+      "at": "2026-11-15T11:21:59Z",
+      "minutes": 237.5,
+      "slowestShard": 19.2,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": false
+    },
+    {
+      "run": 43725941572,
+      "at": "2026-11-15T14:43:53Z",
+      "minutes": 169.5,
+      "slowestShard": 13.1,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": true
+    },
+    {
+      "run": 43734438966,
+      "at": "2026-11-15T16:15:19Z",
+      "minutes": 169.6,
+      "slowestShard": 12.7,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": true
+    },
+    {
+      "run": 43757528263,
+      "at": "2026-11-15T20:20:35Z",
+      "minutes": 213.4,
+      "slowestShard": 17.7,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": true
     }
   ]
 }
