@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import type Koa from 'koa';
 import type { Readable } from 'stream';
 import { readRequestText, setRequestText } from '../middleware/index.ts';
@@ -19,9 +20,15 @@ import { requestHostURL, type HostURLMatch } from './realm-host-urls.ts';
 // two its stored markup names. A page's canonical link and `og:url` name the
 // canonical host URL instead (ADR 033 §1.4).
 //
-// Nothing translated is stored. A request for a file's stored bytes (card
-// source) is answered untranslated, so that a client which writes the file
-// back writes what the realm holds.
+// Nothing translated is stored. A file's stored bytes, as a card-source read
+// serves them, are answered untranslated, so that a client which writes the
+// file back writes what the realm holds.
+//
+// A translated response is a different representation from the realm's, and
+// it changes when the canonical host URL changes, which the realm's ETag does
+// not see. So every ETag on a host URL carries a suffix that names the
+// translation, and a conditional request has the suffix removed before the
+// realm compares it. A validator with another suffix, or none, never matches.
 
 // A request whose body names ids: JSON, JSON:API and the operations envelope.
 function isJSONType(contentType: string): boolean {
@@ -31,8 +38,13 @@ function isJSONType(contentType: string): boolean {
 
 const CARD_SOURCE = 'application/vnd.card+source';
 
-// The response types whose bodies are translated. `+html` types are the
-// card+html and file-meta+html reads, JSON documents that carry markup.
+// The card+html and file-meta+html reads: JSON documents that carry markup,
+// a `head` rendering's canonical link and `og:url` among it.
+function isMarkupEnvelopeType(type: string): boolean {
+  return type.endsWith('+html');
+}
+
+// The response types whose bodies are translated.
 function isTranslatedResponseType(type: string): boolean {
   return (
     type === 'text/html' ||
@@ -47,6 +59,9 @@ const CONFIG_META =
 const LINK_OR_META = /<(?:link|meta)\b[^>]*>/gi;
 const CANONICAL_TAG =
   /\brel\s*=\s*["']?[^"'>]*\bcanonical\b|\bproperty\s*=\s*["']?og:url["'\s/>]/i;
+
+const ENTITY_TAG = /(W\/)?"([^"]*)"/g;
+const CONDITIONAL_HEADERS = ['if-match', 'if-none-match', 'if-range'];
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -88,6 +103,7 @@ export class HostURLTranslator {
   #canonical: Replacer;
   #realmPath: string;
   #hostPath: string;
+  #validatorSuffix: string;
 
   constructor(match: HostURLMatch) {
     this.match = match;
@@ -107,6 +123,34 @@ export class HostURLTranslator {
     ]);
     this.#realmPath = new URL(realmURL).pathname;
     this.#hostPath = new URL(hostURL).pathname;
+    let hash = createHash('sha256')
+      .update(`${realmURL}\n${hostURL}\n${canonicalHostURL}`)
+      .digest('base64url')
+      .slice(0, 12);
+    this.#validatorSuffix = `.h${hash}`;
+  }
+
+  // The realm's ETag, as the ETag of this translation of it.
+  outboundETag(value: string): string {
+    return value.replace(
+      ENTITY_TAG,
+      (_match, weak: string | undefined, tag: string) =>
+        `${weak ?? ''}"${tag}${this.#validatorSuffix}"`,
+    );
+  }
+
+  // A conditional header's entity tags, as the realm's own. A tag from
+  // another translation keeps a mark that matches no realm ETag.
+  inboundConditional(value: string): string {
+    return value.replace(
+      ENTITY_TAG,
+      (_match, weak: string | undefined, tag: string) => {
+        let realmTag = tag.endsWith(this.#validatorSuffix)
+          ? tag.slice(0, -this.#validatorSuffix.length)
+          : `${tag}.stale`;
+        return `${weak ?? ''}"${realmTag}"`;
+      },
+    );
   }
 
   // Text from a visitor, with the host URLs it names as the realm's URL.
@@ -133,7 +177,11 @@ export class HostURLTranslator {
   }
 
   outboundHeader(name: string, value: string): string {
-    if (name.toLowerCase() === 'location' && value.startsWith('/')) {
+    let lowerName = name.toLowerCase();
+    if (lowerName === 'etag') {
+      return this.outboundETag(value);
+    }
+    if (lowerName === 'location' && value.startsWith('/')) {
       return this.outboundPath(value);
     }
     return this.outbound(value);
@@ -154,7 +202,42 @@ export class HostURLTranslator {
   }
 
   outboundBody(text: string, type: string): string {
-    return type === 'text/html' ? this.outboundHTML(text) : this.outbound(text);
+    if (type === 'text/html') {
+      return this.outboundHTML(text);
+    }
+    if (isMarkupEnvelopeType(type)) {
+      return this.#outboundMarkupEnvelope(text);
+    }
+    return this.outbound(text);
+  }
+
+  // Each string in the document is translated as markup, so a `head`
+  // rendering's canonical link and `og:url` name the canonical host URL.
+  #outboundMarkupEnvelope(text: string): string {
+    let doc: unknown;
+    try {
+      doc = JSON.parse(text);
+    } catch {
+      return this.outbound(text);
+    }
+    let walk = (value: unknown): unknown => {
+      if (typeof value === 'string') {
+        return this.outboundHTML(value);
+      }
+      if (Array.isArray(value)) {
+        return value.map(walk);
+      }
+      if (value && typeof value === 'object') {
+        return Object.fromEntries(
+          Object.entries(value).map(([key, child]) => [
+            this.outbound(key),
+            walk(child),
+          ]),
+        );
+      }
+      return value;
+    };
+    return JSON.stringify(walk(doc));
   }
 
   #outboundTag(tag: string): string {
@@ -229,6 +312,13 @@ export function translateAtHostURLs(): (
     let translator = new HostURLTranslator(match);
 
     // Inbound.
+    let headers = ctxt.req.headers as Record<string, string | undefined>;
+    for (let name of CONDITIONAL_HEADERS) {
+      let value = headers[name];
+      if (typeof value === 'string') {
+        headers[name] = translator.inboundConditional(value);
+      }
+    }
     let querystring = ctxt.querystring;
     if (querystring) {
       let translated = translator.inbound(querystring);
@@ -265,7 +355,11 @@ export function translateAtHostURLs(): (
       ctxt.status === 206 ||
       ctxt.body == null ||
       !isTranslatedResponseType(type) ||
-      ctxt.get('accept').toLowerCase().includes(CARD_SOURCE) ||
+      // A card-source read answers with the file's own content type, so it
+      // is known by what the request asked for. Its errors are translated.
+      (ctxt.get('accept').toLowerCase().includes(CARD_SOURCE) &&
+        ctxt.status >= 200 &&
+        ctxt.status < 300) ||
       // Koa reads an absent header as ''. A compressed body can't be read as
       // text here.
       !['', 'identity'].includes(ctxt.response.get('content-encoding'))

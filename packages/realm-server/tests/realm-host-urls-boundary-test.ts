@@ -19,6 +19,7 @@ import {
   testRealmURLFor,
 } from './helpers/index.ts';
 import { HostURLTranslator } from '../lib/realm-host-urls-boundary.ts';
+import { notifyHostURLsChanged } from '../lib/realm-host-urls.ts';
 
 // The realm is served at two host URLs: its canonical one at the root of
 // `canonical.localhost`, and another under a path prefix, which requests come
@@ -125,6 +126,52 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         translator.outboundHeader('Location', '/elsewhere'),
         '/elsewhere',
+      );
+    });
+
+    test('a translated ETag is the realm ETag again in a conditional request', function (assert) {
+      let etag = translator.outboundHeader('ETag', 'W/"abc"');
+      assert.notStrictEqual(etag, 'W/"abc"', 'the ETag names the translation');
+      assert.true(etag.startsWith('W/"abc'), 'a weak ETag stays weak');
+      assert.strictEqual(
+        translator.inboundConditional(`"x", ${etag}`),
+        '"x.stale", W/"abc"',
+        'a tag of this translation is the realm ETag; any other matches none',
+      );
+      assert.strictEqual(translator.inboundConditional('*'), '*');
+
+      let other = new HostURLTranslator({
+        hostURL: 'https://site.example.test/shop/',
+        realmURL: 'https://realms.example.test/owner/store/',
+        isCanonical: false,
+        canonicalHostURL: 'https://other.example.test/',
+      });
+      assert.notStrictEqual(
+        other.outboundETag('"abc"'),
+        translator.outboundETag('"abc"'),
+        'another canonical host URL gives another ETag',
+      );
+    });
+
+    test('translates the markup inside a +html envelope', function (assert) {
+      let envelope = JSON.stringify({
+        data: { id: 'https://realms.example.test/owner/store/a' },
+        included: [
+          {
+            type: 'html',
+            attributes: {
+              html: '<link rel="canonical" href="https://realms.example.test/owner/store/a"><a href="https://realms.example.test/owner/store/a">a</a>',
+            },
+          },
+        ],
+      });
+      let doc = JSON.parse(
+        translator.outboundBody(envelope, 'application/vnd.card+html'),
+      );
+      assert.strictEqual(doc.data.id, 'https://site.example.test/shop/a');
+      assert.strictEqual(
+        doc.included[0].attributes.html,
+        '<link rel="canonical" href="https://store.example.test/a"><a href="https://site.example.test/shop/a">a</a>',
       );
     });
   });
@@ -325,6 +372,104 @@ module(basename(import.meta.filename), function () {
         response.text,
         readFileSync(join(testRealmPath, 'person-1.json'), 'utf8'),
       );
+    });
+
+    test('an error answering a card-source request names the host URL', async function (assert) {
+      let response = await get(
+        `${SPACE_PREFIX}missing.json`,
+        SupportedMimeType.CardSource,
+      );
+
+      assert.strictEqual(response.status, 404, response.text);
+      assert.true(
+        response.text.includes(`${SPACE_HOST_URL}missing.json`),
+        response.text,
+      );
+      assert.false(response.text.includes(realmURL.href), 'no realm URL');
+    });
+
+    test("a head rendering's canonical link and og:url name the canonical host URL", async function (assert) {
+      let response = await get(
+        `${SPACE_PREFIX}person-1?format=head`,
+        SupportedMimeType.CardHtml,
+      );
+
+      assert.strictEqual(response.status, 200, response.text);
+      let doc = JSON.parse(response.text);
+      assert.strictEqual(doc.data.id, `${SPACE_HOST_URL}person-1`);
+      let html: string = doc.included.find(
+        (resource: { type: string }) => resource.type === 'html',
+      ).attributes.html;
+      assert.strictEqual(
+        attr(html, /<link [^>]*rel="canonical"[^>]*>/, 'href'),
+        `${CANONICAL_HOST_URL}person-1`,
+      );
+      assert.strictEqual(
+        attr(html, /<meta [^>]*property="og:url"[^>]*>/, 'content'),
+        `${CANONICAL_HOST_URL}person-1`,
+      );
+      assert.false(response.text.includes(realmURL.href), 'no realm URL');
+    });
+
+    test('an ETag on a host URL is revalidated there, and changes with the canonical host URL', async function (assert) {
+      let realmResponse = await request
+        .get(`${realmURL.pathname}person-1`)
+        .set('Accept', SupportedMimeType.CardJson);
+      let realmETag = realmResponse.headers.etag;
+      let first = await get(
+        `${SPACE_PREFIX}person-1`,
+        SupportedMimeType.CardJson,
+      );
+      let etag = first.headers.etag;
+      assert.ok(realmETag, 'the realm answers with an ETag');
+      assert.ok(etag, 'the host URL answers with an ETag');
+      assert.notStrictEqual(etag, realmETag, 'the two ETags differ');
+
+      let revalidated = await get(
+        `${SPACE_PREFIX}person-1`,
+        SupportedMimeType.CardJson,
+      ).set('If-None-Match', etag);
+      assert.strictEqual(revalidated.status, 304, 'its own ETag revalidates');
+      assert.strictEqual(revalidated.headers.etag, etag);
+
+      let withRealmETag = await get(
+        `${SPACE_PREFIX}person-1`,
+        SupportedMimeType.CardJson,
+      ).set('If-None-Match', realmETag);
+      assert.strictEqual(
+        withRealmETag.status,
+        200,
+        "the realm's own ETag does not revalidate a translation",
+      );
+
+      await query(dbAdapter, [
+        `UPDATE realm_host_urls SET is_canonical = false WHERE host =`,
+        param(CANONICAL_HOST),
+      ]);
+      await query(dbAdapter, [
+        `UPDATE realm_host_urls SET is_canonical = true WHERE host =`,
+        param(SPACE_HOST),
+      ]);
+      await notifyHostURLsChanged(dbAdapter, CANONICAL_HOST);
+      await notifyHostURLsChanged(dbAdapter, SPACE_HOST);
+
+      let after = await get(
+        `${SPACE_PREFIX}person-1`,
+        SupportedMimeType.CardJson,
+      ).set('If-None-Match', etag);
+      for (let attempt = 0; attempt < 50 && after.status === 304; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        after = await get(
+          `${SPACE_PREFIX}person-1`,
+          SupportedMimeType.CardJson,
+        ).set('If-None-Match', etag);
+      }
+      assert.strictEqual(
+        after.status,
+        200,
+        'a validator from before the canonical host URL changed does not revalidate',
+      );
+      assert.notStrictEqual(after.headers.etag, etag);
     });
 
     test('an operations request naming host URLs reaches the realm in its own URLs', async function (assert) {
