@@ -47,27 +47,16 @@ module('Pretui | components/empty-state', function (hooks) {
     assert.notOk(q('.pretui-empty-texture'));
   });
 
-  test('EmptyState places its <:actions> block under the message as given', async function (assert) {
+  test('EmptyState places its <:action> block under the message as given', async function (assert) {
     await render(
       <template>
         <EmptyState @title='No batches' @message='Start one, or bring one in.'>
-          <:actions><button type='button' data-test-new>Start blank</button><button type='button' data-test-import>Import CSV</button></:actions>
+          <:action><button type='button' data-test-new>Start blank</button><button type='button' data-test-import>Import CSV</button></:action>
         </EmptyState>
       </template>,
     );
     assert.deepEqual(texts('.pretui-empty-action > *'), ['Start blank', 'Import CSV'], 'the block, untouched');
     assert.notOk(q('[data-test-pretui-empty]').textContent?.includes(' or '), 'no built-in separator');
-  });
-
-  test('EmptyState still renders the deprecated <:action> block in the same place', async function (assert) {
-    await render(
-      <template>
-        <EmptyState @title='No rows'>
-          <:action><button type='button' data-test-new>Add</button></:action>
-        </EmptyState>
-      </template>,
-    );
-    assert.ok(q('.pretui-empty-action [data-test-new]'));
   });
 
   test('EmptyState renders its default block as the message, markup included', async function (assert) {

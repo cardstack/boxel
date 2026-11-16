@@ -34,12 +34,12 @@ class EmptyStateUsage extends Component {
     let message = this.messageVal
       ? ''
       : '<:default>Try clearing the <Token …/> filters.</:default>';
-    return `<EmptyState ${bits.join(' ')}>${message}<:actions>…</:actions></EmptyState>`;
+    return `<EmptyState ${bits.join(' ')}>${message}<:action>…</:action></EmptyState>`;
   }
   <template>
     <FreestyleUsage
       @name='EmptyState'
-      @description='A named absence with optional actions. Texture is confined to this low-information surface and never competes with data.'
+      @description='A named absence with optional action. Texture is confined to this low-information surface and never competes with data.'
       @source={{this.usage}}
     >
       <:example>
@@ -51,7 +51,7 @@ class EmptyStateUsage extends Component {
             @texture={{this.texture}}
             @size={{this.size}}
           >
-            <:actions><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:actions>
+            <:action><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:action>
           </EmptyState>
         {{else}}
           <EmptyState
@@ -64,7 +64,7 @@ class EmptyStateUsage extends Component {
               and
               <Token @value='harvest' />
               filters.</:default>
-            <:actions><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:actions>
+            <:action><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:action>
           </EmptyState>
         {{/if}}
       </:example>
@@ -99,10 +99,9 @@ class EmptyStateUsage extends Component {
           @description='The message with markup in it (a Token, a link, emphasis), in the same place and type as @message. Wins over @message when both are given.'
         />
         <Args.Yield
-          @name='actions'
-          @description="The ways forward, placed under the message as given: one Button, or several in the caller's own layout."
+          @name='action'
+          @description="Any content, placed under the message as given: one Button, or several in the caller's own layout."
         />
-        <Args.Yield @name='action' @description='Deprecated alias of actions.' />
       </:api>
     </FreestyleUsage>
   </template>

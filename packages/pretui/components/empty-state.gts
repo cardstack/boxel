@@ -25,11 +25,9 @@ export interface EmptyStateSignature {
     /** The message with markup in it (a Token, a link, emphasis); wins over @message when both are given. */
     default: [];
     /**
-     * The ways forward, placed under the message as given. The caller lays
-     * out several actions.
+     * Any content, placed under the message as given. The caller lays out
+     * several actions.
      */
-    actions: [];
-    /** @deprecated use `<:actions>`; renders in the same place */
     action: [];
   };
   Element: HTMLDivElement;
@@ -59,9 +57,7 @@ export class EmptyState extends Component<EmptyStateSignature> {
       {{else if @message}}
         <p class='pretui-empty-msg'>{{@message}}</p>
       {{/if}}
-      {{#if (has-block 'actions')}}
-        <div class='pretui-empty-action'>{{yield to='actions'}}</div>
-      {{else if (has-block 'action')}}
+      {{#if (has-block 'action')}}
         <div class='pretui-empty-action'>{{yield to='action'}}</div>
       {{/if}}
     </div>

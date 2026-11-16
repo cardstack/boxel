@@ -8,8 +8,7 @@ What a region shows when it has nothing to show: a title, an optional message, a
 @title: string   (required)
 @message?, @texture? (default true), @size? (default 'm')
 <:default>   — the message with markup in it; wins over @message
-<:actions>   — the ways forward, placed under the message as given
-<:action>    — deprecated alias of <:actions>
+<:action>    — any content, placed under the message as given
 Element: HTMLDivElement
 ```
 
@@ -21,7 +20,7 @@ Element: HTMLDivElement
 
 **`@size`** takes the house scale (`xs | s | m | l | xl` and the `sm` / `md` / `lg` / `small` / `medium` / `large` / `default` aliases) and paints two steps. `s` is the compact well for an empty note inside a card section: `--boxel-sp` padding on every side and the title at `--boxel-font-size`. `m`, the default, is sized for a page section. `xs` lands on `s`, and `l` / `xl` on `m`. The resolved step lands as `data-size`, `'s'` or `'m'`, on every render, the default included.
 
-**EmptyState places its actions; it does not lay them out.** Whether two actions are equal alternatives, a primary and a secondary, or an action and a link is the caller's call, so `<:actions>` renders under the message exactly as given. One action is a **Button** on its own. For several, the caller brings the layout, such as a **ButtonGroup** or its own flex row, along with anything between them, such as an "or". Primary versus secondary comes from each Button's `@appearance`. `<:action>` is a deprecated alias that renders in the same place.
+**EmptyState places its actions; it does not lay them out.** Whether two actions are equal alternatives, a primary and a secondary, or an action and a link is the caller's call, so `<:action>` renders under the message exactly as given. One action is a **Button** on its own. For several, the caller brings the layout, such as a **ButtonGroup** or its own flex row, along with anything between them, such as an "or". Primary versus secondary comes from each Button's `@appearance`.
 
 `max-width: 34ch` on the message is the measure at which a centred paragraph stays scannable — wider and the eye loses the line, and centred text is much less forgiving of long measures than left-aligned.
 
@@ -48,7 +47,7 @@ Gaps, and the first two are the real ones:
 - **The texture layer has no `aria-hidden`**, though it is an empty `<div>` with no content, so nothing is announced — correct by accident rather than by declaration.
 - **The empty state does not replace a table's semantics.** If you render it _instead of_ a `<tbody>`, screen-reader users lose the table's structure and get a bare region. React Spectrum's `renderEmptyState` renders inside the grid for exactly this reason. Placement is the caller's responsibility here.
 - `@message` is limited to `34ch` and centred; long messages will be several short centred lines, which is harder to read for users with dyslexia (WCAG **1.4.8**, AAA).
-- Each action in `<:actions>` is an ordinary tab stop, which is right — an empty state should not trap or auto-focus.
+- Each action in `<:action>` is an ordinary tab stop, which is right — an empty state should not trap or auto-focus.
 
 ## Theming
 
