@@ -522,6 +522,9 @@ export class RenderRunner {
         poolInfo.timedOut = true;
       }
     };
+    // When the command started in the tab, so a command that fails partway
+    // still reports the tab time it held.
+    let renderStart: number | undefined;
     try {
       // Page acquired but untouched — a cancel in this window doesn't
       // need eviction (the tab is still clean), so tag it `'queued'`.
@@ -530,7 +533,7 @@ export class RenderRunner {
       // check lives inside the try so `finally { release() }` frees the
       // tab slot if the caller aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
-      let renderStart = Date.now();
+      renderStart = Date.now();
       let requestId = randomUUID();
       let nonce = String(this.#nonce);
       let storageKey = `${commandRequestStorageKeyPrefix}${requestId}`;
@@ -719,7 +722,11 @@ export class RenderRunner {
       };
       return {
         response,
-        timings: { launchMs, renderMs: 0, waits },
+        timings: {
+          launchMs,
+          renderMs: renderStart === undefined ? 0 : Date.now() - renderStart,
+          waits,
+        },
         pool: poolInfo,
       };
     } finally {

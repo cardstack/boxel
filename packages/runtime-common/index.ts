@@ -2047,6 +2047,9 @@ export * from './code-ref.ts';
 export * from './command-parsing-utils.ts';
 export * from './serializers/index.ts';
 export * from './host-routing-validation.ts';
+export * from './host-routes.ts';
+export * from './host-route-resolver.ts';
+export * from './host-route-address.ts';
 export * from './route-pattern.ts';
 
 export type {
@@ -2594,6 +2597,7 @@ export {
 export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
 export * from './automation-runs.ts';
+export * from './automation-run-charge.ts';
 export * from './automation-run-command.ts';
 export * from './ai-batches.ts';
 export * from './automation-files.ts';

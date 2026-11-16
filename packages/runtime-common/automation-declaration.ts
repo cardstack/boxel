@@ -128,6 +128,7 @@ export type AutomationProblemCode =
   | 'invalid-trigger-kind'
   | 'missing-label'
   | 'duplicate-label'
+  | 'reserved-label'
   | 'invalid-cron'
   | 'cron-too-frequent'
   | 'missing-time-zone'
@@ -560,6 +561,11 @@ function readScript(
   return script;
 }
 
+// The trigger label a Preview's or a Run now's run row carries, with the
+// click as its slot. No trigger on a card may take it, so a click can never
+// share a run's slot and dedupe key with a scheduled run.
+export const MANUAL_RUN_TRIGGER = 'manual';
+
 function readTriggers(
   raw: unknown,
   report: Report,
@@ -572,6 +578,12 @@ function readTriggers(
     let label = text(trigger.label);
     if (label === undefined) {
       report('missing-label', `${path}.label`, 'Every trigger needs a label');
+    } else if (label === MANUAL_RUN_TRIGGER) {
+      report(
+        'reserved-label',
+        `${path}.label`,
+        `The label "${label}" is reserved for runs started by hand (Preview and Run now); choose another label`,
+      );
     } else if (labels.has(label)) {
       report(
         'duplicate-label',

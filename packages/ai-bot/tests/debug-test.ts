@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common';
+import { SKILL_FEATURES } from '@cardstack/runtime-common/ai';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import { handleDebugCommands } from '../lib/debug.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
@@ -168,6 +169,28 @@ module('handleDebugCommands - help', (hooks) => {
     return sent[0].content.body;
   }
 
+  // Runs `fn` with `features` as the registered skill features, then puts
+  // back what the registry held. The registry is read-only by type.
+  async function withFeatures(
+    features: Record<string, string>,
+    fn: () => Promise<void>,
+  ) {
+    let registry = SKILL_FEATURES as Record<string, string>;
+    let saved = { ...registry };
+    let reset = (to: Record<string, string>) => {
+      for (let name of Object.keys(registry)) {
+        delete registry[name];
+      }
+      Object.assign(registry, to);
+    };
+    reset(features);
+    try {
+      await fn();
+    } finally {
+      reset(saved);
+    }
+  }
+
   test('boxel-debug on its own lists the commands', async (assert) => {
     let body = await reply('boxel-debug');
     assert.true(body.includes('boxel-debug:eventlist'));
@@ -181,8 +204,17 @@ module('handleDebugCommands - help', (hooks) => {
   });
 
   test('the help lists the available features', async (assert) => {
-    let body = await reply('boxel-debug');
-    assert.true(body.includes('`catalog-reuse` — '));
+    await withFeatures({ 'stand-in-feature': 'Does nothing.' }, async () => {
+      let body = await reply('boxel-debug');
+      assert.true(body.includes('- `stand-in-feature` — Does nothing.'));
+    });
+  });
+
+  test('the help says when no feature is available', async (assert) => {
+    await withFeatures({}, async () => {
+      let body = await reply('boxel-debug');
+      assert.true(body.includes('No features are available.'));
+    });
   });
 
   test('an old debug: command points to boxel-debug', async (assert) => {
@@ -192,9 +224,26 @@ module('handleDebugCommands - help', (hooks) => {
     assert.true(body.includes('boxel-debug:feature:enable:'));
   });
 
+  test('a name inherited from Object.prototype is not a feature', async (assert) => {
+    let body = await reply('boxel-debug:feature:enable:constructor');
+    assert.true(body.includes('There is no feature named `constructor`.'));
+  });
+
   test('enabling an unknown feature says so', async (assert) => {
-    let body = await reply('boxel-debug:feature:enable:no-such-feature');
-    assert.true(body.includes('There is no feature named `no-such-feature`.'));
-    assert.true(body.includes('Available features: `catalog-reuse`.'));
+    await withFeatures({ 'stand-in-feature': 'Does nothing.' }, async () => {
+      let body = await reply('boxel-debug:feature:enable:no-such-feature');
+      assert.true(
+        body.includes('There is no feature named `no-such-feature`.'),
+      );
+      assert.true(body.includes('Available features: `stand-in-feature`.'));
+    });
+  });
+
+  test('the feature status says when no feature is available', async (assert) => {
+    await withFeatures({}, async () => {
+      let body = await reply('boxel-debug:feature');
+      assert.true(body.includes('No features are enabled in this room.'));
+      assert.true(body.includes('No features are available.'));
+    });
   });
 });

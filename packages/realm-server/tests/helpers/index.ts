@@ -1833,6 +1833,7 @@ export async function runTestRealmServer({
   googleSignIn,
   oauthProvider,
   oauthTestResources,
+  oauthTestDocumentOrigins,
   oauthNewClientLimit,
   oauthAuthorizationLimit,
   secureOriginAppOrigins,
@@ -1878,6 +1879,9 @@ export async function runTestRealmServer({
   oauthTestResources?: ConstructorParameters<
     typeof RealmServer
   >[0]['__testOnlyOAuthResources'];
+  // Client ID metadata documents served from a stub: each `https://` origin
+  // maps to the stub's plain HTTP origin.
+  oauthTestDocumentOrigins?: ReadonlyMap<string, string>;
   // The provider's limit on new clients; omit for the production default.
   oauthNewClientLimit?: ConstructorParameters<
     typeof RealmServer
@@ -1997,6 +2001,9 @@ export async function runTestRealmServer({
     ...(oauthProvider ? { oauthProvider } : {}),
     ...(oauthTestResources
       ? { __testOnlyOAuthResources: oauthTestResources }
+      : {}),
+    ...(oauthTestDocumentOrigins
+      ? { __testOnlyOAuthDocumentOrigins: oauthTestDocumentOrigins }
       : {}),
     ...(oauthNewClientLimit ? { oauthNewClientLimit } : {}),
     ...(oauthAuthorizationLimit ? { oauthAuthorizationLimit } : {}),

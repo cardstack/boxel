@@ -8,6 +8,7 @@ import {
   fetchDirectWriters,
   insertPermissions,
   isDirectWriter,
+  isRealmAdministrator,
   rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -15,6 +16,7 @@ import type {
   QueuePublisher,
   QueueRunner,
   Realm,
+  RealmPermissions,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms.ts';
@@ -261,6 +263,111 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         await fetchDirectWriters(dbAdapter, realmURL, 'localhost'),
         ['@owner:localhost'],
+      );
+    });
+  });
+
+  // Administering a realm is direct write, with one addition: a service
+  // account administers a realm it created under its own name.
+  module('administering', function () {
+    const realmServerURL = new URL('http://127.0.0.1:4444/');
+    const bot = '@submissionbot:localhost';
+    const botWrite: RealmPermissions = { [bot]: ['read', 'write'] };
+
+    function administers(
+      permissions: RealmPermissions,
+      userId: string,
+      realmURL: string,
+      serverURL = realmServerURL,
+    ) {
+      return isRealmAdministrator(
+        permissions,
+        userId,
+        'localhost',
+        new URL(realmURL),
+        serverURL,
+      );
+    }
+
+    test('a person whose own row grants write administers the realm', function (assert) {
+      let permissions: RealmPermissions = {
+        '@writer:localhost': ['read', 'write'],
+        '@reader:localhost': ['read'],
+        users: ['read', 'write'],
+      };
+      let realmURL = 'http://127.0.0.1:4444/mango/shared/';
+      assert.true(administers(permissions, '@writer:localhost', realmURL));
+      assert.false(administers(permissions, '@reader:localhost', realmURL));
+      assert.false(
+        administers(permissions, 'users', realmURL),
+        'a wildcard row names no one',
+      );
+      assert.false(
+        administers(permissions, '@stranger:localhost', realmURL),
+        'no row, no authority',
+      );
+    });
+
+    test('a service account administers a realm under its own name', function (assert) {
+      assert.true(
+        administers(botWrite, bot, 'http://127.0.0.1:4444/submissionbot/pr-1/'),
+      );
+      assert.true(
+        administers(
+          botWrite,
+          bot,
+          'http://127.0.0.1:4444/realms/submissionbot/pr-1/',
+          new URL('http://127.0.0.1:4444/realms/'),
+        ),
+        'on a realm server mounted under a path',
+      );
+    });
+
+    test('a service account with write on a realm it did not create does not administer it', function (assert) {
+      for (let [realmURL, what] of [
+        ['http://127.0.0.1:4444/mango/shared/', 'a realm another user created'],
+        ['http://127.0.0.1:4444/submissions/', 'a bootstrap realm'],
+        [
+          'http://127.0.0.1:4444/submissionbot/',
+          'a realm merely named after the account',
+        ],
+        [
+          'http://127.0.0.1:4444/experiments/submissionbot/pr-1/',
+          'a realm nested under another path',
+        ],
+        [
+          'http://127.0.0.1:4444/submissionbot/pr-1/nested/',
+          'a realm below one it could create',
+        ],
+        ['http://other.example/submissionbot/pr-1/', 'a realm on another host'],
+        [
+          'http://127.0.0.1:4444/submissionbot/PR_1/',
+          'an endpoint the realm server would not create',
+        ],
+      ]) {
+        assert.false(administers(botWrite, bot, realmURL), what);
+      }
+    });
+
+    test('a service account needs its own write row even under its own name', function (assert) {
+      let realmURL = 'http://127.0.0.1:4444/submissionbot/pr-1/';
+      assert.false(
+        administers({ [bot]: ['read'] }, bot, realmURL),
+        'a read row',
+      );
+      assert.false(
+        administers({ users: ['read', 'write'] }, bot, realmURL),
+        'a wildcard write row',
+      );
+    });
+
+    test("one service account does not administer a realm under another service account's name", function (assert) {
+      assert.false(
+        administers(
+          { '@aibot:localhost': ['read', 'write'] },
+          '@aibot:localhost',
+          'http://127.0.0.1:4444/submissionbot/pr-1/',
+        ),
       );
     });
   });

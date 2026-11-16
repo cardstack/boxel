@@ -17,6 +17,7 @@ import {
 } from '@cardstack/runtime-common';
 import { cancelAutomationRunFor } from '@cardstack/runtime-common/automations';
 import { enqueueAutomationRunJob } from '@cardstack/runtime-common/jobs/run-command';
+import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
 import { inMemorySessionsGlobal } from '@cardstack/runtime-common/in-memory-sessions';
 import { PagePool } from '../prerender/page-pool.ts';
 import { isRunAffinityKey } from '../prerender/affinity.ts';
@@ -31,8 +32,8 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // An automation run end to end: its job is claimed by a worker, which sends
 // the script to a real prerender tab on the run's own affinity. There the
 // automation command runs it on Realm Runner's automation surface with the
-// run's token, the worker commits what it staged, and the run row says how it
-// ended.
+// run's token and sends its progress to its run log, the worker commits what
+// it staged, and the run row says how it ended.
 
 const realmURL = new URL('http://127.0.0.1:4444/automation-run-command-test/');
 const OWNER = '@run-command-owner:localhost';
@@ -85,6 +86,7 @@ const WRITES = 'automation/writes';
 const THROWS = 'automation/throws';
 const SLOW = 'automation/slow';
 const SPINS = 'automation/spins';
+const LOGS = 'automation/logs';
 
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
@@ -125,6 +127,12 @@ module(basename(import.meta.filename), function (hooks) {
       [`${SPINS}-script.js`]: [
         `await realm.fs.writeText('out/before-cancel.txt', 'staged, never lands');`,
         `while (true) {}`,
+      ].join('\n'),
+      ...automationFixture({ operations: [], path: LOGS }),
+      [`${LOGS}-script.js`]: [
+        `console.log('checking the feed');`,
+        `console.warn('the feed is slow');`,
+        `throw new Error('the feed said no');`,
       ].join('\n'),
     },
     onRealmSetup(args) {
@@ -338,6 +346,56 @@ module(basename(import.meta.filename), function (hooks) {
       await readFile('out/before-cancel.txt'),
       undefined,
       'what it staged never landed',
+    );
+  });
+
+  test("a run's console lines and the error it ends with reach its run log", async function (assert) {
+    let run = await runAutomation(LOGS, 600);
+    assert.strictEqual(run.state, 'error');
+    assert.strictEqual(run.errorReason, 'script-error');
+    let log = await readRunLog(dbAdapter, run.id);
+    assert.ok(log, "the run's log can be read");
+    let lines = log!.lines;
+    assert.deepEqual(
+      lines
+        .filter((line) => line.source === 'script')
+        .map(({ kind, level, message, scriptLine }) => ({
+          kind,
+          level,
+          message: kind === 'error' ? undefined : message,
+          scriptLine,
+        })),
+      [
+        {
+          kind: 'console',
+          level: 'log',
+          message: 'checking the feed',
+          scriptLine: 1,
+        },
+        {
+          kind: 'console',
+          level: 'warn',
+          message: 'the feed is slow',
+          scriptLine: 2,
+        },
+        {
+          kind: 'error',
+          level: 'error',
+          message: undefined,
+          scriptLine: 3,
+        },
+      ],
+      "the script's console lines and its uncaught error are in its log, in order, with their script lines",
+    );
+    let error = lines.find((line) => line.kind === 'error');
+    assert.ok(
+      error?.message.includes('the feed said no'),
+      `the error line carries the error's message: ${error?.message}`,
+    );
+    let finish = lines.findIndex((line) => line.kind === 'finish');
+    assert.ok(
+      finish > lines.indexOf(error!),
+      "the script's lines were sent before the run finished",
     );
   });
 });

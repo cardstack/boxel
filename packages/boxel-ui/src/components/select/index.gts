@@ -22,6 +22,7 @@ import type {
 } from 'ember-power-select/types';
 
 import cn from '../../helpers/cn.ts';
+import { SELECT_WORMHOLE_KNOBS } from '../dropdown/wormhole-knobs.ts';
 import { BoxelSelectDefaultTrigger } from './trigger.gts';
 
 // glint cannot match curried/generic components against power-select's
@@ -133,22 +134,6 @@ export default class BoxelSelect<ItemT = any> extends Component<
       '--muted-foreground',
       '--destructive',
       '--destructive-foreground',
-      'font-family',
-    ];
-
-    const dropdownVars = [
-      '--boxel-dropdown-background-color',
-      '--boxel-dropdown-border-color',
-      '--boxel-dropdown-text-color',
-      '--boxel-dropdown-selected-text-color',
-      '--boxel-dropdown-focus-border-color',
-      '--boxel-dropdown-highlight-color',
-      '--boxel-dropdown-highlight-hover-color',
-      '--boxel-dropdown-selected-highlighted-color',
-      '--boxel-dropdown-selected-hover-color',
-      '--boxel-dropdown-hover-color',
-      '--boxel-dropdown-hover-text-color',
-      '--boxel-form-control-border-radius',
     ];
 
     themeVars.forEach((varName) => {
@@ -157,7 +142,7 @@ export default class BoxelSelect<ItemT = any> extends Component<
       this.dropdownContainer?.style.setProperty(varName, value);
     });
 
-    dropdownVars.forEach((varName) => {
+    SELECT_WORMHOLE_KNOBS.forEach((varName) => {
       const value = cs.getPropertyValue(varName);
       this.dropdownContainer?.style.setProperty(varName, value);
     });

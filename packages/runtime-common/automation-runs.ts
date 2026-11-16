@@ -24,7 +24,13 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import { logRunPlatformLine } from './automation-run-log.ts';
 import type { DBAdapter } from './db.ts';
-import { param, query, type Expression, type Querier } from './expression.ts';
+import {
+  dbAdapterQuerier,
+  param,
+  query,
+  type Expression,
+  type Querier,
+} from './expression.ts';
 import type { PgPrimitive } from './index.ts';
 import type {
   RealmIdentifier,
@@ -56,6 +62,13 @@ export interface AutomationRun extends AutomationRunCounts {
   slot: string;
   // The Matrix user id of the person the run acts as.
   actsAs: string;
+  // A Preview: the run stops before its commit, and once it finishes
+  // complete the files it staged are kept as the batch it shows
+  // (`automation_preview_files`).
+  dryRun: boolean;
+  // For a complete Preview whose batch a later one by the same person
+  // replaced: that Preview.
+  previewReplacedBy: string | null;
   // The queue attempt (the job's reservation id) that owns the run, once one
   // has started it.
   attempt: number | null;
@@ -73,6 +86,9 @@ export interface AutomationRun extends AutomationRunCounts {
   // `reserveAutomationRunAICredits`).
   aiCreditsSpent: number;
   aiCreditsReserved: number;
+  // Milliseconds of prerender tab time the run's script took, summed over
+  // the attempts that ran it (see `addAutomationRunTabTime`).
+  prerenderTabMs: number;
   createdAt: string;
   startedAt: string | null;
   commitStartedAt: string | null;
@@ -86,6 +102,8 @@ export interface NewAutomationRun {
   trigger: string;
   slot: string;
   actsAs: string;
+  // A Preview; false when absent.
+  dryRun?: boolean;
 }
 
 // What an attempt that has just taken a run must do with it:
@@ -126,8 +144,16 @@ export async function createAutomationRun(
   dbAdapter: DBAdapter,
   run: NewAutomationRun,
 ): Promise<AutomationRun> {
-  let [created] = await query(dbAdapter, [
-    'INSERT INTO automation_runs (automation_id, realm, trigger, slot, acts_as) VALUES (',
+  return await insertAutomationRun(dbAdapterQuerier(dbAdapter), run);
+}
+
+// `createAutomationRun` inside the caller's transaction.
+export async function insertAutomationRun(
+  querier: Querier,
+  run: NewAutomationRun,
+): Promise<AutomationRun> {
+  let [created] = await querier([
+    'INSERT INTO automation_runs (automation_id, realm, trigger, slot, acts_as, dry_run) VALUES (',
     param(run.automationId),
     ',',
     param(run.realm),
@@ -137,12 +163,14 @@ export async function createAutomationRun(
     param(run.slot),
     ',',
     param(run.actsAs),
+    ',',
+    param(run.dryRun ?? false),
     ') ON CONFLICT ON CONSTRAINT automation_runs_slot_key DO NOTHING RETURNING *',
   ]);
   if (created) {
     return runFromRow(created);
   }
-  let [existing] = await query(dbAdapter, [
+  let [existing] = await querier([
     'SELECT * FROM automation_runs WHERE automation_id =',
     param(run.automationId),
     'AND trigger =',
@@ -382,7 +410,8 @@ export async function logAutomationRunEnded(
 // Closes a pending or running run whose job is gone, such as one whose job ran
 // out of retries, whoever owned it. A run whose commit landed finishes as
 // complete. Any other run finishes as an error with `reason`, including one
-// whose commit was claimed but never recorded as landed.
+// whose commit was claimed but never recorded as landed. No attempt is left to
+// charge the run, so the caller charges it (`chargeAutomationRun`).
 export async function abandonAutomationRun(
   dbAdapter: DBAdapter,
   id: string,
@@ -476,6 +505,31 @@ export async function cancelUnfinishedAutomationRuns(
     rows.map((row) => String(row.id)),
   );
   return rows.map(runFromRow);
+}
+
+// Adds the prerender tab time one attempt's script took to the run. The tab
+// was held whatever state the run is in by then, so the time is added in any
+// state, like the counts below.
+export async function addAutomationRunTabTime(
+  dbAdapter: DBAdapter,
+  id: string,
+  ms: number,
+): Promise<void> {
+  let whole = Math.ceil(ms);
+  if (!Number.isSafeInteger(whole) || whole < 0) {
+    throw new Error(
+      `a run's tab time can only grow by 0 ms or more, not ${ms}`,
+    );
+  }
+  if (whole === 0) {
+    return;
+  }
+  await query(dbAdapter, [
+    'UPDATE automation_runs SET prerender_tab_ms = prerender_tab_ms +',
+    param(whole),
+    'WHERE id =',
+    param(id),
+  ]);
 }
 
 // Adds to the run's metered counts. The work they count was done whatever
@@ -734,6 +788,9 @@ async function updateOwned(
 // the update: a file staged while the update waited on the run's row lock has
 // committed by then, and a later stage waits on the lock and then finds the
 // run no longer running.
+//
+// A Preview that finishes complete first keeps the files its owning attempt
+// staged, as the batch it shows (`keepPreviewBatch`).
 async function endRun(
   dbAdapter: DBAdapter,
   update: Expression,
@@ -741,6 +798,13 @@ async function endRun(
   return await dbAdapter.withTransaction(async (txQuery) => {
     let [row] = await txQuery(update);
     if (row) {
+      if (
+        row.dry_run === true &&
+        row.state === 'complete' &&
+        row.attempt != null
+      ) {
+        await keepPreviewBatch(txQuery, row);
+      }
       await discardOverlays(txQuery, [String(row.id)]);
     }
     return row;
@@ -758,6 +822,74 @@ async function discardOverlays(querier: Querier, runIds: string[]) {
   }
 }
 
+// Copies a complete Preview's staged files into `automation_preview_files`,
+// inside the transaction that finishes it. Only a person's latest complete
+// Preview of an automation, ordered by when each was asked for, keeps its
+// batch: keeping one deletes the batch of every earlier one and records it
+// in their `preview_replaced_by`, and a Preview that finishes after a later
+// one has completed keeps nothing and records that one. The finishes of one
+// person's Previews of one automation take a transaction-scoped advisory
+// lock, so two finishing together can't both keep a batch, and each sees
+// the other's finish once it has the lock.
+async function keepPreviewBatch(
+  txQuery: Querier,
+  row: Record<string, PgPrimitive>,
+): Promise<void> {
+  let runId = String(row.id);
+  let samePerson: Expression = [
+    'automation_id =',
+    param(String(row.automation_id)),
+    'AND acts_as =',
+    param(String(row.acts_as)),
+    "AND dry_run AND state = 'complete' AND id <>",
+    param(runId),
+  ];
+  await txQuery([
+    'SELECT pg_advisory_xact_lock(hashtext(',
+    param(`automation-preview:${row.automation_id}:${row.acts_as}`),
+    '))',
+  ]);
+  let [later] = await txQuery([
+    'SELECT id FROM automation_runs WHERE',
+    ...samePerson,
+    'AND (created_at, id) > (SELECT created_at, id FROM automation_runs WHERE id =',
+    param(runId),
+    ') ORDER BY created_at DESC, id DESC LIMIT 1',
+  ]);
+  if (later) {
+    await txQuery([
+      'UPDATE automation_runs SET preview_replaced_by =',
+      param(String(later.id)),
+      'WHERE id =',
+      param(runId),
+    ]);
+    return;
+  }
+  let earlier = [
+    'SELECT id FROM automation_runs WHERE',
+    ...samePerson,
+    'AND preview_replaced_by IS NULL',
+  ];
+  await txQuery([
+    'DELETE FROM automation_preview_files WHERE run_id IN (',
+    ...earlier,
+    ')',
+  ]);
+  await txQuery([
+    'UPDATE automation_runs SET preview_replaced_by =',
+    param(runId),
+    'WHERE id IN (',
+    ...earlier,
+    ')',
+  ]);
+  await txQuery([
+    'INSERT INTO automation_preview_files (run_id, path, content, size) SELECT run_id, path, content, size FROM run_overlay_files WHERE run_id =',
+    param(runId),
+    'AND attempt =',
+    param(Number(row.attempt)),
+  ]);
+}
+
 function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
   return {
     id: String(row.id),
@@ -766,6 +898,8 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     trigger: String(row.trigger),
     slot: String(row.slot),
     actsAs: String(row.acts_as),
+    dryRun: row.dry_run === true || row.dry_run === 1,
+    previewReplacedBy: (row.preview_replaced_by as string | null) ?? null,
     attempt: row.attempt == null ? null : Number(row.attempt),
     scriptId: (row.script_id as RealmResourceIdentifier | null) ?? null,
     scriptHash: (row.script_hash as string | null) ?? null,
@@ -779,6 +913,7 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     writes: Number(row.writes),
     aiCreditsSpent: Number(row.ai_credits_spent ?? 0),
     aiCreditsReserved: Number(row.ai_credits_reserved ?? 0),
+    prerenderTabMs: Number(row.prerender_tab_ms ?? 0),
     createdAt: iso(row.created_at)!,
     startedAt: iso(row.started_at),
     commitStartedAt: iso(row.commit_started_at),
