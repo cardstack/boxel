@@ -7,6 +7,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   addToCreditsLedger,
   getLedgerEntries,
+  getUserByMatrixUserId,
 } from '@cardstack/billing/billing-queries';
 import {
   createAutomationRun,
@@ -35,7 +36,7 @@ import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   automationFixture,
-  insertUser,
+  ensureTestUser,
   ROOMY_AUTOMATION_CAPS,
   setupPermissionedRealmCached,
   testCreatePrerenderAuth,
@@ -289,8 +290,10 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test("Run now charges the run's compute to the clicker, not the automation's owner", async function (assert) {
-    let clicker = await insertUser(dbAdapter, CLICKER, 'cus_clicker', null);
-    let owner = await insertUser(dbAdapter, OWNER, 'cus_owner', null);
+    await ensureTestUser(dbAdapter, CLICKER);
+    await ensureTestUser(dbAdapter, OWNER);
+    let clicker = (await getUserByMatrixUserId(dbAdapter, CLICKER))!;
+    let owner = (await getUserByMatrixUserId(dbAdapter, OWNER))!;
     for (let user of [clicker, owner]) {
       await addToCreditsLedger(dbAdapter, {
         userId: user.id,

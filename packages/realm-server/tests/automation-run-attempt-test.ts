@@ -33,12 +33,13 @@ import type { MeteredCharges } from '@cardstack/runtime-common/metered-charges';
 import {
   addToCreditsLedger,
   getLedgerEntries,
+  getUserByMatrixUserId,
   getLedgerUsage,
 } from '@cardstack/billing/billing-queries';
 import {
   TEST_AUTOMATION_PATH,
   automationFixture,
-  insertUser,
+  ensureTestUser,
   realmSecretSeed,
   setupPermissionedRealmCached,
   testCreatePrerenderAuth,
@@ -596,7 +597,8 @@ module(basename(import.meta.filename), function (hooks) {
 
   // The run's identity, with credits to pay for its run.
   async function fundOwner() {
-    let user = await insertUser(dbAdapter, OWNER, 'cus_attempt_owner', null);
+    await ensureTestUser(dbAdapter, OWNER);
+    let user = (await getUserByMatrixUserId(dbAdapter, OWNER))!;
     await addToCreditsLedger(dbAdapter, {
       userId: user.id,
       creditAmount: 10_000,
