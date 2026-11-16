@@ -124,9 +124,10 @@ export async function endGrant(
 // earlier. `cutoff` is now unless given. A user with no row has no grant to
 // revoke.
 //
-// Called beside an operator's revocation of the user's sessions, and on the
-// first revocation after a password change, never on the later one that
-// covers Matrix OpenID tokens, since an OpenID token can't create a grant.
+// Called on the first revocation after a password change, never on the
+// later one that covers Matrix OpenID tokens, since an OpenID token can't
+// create a grant. An operator's revocation of the user's sessions does the
+// same with them, through `revokeUserSessionsAndOAuthGrants`.
 export async function revokeUserOAuthGrants(
   dbAdapter: DBAdapter,
   matrixUserId: string,
@@ -153,15 +154,71 @@ export async function revokeUserOAuthGrants(
      SELECT id FROM ended`,
     { bind: [matrixUserId, cutoff ? cutoff.toISOString() : null] },
   )) as { id: string }[];
-  let ended = rows.length;
-  if (ended > 0) {
+  return await deleteRevokedGrantsTokens(
+    dbAdapter,
+    rows.map(({ id }) => id),
+  );
+}
+
+// An operator's revocation of a user's sessions (ADR 021 §1.9), which also
+// revokes their OAuth grants as `revokeUserOAuthGrants` does. Both are
+// recorded, and the grants ended, in one statement at one instant, so
+// neither happens without the other. Like `revokeUserSessions`, it records
+// the revocation for a user who has no row yet. Resolves to the sessions'
+// revocation instant, in epoch seconds.
+export async function revokeUserSessionsAndOAuthGrants(
+  dbAdapter: DBAdapter,
+  matrixUserId: string,
+): Promise<number> {
+  let [row] = (await dbAdapter.execute(
+    `WITH revoked AS (
+       INSERT INTO users
+         (matrix_user_id, sessions_revoked_at, oauth_grants_revoked_at)
+         VALUES ($1, EXTRACT(EPOCH FROM now())::bigint, now())
+       ON CONFLICT (matrix_user_id) DO UPDATE
+         SET sessions_revoked_at = EXCLUDED.sessions_revoked_at,
+             oauth_grants_revoked_at = GREATEST(
+               users.oauth_grants_revoked_at,
+               EXCLUDED.oauth_grants_revoked_at
+             )
+       RETURNING id, sessions_revoked_at, oauth_grants_revoked_at
+     ), ended AS (
+       UPDATE oauth_provider_grants AS g
+          SET ended_at = now(), ended_reason = 'sessions-revoked'
+         FROM revoked
+        WHERE g.user_id = revoked.id
+          AND g.ended_at IS NULL
+          AND g.created_at <= revoked.oauth_grants_revoked_at
+        RETURNING g.id
+     )
+     SELECT revoked.sessions_revoked_at,
+            ARRAY(SELECT id FROM ended) AS ended
+       FROM revoked`,
+    { bind: [matrixUserId] },
+  )) as { sessions_revoked_at: string | number; ended: string[] }[];
+  if (row?.sessions_revoked_at == null) {
+    throw new Error(
+      `revokeUserSessionsAndOAuthGrants: failed to record revocation for matrix_user_id="${matrixUserId}"`,
+    );
+  }
+  await deleteRevokedGrantsTokens(dbAdapter, row.ended);
+  return Number(row.sessions_revoked_at);
+}
+
+// Deletes the tokens of grants a revocation ended, in a statement after the
+// one that ended them, as `endGrant` does.
+async function deleteRevokedGrantsTokens(
+  dbAdapter: DBAdapter,
+  grantIds: string[],
+): Promise<number> {
+  if (grantIds.length > 0) {
     await dbAdapter.execute(
       `DELETE FROM oauth_provider_tokens WHERE grant_id = ANY($1::varchar[])`,
-      { bind: [rows.map(({ id }) => id)] },
+      { bind: [grantIds] },
     );
-    log.info(`grants ended: sessions-revoked, ${ended}`);
+    log.info(`grants ended: sessions-revoked, ${grantIds.length}`);
   }
-  return ended;
+  return grantIds.length;
 }
 
 // Deletes a grant no flow finished with. Only such a grant is ever deleted:

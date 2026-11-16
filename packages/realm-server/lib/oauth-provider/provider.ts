@@ -352,7 +352,9 @@ export function createOAuthProvider({
     // Revoking any token of a grant revokes the whole grant, which
     // `GrantAdapter` ends rather than deletes (ADR 021 §1.9). Not the
     // library's default, which leaves the grant live when its client revokes
-    // an access token.
+    // an access token. Nothing reaches this yet: the revocation endpoint is
+    // off (`features.revocation` below, listed in ADR 021's remediation). It
+    // is set now so the endpoint ends grants as §1.9 requires once it is on.
     revokeGrantPolicy: () => true,
     // The account a flow signs in as: a user's internal ID. The library
     // reads nothing about the user: the provider issues no ID tokens and

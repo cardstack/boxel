@@ -219,25 +219,32 @@ module(basename(import.meta.filename), function () {
   module('the token limit', function () {
     test('reads named parts, each defaulting when left out', function (assert) {
       assert.deepEqual(
-        parseTokenLimit('grant=60/3600,failures=60/600'),
+        parseTokenLimit(
+          'grant=60/3600,address=60/600,network=300/600,all=3000/600,alert=1500',
+        ),
         DEFAULT_TOKEN_LIMIT,
       );
       assert.deepEqual(parseTokenLimit(' grant = 10/60 '), {
         ...DEFAULT_TOKEN_LIMIT,
         perGrant: { requests: 10, windowSeconds: 60 },
       });
-      assert.deepEqual(parseTokenLimit('failures=5/60'), {
-        ...DEFAULT_TOKEN_LIMIT,
-        failuresPerAddress: { requests: 5, windowSeconds: 60 },
+      assert.deepEqual(parseTokenLimit('network=50/60,grant=10/60'), {
+        perGrant: { requests: 10, windowSeconds: 60 },
+        failures: {
+          ...DEFAULT_TOKEN_LIMIT.failures,
+          perNetwork: { requests: 50, windowSeconds: 60 },
+        },
       });
       for (let spec of [
         '60/3600,60/600',
         'grant=60/3600,',
         'grant=60/3600,grant=30/3600',
+        'failures=60/600',
         'everyone=20/3600',
         'grant=20',
         'grant=0/60',
         'grant=20/3600=1',
+        'all=100/600,alert=100',
       ]) {
         assert.strictEqual(parseTokenLimit(spec), undefined, spec);
       }
@@ -247,11 +254,14 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(readTokenLimit({}), DEFAULT_TOKEN_LIMIT);
       assert.deepEqual(
         readTokenLimit({
-          BOXEL_OAUTH_TOKEN_RATE_LIMIT: 'grant=3/60,failures=6/60',
+          BOXEL_OAUTH_TOKEN_RATE_LIMIT: 'grant=3/60,address=6/60',
         }),
         {
           perGrant: { requests: 3, windowSeconds: 60 },
-          failuresPerAddress: { requests: 6, windowSeconds: 60 },
+          failures: {
+            ...DEFAULT_TOKEN_LIMIT.failures,
+            perAddress: { requests: 6, windowSeconds: 60 },
+          },
         },
       );
       assert.throws(

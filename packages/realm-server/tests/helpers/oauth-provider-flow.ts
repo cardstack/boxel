@@ -44,7 +44,12 @@ export const ROOMY_LIMIT: CallerLimit = {
 // Token endpoint limits no test reaches, for modules that aren't testing them.
 export const ROOMY_TOKEN_LIMIT: TokenLimit = {
   perGrant: { requests: 1000, windowSeconds: 600 },
-  failuresPerAddress: { requests: 1000, windowSeconds: 600 },
+  failures: {
+    perAddress: { requests: 1000, windowSeconds: 600 },
+    perNetwork: { requests: 1000, windowSeconds: 600 },
+    overall: { requests: 1000, windowSeconds: 600 },
+    alertAfter: 999,
+  },
 };
 
 // The verifier every flow these helpers start proves its code with, and the

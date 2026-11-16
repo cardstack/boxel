@@ -133,7 +133,9 @@ interface GrantRow {
 
 // Why the library revokes a grant, by the route it revokes it on: the token
 // endpoint revokes one when a code or refresh token is used again, and the
-// revocation endpoint when its client revokes one of its tokens.
+// revocation endpoint when its client revokes one of its tokens. The
+// revocation endpoint is off for now (`provider.ts`), so only the token
+// endpoint revokes one yet.
 const REVOKED_ON: Record<string, GrantEndReason> = {
   token: 'reuse',
   revocation: 'client',

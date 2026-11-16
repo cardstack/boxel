@@ -48,7 +48,10 @@ import {
 import type { OAuthResourceDefinition } from '../lib/oauth-provider/registry.ts';
 import type { TokenLimit } from '../lib/oauth-provider/token-limit.ts';
 import { TokenAdapter } from '../lib/oauth-provider/tokens.ts';
-import { runDueDeviceSweeps } from '../lib/secure-session.ts';
+import {
+  DEVICE_SWEEP_DELAY_MS,
+  runDueDeviceSweeps,
+} from '../lib/secure-session.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
 const serverURL = OAUTH_TEST_SERVER_URL;
@@ -696,6 +699,47 @@ module(basename(import.meta.filename), function () {
           'and so is one with two',
         );
       });
+
+      test('a store that runs the sweep deletes expired tokens, and a refused one runs none', async function (assert) {
+        await tokensFor();
+        let [grant] = await grants();
+        await endGrant(db(), grant.id, 'user');
+        let adapter = new TokenAdapter(db(), 'RefreshToken');
+        let random = Math.random;
+        // Every store runs the sweep.
+        Math.random = () => 0;
+        try {
+          await db().execute(
+            `INSERT INTO oauth_provider_tokens
+               (id_hash, kind, grant_id, scope, payload, expires_at, rotation)
+               VALUES (decode(md5('an-expired-token'), 'hex'), 'RefreshToken',
+                       $1, '', '{}'::jsonb, now() - interval '1 second', 0)`,
+            { bind: [grant.id] },
+          );
+          await assert.rejects(
+            adapter.upsert(
+              'a-token-for-an-ended-grant',
+              { grantId: grant.id, scope: 'boxel:read', rotations: 1 },
+              60,
+            ),
+            (e: any) => e?.error === 'invalid_grant',
+          );
+          assert.strictEqual(
+            (await tokenRows()).length,
+            1,
+            'a refused store deletes nothing',
+          );
+          let current = await tokensFor();
+          assert.ok(current.tokens.refresh_token, 'a store that succeeds');
+          let rows = (await db().execute(
+            `SELECT count(*)::int AS n FROM oauth_provider_tokens
+              WHERE expires_at <= now()`,
+          )) as { n: number }[];
+          assert.strictEqual(rows[0].n, 0, 'deletes the expired tokens');
+        } finally {
+          Math.random = random;
+        }
+      });
     });
 
     module('revocation', function (hooks) {
@@ -746,18 +790,19 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test("a password change's first revocation ends the grants made before it was due, and its later one leaves those made since", async function (assert) {
-        // A grant decided before the sweep fell due.
+      test("a password change's first revocation ends the grants made before the change, and leaves those made since, as does its later one", async function (assert) {
+        // A grant decided before the password changed.
         let earlier = await tokensFor();
         let who = earlier.user;
         await new Promise((resolve) => setTimeout(resolve, 20));
+        // The password changes now, so its sweep is due a delay from now.
         await db().execute(
           `INSERT INTO password_change_device_sweeps (user_id, sweep_at)
-             VALUES ($1, NOW())`,
-          { bind: [who.matrixId] },
+             VALUES ($1, NOW() + $2::integer * interval '1 millisecond')`,
+          { bind: [who.matrixId, DEVICE_SWEEP_DELAY_MS] },
         );
-        // A grant the same user decided after the sweep fell due and before
-        // it ran, as when a sweep is tried again later.
+        // A grant the same user decided with the new password, before the
+        // sweep falls due.
         await new Promise((resolve) => setTimeout(resolve, 20));
         let betweenClient = await registerOAuthClient(server());
         let betweenCode = await codeForOAuthClient(
@@ -771,6 +816,18 @@ module(basename(import.meta.filename), function () {
           betweenCode,
         );
         assert.strictEqual(betweenExchange.status, 200, betweenExchange.text);
+        // The delay passes: everything recorded moves back by it, so the
+        // sweep is due and the order of the change and the grants holds.
+        await db().execute(
+          `UPDATE password_change_device_sweeps
+              SET sweep_at = sweep_at - $1::integer * interval '1 millisecond'`,
+          { bind: [DEVICE_SWEEP_DELAY_MS] },
+        );
+        await db().execute(
+          `UPDATE oauth_provider_grants
+              SET created_at = created_at - $1::integer * interval '1 millisecond'`,
+          { bind: [DEVICE_SWEEP_DELAY_MS] },
+        );
 
         await runDueDeviceSweeps({
           dbAdapter: db(),
@@ -790,11 +847,11 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(
           before.ended_reason,
           'sessions-revoked',
-          'the first revocation ends the grant decided before it was due',
+          'the first revocation ends the grant decided before the change',
         );
         assert.false(
           made.ended,
-          'and leaves the one decided after it was due, though before it ran',
+          'and leaves the one decided after the change, though before the sweep',
         );
 
         await db().execute(
@@ -948,7 +1005,12 @@ module(basename(import.meta.filename), function () {
     let state = setupProvider(hooks, {
       tokenLimit: {
         perGrant: { requests: 3, windowSeconds: 3600 },
-        failuresPerAddress: { requests: 3, windowSeconds: 600 },
+        failures: {
+          perAddress: { requests: 3, windowSeconds: 600 },
+          perNetwork: { requests: 1000, windowSeconds: 600 },
+          overall: { requests: 1000, windowSeconds: 600 },
+          alertAfter: 999,
+        },
       },
     });
     let server = () => state.server!;
@@ -1173,6 +1235,42 @@ module(basename(import.meta.filename), function () {
         elsewhere.headers['access-control-allow-origin'],
         undefined,
         'and a page elsewhere cannot',
+      );
+    });
+  });
+
+  module('with a tight network limit', function (hooks) {
+    let state = setupProvider(hooks, {
+      tokenLimit: {
+        perGrant: { requests: 1000, windowSeconds: 3600 },
+        failures: {
+          perAddress: { requests: 1000, windowSeconds: 600 },
+          perNetwork: { requests: 3, windowSeconds: 600 },
+          overall: { requests: 1000, windowSeconds: 600 },
+          alertAfter: 999,
+        },
+      },
+    });
+
+    test("failures count against the address's network as well as the address", async function (assert) {
+      let clientId = await registerOAuthClient(state.server!);
+      for (let i = 0; i < 3; i++) {
+        let response = await refreshOAuthTokens(
+          state.server!,
+          clientId,
+          `not-a-token-${i}`,
+        );
+        assert.strictEqual(response.status, 400, `failure ${i + 1}`);
+      }
+      let limited = await refreshOAuthTokens(
+        state.server!,
+        clientId,
+        'not-a-token',
+      );
+      assert.strictEqual(
+        limited.status,
+        429,
+        "the network is limited while the address isn't",
       );
     });
   });

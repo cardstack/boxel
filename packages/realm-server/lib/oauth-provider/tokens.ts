@@ -29,20 +29,73 @@ const log = logger('boxel:oauth-provider');
 
 export const REFRESH_GRACE_SECONDS = 30;
 
-// Expired rows are deleted on roughly one store in this many. A row past its
-// expiry already reads as missing, so this only keeps a grant that runs to
-// its expiry, refreshing every few minutes, from piling up its tokens.
+// Expired rows are deleted on roughly one store in this many, at most
+// `EXPIRED_SWEEP_LIMIT` at a time. A row past its expiry already reads as
+// missing, so this only keeps a grant that runs to its expiry, refreshing
+// every few minutes, from piling up its tokens. A store adds one or two
+// rows, so the limit clears them far faster than they come, and keeps the
+// request that runs it from waiting on a large delete.
 const EXPIRED_SWEEP_ONE_IN = 50;
+const EXPIRED_SWEEP_LIMIT = 500;
 
 export type TokenKind = 'AccessToken' | 'RefreshToken';
 
-interface TokenRow {
-  payload: AdapterPayload | string;
-  rotation: number | null;
-  consumed_at: string | Date | null;
-  revoked_at: string | Date | null;
+// What decides a refresh token's use (§1.9), read for the token as `t` by
+// `REFRESH_USE_COLUMNS`.
+interface RefreshUse {
+  consumed: boolean;
+  revoked: boolean;
+  // Used within the grace window. Null when unused.
   in_window: boolean | null;
+  // One of the tokens its use issued has been used.
   child_used: boolean;
+  // Another token of its rotation has been used.
+  sibling_used: boolean;
+}
+
+// The columns of `RefreshUse`, for a query that reads the token as `t`. One
+// fragment, read by `TokenAdapter.find` and `consume` and by
+// `presentedRefreshToken`, and decided by `refreshTokenUse`, so the three
+// agree on whether presenting a token ends its grant.
+const REFRESH_USE_COLUMNS = `
+  t.consumed_at IS NOT NULL AS consumed,
+  t.revoked_at IS NOT NULL AS revoked,
+  t.consumed_at > now() - make_interval(secs => ${Number(REFRESH_GRACE_SECONDS)})
+    AS in_window,
+  EXISTS (
+    SELECT 1 FROM oauth_provider_tokens AS c
+     WHERE c.grant_id = t.grant_id
+       AND c.kind = 'RefreshToken'
+       AND c.rotation = t.rotation + 1
+       AND c.consumed_at IS NOT NULL
+  ) AS child_used,
+  EXISTS (
+    SELECT 1 FROM oauth_provider_tokens AS s
+     WHERE s.grant_id = t.grant_id
+       AND s.kind = 'RefreshToken'
+       AND s.rotation = t.rotation
+       AND s.id_hash <> t.id_hash
+       AND s.consumed_at IS NOT NULL
+  ) AS sibling_used`;
+
+// The reuse rule (§1.9). `unused`: presenting it rotates it. `grace`: used,
+// but within the grace window and before any of its children, so presenting
+// it rotates it again. `reuse`: it was revoked, a sibling was used, or it was
+// used outside the window or after one of its children, so presenting it
+// ends the grant.
+function refreshTokenUse(use: RefreshUse): 'unused' | 'grace' | 'reuse' {
+  if (use.revoked || use.sibling_used) {
+    return 'reuse';
+  }
+  if (!use.consumed) {
+    return 'unused';
+  }
+  return use.in_window && !use.child_used ? 'grace' : 'reuse';
+}
+
+interface TokenRow extends Partial<RefreshUse> {
+  payload: AdapterPayload | string;
+  used_at: string | Date | null;
 }
 
 export class TokenAdapter extends OAuthProviderAdapter {
@@ -76,11 +129,6 @@ export class TokenAdapter extends OAuthProviderAdapter {
     if (this.#kind === 'AccessToken' && typeof payload.aud !== 'string') {
       throw new OAuthProviderObjectError(
         `the OAuth provider's AccessToken names no single resource`,
-      );
-    }
-    if (Math.random() * EXPIRED_SWEEP_ONE_IN < 1) {
-      await this.#dbAdapter.execute(
-        `DELETE FROM oauth_provider_tokens WHERE expires_at <= now()`,
       );
     }
     let resource =
@@ -121,23 +169,33 @@ export class TokenAdapter extends OAuthProviderAdapter {
       log.info(`token not stored: grant ended`);
       throw new errors.InvalidGrant('grant has ended');
     }
+    if (Math.random() * EXPIRED_SWEEP_ONE_IN < 1) {
+      // Rows another request is deleting are skipped, not waited for.
+      await this.#dbAdapter.execute(
+        `DELETE FROM oauth_provider_tokens
+          WHERE id_hash IN (
+            SELECT id_hash FROM oauth_provider_tokens
+             WHERE expires_at <= now()
+             LIMIT $1
+               FOR UPDATE SKIP LOCKED
+          )`,
+        { bind: [EXPIRED_SWEEP_LIMIT] },
+      );
+    }
   }
 
   async find(id: string): Promise<AdapterPayload | undefined> {
+    // An access token's lookup reads only its own row: the reuse rule is a
+    // refresh token's.
+    let refresh = this.#kind === 'RefreshToken';
     let [row] = (await this.#dbAdapter.execute(
-      `SELECT t.payload, t.rotation, t.consumed_at, t.revoked_at,
-              t.consumed_at > now() - make_interval(secs => $3) AS in_window,
-              EXISTS (
-                SELECT 1 FROM oauth_provider_tokens AS c
-                 WHERE c.grant_id = t.grant_id
-                   AND c.kind = 'RefreshToken'
-                   AND c.rotation = t.rotation + 1
-                   AND c.consumed_at IS NOT NULL
-              ) AS child_used
+      `SELECT t.payload,
+              COALESCE(t.revoked_at, t.consumed_at, now()) AS used_at
+              ${refresh ? `, ${REFRESH_USE_COLUMNS}` : ''}
          FROM oauth_provider_tokens AS t
         WHERE t.id_hash = decode($1, 'hex') AND t.kind = $2
           AND t.expires_at > now()`,
-      { bind: [sha256Hex(id), this.#kind, REFRESH_GRACE_SECONDS] },
+      { bind: [sha256Hex(id), this.#kind] },
     )) as unknown as TokenRow[];
     if (!row) {
       return undefined;
@@ -146,15 +204,10 @@ export class TokenAdapter extends OAuthProviderAdapter {
       typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload
     ) as AdapterPayload;
     let restored: AdapterPayload = { ...payload, jti: id };
-    if (this.#kind === 'RefreshToken') {
-      // The library ends the grant on a token it finds used. Inside the
-      // grace window, a used token whose children are unused is reported
-      // unused, so the library rotates it again.
-      let usedAt = row.revoked_at ?? row.consumed_at;
-      let inGrace = !row.revoked_at && row.in_window && !row.child_used;
-      if (usedAt && !inGrace) {
-        restored.consumed = Math.floor(new Date(usedAt).getTime() / 1000);
-      }
+    // The library ends the grant on a token it finds used. One in the grace
+    // window is reported unused, so the library rotates it again.
+    if (refresh && refreshTokenUse(row as RefreshUse) === 'reuse') {
+      restored.consumed = Math.floor(new Date(row.used_at!).getTime() / 1000);
     }
     return restored;
   }
@@ -188,26 +241,7 @@ export class TokenAdapter extends OAuthProviderAdapter {
       // Read again under the lock, so a sibling's use that committed while
       // this waited is seen.
       let [state] = await query([
-        `SELECT t.rotation, t.consumed_at IS NOT NULL AS consumed,
-                t.revoked_at IS NOT NULL AS revoked,
-                t.consumed_at > now() - make_interval(secs => `,
-        param(REFRESH_GRACE_SECONDS),
-        `) AS in_window,
-                EXISTS (
-                  SELECT 1 FROM oauth_provider_tokens AS c
-                   WHERE c.grant_id = t.grant_id
-                     AND c.kind = 'RefreshToken'
-                     AND c.rotation = t.rotation + 1
-                     AND c.consumed_at IS NOT NULL
-                ) AS child_used,
-                EXISTS (
-                  SELECT 1 FROM oauth_provider_tokens AS s
-                   WHERE s.grant_id = t.grant_id
-                     AND s.kind = 'RefreshToken'
-                     AND s.rotation = t.rotation
-                     AND s.id_hash <> t.id_hash
-                     AND s.consumed_at IS NOT NULL
-                ) AS sibling_used
+        `SELECT t.rotation, ${REFRESH_USE_COLUMNS}
            FROM oauth_provider_tokens AS t
           WHERE t.kind = 'RefreshToken' AND t.id_hash = decode(`,
         param(hash),
@@ -216,13 +250,12 @@ export class TokenAdapter extends OAuthProviderAdapter {
       if (!state) {
         return { result: 'missing' as const };
       }
-      if (state.revoked || state.sibling_used) {
+      let use = refreshTokenUse(state as unknown as RefreshUse);
+      if (use === 'reuse') {
         return { result: 'reuse' as const, grantId };
       }
-      if (state.consumed) {
-        return state.in_window && !state.child_used
-          ? { result: 'grace' as const }
-          : { result: 'reuse' as const, grantId };
+      if (use === 'grace') {
+        return { result: 'grace' as const };
       }
       await query([
         `UPDATE oauth_provider_tokens SET consumed_at = now()
@@ -274,41 +307,23 @@ export class TokenAdapter extends OAuthProviderAdapter {
 }
 
 // Whether a refresh token, by its value, has been used in a way that ends
-// its grant if it is presented: revoked, a sibling used, or used itself
-// outside the grace window or after one of its children was used. The same
-// rule `TokenAdapter.consume` applies, read without the grant's lock, for a
-// request refused before the library sees it. Undefined for a token the
-// provider doesn't hold.
+// its grant if it is presented (`refreshTokenUse`), as `TokenAdapter.consume`
+// decides it, read without the grant's lock, for a request refused before
+// the library sees it. Undefined for a token the provider doesn't hold.
 export async function presentedRefreshToken(
   dbAdapter: DBAdapter,
   token: string,
 ): Promise<{ grantId: string; reused: boolean } | undefined> {
   let [row] = (await dbAdapter.execute(
-    `SELECT t.grant_id,
-            t.expires_at > now() AND (
-              t.revoked_at IS NOT NULL
-              OR EXISTS (
-                SELECT 1 FROM oauth_provider_tokens AS s
-                 WHERE s.grant_id = t.grant_id
-                   AND s.kind = 'RefreshToken'
-                   AND s.rotation = t.rotation
-                   AND s.id_hash <> t.id_hash
-                   AND s.consumed_at IS NOT NULL
-              )
-              OR (t.consumed_at IS NOT NULL AND (
-                t.consumed_at <= now() - make_interval(secs => $2)
-                OR EXISTS (
-                  SELECT 1 FROM oauth_provider_tokens AS c
-                   WHERE c.grant_id = t.grant_id
-                     AND c.kind = 'RefreshToken'
-                     AND c.rotation = t.rotation + 1
-                     AND c.consumed_at IS NOT NULL
-                )
-              ))
-            ) AS reused
+    `SELECT t.grant_id, t.expires_at > now() AS current, ${REFRESH_USE_COLUMNS}
        FROM oauth_provider_tokens AS t
       WHERE t.kind = 'RefreshToken' AND t.id_hash = decode($1, 'hex')`,
-    { bind: [sha256Hex(token), REFRESH_GRACE_SECONDS] },
-  )) as { grant_id: string; reused: boolean }[];
-  return row ? { grantId: row.grant_id, reused: row.reused } : undefined;
+    { bind: [sha256Hex(token)] },
+  )) as unknown as (RefreshUse & { grant_id: string; current: boolean })[];
+  return row
+    ? {
+        grantId: row.grant_id,
+        reused: row.current && refreshTokenUse(row) === 'reuse',
+      }
+    : undefined;
 }
