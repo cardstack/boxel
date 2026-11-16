@@ -240,7 +240,7 @@ module('Acceptance | automation view', function (hooks) {
   });
 
   test('an automation nobody has switched on reads as off', async function (assert) {
-    answer = { status: 200, attributes: { switchedOn: false } };
+    answer = { status: 200, attributes: { switchedOn: false, lastRun: null } };
     await openIsolated();
     await waitForStatus();
     assert.dom('[data-test-automation-state="Off"]').exists();
@@ -292,6 +292,89 @@ module('Acceptance | automation view', function (hooks) {
       timeout: 10000,
     });
     assert.dom('[data-test-automation-fitted-state="On"]').exists();
+  });
+
+  test("the card lists the milestones of the automation's last run from the run", async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: {
+          runId: 'run-1',
+          state: 'error',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: '2030-01-01T09:00:00.000Z',
+          plan: ['Fetch issues', 'Group by label', 'Write digest'],
+          milestones: [
+            {
+              name: 'Fetch issues',
+              planned: true,
+              startedAt: '2030-01-01T08:59:00.000Z',
+              endedAt: '2030-01-01T08:59:04.000Z',
+              ms: 4_000,
+              done: 30,
+              total: 30,
+            },
+            {
+              name: 'Retry',
+              planned: false,
+              startedAt: '2030-01-01T08:59:04.000Z',
+              endedAt: '2030-01-01T08:59:05.000Z',
+              ms: 1_000,
+            },
+            {
+              name: 'Group by label',
+              planned: true,
+              startedAt: '2030-01-01T08:59:05.000Z',
+              endedAt: '2030-01-01T09:00:00.000Z',
+              ms: 55_000,
+              done: 12,
+              total: 40,
+            },
+          ],
+          ahead: ['Write digest'],
+          failedIn: 'Group by label',
+          dropped: 0,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-milestones-lead]')
+      .hasText(
+        'The milestones the script reported on the last run, which ended with an error.',
+      );
+    let milestones = text('[data-test-automation-milestones]') ?? '';
+    for (let expected of [
+      'Fetch issues',
+      'Took 4 s · 30 of 30',
+      'Retry',
+      'Took 1 s · Not in the plan',
+      'Group by label',
+      'Took 55 s · 12 of 40 · The run ended with an error here',
+      'Write digest',
+      'The run ended before reaching this milestone',
+    ]) {
+      assert.true(milestones.includes(expected), `shows "${expected}"`);
+    }
+    assert.true(
+      milestones.indexOf('Fetch issues') < milestones.indexOf('Retry') &&
+        milestones.indexOf('Retry') < milestones.indexOf('Group by label') &&
+        milestones.indexOf('Group by label') <
+          milestones.indexOf('Write digest'),
+      'in the order the run reached them, then the ones it never reached',
+    );
+  });
+
+  test('an automation with no ended run says where its milestones will show', async function (assert) {
+    answer = { status: 200, attributes: { ...ACTIVE, lastRun: null } };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-milestones]')
+      .includesText('Shown from runs');
+    assert.dom('[data-test-automation-milestones-lead]').doesNotExist();
   });
 
   test('a payer who shares no workspace with the viewer is not named', async function (assert) {

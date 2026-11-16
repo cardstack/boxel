@@ -23,6 +23,12 @@ import {
 } from '@cardstack/runtime-common/automation-declaration';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
 import type { AutomationStatusDocument } from '@cardstack/runtime-common/automation-status';
+import { appendRunLog } from '@cardstack/runtime-common/automation-run-log';
+import {
+  createAutomationRun,
+  finishAutomationRun,
+  startAutomationRunAttempt,
+} from '@cardstack/runtime-common/automation-runs';
 import {
   pauseAutomation,
   switchOnAutomation,
@@ -262,9 +268,90 @@ module(basename(import.meta.filename), function (hooks) {
         data: {
           type: 'automation-status',
           id: automationURL(),
-          attributes: { switchedOn: false },
+          attributes: { switchedOn: false, lastRun: null },
         },
       });
+    });
+
+    // A run of the automation that reached `names` in order, then ended as
+    // `outcome`.
+    async function ranThrough(
+      names: string[],
+      plan: string[],
+      outcome: Parameters<typeof finishAutomationRun>[3],
+    ) {
+      let created = await createAutomationRun(dbAdapter, {
+        automationId: rri(automationURL()),
+        realm: ri(testRealm.url),
+        trigger: 'nightly',
+        slot: `slot-${names.join('-')}-${outcome.state}`,
+        actsAs: PAYER,
+      });
+      await startAutomationRunAttempt(dbAdapter, created.id, 1);
+      let at = Date.parse('2026-11-10T18:00:00.000Z');
+      await appendRunLog(dbAdapter, created.id, [
+        {
+          at,
+          source: 'script',
+          kind: 'plan',
+          message: `Plan: ${plan.join(' → ')}`,
+          data: { milestones: plan },
+        },
+        ...names.map((name, index) => ({
+          at: at + index * 1_000,
+          source: 'script' as const,
+          kind: 'milestone' as const,
+          message: `Milestone: ${name}`,
+          data: { name },
+        })),
+      ]);
+      await finishAutomationRun(dbAdapter, created.id, 1, outcome);
+      return created.id;
+    }
+
+    test("the automation's last run reads with the milestones its script reported, switched on or not", async function (assert) {
+      await writeAutomation();
+      let runId = await ranThrough(
+        ['Import', 'Index'],
+        ['Import', 'Index', 'Notify'],
+        {
+          state: 'error',
+          reason: 'script-error',
+          message: 'Error: the feed was empty',
+        },
+      );
+
+      let off = attributesOf((await statusOf(ADMIN, ['read', 'write'])).body);
+      assert.false(off.switchedOn);
+      let lastRun = off.lastRun!;
+      assert.strictEqual(lastRun.runId, runId);
+      assert.strictEqual(lastRun.state, 'error');
+      assert.deepEqual(lastRun.plan, ['Import', 'Index', 'Notify']);
+      assert.deepEqual(
+        lastRun.milestones.map(({ name, planned, ms }) => ({
+          name,
+          planned,
+          ms,
+        })),
+        [
+          { name: 'Import', planned: true, ms: 1_000 },
+          { name: 'Index', planned: true, ms: lastRun.milestones[1].ms },
+        ],
+      );
+      assert.strictEqual(
+        lastRun.failedIn,
+        'Index',
+        'the milestone it failed in',
+      );
+      assert.deepEqual(lastRun.ahead, ['Notify']);
+
+      await switchOn();
+      let on = attributesOf((await statusOf(ADMIN, ['read', 'write'])).body);
+      assert.true(on.switchedOn);
+      assert.strictEqual(on.lastRun?.runId, runId);
+
+      let reader = await statusOf(READER, ['read']);
+      assert.strictEqual(reader.status, 403, 'a reader never sees a run');
     });
 
     test("a switched-on automation reads with its payer, state and each trigger's runs left", async function (assert) {

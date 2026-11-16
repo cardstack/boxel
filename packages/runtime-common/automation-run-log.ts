@@ -19,6 +19,7 @@ import { param, query, type Expression } from './expression.ts';
 import { sanitizeForJsonb } from './error.ts';
 import { logger } from './log.ts';
 import { redactSecrets } from './redact-secrets.ts';
+import { recordRunMilestones } from './automation-run-milestones.ts';
 
 const log = logger('automation-run-log');
 
@@ -135,6 +136,9 @@ export async function appendRunLog(
     if (!run) {
       return undefined;
     }
+    // The run's milestones are recorded whether or not the log has room for
+    // their lines.
+    await recordRunMilestones(txQuery, runId, redacted);
     let seq = Number(run.log_lines);
     let chars = Number(run.log_chars);
     let stored: StoredRunLogLine[] = [];

@@ -23,6 +23,7 @@
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import { logRunPlatformLine } from './automation-run-log.ts';
+import { closeRunMilestones } from './automation-run-milestones.ts';
 import type { DBAdapter } from './db.ts';
 import { param, query, type Expression, type Querier } from './expression.ts';
 import type { PgPrimitive } from './index.ts';
@@ -354,6 +355,7 @@ async function logRunEnded(
   dbAdapter: DBAdapter,
   run: AutomationRun,
 ): Promise<void> {
+  await closeRunMilestones(dbAdapter, run);
   await logRunPlatformLine(
     dbAdapter,
     run.id,
