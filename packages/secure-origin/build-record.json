@@ -2071,7 +2071,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 574593,
+      "bytes": 574599,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2171,6 +2171,12 @@
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/dropdown/wormhole-knobs.ts",
+          "sha256": "593ee70172e406278c18c398e1f8eac27b382393b0dc602e313bc8435dc8e27b",
+          "size": 590
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/components/icon-button/index.gts",
           "sha256": "ac6918137e14d08516bdd40f3c51d41e2fd2fda1d490616b70e4fde1184c74bd",
           "size": 1549
@@ -2202,8 +2208,8 @@
         {
           "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/components/select/index.gts",
-          "sha256": "4824d7ca0ef7c5d6b7fa383925ad8f9a3d8085fd10b41a66cf6783b0228304a8",
-          "size": 8422
+          "sha256": "d5107073de9a6f187f0b30e4af063e7451ebc521bc52818d70e3b1a6a730fb16",
+          "size": 7864
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
