@@ -14565,7 +14565,12 @@ export class Realm {
             files.length === 0
               ? 'The commit saved no files'
               : `The commit saved ${files.length} ${files.length === 1 ? 'file' : 'files'}: ${files.join(', ')}`,
-          data: { status: response.status, files: files.length, ms },
+          data: {
+            status: response.status,
+            files: files.length,
+            paths: files,
+            ms,
+          },
         });
       } else {
         let error = body?.errors?.[0];

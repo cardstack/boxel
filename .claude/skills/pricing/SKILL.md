@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -178,6 +178,66 @@ over the process's current prices. A worker whose pricing check failed
 answers `no-prices` and writes nothing. `MeteredUsage` is keyed by the usage
 unit names below, and `BYTES_PER_GB` lives beside it, so a task measures GB
 the way the prices quote them.
+
+## A run's compute and network
+
+A run's own compute and network are one `run` charge, to the run's identity
+(`automation_runs.acts_as`: the automation's payer for a scheduled or webhook
+run, the person who clicked for a Preview or Run now), referencing the run:
+
+```
+usage   = prerender_tab_seconds: automation_runs.prerender_tab_ms / 1000
+          downloaded_gb:         automation_runs.call_api_response_bytes / 2^30
+credits = ceil((tab seconds × prerenderTabUsdPerSecond
+               + GB downloaded × PRICING_USD_PER_DOWNLOADED_GB) × PRICING_MARGIN × 1000)
+```
+
+`prerenderTabUsdPerSecond` is the prerender task's hourly cost divided over
+its tabs, so a tab-second is the tab's share of its server. The tab time is
+what the script took in its tab, measured by the worker around the
+automation command (`renderTabMs`: the prerender server's `renderElapsedMs`,
+falling back to `totalElapsedMs`, then to the call's wall clock) and added
+to the row by each attempt that ran it (`addAutomationRunTabTime`). Each
+attempt's time is held to what was left of the run's time limit when its
+script started: the tab call gets a grace past the limit so the tab can
+answer, and that grace isn't charged, so a run's compute never costs more
+than the seconds cap prices it at in the minimum balance and the estimate
+below. A tab call that throws carries no measure from a prerender server and
+may never have reached a tab, so it adds no tab time. A `callApi` transform
+runs inside the script, so its time is part of that tab time. The bytes are the response bytes the realm server counted for the
+run's `callApi` calls, divided by `BYTES_PER_GB`, the same GB the switch-on
+estimate prices the response-bytes cap in.
+
+`runAutomationAttempt` charges the run through `chargeAutomationRun`
+(`packages/runtime-common/automation-run-charge.ts`) once the attempt is
+done and the run has ended, however it ended: complete, an error (a script
+that threw, a cap, a time limit, a tab that failed) or canceled, each for
+the tab time and bytes it used. A run canceled while its script ran is
+charged when the script's tab answers. A run still pending or running is
+left for the attempt running it, and a run that used no tab time and
+downloaded nothing (one canceled before it started) has nothing to charge.
+The charge is written once per run, priced from what the row holds when it
+is first written, and a charge that can't be written is retried a few times
+and then logged on the attempt's log, never failing the job. An attempt that
+a retry replaced can still be in its tab; when that tab answers after the
+newer attempt has ended and charged the run, its time reaches
+`prerender_tab_ms` but isn't billed, so the row can read more tab time than
+the charge's usage. A run closed without an attempt (`abandonAutomationRun`)
+is charged by whatever closes it.
+
+```sql
+-- A run's compute and network: credits beside the usage they priced.
+SELECT l.charge_id, l.pricing_version, -SUM(l.credit_amount) AS credits,
+       (SELECT json_object_agg(unit, quantity) FROM credit_charge_usage u
+        WHERE u.charge_id = l.charge_id) AS usage
+FROM credits_ledger l
+WHERE l.run_id = '<run id>' AND l.charge_kind = 'run'
+GROUP BY l.charge_id, l.pricing_version;
+
+-- What the row holds for it.
+SELECT state, prerender_tab_ms, call_api_response_bytes, acts_as
+FROM automation_runs WHERE id = '<run id>';
+```
 
 ## The indexing a run's writes cause
 
