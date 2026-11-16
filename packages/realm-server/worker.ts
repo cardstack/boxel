@@ -61,6 +61,7 @@ import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
 import { checkPricingAtStartup } from './lib/pricing.ts';
 import { meteredChargesFor } from './lib/metered-charge.ts';
 import { buildMintRunToken } from './lib/run-token.ts';
+import { buildAutomationAdmissionChecks } from './lib/automation-admission-checks.ts';
 
 let log = logger('worker');
 checkPricingAtStartup('worker');
@@ -280,6 +281,19 @@ let autoMigrate = migrateDB || undefined;
     prerenderer,
     createPrerenderAuth,
     mintRunToken: buildMintRunToken(REALM_SECRET_SEED),
+    // An automation run's admission asks the Matrix server whether the
+    // account the run acts as can still sign in, with the admin credentials
+    // the realm server also holds.
+    buildAutomationAdmissionChecks: ({ definitionLookup }) =>
+      buildAutomationAdmissionChecks({
+        dbAdapter,
+        definitionLookup,
+        virtualNetwork,
+        matrixURL: new URL(matrixURL),
+        matrixServerName: matrixServerNameFromEnv(),
+        matrixAdminUsername: process.env.MATRIX_ADMIN_USERNAME,
+        matrixAdminPassword: process.env.MATRIX_ADMIN_PASSWORD,
+      }),
     indexJobsOnly,
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),

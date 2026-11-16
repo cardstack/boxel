@@ -15,8 +15,10 @@
 // and how, and its limits, which the owner changes there.
 // Above the keys, where a share's or key's use reached its high-water mark or
 // its budget this day or month, each with what to do about it (see
-// `key-limit-notices.gts`), and what workspaces' policies did with the user's
-// shared keys. Listing them marks them read, which clears the app's badge.
+// `key-limit-notices.gts`), the automation runs that didn't start for want
+// of an approval, a share or a key (see `automation-notices.gts`), and what
+// workspaces' policies did with the user's shared keys. Listing them marks
+// them read, which clears the app's badge.
 // Each key that can be shared says whether people who aren't signed in can
 // use it, with its optional daily and monthly anonymous caps, and Change
 // opens a panel to turn that on or off and set the caps. It is the key's own
@@ -37,11 +39,13 @@ import { Alert } from '@cardstack/pretui/components/alert';
 import { EmptyState } from '@cardstack/pretui/components/empty-state';
 
 import {
+  automationNotices,
   deleteKey,
   listBindings,
   declinePolicyNotice,
   limitNotices,
   listKeys,
+  markAutomationNoticesRead,
   markLimitNoticesRead,
   markPolicyNoticesRead,
   policyNotices,
@@ -50,6 +54,7 @@ import {
   setAnonymousUse,
   sharesOfKey,
   unshare,
+  type AutomationNotice,
   type KeyBinding,
   type KeyGrant,
   type KeyLimitNotice,
@@ -88,6 +93,7 @@ import EditPage from './edit-page.gts';
 import KeyFields from './key-fields.gts';
 import KeyGrants from './key-grants.gts';
 import KeyLimitNotices from './key-limit-notices.gts';
+import AutomationNotices from './automation-notices.gts';
 import KeyPolicyNotices from './key-policy-notices.gts';
 import KeyTile from './key-tile.gts';
 import ServiceAccountDetails from './service-account-details.gts';
@@ -135,6 +141,10 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
               @showsKeyUsage={{this.showsKeyUsage}}
               @onOpenKeyUsage={{this.showKeyUsage}}
               @onOpenShareUsage={{this.openShareUsage}}
+            />
+            <AutomationNotices
+              @notices={{this.state.automationNotices}}
+              @onOpenApproval={{this.openAutomationApproval}}
             />
             <KeyPolicyNotices
               @notices={{this.state.notices}}
@@ -502,6 +512,9 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
     // Where the user's shares and keys reached a limit this day or month.
     // Empty when there are none, or when they can't be read.
     limitNotices: [] as KeyLimitNotice[],
+    // The automation runs that didn't start for want of something the user
+    // fixes here. Empty when there are none, or when they can't be read.
+    automationNotices: [] as AutomationNotice[],
     // The request being declined, while it is.
     declining: undefined as string | undefined,
     error: undefined as string | undefined,
@@ -547,9 +560,11 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       this.state.bindings = await this.readBindings();
       this.state.notices = await this.readNotices();
       this.state.limitNotices = await this.readLimitNotices();
+      this.state.automationNotices = await this.readAutomationNotices();
       this.args.api.visit.loaded();
       this.markNoticesRead();
       this.markLimitNoticesRead();
+      this.markAutomationNoticesRead();
       this.openAnonymousUseFromFragment();
     } catch (e) {
       if (isSignedOut(e)) {
@@ -744,6 +759,57 @@ class Keys extends Component<{ Args: { api: KeysWindowAPI } }> {
       console.warn(`Could not mark the key limit notices read: ${e}`);
     });
   }
+
+  // The keys are the page; automation notices that can't be read are left
+  // out.
+  private readAutomationNotices = async (): Promise<AutomationNotice[]> => {
+    try {
+      return await automationNotices(this.args.api.config);
+    } catch (e) {
+      if (isSignedOut(e)) {
+        throw e;
+      }
+      return [];
+    }
+  };
+
+  // As for policy notices: what this page lists has been seen.
+  private markAutomationNoticesRead() {
+    let unread = this.state.automationNotices
+      .filter((notice) => !notice.readAt)
+      .map((notice) => notice.id);
+    if (unread.length === 0) {
+      return;
+    }
+    markAutomationNoticesRead(this.args.api.config, unread).catch((e) => {
+      console.warn(`Could not mark the automation notices read: ${e}`);
+    });
+  }
+
+  // An operation an automation's run was refused for opens the approve page
+  // for it: `approve` for one never approved for automations,
+  // `review-changes` for one whose request changed since. It comes back to
+  // this page when it is done.
+  private openAutomationApproval = (notice: AutomationNotice) => {
+    if (!notice.operation || !notice.targetType) {
+      return;
+    }
+    let page =
+      notice.reason === 'binding-needs-reapproval'
+        ? 'review-changes'
+        : 'approve';
+    navigation.assign(
+      withWayBack(
+        `${pageURL(page)}#${new URLSearchParams({
+          module: notice.targetType.module,
+          name: notice.targetType.name,
+          realm: notice.realm,
+          operation: notice.operation,
+          then: 'keys',
+        })}`,
+      ),
+    );
+  };
 
   // Each key's usage panel, by key id, so a limit notice about the key can
   // open it.

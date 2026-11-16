@@ -1,5 +1,11 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 
+import {
+  admitRunIdentity,
+  admitRunOperations,
+  scriptParseError,
+  type AutomationAdmissionChecks,
+} from '../automation-admission.ts';
 import { MAX_RUN_SECONDS } from '../automation-declaration.ts';
 import {
   type AutomationJobInput,
@@ -13,9 +19,11 @@ import {
   isAutomationScriptOutcome,
 } from '../automation-run-command.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
+import { logRunPlatformLine } from '../automation-run-log.ts';
 import {
   finishAutomationRun,
   getAutomationRun,
+  recordAutomationRunAdmitted,
   recordAutomationRunScript,
   startAutomationRunAttempt,
   type AutomationRun,
@@ -67,6 +75,11 @@ export interface AutomationAttemptContext {
   virtualNetwork: VirtualNetwork;
   prerenderer: Prerenderer;
   mintRunToken: MintRunToken | undefined;
+  // The paired Matrix server, whose bot accounts are never direct writers.
+  matrixServerName: string | undefined;
+  // What admission asks the realm server's side of the worker (see
+  // `automation-admission.ts`). A worker without them admits no run.
+  admissionChecks: AutomationAdmissionChecks | undefined;
   log: Log;
 }
 
@@ -79,7 +92,8 @@ export interface AutomationAttemptResult {
 }
 
 // Runs one attempt of an automation run (ADR 025, ADR 027 §1.4): takes the
-// run through its row, runs its script in a warm prerender tab on the run's
+// run through its row, admits it (`automation-admission.ts`), which refuses a
+// run that can't go ahead before it costs anything, runs its script in a warm prerender tab on the run's
 // own affinity with the run's token, then commits the overlay as one batch
 // or, for a script that threw or ran out of time, discards it and records the
 // error. The run row is the source of truth: every step is refused once a
@@ -129,6 +143,17 @@ export async function runAutomationAttempt(
   let run = start.run;
   let fail = (reason: string, message: string) =>
     finish(ctx, tag, runId, attempt, { state: 'error', reason, message });
+  // A refusal at admission: the run ends with the refusal's code, and its
+  // log says admission refused it.
+  let refuse = async (reason: string, message: string) => {
+    await logRunPlatformLine(dbAdapter, runId, {
+      kind: 'admission',
+      level: 'error',
+      message: `Admission refused the run (${reason}): ${message}`,
+      data: { admitted: false, reason, actsAs: run.actsAs },
+    });
+    return await fail(reason, message);
+  };
 
   let realmURL = ensureTrailingSlash(ctx.virtualNetwork.toURLHref(run.realm));
   let [limits, declaration] = await Promise.all([
@@ -136,13 +161,26 @@ export async function runAutomationAttempt(
     readRunDeclaration({ ...ctx, automationId: run.automationId }),
   ]);
   if (!limits.ok || !declaration.ok) {
-    return await fail(
+    return await refuse(
       'not-an-automation',
       !limits.ok
         ? limits.message
         : (declaration as { message: string }).message,
     );
   }
+  let manual =
+    triggerKind(input, run, declaration.declaration.triggers) === 'manual';
+  let admission = {
+    dbAdapter,
+    virtualNetwork: ctx.virtualNetwork,
+    matrixServerName: ctx.matrixServerName,
+    checks: ctx.admissionChecks,
+  };
+  let identity = await admitRunIdentity(admission, run, { manual });
+  if (!identity.ok) {
+    return await refuse(identity.reason, identity.message);
+  }
+
   let { caps } = limits;
   let timeLimitSeconds = Math.min(caps.seconds, MAX_RUN_SECONDS);
   // A retry keeps the run's first start, so it gets what is left of the
@@ -182,24 +220,52 @@ export async function runAutomationAttempt(
       },
     });
     if (!response.ok) {
-      return await fail(
+      return await refuse(
         'missing-script',
         `The script ${scriptURL} could not be read: ${response.status}`,
       );
     }
     code = await response.text();
   } catch (e: any) {
-    return await fail(
+    return await refuse(
       'missing-script',
       redact(`The script ${scriptURL} could not be read: ${e?.message ?? e}`),
     );
   }
   if (!code.trim() || code.length > MAX_AUTOMATION_SCRIPT_CHARS) {
-    return await fail(
+    return await refuse(
       'script-error',
       `The script ${scriptURL} must be between 1 and ${MAX_AUTOMATION_SCRIPT_CHARS} characters`,
     );
   }
+  let parseError = scriptParseError(code);
+  if (parseError) {
+    return await refuse(
+      'script-error',
+      `The script ${scriptURL} doesn't parse: ${parseError}`,
+    );
+  }
+  let operationsAdmitted = await admitRunOperations(admission, run, {
+    automation: identity.automation,
+    operations: limits.operations,
+  });
+  if (!operationsAdmitted.ok) {
+    return await refuse(operationsAdmitted.reason, operationsAdmitted.message);
+  }
+  if (!(await recordAutomationRunAdmitted(dbAdapter, runId, attempt))) {
+    log.info(`${tag} left alone: another attempt owns the run, or it ended`);
+    return { state: 'left', reason: 'superseded' };
+  }
+  await logRunPlatformLine(dbAdapter, runId, {
+    kind: 'admission',
+    level: 'info',
+    message: `Admitted the run as ${run.actsAs}, with ${limits.operations.length} declared ${limits.operations.length === 1 ? 'operation' : 'operations'} checked`,
+    data: {
+      admitted: true,
+      actsAs: run.actsAs,
+      operations: limits.operations.length,
+    },
+  });
   let recorded = await recordAutomationRunScript(dbAdapter, runId, attempt, {
     scriptId: declaration.declaration.script,
     scriptHash: await scriptHash(code),

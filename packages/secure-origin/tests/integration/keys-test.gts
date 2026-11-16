@@ -1061,6 +1061,7 @@ module('Integration | key pages', function (hooks) {
           'GET _key-bindings',
           'GET _key-policy-notices',
           'GET _key-limit-notices',
+          'GET _automation-notices',
         ],
         'the page asks nothing per key',
       );

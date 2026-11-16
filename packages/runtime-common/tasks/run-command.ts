@@ -104,6 +104,7 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
   definitionLookup,
   virtualNetwork,
   mintRunToken,
+  automationAdmissionChecks,
 }) =>
   async function (args) {
     let { jobInfo, realmURL, realmUsername, runAs, command, commandInput } =
@@ -132,6 +133,8 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
             virtualNetwork,
             prerenderer,
             mintRunToken,
+            matrixServerName,
+            admissionChecks: automationAdmissionChecks,
             log,
           },
           commandInput,

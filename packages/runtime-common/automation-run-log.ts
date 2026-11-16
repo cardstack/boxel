@@ -48,6 +48,7 @@ export const RUN_LOG_SCRIPT_KINDS = [
 ] as const;
 
 export const RUN_LOG_PLATFORM_KINDS = [
+  'admission',
   'call-api',
   'resolve',
   'commit',

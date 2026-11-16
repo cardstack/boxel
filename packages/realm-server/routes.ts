@@ -119,6 +119,7 @@ import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import {
+  AUTOMATION_NOTICES_PATH,
   KEY_BINDINGS_PATH,
   KEY_LIMIT_NOTICES_PATH,
   KEY_POLICY_NOTICES_PATH,
@@ -193,6 +194,10 @@ import {
   handleSetUserKeyLimits,
   handleSetUserKeyAnonymousUse,
 } from './handlers/handle-key-limits.ts';
+import {
+  handleListAutomationNotices,
+  handleMarkAutomationNoticesRead,
+} from './handlers/handle-automation-notices.ts';
 import {
   handleKeyShareUsage,
   handleUserKeyUsage,
@@ -589,6 +594,16 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${KEY_LIMIT_NOTICES_PATH}/read`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleMarkKeyLimitNoticesRead(args),
+  );
+  router.get(
+    AUTOMATION_NOTICES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListAutomationNotices(args),
+  );
+  router.post(
+    `${AUTOMATION_NOTICES_PATH}/read`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMarkAutomationNoticesRead(args),
   );
   router.get(
     `${OAUTH_PATH}/clients`,

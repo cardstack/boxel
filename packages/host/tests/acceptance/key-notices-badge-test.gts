@@ -31,11 +31,13 @@ import { stubWindowOpen } from '../helpers/window-open';
 const ME = '@testuser:localhost';
 const POLICY_NOTICES_PATH = '/_key-policy-notices';
 const LIMIT_NOTICES_PATH = '/_key-limit-notices';
+const AUTOMATION_NOTICES_PATH = '/_automation-notices';
 
 interface Unread {
-  // Unread policy notices, and unread limit notices.
+  // Unread policy notices, limit notices and automation notices.
   policy: number;
   limit: number;
+  automation: number;
 }
 
 // The realm server's notice listings, as far as the app reads them: the
@@ -45,6 +47,7 @@ function stubNotices(unread: Unread) {
   let listings: [string, () => number][] = [
     [POLICY_NOTICES_PATH, () => unread.policy],
     [LIMIT_NOTICES_PATH, () => unread.limit],
+    [AUTOMATION_NOTICES_PATH, () => unread.automation],
   ];
   // The mock's own listings, put back when the test is done.
   let standing = listings.map(([path]) =>
@@ -95,13 +98,14 @@ module('Acceptance | key notices badge', function (hooks) {
     directRooms: ['test-auth-realm-server-session-room'],
   });
 
-  let unread: Unread = { policy: 0, limit: 0 };
+  let unread: Unread = { policy: 0, limit: 0, automation: 0 };
   let api: ReturnType<typeof stubNotices> | undefined;
   let windowOpen: ReturnType<typeof stubWindowOpen>;
 
   hooks.beforeEach(async function () {
     unread.policy = 0;
     unread.limit = 0;
+    unread.automation = 0;
     api = stubNotices(unread);
     windowOpen = stubWindowOpen(window);
     await setupAcceptanceTestRealm({
@@ -226,20 +230,21 @@ module('Acceptance | key notices badge', function (hooks) {
     assert.dom('[data-test-pretui-badge-mark]').doesNotExist();
   });
 
-  test('the count adds up unread policy notices and unread limit notices', async function (assert) {
+  test('the count adds up unread policy, limit and automation notices', async function (assert) {
     unread.policy = 1;
     unread.limit = 2;
+    unread.automation = 3;
     await visitApp();
     await waitFor('[data-test-profile-icon-key-notices-badge]');
     assert
       .dom(
         '[data-test-profile-icon-key-notices-badge] [data-test-pretui-badge-mark]',
       )
-      .hasText('3');
+      .hasText('6');
     await click('[data-test-profile-icon-button]');
     assert
       .dom('[data-test-profile-api-keys-badge] [data-test-pretui-badge-spoken]')
-      .hasText('3 unseen key notices');
+      .hasText('6 unseen key notices');
   });
 
   test('a limit notice recorded while the app is open shows as soon as the realm server says so', async function (assert) {
