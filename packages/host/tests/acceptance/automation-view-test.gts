@@ -358,11 +358,12 @@ module('Acceptance | automation view', function (hooks) {
     ]) {
       assert.true(milestones.includes(expected), `shows "${expected}"`);
     }
-    assert.true(
-      milestones.indexOf('Fetch issues') < milestones.indexOf('Retry') &&
-        milestones.indexOf('Retry') < milestones.indexOf('Group by label') &&
-        milestones.indexOf('Group by label') <
-          milestones.indexOf('Write digest'),
+    let order = ['Fetch issues', 'Retry', 'Group by label', 'Write digest'].map(
+      (name) => milestones.indexOf(name),
+    );
+    assert.deepEqual(
+      order,
+      [...order].sort((a, b) => a - b),
       'in the order the run reached them, then the ones it never reached',
     );
   });
