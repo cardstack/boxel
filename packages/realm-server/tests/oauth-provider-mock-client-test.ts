@@ -105,6 +105,7 @@ function readResultPage(html: string) {
     ),
     expires: text('[data-test-expires]'),
     renews: text('[data-test-renews]'),
+    message: text('[data-test-result="error"]'),
   };
 }
 
@@ -389,9 +390,13 @@ module(basename(import.meta.filename), function (hooks) {
     let appPages = supertest.agent(app.server);
     let session = await secureSession();
 
-    for (let [what, iss] of [
-      ['no issuer', undefined],
-      ['another issuer', 'https://elsewhere.example.com'],
+    for (let [what, iss, message] of [
+      ['no issuer', undefined, "Boxel's response didn't name its issuer."],
+      [
+        'another issuer',
+        'https://elsewhere.example.com',
+        'The response came from a different authorization server.',
+      ],
     ] as const) {
       let { uid, browser } = await connect(appPages);
       let ticket = await decideOAuthFlow(server!, uid, session);
@@ -409,11 +414,27 @@ module(basename(import.meta.filename), function (hooks) {
       }
       let result = await resultFor(appPages, `?${query}`);
       assert.strictEqual(result.outcome, 'error', what);
+      assert.strictEqual(result.message, message, `${what}: the message`);
     }
     assert.strictEqual(
       app.app.heldTokensForTests,
       undefined,
       'no code was exchanged',
+    );
+  });
+
+  test('refuses to register with a provider whose discovery document names another issuer', async function (assert) {
+    // The in-process transport sends every request to this test's server,
+    // which names itself OAUTH_TEST_ISSUER, whatever address the app is given.
+    await assert.rejects(
+      startExampleAIApp({
+        mode: 'loopback',
+        issuer: 'http://127.0.0.1:1',
+        transport: inProcessTransport(() => server!),
+      }),
+      new RegExp(
+        `names the issuer ${OAUTH_TEST_ISSUER.replace(/[.]/g, '\\.')}$`,
+      ),
     );
   });
 });

@@ -53,6 +53,14 @@ if (mode === 'cimd') {
   process.exit(1);
 }
 
+let port = Number(values.port);
+if (!Number.isInteger(port) || port < 0 || port > 65535) {
+  console.error(
+    `--port must be a whole number from 0 to 65535, not "${values.port}"`,
+  );
+  process.exit(1);
+}
+
 let issuer = values['realm-server'] ?? process.env.REALM_BASE_URL;
 if (!issuer) {
   console.error(
@@ -67,7 +75,7 @@ try {
     mode,
     issuer,
     transport: fetchTransport(),
-    port: Number(values.port),
+    port,
   });
 } catch (error) {
   console.error(
@@ -87,7 +95,14 @@ console.log(`${EXAMPLE_AI_APP_NAME} (${mode}) registered with ${issuer}`);
 console.log(`Connect page: ${running.origin}/`);
 console.log('Press Ctrl+C to stop.');
 
+// Stops once, however many signals arrive: a second Ctrl+C, or SIGINT then
+// SIGTERM, would otherwise close the server twice.
+let stopping = false;
 let stop = async () => {
+  if (stopping) {
+    return;
+  }
+  stopping = true;
   await running.close();
   process.exit(0);
 };

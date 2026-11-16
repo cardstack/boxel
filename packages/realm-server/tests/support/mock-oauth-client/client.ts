@@ -163,10 +163,6 @@ export class ExampleAIApp {
     return this.#clientId;
   }
 
-  get registered(): boolean {
-    return this.#clientId !== undefined;
-  }
-
   // The tokens the last exchange returned. Only for a test that checks the
   // app's pages never show them; no page reads this.
   get heldTokensForTests():
@@ -265,10 +261,15 @@ export class ExampleAIApp {
     // response (RFC 9207 §2.4) is answered only by a response that does.
     let iss = params.get('iss');
     if (
-      iss === null
-        ? metadata.authorization_response_iss_parameter_supported === true
-        : iss !== metadata.issuer
+      iss === null &&
+      metadata.authorization_response_iss_parameter_supported === true
     ) {
+      return {
+        kind: 'error',
+        message: "Boxel's response didn't name its issuer.",
+      };
+    }
+    if (iss !== null && iss !== metadata.issuer) {
       return {
         kind: 'error',
         message: 'The response came from a different authorization server.',
@@ -315,7 +316,10 @@ export class ExampleAIApp {
     return {
       kind: 'connected',
       codePreview: code.slice(0, CODE_PREVIEW_LENGTH),
-      scopes: (field(response.body, 'scope') ?? '').split(' ').filter(Boolean),
+      // A response without `scope` granted the scope asked for (RFC 6749 §5.1).
+      scopes: (field(response.body, 'scope') ?? this.scope)
+        .split(' ')
+        .filter(Boolean),
       expiresInSeconds: expiresIn,
       refreshTokenIssued: refreshToken !== undefined,
     };
@@ -334,6 +338,13 @@ export class ExampleAIApp {
     ) {
       throw new Error(
         `no OAuth discovery document at ${this.#issuer} (${response.status}); is the provider on?`,
+      );
+    }
+    // The document must name the issuer it was fetched from (RFC 8414 §3.3):
+    // every later check of `iss` compares against it.
+    if (body.issuer.replace(/\/+$/, '') !== this.#issuer) {
+      throw new Error(
+        `the discovery document at ${this.#issuer} names the issuer ${body.issuer}`,
       );
     }
     this.#metadata = body as ProviderMetadata;

@@ -2,6 +2,7 @@
 // its own styles and no assets, so a screenshot needs nothing but the app's
 // server. Every value a page shows is escaped.
 
+import { escapeHtml } from '@cardstack/runtime-common/helpers/html';
 import {
   EXAMPLE_AI_APP_NAME,
   type FlowOutcome,
@@ -41,11 +42,11 @@ export function resultPage(
         an access token. The token itself is never shown.</p>
         <dl data-test-result="connected">
           <dt>Code</dt>
-          <dd data-test-code><code>${escape(outcome.codePreview)}…</code></dd>
+          <dd data-test-code><code>${escapeHtml(outcome.codePreview)}…</code></dd>
           <dt>Scopes</dt>
-          <dd data-test-scopes>${outcome.scopes.map((scope) => `<code>${escape(scope)}</code>`).join(' ') || 'None'}</dd>
+          <dd data-test-scopes>${outcome.scopes.map((scope) => `<code>${escapeHtml(scope)}</code>`).join(' ') || 'None'}</dd>
           <dt>Expires</dt>
-          <dd data-test-expires>${escape(describeLifetime(outcome.expiresInSeconds))}</dd>
+          <dd data-test-expires>${escapeHtml(describeLifetime(outcome.expiresInSeconds))}</dd>
           <dt>Renews</dt>
           <dd data-test-renews>${
             outcome.refreshTokenIssued
@@ -71,7 +72,7 @@ export function resultPage(
         'Something went wrong',
         `
         <h1>Boxel couldn't be connected</h1>
-        <p data-test-result="error">${escape(outcome.message)}</p>
+        <p data-test-result="error">${escapeHtml(outcome.message)}</p>
         <a class="button" href="/connect">Try again</a>
         ${modeNote(mode)}`,
       );
@@ -83,11 +84,15 @@ export function errorPage(message: string): string {
     'Something went wrong',
     `
     <h1>Something went wrong</h1>
-    <p data-test-result="error">${escape(message)}</p>`,
+    <p data-test-result="error">${escapeHtml(message)}</p>`,
   );
 }
 
-function describeLifetime(seconds: number): string {
+function describeLifetime(expiresIn: number): string {
+  let seconds = Math.round(expiresIn);
+  if (seconds <= 0) {
+    return 'Already expired';
+  }
   if (seconds % 3600 === 0) {
     let hours = seconds / 3600;
     return `In ${hours} hour${hours === 1 ? '' : 's'}`;
@@ -96,11 +101,11 @@ function describeLifetime(seconds: number): string {
     let minutes = seconds / 60;
     return `In ${minutes} minute${minutes === 1 ? '' : 's'}`;
   }
-  return `In ${seconds} seconds`;
+  return `In ${seconds} second${seconds === 1 ? '' : 's'}`;
 }
 
 function modeNote(mode: RegistrationMode): string {
-  return `<p class="note">Test client · ${escape(MODE_LABELS[mode])}</p>`;
+  return `<p class="note">Test client · ${escapeHtml(MODE_LABELS[mode])}</p>`;
 }
 
 function page(title: string, body: string): string {
@@ -110,7 +115,7 @@ function page(title: string, body: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>${escape(title)} · ${EXAMPLE_AI_APP_NAME}</title>
+<title>${escapeHtml(title)} · ${EXAMPLE_AI_APP_NAME}</title>
 <style>
   :root {
     color-scheme: light;
@@ -194,13 +199,4 @@ function page(title: string, body: string): string {
 </body>
 </html>
 `;
-}
-
-function escape(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
