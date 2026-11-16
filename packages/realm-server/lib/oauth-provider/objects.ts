@@ -117,7 +117,7 @@ async function destroyObject(
   );
 }
 
-function asRecord(stored: unknown): Record<string, unknown> {
+export function asRecord(stored: unknown): Record<string, unknown> {
   return (typeof stored === 'string' ? JSON.parse(stored) : stored) as Record<
     string,
     unknown
@@ -129,16 +129,58 @@ function jsonEscaped(value: string): string {
   return JSON.stringify(value).slice(1, -1);
 }
 
+// The part of the library's adapter interface it uses for none of Boxel's
+// kinds: finding by user code (the device flow is off), by UID, consuming and
+// revoking by grant. Each throws, naming the kind.
+export abstract class OAuthProviderAdapter implements Adapter {
+  readonly #kind: string;
+
+  constructor(kind: string) {
+    this.#kind = kind;
+  }
+
+  abstract upsert(
+    id: string,
+    payload: AdapterPayload,
+    expiresIn: number,
+  ): Promise<void>;
+  abstract find(id: string): Promise<AdapterPayload | undefined>;
+  abstract destroy(id: string): Promise<void>;
+
+  async findByUserCode(): Promise<never> {
+    throw this.unused('findByUserCode');
+  }
+
+  async findByUid(): Promise<never> {
+    throw this.unused('findByUid');
+  }
+
+  async consume(): Promise<never> {
+    throw this.unused('consume');
+  }
+
+  async revokeByGrantId(): Promise<never> {
+    throw this.unused('revokeByGrantId');
+  }
+
+  protected unused(method: string): OAuthProviderObjectError {
+    return new OAuthProviderObjectError(
+      `the OAuth provider's ${this.#kind} has no ${method}`,
+    );
+  }
+}
+
 // The library's adapter for a kind of object it stores, finds and deletes by
 // the object's own value, which is a bearer secret. The value is the row's
 // key, hashed, and the library's copy of it in the payload (`jti`) is left
 // out and put back when the row is found. The library looks up nothing else
 // for these kinds, so every other lookup throws.
-class BearerKeyedAdapter implements Adapter {
+class BearerKeyedAdapter extends OAuthProviderAdapter {
   #dbAdapter: DBAdapter;
   #kind: string;
 
   constructor(dbAdapter: DBAdapter, kind: string) {
+    super(kind);
     this.#dbAdapter = dbAdapter;
     this.#kind = kind;
   }
@@ -179,28 +221,6 @@ class BearerKeyedAdapter implements Adapter {
 
   async destroy(id: string): Promise<void> {
     await destroyObject(this.#dbAdapter, this.#kind, id);
-  }
-
-  async findByUserCode(): Promise<never> {
-    throw this.#unused('findByUserCode');
-  }
-
-  async findByUid(): Promise<never> {
-    throw this.#unused('findByUid');
-  }
-
-  async consume(): Promise<never> {
-    throw this.#unused('consume');
-  }
-
-  async revokeByGrantId(): Promise<never> {
-    throw this.#unused('revokeByGrantId');
-  }
-
-  #unused(method: string) {
-    return new OAuthProviderObjectError(
-      `the OAuth provider's ${this.#kind} has no ${method}`,
-    );
   }
 }
 
@@ -421,6 +441,17 @@ export async function findConsentDecision(
   interactionId: string,
 ): Promise<ConsentDecisionRecord | undefined> {
   return (await findObject(dbAdapter, CONSENT_DECISION_KIND, interactionId)) as
+    | ConsentDecisionRecord
+    | undefined;
+}
+
+// Finds a flow's decision and deletes it, so only one request can finish the
+// flow with it.
+export async function takeConsentDecision(
+  dbAdapter: DBAdapter,
+  interactionId: string,
+): Promise<ConsentDecisionRecord | undefined> {
+  return (await takeObject(dbAdapter, CONSENT_DECISION_KIND, interactionId)) as
     | ConsentDecisionRecord
     | undefined;
 }

@@ -10,8 +10,10 @@ import { randomBytes } from 'crypto';
 import type { Adapter, AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import {
+  asRecord,
   AuthorizationCodeAdapter,
   InteractionAdapter,
+  OAuthProviderAdapter,
   SessionAdapter,
 } from './objects.ts';
 
@@ -75,10 +77,11 @@ export function oauthProviderAdapter(
 // metadata document, so an ID registration could not have given (a metadata
 // document's URL, say) is not found without asking the database. No row can
 // then stand in for a metadata document, whatever is in the table.
-class DynamicClientAdapter implements Adapter {
+class DynamicClientAdapter extends OAuthProviderAdapter {
   #dbAdapter: DBAdapter;
 
   constructor(dbAdapter: DBAdapter) {
+    super('clients');
     this.#dbAdapter = dbAdapter;
   }
 
@@ -98,12 +101,7 @@ class DynamicClientAdapter implements Adapter {
       `SELECT metadata FROM oauth_provider_dynamic_clients WHERE client_id = $1`,
       { bind: [id] },
     )) as { metadata: AdapterPayload | string }[];
-    if (!row) {
-      return undefined;
-    }
-    return typeof row.metadata === 'string'
-      ? (JSON.parse(row.metadata) as AdapterPayload)
-      : row.metadata;
+    return row ? (asRecord(row.metadata) as AdapterPayload) : undefined;
   }
 
   async destroy(id: string): Promise<void> {
@@ -112,28 +110,6 @@ class DynamicClientAdapter implements Adapter {
       { bind: [id] },
     );
   }
-
-  async findByUserCode(): Promise<never> {
-    throw unused('findByUserCode');
-  }
-
-  async findByUid(): Promise<never> {
-    throw unused('findByUid');
-  }
-
-  async consume(): Promise<never> {
-    throw unused('consume');
-  }
-
-  async revokeByGrantId(): Promise<never> {
-    throw unused('revokeByGrantId');
-  }
-}
-
-function unused(method: string) {
-  return new OAuthProviderStorageError(
-    `the OAuth provider's clients have no ${method}`,
-  );
 }
 
 interface GrantRow {
@@ -152,10 +128,11 @@ interface GrantRow {
 // library's own payload: the user as `accountId`, and each resource's scopes
 // as one space-separated string.
 
-class GrantAdapter implements Adapter {
+class GrantAdapter extends OAuthProviderAdapter {
   #dbAdapter: DBAdapter;
 
   constructor(dbAdapter: DBAdapter) {
+    super('grants');
     this.#dbAdapter = dbAdapter;
   }
 
@@ -171,11 +148,7 @@ class GrantAdapter implements Adapter {
     if (!row) {
       return undefined;
     }
-    let resources = (
-      typeof row.resources === 'string'
-        ? JSON.parse(row.resources)
-        : row.resources
-    ) as Record<string, string[]>;
+    let resources = asRecord(row.resources) as Record<string, string[]>;
     return {
       jti: id,
       kind: 'Grant',
@@ -199,28 +172,6 @@ class GrantAdapter implements Adapter {
   }
 
   async destroy(): Promise<never> {
-    throw unusedGrant('destroy');
+    throw this.unused('destroy');
   }
-
-  async findByUserCode(): Promise<never> {
-    throw unusedGrant('findByUserCode');
-  }
-
-  async findByUid(): Promise<never> {
-    throw unusedGrant('findByUid');
-  }
-
-  async consume(): Promise<never> {
-    throw unusedGrant('consume');
-  }
-
-  async revokeByGrantId(): Promise<never> {
-    throw unusedGrant('revokeByGrantId');
-  }
-}
-
-function unusedGrant(method: string) {
-  return new OAuthProviderStorageError(
-    `the OAuth provider's grants have no ${method}`,
-  );
 }

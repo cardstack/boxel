@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const MIGRATION = join(
   dirname(require.resolve('@cardstack/postgres/package.json')),
   'migrations',
-  '1794552668724_add-oauth-provider-grants.js',
+  '1794801545328_add-oauth-provider-grants.js',
 );
 
 // Roles and memberships are shared by every database on the server, so the
