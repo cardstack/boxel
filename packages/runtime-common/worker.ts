@@ -378,6 +378,11 @@ export class Worker {
           `automation-storage-charge`,
           Tasks['automationStorageCharge'](taskArgs),
         ),
+      'automation-tick': () =>
+        this.#queue.register(
+          `automation-tick`,
+          Tasks['automationTick'](taskArgs),
+        ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
       capture: () =>
