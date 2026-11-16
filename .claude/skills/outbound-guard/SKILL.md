@@ -17,6 +17,10 @@ account's at Google's token endpoint (`lib/outbound/google-service-account.ts`,
 which registers the private key and the signed assertion with the scrubber;
 see the `user-keys` skill) and an OAuth client's or connection's at its
 client's (see the `oauth-connections` skill).
+Boxel's OAuth provider also downloads each client ID metadata document through
+it (`lib/oauth-provider/client-metadata-document.ts`), with no credential:
+`destinationSetBy: 'user'` on the `call-api` path, held to 5 KB, and with
+`noRedirects`, so a redirect is the response rather than followed.
 A `callApi` carries no `credential`: its credentials are `substitutions`,
 filled into the request after the destination check and never followed across
 a redirect to another origin. A substitution may not change the URL's origin,

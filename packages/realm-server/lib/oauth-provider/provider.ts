@@ -1,4 +1,3 @@
-import { randomBytes } from 'crypto';
 import type Koa from 'koa';
 import * as Sentry from '@sentry/node';
 import Provider, { errors, interactionPolicy } from 'oidc-provider';
@@ -14,7 +13,7 @@ import {
   type RateLimitStore,
 } from '@cardstack/runtime-common';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
-import { oauthProviderAdapter } from './adapter.ts';
+import { newDynamicClientId, oauthProviderAdapter } from './adapter.ts';
 import type { CallerLimit } from './caller-limit.ts';
 import {
   authorizationHandler,
@@ -33,6 +32,15 @@ import {
   type AccountContactLookup,
 } from './consent.ts';
 import type { OAuthProviderConfig } from './config.ts';
+import { finishHandler, resumeHandler, userExists } from './finish.ts';
+import { NON_RENEWING_GRANT_TTL_SECONDS } from './grants.ts';
+import {
+  CHECKS_PROPERTY,
+  clientMetadataDocuments,
+  DOCUMENT_CACHE_SECONDS,
+  MAX_DOCUMENT_BYTES,
+  type ClientMetadataDocuments,
+} from './client-metadata-document.ts';
 import {
   DEFAULT_NEW_CLIENT_LIMIT,
   type NewClientLimit,
@@ -66,16 +74,25 @@ export const OAUTH_REGISTRATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/reg`;
 // copied: the library lists `refresh_token` as soon as a client may register
 // for it, before the token endpoint serves a refresh.
 //
+// `client_id_metadata_document_supported` is copied: the library sets it
+// once client ID metadata documents are on.
+//
 // `token_endpoint_auth_methods_supported` is listed, before the token
 // endpoint is, because a client that finds it missing assumes
 // `client_secret_basic` (RFC 8414 §2) and registers asking for a secret,
 // which registration refuses. The library lists `none`, from
 // `clientAuthMethods`.
+//
+// `authorization_response_iss_parameter_supported` says the provider sends
+// `iss` with every authorization response (RFC 9207), which lets a client
+// tell which server answered it.
 const DISCOVERY_FIELDS = [
   'issuer',
   'response_types_supported',
   'code_challenge_methods_supported',
   'token_endpoint_auth_methods_supported',
+  'authorization_response_iss_parameter_supported',
+  'client_id_metadata_document_supported',
 ] as const;
 const GRANT_TYPES_SERVED = ['authorization_code'];
 
@@ -84,16 +101,22 @@ const GRANT_TYPES_SERVED = ['authorization_code'];
 // outlives a flow: Boxel drops it at the start of each (ADR 021 §1.7).
 const INTERACTION_TTL_SECONDS = 10 * 60;
 const SESSION_TTL_SECONDS = 10 * 60;
+// How long an authorization code lasts: long enough for an app to exchange
+// it straight away.
+const AUTHORIZATION_CODE_TTL_SECONDS = 60;
 
 // The running provider: the library, and Boxel's handling of the requests that
 // run before or beside the library's: registration, the start of a flow, the
 // interaction route that hands a flow to the secure origin, the error page's
-// details and "Return", and a flow's consent.
+// details and "Return", a flow's consent, the route that finishes it, and the
+// resume route the library continues it on.
 export interface OAuthProviderService {
   provider: Provider;
   handleRegistration: Koa.Middleware;
   handleAuthorization: Koa.Middleware;
   handleInteraction: Koa.Middleware;
+  handleFinish: Koa.Middleware;
+  handleResume: Koa.Middleware;
   handleErrorDetails: Koa.Middleware;
   handleErrorReturn: Koa.Middleware;
   // Consent's details and decision. They verify the secure window's session
@@ -126,6 +149,7 @@ export function startOAuthProvider({
   authorizationLimit = DEFAULT_AUTHORIZATION_LIMIT,
   rateLimitStore = new DBRateLimitStore(dbAdapter),
   testOnlyResources,
+  testOnlyDocumentOrigins,
 }: {
   serverURL: URL;
   config: OAuthProviderConfig;
@@ -137,6 +161,8 @@ export function startOAuthProvider({
   authorizationLimit?: CallerLimit;
   rateLimitStore?: RateLimitStore;
   testOnlyResources?: readonly OAuthResourceDefinition[];
+  // See `clientMetadataDocuments`.
+  testOnlyDocumentOrigins?: ReadonlyMap<string, string>;
 }): OAuthProviderService {
   if (!secureOriginURL) {
     throw new OAuthProviderConfigError(
@@ -152,6 +178,13 @@ export function startOAuthProvider({
   }
   let issuer = oauthIssuer(serverURL);
   let registry = buildRegistry(issuer, testOnlyResources);
+  let hosts = boxelHosts({
+    serverURL,
+    secureOriginURL,
+    appOrigins,
+    publishedDomains,
+  });
+  let scopes = registryScopes(registry);
   let provider = createOAuthProvider({
     issuer,
     config,
@@ -161,6 +194,14 @@ export function startOAuthProvider({
         `${issuer}${OAUTH_AUTHORIZATION_PATH}/${id}`,
     }),
     renderError: renderLibraryError({ dbAdapter, secureOriginURL }),
+    accountExists: (accountId) => userExists(dbAdapter, accountId),
+    metadataDocuments: clientMetadataDocuments({
+      hosts,
+      scopes,
+      rateLimitStore,
+      newClientLimit,
+      testOnlyDocumentOrigins,
+    }),
   });
   // Boxel's own apps, listed in code. None is listed yet.
   let preRegistered: ReadonlySet<string> = new Set();
@@ -176,6 +217,8 @@ export function startOAuthProvider({
       secureOriginURL,
     }),
     handleInteraction: interactionHandler({ secureOriginURL }),
+    handleFinish: finishHandler({ provider, dbAdapter, secureOriginURL }),
+    handleResume: resumeHandler({ provider }),
     handleErrorDetails: errorDetailsHandler({
       provider,
       dbAdapter,
@@ -203,13 +246,8 @@ export function startOAuthProvider({
       };
     },
     handleRegistration: registrationHandler({
-      hosts: boxelHosts({
-        serverURL,
-        secureOriginURL,
-        appOrigins,
-        publishedDomains,
-      }),
-      scopes: registryScopes(registry),
+      hosts,
+      scopes,
       rateLimitStore,
       newClientLimit,
     }),
@@ -222,12 +260,20 @@ export function createOAuthProvider({
   registry,
   adapter,
   renderError,
+  accountExists = async () => false,
+  metadataDocuments,
 }: {
   issuer: string;
   config: OAuthProviderConfig;
   registry: readonly OAuthResource[];
   adapter: AdapterFactory;
   renderError?: Configuration['renderError'];
+  // Whether a user ID (`users.id`) names a user. A flow signs in only as
+  // the user who decided it, by that ID.
+  accountExists?: (accountId: string) => Promise<boolean>;
+  // Boxel's handling of client ID metadata documents. Without it, a client
+  // ID that is a URL is unknown, as any other unregistered ID is.
+  metadataDocuments?: ClientMetadataDocuments;
 }): Provider {
   let scopes = registryScopes(registry);
   let configuration: Configuration = {
@@ -250,9 +296,28 @@ export function createOAuthProvider({
     // Set, rather than left to the library's default, so a client may
     // register for the refresh grant; the library allows the grant only once
     // this is set or `offline_access` is a scope. Refresh tokens follow the
-    // renewal choice a flow's consent decision records, which no grant
-    // carries until a flow finishes into one, so none is issued.
+    // renewal choice a grant records, which the token endpoint reads once it
+    // is served, so none is issued yet.
     issueRefreshToken: async () => false,
+    // The account a flow signs in as: a user's internal ID. The library
+    // reads nothing about the user: the provider issues no ID tokens and
+    // answers no `userinfo`.
+    findAccount: async (_ctx: KoaContextWithOIDC, accountId: string) =>
+      (await accountExists(accountId))
+        ? { accountId, claims: async () => ({ sub: accountId }) }
+        : undefined,
+    // Only the grant the flow's finish created, never one the library's
+    // session remembers for the client: each consent is its own grant
+    // (ADR 021 §1.3).
+    loadExistingGrant: async (ctx: KoaContextWithOIDC) => {
+      let grantId = ctx.oidc.result?.consent?.grantId;
+      return typeof grantId === 'string'
+        ? await ctx.oidc.provider.Grant.find(grantId)
+        : undefined;
+    },
+    // A code or token is never tied to the library's session, which lasts
+    // only through one flow: its grant's expiry and state govern it.
+    expiresWithSession: async () => false,
     // The library accepts only S256 challenges; this makes one required of
     // every client, not just public ones.
     pkce: { required: () => true },
@@ -260,6 +325,12 @@ export function createOAuthProvider({
     ttl: {
       Interaction: INTERACTION_TTL_SECONDS,
       Session: SESSION_TTL_SECONDS,
+      AuthorizationCode: AUTHORIZATION_CODE_TTL_SECONDS,
+      // Boxel creates every grant with the expiry its consent chose
+      // (`grants.ts`), and the library never saves one. Set all the same, to
+      // the shorter of the two, so nothing the library might save outlives
+      // a consent that didn't ask to renew.
+      Grant: NON_RENEWING_GRANT_TTL_SECONDS,
     },
     interactions: {
       // A realm-server route, so the library's interaction cookie is set for
@@ -270,6 +341,34 @@ export function createOAuthProvider({
       policy: alwaysPromptingPolicy(),
     },
     ...(renderError ? { renderError } : {}),
+    // The only fetch the provider makes: every feature that would fetch
+    // another URL is off, and registration drops each field that would name
+    // one. Without Boxel's handling there is nothing to fetch.
+    ...(metadataDocuments
+      ? {
+          fetch: metadataDocuments.fetch,
+          fetchResponseBodyLimits: {
+            'client_id metadata document': MAX_DOCUMENT_BYTES,
+          },
+          // Run for every client the library builds: Boxel's checks apply
+          // only to one identified by a metadata document.
+          extraClientMetadata: {
+            properties: [CHECKS_PROPERTY],
+            validator: (
+              ctx: KoaContextWithOIDC | undefined,
+              key: string,
+              value: unknown,
+              metadata: object,
+            ) =>
+              metadataDocuments.validate(
+                ctx,
+                key,
+                value,
+                metadata as Record<string, unknown>,
+              ),
+          },
+        }
+      : {}),
     routes: {
       authorization: OAUTH_AUTHORIZATION_PATH,
       backchannel_authentication: `${OAUTH_PROVIDER_PATH_PREFIX}/backchannel`,
@@ -331,7 +430,7 @@ export function createOAuthProvider({
         // A registration can't be read, changed or deleted afterwards, so
         // there is no token to do it with. On by default.
         issueRegistrationAccessToken: false,
-        idFactory: () => randomBytes(24).toString('base64url'),
+        idFactory: newDynamicClientId,
         // No client is ever issued a secret. Should the library ask for one
         // all the same, the registration is refused rather than a secret
         // stored.
@@ -339,8 +438,19 @@ export function createOAuthProvider({
           throw new Error('the OAuth provider issues no client secrets');
         },
       },
+      // A client identified by the URL of a document describing it, which
+      // the library downloads through Boxel's `fetch` and keeps in memory
+      // (`client-metadata-document.ts`). On only with Boxel's handling.
+      clientIdMetadataDocument: metadataDocuments
+        ? {
+            enabled: true,
+            ack: 'draft-02',
+            allowFetch: metadataDocuments.allowFetch,
+            allowClient: metadataDocuments.allowClient,
+            cacheDuration: { ...DOCUMENT_CACHE_SECONDS },
+          }
+        : { enabled: false },
       // Off: nothing serves them.
-      clientIdMetadataDocument: { enabled: false },
       deviceFlow: { enabled: false },
       revocation: { enabled: false },
       // No ID tokens or OpenID claims: the provider is not an OpenID provider.
@@ -440,9 +550,18 @@ export function createOAuthProvider({
 // ask for them, since Boxel drops its session cookie and each consent makes a
 // new grant; this keeps a flow from skipping either should that change. A
 // resumed flow is left to the library's checks, which see the decision.
+//
+// The library's check that every OpenID scope asked for was granted
+// (`op_scopes_missing`) is removed. The library counts every scope in its
+// `scopes` setting as an OpenID scope, and the registry's scopes are there so
+// a registration may name them. Each of them belongs to a resource, so the
+// check that every resource scope asked for was granted (`rs_scopes_missing`)
+// covers it, and a grant holds scopes only by resource: none for the whole
+// provider, which a token naming no resource would carry.
 function alwaysPromptingPolicy() {
   let { base, Check } = interactionPolicy;
   let policy = base();
+  policy.get('consent')!.checks.remove('op_scopes_missing');
   for (let name of ['login', 'consent']) {
     policy
       .get(name)!

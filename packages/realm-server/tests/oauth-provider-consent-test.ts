@@ -1,28 +1,28 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename, join } from 'path';
+import { basename } from 'path';
 import { randomBytes } from 'crypto';
-import { dirSync } from 'tmp';
-import fsExtra from 'fs-extra';
 import supertest from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
   closeServer,
-  createVirtualNetwork,
   ensureMatrixAdminUser,
-  fixtureDir,
   matrixRegistrationSecret,
   matrixURL,
   realmSecretSeed,
-  runTestRealmServer,
   setupDB,
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
+import { testOAuthSecureOriginURL } from './helpers/oauth-provider.ts';
 import {
-  testOAuthProviderConfig,
-  testOAuthSecureOriginURL,
-} from './helpers/oauth-provider.ts';
+  OAUTH_TEST_ISSUER,
+  OAUTH_TEST_MCP,
+  OAUTH_TEST_SERVER_URL,
+  registerOAuthClient,
+  startOAuthFlow,
+  startOAuthProviderServer,
+} from './helpers/oauth-provider-flow.ts';
 import {
   assertNoSecrets,
   telemetryDuring,
@@ -37,16 +37,12 @@ import {
   takeConsentTicket,
 } from '../lib/oauth-provider/objects.ts';
 import { buildRegistry } from '../lib/oauth-provider/registry.ts';
-import type { CallerLimit } from '../lib/oauth-provider/caller-limit.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
-const { copySync, ensureDirSync } = fsExtra;
-
-const serverURL = new URL('http://127.0.0.1:0/');
-const ISSUER = 'http://127.0.0.1:0';
-const MCP = `${ISSUER}/mcp`;
+const serverURL = OAUTH_TEST_SERVER_URL;
+const ISSUER = OAUTH_TEST_ISSUER;
+const MCP = OAUTH_TEST_MCP;
 const SECURE_ORIGIN = testOAuthSecureOriginURL.origin;
-const WEB_REDIRECT_URI = 'https://app.connector.example.co.uk/callback';
 const LOOPBACK_REDIRECT_URI = 'http://127.0.0.1/callback';
 const ADMIN = { matrixURL, adminUsername: 'admin', adminPassword: 'password' };
 
@@ -54,42 +50,12 @@ const ADMIN = { matrixURL, adminUsername: 'admin', adminPassword: 'password' };
 // client sent.
 const MCP_ENTRY = buildRegistry(ISSUER).find(({ id }) => id === MCP)!;
 
-const ROOMY_LIMIT: CallerLimit = {
-  perAddress: { requests: 1000, windowSeconds: 600 },
-  perNetwork: { requests: 1000, windowSeconds: 600 },
-  overall: { requests: 1000, windowSeconds: 600 },
-  alertAfter: 999,
-};
-
-async function start({
-  dbAdapter,
-  publisher,
-  runner,
-}: {
+function start(args: {
   dbAdapter: PgAdapter;
   publisher: QueuePublisher;
   runner: QueueRunner;
 }): Promise<Server> {
-  let realmsRootPath = join(dirSync().name, 'realm_server_oauth_consent');
-  let testRealmDir = join(realmsRootPath, 'root');
-  ensureDirSync(testRealmDir);
-  copySync(fixtureDir('simple'), testRealmDir);
-  let { testRealmHttpServer } = await runTestRealmServer({
-    virtualNetwork: createVirtualNetwork(),
-    testRealmDir,
-    realmsRootPath,
-    realmURL: serverURL,
-    dbAdapter,
-    publisher,
-    runner,
-    matrixURL,
-    secureOriginURL: testOAuthSecureOriginURL,
-    clientAddress: { trustedProxyHops: 0, infraAddresses: [] },
-    oauthProvider: testOAuthProviderConfig(),
-    oauthNewClientLimit: ROOMY_LIMIT,
-    oauthAuthorizationLimit: ROOMY_LIMIT,
-  });
-  return testRealmHttpServer;
+  return startOAuthProviderServer(args, 'realm_server_oauth_consent');
 }
 
 // A Matrix account, with an email address when `email` is given.
@@ -129,14 +95,6 @@ async function matrixAccount({
   return userId;
 }
 
-function interactionUid(location: string): string {
-  let prefix = `${ISSUER}/_oauth-provider/interaction/`;
-  if (!location?.startsWith(prefix)) {
-    throw new Error(`not the interaction route: ${location}`);
-  }
-  return location.slice(prefix.length);
-}
-
 module(basename(import.meta.filename), function (hooks) {
   let server: Server | undefined;
   let db: PgAdapter;
@@ -166,57 +124,16 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
-  async function register({
-    redirectUri = WEB_REDIRECT_URI,
-    clientName = 'Test App',
-    grantTypes,
-  }: {
-    redirectUri?: string;
-    clientName?: string;
-    grantTypes?: string[];
-  } = {}): Promise<string> {
-    let response = await supertest(server!)
-      .post('/_oauth-provider/reg')
-      .set('Host', serverURL.host)
-      .set('Content-Type', 'application/json')
-      .send(
-        JSON.stringify({
-          client_name: clientName,
-          redirect_uris: [redirectUri],
-          ...(grantTypes ? { grant_types: grantTypes } : {}),
-        }),
-      );
-    if (response.status !== 201) {
-      throw new Error(`registration failed: ${JSON.stringify(response.body)}`);
-    }
-    return response.body.client_id as string;
+  function register(options?: Parameters<typeof registerOAuthClient>[1]) {
+    return registerOAuthClient(server!, options);
   }
 
   // Starts a flow the way an app does, and answers its interaction ID.
-  async function startFlow(
+  function startFlow(
     clientId: string,
-    {
-      redirectUri = WEB_REDIRECT_URI,
-      scope = 'boxel:read',
-    }: { redirectUri?: string; scope?: string } = {},
-  ): Promise<string> {
-    let query = new URLSearchParams({
-      client_id: clientId,
-      response_type: 'code',
-      redirect_uri: redirectUri,
-      scope,
-      resource: MCP,
-      state: 'state-marker-7c2e',
-      code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
-      code_challenge_method: 'S256',
-    });
-    let response = await supertest(server!)
-      .get(`/_oauth-provider/auth?${query}`)
-      .set('Host', serverURL.host);
-    if (response.status !== 303) {
-      throw new Error(`the flow didn't start: ${response.status}`);
-    }
-    return interactionUid(response.headers.location);
+    options?: Parameters<typeof startOAuthFlow>[2],
+  ) {
+    return startOAuthFlow(supertest(server!), clientId, options);
   }
 
   interface Caller {

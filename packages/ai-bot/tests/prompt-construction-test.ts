@@ -72,13 +72,17 @@ import {
   toolSourceEventIdsToCarry,
   isMarkdownSkillFile,
   parseMarkdownSkill,
+  realmsOfDisabledFeatures,
   sessionSkillFeatures,
+  SKILL_FEATURE_REALMS,
+  SKILL_FEATURES,
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
   TRAILING_CONTEXT_PREAMBLE,
   VIEW_ATTACHMENT_TOOL_NAME,
 } from '@cardstack/runtime-common/ai';
 import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
+import { CATALOG_REALM_PREFIX } from '@cardstack/runtime-common/realm-prefixes';
 import { fulfillViewAttachmentCall } from '../lib/bot-tools/view-attachment/fulfillment.ts';
 import { roomAttachments } from '../lib/bot-tools/view-attachment/view.ts';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
@@ -11677,14 +11681,39 @@ module('absolutizeSkillLinks', () => {
   });
 });
 
-module('skill feature sections', () => {
+module('skill feature sections', (hooks) => {
+  // No feature is registered, so the tests register a stand-in one, and put
+  // back what the registries held for it. They are read-only by type.
+  const FEATURE = 'stand-in-feature';
+  let features = SKILL_FEATURES as Record<string, string>;
+  let featureRealms = SKILL_FEATURE_REALMS as Record<string, string[]>;
+  let savedFeature: string | undefined;
+  let savedRealms: string[] | undefined;
+  hooks.beforeEach(() => {
+    savedFeature = features[FEATURE];
+    savedRealms = featureRealms[FEATURE];
+    features[FEATURE] = 'Does nothing.';
+  });
+  hooks.afterEach(() => {
+    if (savedFeature) {
+      features[FEATURE] = savedFeature;
+    } else {
+      delete features[FEATURE];
+    }
+    if (savedRealms) {
+      featureRealms[FEATURE] = savedRealms;
+    } else {
+      delete featureRealms[FEATURE];
+    }
+  });
+
   const INDEX = 'https://localhost:4201/skills/index.md';
   const instructions = [
     'Before.',
     '',
-    '<!-- feature:catalog-reuse -->',
+    `<!-- feature:${FEATURE} -->`,
     'Search the catalog first.',
-    '<!-- /feature:catalog-reuse -->',
+    `<!-- /feature:${FEATURE} -->`,
     '',
     'After.',
   ].join('\n');
@@ -11702,7 +11731,7 @@ module('skill feature sections', () => {
   });
 
   test('keeps a feature section, without its markers, when its feature is enabled', () => {
-    let [message] = skillCardsToMessages([skill], ['catalog-reuse']);
+    let [message] = skillCardsToMessages([skill], [FEATURE]);
     assert.true(message.includes('Search the catalog first.'));
     assert.false(message.includes('feature:'), 'the markers are removed');
   });
@@ -11718,16 +11747,16 @@ module('skill feature sections', () => {
     assert.deepEqual(sessionSkillFeatures([], bot), []);
     assert.deepEqual(
       sessionSkillFeatures(
-        [message(user, 'boxel-debug:feature:enable:catalog-reuse')],
+        [message(user, `boxel-debug:feature:enable:${FEATURE}`)],
         bot,
       ),
-      ['catalog-reuse'],
+      [FEATURE],
     );
     assert.deepEqual(
       sessionSkillFeatures(
         [
-          message(user, 'boxel-debug:feature:enable:catalog-reuse'),
-          message(user, 'boxel-debug:feature:disable:catalog-reuse'),
+          message(user, `boxel-debug:feature:enable:${FEATURE}`),
+          message(user, `boxel-debug:feature:disable:${FEATURE}`),
         ],
         bot,
       ),
@@ -11736,11 +11765,42 @@ module('skill feature sections', () => {
     );
     assert.deepEqual(
       sessionSkillFeatures(
-        [message(bot, 'boxel-debug:feature:enable:catalog-reuse')],
+        [message(bot, `boxel-debug:feature:enable:${FEATURE}`)],
         bot,
       ),
       [],
       'the bot cannot enable a feature',
     );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(user, 'boxel-debug:feature:enable:constructor')],
+        bot,
+      ),
+      [],
+      'a name inherited from Object.prototype is not a feature',
+    );
+  });
+
+  // The type of SKILL_FEATURE_REALMS rejects an unregistered key only while
+  // SKILL_FEATURES has an entry: against an empty registry TypeScript skips
+  // the excess-property check. A realm under an unregistered key would be
+  // left out of every room's searches, with no command that can enable it.
+  test('every feature that gates realms is a registered feature', () => {
+    assert.deepEqual(
+      Object.keys(SKILL_FEATURE_REALMS).filter(
+        (feature) => !Object.hasOwn(SKILL_FEATURES, feature),
+      ),
+      [],
+    );
+  });
+
+  test('the catalog is searched in a room that enabled no feature', () => {
+    assert.false(realmsOfDisabledFeatures([]).includes(CATALOG_REALM_PREFIX));
+  });
+
+  test("a feature's realms are left out until the room enables it", () => {
+    featureRealms[FEATURE] = ['@cardstack/some-realm/'];
+    assert.deepEqual(realmsOfDisabledFeatures([]), ['@cardstack/some-realm/']);
+    assert.deepEqual(realmsOfDisabledFeatures([FEATURE]), []);
   });
 });

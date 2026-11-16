@@ -60,6 +60,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     }
 
+    test('POST /_archive-realm lets a platform service account archive a realm under its own name, and no other', async function (assert) {
+      const serviceAccount = '@sync_writer:localhost';
+      const ownRealmURL = `${testRealmURL.origin}/sync_writer/archive-${uuidv4()}/`;
+      const sharedRealmURL = makeRealmURL();
+      await seedSourceRealm(ownRealmURL, {
+        [serviceAccount]: ['read', 'write', 'realm-owner'],
+      });
+      await seedSourceRealm(sharedRealmURL, {
+        [serviceAccount]: ['read', 'write'],
+      });
+      let archive = (realmURL: string) =>
+        context.request
+          .post('/_archive-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', authHeader(serviceAccount))
+          .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+
+      assert.strictEqual((await archive(ownRealmURL)).status, 200);
+      assert.strictEqual((await archive(sharedRealmURL)).status, 403);
+    });
+
     test('POST /_archive-realm lets an owner archive a realm', async function (assert) {
       const owner = '@archive-owner:localhost';
       const realmURL = makeRealmURL();

@@ -205,4 +205,14 @@ module('Pretui | components/radio-card', function (hooks) {
     await render(<template><RadioCard @options={{PLANS}} /></template>);
     assert.strictEqual(all('.pretui-optioncard-media').length, 0);
   });
+
+  test('RadioCard @variant list stamps the group and every row, and keeps the radio contract', async function (assert) {
+    await render(<template><RadioCard @options={{PLANS}} @variant='list' @defaultValue='team' /></template>);
+    assert.strictEqual(q('[data-test-pretui-radio-card]').getAttribute('data-variant'), 'list', 'on the root');
+    assert.true(cards().every((c) => c.getAttribute('data-variant') === 'list'), 'on every row');
+    assert.strictEqual(new Set(radios().map((r) => r.name)).size, 1, 'still one radio group');
+    assert.strictEqual(q('.pretui-optioncard-meta').textContent?.trim(), '$0', 'meta is the trailing figure');
+    await click(cards()[0]!);
+    assert.true(radios()[0]!.checked, 'a click on a row checks its radio');
+  });
 });

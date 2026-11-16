@@ -124,7 +124,6 @@ export type ListingSizeArg =
   | 'large'
   | 'middle';
 
-
 /**
  * Sets `indeterminate` — a PROPERTY with no content attribute at all, which
  * is why it cannot be bound as `indeterminate={{...}}`: Glimmer would call
@@ -145,10 +144,9 @@ export const setsIndeterminate = modifier(
  *
  * It is a plain class, not a component and not a modifier, for the reason
  * `DataSource` is one: it is testable without a DOM and it can be held by
- * anything. `<List>` holds one. `<DataTable>` deliberately does NOT — a
- * plain `<table>` must leave Tab alone so the links, buttons and checkboxes
- * inside its cells stay reachable in document order. Roving row focus is a
- * `role='grid'` behaviour, and this file does not claim that role.
+ * anything. `<List>` holds one, and so does `<DataTable>` when its rows
+ * are activatable: only the rows rove, so the links, buttons and checkboxes
+ * inside cells stay in the Tab order in document order.
  */
 export class RowCursor {
   constructor(private readCount: () => number) {}
@@ -187,6 +185,30 @@ export class RowCursor {
     }
     this.navigating = false;
     this.index = index;
+  };
+
+  /** `focusout` on the rows container: once focus is off the rows — out of
+   * the container, or onto a control inside one (a selection checkbox, the
+   * expander, a field in a detail) — the keyboard is no longer driving them,
+   * so a later re-render (selection, filter, sort, page) must not pull focus
+   * back. Rows are the container's direct children, so a row-to-row move
+   * from `focusWhen`'s own `el.focus()` writes nothing mid-render. */
+  leave = (event: Event): void => {
+    if (!this.navigating) {
+      return;
+    }
+    let rows = event.currentTarget as HTMLElement;
+    let isRow = (node: Node | null) => node?.parentNode === rows;
+    if (isRow((event as FocusEvent).relatedTarget as Node | null)) {
+      return;
+    }
+    // deferred: a render that removes the focused row fires focusout
+    // mid-render, where writing tracked state would backtrack
+    queueMicrotask(() => {
+      if (!isRow(rows.ownerDocument.activeElement)) {
+        this.navigating = false;
+      }
+    });
   };
 
   /** returns true when the key was consumed and the caller should
