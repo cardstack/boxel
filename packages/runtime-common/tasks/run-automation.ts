@@ -260,8 +260,9 @@ export async function runAutomationAttempt(
     return await fail(outcome.reason, message);
   }
   if (dryRun) {
-    // A Preview stops before the commit. Its finish keeps what it staged as
-    // the batch it shows, and nothing reaches the realm.
+    // A Preview stops before the commit. Its finish keeps a copy of what it
+    // staged as the batch it shows, discards the overlay, and nothing
+    // reaches the realm.
     return await finish(ctx, tag, runId, attempt, { state: 'complete' });
   }
   return await commit(ctx, tag, run, attempt, realmURL, token);

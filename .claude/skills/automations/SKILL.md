@@ -308,7 +308,7 @@ cancel works by changing it. The functions that change it are in
 | `automation_id`, `realm`                                                       | The automation card and its realm, as canonical identifiers (ADR 002), never served URLs                                                                                                           |
 | `trigger`, `slot`                                                              | The trigger's label and the slot it fired for: the scheduled instant, a webhook delivery's id, a batch's id, or a click's id                                                                       |
 | `acts_as`                                                                      | The Matrix user id of the person the run acts as (ADR 026 §1.1)                                                                                                                                    |
-| `dry_run`                                                                      | A Preview: the run stops before its commit, and a complete one keeps its staged files (_Preview and Run now_)                                                                                      |
+| `dry_run`                                                                      | A Preview: the run stops before its commit, and a complete one keeps a copy of its staged files (_Preview and Run now_)                                                                            |
 | `attempt`                                                                      | The queue attempt that owns the run: the job's reservation id, which grows with each reservation                                                                                                   |
 | `script_id`, `script_hash`                                                     | The script file the run read, as an identifier, and the hash of the text it ran                                                                                                                    |
 | `state`                                                                        | `pending`, `running`, `complete`, `error` or `canceled`                                                                                                                                            |
@@ -369,8 +369,9 @@ says why) rather than throwing.
 - **`finishAutomationRun`** ends a running run as `complete` or `error`, owner
   only. A run that claimed its commit can't finish as complete until the
   commit is recorded as landed, and a run whose commit landed can't finish as
-  an error. A Preview never claims a commit and finishes complete, keeping
-  the files its attempt staged.
+  an error. A Preview never claims a commit and finishes complete, and its
+  finish keeps a copy of the files its attempt staged
+  (`automation_preview_files`) before it discards the overlay.
 - **`abandonAutomationRun(db, id, reason)`** closes a pending or running run
   whose job is gone, whoever owned it: the queue gives up on a job after its
   last reservation, and no attempt is left to finish the run. This is for the
@@ -637,8 +638,7 @@ retry starts from an empty overlay and a replaced attempt's writes never
 reach its commit. A run whose commit was already claimed keeps its files,
 since the claiming attempt may still be sending them. Every way a run ends
 (`finishAutomationRun`, `cancelAutomationRun`, `abandonAutomationRun`)
-discards its overlay in the transaction that ends it (except a Preview that
-finishes complete, below), as a statement of its
+discards its overlay in the transaction that ends it, as a statement of its
 own after the update, so it also catches a file staged while the end waited
 on the run's row lock. Deleting a run row deletes its overlay
 (`ON DELETE CASCADE`).
@@ -657,8 +657,7 @@ SELECT attempt, path, size, updated_at
   FROM run_overlay_files WHERE run_id = '<run id>' ORDER BY attempt, path;
 ```
 
-A finished run has no rows, except a complete Preview's, which keeps the
-files of the attempt that ran it. Rows from more than one attempt would mean a
+A finished run has no rows. Rows from more than one attempt would mean a
 start that didn't drop its predecessors' files. To read a staged file's text:
 `SELECT convert_from(content, 'UTF8') FROM run_overlay_files WHERE run_id = …
 AND path = …`.
@@ -715,8 +714,9 @@ Failure modes, and what the caller does:
 | 5xx from a failure while writing                          | kept, unrecorded             | some files may have landed                                                       | finish as an error; a retry finds `commit-interrupted`, and the next run compares and catches up |
 | 200 again                                                 | recorded                     | the commit landed earlier (a repeat after a lost answer)                         | finish complete                                                                                  |
 
-A Preview never commits: it finishes complete, and the finish keeps its
-attempt's staged files as the batch it shows (_Preview and Run now_). A run with nothing staged commits an empty batch, which claims and
+A Preview never commits: it finishes complete, and the finish copies its
+attempt's staged files out as the batch it shows (_Preview and Run now_)
+and discards its overlay. A run with nothing staged commits an empty batch, which claims and
 records the commit and writes nothing.
 
 ### The AI spending cap
@@ -1071,8 +1071,8 @@ for a run row its trigger has already made with `createAutomationRun`:
    limit passes, so time spent waiting for the tab comes off the script's.
 6. Finishes the run from what the tab answers:
    - `complete`, Preview (the row's `dry_run`, or the job's `dryRun`):
-     finishes complete without a commit, keeping the staged files as the
-     Preview's batch;
+     finishes complete without a commit, which copies the staged files out
+     as the Preview's batch and discards the overlay;
    - `complete`: commits with `POST /_run-commit` carrying the token, sent
      again up to three times on `overlay-changed` or when its answer is lost
      (the realm answers this attempt's commit again with the same success),
@@ -1163,8 +1163,8 @@ It creates a `manual` run row for the card, enqueues its job, waits for it
 and prints the run row. `--as` must be a direct writer of the realm, since the
 commit re-confirms it. The script skips the direct-writer check
 `startAutomationRunNow` makes before the row; with `--preview` the row is a
-Preview (`dry_run`), and its staged files stay in `run_overlay_files` once it
-completes. Then read the outcome:
+Preview (`dry_run`), and its staged files are in `automation_preview_files`
+once it completes. Then read the outcome:
 
 - the printed row: `state`, `error_reason`, `error_message` (a script error
   starts `line N:`), `script_hash`, `committed_at`;
@@ -1222,14 +1222,22 @@ through `pending`, `running`, and `complete` or `error`, like any run.
 
 ### The batch a Preview keeps
 
-A Preview that finishes complete keeps the files its attempt staged in
-`run_overlay_files`: it is the batch the Preview shows. Nothing can change
-it afterwards, since staging and the commit both take only a running run.
-A Preview that errors or is canceled discards its overlay like any run. Only
-a person's latest kept batch per automation stays: the finish that keeps
-one discards the batch of every earlier finished Preview that person ran of
-it (`endRun` in `automation-runs.ts`). A Preview is never the automation's
-`lastSuccessAt`.
+A Preview that finishes complete copies the files its attempt staged into
+`automation_preview_files` (run, realm-local path, bytes and size), in the
+transaction that finishes it, and then discards its overlay like every run
+(ADR 027 §1.4). The copy is the batch the Preview shows, and nothing writes
+to it afterwards. A Preview that errors or is canceled keeps nothing. Only a
+person's latest batch per automation stays: the finish that keeps one
+deletes the batch of every earlier Preview that person ran of it (`endRun`
+in `automation-runs.ts`). `readAutomationPreviewFiles(dbAdapter, runId)`
+reads a batch. A Preview is never the automation's `lastSuccessAt`.
+
+To read a batch by hand:
+
+```sql
+SELECT path, size, convert_from(content, 'UTF8') AS text
+  FROM automation_preview_files WHERE run_id = '<run id>' ORDER BY path;
+```
 
 ### The run's report
 

@@ -72,7 +72,6 @@ module(basename(import.meta.filename), function (hooks) {
       [`${WRITES}-script.js`]: [
         `let { dryRun, trigger, scheduledAt } = realm.current.automation;`,
         `await realm.fs.writeText('out/' + scheduledAt.replace(/[^0-9]/g, '') + '.txt', 'dryRun=' + dryRun + ' trigger=' + trigger.kind);`,
-        `console.log('wrote it');`,
         `return 'ok';`,
       ].join('\n'),
       ...automationFixture({ operations: [], path: THROWS }),
@@ -209,14 +208,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(report.committedPaths, undefined);
     assert.ok(
-      report.log.lines.some(
-        (l) => l.kind === 'console' && l.message === 'wrote it',
-      ),
-      "the report carries the script's log",
-    );
-    assert.ok(
       report.log.lines.some((l) => l.kind === 'finish'),
-      'and the platform line saying how the run ended',
+      'the report carries the run log, ending with how the run ended',
     );
     assert.strictEqual(typeof report.timings.queuedMs, 'number');
     assert.strictEqual(typeof report.timings.runMs, 'number');

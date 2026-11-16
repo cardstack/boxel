@@ -63,7 +63,8 @@ export interface AutomationRun extends AutomationRunCounts {
   // The Matrix user id of the person the run acts as.
   actsAs: string;
   // A Preview: the run stops before its commit, and once it finishes
-  // complete it keeps the files it staged as the batch it shows.
+  // complete the files it staged are kept as the batch it shows
+  // (`automation_preview_files`).
   dryRun: boolean;
   // The queue attempt (the job's reservation id) that owns the run, once one
   // has started it.
@@ -719,11 +720,10 @@ async function updateOwned(
 // committed by then, and a later stage waits on the lock and then finds the
 // run no longer running.
 //
-// A Preview that finishes complete keeps the files its owning attempt staged:
-// they are the batch the Preview shows. Nothing can change them from then on,
-// since staging and the commit both take only a running run. Only a person's
-// latest kept batch for an automation stays: keeping one discards the batch
-// of every earlier finished Preview they ran of it.
+// A Preview that finishes complete first copies the files its owning attempt
+// staged into `automation_preview_files`: they are the batch the Preview
+// shows. Only a person's latest such batch for an automation stays, so
+// keeping one deletes the batch of every earlier Preview they ran of it.
 async function endRun(
   dbAdapter: DBAdapter,
   update: Expression,
@@ -731,25 +731,32 @@ async function endRun(
   return await dbAdapter.withTransaction(async (txQuery) => {
     let [row] = await txQuery(update);
     if (row) {
-      let keepsBatch = row.dry_run === true && row.state === 'complete';
-      await txQuery([
-        'DELETE FROM run_overlay_files WHERE run_id =',
-        param(String(row.id)),
-        ...(keepsBatch && row.attempt != null
-          ? ['AND attempt <>', param(Number(row.attempt))]
-          : []),
-      ]);
-      if (keepsBatch) {
+      let runId = String(row.id);
+      if (
+        row.dry_run === true &&
+        row.state === 'complete' &&
+        row.attempt != null
+      ) {
         await txQuery([
-          'DELETE FROM run_overlay_files WHERE run_id IN (SELECT id FROM automation_runs WHERE automation_id =',
+          'DELETE FROM automation_preview_files WHERE run_id IN (SELECT id FROM automation_runs WHERE automation_id =',
           param(String(row.automation_id)),
           'AND acts_as =',
           param(String(row.acts_as)),
-          "AND dry_run AND state IN ('complete', 'error', 'canceled') AND id <>",
-          param(String(row.id)),
+          'AND dry_run AND id <>',
+          param(runId),
           ')',
         ]);
+        await txQuery([
+          'INSERT INTO automation_preview_files (run_id, path, content, size) SELECT run_id, path, content, size FROM run_overlay_files WHERE run_id =',
+          param(runId),
+          'AND attempt =',
+          param(Number(row.attempt)),
+        ]);
       }
+      await txQuery([
+        'DELETE FROM run_overlay_files WHERE run_id =',
+        param(runId),
+      ]);
     }
     return row;
   });

@@ -17,8 +17,8 @@ import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 // do but without their direct-writer check: creates a run row for the
 // automation card, enqueues its job at the automation tier and waits for it,
 // then prints the run row. A worker on the stack runs the job in a prerender
-// tab. Pass `--preview` to stop before the commit; the run row then keeps the
-// files the script staged (`run_overlay_files`).
+// tab. Pass `--preview` to stop before the commit; the files the script
+// staged are then kept in `automation_preview_files`.
 //
 //   pnpm run-automation --realm http://localhost:4201/user/my-realm/ \
 //     --card http://localhost:4201/user/my-realm/automation/sync \

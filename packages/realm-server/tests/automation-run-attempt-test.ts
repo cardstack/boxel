@@ -27,6 +27,7 @@ import {
 } from '@cardstack/runtime-common';
 import { presentsAsRunToken } from '@cardstack/runtime-common/run-token';
 import { runOverlayFiles } from '@cardstack/runtime-common/run-overlay';
+import { readAutomationPreviewFiles } from '@cardstack/runtime-common/automation-manual-runs';
 import {
   TEST_AUTOMATION_PATH,
   automationFixture,
@@ -544,14 +545,22 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(after?.state, 'complete');
     assert.strictEqual(after?.commitStartedAt, null, 'no commit was claimed');
     assert.strictEqual(await readFile('out/kept.txt'), undefined);
-    let kept = await runOverlayFiles(dbAdapter, {
-      runId: preview.id,
-      attempt: after!.attempt!,
-    });
+    let kept = await readAutomationPreviewFiles(dbAdapter, preview.id);
     assert.deepEqual(
-      kept.map(({ path }) => path),
-      ['out/kept.txt'],
-      'the finished Preview keeps the files it staged',
+      kept.map(({ path, content }) => ({
+        path,
+        text: new TextDecoder().decode(content),
+      })),
+      [{ path: 'out/kept.txt', text: 'the batch a Preview shows' }],
+      'the finished Preview keeps a copy of the files it staged',
+    );
+    assert.deepEqual(
+      await runOverlayFiles(dbAdapter, {
+        runId: preview.id,
+        attempt: after!.attempt!,
+      }),
+      [],
+      'and its overlay is discarded, as for every run',
     );
 
     let next = await newRun();

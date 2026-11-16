@@ -29,11 +29,11 @@ import { ensureTrailingSlash } from './index.ts';
 import { enqueueAutomationRunJob } from './jobs/run-command.ts';
 import { RealmPaths } from './paths.ts';
 import type { Job, QueuePublisher } from './queue.ts';
+import { fromBase64 } from './run-overlay.ts';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
 } from './realm-identifiers.ts';
-import { runOverlayFiles } from './run-overlay.ts';
 import type { RunCommandResponse } from './index.ts';
 
 // The trigger label a Preview's or a Run now's row carries. Its slot is the
@@ -251,21 +251,31 @@ export async function readAutomationRunReport(
     },
     log: runLog,
   };
-  if (run.dryRun && run.state === 'complete' && run.attempt != null) {
-    let files = await runOverlayFiles(dbAdapter, {
-      runId: run.id,
-      attempt: run.attempt,
-    });
-    report.stagedFiles = files.map(({ path, content }) => ({
-      path,
-      size: content.byteLength,
-      content,
-    }));
+  if (run.dryRun && run.state === 'complete') {
+    report.stagedFiles = await readAutomationPreviewFiles(dbAdapter, run.id);
   }
   if (run.committedAt) {
     report.committedPaths = committedPathsOf(runLog);
   }
   return { ok: true, report };
+}
+
+// The batch a complete Preview kept, in path order: empty once a newer
+// Preview by the same person of the same automation replaced it.
+export async function readAutomationPreviewFiles(
+  dbAdapter: DBAdapter,
+  runId: string,
+): Promise<StagedRunFile[]> {
+  let rows = await query(dbAdapter, [
+    "SELECT path, size, encode(content, 'base64') AS content FROM automation_preview_files WHERE run_id =",
+    param(runId),
+    'ORDER BY path',
+  ]);
+  return rows.map((row) => ({
+    path: String(row.path),
+    size: Number(row.size),
+    content: fromBase64(String(row.content)),
+  }));
 }
 
 function timingsOf(run: AutomationRun): AutomationRunTimings {
