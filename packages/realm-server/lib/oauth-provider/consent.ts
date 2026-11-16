@@ -21,6 +21,7 @@ import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
 import { secureSessionClient, type AccountContact } from '../secure-session.ts';
 import { retrieveUserSessionClaim } from '../../utils/jwt.ts';
 import { appName, type AppName } from './app-name.ts';
+import { clientIdForLogs } from './client-metadata-document.ts';
 import {
   findClient,
   FIXED_ERROR_PAGES,
@@ -311,7 +312,7 @@ function describe(flow: Flow, app: AppName): string {
         `${resource.id} [${scopes.map(({ name }) => name).join(' ')}]`,
     )
     .join(', ');
-  return `client ${flow.client.clientId} (${app.kind}, shown as ${app.shown}), scopes ${scopes}`;
+  return `client ${clientIdForLogs(flow.client.clientId)} (${app.kind}, shown as ${app.shown}), scopes ${scopes}`;
 }
 
 async function readDecision(

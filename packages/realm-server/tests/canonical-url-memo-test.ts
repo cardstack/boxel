@@ -4,6 +4,7 @@ import { basename } from 'path';
 import type { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 import {
   canonicalURL,
+  CANONICAL_URL_MEMO_MAX_ENTRIES,
   type CanonicalURLMemo,
 } from '@cardstack/runtime-common/index-runner/dependency-url';
 
@@ -95,6 +96,125 @@ module(basename(import.meta.filename), function () {
         resolveCount(),
         2,
         'the same url under a different relativeTo resolves separately',
+      );
+    });
+
+    test('every kind of reference resolves as it does without a memo', function (assert) {
+      let { network } = makeStubNetwork();
+      let memo: CanonicalURLMemo = new Map();
+      let bases = [
+        'http://test/dir/a.gts',
+        'http://test/dir/b.json',
+        'http://test/other/c.json?x=1#y',
+        'http://test/Person/a.json',
+        'http://test/Pet/b.json',
+        'http://test/a.json',
+        'http://elsewhere/dir/a.gts',
+        // No path: the last `/` is inside `://`, so there is no directory.
+        'http://a',
+        'http://b',
+      ];
+      let refs = [
+        './b.gts',
+        '../up.gts',
+        'sibling',
+        '/root.gts',
+        'http://test/abs.gts',
+        'http://test/abs.gts?q=1#h',
+        '?only-query',
+        '#only-hash',
+        '',
+        // Same scheme, no authority: relative to the base's directory.
+        'http:person.gts',
+        // The parser strips the space, leaving a fragment of the base.
+        ' #details',
+        '\t./tabbed.gts',
+        'mailto:someone@example.com',
+      ];
+      for (let i = 0; i < 2; i++) {
+        for (let base of bases) {
+          for (let ref of refs) {
+            assert.strictEqual(
+              canonicalURL(ref, base, network, memo),
+              canonicalURL(ref, base, network),
+              `${JSON.stringify(ref)} against ${base}`,
+            );
+          }
+        }
+      }
+    });
+
+    test('an absolute reference resolves once for every card that has it', function (assert) {
+      let { network, resolveCount } = makeStubNetwork();
+      let memo: CanonicalURLMemo = new Map();
+      for (let i = 0; i < 100; i++) {
+        canonicalURL(
+          'http://test/person.gts',
+          `http://test/Person/${i}.json`,
+          network,
+          memo,
+        );
+      }
+      assert.strictEqual(resolveCount(), 1);
+      assert.strictEqual(memo.size, 1);
+    });
+
+    test('a relative reference resolves once per directory', function (assert) {
+      let { network, resolveCount } = makeStubNetwork();
+      let memo: CanonicalURLMemo = new Map();
+      for (let i = 0; i < 100; i++) {
+        canonicalURL(
+          '../person',
+          `http://test/Person/${i}.json`,
+          network,
+          memo,
+        );
+        canonicalURL('../person', `http://test/Pet/${i}.json`, network, memo);
+      }
+      assert.strictEqual(resolveCount(), 2, 'one per directory');
+      assert.strictEqual(
+        canonicalURL('../person', 'http://test/Pet/7.json', network, memo),
+        'http://test/person',
+      );
+    });
+
+    test('a realm-sized pass keeps one entry per card and one per reference', function (assert) {
+      let { network, resolveCount } = makeStubNetwork();
+      let memo: CanonicalURLMemo = new Map();
+      let deps = [
+        'http://test/person.gts',
+        'https://cardstack.com/base/card-api',
+        '../person',
+        './friend',
+        '/shared.gts',
+      ];
+      for (let i = 0; i < 10_000; i++) {
+        let card = `http://test/Person/${i}.json`;
+        // The relationship extractor resolves each card's own URL against
+        // itself, which is an absolute key of its own for every card.
+        canonicalURL(card, card, network, memo);
+        for (let dep of deps) {
+          canonicalURL(dep, card, network, memo);
+        }
+      }
+      assert.strictEqual(memo.size, 10_000 + deps.length);
+      assert.strictEqual(
+        resolveCount(),
+        10_000 + deps.length,
+        'each card and each reference resolves once',
+      );
+    });
+
+    test('the memo starts over past its ceiling', function (assert) {
+      let { network } = makeStubNetwork();
+      let memo: CanonicalURLMemo = new Map();
+      for (let i = 0; i <= CANONICAL_URL_MEMO_MAX_ENTRIES; i++) {
+        canonicalURL(`http://test/${i}.gts`, undefined, network, memo);
+      }
+      assert.ok(memo.size <= CANONICAL_URL_MEMO_MAX_ENTRIES);
+      assert.strictEqual(
+        canonicalURL('http://test/after.gts', undefined, network, memo),
+        'http://test/after.gts',
       );
     });
 
