@@ -187,23 +187,25 @@ export class RowCursor {
     this.index = index;
   };
 
-  /** `focusout` on the rows container: once focus leaves the rows the
-   * keyboard is no longer driving them, so a later re-render (filter, sort,
-   * page) must not pull focus back. A row-to-row move keeps `relatedTarget`
-   * inside, so `focusWhen`'s own `el.focus()` writes nothing mid-render. */
+  /** `focusout` on the rows container: once focus is off the rows — out of
+   * the container, or onto a control inside one (a selection checkbox, the
+   * expander, a field in a detail) — the keyboard is no longer driving them,
+   * so a later re-render (selection, filter, sort, page) must not pull focus
+   * back. Rows are the container's direct children, so a row-to-row move
+   * from `focusWhen`'s own `el.focus()` writes nothing mid-render. */
   leave = (event: Event): void => {
     if (!this.navigating) {
       return;
     }
     let rows = event.currentTarget as HTMLElement;
-    let next = (event as FocusEvent).relatedTarget as Node | null;
-    if (next && rows.contains(next)) {
+    let isRow = (node: Node | null) => node?.parentNode === rows;
+    if (isRow((event as FocusEvent).relatedTarget as Node | null)) {
       return;
     }
     // deferred: a render that removes the focused row fires focusout
     // mid-render, where writing tracked state would backtrack
     queueMicrotask(() => {
-      if (!rows.contains(document.activeElement)) {
+      if (!isRow(rows.ownerDocument.activeElement)) {
         this.navigating = false;
       }
     });
