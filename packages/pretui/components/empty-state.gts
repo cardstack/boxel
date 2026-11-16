@@ -26,8 +26,7 @@ export interface EmptyStateSignature {
     default: [];
     /**
      * The ways forward, placed under the message as given: one Button, or
-     * several in a ButtonGroup, which lays them out (`@separator='or'` for two
-     * equal paths).
+     * several in a ButtonGroup, which lays them out.
      */
     actions: [];
     /** @deprecated use `<:actions>`; renders in the same place */

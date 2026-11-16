@@ -49,18 +49,6 @@ module('Pretui | components/button-group', function (hooks) {
     assert.strictEqual(group.dataset['appearance'], undefined);
   });
 
-  test('ButtonGroup @separator names the word between the paths', async function (assert) {
-    await render(
-      <template>
-        <ButtonGroup @label='Ways in' @separator='or'>
-          <Button>Go to checkout</Button>
-          <Button>Back to the shop</Button>
-        </ButtonGroup>
-      </template>,
-    );
-    assert.strictEqual(q('[data-test-pretui-button-group]').dataset.separator, 'or');
-  });
-
   // The stacked look is in scoped styles this harness doesn't apply; the
   // usage page's wide and narrow frames are the visual check. Here only the
   // measurement that picks data-fold is covered.

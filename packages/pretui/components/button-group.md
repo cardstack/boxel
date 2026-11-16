@@ -13,7 +13,6 @@ It is not a **ToggleGroup** — nothing here has a pressed state. These are acti
 @appearance?  — recipe applied to every child Button
 @size?        — font-size scale applied to every child Button
 @shape?       — outer-corner treatment; inner corners stay square
-@separator?   — word drawn as "— or —" between two equal paths
 
 <:default> — the buttons
 ```
@@ -23,8 +22,6 @@ It is not a **ToggleGroup** — nothing here has a pressed state. These are acti
 **`@label` is strongly recommended rather than required**, and that is a real gap: an unnamed group of three buttons is announced as three loose buttons.
 
 **A horizontal group stacks all at once when its row doesn't fit.** The row is measured against the parent's content width, and the moment it is wider every button takes its own line: never two and one. The group lands `data-fold='row'` or `'stack'`, and a stacked group fuses vertically like `@orientation='vertical'`. It is measured, not a breakpoint, because a breakpoint can't know the labels or `@size`, and a container query would collapse an auto-sized parent. A vertical group never folds.
-
-**`@separator` turns a fused group into two equal paths.** The buttons are spaced instead of sharing an edge, and the word sits between the first button and the rest with a short rule on each side, in a row or a stack. It is drawn by the group, so callers still pass plain Buttons. Use it for two alternatives of equal weight, such as an empty state's "Go to checkout" or "Back to the shop". The word is punctuation: it stays out of the accessible name, and the group's `@label` names the choice.
 
 ## Prior art
 

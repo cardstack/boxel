@@ -1,4 +1,4 @@
-// Pretui — ButtonGroup: related Buttons as one unit — fused, or two equal paths with a word between.
+// Pretui — ButtonGroup: related Buttons fused into one visual unit.
 import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 import type {
@@ -36,8 +36,6 @@ export interface ButtonGroupSignature {
     size?: PretuiSize;
     /** outer-corner treatment for the whole group; the inner corners stay square */
     shape?: ButtonShape;
-    /** word drawn as "— or —" between two equal paths; spaces the buttons instead of fusing them */
-    separator?: string;
   };
   Blocks: { default: [] };
   Element: HTMLDivElement;
@@ -101,7 +99,6 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
       data-appearance={{@appearance}}
       data-size={{@size}}
       data-shape={{@shape}}
-      data-separator={{@separator}}
       data-fold={{this.fold}}
       {{foldWhenFull}}
       data-test-pretui-button-group
@@ -123,37 +120,6 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
         .pretui-btngroup[data-fold='stack'] {
           flex-direction: column;
           align-items: stretch;
-        }
-        /* two equal paths: spaced, not fused, with the word between them.
-           The word is the group's own ::before, ordered between the first
-           child and the rest, so callers pass plain Buttons. Its rules are
-           drawn in its padding so "— or —" reads the same in a row or a stack */
-        .pretui-btngroup[data-separator] {
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-        }
-        .pretui-btngroup[data-separator][data-fold='stack'] {
-          align-items: stretch;
-        }
-        .pretui-btngroup[data-separator] > :deep(*) {
-          order: 2;
-        }
-        .pretui-btngroup[data-separator] > :deep(:first-child) {
-          order: 0;
-        }
-        .pretui-btngroup[data-separator]::before {
-          --_sep-rule: var(--boxel-sp-sm);
-          order: 1;
-          align-self: center;
-          padding-inline: calc(var(--_sep-rule) + var(--boxel-sp-xs));
-          background:
-            linear-gradient(var(--border), var(--border)) left center / var(--_sep-rule) 1px no-repeat,
-            linear-gradient(var(--border), var(--border)) right center / var(--_sep-rule) 1px no-repeat;
-          color: var(--foreground);
-          font-size: var(--boxel-font-size-2xs);
-          text-transform: lowercase;
-          /* visual punctuation: the empty alt text keeps it out of the accessible name */
-          content: attr(data-separator) / '';
         }
         .pretui-btngroup :deep(.pretui-btn) {
           position: relative;
@@ -178,21 +144,21 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
            adjacent edges collapse into one shared line. Siblings are matched
            by class, so a non-button child (CopyButton's status region) does
            not count as a neighbor */
-        .pretui-btngroup[data-fold='row']:not([data-separator]) :deep(.pretui-btn ~ .pretui-btn) {
+        .pretui-btngroup[data-fold='row'] :deep(.pretui-btn ~ .pretui-btn) {
           margin-left: -1px;
           border-top-left-radius: 0;
           border-bottom-left-radius: 0;
         }
-        .pretui-btngroup[data-fold='row']:not([data-separator]) :deep(.pretui-btn:has(~ .pretui-btn)) {
+        .pretui-btngroup[data-fold='row'] :deep(.pretui-btn:has(~ .pretui-btn)) {
           border-top-right-radius: 0;
           border-bottom-right-radius: 0;
         }
-        .pretui-btngroup:is([data-orientation='vertical'], [data-fold='stack']):not([data-separator]) :deep(.pretui-btn ~ .pretui-btn) {
+        .pretui-btngroup:is([data-orientation='vertical'], [data-fold='stack']) :deep(.pretui-btn ~ .pretui-btn) {
           margin-top: -1px;
           border-top-left-radius: 0;
           border-top-right-radius: 0;
         }
-        .pretui-btngroup:is([data-orientation='vertical'], [data-fold='stack']):not([data-separator]) :deep(.pretui-btn:has(~ .pretui-btn)) {
+        .pretui-btngroup:is([data-orientation='vertical'], [data-fold='stack']) :deep(.pretui-btn:has(~ .pretui-btn)) {
           border-bottom-left-radius: 0;
           border-bottom-right-radius: 0;
         }

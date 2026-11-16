@@ -8,7 +8,7 @@ import { Token } from './token';
 import { EmptyState, type EmptyStateSize } from './empty-state';
 
 const SIZES: EmptyStateSize[] = ['m', 's'];
-// Two equal paths in a ButtonGroup, at a width that holds the row and one that doesn't.
+// Two actions in a ButtonGroup, at a width that holds the row and one that doesn't.
 const PATH_FRAMES = ['wide', 'narrow'];
 
 class EmptyStateUsage extends Component {
@@ -75,7 +75,7 @@ class EmptyStateUsage extends Component {
             <div class='empty-state-usage-frame' data-width={{width}}>
               <EmptyState @title='No proofs yet' @size={{this.size}} @texture={{this.texture}}>
                 <:actions>
-                  <ButtonGroup @label='Ways forward' @separator='or' @size={{this.size}}>
+                  <ButtonGroup @label='Ways forward' @size={{this.size}}>
                     <Button @appearance='accent'>Go to checkout</Button>
                     <Button @tone='neutral' @appearance='outlined'>Back to the shop</Button>
                   </ButtonGroup>
@@ -117,7 +117,7 @@ class EmptyStateUsage extends Component {
         />
         <Args.Yield
           @name='actions'
-          @description="The ways forward, placed under the message as given: one Button, or several in a ButtonGroup, which lays them out. Two equal paths take the group's @separator='or'."
+          @description="The ways forward, placed under the message as given: one Button, or several in a ButtonGroup, which lays them out."
         />
         <Args.Yield @name='action' @description='Deprecated alias of actions.' />
       </:api>
