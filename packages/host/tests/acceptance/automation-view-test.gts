@@ -255,7 +255,10 @@ module('Acceptance | automation view', function (hooks) {
   });
 
   test('an automation nobody has switched on reads as off', async function (assert) {
-    answer = { status: 200, attributes: { switchedOn: false, lastRun: null } };
+    answer = {
+      status: 200,
+      attributes: { switchedOn: false, lastRun: null, currentRun: null },
+    };
     await openIsolated();
     await waitForStatus();
     assert.dom('[data-test-automation-state="Off"]').exists();
@@ -367,9 +370,10 @@ module('Acceptance | automation view', function (hooks) {
       'Retry',
       'Took 1 s · Not in the plan',
       'Group by label',
-      'Took 55 s · 12 of 40 · The run ended with an error here',
+      'Failed here',
+      'Ran for 55 s · 12 of 40',
       'Write digest',
-      'The run ended before reaching the milestone',
+      'Not reached',
     ]) {
       assert.true(milestones.includes(expected), `shows "${expected}"`);
     }
@@ -381,9 +385,77 @@ module('Acceptance | automation view', function (hooks) {
       [...order].sort((a, b) => a - b),
       'in the order the run reached them, then the ones it never reached',
     );
+    assert.deepEqual(
+      [
+        ...document.querySelectorAll(
+          '[data-test-automation-milestones] [data-test-milestone-state]',
+        ),
+      ].map((step) => step.getAttribute('data-test-milestone-state')),
+      ['reached', 'reached', 'failed', 'not-reached'],
+      'done up to the failure, failed there, and not reached after it',
+    );
   });
 
-  test('the step a run failed in reads as an error, and the step a stopped run was in as blocked', async function (assert) {
+  test('a run in progress shows the milestone it is in as running, the ones before it done and the ones after it not reached yet', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: null,
+        currentRun: {
+          runId: 'run-live',
+          state: 'running',
+          current: 'Group by label',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: null,
+          plan: ['Fetch issues', 'Group by label', 'Write digest'],
+          milestones: [
+            {
+              name: 'Fetch issues',
+              planned: true,
+              startedAt: '2030-01-01T08:59:00.000Z',
+              endedAt: '2030-01-01T08:59:04.000Z',
+              ms: 4_000,
+            },
+            {
+              name: 'Group by label',
+              planned: true,
+              startedAt: '2030-01-01T08:59:04.000Z',
+              endedAt: null,
+              ms: 90_000,
+              done: 140,
+              total: 412,
+            },
+          ],
+          ahead: ['Write digest'],
+          failedIn: null,
+          dropped: 0,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-milestones-lead]')
+      .hasText(
+        'The milestones the script has reported on the run in progress.',
+      );
+    let states = [
+      ...document.querySelectorAll(
+        '[data-test-automation-milestones] [data-test-milestone-state]',
+      ),
+    ].map((step) => step.getAttribute('data-test-milestone-state'));
+    assert.deepEqual(states, ['reached', 'running', 'not-reached']);
+    let milestones = text('[data-test-automation-milestones]') ?? '';
+    for (let expected of [
+      'Running for 1 min 30 s · 140 of 412',
+      'Not reached yet',
+    ]) {
+      assert.true(milestones.includes(expected), `shows "${expected}"`);
+    }
+  });
+
+  test('the milestone a stopped run was in reads as stopped, and the ones after it as not reached', async function (assert) {
     let milestone = (name: string, ms: number) => ({
       name,
       planned: true,
@@ -412,13 +484,13 @@ module('Acceptance | automation view', function (hooks) {
     await waitForStatus();
     let states = [
       ...document.querySelectorAll(
-        '[data-test-automation-milestones] [data-state]',
+        '[data-test-automation-milestones] [data-test-milestone-state]',
       ),
-    ].map((step) => step.getAttribute('data-state'));
-    assert.deepEqual(states, ['blocked', 'upcoming']);
+    ].map((step) => step.getAttribute('data-test-milestone-state'));
+    assert.deepEqual(states, ['stopped', 'not-reached']);
     assert
       .dom('[data-test-automation-milestones]')
-      .includesText('Boxel stopped the run here');
+      .includesText('Stopped here');
   });
 
   test('a run that marked more milestones than a run records says so', async function (assert) {
@@ -471,9 +543,12 @@ module('Acceptance | automation view', function (hooks) {
   test('before any run, the section lists the milestones the script declares, each not reached yet', async function (assert) {
     answer = { status: 200, attributes: { ...ACTIVE, lastRun: null } };
     await openIsolated(PLANNED);
-    await waitFor('[data-test-automation-milestones] [data-state]', {
-      timeout: 10000,
-    });
+    await waitFor(
+      '[data-test-automation-milestones] [data-test-milestone-state]',
+      {
+        timeout: 10000,
+      },
+    );
     assert
       .dom('[data-test-automation-milestones-lead]')
       .hasText(
@@ -481,12 +556,12 @@ module('Acceptance | automation view', function (hooks) {
       );
     let steps = [
       ...document.querySelectorAll(
-        '[data-test-automation-milestones] [data-state]',
+        '[data-test-automation-milestones] [data-test-milestone-state]',
       ),
     ];
     assert.deepEqual(
-      steps.map((step) => step.getAttribute('data-state')),
-      ['upcoming', 'upcoming', 'upcoming'],
+      steps.map((step) => step.getAttribute('data-test-milestone-state')),
+      ['not-reached', 'not-reached', 'not-reached'],
     );
     let milestones = text('[data-test-automation-milestones]') ?? '';
     for (let name of ['Fetch open issues', 'Group by label', 'Write digest']) {
@@ -497,9 +572,12 @@ module('Acceptance | automation view', function (hooks) {
   test('a viewer the route refuses still sees the milestones the script declares', async function (assert) {
     await openIsolated(PLANNED);
     await waitFor('[data-test-automation-who-pays]', { timeout: 10000 });
-    await waitFor('[data-test-automation-milestones] [data-state]', {
-      timeout: 10000,
-    });
+    await waitFor(
+      '[data-test-automation-milestones] [data-test-milestone-state]',
+      {
+        timeout: 10000,
+      },
+    );
     assert
       .dom('[data-test-automation-milestones]')
       .includesText('Group by label');

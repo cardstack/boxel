@@ -257,6 +257,22 @@ export async function readLastRunMilestones(
   return run ? await milestonesOf(dbAdapter, run, Date.now()) : undefined;
 }
 
+// The automation's run in progress, if one is running, with its milestones so
+// far: the one it is in reads as `current`, with the time spent in it so far.
+export async function readCurrentRunMilestones(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+  { now = Date.now() }: { now?: number } = {},
+): Promise<RunMilestones | undefined> {
+  let [run] = (await query(dbAdapter, [
+    'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped FROM automation_runs WHERE automation_id =',
+    param(automationId),
+    "AND state = 'running'",
+    'ORDER BY started_at DESC NULLS LAST, id LIMIT 1',
+  ])) as unknown as RunRow[];
+  return run ? await milestonesOf(dbAdapter, run, now) : undefined;
+}
+
 // Writes each milestone of a run that has ended to telemetry, once, with the
 // time spent in it. Called as the run ends; it never fails the run, so a
 // telemetry write that throws costs the record, not the finish. `outcome` is

@@ -268,7 +268,7 @@ module(basename(import.meta.filename), function (hooks) {
         data: {
           type: 'automation-status',
           id: automationURL(),
-          attributes: { switchedOn: false, lastRun: null },
+          attributes: { switchedOn: false, lastRun: null, currentRun: null },
         },
       });
     });
@@ -352,6 +352,53 @@ module(basename(import.meta.filename), function (hooks) {
 
       let reader = await statusOf(READER, ['read']);
       assert.strictEqual(reader.status, 403, 'a reader never sees a run');
+    });
+
+    test('a run in progress reads as currentRun, with the milestone it is in', async function (assert) {
+      await writeAutomation();
+      let created = await createAutomationRun(dbAdapter, {
+        automationId: rri(automationURL()),
+        realm: ri(testRealm.url),
+        trigger: 'nightly',
+        slot: 'running-slot',
+        actsAs: PAYER,
+      });
+      await startAutomationRunAttempt(dbAdapter, created.id, 1);
+      let at = Date.parse('2026-11-10T18:00:00.000Z');
+      await appendRunLog(dbAdapter, created.id, [
+        {
+          at,
+          source: 'script',
+          kind: 'plan',
+          message: 'Plan: Import → Index',
+          data: { milestones: ['Import', 'Index'] },
+        },
+        {
+          at,
+          source: 'script',
+          kind: 'milestone',
+          message: 'Milestone: Import',
+          data: { name: 'Import' },
+        },
+        {
+          at,
+          source: 'script',
+          kind: 'count',
+          message: '3 of 9',
+          data: { done: 3, total: 9 },
+        },
+      ]);
+      let attributes = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      let current = attributes.currentRun!;
+      assert.strictEqual(current.runId, created.id);
+      assert.strictEqual(current.state, 'running');
+      assert.strictEqual(current.current, 'Import');
+      assert.deepEqual(current.ahead, ['Index']);
+      assert.strictEqual(current.milestones[0].done, 3);
+      assert.strictEqual(current.milestones[0].endedAt, null);
+      assert.strictEqual(attributes.lastRun, null, 'no run has ended');
     });
 
     test("a switched-on automation reads with its payer, state and each trigger's runs left", async function (assert) {

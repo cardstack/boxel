@@ -24,6 +24,7 @@ import {
   type AutomationState,
 } from './automations.ts';
 import {
+  readCurrentRunMilestones,
   readLastRunMilestones,
   type RunMilestones,
 } from './automation-run-milestones.ts';
@@ -67,11 +68,20 @@ export interface AutomationTriggerStatus {
 // its script reported: what the card shows under _Run milestones_.
 export type AutomationLastRun = RunMilestones;
 
+// The automation's run in progress, with the milestones its script has
+// reported so far: the card shows the one it is in as running.
+export type AutomationCurrentRun = RunMilestones;
+
 export type AutomationStatusAttributes =
-  | { switchedOn: false; lastRun: AutomationLastRun | null }
+  | {
+      switchedOn: false;
+      lastRun: AutomationLastRun | null;
+      currentRun: AutomationCurrentRun | null;
+    }
   | {
       switchedOn: true;
       lastRun: AutomationLastRun | null;
+      currentRun: AutomationCurrentRun | null;
       state: AutomationState;
       pauseReason: AutomationPauseReason | null;
       // The payer's Matrix id, or null when the viewer may not see who pays.
@@ -155,6 +165,8 @@ export async function answerAutomationStatus({
   // A run can end before the automation is switched on (a Preview, a Run
   // now), so the last run is read either way.
   let lastRun = (await readLastRunMilestones(dbAdapter, automationId)) ?? null;
+  let currentRun =
+    (await readCurrentRunMilestones(dbAdapter, automationId)) ?? null;
   let declaration: AutomationDeclaration | undefined;
   let payerShown = false;
   if (row) {
@@ -177,6 +189,7 @@ export async function answerAutomationStatus({
       payerShown,
       now,
       lastRun,
+      currentRun,
     }),
   };
 }
@@ -195,6 +208,7 @@ export function automationStatusDocument({
   payerShown,
   now,
   lastRun = null,
+  currentRun = null,
 }: {
   url: string;
   row: AutomationRow | undefined;
@@ -204,6 +218,7 @@ export function automationStatusDocument({
   // Unix seconds.
   now: number;
   lastRun?: AutomationLastRun | null;
+  currentRun?: AutomationCurrentRun | null;
 }): AutomationStatusDocument {
   return {
     data: {
@@ -221,8 +236,9 @@ export function automationStatusDocument({
             lastFinishedAt: row.lastFinishedAt,
             triggers: triggerStatuses(row, declaration, now),
             lastRun,
+            currentRun,
           }
-        : { switchedOn: false, lastRun },
+        : { switchedOn: false, lastRun, currentRun },
     },
   };
 }
