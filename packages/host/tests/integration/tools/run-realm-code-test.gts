@@ -9,7 +9,10 @@ import {
   SupportedMimeType,
   type Realm,
 } from '@cardstack/runtime-common';
-import { SKILL_FEATURE_REALMS } from '@cardstack/runtime-common/ai/debug';
+import {
+  SKILL_FEATURES,
+  SKILL_FEATURE_REALMS,
+} from '@cardstack/runtime-common/ai/debug';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -4599,16 +4602,21 @@ await images.generate({ prompt: 'a dot', path: 'dot.png' });`;
   });
 });
 
-// A realm gated behind a skill feature, with the catalog standing in for it:
-// no feature gates the catalog itself. The feature is read from the room's
-// messages, which reach the room resources only for a signed-in user.
+const STAND_IN_FEATURE = 'stand-in-feature';
+
+// A realm gated behind a stand-in skill feature, with the catalog standing in
+// for the realm: no feature is registered, and none gates the catalog. The
+// feature is read from the room's messages, which reach the room resources
+// only for a signed-in user.
 module(
-  'Integration | tools | run-realm-code | catalog-reuse',
+  'Integration | tools | run-realm-code | skill feature gate',
   function (hooks) {
     setupRenderingTest(hooks);
-    // The registry is read-only by type; the module gates the catalog, and
-    // puts back what the registry held for the feature before it.
+    // The registries are read-only by type; the module registers a stand-in
+    // feature that gates the catalog, and puts back what they held for it.
+    let features = SKILL_FEATURES as Record<string, string>;
     let featureRealms = SKILL_FEATURE_REALMS as Record<string, string[]>;
+    let savedFeature: string | undefined;
     let savedRealms: string[] | undefined;
     // The test build lists no catalog, so list one for the default realms
     // to leave out. It must be listed before the user signs in.
@@ -4616,14 +4624,21 @@ module(
       setCatalogRealmURL(
         getService('network').virtualNetwork.toURL('@cardstack/catalog/').href,
       );
-      savedRealms = featureRealms['catalog-reuse'];
-      featureRealms['catalog-reuse'] = [CATALOG_REALM_PREFIX];
+      savedFeature = features[STAND_IN_FEATURE];
+      savedRealms = featureRealms[STAND_IN_FEATURE];
+      features[STAND_IN_FEATURE] = 'Gates the catalog in these tests.';
+      featureRealms[STAND_IN_FEATURE] = [CATALOG_REALM_PREFIX];
     });
     hooks.afterEach(function () {
-      if (savedRealms) {
-        featureRealms['catalog-reuse'] = savedRealms;
+      if (savedFeature) {
+        features[STAND_IN_FEATURE] = savedFeature;
       } else {
-        delete featureRealms['catalog-reuse'];
+        delete features[STAND_IN_FEATURE];
+      }
+      if (savedRealms) {
+        featureRealms[STAND_IN_FEATURE] = savedRealms;
+      } else {
+        delete featureRealms[STAND_IN_FEATURE];
       }
       resetCatalogRealmURL();
     });
@@ -4642,11 +4657,11 @@ module(
       });
     });
 
-    test('realm.entries.search leaves the catalog out unless the room enabled catalog-reuse', async function (assert) {
+    test('realm.entries.search leaves the catalog out unless the room enabled the feature', async function (assert) {
       await getService('matrix-service').ready;
       let roomId = mockMatrixUtils.createAndJoinRoom({
         sender: '@testuser:localhost',
-        name: 'catalog-reuse',
+        name: 'skill-feature',
       });
       let { virtualNetwork } = getService('network');
       let sentRealms: string[][] = [];
@@ -4702,7 +4717,7 @@ module(
 
         mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
           msgtype: 'm.text',
-          body: 'boxel-debug:feature:enable:catalog-reuse',
+          body: `boxel-debug:feature:enable:${STAND_IN_FEATURE}`,
         });
         await settled();
         await search(
@@ -4722,7 +4737,7 @@ module(
       await getService('matrix-service').ready;
       let roomId = mockMatrixUtils.createAndJoinRoom({
         sender: '@testuser:localhost',
-        name: 'catalog-reuse',
+        name: 'skill-feature',
       });
       let { virtualNetwork } = getService('network');
       let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
@@ -4831,7 +4846,7 @@ module(
 
         mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
           msgtype: 'm.text',
-          body: 'boxel-debug:feature:enable:catalog-reuse',
+          body: `boxel-debug:feature:enable:${STAND_IN_FEATURE}`,
         });
         // The message reaches the room's events a tick after it is sent.
         await waitUntil(() =>
@@ -4840,7 +4855,7 @@ module(
             ?.events.some(
               (event) =>
                 (event.content as { body?: string })?.body ===
-                'boxel-debug:feature:enable:catalog-reuse',
+                `boxel-debug:feature:enable:${STAND_IN_FEATURE}`,
             ),
         );
         await search('kanban board', `['@cardstack/catalog/']`);
@@ -4978,11 +4993,11 @@ module(
       }
     });
 
-    test('realm.cards.search in the catalog finds nothing unless the room enabled catalog-reuse', async function (assert) {
+    test('realm.cards.search in the catalog finds nothing unless the room enabled the feature', async function (assert) {
       await getService('matrix-service').ready;
       let roomId = mockMatrixUtils.createAndJoinRoom({
         sender: '@testuser:localhost',
-        name: 'catalog-reuse',
+        name: 'skill-feature',
       });
       let { virtualNetwork } = getService('network');
       let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
@@ -5045,7 +5060,7 @@ module(
 
         mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
           msgtype: 'm.text',
-          body: 'boxel-debug:feature:enable:catalog-reuse',
+          body: `boxel-debug:feature:enable:${STAND_IN_FEATURE}`,
         });
         // The message reaches the room's events a tick after it is sent.
         await waitUntil(() =>
@@ -5054,7 +5069,7 @@ module(
             ?.events.some(
               (event) =>
                 (event.content as { body?: string })?.body ===
-                'boxel-debug:feature:enable:catalog-reuse',
+                `boxel-debug:feature:enable:${STAND_IN_FEATURE}`,
             ),
         );
         await search();
