@@ -94,6 +94,10 @@ export async function recordRunMilestones(
   if (progress.length === 0) {
     return;
   }
+  let [run] = (await txQuery([
+    'SELECT milestones_dropped FROM automation_runs WHERE id =',
+    param(runId),
+  ])) as { milestones_dropped: number }[];
   let [last] = (await txQuery([
     'SELECT position FROM automation_run_milestones WHERE run_id =',
     param(runId),
@@ -111,9 +115,10 @@ export async function recordRunMilestones(
   // A count for the milestone the run was in before this batch.
   let earlierCount: { done: number; total?: number } | undefined;
   let dropped = 0;
-  // Whether the milestone the run is in was recorded: past the cap it wasn't,
-  // and a count belongs to the last one that was.
-  let inDropped = false;
+  // Whether the milestone the run is in went unrecorded. Once one mark is
+  // past the cap every later one is too, so a run that has dropped a mark is
+  // in an unrecorded milestone, and its counts belong to none.
+  let inDropped = Number(run?.milestones_dropped ?? 0) > 0;
   for (let line of progress) {
     let data = line.data ?? {};
     if (line.kind === 'plan') {
@@ -207,6 +212,22 @@ export async function recordRunMilestones(
   }
 }
 
+// Clears a run's milestones, inside the caller's transaction, for an attempt
+// that runs the script again from its start.
+export async function clearRunMilestones(
+  txQuery: Querier,
+  runId: string,
+): Promise<void> {
+  await txQuery([
+    'DELETE FROM automation_run_milestones WHERE run_id =',
+    param(runId),
+  ]);
+  await txQuery([
+    'UPDATE automation_runs SET milestone_plan = NULL, milestones_dropped = 0 WHERE id =',
+    param(runId),
+  ]);
+}
+
 // A run's milestones as its row and milestone rows hold them, or undefined
 // when there is no such run.
 export async function readRunMilestones(
@@ -238,7 +259,9 @@ export async function readLastRunMilestones(
 
 // Writes each milestone of a run that has ended to telemetry, once, with the
 // time spent in it. Called as the run ends; it never fails the run, so a
-// telemetry write that throws costs the record, not the finish.
+// telemetry write that throws costs the record, not the finish. `outcome` is
+// the run's state as it ended: a run that ended as `commit-interrupted` and
+// whose batch landed afterwards reads `complete` on its row, and `error` here.
 export async function closeRunMilestones(
   dbAdapter: DBAdapter,
   run: AutomationRun,
@@ -361,7 +384,20 @@ async function milestonesOf(
       ...(row.count_total != null ? { total: Number(row.count_total) } : {}),
     };
   });
-  let reachedNames = new Set(milestones.map((m) => m.name));
+  // A plan may name a milestone more than once, so each one reached accounts
+  // for one occurrence of its name, in plan order.
+  let reachedCounts = new Map<string, number>();
+  for (let { name } of milestones) {
+    reachedCounts.set(name, (reachedCounts.get(name) ?? 0) + 1);
+  }
+  let ahead = plan.filter((name) => {
+    let left = reachedCounts.get(name) ?? 0;
+    if (left > 0) {
+      reachedCounts.set(name, left - 1);
+      return false;
+    }
+    return true;
+  });
   let last = milestones.at(-1);
   return {
     runId: String(run.id),
@@ -371,7 +407,7 @@ async function milestonesOf(
     plan,
     milestones,
     current: run.state === 'running' && last ? last.name : null,
-    ahead: plan.filter((name) => !reachedNames.has(name)),
+    ahead,
     failedIn: run.state === 'error' && last ? last.name : null,
     dropped: Number(run.milestones_dropped),
   };

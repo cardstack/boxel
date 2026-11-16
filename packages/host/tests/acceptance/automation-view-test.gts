@@ -354,7 +354,7 @@ module('Acceptance | automation view', function (hooks) {
       'Group by label',
       'Took 55 s · 12 of 40 · The run ended with an error here',
       'Write digest',
-      'The run ended before reaching this milestone',
+      'The run ended before reaching the milestone',
     ]) {
       assert.true(milestones.includes(expected), `shows "${expected}"`);
     }
@@ -368,14 +368,126 @@ module('Acceptance | automation view', function (hooks) {
     );
   });
 
-  test('an automation with no ended run says where its milestones will show', async function (assert) {
+  test('the step a run failed in reads as an error, and the step a stopped run was in as blocked', async function (assert) {
+    let milestone = (name: string, ms: number) => ({
+      name,
+      planned: true,
+      startedAt: '2030-01-01T08:59:00.000Z',
+      endedAt: '2030-01-01T09:00:00.000Z',
+      ms,
+    });
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: {
+          runId: 'run-2',
+          state: 'canceled',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: '2030-01-01T09:00:00.000Z',
+          plan: ['Fetch', 'Write'],
+          milestones: [milestone('Fetch', 3_000)],
+          ahead: ['Write'],
+          failedIn: null,
+          dropped: 0,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    let states = [
+      ...document.querySelectorAll(
+        '[data-test-automation-milestones] [data-state]',
+      ),
+    ].map((step) => step.getAttribute('data-state'));
+    assert.deepEqual(states, ['blocked', 'upcoming']);
+    assert
+      .dom('[data-test-automation-milestones]')
+      .includesText('Boxel stopped the run here');
+  });
+
+  test('a run that marked more milestones than a run records says so', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: {
+          runId: 'run-3',
+          state: 'complete',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: '2030-01-01T09:00:00.000Z',
+          plan: [],
+          milestones: [
+            {
+              name: 'Item 200',
+              planned: false,
+              startedAt: '2030-01-01T08:59:00.000Z',
+              endedAt: '2030-01-01T09:00:00.000Z',
+              ms: 60_000,
+            },
+          ],
+          ahead: [],
+          failedIn: null,
+          dropped: 12,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-milestones-lead]')
+      .includesText(
+        'The script marked 12 more milestones past the 200 a run records',
+      );
+  });
+
+  test('an automation with no ended run says milestones show after a run ends', async function (assert) {
     answer = { status: 200, attributes: { ...ACTIVE, lastRun: null } };
     await openIsolated();
     await waitForStatus();
     assert
       .dom('[data-test-automation-milestones]')
-      .includesText('Shown from runs');
+      .includesText(
+        'The milestones the script reports show here after a run ends.',
+      );
     assert.dom('[data-test-automation-milestones-lead]').doesNotExist();
+  });
+
+  test('a last run that reported no milestones says so', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: {
+          runId: 'run-4',
+          state: 'complete',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: '2030-01-01T09:00:00.000Z',
+          plan: [],
+          milestones: [],
+          ahead: [],
+          failedIn: null,
+          dropped: 0,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-milestones]')
+      .includesText(
+        'The last run reported no milestones. A script reports milestones with realm.progress.plan and realm.progress.milestone.',
+      );
+  });
+
+  test('a viewer the route refuses is told who sees the milestones', async function (assert) {
+    await openIsolated();
+    await waitFor('[data-test-automation-who-pays]', { timeout: 10000 });
+    assert
+      .dom('[data-test-automation-milestones]')
+      .includesText(
+        'Someone who can edit this workspace sees the milestones of the last run here.',
+      );
   });
 
   test('a payer who shares no workspace with the viewer is not named', async function (assert) {

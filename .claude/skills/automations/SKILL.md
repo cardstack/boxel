@@ -1032,7 +1032,7 @@ They reach the realm server as the run's `plan`, `milestone` and `count` log lin
 | `automation_run_milestones`          | one row per milestone the run reached, at `position` in the order reached, with `started_at` (the tab's time for the mark) and the last `count_done` / `count_total` inside it       |
 | `automation_runs.milestones_dropped` | marks past `RUN_MAX_MILESTONES` (200) a run records; the run's last recorded milestone then lasts until the run ends                                                                 |
 
-A milestone lasts until the next one starts, or until the run ends (`finished_at`). A milestone the plan doesn't name is recorded like any other and reads as unplanned; one marked twice is two rows. A count before the run's first milestone is ignored.
+A milestone lasts until the next one starts, or until the run ends (`finished_at`). A milestone the plan doesn't name is recorded like any other and reads as unplanned; one marked twice is two rows. A count before the run's first milestone is ignored, as is one inside a milestone marked past the limit. An attempt that takes a run from another attempt (`startAutomationRunAttempt`, before the commit is claimed) clears the run's plan and milestones, since the script runs again from its start.
 
 **Reading them.** `readRunMilestones(dbAdapter, runId)` answers a run's `plan`, its `milestones` in order (`name`, `planned`, `startedAt`, `endedAt`, `ms`, and `done` / `total` when counted), `current` (the milestone a running run is in), `ahead` (the plan's milestones it hasn't reached), `failedIn` (for a run that ended with an error, the milestone it was in) and `dropped`. `readLastRunMilestones(dbAdapter, automationId)` answers the same for the automation's last run that started and has ended: what the card shows, through `_automation-status`'s `lastRun`.
 
@@ -1042,7 +1042,7 @@ SELECT r.state, r.milestone_plan, m.position, m.name, m.started_at, m.count_done
  WHERE r.id = '<run id>' ORDER BY m.position;
 ```
 
-**Telemetry.** As a run ends (`finishAutomationRun`, `abandonAutomationRun`, `cancelAutomationRun`), `closeRunMilestones` writes each of its milestones once to the `boxel:automation-milestones` channel: one JSON line with `automation`, `realm`, `run`, `outcome`, `errorReason`, `milestone`, `position`, `planned`, `ms`, `done`, `total` and `failedHere`, the numbers flat so LogQL can `unwrap` them:
+**Telemetry.** As a run ends (`finishAutomationRun`, `abandonAutomationRun`, `cancelAutomationRun`), `closeRunMilestones` writes each of its milestones once to the `boxel:automation-milestones` channel: one JSON line with `automation`, `realm`, `run`, `outcome`, `errorReason`, `milestone`, `position`, `planned`, `ms`, `done`, `total` and `failedHere`, the numbers flat so LogQL can `unwrap` them. `outcome` is the run's state as it ended, so a `commit-interrupted` run whose batch landed afterwards reads `error` there and `complete` on its row:
 
 ```bash
 packages/observability/scripts/tail-logs.sh --env staging --service realm-server \

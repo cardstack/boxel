@@ -14474,6 +14474,7 @@ export class Realm {
     let token = request.headers.get('Authorization')?.replace(/^Bearer /, '');
     let result = await appendRunLog(this.#dbAdapter, call.runId, parsed.lines, {
       secrets: token ? [token] : [],
+      attempt: call.attempt,
     });
     return answer(200, {
       data: {

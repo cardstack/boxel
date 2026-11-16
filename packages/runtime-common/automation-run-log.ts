@@ -105,10 +105,15 @@ export async function appendRunLog(
   lines: RunLogLine[],
   {
     secrets = [],
+    attempt,
     maxLines = RUN_LOG_MAX_LINES,
     maxChars = RUN_LOG_MAX_CHARS,
   }: {
     secrets?: readonly string[];
+    // The attempt that sent the lines. Their milestones are recorded only
+    // while the run is running under it, so a send that lands after the run
+    // ended, or after another attempt took it, adds to the log alone.
+    attempt?: number;
     // The run's cap, which only tests change.
     maxLines?: number;
     maxChars?: number;
@@ -120,13 +125,14 @@ export async function appendRunLog(
   let redacted = lines.map((line) => redactLine(line, secrets));
   let result = await dbAdapter.withTransaction(async (txQuery) => {
     let [run] = (await txQuery([
-      'SELECT r.automation_id, r.attempt, r.log_lines, r.log_chars, r.log_dropped, jr.job_id',
+      'SELECT r.automation_id, r.state, r.attempt, r.log_lines, r.log_chars, r.log_dropped, jr.job_id',
       'FROM automation_runs r LEFT JOIN job_reservations jr ON jr.id = r.attempt',
       'WHERE r.id =',
       param(runId),
       'FOR UPDATE OF r',
     ])) as {
       automation_id: string;
+      state: string;
       attempt: number | string | null;
       log_lines: number;
       log_chars: number | string;
@@ -137,8 +143,15 @@ export async function appendRunLog(
       return undefined;
     }
     // The run's milestones are recorded whether or not the log has room for
-    // their lines.
-    await recordRunMilestones(txQuery, runId, redacted);
+    // their lines, and only while the run is running under the sender's
+    // attempt: the run's end reads them for telemetry, and an attempt that
+    // takes the run over starts them afresh.
+    if (
+      run.state === 'running' &&
+      (attempt === undefined || Number(run.attempt) === attempt)
+    ) {
+      await recordRunMilestones(txQuery, runId, redacted);
+    }
     let seq = Number(run.log_lines);
     let chars = Number(run.log_chars);
     let stored: StoredRunLogLine[] = [];
