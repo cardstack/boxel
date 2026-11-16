@@ -33,18 +33,31 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 //   module.
 // - Routed: everyone may read it, and a routing rule serves a card other than
 //   its index card at its root.
+// - Governed with code: like Governed, but its policy also opens the source of
+//   the realm's modules to visitors who aren't signed in.
 const OPEN = 'http://127.0.0.1:4444/open-site/';
 const CLOSED = 'http://127.0.0.1:4444/closed-site/';
 const GOVERNED = 'http://127.0.0.1:4444/governed-site/';
 const ROUTED = 'http://127.0.0.1:4444/routed-site/';
+const GOVERNED_WITH_CODE = 'http://127.0.0.1:4444/governed-code-site/';
 const ORG = 'http://127.0.0.1:4444/org/';
 const GOVERNED_POLICY = `${ORG}policies/governed-site`;
+const GOVERNED_WITH_CODE_POLICY = `${ORG}policies/governed-code-site`;
 const OWNER = '@owner:localhost';
 
 const REALM_POLICY = {
   module: rri('@cardstack/catalog/realm-policy/realm-policy'),
   name: 'RealmPolicy',
 };
+
+// The type a module's source is matched on. `GtsFileDef` descends from it, so
+// a rule on it covers `.gts` modules too.
+const TS_FILE_DEF = {
+  module: rri('@cardstack/base/ts-file-def'),
+  name: 'TsFileDef',
+};
+
+const ANONYMOUS = 'actor() == "anonymous"';
 
 const GREETING_MODULE = `
   export const greeting = 'Welcome';
@@ -103,7 +116,28 @@ const GOVERNED_POLICY_CARD = JSON.stringify({
       rules: [
         {
           targetType: { module: `${GOVERNED}home`, name: 'Home' },
-          grants: [{ operation: 'read', where: 'actor() == "anonymous"' }],
+          grants: [{ operation: 'read', where: ANONYMOUS }],
+        },
+      ],
+    },
+    meta: { adoptsFrom: REALM_POLICY },
+  },
+});
+
+// Opens the home card of the governed site with code to visitors who aren't
+// signed in, and the source of its modules too.
+const GOVERNED_WITH_CODE_POLICY_CARD = JSON.stringify({
+  data: {
+    type: 'card',
+    attributes: {
+      rules: [
+        {
+          targetType: { module: `${GOVERNED_WITH_CODE}home`, name: 'Home' },
+          grants: [{ operation: 'read', where: ANONYMOUS }],
+        },
+        {
+          targetType: TS_FILE_DEF,
+          grants: [{ operation: 'readSource', where: ANONYMOUS }],
         },
       ],
     },
@@ -185,10 +219,22 @@ module(basename(import.meta.filename), function (hooks) {
           permissions: { '*': ['read'], ...ownerOnly },
         },
         {
+          realmURL: new URL(GOVERNED_WITH_CODE),
+          fileSystem: siteFiles(
+            'Governed with code',
+            realmConfigCardJSON({
+              name: 'Governed with code',
+              policy: GOVERNED_WITH_CODE_POLICY,
+            }),
+          ),
+          permissions: { ...ownerOnly },
+        },
+        {
           realmURL: new URL(ORG),
           fileSystem: {
             'realm.json': realmConfigCardJSON({ name: 'Org' }),
             'policies/governed-site.json': GOVERNED_POLICY_CARD,
+            'policies/governed-code-site.json': GOVERNED_WITH_CODE_POLICY_CARD,
           },
           permissions: { ...ownerOnly },
         },
@@ -280,6 +326,22 @@ module(basename(import.meta.filename), function (hooks) {
       'only modules from the realm itself are named',
     );
     assert.false(report.anonymousCanView, 'the realm fails');
+  });
+
+  test("a policy that opens the home card and its modules' source passes", async function (assert) {
+    let report = await checkAnonymousHomePage(realm(GOVERNED_WITH_CODE));
+
+    assert.strictEqual(report.homeCardId, `${GOVERNED_WITH_CODE}index`);
+    assert.true(
+      report.homeCardReadable,
+      'the policy lets a visitor who is not signed in read the home card',
+    );
+    assert.deepEqual(
+      report.unloadableModules,
+      [],
+      "the policy's readSource grant lets every module of the home card load",
+    );
+    assert.true(report.anonymousCanView, 'the realm passes');
   });
 
   test("a module only the home card's HTML render loaded is checked too", async function (assert) {

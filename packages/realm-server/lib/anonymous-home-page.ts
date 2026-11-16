@@ -11,9 +11,14 @@ import {
   realmHoldsExtensionlessSourceModule,
 } from './realm-routing.ts';
 
-// Whether a visitor who isn't signed in can view a realm's home page: read the
-// card the realm serves at its root, and load that card's code from the realm.
-// A realm is fit to be served at a host URL only when they can.
+// Whether a visitor who isn't signed in can read the card a realm serves at its
+// root, and load that card's code from the realm. A realm is fit to be served
+// at a host URL only when they can.
+//
+// The check covers that card and its code, not everything the page shows. The
+// cards it links to and the files it shows (images, for example) are not
+// checked, so a policy that opens the home card's type but not theirs still
+// passes, and the visitor is refused those links and images.
 //
 // Every answer comes from the realm itself. The check sends the requests such
 // a visitor's browser would send, through `realm.handle` and without
@@ -60,8 +65,9 @@ export interface AnonymousHomePageReport {
   // The home card's modules in this realm that a visitor who isn't signed in
   // can't load.
   unloadableModules: AnonymousHomePageModule[];
-  // Whether a visitor who isn't signed in can view the home page: the home
-  // card is readable and every one of its modules in this realm loads.
+  // Whether a visitor who isn't signed in can read the home card and load
+  // every one of its modules in this realm. The cards and files the home card
+  // links to or shows are not checked.
   anonymousCanView: boolean;
 }
 
@@ -136,8 +142,10 @@ async function homePage(
 // as a linked card the search doc doesn't follow. Reading the card's
 // `adoptsFrom` alone would miss all but the first. Deps also list the cards
 // and files the card read, and scoped CSS, which are not modules, so a dep
-// counts as a module only where the realm holds a module file for it. Deps in
-// other realms are left out: their own realm's access decides them.
+// counts as a module only where the realm holds a module file for it. The
+// cards and files are left out, as the check covers only the home card and its
+// code. Deps in other realms are left out too: their own realm's access
+// decides them.
 async function homeCardModules(
   realm: Realm,
   cardId: string,
