@@ -96,15 +96,28 @@ export function addRunIndexingUsage(
   };
 }
 
-// A prerenderer that adds up the tab time of every render made through it.
-//
-// A render's tab time is the server's own measure of the render
+// The tab time of one prerender call that started at `startedAt` (epoch ms)
+// and answered `meta`. It is the server's own measure of the render
 // (`renderElapsedMs`), which leaves out the wait for a tab, when the tab was
-// not yet the job's. A response without it falls back to the server's total
-// (`totalElapsedMs`, which includes that wait), and a response without either,
-// from an in-process prerenderer, to the time the call took. Each fallback is
-// longer than the render, so a missing measure never charges less than the
-// render took.
+// not yet the caller's. A response without it falls back to the server's
+// total (`totalElapsedMs`, which includes that wait), and a response without
+// either, from an in-process prerenderer, to the time the call took. Each
+// fallback is longer than the render, so a missing measure never charges less
+// than the render took.
+export function renderTabMs(
+  meta: PrerenderResponseMeta | undefined,
+  startedAt: number,
+): number {
+  let diagnostics = meta?.diagnostics;
+  return (
+    diagnostics?.renderElapsedMs ??
+    diagnostics?.totalElapsedMs ??
+    Date.now() - startedAt
+  );
+}
+
+// A prerenderer that adds up the tab time of every render made through it,
+// each measured by `renderTabMs`.
 //
 // It sees only the renders made through it. The module renders that fill the
 // shared definition cache go through the worker's definition lookup, or the
@@ -137,11 +150,7 @@ export function meteredPrerenderer(prerenderer: Prerenderer): {
       tabMs += Date.now() - start;
       throw e;
     }
-    let diagnostics = response?.meta?.diagnostics;
-    tabMs +=
-      diagnostics?.renderElapsedMs ??
-      diagnostics?.totalElapsedMs ??
-      Date.now() - start;
+    tabMs += renderTabMs(response?.meta, start);
     return response;
   }
   let metered: Prerenderer = {

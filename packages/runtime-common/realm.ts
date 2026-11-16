@@ -13306,6 +13306,8 @@ export class Realm {
               realmPermissions,
               user,
               this.#matrixClient.serverName,
+              new URL(this.url),
+              new URL(this.#realmServerURL),
             )
           : await realmPermissionChecker.can(user, requiredPermission))
       ) {
@@ -14659,7 +14661,12 @@ export class Realm {
             files.length === 0
               ? 'The commit saved no files'
               : `The commit saved ${files.length} ${files.length === 1 ? 'file' : 'files'}: ${files.join(', ')}`,
-          data: { status: response.status, files: files.length, ms },
+          data: {
+            status: response.status,
+            files: files.length,
+            paths: files,
+            ms,
+          },
         });
       } else {
         let error = body?.errors?.[0];
@@ -20610,9 +20617,17 @@ export class Realm {
 
     // Only an administrator can change permissions here, so a change that
     // leaves the realm with none would leave no one able to change them back.
+    let realmURL = new URL(this.url);
+    let realmServerURL = new URL(this.#realmServerURL);
     let administers = (permissions: RealmPermissions) =>
       Object.keys(permissions).some((user) =>
-        isRealmAdministrator(permissions, user, this.#matrixClient.serverName),
+        isRealmAdministrator(
+          permissions,
+          user,
+          this.#matrixClient.serverName,
+          realmURL,
+          realmServerURL,
+        ),
       );
     let patched: RealmPermissions = { ...currentPermissions };
     for (let [user, permissions] of Object.entries(patch)) {
@@ -20624,7 +20639,7 @@ export class Realm {
     }
     if (administers(currentPermissions) && !administers(patched)) {
       return badRequest({
-        message: `the realm must keep at least one administrator: a user whose own permissions include write`,
+        message: `the realm must keep at least one administrator: a person whose own permissions include write, or a service account with write on a realm it created under its own name`,
         requestContext,
       });
     }

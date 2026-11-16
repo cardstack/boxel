@@ -21,7 +21,9 @@ import {
 } from '../automation-run-command.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
 import { logRunPlatformLine } from '../automation-run-log.ts';
+import { chargeAutomationRun } from '../automation-run-charge.ts';
 import {
+  addAutomationRunTabTime,
   finishAutomationRun,
   getAutomationRun,
   recordAutomationRunAdmitted,
@@ -31,6 +33,7 @@ import {
   type AutomationRunOutcome,
 } from '../automation-runs.ts';
 import type { DBAdapter } from '../db.ts';
+import type { MeteredCharges } from '../metered-charges.ts';
 import type { DefinitionLookup } from '../definition-lookup.ts';
 import { param, query } from '../expression.ts';
 import {
@@ -39,6 +42,7 @@ import {
   type Prerenderer,
   type RunCommandResponse,
 } from '../index.ts';
+import { renderTabMs } from '../run-indexing.ts';
 import { RUN_COMMIT_PATH } from '../run-overlay.ts';
 import { SupportedMimeType } from '../supported-mime-type.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
@@ -81,6 +85,9 @@ export interface AutomationAttemptContext {
   // What admission asks the realm server's side of the worker (see
   // `automation-admission.ts`). A worker without them admits no run.
   admissionChecks: AutomationAdmissionChecks | undefined;
+  // Writes the run's compute and network charge once the run has ended.
+  // Without it, as in a harness, the run is measured and nothing is charged.
+  meteredCharges?: MeteredCharges;
   log: Log;
 }
 
@@ -100,7 +107,38 @@ export interface AutomationAttemptResult {
 // discards it and records the error. The run row is the source of truth:
 // every step is refused once a newer attempt owns the run, a person cancels
 // it, or it ends at a cap.
+//
+// The tab time the script takes is added to the run's row (see
+// `addTabTime`), and once the attempt is done, a run that has ended (however
+// it ended, including one a person canceled while its script ran) is charged
+// its compute and network (`chargeAutomationRun`). The charge is written even
+// when the attempt throws, since the run may have ended before it did, and
+// the queue doesn't run a job again after its handler throws.
 export async function runAutomationAttempt(
+  ctx: AutomationAttemptContext,
+  input: AutomationJobInput,
+  dedupeKey: string | null,
+  jobInfo: JobInfo | undefined,
+): Promise<AutomationAttemptResult> {
+  let result: AutomationAttemptResult | undefined;
+  try {
+    result = await attemptRun(ctx, input, dedupeKey, jobInfo);
+    return result;
+  } finally {
+    if (result?.reason !== NOT_THE_RUNS_JOB) {
+      await chargeAutomationRun({
+        dbAdapter: ctx.dbAdapter,
+        meteredCharges: ctx.meteredCharges,
+        runId: input.runId,
+        log: ctx.log,
+      });
+    }
+  }
+}
+
+const NOT_THE_RUNS_JOB = 'not-the-runs-job';
+
+async function attemptRun(
   ctx: AutomationAttemptContext,
   input: AutomationJobInput,
   dedupeKey: string | null,
@@ -122,7 +160,7 @@ export async function runAutomationAttempt(
     log.warn(
       `${tag} refused: the job's key ${JSON.stringify(dedupeKey)} isn't the run's`,
     );
-    return { state: 'left', reason: 'not-the-runs-job' };
+    return { state: 'left', reason: NOT_THE_RUNS_JOB };
   }
 
   let start = await startAutomationRunAttempt(dbAdapter, runId, attempt);
@@ -156,6 +194,17 @@ export async function runAutomationAttempt(
     });
     return await fail(reason, message);
   };
+  // The row decides whether the run is a Preview, since everything after
+  // the run (its kept batch, its report, `lastSuccessAt`) reads the row. A
+  // job that says otherwise runs nothing, so a run its job calls a Preview
+  // never commits.
+  let dryRun = run.dryRun;
+  if (input.dryRun !== dryRun) {
+    return await fail(
+      'dry-run-mismatch',
+      `The run's job ${input.dryRun ? 'is' : "isn't"} a Preview and its row ${dryRun ? 'is' : "isn't"}, so the run didn't start`,
+    );
+  }
 
   let realmURL = ensureTrailingSlash(ctx.virtualNetwork.toURLHref(run.realm));
   let [limits, declaration] = await Promise.all([
@@ -299,13 +348,14 @@ export async function runAutomationAttempt(
       ...(input.webhookPayload !== undefined
         ? { webhookPayload: input.webhookPayload }
         : {}),
-      dryRun: input.dryRun,
+      dryRun,
     },
     secondsCap: remainingMs / 1000,
     endsAt: new Date(deadline).toISOString(),
   };
 
   let outcome: AutomationScriptOutcome;
+  let tabStartedAt = Date.now();
   try {
     let result = await ctx.prerenderer.runCommand({
       userId: run.actsAs,
@@ -316,8 +366,17 @@ export async function runAutomationAttempt(
       priority: jobInfo.priority,
       timeoutMs: remainingMs + AUTOMATION_TAB_GRACE_MS,
     });
+    await addTabTime(
+      ctx,
+      runId,
+      renderTabMs(result?.meta, tabStartedAt),
+      remainingMs,
+    );
     outcome = outcomeOf(result, redact);
   } catch (e: any) {
+    // A call that throws carries no measure from a prerender server, and
+    // may never have reached a tab (the request found no server, or every
+    // try was refused), so it adds no tab time.
     outcome = {
       state: 'error',
       reason: 'run-failed',
@@ -332,11 +391,34 @@ export async function runAutomationAttempt(
         : outcome.message;
     return await fail(outcome.reason, message);
   }
-  if (input.dryRun) {
-    // A Preview stops before the commit; its finish discards the overlay.
+  if (dryRun) {
+    // A Preview stops before the commit. Its finish keeps a copy of what it
+    // staged as the batch it shows, discards the overlay, and nothing
+    // reaches the realm.
     return await finish(ctx, tag, runId, attempt, { state: 'complete' });
   }
   return await commit(ctx, tag, run, attempt, realmURL, token);
+}
+
+// Records the tab time the script took on the run's row, where the run's
+// charge reads it. The time is held to `remainingMs`, what was left of the
+// run's time limit when the script started: the tab call's grace past the
+// limit (`AUTOMATION_TAB_GRACE_MS`) lets the tab answer, and isn't charged,
+// so a run's compute never costs more than its seconds cap prices it at in
+// the minimum balance and the switch-on estimate. A failure to record it is
+// logged rather than failing the run, whose script has already run.
+async function addTabTime(
+  ctx: AutomationAttemptContext,
+  runId: string,
+  measuredMs: number,
+  remainingMs: number,
+): Promise<void> {
+  let ms = Math.max(0, Math.min(measuredMs, remainingMs));
+  try {
+    await addAutomationRunTabTime(ctx.dbAdapter, runId, ms);
+  } catch (e) {
+    ctx.log.error(`could not record ${ms} ms of tab time on run ${runId}`, e);
+  }
 }
 
 async function commit(
@@ -513,7 +595,8 @@ function triggerKind(
   return triggers.find((t) => t.label === run.trigger)?.kind ?? 'manual';
 }
 
-// When the automation's last complete run started, other than this one.
+// When the automation's last complete run started, other than this one. A
+// Preview wrote nothing, so it never counts.
 async function lastSuccessAt(
   dbAdapter: DBAdapter,
   run: AutomationRun,
@@ -521,7 +604,7 @@ async function lastSuccessAt(
   let [row] = await query(dbAdapter, [
     'SELECT started_at FROM automation_runs WHERE automation_id =',
     param(run.automationId),
-    "AND state = 'complete' AND started_at IS NOT NULL AND id <>",
+    "AND state = 'complete' AND NOT dry_run AND started_at IS NOT NULL AND id <>",
     param(run.id),
     'ORDER BY started_at DESC LIMIT 1',
   ]);

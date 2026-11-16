@@ -800,7 +800,7 @@ async function lockForDirectWriter(
 
 // Whether `declaration` was read from the automation's own card. The two may
 // be spelled in different forms, so both are compared as served URLs.
-function isDeclarationOf(
+export function isDeclarationOf(
   declaration: AutomationDeclaration,
   automationId: RealmResourceIdentifier,
   { virtualNetwork }: Pick<AutomationActorOptions, 'virtualNetwork'>,
@@ -815,7 +815,7 @@ function isDeclarationOf(
   }
 }
 
-async function isDirectWriterOf(
+export async function isDirectWriterOf(
   txQuery: Querier,
   realm: RealmIdentifier,
   user: string,

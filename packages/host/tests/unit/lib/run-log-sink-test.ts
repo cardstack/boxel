@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 
 import {
   RUN_LOG_MAX_BATCH_LINES,
+  RUN_LOG_MAX_REQUEST_BYTES,
   RUN_LOG_PATH,
 } from '@cardstack/runtime-common/automation-run-log';
 
@@ -141,5 +142,31 @@ module('Unit | Lib | run log sink', function () {
     assert.ok(warning, 'a line says lines were dropped');
     assert.true(warning!.message.startsWith('7 log lines'), warning!.message);
     assert.strictEqual(all.length, total - 7 + 1);
+  });
+
+  test("a batch stays under the realm's request limit in bytes, however few lines fill it", async function (assert) {
+    let { sent, fetch } = recordingFetch();
+    let sink = new RunLogSink({ realmURL: REALM, runToken: TOKEN, fetch });
+    // Each line is 10,000 two-byte characters, so 105 of them are well under
+    // the line count of a batch but over its byte limit.
+    let wide = 'é'.repeat(10_000);
+    let count = 105;
+    for (let n = 0; n < count; n++) {
+      sink.record({ kind: 'console', at: n, level: 'log', message: wide });
+    }
+    await sink.flush();
+    assert.true(sent.length > 1, `the lines went in ${sent.length} batches`);
+    for (let { init } of sent) {
+      let bytes = new TextEncoder().encode(String(init.body)).length;
+      assert.true(
+        bytes <= RUN_LOG_MAX_REQUEST_BYTES,
+        `a batch of ${bytes} bytes fits the realm's limit`,
+      );
+    }
+    assert.deepEqual(
+      sent.flatMap(({ events }) => events.map((event) => event.at)),
+      Array.from({ length: count }, (_, n) => n),
+      'every line was sent once, in order',
+    );
   });
 });

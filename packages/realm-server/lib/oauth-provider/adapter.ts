@@ -1,13 +1,21 @@
 // Where the OAuth provider keeps what it stores: a table for each kind of
 // object the library hands its adapter, each arriving with the work that first
-// stores it. A kind with no table yet is refused, never kept in memory, which
+// stores it. Clients registered dynamically and grants have tables of their
+// own. A kind with no table yet is refused, never kept in memory, which
 // would lose it on restart and differ between the realm server's processes.
-// Short-lived objects share `oauth_provider_objects` (`objects.ts`).
+// Short-lived objects (interactions, sessions and authorization codes) share
+// `oauth_provider_objects` (`objects.ts`).
 
 import { randomBytes } from 'crypto';
 import type { Adapter, AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { InteractionAdapter } from './objects.ts';
+import {
+  asRecord,
+  AuthorizationCodeAdapter,
+  InteractionAdapter,
+  OAuthProviderAdapter,
+  SessionAdapter,
+} from './objects.ts';
 
 // The ID dynamic client registration gives a client: 24 random bytes in
 // base64url, so always 32 characters of that alphabet. A client ID metadata
@@ -44,6 +52,12 @@ export function oauthProviderAdapter(
           break;
         }
         return new InteractionAdapter(dbAdapter, interactionResumeURL);
+      case 'Session':
+        return new SessionAdapter(dbAdapter);
+      case 'AuthorizationCode':
+        return new AuthorizationCodeAdapter(dbAdapter);
+      case 'Grant':
+        return new GrantAdapter(dbAdapter);
     }
     throw new OAuthProviderStorageError(
       `the OAuth provider has no storage for ${name}`,
@@ -63,10 +77,11 @@ export function oauthProviderAdapter(
 // metadata document, so an ID registration could not have given (a metadata
 // document's URL, say) is not found without asking the database. No row can
 // then stand in for a metadata document, whatever is in the table.
-class DynamicClientAdapter implements Adapter {
+class DynamicClientAdapter extends OAuthProviderAdapter {
   #dbAdapter: DBAdapter;
 
   constructor(dbAdapter: DBAdapter) {
+    super('clients');
     this.#dbAdapter = dbAdapter;
   }
 
@@ -86,12 +101,7 @@ class DynamicClientAdapter implements Adapter {
       `SELECT metadata FROM oauth_provider_dynamic_clients WHERE client_id = $1`,
       { bind: [id] },
     )) as { metadata: AdapterPayload | string }[];
-    if (!row) {
-      return undefined;
-    }
-    return typeof row.metadata === 'string'
-      ? (JSON.parse(row.metadata) as AdapterPayload)
-      : row.metadata;
+    return row ? (asRecord(row.metadata) as AdapterPayload) : undefined;
   }
 
   async destroy(id: string): Promise<void> {
@@ -100,26 +110,68 @@ class DynamicClientAdapter implements Adapter {
       { bind: [id] },
     );
   }
-
-  async findByUserCode(): Promise<never> {
-    throw unused('findByUserCode');
-  }
-
-  async findByUid(): Promise<never> {
-    throw unused('findByUid');
-  }
-
-  async consume(): Promise<never> {
-    throw unused('consume');
-  }
-
-  async revokeByGrantId(): Promise<never> {
-    throw unused('revokeByGrantId');
-  }
 }
 
-function unused(method: string) {
-  return new OAuthProviderStorageError(
-    `the OAuth provider's clients have no ${method}`,
-  );
+interface GrantRow {
+  user_id: string;
+  client_id: string;
+  // The approved scopes by resource, as JSON or already parsed.
+  resources: string | Record<string, string[]>;
+  created: number | string;
+  expires: number | string;
+}
+
+// The OAuth grants, in `oauth_provider_grants` (`grants.ts`). Boxel creates
+// every grant itself when a flow finishes. The library saves one only in its
+// development pages, which are off, so a grant the library tries to save is
+// refused. It finds a grant that has neither ended nor expired, as the
+// library's own payload: the user as `accountId`, and each resource's scopes
+// as one space-separated string.
+
+class GrantAdapter extends OAuthProviderAdapter {
+  #dbAdapter: DBAdapter;
+
+  constructor(dbAdapter: DBAdapter) {
+    super('grants');
+    this.#dbAdapter = dbAdapter;
+  }
+
+  async find(id: string): Promise<AdapterPayload | undefined> {
+    let [row] = (await this.#dbAdapter.execute(
+      `SELECT user_id, client_id, resources,
+              floor(extract(epoch FROM created_at)) AS created,
+              floor(extract(epoch FROM expires_at)) AS expires
+         FROM oauth_provider_grants
+         WHERE id = $1 AND ended_at IS NULL AND expires_at > now()`,
+      { bind: [id] },
+    )) as unknown as GrantRow[];
+    if (!row) {
+      return undefined;
+    }
+    let resources = asRecord(row.resources) as Record<string, string[]>;
+    return {
+      jti: id,
+      kind: 'Grant',
+      iat: Number(row.created),
+      exp: Number(row.expires),
+      accountId: row.user_id,
+      clientId: row.client_id,
+      resources: Object.fromEntries(
+        Object.entries(resources).map(([resource, scopes]) => [
+          resource,
+          scopes.join(' '),
+        ]),
+      ),
+    } as AdapterPayload;
+  }
+
+  async upsert(): Promise<never> {
+    throw new OAuthProviderStorageError(
+      `the OAuth provider's grants are created only when a flow finishes`,
+    );
+  }
+
+  async destroy(): Promise<never> {
+    throw this.unused('destroy');
+  }
 }
