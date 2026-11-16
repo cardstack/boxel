@@ -548,7 +548,8 @@ export async function markLimitNoticesRead(
 // - `share-suspended`: the realm's share the operation uses is suspended;
 // - `credential-rejected`: the vendor refused the key or connection the
 //   operation uses.
-// Listed while the user still directly writes the automation's realm.
+// Listed while the user still directly writes the automation's realm, until
+// what it reports is fixed.
 export interface AutomationNotice {
   id: string;
   // The automation card and its realm, as canonical identifiers: a URL or a
@@ -569,9 +570,12 @@ export interface AutomationNotice {
   // counts in the badge on the user's avatar.
   readAt: string | null;
   createdAt: string;
+  // The most recent refusal it reports. A later refusal of the same kind
+  // refreshes the notice rather than adding another.
+  lastRefusedAt: string;
 }
 
-// The user's automation notices, newest first.
+// The user's automation notices, most recently refused first.
 export async function automationNotices(
   config: Config,
 ): Promise<AutomationNotice[]> {

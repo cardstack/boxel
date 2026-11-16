@@ -4,6 +4,7 @@ import {
   admitRunIdentity,
   admitRunOperations,
   scriptParseError,
+  type AdmittedRunKind,
   type AutomationAdmissionChecks,
 } from '../automation-admission.ts';
 import { MAX_RUN_SECONDS } from '../automation-declaration.ts';
@@ -169,15 +170,21 @@ export async function runAutomationAttempt(
         : (declaration as { message: string }).message,
     );
   }
-  let manual =
-    triggerKind(input, run, declaration.declaration.triggers) === 'manual';
+  // The job says how the run was started; a run without a `triggerKind` is
+  // a trigger's, even when the card no longer names its trigger.
+  let kind: AdmittedRunKind =
+    input.triggerKind === 'manual'
+      ? 'manual'
+      : input.triggerKind === 'batch'
+        ? 'batch'
+        : 'trigger';
   let admission = {
     dbAdapter,
     virtualNetwork: ctx.virtualNetwork,
     matrixServerName: ctx.matrixServerName,
     checks: ctx.admissionChecks,
   };
-  let identity = await admitRunIdentity(admission, run, { manual });
+  let identity = await admitRunIdentity(admission, run, { kind });
   if (!identity.ok) {
     return await refuse(identity.reason, identity.message);
   }

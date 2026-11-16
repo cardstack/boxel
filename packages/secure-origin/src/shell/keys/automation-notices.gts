@@ -9,7 +9,8 @@
 // each opens the approve page for that operation, which comes back to this
 // page when it is done. A suspended share and a key the vendor refused are
 // fixed elsewhere (the share by a direct writer of its workspace or its key's
-// owner, the key on its own tile below), so they only say so.
+// owner, the key by its owner, who may be someone else), so they only say
+// so.
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { TOC } from '@ember/component/template-only';
@@ -119,8 +120,8 @@ const AutomationNotices: TOC<Signature> = <template>
                       A direct writer of the workspace resumes the share, or the
                       key’s owner swaps another key into the share.
                     {{else}}
-                      Reconnect or replace the key on the key’s tile below, and
-                      the automation’s next run goes ahead.
+                      The key’s owner reconnects or replaces the key, and the
+                      automation’s next run goes ahead.
                     {{/if}}
                   </p>
                 </:default>

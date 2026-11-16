@@ -14531,7 +14531,6 @@ export class Realm {
     });
   }
 
-  // Commits a run's overlay, and logs on the run what the commit did.
   // Checks each operation the run's automation declares as the run's
   // identity, without opening any key (`CallApiSender.admitAutomation`), and
   // answers the first refusal, or none (see `automation-admission-route.ts`).
@@ -14611,6 +14610,7 @@ export class Realm {
     return answer({ refusal: null, operations: limits.operations.length });
   }
 
+  // Commits a run's overlay, and logs on the run what the commit did.
   private async commitRunOverlay(
     request: Request,
     requestContext: RequestContext,

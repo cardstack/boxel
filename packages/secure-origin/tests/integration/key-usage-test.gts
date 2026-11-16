@@ -212,6 +212,7 @@ function automationNotice(
       detail: 'The operation is not approved for automations',
       readAt: null,
       createdAt: '2026-11-02T05:30:00.000Z',
+      lastRefusedAt: '2026-11-02T05:30:00.000Z',
       ...attributes,
     },
   };
@@ -931,7 +932,9 @@ module('Integration | key usage and limits', function (hooks) {
         .includesText(
           'the service refused the key that the operation “sync” uses.',
         )
-        .includesText('Reconnect or replace the key on the key’s tile below');
+        .includesText(
+          'The key’s owner reconnects or replaces the key, and the automation’s next run goes ahead.',
+        );
       assert.dom('[data-test-automation-notice-approve]').doesNotExist();
     });
 

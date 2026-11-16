@@ -5,17 +5,17 @@
 // In order:
 //
 // 1. The automation's row. A run of one of the card's own triggers (cron,
-//    one-time, webhook) is refused when the automation was removed
-//    (`not-switched-on`) or is paused (`automation-paused`), so a run enqueued
-//    before a pause or a remove doesn't start. A run someone started by hand
-//    (Preview, Run now) needs no row. A `waiting-for-credits` row is
+//    one-time, webhook) or a batch's follow-up is refused when the
+//    automation was removed (`not-switched-on`) or is paused
+//    (`automation-paused`), so a run enqueued before a pause or a remove
+//    doesn't start, and a trigger's run that no longer acts as the payer
+//    (a resume made someone else the payer) is refused (`payer-changed`). A
+//    run someone started by hand (Preview, Run now) needs no row. A `waiting-for-credits` row is
 //    admitted here and left to the billing check, and a `done` row is
 //    admitted, since the run of its last slot is enqueued before it is done.
 // 2. The run's identity: the person the run acts as (the payer, or whoever
 //    clicked).
 //    - They are still a direct writer of the realm (`not-a-direct-writer`).
-//      When they are the automation's payer, the automation is paused with
-//      `payer-lost-access` too (`checkAutomationPayer`).
 //    - Their sessions weren't revoked since the run was given their
 //      authority (`session-revoked`): since they switched the automation on
 //      or last resumed it, for a run of its triggers, or since they started
@@ -23,6 +23,10 @@
 //    - Their account can still sign in (`account-deactivated`): the Matrix
 //      server, which alone knows, says it isn't deactivated or locked. A
 //      worker that can't ask refuses the run (`account-unverifiable`).
+//    When the run acts as the automation's payer, losing direct write, a
+//    revocation and an account that can't sign in also pause the automation
+//    with `payer-lost-access`, so its later slots don't each fail the same
+//    way. A direct writer resumes it and becomes the payer.
 // 3. The script parses (`script-error`). The card and the script file are
 //    read before this, by the attempt.
 // 4. Every operation the card declares passes `automationAdmission` as the
@@ -39,7 +43,8 @@
 //    checks the balance and the monthly cap where one is configured.
 //
 // A refused run finishes as an error whose `error_reason` is the refusal's
-// code. An admitted run records `admitted_at`. Either way the run's log gets
+// code. An admitted run records `admitted_at`, and ends the notices about
+// the automation that its identity was owed. Either way the run's log gets
 // one `admission` line saying which.
 
 import {
@@ -47,6 +52,7 @@ import {
   type RunAdmissionAnswer,
 } from './automation-admission-route.ts';
 import {
+  clearAutomationNotices,
   recordAutomationNotice,
   isNoticedAdmissionRefusal,
 } from './automation-notices.ts';
@@ -54,6 +60,7 @@ import type { AutomationRun } from './automation-runs.ts';
 import {
   checkAutomationPayer,
   getAutomation,
+  pauseForPayerLostAccess,
   type AutomationRow,
 } from './automations.ts';
 import type { DBAdapter } from './db.ts';
@@ -93,20 +100,27 @@ export interface AdmissionContext {
   checks: AutomationAdmissionChecks | undefined;
 }
 
+// How a run was started: by hand (Preview, Run now), by a batch's follow-up,
+// or by one of the card's own triggers. The job says which: a run no trigger
+// on the card names carries `triggerKind`; a run without one is a trigger's,
+// whatever the card says now, so a trigger renamed or removed after its run
+// was enqueued doesn't make that run a manual one.
+export type AdmittedRunKind = 'manual' | 'batch' | 'trigger';
+
 // The checks on the automation's row and the run's identity (steps 1 and 2),
-// made before the run's token is minted. `manual` is whether someone started
-// the run by hand rather than one of the card's triggers.
+// made before the run's token is minted.
 export async function admitRunIdentity(
   ctx: AdmissionContext,
   run: AutomationRun,
-  { manual }: { manual: boolean },
+  { kind }: { kind: AdmittedRunKind },
 ): Promise<
   | { ok: true; automation: AutomationRow | undefined }
   | ({ ok: false } & AdmissionRefusal)
 > {
   let { dbAdapter, virtualNetwork, matrixServerName } = ctx;
   let automation = await getAutomation(dbAdapter, run.automationId);
-  if (!manual) {
+  let actsAs = run.actsAs;
+  if (kind !== 'manual') {
     if (!automation) {
       return refuse(
         'not-switched-on',
@@ -119,9 +133,26 @@ export async function admitRunIdentity(
         `The automation is paused (${automation.pauseReason}), so its scheduled run doesn't start`,
       );
     }
+    // A trigger's run acts as the payer (ADR 026 §1.1). One enqueued before
+    // a resume made someone else the payer doesn't start as the old one; the
+    // automation's next run acts as the new payer. A batch's follow-up acts
+    // as whoever its submitting run acted as.
+    if (kind === 'trigger' && automation.payer !== actsAs) {
+      return refuse(
+        'payer-changed',
+        `The run acts as ${actsAs}, but the automation's payer is now ${automation.payer}`,
+      );
+    }
   }
+  // Whether a refusal of the identity is the payer losing access, which
+  // pauses the automation too.
+  let isPayer = kind !== 'manual' && automation?.payer === actsAs;
+  let payerLostAccess = async () => {
+    if (isPayer) {
+      await pauseForPayerLostAccess(dbAdapter, run.automationId, actsAs);
+    }
+  };
 
-  let actsAs = run.actsAs;
   if (!matrixServerName) {
     return refuse(
       'account-unverifiable',
@@ -130,7 +161,7 @@ export async function admitRunIdentity(
   }
   let realmURL = virtualNetwork.toURL(run.realm);
   if (!(await isDirectWriter(dbAdapter, realmURL, actsAs, matrixServerName))) {
-    if (!manual && automation?.payer === actsAs) {
+    if (isPayer) {
       await checkAutomationPayer(dbAdapter, run.automationId, {
         matrixServerName,
         virtualNetwork,
@@ -142,14 +173,16 @@ export async function admitRunIdentity(
     );
   }
 
-  // The moment the run was given its identity's authority: the click, for a
-  // run started by hand; the switch-on or last resume (when the payer was
-  // set), for a run of the card's triggers.
+  // The moment the run was given its identity's authority: the payer's
+  // switch-on or last resume (when the payer was set), for a run that acts as
+  // the payer; the run's own start, for a run started by hand or a batch's
+  // follow-up that acts as someone else.
   let authorizedAt =
-    manual || !automation
-      ? Math.floor(Date.parse(run.createdAt) / 1000)
-      : automation.scheduledSince;
+    isPayer && automation
+      ? automation.scheduledSince
+      : Math.floor(Date.parse(run.createdAt) / 1000);
   if (await isSessionRevoked(dbAdapter, actsAs, authorizedAt)) {
+    await payerLostAccess();
     return refuse(
       'session-revoked',
       `The sessions of ${actsAs}, whom the run acts as, were revoked after the run was given their authority`,
@@ -172,6 +205,7 @@ export async function admitRunIdentity(
     );
   }
   if (standing !== 'usable') {
+    await payerLostAccess();
     return refuse(
       'account-deactivated',
       standing === 'missing'
@@ -247,6 +281,12 @@ export async function admitRunOperations(
         : refusal.detail,
     );
   }
+  // Every declared operation would be served, so no notice about this
+  // automation that the run's identity was owed still stands.
+  await clearAutomationNotices(ctx.dbAdapter, {
+    recipient: run.actsAs,
+    automationId: run.automationId,
+  });
   let spending = await ctx.checks?.admitSpending?.({ run, automation });
   if (spending) {
     return { ok: false, ...spending };

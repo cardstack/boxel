@@ -7,10 +7,13 @@
 // `automation_notices` records the notices sent when admission refuses a run
 // over something only a person can fix, such as an operation whose binding
 // isn't approved. One row per recipient: the person the run acts as. The
-// partial unique index keeps one unread notice per recipient, automation,
-// reason and operation, so an automation that comes due every few minutes
-// while its binding stays unapproved doesn't pile up notices. The secure
-// origin's key page lists them and marks the ones it shows read.
+// unique index keeps one open notice per recipient, automation, reason,
+// operation and type: a later refusal of the same kind refreshes it
+// (`last_refused_at`) rather than adding another, so an automation that comes
+// due every few minutes while its binding stays unapproved holds one notice.
+// A notice ends when what it reports is fixed: a run of the automation is
+// admitted, or the person approves the operation. The secure origin's key
+// page lists them and marks the ones it shows read.
 //
 // Both are server-only, and excluded from the SQLite schema dump.
 
@@ -38,13 +41,21 @@ exports.up = (pgm) => {
       target_name varchar,
       detail text NOT NULL,
       read_at timestamptz,
-      created_at timestamptz NOT NULL DEFAULT NOW()
+      created_at timestamptz NOT NULL DEFAULT NOW(),
+      -- The most recent refusal it reports.
+      last_refused_at timestamptz NOT NULL DEFAULT NOW()
     )
   `);
   pgm.sql(`
-    CREATE UNIQUE INDEX IF NOT EXISTS automation_notices_unread_once_idx
-      ON automation_notices (recipient, automation_id, reason, COALESCE(operation, ''))
-      WHERE read_at IS NULL
+    CREATE UNIQUE INDEX IF NOT EXISTS automation_notices_open_idx
+      ON automation_notices (
+        recipient,
+        automation_id,
+        reason,
+        COALESCE(operation, ''),
+        COALESCE(target_module, ''),
+        COALESCE(target_name, '')
+      )
   `);
   pgm.sql(`
     CREATE INDEX IF NOT EXISTS automation_notices_recipient_idx
