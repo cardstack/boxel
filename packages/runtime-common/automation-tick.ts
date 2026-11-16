@@ -16,11 +16,14 @@
 //   `concurrencyGroup` `automation:<id>`, the automation tier, and a timeout
 //   from the card's `seconds` cap. Two triggers due at the same instant start
 //   two runs, which the concurrency group runs one after the other.
-// - or, when the automation already had a pending run before this tick, joins
-//   it instead. The joined slot is *skipped*: it starts nothing, its trigger's
-//   run count stays as it was, and the pending run's log names it. A pending
-//   run already covers every slot that comes due while it waits, since a run
-//   catches up on everything since its last.
+// - or, when a scheduled run of the automation is pending from an earlier
+//   instant, joins it instead. The joined slot is *skipped*: it starts nothing,
+//   its trigger's run count stays as it was, and the pending run's log names
+//   it. A pending run already covers every slot that comes due while it waits,
+//   since a run catches up on everything since its last. Only a run a cron or
+//   one-time trigger on the card started is joined: a Preview never commits,
+//   and a Run now acts as whoever clicked rather than the payer. A run that has
+//   started is never joined; the new run waits behind it.
 //
 // Either way the trigger's `lastSlot` moves to the slot, so the next
 // computation schedules strictly after it. The tick then recomputes the next
@@ -36,9 +39,12 @@
 // the job. Both writes are keyed by the automation, trigger and slot, so a
 // tick that fails after them and before the advance leaves the slot due, and
 // the next tick finds the same run row and joins the same job (or, once that
-// job has run, enqueues one that finds the run over and leaves it). A pending
-// run whose trigger and slot are the ones being handled is that same run, not
-// one to join.
+// job has run, enqueues one that finds the run over and leaves it). Before it
+// schedules anything, a tick adopts every pending run a trigger on the card
+// started for a slot past that trigger's `lastSlot`: such a run came from a
+// tick that stopped before advancing the row. The tick counts it as started,
+// moves the trigger's `lastSlot` to its slot and enqueues its job again (the
+// queue joins the job still there), so each such run is counted once.
 //
 // The tick reads the card's declaration from the index, as a run does. It
 // follows an edit the card's index hook hasn't applied yet the same way the
@@ -238,7 +244,6 @@ async function claimAndEnqueue(
       return { kind: 'caps-raised', automationId, reason: raised };
     }
 
-    let pending = await pendingRun(txQuery, automationId);
     let realmURL = ensureTrailingSlash(
       options.virtualNetwork.toURLHref(automation.realm),
     );
@@ -247,6 +252,59 @@ async function claimAndEnqueue(
       declaration.triggers,
       now,
     );
+    let handled: AutomationTickTrigger[] = [];
+    let start = async (label: string, at: number) => {
+      let slot = unixSecondsToISO(at);
+      let run = await createAutomationRun(dbAdapter, {
+        automationId,
+        realm: automation.realm,
+        trigger: label,
+        slot,
+        actsAs: automation.payer,
+      });
+      let job = await enqueueAutomationRunJob(options.queue, {
+        automationId,
+        realmURL,
+        actsAs: run.actsAs,
+        trigger: label,
+        slot,
+        secondsCap: declaration.caps.seconds,
+        input: { runId: run.id, scheduledAt: slot, dryRun: false },
+      });
+      let state = runState[label] ?? { runs: 0 };
+      runState[label] = { ...state, runs: state.runs + 1, lastSlot: at };
+      handled.push({
+        kind: 'started',
+        trigger: label,
+        slot,
+        runId: run.id,
+        jobId: job.id,
+      });
+      return run;
+    };
+
+    // The pending runs a cron or one-time trigger on the card started, oldest
+    // instant first. A run past its trigger's `lastSlot` came from a tick that
+    // stopped before advancing the row, and is adopted as started.
+    let scheduled = new Set(
+      declaration.triggers
+        .filter(({ kind }) => kind === 'cron' || kind === 'once')
+        .map(({ label }) => label),
+    );
+    let pending: { id: string; at: number }[] = [];
+    for (let run of await pendingRuns(txQuery, automationId)) {
+      let at = Date.parse(run.slot) / 1000;
+      if (!scheduled.has(run.trigger) || !Number.isFinite(at)) {
+        continue;
+      }
+      let lastSlot = runState[run.trigger]?.lastSlot;
+      if (lastSlot === undefined || at > lastSlot) {
+        await start(run.trigger, at);
+      }
+      pending.push({ id: run.id, at });
+    }
+    pending.sort((a, b) => a.at - b.at);
+
     let scheduleNow = () =>
       computeAutomationSchedule({
         triggers: declaration.triggers,
@@ -255,7 +313,6 @@ async function claimAndEnqueue(
         runState,
       });
     let schedule = scheduleNow();
-    let handled: AutomationTickTrigger[] = [];
     // Each pass handles every trigger due at the earliest instant and moves
     // their cursors past it, so each trigger is handled at most once per tick
     // and the passes end within one per trigger.
@@ -267,43 +324,23 @@ async function claimAndEnqueue(
       pass++
     ) {
       let at = schedule.nextRun;
-      let slot = unixSecondsToISO(at);
+      // The latest pending scheduled run from an earlier instant. A run at
+      // the same instant is another trigger's, which starts a run of its own.
+      let joinable = pending.filter((run) => run.at < at).pop();
       for (let label of schedule.dueTriggers) {
-        let state = runState[label] ?? { runs: 0 };
-        if (pending && !(pending.trigger === label && pending.slot === slot)) {
+        if (joinable) {
+          let state = runState[label] ?? { runs: 0 };
           runState[label] = { ...state, lastSlot: at };
           handled.push({
             kind: 'skipped',
             trigger: label,
-            slot,
-            joinedRunId: pending.id,
+            slot: unixSecondsToISO(at),
+            joinedRunId: joinable.id,
           });
-          continue;
+        } else {
+          let run = await start(label, at);
+          pending.push({ id: run.id, at });
         }
-        let run = await createAutomationRun(dbAdapter, {
-          automationId,
-          realm: automation.realm,
-          trigger: label,
-          slot,
-          actsAs: automation.payer,
-        });
-        let job = await enqueueAutomationRunJob(options.queue, {
-          automationId,
-          realmURL,
-          actsAs: run.actsAs,
-          trigger: label,
-          slot,
-          secondsCap: declaration.caps.seconds,
-          input: { runId: run.id, scheduledAt: slot, dryRun: false },
-        });
-        runState[label] = { ...state, runs: state.runs + 1, lastSlot: at };
-        handled.push({
-          kind: 'started',
-          trigger: label,
-          slot,
-          runId: run.id,
-          jobId: job.id,
-        });
       }
       schedule = scheduleNow();
     }
@@ -374,23 +411,21 @@ async function logTriggers(
   }
 }
 
-// The automation's most recent run that is pending, from before this tick.
-async function pendingRun(
+// The automation's pending runs, as this tick found them.
+async function pendingRuns(
   txQuery: Querier,
   automationId: RealmResourceIdentifier,
-): Promise<{ id: string; trigger: string; slot: string } | undefined> {
-  let [row] = await txQuery([
+): Promise<{ id: string; trigger: string; slot: string }[]> {
+  let rows = await txQuery([
     'SELECT id, trigger, slot FROM automation_runs WHERE automation_id =',
     param(automationId),
-    "AND state = 'pending' ORDER BY created_at DESC, id DESC LIMIT 1",
+    "AND state = 'pending' ORDER BY created_at, id",
   ]);
-  return row
-    ? {
-        id: String(row.id),
-        trigger: String(row.trigger),
-        slot: String(row.slot),
-      }
-    : undefined;
+  return rows.map((row) => ({
+    id: String(row.id),
+    trigger: String(row.trigger),
+    slot: String(row.slot),
+  }));
 }
 
 // The rows the tick handles at `now`: the ones `automations_due_idx` serves.

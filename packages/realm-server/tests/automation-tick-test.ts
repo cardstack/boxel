@@ -459,6 +459,155 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  // What a tick writes for a trigger's slot before it advances the row.
+  async function writtenBeforeAdvance(trigger: string, slot: string) {
+    let run = await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger,
+      slot,
+      actsAs: OWNER,
+    });
+    let job = await enqueueAutomationRunJob(publisher, {
+      automationId: AUTOMATION,
+      realmURL: REALM_URL,
+      actsAs: OWNER,
+      trigger,
+      slot,
+      secondsCap: CAPS.seconds,
+      input: { runId: run.id, scheduledAt: slot, dryRun: false },
+    });
+    return { run, job };
+  }
+
+  const NOON_DAILY = {
+    kind: 'cron' as const,
+    label: 'noon',
+    expression: '0 12 * * *',
+    timeZone: 'UTC',
+  };
+
+  test("a tick that stopped after writing two triggers' runs is finished by the next tick, which counts each run once", async function (assert) {
+    await switchOn([HOURLY, NOON_DAILY]);
+    let hourly = await writtenBeforeAdvance('hourly', NOON_SLOT);
+    let noon = await writtenBeforeAdvance('noon', NOON_SLOT);
+
+    let [outcome] = await tick(NOON + 30);
+    assert.deepEqual(
+      outcome.kind === 'enqueued'
+        ? outcome.triggers.map(({ kind, trigger, ...rest }) => ({
+            kind,
+            trigger,
+            runId: 'runId' in rest ? rest.runId : undefined,
+          }))
+        : outcome,
+      [
+        { kind: 'started', trigger: 'hourly', runId: hourly.run.id },
+        { kind: 'started', trigger: 'noon', runId: noon.run.id },
+      ],
+      'both runs are adopted as started; neither is reported as joining the other',
+    );
+    assert.strictEqual((await runs()).length, 2, 'two runs');
+    assert.strictEqual((await queuedRuns()).length, 2, 'two jobs');
+    assert.deepEqual(counts(await row()), {
+      hourly: { runs: 1, lastSlot: NOON },
+      noon: { runs: 1, lastSlot: NOON },
+    });
+  });
+
+  test("a tick that stopped after writing one of two triggers' runs is finished by the next tick, which starts the other trigger's own run", async function (assert) {
+    await switchOn([HOURLY, NOON_DAILY]);
+    let hourly = await writtenBeforeAdvance('hourly', NOON_SLOT);
+
+    let [outcome] = await tick(NOON + 30);
+    assert.deepEqual(
+      outcome.kind === 'enqueued'
+        ? outcome.triggers.map(({ kind, trigger }) => ({ kind, trigger }))
+        : outcome,
+      [
+        { kind: 'started', trigger: 'hourly' },
+        { kind: 'started', trigger: 'noon' },
+      ],
+    );
+    let made = await runs();
+    assert.deepEqual(
+      made.map(({ id, trigger, slot }) => ({ id, trigger, slot })),
+      [
+        { id: hourly.run.id, trigger: 'hourly', slot: NOON_SLOT },
+        { id: made[1].id, trigger: 'noon', slot: NOON_SLOT },
+      ],
+    );
+    assert.deepEqual(counts(await row()), {
+      hourly: { runs: 1, lastSlot: NOON },
+      noon: { runs: 1, lastSlot: NOON },
+    });
+  });
+
+  test('a run left by a stopped tick is counted, and a later slot joins it while it is still pending', async function (assert) {
+    await switchOn();
+    let noon = await writtenBeforeAdvance('hourly', NOON_SLOT);
+
+    let [outcome] = await tick(ONE + 30);
+    assert.deepEqual(
+      outcome.kind === 'enqueued'
+        ? outcome.triggers.map(({ kind, slot }) => ({ kind, slot }))
+        : outcome,
+      [
+        { kind: 'started', slot: NOON_SLOT },
+        { kind: 'skipped', slot: '2026-11-10T13:00:00.000Z' },
+      ],
+    );
+    assert.deepEqual(
+      (await runs()).map(({ id }) => id),
+      [noon.run.id],
+      'no other run is made',
+    );
+    assert.deepEqual(counts(await row()), {
+      hourly: { runs: 1, lastSlot: ONE },
+    });
+  });
+
+  test('a pending Preview or Run now is never joined: a due slot starts its own run', async function (assert) {
+    await switchOn();
+    await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger: 'manual',
+      slot: 'a-click',
+      actsAs: '@someone-else:localhost',
+    });
+    let [outcome] = await tick(NOON + 30);
+    assert.deepEqual(
+      outcome.kind === 'enqueued'
+        ? outcome.triggers.map(({ kind }) => kind)
+        : outcome,
+      ['started'],
+    );
+    assert.deepEqual(counts(await row()), {
+      hourly: { runs: 1, lastSlot: NOON },
+    });
+  });
+
+  test('a tick skips an automation another tick holds, without waiting for it', async function (assert) {
+    assert.timeout(30_000);
+    await switchOn();
+    let outcomes: AutomationTickOutcome[] | undefined;
+    await dbAdapter.withTransaction(async (txQuery) => {
+      await txQuery([
+        `SELECT automation_id FROM automations WHERE automation_id = '${AUTOMATION}' FOR UPDATE`,
+      ]);
+      outcomes = await tick(NOON + 30);
+    });
+    assert.deepEqual(outcomes, [], 'the held automation is skipped');
+    assert.deepEqual(await runs(), [], 'no run is made');
+    assert.deepEqual(await queuedRuns(), [], 'no job is enqueued');
+    assert.strictEqual(
+      (await row()).nextRun,
+      NOON,
+      'the automation stays due for the next tick',
+    );
+  });
+
   test('`count` stops a trigger: its last run makes the automation done', async function (assert) {
     await switchOn([{ ...HOURLY, count: 2 }]);
     await tick(NOON + 30);
