@@ -28,17 +28,22 @@ const DEFAULT_TTL_MS = 30_000;
 const DEFAULT_MAX_HOSTS = 10_000;
 
 // What a request on a host URL resolved to. `hostURL` is the host URL itself,
-// with the request's protocol, ending in `/`.
+// with the request's protocol, ending in `/`. `canonicalHostURL` is the
+// realm's canonical host URL in the same form, undefined when the realm has
+// none.
 export interface HostURLMatch {
   hostURL: string;
   realmURL: string;
   isCanonical: boolean;
+  canonicalHostURL?: string;
 }
 
 interface HostEntry {
   pathPrefix: string;
   realmURL: string;
   isCanonical: boolean;
+  // The realm's canonical host URL, as a host and a path prefix.
+  canonical: string | undefined;
 }
 
 // The part of PgAdapter this module uses, taken from its type so the two can't
@@ -100,6 +105,9 @@ export class HostURLResolver {
       hostURL: `${requestURL.protocol}//${host}${entry.pathPrefix}`,
       realmURL: entry.realmURL,
       isCanonical: entry.isCanonical,
+      canonicalHostURL: entry.canonical
+        ? `${requestURL.protocol}//${entry.canonical}`
+        : undefined,
     };
   }
 
@@ -126,17 +134,27 @@ export class HostURLResolver {
       }
     }
     let invalidationsBefore = this.#invalidations;
+    // A host's entries name its realms' canonical host URLs, which can be on
+    // other hosts. So a change to which host URL is canonical changes the
+    // entries of every host the realm has, and is announced for each of them.
     let rows = (await query(this.#dbAdapter, [
-      `SELECT h.path_prefix, h.is_canonical, r.url`,
+      `SELECT h.path_prefix, h.is_canonical, r.url, c.host || c.path_prefix AS canonical`,
       `FROM realm_host_urls h JOIN realm_registry r ON r.id = h.realm_id`,
+      `LEFT JOIN realm_host_urls c ON c.realm_id = h.realm_id AND c.is_canonical`,
       `WHERE h.host =`,
       param(host),
       `ORDER BY LENGTH(h.path_prefix) DESC`,
-    ])) as { path_prefix: string; is_canonical: boolean; url: string }[];
+    ])) as {
+      path_prefix: string;
+      is_canonical: boolean;
+      url: string;
+      canonical: string | null;
+    }[];
     let entries = rows.map((row) => ({
       pathPrefix: row.path_prefix,
       realmURL: row.url,
       isCanonical: Boolean(row.is_canonical),
+      canonical: row.canonical ?? undefined,
     }));
     if (this.#invalidations === invalidationsBefore) {
       this.#entries.delete(host);
@@ -230,8 +248,9 @@ export function requestHostURL(ctxt: Koa.Context): HostURLMatch | undefined {
 // Resolves a request on a host URL to its realm, ahead of every other route
 // (ADR 033 §1.2), by making the request name the realm's URL. Everything
 // downstream then finds the realm as it would for a request to its own URL.
-// The host URL the request came in on is kept in `ctxt.state` for the code
-// that translates responses back to it.
+// The host URL the request came in on is kept in `ctxt.state` for
+// `translateAtHostURLs` (`realm-host-urls-boundary.ts`), which translates the
+// rest of the request and its response.
 export function resolveHostURLs(
   resolver: HostURLResolver,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
