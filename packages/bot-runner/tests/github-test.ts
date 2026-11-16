@@ -201,6 +201,59 @@ module('github client', (hooks) => {
     assert.true(wrote, 'the same submitter writes again');
   });
 
+  test("writeFilesToBranch finds another submitter's commit past the first page of the folder's history", async (assert) => {
+    let pagesRead: string[] = [];
+    let wrote = false;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      let url = typeof input === 'string' ? input : input.toString();
+      let method = init?.method ?? 'GET';
+      if (url.includes('/commits?sha=')) {
+        let page = new URL(url).searchParams.get('page') ?? '';
+        pagesRead.push(page);
+        return jsonResponse(
+          page === '1'
+            ? Array.from({ length: 100 }, () => ({
+                commit: { message: 'Merge branch main' },
+              }))
+            : [
+                {
+                  commit: {
+                    message: 'add listing changes [boxel-submitter:1111]',
+                  },
+                },
+              ],
+        );
+      }
+      if (url.includes('/git/ref/heads/')) {
+        return jsonResponse({ object: { sha: 'commit-sha' } });
+      }
+      if (url.includes('/git/commits/commit-sha')) {
+        return jsonResponse({ tree: { sha: 'root-tree-sha' } });
+      }
+      if (method !== 'GET') {
+        wrote = true;
+        return jsonResponse({ sha: 'x' });
+      }
+      throw new Error(`unexpected request: ${method} ${url}`);
+    };
+
+    let client = new OctokitGitHubClient('test-token');
+    await assert.rejects(
+      client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'a1b2c3-listing',
+        files: [{ path: 'a1b2c3-listing/kept.json', content: '{}' }],
+        message: 'update listing [boxel-submitter:2222]',
+        syncFolder: 'a1b2c3-listing',
+        submitterTag: '2222',
+      }),
+      /holds another submitter's files/,
+    );
+    assert.deepEqual(pagesRead, ['1', '2'], 'reads on while a page is full');
+    assert.false(wrote, 'nothing is written');
+  });
+
   test("writeFilesToBranch refuses a file on the base branch that has the folder's name", async (assert) => {
     globalThis.fetch = async (input: RequestInfo | URL) => {
       let url = typeof input === 'string' ? input : input.toString();

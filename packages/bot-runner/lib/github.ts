@@ -1,4 +1,6 @@
 const GITHUB_API_BASE = 'https://api.github.com';
+const COMMITS_PER_PAGE = 100;
+const COMMIT_PAGES_READ = 10;
 const GITHUB_TEAM_REVIEWERS = ['ecosystem-team'];
 
 export interface OpenPullRequestParams {
@@ -239,17 +241,28 @@ export class OctokitGitHubClient implements GitHubClient {
     }
 
     if (params.syncFolder && params.submitterTag) {
-      let commits = await this.request<{ commit: { message: string } }[]>({
-        action: 'list commits touching the folder',
-        method: 'GET',
-        path: `/repos/${params.owner}/${params.repo}/commits?sha=${encodeURIComponent(branch)}&path=${encodeURIComponent(params.syncFolder)}&per_page=100`,
-      });
-      for (let { commit } of commits) {
-        let tag = commit.message.match(/\[boxel-submitter:([0-9a-f]+)\]\s*$/);
-        if (tag && tag[1] !== params.submitterTag) {
+      for (let page = 1; ; page++) {
+        // Far past any submission's history: refuse instead of reading on.
+        if (page > COMMIT_PAGES_READ) {
           throw new Error(
-            `folder '${params.syncFolder}' on ${branch} holds another submitter's files`,
+            `folder '${params.syncFolder}' on ${branch} has too long a history to tell whose it is`,
           );
+        }
+        let commits = await this.request<{ commit: { message: string } }[]>({
+          action: 'list commits touching the folder',
+          method: 'GET',
+          path: `/repos/${params.owner}/${params.repo}/commits?sha=${encodeURIComponent(branch)}&path=${encodeURIComponent(params.syncFolder)}&per_page=${COMMITS_PER_PAGE}&page=${page}`,
+        });
+        for (let { commit } of commits) {
+          let tag = commit.message.match(/\[boxel-submitter:([0-9a-f]+)\]\s*$/);
+          if (tag && tag[1] !== params.submitterTag) {
+            throw new Error(
+              `folder '${params.syncFolder}' on ${branch} holds another submitter's files`,
+            );
+          }
+        }
+        if (commits.length < COMMITS_PER_PAGE) {
+          break;
         }
       }
     }

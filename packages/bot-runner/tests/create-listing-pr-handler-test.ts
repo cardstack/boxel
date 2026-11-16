@@ -350,6 +350,39 @@ module('create-listing-pr handler', () => {
     assert.strictEqual(writes, 0, 'nothing is written');
   });
 
+  test('addContentsToCommit refuses a submission with no files', async (assert) => {
+    let writes = 0;
+    let githubClient: GitHubClient = {
+      openPullRequest: async () => ({ number: 1, html_url: 'x' }),
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async () => {
+        writes++;
+        return { commitSha: 'def456' };
+      },
+    };
+    let handler = new CreateListingPRHandler(githubClient);
+    await assert.rejects(
+      handler.addContentsToCommit(
+        {
+          type: 'pr-listing-create',
+          realm: 'http://localhost:4201/test/',
+          userId: '@alice:localhost',
+          input: {
+            roomId: '!abc123:localhost',
+            listingName: 'My Listing',
+            branchName: 'a1b2c3-my-listing',
+          },
+        },
+        '@alice:localhost',
+        [],
+        [],
+      ),
+      /must have at least one file/,
+    );
+    assert.strictEqual(writes, 0, 'nothing is written');
+  });
+
   test('addContentsToCommit asks for a folder new on the base branch and tags the commit with its submitter', async (assert) => {
     let asked: (string | undefined)[] = [];
     let tagged: boolean[] = [];

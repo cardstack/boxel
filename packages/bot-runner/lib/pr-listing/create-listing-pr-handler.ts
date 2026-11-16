@@ -141,8 +141,10 @@ export class CreateListingPRHandler {
       isBinary: true as const,
     }));
     let allFiles = [...textFiles, ...binaryFilesWithFolder];
+    // The write is what checks whose folder this is, so a submission that
+    // writes nothing must not go on to open a pull request for the branch.
     if (allFiles.length === 0) {
-      return;
+      throw new Error('a submission must have at least one file');
     }
     let hash = hashFiles(allFiles);
     await this.githubClient.writeFilesToBranch({
