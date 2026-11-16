@@ -373,7 +373,7 @@ module('Acceptance | automation view', function (hooks) {
       'Failed here',
       'Ran for 55 s · 12 of 40',
       'Write digest',
-      'Not reached',
+      'Not started',
     ]) {
       assert.true(milestones.includes(expected), `shows "${expected}"`);
     }
@@ -391,12 +391,12 @@ module('Acceptance | automation view', function (hooks) {
           '[data-test-automation-milestones] [data-test-milestone-state]',
         ),
       ].map((step) => step.getAttribute('data-test-milestone-state')),
-      ['reached', 'reached', 'failed', 'not-reached'],
-      'done up to the failure, failed there, and not reached after it',
+      ['reached', 'reached', 'failed', 'not-started'],
+      'done up to the failure, failed there, and not started after it',
     );
   });
 
-  test('a run in progress shows the milestone it is in as running, the ones before it done and the ones after it not reached yet', async function (assert) {
+  test('a run in progress shows the milestone it is in as running, the ones before it done and the ones after it not started', async function (assert) {
     answer = {
       status: 200,
       attributes: {
@@ -445,17 +445,17 @@ module('Acceptance | automation view', function (hooks) {
         '[data-test-automation-milestones] [data-test-milestone-state]',
       ),
     ].map((step) => step.getAttribute('data-test-milestone-state'));
-    assert.deepEqual(states, ['reached', 'running', 'not-reached']);
+    assert.deepEqual(states, ['reached', 'running', 'not-started']);
     let milestones = text('[data-test-automation-milestones]') ?? '';
     for (let expected of [
       'Running for 1 min 30 s · 140 of 412',
-      'Not reached yet',
+      'Not started',
     ]) {
       assert.true(milestones.includes(expected), `shows "${expected}"`);
     }
   });
 
-  test('the milestone a stopped run was in reads as stopped, and the ones after it as not reached', async function (assert) {
+  test('the milestone a stopped run was in reads as stopped, and the ones after it as not started', async function (assert) {
     let milestone = (name: string, ms: number) => ({
       name,
       planned: true,
@@ -487,7 +487,7 @@ module('Acceptance | automation view', function (hooks) {
         '[data-test-automation-milestones] [data-test-milestone-state]',
       ),
     ].map((step) => step.getAttribute('data-test-milestone-state'));
-    assert.deepEqual(states, ['stopped', 'not-reached']);
+    assert.deepEqual(states, ['stopped', 'not-started']);
     assert
       .dom('[data-test-automation-milestones]')
       .includesText('Stopped here');
@@ -540,7 +540,7 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-milestones-lead]').doesNotExist();
   });
 
-  test('before any run, the section lists the milestones the script declares, each not reached yet', async function (assert) {
+  test('before any run, the section lists the milestones the script declares, each not started', async function (assert) {
     answer = { status: 200, attributes: { ...ACTIVE, lastRun: null } };
     await openIsolated(PLANNED);
     await waitFor(
@@ -561,7 +561,7 @@ module('Acceptance | automation view', function (hooks) {
     ];
     assert.deepEqual(
       steps.map((step) => step.getAttribute('data-test-milestone-state')),
-      ['not-reached', 'not-reached', 'not-reached'],
+      ['not-started', 'not-started', 'not-started'],
     );
     let milestones = text('[data-test-automation-milestones]') ?? '';
     for (let name of ['Fetch open issues', 'Group by label', 'Write digest']) {
