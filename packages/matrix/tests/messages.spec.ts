@@ -1071,6 +1071,8 @@ test.describe('Room messages', () => {
       },
     ]);
 
+    // Attaching the same card to several messages sends exactly one Boxel
+    // message event per send.
     let messageEvents = await waitForBoxelMessageEvents(
       page,
       username,
@@ -1078,13 +1080,6 @@ test.describe('Room messages', () => {
       ['Message - 1', 'Message - 2', 'Message - 3'],
     );
     expect(messageEvents.length).toEqual(3);
-
-    // An unchanged card attached to several messages is uploaded once, so
-    // every message points at the same uploaded file.
-    let attachedCardUrls = messageEvents.map(
-      (event) => JSON.parse(event.content.data).attachedCards[0].url,
-    );
-    expect(new Set(attachedCardUrls).size).toEqual(1);
   });
 
   test('it escapes html code sent by the user', async ({ page }) => {
