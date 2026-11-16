@@ -549,6 +549,34 @@ Current date and time: 2025-06-11T11:43:00.533Z
       );
     });
 
+    test('says the realm judges a direct write as the operation it amounts to', async () => {
+      const JUDGES =
+        "realm.cards.update or a realm.fs write of a card's .json is the card's update (keeping its type) or create";
+      let notes = {
+        'a policy whose grants are listed': await contextFor({
+          card: POLICY,
+          rules: [
+            {
+              targetType: { module: LIBRARY, name: 'Book' },
+              grants: [{ operation: 'update' }],
+            },
+          ],
+        }),
+        'a policy that could not be read': await contextFor({ card: POLICY }),
+        'a policy too large to list': await contextFor({
+          card: POLICY,
+          tooLarge: true,
+        }),
+      };
+      for (let [policy, context] of Object.entries(notes)) {
+        assert.true(context.includes(JUDGES), `the note for ${policy} says so`);
+      }
+      assert.false(
+        (await contextFor()).includes(JUDGES),
+        'a workspace whose realm names no policy refuses every write',
+      );
+    });
+
     test('refuses every edit when the realm names no policy', async () => {
       let context = await contextFor();
 
