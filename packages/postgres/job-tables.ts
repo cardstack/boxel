@@ -52,11 +52,18 @@ export interface JobReservationsTable {
   // worker SIGKILLed while running it outside a graceful shutdown (typically
   // the container running out of memory), 'interrupted' for an operational
   // interruption (child crash, manager SIGTERM, scale-in), 'timeout-expired'
-  // for the pg-pid reaper path. 'completed' and 'killed' count toward the
-  // per-job reservation cap; the others don't.
+  // for the pg-pid reaper path, 'heap-exhausted' for a child whose V8 heap
+  // ran out after it staged rows no earlier attempt had, and
+  // 'heap-exhausted-without-progress' for one whose heap ran out before it
+  // did. 'completed', 'killed' and 'heap-exhausted-without-progress' count
+  // toward the per-job reservation cap; 'heap-exhausted' counts toward its
+  // own, larger cap (the next attempt resumes from what this one staged); the
+  // others don't count.
   completion_reason:
     | 'completed'
     | 'killed'
+    | 'heap-exhausted'
+    | 'heap-exhausted-without-progress'
     | 'interrupted'
     | 'timeout-expired'
     | null;

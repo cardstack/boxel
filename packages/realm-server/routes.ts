@@ -10,9 +10,9 @@ import type {
   LinkShapePolicy,
 } from '@cardstack/runtime-common';
 import { DBRateLimitStore } from '@cardstack/runtime-common';
+import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
-import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session.ts';
 import handleCreateRealmRequest, {
   type CreateRealmDeps,
@@ -47,8 +47,11 @@ import {
   jwtMiddleware,
   grafanaAuthorization,
   operatorAuthorization,
+  sendResponseForUnauthorizedRequest,
 } from './middleware/index.ts';
 import type Koa from 'koa';
+import { runTokenOf } from '@cardstack/runtime-common/run-token';
+import { verifyRunToken } from './lib/run-token.ts';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
 import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
 import handleQueueStatusRequest from './handlers/handle-queue-status.ts';
@@ -62,6 +65,11 @@ import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts'
 import handleInviteCheck from './handlers/handle-invite-check.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
+import {
+  handleAIBatchStatus,
+  handleSubmitAIBatch,
+} from './handlers/handle-ai-batches.ts';
+import { AI_BATCHES_PATH } from './lib/openrouter-batches.ts';
 import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
@@ -614,11 +622,54 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSecureWindowCards(args),
   );
+  // A request carrying an automation run's token skips the session check,
+  // which refuses it on its signature. Its own signature is verified here, in
+  // the session check's place, so a bearer that only looks like a run token
+  // is refused before the handler reads anything. The handler then checks
+  // the run itself.
+  let requestForwardSession = jwtMiddleware(
+    args.realmSecretSeed,
+    args.dbAdapter,
+  );
   router.post(
     REQUEST_FORWARD_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    async (ctxt: Koa.Context, next: Koa.Next) => {
+      let runToken = runTokenOf(ctxt.req.headers['authorization'] ?? null);
+      if (!runToken) {
+        return await requestForwardSession(ctxt, next);
+      }
+      if (!verifyRunToken(runToken, args.realmSecretSeed)) {
+        return await sendResponseForUnauthorizedRequest(
+          ctxt,
+          AuthenticationErrorMessages.TokenInvalid,
+        );
+      }
+      await next();
+    },
     handleRequestForward({
       dbAdapter: args.dbAdapter,
+      definitionLookup: args.definitionLookup,
+      virtualNetwork: args.virtualNetwork,
+      realmSecretSeed: args.realmSecretSeed,
+    }),
+  );
+  // An automation run's calls to OpenRouter's Batch API. They carry a run
+  // token, which the handler checks itself, since an ordinary session is
+  // refused.
+  router.post(
+    AI_BATCHES_PATH,
+    handleSubmitAIBatch({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
+    }),
+  );
+  router.get(
+    `${AI_BATCHES_PATH}/:batchId`,
+    handleAIBatchStatus({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
     }),
   );
   // Batched client performance beacons. The host sends its server session
@@ -920,15 +971,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleUnlistedRealmPathRequest(args),
   );
-  // Matrix tests don't need the GitHub PR integration, and skipping this route
-  // keeps the realm server from loading Octokit's ESM entrypoint during boot.
-  if (process.env.DISABLE_GITHUB_PR_ROUTE !== 'true') {
-    router.post(
-      '/_github-pr',
-      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-      handleGitHubPRRequestLazy(args),
-    );
-  }
   router.get('/_download-realm', handleDownloadRealm(args));
   router.post(
     '/_bot-registration',
@@ -998,21 +1040,4 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_webhooks/:webhookPath', handleWebhookReceiverRequest(args));
 
   return router.routes();
-}
-
-function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
-  let handler:
-    | ((ctxt: Koa.Context, next: Koa.Next) => Promise<void>)
-    | undefined;
-
-  return async function (ctxt: Koa.Context, next: Koa.Next) {
-    if (!handler) {
-      handler = (
-        createRequire(import.meta.filename)(
-          './handlers/handle-github-pr',
-        ) as typeof import('./handlers/handle-github-pr.ts')
-      ).default(args);
-    }
-    return await handler(ctxt, next);
-  };
 }

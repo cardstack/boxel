@@ -60,6 +60,7 @@ import { getInstanceId } from './lib/instance-id.ts';
 import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
 import { checkPricingAtStartup } from './lib/pricing.ts';
 import { meteredChargesFor } from './lib/metered-charge.ts';
+import { buildMintRunToken } from './lib/run-token.ts';
 
 let log = logger('worker');
 checkPricingAtStartup('worker');
@@ -278,6 +279,7 @@ let autoMigrate = migrateDB || undefined;
     queuePublisher: new PgQueuePublisher(dbAdapter),
     prerenderer,
     createPrerenderAuth,
+    mintRunToken: buildMintRunToken(REALM_SECRET_SEED),
     indexJobsOnly,
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),

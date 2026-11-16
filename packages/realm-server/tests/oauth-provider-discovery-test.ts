@@ -480,6 +480,7 @@ module(basename(import.meta.filename), function () {
         authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
         token_endpoint: 'http://127.0.0.1:0/_oauth-provider/token',
         registration_endpoint: 'http://127.0.0.1:0/_oauth-provider/reg',
+        client_id_metadata_document_supported: true,
       });
       assert.strictEqual(
         response.headers['access-control-allow-origin'],

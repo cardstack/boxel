@@ -158,3 +158,14 @@ export async function revokeUserOAuthGrants(
   }
   return ended;
 }
+
+// Deletes a grant no flow finished with. Only such a grant is ever deleted:
+// one that connected an app is ended instead, and kept.
+export async function deleteGrant(
+  dbAdapter: DBAdapter,
+  id: string,
+): Promise<void> {
+  await dbAdapter.execute(`DELETE FROM oauth_provider_grants WHERE id = $1`, {
+    bind: [id],
+  });
+}

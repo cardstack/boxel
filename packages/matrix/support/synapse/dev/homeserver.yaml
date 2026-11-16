@@ -106,6 +106,12 @@ rc_invites:
     per_second: 1000
     burst_count: 1000
 
+# These templates run Synapse only on a local machine or in CI. The test
+# suites log Matrix users in on most tests, and at the default bcrypt cost
+# (12) each password check takes about 0.25 s. Cost 4 takes about 1 ms.
+# A Synapse data directory keeps the cost its users were registered with.
+bcrypt_rounds: 4
+
 rc_login:
   address:
     per_second: 10000

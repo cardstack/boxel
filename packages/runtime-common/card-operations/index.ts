@@ -302,7 +302,10 @@ export {
   type CallApiMode,
   type CallApiReadinessLookup,
   type CallApiRequest,
+  type CallApiRunAdmission,
+  type CallApiRunMeter,
   type CallApiSender,
+  type CallApiSendOptions,
   type CallApiSlotLookup,
 } from './call-api.ts';
 export type {

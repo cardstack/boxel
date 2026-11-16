@@ -8,6 +8,8 @@ scope:
   - packages/realm-server/**/run-overlay/**
   - packages/postgres/migrations/*run-overlay*
   - packages/runtime-common/card-operations/coordinator.ts
+  - packages/runtime-common/realm.ts
+  - packages/runtime-common/automation-runs.ts
   - packages/runtime-common/card-operations/executors.ts
   - packages/host/app/tools/*automation*
 ---
@@ -57,8 +59,8 @@ query. Staged files MUST NOT be indexed.
 
 ### 1.4. One batch at the end, or nothing
 
-When the script finishes, the overlay MUST be committed as one `/_operations`
-batch, all or none. A run that fails, is canceled or times out, and every
+When the script finishes, the overlay MUST be committed as one batch, all or
+none, under one write lock and one index pass. A run that fails, is canceled or times out, and every
 Preview, MUST discard its overlay. The batch MUST NOT contain a `callApi`
 entry. A run MUST commit at most once, also when its job is retried.
 

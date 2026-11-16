@@ -61,6 +61,7 @@ function sentTo(location: string | undefined): URL {
 module(basename(import.meta.filename), function (hooks) {
   let server: Server | undefined;
   let db: PgAdapter;
+  let queue: { publisher: QueuePublisher; runner: QueueRunner };
 
   let templateDatabase = setupTestDatabaseTemplate(hooks, {
     key: import.meta.filename,
@@ -73,6 +74,7 @@ module(basename(import.meta.filename), function (hooks) {
     templateDatabase,
     beforeEach: async (dbAdapter, publisher, runner) => {
       db = dbAdapter;
+      queue = { publisher, runner };
       server = await start({ dbAdapter, publisher, runner });
     },
     afterEach: async () => {
@@ -97,6 +99,32 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixId = `@finish-${randomBytes(6).toString('hex')}:localhost`;
     let { id } = await insertUser(db, matrixId, `cus_${matrixId}`, null);
     return { matrixId, id, session: await secureSessionAuth(db, matrixId) };
+  }
+
+  // Restarts the server on a database where the flow's interaction is gone
+  // the moment a grant is stored: as when the interaction expires, or
+  // another request finishes the flow, while a finish is under way.
+  async function restartLosingInteractionsOnGrant() {
+    await closeServer(server!);
+    server = undefined;
+    let losing = new Proxy(db, {
+      get(target, property) {
+        if (property === 'execute') {
+          return async (...args: Parameters<PgAdapter['execute']>) => {
+            let result = await target.execute(...args);
+            if (/^\s*INSERT INTO oauth_provider_grants\b/.test(args[0])) {
+              await target.execute(
+                `DELETE FROM oauth_provider_objects WHERE kind = 'Interaction'`,
+              );
+            }
+            return result;
+          };
+        }
+        let value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    server = await start({ dbAdapter: losing, ...queue });
   }
 
   // A browser: it keeps the cookies the provider sets.
@@ -543,6 +571,86 @@ module(basename(import.meta.filename), function (hooks) {
         Math.round(shortLived.lifetime),
         NON_RENEWING_GRANT_TTL_SECONDS,
         'a grant that does not renew lasts 60 minutes',
+      );
+    });
+  });
+
+  module('refusals after the ticket', function () {
+    test('a decision recorded for another client finishes nothing', async function (assert) {
+      let ada = await user();
+      let app = browser();
+      let uid = await startOAuthFlow(app, await register());
+      let ticket = await decide(uid, ada);
+      let otherClientId = await register({ clientName: 'Other App' });
+      await db.execute(
+        `UPDATE oauth_provider_objects
+           SET payload = jsonb_set(payload, '{clientId}', to_jsonb($1::text))
+           WHERE kind = 'ConsentDecision'`,
+        { bind: [otherClientId] },
+      );
+
+      let { landed } = await finishAndFollow(app, uid, { ticket });
+      assert.strictEqual(landed, EXPIRED_PAGE);
+      assert.deepEqual(await grants(), [], 'no grant');
+      assert.deepEqual(await codeAccounts(), [], 'no code');
+    });
+
+    test('a decision by a user with no row in users finishes nothing', async function (assert) {
+      let matrixId = `@finish-${randomBytes(6).toString('hex')}:localhost`;
+      let stranger = {
+        matrixId,
+        id: '',
+        session: await secureSessionAuth(db, matrixId),
+      };
+      let app = browser();
+      let uid = await startOAuthFlow(app, await register());
+      let ticket = await decide(uid, stranger);
+
+      let { landed } = await finishAndFollow(app, uid, { ticket });
+      assert.strictEqual(landed, EXPIRED_PAGE);
+      assert.deepEqual(await grants(), [], 'no grant');
+      assert.deepEqual(await codeAccounts(), [], 'no code');
+    });
+
+    test('a flow whose interaction is gone before it finishes leaves no grant', async function (assert) {
+      await restartLosingInteractionsOnGrant();
+      let ada = await user();
+      let app = browser();
+      let uid = await startOAuthFlow(app, await register());
+      let ticket = await decide(uid, ada);
+
+      let finished = await finishRequest(app, uid, { ticket });
+      assert.strictEqual(finished.status, 303);
+      assert.strictEqual(
+        finished.headers.location,
+        EXPIRED_PAGE,
+        'the expired page, not an error',
+      );
+      assert.deepEqual(await grants(), [], 'the grant is deleted');
+      assert.deepEqual(await codeAccounts(), [], 'no code');
+    });
+  });
+
+  module('deleting a user', function () {
+    test("deletes the user's grants", async function (assert) {
+      let ada = await user();
+      let bea = await user();
+      let clientId = await register();
+      for (let who of [ada, bea]) {
+        let app = browser();
+        let uid = await startOAuthFlow(app, clientId);
+        codeFrom(
+          assert,
+          (await finishAndFollow(app, uid, { ticket: await decide(uid, who) }))
+            .landed,
+        );
+      }
+
+      await db.execute(`DELETE FROM users WHERE id = $1`, { bind: [ada.id] });
+      assert.deepEqual(
+        (await grants()).map(({ user_id }) => user_id),
+        [bea.id],
+        "only the other user's grant is left",
       );
     });
   });

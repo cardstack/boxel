@@ -27,6 +27,7 @@ import type Koa from 'koa';
 import type Provider from 'oidc-provider';
 import { errors, type InteractionResults } from 'oidc-provider';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
+import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import {
   dropCookies,
   errorPageURL,
@@ -34,12 +35,11 @@ import {
   navigate,
   sessionCookieNames,
 } from './authorization.ts';
-import { createGrant } from './grants.ts';
+import { createGrant, deleteGrant } from './grants.ts';
 import {
-  consentDecidedAt,
   destroyConsentDecision,
-  findConsentDecision,
   sha256Hex,
+  takeConsentDecision,
   takeConsentTickets,
 } from './objects.ts';
 
@@ -99,10 +99,11 @@ export function finishHandler({
 
     if (ctxt.query.cancel === '1') {
       await destroyConsentDecision(dbAdapter, uid);
+      if (!(await finish(ctxt, provider, { error: 'access_denied' }))) {
+        return refuse('no-interaction');
+      }
       log.info(`flow cancelled: client ${String(clientId)}`);
-      return finish(ctxt, provider, {
-        error: 'access_denied',
-      });
+      return;
     }
 
     if (tickets.length === 0) {
@@ -113,26 +114,25 @@ export function finishHandler({
       // of them is this flow's: that one is spent all the same.
       return refuse('ticket-mismatch');
     }
-    let [decision, decidedAt] = await Promise.all([
-      findConsentDecision(dbAdapter, uid),
-      consentDecidedAt(dbAdapter, uid),
-    ]);
-    if (!decision || !decidedAt) {
+    // The decision is spent with the ticket: whatever happens next, the
+    // flow is never decided again.
+    let decision = await takeConsentDecision(dbAdapter, uid);
+    if (!decision) {
       return refuse('undecided');
     }
     if (decision.clientId !== clientId) {
       return refuse('client-mismatch');
     }
-    await destroyConsentDecision(dbAdapter, uid);
 
     if (!decision.allowed) {
+      if (!(await finish(ctxt, provider, { error: 'access_denied' }))) {
+        return refuse('no-interaction');
+      }
       log.info(`flow finished: denied, client ${decision.clientId}`);
-      return finish(ctxt, provider, {
-        error: 'access_denied',
-      });
+      return;
     }
 
-    let userId = await internalUserId(dbAdapter, decision.user);
+    let userId = (await getUserByMatrixUserId(dbAdapter, decision.user))?.id;
     if (!userId) {
       return refuse('unknown-user');
     }
@@ -141,15 +141,28 @@ export function finishHandler({
       clientId: decision.clientId,
       resources: decision.scopes,
       renewing: decision.renew,
-      consentedAt: decidedAt,
+      consentedAt: decision.decidedAt,
     });
+    // A grant the flow didn't finish with is deleted: no code names it, so
+    // it never connected the app. The interaction can expire, or another
+    // request finish it, between the check above and this one.
+    let finished = false;
+    try {
+      finished = await finish(ctxt, provider, {
+        login: { accountId: userId, remember: false },
+        consent: { grantId },
+      });
+    } finally {
+      if (!finished) {
+        await deleteGrant(dbAdapter, grantId);
+      }
+    }
+    if (!finished) {
+      return refuse('no-interaction');
+    }
     log.info(
       `flow finished: allowed, client ${decision.clientId}, renewing ${decision.renew}`,
     );
-    await finish(ctxt, provider, {
-      login: { accountId: userId, remember: false },
-      consent: { grantId },
-    });
   };
 }
 
@@ -182,16 +195,25 @@ export function resumeHandler({
 }
 
 // Records the result on the interaction the cookie names, and sends the
-// browser to the resume route. The library writes the response.
+// browser to the resume route: the library writes the response. Answers
+// false, having written nothing, when the interaction is gone by then.
 async function finish(
   ctxt: Koa.Context,
   provider: Provider,
   result: InteractionResults,
-) {
+): Promise<boolean> {
+  try {
+    await provider.interactionFinished(ctxt.req, ctxt.res, result, {
+      mergeWithLastSubmission: false,
+    });
+  } catch (error) {
+    if (error instanceof errors.SessionNotFound) {
+      return false;
+    }
+    throw error;
+  }
   ctxt.respond = false;
-  await provider.interactionFinished(ctxt.req, ctxt.res, result, {
-    mergeWithLastSubmission: false,
-  });
+  return true;
 }
 
 // The values of a query parameter, ignoring empty ones.
@@ -199,18 +221,6 @@ function presented(value: string | string[] | undefined): string[] {
   let values =
     value === undefined ? [] : Array.isArray(value) ? value : [value];
   return values.filter((entry) => entry.length > 0);
-}
-
-// The internal ID (`users.id`) of the user a Matrix ID names.
-async function internalUserId(
-  dbAdapter: DBAdapter,
-  matrixUserId: string,
-): Promise<string | undefined> {
-  let [row] = (await dbAdapter.execute(
-    `SELECT id FROM users WHERE matrix_user_id = $1`,
-    { bind: [matrixUserId] },
-  )) as { id: string }[];
-  return row?.id;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

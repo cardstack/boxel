@@ -7,15 +7,31 @@
 // `oauth_provider_objects` (`objects.ts`); access and refresh tokens are in
 // `oauth_provider_tokens` (`tokens.ts`).
 
+import { randomBytes } from 'crypto';
 import Provider, { type Adapter, type AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { endGrant, type GrantEndReason } from './grants.ts';
 import {
+  asRecord,
   AuthorizationCodeAdapter,
   InteractionAdapter,
+  OAuthProviderAdapter,
   SessionAdapter,
 } from './objects.ts';
 import { TokenAdapter } from './tokens.ts';
+
+// The ID dynamic client registration gives a client: 24 random bytes in
+// base64url, so always 32 characters of that alphabet. A client ID metadata
+// document's ID is an `https://` URL, which can never take this form.
+const DYNAMIC_CLIENT_ID = /^[A-Za-z0-9_-]{32}$/;
+
+export function newDynamicClientId(): string {
+  return randomBytes(24).toString('base64url');
+}
+
+export function isDynamicClientId(id: string): boolean {
+  return DYNAMIC_CLIENT_ID.test(id);
+}
 
 export class OAuthProviderStorageError extends Error {
   name = 'OAuthProviderStorageError';
@@ -62,10 +78,16 @@ export function oauthProviderAdapter(
 // is off. A second store under an ID fails rather than replacing the client.
 // It never consumes a client, and finds none by grant, user code or
 // interaction.
-class DynamicClientAdapter implements Adapter {
+//
+// The library looks here for every client ID it is sent before it turns to a
+// metadata document, so an ID registration could not have given (a metadata
+// document's URL, say) is not found without asking the database. No row can
+// then stand in for a metadata document, whatever is in the table.
+class DynamicClientAdapter extends OAuthProviderAdapter {
   #dbAdapter: DBAdapter;
 
   constructor(dbAdapter: DBAdapter) {
+    super('clients');
     this.#dbAdapter = dbAdapter;
   }
 
@@ -78,16 +100,14 @@ class DynamicClientAdapter implements Adapter {
   }
 
   async find(id: string): Promise<AdapterPayload | undefined> {
+    if (!isDynamicClientId(id)) {
+      return undefined;
+    }
     let [row] = (await this.#dbAdapter.execute(
       `SELECT metadata FROM oauth_provider_dynamic_clients WHERE client_id = $1`,
       { bind: [id] },
     )) as { metadata: AdapterPayload | string }[];
-    if (!row) {
-      return undefined;
-    }
-    return typeof row.metadata === 'string'
-      ? (JSON.parse(row.metadata) as AdapterPayload)
-      : row.metadata;
+    return row ? (asRecord(row.metadata) as AdapterPayload) : undefined;
   }
 
   async destroy(id: string): Promise<void> {
@@ -96,28 +116,6 @@ class DynamicClientAdapter implements Adapter {
       { bind: [id] },
     );
   }
-
-  async findByUserCode(): Promise<never> {
-    throw unused('findByUserCode');
-  }
-
-  async findByUid(): Promise<never> {
-    throw unused('findByUid');
-  }
-
-  async consume(): Promise<never> {
-    throw unused('consume');
-  }
-
-  async revokeByGrantId(): Promise<never> {
-    throw unused('revokeByGrantId');
-  }
-}
-
-function unused(method: string) {
-  return new OAuthProviderStorageError(
-    `the OAuth provider's clients have no ${method}`,
-  );
 }
 
 interface GrantRow {
@@ -159,10 +157,11 @@ const REVOKED_ON: Record<string, GrantEndReason> = {
 // When the library revokes a grant, after a code or refresh token is used
 // again, it is ended, not deleted: its row stays, with why it ended.
 
-class GrantAdapter implements Adapter {
+class GrantAdapter extends OAuthProviderAdapter {
   #dbAdapter: DBAdapter;
 
   constructor(dbAdapter: DBAdapter) {
+    super('grants');
     this.#dbAdapter = dbAdapter;
   }
 
@@ -187,11 +186,7 @@ class GrantAdapter implements Adapter {
       await endGrant(this.#dbAdapter, id, 'sessions-revoked');
       return undefined;
     }
-    let resources = (
-      typeof row.resources === 'string'
-        ? JSON.parse(row.resources)
-        : row.resources
-    ) as Record<string, string[]>;
+    let resources = asRecord(row.resources) as Record<string, string[]>;
     return {
       jti: id,
       kind: 'Grant',
@@ -224,26 +219,4 @@ class GrantAdapter implements Adapter {
     }
     await endGrant(this.#dbAdapter, id, reason);
   }
-
-  async findByUserCode(): Promise<never> {
-    throw unusedGrant('findByUserCode');
-  }
-
-  async findByUid(): Promise<never> {
-    throw unusedGrant('findByUid');
-  }
-
-  async consume(): Promise<never> {
-    throw unusedGrant('consume');
-  }
-
-  async revokeByGrantId(): Promise<never> {
-    throw unusedGrant('revokeByGrantId');
-  }
-}
-
-function unusedGrant(method: string) {
-  return new OAuthProviderStorageError(
-    `the OAuth provider's grants have no ${method}`,
-  );
 }

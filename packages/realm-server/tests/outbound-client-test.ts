@@ -348,6 +348,26 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(echoed.body, '');
     });
 
+    test('with noRedirects, a redirect is the response, even on the same origin', async function (assert) {
+      let before = vendor.requests.length;
+      let response = await outboundFetch({
+        url: `${vendor.url}/redirect?to=/echo`,
+        method: 'GET',
+        headers: {},
+        sizePath: 'call-api',
+        destinationSetBy: 'user',
+        noRedirects: true,
+      });
+      await response.body?.cancel();
+      assert.strictEqual(response.status, 302);
+      assert.strictEqual(response.headers.get('location'), '/echo');
+      assert.strictEqual(
+        vendor.requests.length - before,
+        1,
+        'the redirect is not followed',
+      );
+    });
+
     test('stops after too many redirects', async function (assert) {
       configureOutbound({ maxRedirects: 2 });
       let error = await refusal(

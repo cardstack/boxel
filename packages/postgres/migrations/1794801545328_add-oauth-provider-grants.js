@@ -17,6 +17,9 @@
 // `ended_reason`), so the lookup and telemetry can still say who ended it.
 // `last_used_at` is when a token of the grant was last accepted.
 //
+// A user's grants are deleted with the user: a grant names nobody else, and
+// it must never block deleting a user.
+//
 // The read-only role used by dashboards and read-only database access may read
 // the table: it holds no secret, and it is what explains a user's connections.
 // `readonly_role` exists only where it was provisioned (staging and
@@ -29,7 +32,7 @@ exports.up = (pgm) => {
   pgm.sql(`
     CREATE TABLE IF NOT EXISTS oauth_provider_grants (
       id varchar PRIMARY KEY,
-      user_id uuid NOT NULL REFERENCES users(id),
+      user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       client_id varchar NOT NULL,
       resources jsonb NOT NULL,
       renewing boolean NOT NULL,

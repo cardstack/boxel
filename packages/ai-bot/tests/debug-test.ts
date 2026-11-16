@@ -192,6 +192,11 @@ module('handleDebugCommands - help', (hooks) => {
     assert.true(body.includes('boxel-debug:feature:enable:'));
   });
 
+  test('a name inherited from Object.prototype is not a feature', async (assert) => {
+    let body = await reply('boxel-debug:feature:enable:constructor');
+    assert.true(body.includes('There is no feature named `constructor`.'));
+  });
+
   test('enabling an unknown feature says so', async (assert) => {
     let body = await reply('boxel-debug:feature:enable:no-such-feature');
     assert.true(body.includes('There is no feature named `no-such-feature`.'));

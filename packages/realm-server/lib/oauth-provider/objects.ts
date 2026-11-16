@@ -120,7 +120,7 @@ async function destroyObject(
   );
 }
 
-function asRecord(stored: unknown): Record<string, unknown> {
+export function asRecord(stored: unknown): Record<string, unknown> {
   return (typeof stored === 'string' ? JSON.parse(stored) : stored) as Record<
     string,
     unknown
@@ -132,16 +132,58 @@ function jsonEscaped(value: string): string {
   return JSON.stringify(value).slice(1, -1);
 }
 
+// The part of the library's adapter interface it uses for none of Boxel's
+// kinds: finding by user code (the device flow is off), by UID, consuming and
+// revoking by grant. Each throws, naming the kind.
+export abstract class OAuthProviderAdapter implements Adapter {
+  readonly #kind: string;
+
+  constructor(kind: string) {
+    this.#kind = kind;
+  }
+
+  abstract upsert(
+    id: string,
+    payload: AdapterPayload,
+    expiresIn: number,
+  ): Promise<void>;
+  abstract find(id: string): Promise<AdapterPayload | undefined>;
+  abstract destroy(id: string): Promise<void>;
+
+  async findByUserCode(): Promise<never> {
+    throw this.unused('findByUserCode');
+  }
+
+  async findByUid(): Promise<never> {
+    throw this.unused('findByUid');
+  }
+
+  async consume(_id: string): Promise<void> {
+    throw this.unused('consume');
+  }
+
+  async revokeByGrantId(_grantId: string): Promise<void> {
+    throw this.unused('revokeByGrantId');
+  }
+
+  protected unused(method: string): OAuthProviderObjectError {
+    return new OAuthProviderObjectError(
+      `the OAuth provider's ${this.#kind} has no ${method}`,
+    );
+  }
+}
+
 // The library's adapter for a kind of object it stores, finds and deletes by
 // the object's own value, which is a bearer secret. The value is the row's
 // key, hashed, and the library's copy of it in the payload (`jti`) is left
 // out and put back when the row is found. The library looks up nothing else
 // for these kinds, so every other lookup throws.
-class BearerKeyedAdapter implements Adapter {
+class BearerKeyedAdapter extends OAuthProviderAdapter {
   #dbAdapter: DBAdapter;
   #kind: string;
 
   constructor(dbAdapter: DBAdapter, kind: string) {
+    super(kind);
     this.#dbAdapter = dbAdapter;
     this.#kind = kind;
   }
@@ -182,28 +224,6 @@ class BearerKeyedAdapter implements Adapter {
 
   async destroy(id: string): Promise<void> {
     await destroyObject(this.#dbAdapter, this.#kind, id);
-  }
-
-  async findByUserCode(): Promise<never> {
-    throw this.#unused('findByUserCode');
-  }
-
-  async findByUid(): Promise<never> {
-    throw this.#unused('findByUid');
-  }
-
-  async consume(_id: string): Promise<void> {
-    throw this.#unused('consume');
-  }
-
-  async revokeByGrantId(_grantId: string): Promise<void> {
-    throw this.#unused('revokeByGrantId');
-  }
-
-  #unused(method: string) {
-    return new OAuthProviderObjectError(
-      `the OAuth provider's ${this.#kind} has no ${method}`,
-    );
   }
 }
 
@@ -475,18 +495,26 @@ export async function findConsentDecision(
     | undefined;
 }
 
-// When a flow was decided: when its decision was first stored, which a
+// Finds a flow's decision and deletes it, so only one request can finish the
+// flow with it. `decidedAt` is when the decision was first stored, which a
 // second decision never moves.
-export async function consentDecidedAt(
+export async function takeConsentDecision(
   dbAdapter: DBAdapter,
   interactionId: string,
-): Promise<Date | undefined> {
+): Promise<(ConsentDecisionRecord & { decidedAt: Date }) | undefined> {
   let [row] = (await dbAdapter.execute(
-    `SELECT created_at FROM oauth_provider_objects
-       WHERE kind = $1 AND id_hash = decode($2, 'hex') AND expires_at > now()`,
+    `DELETE FROM oauth_provider_objects
+       WHERE kind = $1 AND id_hash = decode($2, 'hex')
+       RETURNING payload, created_at, expires_at > now() AS current`,
     { bind: [CONSENT_DECISION_KIND, sha256Hex(interactionId)] },
-  )) as { created_at: string | Date }[];
-  return row ? new Date(row.created_at) : undefined;
+  )) as { payload: unknown; created_at: string | Date; current: boolean }[];
+  if (!row?.current) {
+    return undefined;
+  }
+  return {
+    ...(asRecord(row.payload) as unknown as ConsentDecisionRecord),
+    decidedAt: new Date(row.created_at),
+  };
 }
 
 // Finds a ticket and deletes it, so it is spent on its first presentation.

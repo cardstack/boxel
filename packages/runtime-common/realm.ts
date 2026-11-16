@@ -114,7 +114,7 @@ function cardJsonRoute(method: string): PolicyRoute {
   return { transport: 'card-json', route: method.toUpperCase() };
 }
 
-function byteRoute(route: 'source' | 'module'): PolicyRoute {
+function byteRoute(route: 'source' | 'module' | '_atomic'): PolicyRoute {
   return { transport: 'byte-route', route };
 }
 import {
@@ -200,11 +200,39 @@ import {
 } from './diagnostic-session.ts';
 import {
   carriesRunToken,
+  runTokenOf,
   runTokenContext,
   runTokenSecret,
   type RunTokenClaim,
 } from './run-token.ts';
-import { automationRunForCall } from './automation-runs.ts';
+import { automationRef } from './automation-declaration.ts';
+import {
+  addAutomationRunCounts,
+  automationRunForCall,
+  getAutomationRun,
+  recordAutomationRunCommitted,
+} from './automation-runs.ts';
+import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
+import {
+  RUN_COMMIT_PATH,
+  claimRunOverlayCommit,
+  discardRunOverlay,
+  releaseRunOverlayCommitClaim,
+  readRunOverlayFile,
+  runOverlayFiles,
+  runOverlayPathsUnder,
+  stageRunOverlayFiles,
+  type RunOverlayKey,
+} from './run-overlay.ts';
+import { automationRunCallApiMeter } from './automation-run-limits.ts';
+import {
+  RUN_LOG_MAX_REQUEST_BYTES,
+  RUN_LOG_PATH,
+  appendRunLog,
+  logRunPlatformLine,
+  scriptRunLogLines,
+} from './automation-run-log.ts';
+import type { CallApiRunMeter } from './card-operations/call-api.ts';
 import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
@@ -241,6 +269,7 @@ import {
   methodNotAllowed,
   badRequest,
   CardError,
+  isCardError,
   responseWithError,
   formattedError,
   stringifyErrorForLog,
@@ -330,6 +359,7 @@ import type { LinkStrategy } from '@cardstack/base/operations';
 import {
   actingUserResolver,
   dischargePendingDecision,
+  loadPolicy,
   nonGrantableAnswerSources,
   notPermitted,
   pendingWriteFor,
@@ -365,6 +395,7 @@ import {
 import type {
   CoarseDeclined,
   OperationCore,
+  OperationIndexQueryEngine,
   OperationScope,
   OperationStoredFile,
   OperationStoredFileMeta,
@@ -452,7 +483,11 @@ import type {
   BatchEntryResult,
   CommitBatchOptions,
 } from './card-operations/coordinator.ts';
-import type { BatchEntry } from './card-operations/executors.ts';
+import type {
+  BatchEntry,
+  SourceBytes,
+  StagedContent,
+} from './card-operations/executors.ts';
 import type {
   DeferredPrerenderHtml,
   FromScratchResult,
@@ -569,6 +604,7 @@ import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import type { SearchResultDoc } from './realm-index-query-engine.ts';
+import type { InstanceOrError } from './index-query-engine.ts';
 import {
   REALM_IGNORE_FILES,
   RealmIndexUpdater,
@@ -584,7 +620,11 @@ import {
   validateByteLength,
   validateWriteSize,
 } from './write-size-validation.ts';
-import { isSplicedSource, type SplicedSource } from './spliced-content.ts';
+import {
+  isSplicedSource,
+  streamSpliced,
+  type SplicedSource,
+} from './spliced-content.ts';
 import {
   POLICY_OPENS_SHARES_CODE,
   policyAuditOptionsFor,
@@ -1224,10 +1264,13 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // policy gate: the `/_operations` envelope, which resolves every entry through
 // the gate, the card+json read, whose operation runs through it, the search,
 // which hands it to the policy's query lane, the capability check, which asks
-// the gate what it would decide, and the card+json writes, each of which is
+// the gate what it would decide, the card+json writes, each of which is
 // resolved through the gate as the `create`, `update` or `delete` it carries
-// out. A route consumes the outcome only if every operation it resolves is
-// resolved with the ACL's refusal on it.
+// out, and the verbatim writes: the card+source write, its octet-stream
+// spelling, the card+source removal and `/_atomic`, each write of which is
+// resolved through the gate as the operation it amounts to on its path (see
+// `#verbatimOperation`). A route consumes the outcome only if every operation
+// it resolves is resolved with the ACL's refusal on it.
 //
 // The realm's `_info` consumes it too, and resolves no operation: it answers
 // any signed-in caller the realm hands to its policy (see
@@ -1247,19 +1290,6 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // declared, or serves code and the file tree (`COARSE_READ_ONLY`), and each
 // is one no grant can reach rather than one left out:
 //
-// - The card+source write, its octet-stream spelling and the card+source
-//   removal put or remove whatever bytes they are sent at whatever path they
-//   name: a module's source, a data file, or a card's stored `.json`. The gate
-//   grants a data file nothing but the read of its bytes, module source is
-//   code, which only a caller the ACL allows reads or writes, and a verbatim
-//   replacement of a card's document can change the type its grants were
-//   matched on. The operations envelope refuses the same replacement to every
-//   caller for that reason. These are the write half of the card+source read,
-//   which a grant reaches only to read a data file's or a card's stored bytes.
-// - `/_atomic` is a batch of the same verbatim writes: whole-document
-//   replacements, and modules alongside cards. The writes a grant can reach
-//   are the ones the operations envelope carries, all or nothing, as `/_atomic`
-//   does.
 // - The realm's administration routes (`_reindex`, `_invalidate`,
 //   `_permissions` and the rest) do not act on a card at all.
 // - The card+html, file-meta+html, markdown and file-meta reads serve what the
@@ -1304,8 +1334,10 @@ const ACL_ONLY = { aclOnly: true } as const;
 // `RouteOptions.appliesArchivedSeal`): the card+json read once the gate admits
 // the read, the search once a grant would answer it with a row, the operations
 // envelope once every entry has resolved, the capability check once it would
-// admit a pair, and each card+json write once the gate has decided it and
-// before its batch runs (see `#sealAdmittedCardWrite`). The realm info is
+// admit a pair, each card+json write once the gate has decided it and before
+// its batch runs (see `#sealAdmittedCardWrite`), and each verbatim write route
+// once the gate has decided every write it makes (see
+// `VerbatimAdmission.sealed`). The realm info is
 // one too, and never runs anything a grant admits, so it never applies the
 // seal. A consumer marked only `CONSUMES_COARSE_OUTCOME` seals a caller as
 // soon as it admits them. The card+json `HEAD` is one, and never admits anyone: the ACL lets
@@ -1362,6 +1394,20 @@ function sameJSON(a: string, b: string): boolean {
   } catch {
     return false;
   }
+}
+
+// Whether two types a card's document adopts are one type. A type that does
+// not resolve is the same as nothing, so it never matches.
+function sameCodeRef(
+  a: ResolvedCodeRef | 'unresolved',
+  b: ResolvedCodeRef | 'unresolved',
+): boolean {
+  return (
+    a !== 'unresolved' &&
+    b !== 'unresolved' &&
+    a.name === b.name &&
+    trimExecutableExtension(a.module) === trimExecutableExtension(b.module)
+  );
 }
 
 function namesGrantableBytes(localPath: LocalPath): boolean {
@@ -2880,6 +2926,71 @@ export interface MatrixConfig {
   username: string;
 }
 
+// Why a run's commit was refused before anything was claimed, with the
+// status and code the commit route answers with.
+class RunCommitRefusal extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly title: string;
+  readonly detail: string;
+  constructor(status: number, code: string, title: string, detail: string) {
+    super(detail);
+    this.status = status;
+    this.code = code;
+    this.title = title;
+    this.detail = detail;
+  }
+}
+
+// A request's body, read no further than `limit` bytes: undefined when it
+// declares or turns out to hold more, so an oversized body is refused without
+// being buffered.
+async function readBodyWithin(
+  request: Request,
+  limit: number,
+): Promise<Uint8Array<ArrayBuffer> | undefined> {
+  let declared = request.headers.get('content-length');
+  if (declared !== null && Number(declared) > limit) {
+    return undefined;
+  }
+  if (!request.body) {
+    return new Uint8Array(0);
+  }
+  let reader = request.body.getReader();
+  let chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    let { done, value } = await reader.read();
+    if (done || !value) {
+      break;
+    }
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel();
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  let bytes = new Uint8Array(total);
+  let offset = 0;
+  for (let chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+// `bytes` as text, when they are UTF-8; otherwise undefined.
+function utf8OrUndefined(bytes: Uint8Array): string | undefined {
+  try {
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
+      bytes,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
 // A run-token call `Realm.handleAutomation` admitted (see
 // `RequestContext.automationRun`).
 export interface AutomationRunCall {
@@ -2891,6 +3002,8 @@ export interface AutomationRunCall {
   actsAs: string;
   // Set in a realm the run may only read: one its cards' modules load from.
   readOnly: boolean;
+  // The most files the run may write.
+  writesCap: number;
 }
 
 export type RequestContext = {
@@ -3016,6 +3129,9 @@ interface RequestDispatch {
   // anonymous rate limit (see `AnonymousDispatch`). A dispatch without it
   // never admits a caller who isn't signed in.
   anonymous?: AnonymousDispatch;
+  // The dispatch takes an automation run's write into the run's overlay (see
+  // `RouteOptions.takesRunWrites`).
+  takesRunWrites?: boolean;
   handle: () => Promise<ResponseWithNodeStream>;
 }
 
@@ -3093,6 +3209,53 @@ const COARSE_CARD_WRITE: CardWriteAdmission = {
   sealed: async (seal) => seal,
 };
 
+// One path a verbatim write puts bytes at or removes: the card+source write,
+// its octet-stream spelling, the card+source removal, and each entry of
+// `/_atomic`.
+interface VerbatimWrite {
+  path: LocalPath;
+  // The text the write puts at a `.json` path, which says whether it is a
+  // card's document and, if so, its type. Absent for every other path, whose
+  // bytes the gate never reads, and for a removal.
+  text?: string;
+  removal?: true;
+}
+
+// What one verbatim write amounts to as an operation: a `create`, `update` or
+// `delete` of the card whose document the path holds or will hold, or the
+// `update` of the file stored there.
+type VerbatimOperation =
+  | {
+      kind: 'card';
+      base: 'create' | 'update' | 'delete';
+      cardURL: URL;
+      target: OperationTarget;
+    }
+  | { kind: 'file'; base: 'update'; target: OperationTarget };
+
+// What the policy gate's decisions on a request's verbatim writes hand the
+// write.
+interface VerbatimAdmission {
+  // Judges each write again from the bytes stored at its path, under the
+  // write lock that covers the path, and refuses the request by throwing where
+  // a write is not the operation the gate judged it as, or where the lock
+  // refuses what the gate left to it.
+  locked(): Promise<void>;
+  // A refusal the write made, in the words the caller may be told it in.
+  seenBy(err: unknown): Promise<unknown>;
+  // What an archived realm answers the request with where it would run: its
+  // seal where the lock would admit every write, and the lock's refusal where
+  // it would not (see `#sealAdmittedCardWrite`).
+  sealed(seal: ArchivedRealmError): Promise<unknown>;
+}
+
+// The admission of verbatim writes by a caller the realm ACL allowed.
+const COARSE_VERBATIM_WRITE: VerbatimAdmission = {
+  locked: async () => {},
+  seenBy: async (err) => err,
+  sealed: async (seal) => seal,
+};
+
 // A realm a server serves, found without being mounted. Finding it answers
 // which realm a URL is in, so a caller can be judged against that realm's
 // permissions before the server pays to mount it.
@@ -3113,6 +3276,7 @@ export class Realm {
   #realmIndexQueryEngine: RealmIndexQueryEngine;
   #policyCache: RealmPolicyCache;
   #policyTypeKey: string | undefined;
+  #automationTypeKey: string | undefined;
   #operationCore: OperationCore | undefined;
   #batchCore: BatchCore | undefined;
   #adapter: RealmAdapter;
@@ -3149,6 +3313,7 @@ export class Realm {
   #skipBootIndex = false;
   #fromScratchIndexPriority = systemInitiatedPriority;
   #definitionLookup: DefinitionLookup;
+  #callApiRunMeters = new WeakMap<RequestContext, CallApiRunMeter>();
   // The definition lookup an operation reads through: a cache miss renders at
   // user priority, ahead of background re-index work, and a render that does
   // not finish in time refuses with a retryable 503 rather than holding the
@@ -3730,13 +3895,35 @@ export class Realm {
         this.readinessCheck.bind(this),
         OPERATIONAL_ENDPOINT,
       )
-      // Answered on the realm ACL alone: its writes are verbatim replacements,
-      // which no policy grant reaches (see `CONSUMES_COARSE_OUTCOME`).
+      // Each write in the batch is judged by the policy gate as the operation
+      // it amounts to, for a caller the realm ACL declined (see
+      // `#admitVerbatimWrites`). An automation run's atomic write is staged in
+      // its overlay (see `#stageRunAtomic`).
       .post(
         '/_atomic',
         SupportedMimeType.JSONAPI,
         this.handleAtomicOperations.bind(this),
-        ACL_ONLY,
+        { ...APPLIES_ARCHIVED_SEAL, takesRunWrites: true },
+      )
+      // An automation run's commit of its overlay, which is where a run's
+      // staged writes reach the realm. It is answered on the realm ACL alone:
+      // a run's identity is a direct writer of its realm when its writes
+      // commit, and a policy grant makes no one a run's identity
+      // (ADR 026 §1.5).
+      .post(
+        RUN_COMMIT_PATH,
+        SupportedMimeType.JSONAPI,
+        this.commitRunOverlay.bind(this),
+        { ...ACL_ONLY, takesRunWrites: true },
+      )
+      // An automation run's script lines: its console, activity, milestones
+      // and uncaught error, which the run's tab sends as they happen. They go
+      // to the run's log, never the realm.
+      .post(
+        RUN_LOG_PATH,
+        SupportedMimeType.JSONAPI,
+        this.appendScriptRunLog.bind(this),
+        { ...ACL_ONLY, takesRunWrites: true },
       )
       // The operations envelope, under the media type that carries its
       // extension and under the plain JSON:API one it extends. Both reach the
@@ -3750,11 +3937,20 @@ export class Realm {
       // are what separates a batch that may write from one that may not:
       // `POST` needs realm write, `QUERY` needs realm read, and a `QUERY`
       // carrying a write is refused by the handler.
+      //
+      // An automation run sends its `callApi` entries and its write
+      // operations here as a `POST`, so the route takes a run's writes: the
+      // handler stages a run's batch in its overlay, and refuses one that
+      // removes a card, which the overlay can't hold.
       .post(
         '/_operations',
         SupportedMimeType.BoxelOperations,
         this.handleOperations.bind(this),
-        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_OPERATIONS },
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_OPERATIONS,
+          takesRunWrites: true,
+        },
       )
       .query(
         '/_operations',
@@ -3766,7 +3962,11 @@ export class Realm {
         '/_operations',
         SupportedMimeType.JSONAPI,
         this.handleOperations.bind(this),
-        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_OPERATIONS },
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_OPERATIONS,
+          takesRunWrites: true,
+        },
       )
       .query(
         '/_operations',
@@ -3855,14 +4055,14 @@ export class Realm {
         { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_CARD_DELETE },
       )
       // The card+source write, its octet-stream spelling and the card+source
-      // removal are answered on the realm ACL alone, as the card+source read
-      // is: they replace or remove stored bytes verbatim, which no policy grant
-      // reaches (see `CONSUMES_COARSE_OUTCOME`).
+      // removal replace or remove stored bytes verbatim. Each is judged by the
+      // policy gate as the operation it amounts to on the path it names, for
+      // a caller the realm ACL declined (see `#admitVerbatimWrites`).
       .post(
         '/.*',
         SupportedMimeType.CardSource,
         this.upsertCardSource.bind(this),
-        ACL_ONLY,
+        { ...APPLIES_ARCHIVED_SEAL, takesRunWrites: true },
       )
       // The octet-stream spelling of the card+source write: the same one-file
       // `update` operation, sent as bytes rather than text.
@@ -3870,7 +4070,7 @@ export class Realm {
         '/.*',
         SupportedMimeType.OctetStream,
         this.upsertBinaryFile.bind(this),
-        ACL_ONLY,
+        { ...APPLIES_ARCHIVED_SEAL, takesRunWrites: true },
       )
       .get(
         '/.*',
@@ -3894,7 +4094,7 @@ export class Realm {
         '/.+',
         SupportedMimeType.CardSource,
         this.removeCardSource.bind(this),
-        ACL_ONLY,
+        APPLIES_ARCHIVED_SEAL,
       )
       .get(
         '.*/',
@@ -5645,27 +5845,79 @@ export class Realm {
   // as the realm resolves it. A document naming no type, or one that doesn't
   // resolve, isn't one.
   async #writesPolicyCard(path: LocalPath, content: string): Promise<boolean> {
-    if (!content.includes('adoptsFrom')) {
-      return false;
-    }
-    let adoptsFrom: unknown;
+    let types = await this.#adoptedTypes(path, content);
+    return !!types && this.#isTypeOrNone(types, 'policy');
+  }
+
+  // Whether an adoption chain is a policy card's or an automation card's,
+  // and false in a deployment that maps no catalog for the type to come from:
+  // no realm there can hold one.
+  #isTypeOrNone(types: string[], kind: 'policy' | 'automation'): boolean {
     try {
-      adoptsFrom = JSON.parse(content)?.data?.meta?.adoptsFrom;
+      return kind === 'policy'
+        ? this.#isPolicyCard(types)
+        : this.#isAutomationCard(types);
     } catch {
       return false;
     }
+  }
+
+  // The adoption chain of the card `content` would be at `path`, as the index
+  // spells one: the type its `adoptsFrom` names, resolved against the card as
+  // the realm resolves it, and every type that type descends from. Undefined
+  // for a document naming no type, or one that doesn't resolve. A type with
+  // no definition the realm can look up is known by its own name alone.
+  async #adoptedTypes(
+    path: LocalPath,
+    content: string,
+  ): Promise<string[] | undefined> {
+    let codeRef = this.#adoptedCodeRef(path, content);
+    if (!codeRef) {
+      return undefined;
+    }
+    let own = internalKeyFor(codeRef, undefined, this.#virtualNetwork);
+    let types: string[];
+    try {
+      types = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
+        .types;
+    } catch {
+      // A type with no definition is known only by its own name.
+      return [own];
+    }
+    // The definition's chain starts with the type itself, which the index
+    // records once.
+    return types.includes(own) ? types : [own, ...types];
+  }
+
+  // What the document `content` holds at `data.meta.adoptsFrom`, as a parse
+  // reads it: undefined for text that isn't JSON or holds nothing there. Read
+  // from the parsed document, never by looking for the key in the text, since
+  // a JSON key can be spelled with escapes.
+  #adoptsFromOf(content: string): unknown {
+    try {
+      return JSON.parse(content)?.data?.meta?.adoptsFrom;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // The type the card `content` would be at `path` names in its `adoptsFrom`,
+  // resolved against the card as the realm resolves it. Undefined for a
+  // document naming no type, or one that doesn't resolve.
+  #adoptedCodeRef(
+    path: LocalPath,
+    content: string,
+  ): ResolvedCodeRef | undefined {
+    let adoptsFrom = this.#adoptsFromOf(content);
     if (
       !adoptsFrom ||
       typeof adoptsFrom !== 'object' ||
       typeof (adoptsFrom as { module?: unknown }).module !== 'string' ||
       typeof (adoptsFrom as { name?: unknown }).name !== 'string'
     ) {
-      return false;
+      return undefined;
     }
     let { module, name } = adoptsFrom as { module: string; name: string };
-    // A type that doesn't resolve, or a deployment that maps no catalog for
-    // RealmPolicy to come from, names no policy card: no realm there can be
-    // governed by one.
     try {
       let codeRef = codeRefWithAbsoluteIdentifier(
         { module: rri(module), name },
@@ -5673,22 +5925,21 @@ export class Realm {
         undefined,
         this.#virtualNetwork,
       );
-      if (!isResolvedCodeRef(codeRef)) {
-        return false;
-      }
-      if (
-        this.#isPolicyCard([
-          internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-        ])
-      ) {
-        return true;
-      }
-      return this.#isPolicyCard(
-        (await this.#definitionLookup.lookupDefinitionEntry(codeRef)).types,
-      );
+      return isResolvedCodeRef(codeRef) ? codeRef : undefined;
     } catch {
-      return false;
+      return undefined;
     }
+  }
+
+  // Whether an adoption chain, as the index records one, is an automation
+  // card's: the catalog's Automation, or a type descending from it.
+  #isAutomationCard(types: string[]): boolean {
+    this.#automationTypeKey ??= internalKeyFor(
+      automationRef,
+      undefined,
+      this.#virtualNetwork,
+    );
+    return types.includes(this.#automationTypeKey);
   }
 
   // A notice that can't be recorded costs the write nothing: it has landed.
@@ -6953,6 +7204,58 @@ export class Realm {
       : href;
   }
 
+  // The writes an atomic request makes, as the policy gate judges them: the
+  // path each entry names, and for a `.json` the text it writes there, built
+  // as the write loop builds it. An entry naming no path in this realm is
+  // left out, and the precheck refuses the request for it before anything is
+  // written.
+  #atomicVerbatimWrites(operations: AtomicOperation[]): VerbatimWrite[] {
+    let writes: VerbatimWrite[] = [];
+    for (let operation of filterAtomicOperations(operations)) {
+      let path: LocalPath;
+      try {
+        path = this.paths.local(
+          new URL(this.#resolveAtomicHref(operation.href), this.paths.url),
+        );
+      } catch {
+        continue;
+      }
+      let resource = operation.data;
+      let text = isModuleResource(resource)
+        ? (resource.attributes?.content ?? '')
+        : isCardResource(resource)
+          ? JSON.stringify({ data: resource }, null, 2)
+          : undefined;
+      writes.push({
+        path,
+        ...(path.endsWith('.json') && text !== undefined ? { text } : {}),
+      });
+    }
+    return writes;
+  }
+
+  // A refusal of an atomic request, in the JSON:API errors document the route
+  // answers every refusal with, as a caller the realm ACL declined may be
+  // told it (see `#refusalSeenBy`). Anything that is not an operation's
+  // refusal, the archived realm's seal among them, is the router's to answer.
+  #atomicRefusal(err: unknown, requestContext: RequestContext): Response {
+    if (!isOperationFailure(err)) {
+      throw err;
+    }
+    let { status, title, detail } = this.#refusalSeenBy(
+      err.error,
+      requestContext,
+    );
+    return createResponse({
+      body: JSON.stringify({ errors: [{ status, title, detail }] }),
+      init: {
+        status,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
   // The files an atomic request will write, for the locks it takes before its
   // precheck reads any of them. Path math over what each operation names, by
   // the same resolution the write loop applies, so the set cannot disagree
@@ -7124,7 +7427,31 @@ export class Realm {
       });
     }
     let atomicOperations = json['atomic:operations'] as AtomicOperation[];
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      return (
+        this.#runWriteWithoutDirectWrite(requestContext) ??
+        (await this.#stageRunAtomic(requestContext, run, atomicOperations))
+      );
+    }
     let atomicWritePaths = this.#atomicWritePaths(atomicOperations);
+    // For a caller the realm ACL declined, each write is judged by the policy
+    // gate before anything is locked, all or nothing, and judged again under
+    // the locks before anything else is screened.
+    let admission = COARSE_VERBATIM_WRITE;
+    try {
+      admission = await this.#admitVerbatimWrites(
+        request,
+        requestContext,
+        () => this.#atomicVerbatimWrites(atomicOperations),
+        byteRoute('_atomic'),
+      );
+      if (requestContext.archivedSeal) {
+        throw await admission.sealed(requestContext.archivedSeal);
+      }
+    } catch (err: unknown) {
+      return this.#atomicRefusal(await admission.seenBy(err), requestContext);
+    }
 
     // Take the advisory lock on every file the operations name, from the
     // precheck through the write. Without this, two replicas could both pass
@@ -7152,6 +7479,11 @@ export class Realm {
     let operations = filterAtomicOperations(atomicOperations);
     let files = new Map<LocalPath, string>();
     let screen = async (): Promise<Response | undefined> => {
+      try {
+        await admission.locked();
+      } catch (err: unknown) {
+        return this.#atomicRefusal(await admission.seenBy(err), requestContext);
+      }
       let atomicCheckErrors =
         await this.checkBeforeAtomicWrite(atomicOperations);
       if (atomicCheckErrors.length > 0) {
@@ -7438,7 +7770,16 @@ export class Realm {
     // target's stored type.
     let caller = this.#callerOf(request, requestContext);
     let coarseDeclined = this.#coarseDeclined(requestContext);
-    let scope = newOperationScope(this.operationCore, {
+    // A run's batch resolves, is gated and reads against the realm as the run
+    // sees it, with the cards it staged as it staged them (see
+    // `#runOperationCore`), and its writes stage in its overlay (see
+    // `#runBatchCore`).
+    let run = this.#runOverlay(requestContext);
+    let core = run ? this.#runOperationCore(run) : this.operationCore;
+    let batchCore = run
+      ? this.#runBatchCore(requestContext, run)
+      : this.batchCore;
+    let scope = newOperationScope(core, {
       caller: scopeCallerFor(caller.actor),
       coarseDeclined,
       route: ENVELOPE_ROUTE,
@@ -7458,12 +7799,7 @@ export class Realm {
     // the realm ACL would not let read the realm, it is an ad-hoc search, and
     // it finds only the cards a `query` grant on its type admits. Each card it
     // finds is then gated for the entry's own operation like a named one.
-    let tree = await resolveQueryTargets(
-      this.operationCore,
-      scope,
-      parsed,
-      envelopeOptions,
-    );
+    let tree = await resolveQueryTargets(core, scope, parsed, envelopeOptions);
     let entries = invocationsIn(tree);
     // Settled rather than raced, so the entry a refusal names is the earliest
     // one the caller got wrong rather than whichever index read came back
@@ -7478,7 +7814,7 @@ export class Realm {
     // batch would put that many point reads on the pool at once and reach the
     // staging limiter only after the pool was already spent.
     let outcomes = await settledWithin(STAGING_WIDTH, entries, (entry) =>
-      this.#resolveEnvelopeEntry(entry, scope),
+      this.#resolveEnvelopeEntry(core, entry, scope),
     );
     let fulfilled = (outcome: (typeof outcomes)[number]) =>
       (outcome as PromiseFulfilledResult<ResolvedEnvelopeEntry>).value;
@@ -7493,7 +7829,7 @@ export class Realm {
       // Nothing has reached the write lock, so it has decided nothing.
       throw await this.#disclosableFailure(
         (outcomes[refusedAt] as PromiseRejectedResult).reason,
-        { coarseDeclined, tree, caller },
+        { coarseDeclined, tree, caller, core, batchCore },
         outcomes.slice(0, refusedAt).map(fulfilled),
         new Map(),
       );
@@ -7542,6 +7878,33 @@ export class Realm {
               `outside service on the realm's behalf, and a QUERY batch is ` +
               `authorized to read; send it as a POST`,
             meta: { entry: outbound.entry.position },
+          });
+        }
+      }
+
+      // A run's writes are staged in its overlay (ADR 027 §1.2): its batch
+      // stages against the overlay's view of each file and the overlay holds
+      // the result (see `#runBatchCore`). The overlay can't hold a removal,
+      // so a run's batch removes nothing.
+      if (requestContext.automationRun) {
+        let removal = resolved.find(
+          ({ definition }) => definition.base === 'delete',
+        );
+        let write = run
+          ? removal
+          : resolved.find(({ definition }) => isWrite(definition.base));
+        if (write) {
+          throw new OperationFailure({
+            ...(write.entry.href ? { id: write.entry.href } : {}),
+            status: 403,
+            code: 'run-write-not-staged',
+            title: 'Forbidden',
+            detail: run
+              ? `operation "${write.entry.name}" removes a card, and an ` +
+                `automation run's overlay can't hold a removal`
+              : `operation "${write.entry.name}" writes a realm the ` +
+                `automation run may only read`,
+            meta: { entry: write.entry.position },
           });
         }
       }
@@ -7661,7 +8024,7 @@ export class Realm {
           // On the decision the entry resolved to, so the gate decides each
           // entry once.
           result = await runOperation(
-            this.operationCore,
+            core,
             {
               target,
               name: entry.name,
@@ -7682,6 +8045,10 @@ export class Realm {
                 ? {
                     callApiMode: 'automation' as const,
                     automationRunId: requestContext.automationRun.runId,
+                    callApiRunMeter: this.#callApiRunMeter(
+                      requestContext,
+                      requestContext.automationRun,
+                    ),
                   }
                 : {}),
               ...(definition.base === 'callApi'
@@ -7711,11 +8078,7 @@ export class Realm {
             caller,
             async (pending, judged, position) => {
               try {
-                await dischargePendingDecision(
-                  this.operationCore,
-                  pending,
-                  judged,
-                );
+                await dischargePendingDecision(core, pending, judged);
               } catch (refusal: unknown) {
                 decided.set(position, refusal);
                 throw refusal;
@@ -7735,28 +8098,24 @@ export class Realm {
         // refusal from the coordinator names that one rather than the position
         // it took among the entries that write — in the key, in the key beside
         // it naming a conflicting entry, and in the prose.
-        let committed = await commitBatch(
-          this.batchCore,
-          stagedTree(tree, staged),
-          {
-            clientRequestId: caller.clientRequestId || null,
-            actor: caller.actor || undefined,
-            history: writeContextFromHeaders(request.headers),
-            ...(caller.policyAudit ? { policyAudit: caller.policyAudit } : {}),
-            // One request, several cards, and not all of them from the same
-            // place — which is the case the event's authorship naming exists
-            // for, and the only front door that produces it.
-            reportAuthorship: true,
-            // The caller is waiting on this request, and the batch's own index
-            // pass waits on the prerender pool. The wait is bounded, or skipped
-            // when the caller asks, so a stalled pool costs the caller a
-            // pending generation rather than an answer to a write that has
-            // already landed.
-            ...indexWaitOptions(request, { bounded: true }),
-            ...this.#mintPosture(coarseDeclined),
-            ...anonymousCommit,
-          },
-        );
+        let committed = await commitBatch(batchCore, stagedTree(tree, staged), {
+          clientRequestId: caller.clientRequestId || null,
+          actor: caller.actor || undefined,
+          history: writeContextFromHeaders(request.headers),
+          ...(caller.policyAudit ? { policyAudit: caller.policyAudit } : {}),
+          // One request, several cards, and not all of them from the same
+          // place — which is the case the event's authorship naming exists
+          // for, and the only front door that produces it.
+          reportAuthorship: true,
+          // The caller is waiting on this request, and the batch's own index
+          // pass waits on the prerender pool. The wait is bounded, or skipped
+          // when the caller asks, so a stalled pool costs the caller a
+          // pending generation rather than an answer to a write that has
+          // already landed.
+          ...indexWaitOptions(request, { bounded: true }),
+          ...this.#mintPosture(coarseDeclined),
+          ...anonymousCommit,
+        });
         // The coordinator answers in the flat order of the entries it staged,
         // which is the order they were sent in.
         for (let [index, { entry, definition }] of writes.entries()) {
@@ -7800,7 +8159,7 @@ export class Realm {
     } catch (err: unknown) {
       throw await this.#disclosableFailure(
         err,
-        { coarseDeclined, tree, caller },
+        { coarseDeclined, tree, caller, core, batchCore },
         resolved,
         decided,
       );
@@ -7852,6 +8211,7 @@ export class Realm {
   // the wire — the envelope carries the operation's name, and what a `delete`
   // does is whatever the card's type says it does.
   async #resolveEnvelopeEntry(
+    core: OperationCore,
     entry: EnvelopeEntry,
     scope: OperationScope,
   ): Promise<ResolvedEnvelopeEntry> {
@@ -7863,16 +8223,13 @@ export class Realm {
       // exact URL — so resolving the raw spelling would report a declared
       // operation as unknown on a card whose type declares it, and would leave
       // the entry's result carrying an id no other surface spells that way.
-      let target = canonicalizeTarget(
-        this.operationCore,
-        targetFor(entry, this.url),
-      );
+      let target = canonicalizeTarget(core, targetFor(entry, this.url));
       let canonical =
         target.kind === 'instance' && target.url !== entry.href
           ? { ...entry, href: target.url }
           : entry;
       let { definition, decision } = await resolveGatedOperation(
-        this.operationCore,
+        core,
         target,
         canonical.name,
         scope,
@@ -7933,10 +8290,16 @@ export class Realm {
       coarseDeclined,
       tree,
       caller,
+      core,
+      batchCore,
     }: {
       coarseDeclined: CoarseDeclined;
       tree: readonly EnvelopeNode[];
       caller: OperationsCaller;
+      // What the batch resolved and staged against: the realm's own, or a
+      // run's view of it (see `#runOperationCore`, `#runBatchCore`).
+      core: OperationCore;
+      batchCore: BatchCore;
     },
     resolved: readonly ResolvedEnvelopeEntry[],
     // The lock's decisions, for a batch that reached it.
@@ -7963,7 +8326,7 @@ export class Realm {
         } else {
           let refusal = decided.has(position)
             ? decided.get(position)
-            : await storedWriteRefusal(this.operationCore, pending);
+            : await storedWriteRefusal(core, pending);
           if (refusal !== undefined) {
             refused = { position, refusal };
             break;
@@ -7985,6 +8348,8 @@ export class Realm {
         ahead,
         caller,
         coarseDeclined,
+        core,
+        batchCore,
       );
       for (let entry of ahead) {
         let { position } = entry.entry;
@@ -8010,7 +8375,8 @@ export class Realm {
   // undefined where it would admit the write.
   //
   // The writes are staged in request order as the lock stages them, against
-  // the realm as stored now, and nothing is committed. What they are staged
+  // the realm as stored now (for a run, as the run sees it: `core` and
+  // `batchCore`), and nothing is committed. What they are staged
   // with is `resolved` and nothing else, local ids included. A write that
   // cannot be staged ends the rehearsal there, since nothing can say what it
   // would leave its card. So does anything staging refuses, as it ends the
@@ -8024,6 +8390,8 @@ export class Realm {
     // under (see `#mintPosture`), so a card a write is judged by is the card
     // the lock would judge it by.
     coarseDeclined: CoarseDeclined,
+    core: OperationCore,
+    batchCore: BatchCore,
   ): Promise<Map<EntryPosition, OperationFailure | undefined>> {
     let rehearsed = new Map<EntryPosition, OperationFailure | undefined>();
     let admit = async (
@@ -8031,11 +8399,7 @@ export class Realm {
       judged: AdmissionSubject | undefined,
       position: EntryPosition,
     ) => {
-      let refusal = await pendingWriteRefusal(
-        this.operationCore,
-        pending,
-        judged,
-      );
+      let refusal = await pendingWriteRefusal(core, pending, judged);
       rehearsed.set(position, refusal);
       if (refusal) {
         throw refusal;
@@ -8054,7 +8418,7 @@ export class Realm {
       }
     }
     try {
-      await rehearseBatch(this.batchCore, stagedTree(tree, staged), {
+      await rehearseBatch(batchCore, stagedTree(tree, staged), {
         actor: caller.actor || undefined,
         ...this.#mintPosture(coarseDeclined),
       });
@@ -9421,6 +9785,22 @@ export class Realm {
         );
       }
       let dispatch = this.#routeRequest(request, localPath, requestContext);
+      // A run's writes are staged, never written to the realm while it runs
+      // (ADR 027 §1.2), so a run's write reaches only a route that stages
+      // it. A route that would write the realm, or remove from it, refuses
+      // the run until it stages too.
+      if (
+        requestContext.automationRun &&
+        requiredPermission === 'write' &&
+        !dispatch.takesRunWrites
+      ) {
+        this.#log.warn(
+          `run-token call ${request.method} ${maskLoggedURL(request.url)} refused: run ${requestContext.automationRun.runId} wrote through a route that doesn't stage its writes`,
+        );
+        throw new AuthorizationError(
+          "An automation run's writes go through the card+source write alone, so they can be committed together",
+        );
+      }
       if (!isLocal) {
         // A capture-URL token (`?token=` on a `_capture/` GET) authorizes
         // exactly this request without an Authorization header — the door for
@@ -9675,6 +10055,40 @@ export class Realm {
         handle: () => this.serveHashedScopedCSS(request, requestContext),
       };
     }
+    // A run's write to a reserved path is refused as the run's commit
+    // refuses it (see `#runFileRefusal`), whichever route the request names.
+    // The route takes the run's write, so the refusal is this answer rather
+    // than the run gate's.
+    let runReserved =
+      this.#runOverlay(requestContext) &&
+      ['PUT', 'PATCH', 'POST'].includes(request.method)
+        ? reservedWriteDestination(localPath)
+        : undefined;
+    if (runReserved) {
+      let detail = runReserved;
+      return {
+        consumesCoarseOutcome: false,
+        takesRunWrites: true,
+        handle: async () =>
+          createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  status: '403',
+                  code: 'forbidden-path',
+                  title: 'Forbidden',
+                  detail,
+                },
+              ],
+            }),
+            init: {
+              status: 403,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          }),
+      };
+    }
     // A file the realm is part-way through assembling, or one a write that
     // died left behind. It is never indexed, so serving it would hand back
     // content the realm does not otherwise acknowledge exists. Its `HEAD` is
@@ -9717,6 +10131,7 @@ export class Realm {
         admitsVerifiedNonReaders: matched.admitsVerifiedNonReaders,
         operationalEndpoint: matched.operationalEndpoint,
         answersWithoutCredentials: matched.operationalEndpoint,
+        takesRunWrites: matched.takesRunWrites,
         ...(matched.anonymous ? { anonymous: matched.anonymous } : {}),
         handle: serve,
       };
@@ -12914,14 +13329,14 @@ export class Realm {
       this.#log.warn(`run-token call ${described} refused: ${why}`);
       throw new AuthenticationError(message);
     };
-    let authorization = request.headers.get('Authorization');
-    if (!carriesRunToken(authorization)) {
+    let runToken = runTokenOf(request.headers.get('Authorization'));
+    if (!runToken) {
       return refuse('the request carries no run token');
     }
     let claims: TokenClaims & { iat: number; exp: number };
     try {
       claims = this.#adapter.verifyJWT(
-        authorization!.slice('Bearer '.length),
+        runToken,
         runTokenSecret(this.#realmSecretSeed),
       );
     } catch (e: any) {
@@ -13008,7 +13423,28 @@ export class Realm {
       automationId: call.run.automationId,
       actsAs: context.actsAs,
       readOnly,
+      writesCap: context.writesCap,
     };
+  }
+
+  // The meter that holds a run-token request's `callApi` calls to the
+  // automation's declaration and the run's caps, one per request so the
+  // declaration is read once however many calls the request carries.
+  #callApiRunMeter(
+    requestContext: RequestContext,
+    run: AutomationRunCall,
+  ): CallApiRunMeter {
+    let meter = this.#callApiRunMeters.get(requestContext);
+    if (!meter) {
+      meter = automationRunCallApiMeter({
+        dbAdapter: this.#dbAdapter,
+        definitionLookup: this.#definitionLookup,
+        virtualNetwork: this.#virtualNetwork,
+        run,
+      });
+      this.#callApiRunMeters.set(requestContext, meter);
+    }
+    return meter;
   }
 
   // A run's call takes the permission check its person's own request would:
@@ -13103,32 +13539,1547 @@ export class Realm {
     );
   }
 
+  // The overlay a run-token call reads through and stages into (ADR 027):
+  // the run's own realm, for an admitted run call. A realm the run may only
+  // read has no overlay for it.
+  #runOverlay(requestContext: RequestContext): RunOverlayKey | undefined {
+    let run = requestContext.automationRun;
+    return run && !run.readOnly
+      ? { runId: run.runId, attempt: run.attempt }
+      : undefined;
+  }
+
+  // A run's write of one file's bytes, staged in its overlay rather than
+  // written to the realm. The checks are the ones the run's commit makes of
+  // the file alone (see `#stageRunFiles`): the realm's size limit for the
+  // file's kind (a card document's limit for a card document, the file limit
+  // for any other file, the larger of the two read off the body before it is
+  // buffered), the realm's reserved paths, the files a run may not write
+  // (ADR 026 §1.4), and no file or directory the realm holds in the way. A
+  // path may not be both a file and a directory among the run's staged
+  // files. The run's `writes` cap bounds how many files it stages.
+  async #stageRunWrite(
+    request: Request,
+    requestContext: RequestContext,
+    run: RunOverlayKey,
+  ): Promise<Response> {
+    let path = this.paths.local(new URL(request.url));
+    let refuse = (
+      status: number,
+      title: string,
+      detail: string,
+      code?: string,
+    ) =>
+      createResponse({
+        body: JSON.stringify({
+          errors: [
+            {
+              status: String(status),
+              ...(code ? { code } : {}),
+              title,
+              detail,
+            },
+          ],
+        }),
+        init: {
+          status,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    let fileLimit = fileSizeLimitFor(path, {
+      default: this.#fileSizeLimitBytes,
+      audio: this.#audioSizeLimitBytes,
+      video: this.#videoSizeLimitBytes,
+    });
+    let tooLarge = (size: number | undefined, limit: number) =>
+      refuse(
+        413,
+        'Payload Too Large',
+        size === undefined
+          ? `File size exceeds maximum allowed size (${limit} bytes)`
+          : `File size (${size} bytes) exceeds maximum allowed size (${limit} bytes)`,
+        'payload-too-large',
+      );
+    let readLimit = path.endsWith('.json')
+      ? Math.max(fileLimit, this.#cardSizeLimitBytes)
+      : fileLimit;
+    let content = await readBodyWithin(request, readLimit);
+    if (!content) {
+      // The commit refuses a file for its path before its size, so a body
+      // too large to read is first asked what its path alone decides.
+      let refusal = await this.#runFileRefusal(path, undefined);
+      if (refusal) {
+        return refuse(
+          refusal.status,
+          refusal.title,
+          refusal.detail,
+          refusal.code,
+        );
+      }
+      return tooLarge(undefined, readLimit);
+    }
+    // Under the realm's write lock on the path, as a run's batch stages, so a
+    // batch's read-merge-write of a file can't straddle this write.
+    let refusal = await this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      [path],
+      () => this.#stageRunFiles(requestContext, run, [{ path, content }]),
+    );
+    if (!refusal) {
+      return createResponse({
+        body: null,
+        init: { status: 204 },
+        requestContext,
+      });
+    }
+    if (refusal.notRunning) {
+      return createResponse({
+        body: 'The automation run is not running',
+        init: { status: 401 },
+        requestContext,
+      });
+    }
+    return refuse(refusal.status, refusal.title, refusal.detail, refusal.code);
+  }
+
+  // Stages `files` in the run's overlay, all of them or none, after the
+  // checks the run's commit makes of each file on its own, so a file staged
+  // here is one the commit takes unless the realm changes in between:
+  // `#runFileRefusal` (reserved paths, the files a run may not write, a file
+  // or directory the realm holds in the way), then the realm's size limit
+  // for the file's kind, as the commit's batch classifies the bytes it
+  // sends. No
+  // path may be both a file and a directory among the run's staged files and
+  // these, and the run's `writes` cap and the overlay's byte bound hold for
+  // the overlay as these files leave it. Answers undefined once every file
+  // is staged, or why none was, with the status, code and detail the commit
+  // gives for the same file.
+  async #stageRunFiles(
+    requestContext: RequestContext,
+    run: RunOverlayKey,
+    files: { path: LocalPath; content: Uint8Array }[],
+  ): Promise<RunStageRefusal | undefined> {
+    let texts = files.map(({ path, content }) =>
+      path.endsWith('.json') ? utf8OrUndefined(content) : undefined,
+    );
+    // In the commit's order: its precondition asks `#runFileRefusal` of
+    // every file before its batch checks any file's size, so a request
+    // refused for both reasons is refused here for the one the commit gives.
+    for (let [index, { path }] of files.entries()) {
+      let refusal = await this.#runFileRefusal(path, texts[index]);
+      if (refusal) {
+        return refusal;
+      }
+    }
+    for (let [index, { path, content }] of files.entries()) {
+      // The commit sends a file's bytes as text when they decode, and its
+      // batch holds them to the ceiling `writeSizeType` picks for that.
+      // Only a `.json` can be classified as a card, so any other file is
+      // measured by its bytes, which is the length its text encodes to.
+      let sent = texts[index] ?? content;
+      try {
+        this.assertWriteSize(sent, writeSizeType(path, sent), path);
+      } catch (err: unknown) {
+        if (!isCardError(err)) {
+          throw err;
+        }
+        return {
+          status: err.status,
+          code: 'payload-too-large',
+          title: err.title ?? 'Payload Too Large',
+          detail: err.message,
+        };
+      }
+    }
+    let paths = files.map(({ path }) => path).join(', ');
+    let staged = await stageRunOverlayFiles(
+      this.#dbAdapter,
+      run,
+      files,
+      requestContext.automationRun!.writesCap,
+    );
+    switch (staged.kind) {
+      case 'over-cap':
+        return {
+          status: 403,
+          code: 'writes-cap',
+          title: 'Writes cap reached',
+          detail: `This run may write at most ${staged.cap} files, and has written them all; ${paths} was not written`,
+        };
+      case 'over-bytes':
+        return {
+          status: 413,
+          title: 'Payload Too Large',
+          detail: `This run's staged files may come to at most ${staged.limit} bytes together; ${paths} was not written`,
+        };
+      case 'not-running':
+        return {
+          status: 401,
+          title: 'Unauthorized',
+          detail: 'The automation run is not running',
+          notRunning: true,
+        };
+      case 'path-clash':
+        return {
+          status: 409,
+          code: 'path-clash',
+          title: 'Conflict',
+          detail: `This run has staged ${staged.clash}, so ${staged.path} can't be both a file and a directory`,
+        };
+      case 'staged':
+        return undefined;
+    }
+  }
+
+  // A run's atomic write (ADR 027 §1.2): every file it adds or updates is
+  // staged in the run's overlay, all or none, and the realm is left as it
+  // is. A reserved path is refused first, as the run's commit refuses it
+  // (403 `forbidden-path`). Then come the atomic write's own checks, against
+  // the files as the run sees them (an `add` of a path that exists, an
+  // `update` of one that doesn't, a resource that is neither a card nor
+  // source), and then the ones every staged write meets (see
+  // `#stageRunFiles`), which answer as the run's commit would. It answers as
+  // the atomic write does, with each file's id.
+  async #stageRunAtomic(
+    requestContext: RequestContext,
+    run: RunOverlayKey,
+    operations: AtomicOperation[],
+  ): Promise<Response> {
+    let refuse = (
+      status: number,
+      title: string,
+      detail: string,
+      code?: string,
+    ) =>
+      createResponse({
+        body: JSON.stringify({
+          errors: [
+            {
+              status: String(status),
+              ...(code ? { code } : {}),
+              title,
+              detail,
+            },
+          ],
+        }),
+        init: {
+          status,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    // Under the realm's write locks on every path the request names, as a
+    // run's batch stages, so a batch's read-merge-write of one of these files
+    // can't straddle this write.
+    let staged = await this.#dbAdapter.withFileWriteLocks(
+      this.url,
+      this.#atomicWritePaths(operations),
+      async () => {
+        let files: { path: LocalPath; content: Uint8Array }[] = [];
+        for (let operation of operations) {
+          let localPath: LocalPath;
+          try {
+            localPath = this.paths.local(
+              new URL(this.#resolveAtomicHref(operation.href), this.paths.url),
+            );
+          } catch (error: any) {
+            return refuse(
+              400,
+              'Invalid atomic:operations format',
+              error?.message ??
+                `Request operation contains invalid href '${operation.href}'`,
+            );
+          }
+          // Ahead of whether the path exists, so a reserved path is refused
+          // as the run's commit refuses it (see `#runFileRefusal`) whether or
+          // not the realm holds a file there.
+          let reserved = reservedWriteDestination(localPath);
+          if (reserved) {
+            return refuse(403, 'Forbidden', reserved, 'forbidden-path');
+          }
+          let exists =
+            (await readRunOverlayFile(this.#dbAdapter, run, localPath)) !==
+              undefined || (await this.#adapter.exists(localPath));
+          if (operation.op === 'add' && exists) {
+            return refuse(
+              409,
+              'Resource already exists',
+              `Resource ${operation.href} already exists`,
+            );
+          }
+          if (operation.op === 'update' && !exists) {
+            return refuse(
+              404,
+              'Resource does not exist',
+              `Resource ${operation.href} does not exist`,
+            );
+          }
+          let resource = operation.data;
+          let content: string;
+          if (isModuleResource(resource)) {
+            content = resource.attributes?.content ?? '';
+          } else if (resource && isCardResource(resource)) {
+            content = JSON.stringify({ data: resource }, null, 2);
+          } else {
+            return refuse(
+              400,
+              'Invalid resource',
+              'Operation data is not a valid card resource or module resource',
+            );
+          }
+          // A card document is serialized as the atomic write serializes it,
+          // so the run stages the bytes the same request would store outside
+          // a run.
+          let serialized: string | undefined;
+          try {
+            serialized = await this.#serializedCardDocument(
+              content,
+              this.paths.fileURL(localPath),
+            );
+          } catch (error: any) {
+            return refuse(
+              422,
+              'Invalid card document',
+              `Cannot write '${operation.href}': ${error?.message ?? error}`,
+            );
+          }
+          files.push({
+            path: localPath,
+            content: new TextEncoder().encode(serialized ?? content),
+          });
+        }
+        let refusal = await this.#stageRunFiles(requestContext, run, files);
+        if (refusal?.notRunning) {
+          return createResponse({
+            body: 'The automation run is not running',
+            init: { status: 401 },
+            requestContext,
+          });
+        }
+        if (refusal) {
+          return refuse(
+            refusal.status,
+            refusal.title,
+            refusal.detail,
+            refusal.code,
+          );
+        }
+        return files;
+      },
+    );
+    if (!Array.isArray(staged)) {
+      return staged;
+    }
+    let files = staged;
+    return createResponse({
+      body: JSON.stringify(
+        {
+          'atomic:results': files.map(({ path }) => ({
+            data: {
+              id: this.#virtualNetwork.unresolveURL(
+                this.paths.fileURL(path).href,
+              ),
+            },
+          })),
+        },
+        null,
+        2,
+      ),
+      init: {
+        status: 201,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
+  // `content` as the atomic write stores it when it holds a card document:
+  // serialized against the card's type, with the realm's URL. Undefined for
+  // content that isn't a card document, which is stored as it is.
+  async #serializedCardDocument(
+    content: string,
+    url: URL,
+  ): Promise<string | undefined> {
+    let doc: { data?: unknown };
+    try {
+      doc = JSON.parse(content);
+    } catch {
+      return undefined;
+    }
+    if (!isCardResource(doc?.data)) {
+      return undefined;
+    }
+    return JSON.stringify(
+      await this.fileSerialization(
+        { data: merge(doc.data, { meta: { realmURL: this.url } }) },
+        url,
+      ),
+      null,
+      2,
+    );
+  }
+
+  // The card a run staged at `localPath` (the card's path, without `.json`),
+  // as a card read serves it (ADR 027 §1.3): the staged document's resource,
+  // with the card's id, its own link, and its type's module resolved against
+  // the card. Staged files aren't indexed, so its computed fields are absent
+  // and its links aren't expanded. Undefined when the run staged nothing
+  // there, and `not-a-card` when what it staged isn't a card document, which
+  // its reads must not answer with the realm's version instead.
+  async #stagedCardResource(
+    run: RunOverlayKey,
+    localPath: LocalPath,
+  ): Promise<LooseCardResource | 'not-a-card' | undefined> {
+    let bytes = await readRunOverlayFile(
+      this.#dbAdapter,
+      run,
+      `${localPath}.json` as LocalPath,
+    );
+    return bytes
+      ? this.#stagedCardFrom(localPath, new TextDecoder().decode(bytes))
+      : undefined;
+  }
+
+  // The card resource the staged document `content` at `localPath` (the
+  // card's path, without `.json`) serves as (see `#stagedCardResource`), or
+  // `not-a-card` when `content` isn't a card document.
+  #stagedCardFrom(
+    localPath: LocalPath,
+    content: string,
+  ): LooseCardResource | 'not-a-card' {
+    let doc: unknown;
+    try {
+      doc = JSON.parse(content);
+    } catch {
+      return 'not-a-card';
+    }
+    let resource = (doc as { data?: unknown } | null)?.data;
+    if (!isCardResource(resource)) {
+      return 'not-a-card';
+    }
+    let url = this.paths.fileURL(localPath);
+    let id = this.#virtualNetwork.unresolveURL(url.href);
+    let adoptsFrom = resource.meta?.adoptsFrom;
+    if (
+      adoptsFrom &&
+      'module' in adoptsFrom &&
+      typeof adoptsFrom.module === 'string' &&
+      adoptsFrom.module.startsWith('.')
+    ) {
+      adoptsFrom = {
+        ...adoptsFrom,
+        module: this.#virtualNetwork.resolveRRI(
+          adoptsFrom.module,
+          rri(url.href),
+        ),
+      };
+    }
+    return {
+      ...resource,
+      id,
+      links: { self: id },
+      meta: {
+        ...resource.meta,
+        ...(adoptsFrom ? { adoptsFrom } : {}),
+        realmURL: this.url,
+      },
+    } as unknown as LooseCardResource;
+  }
+
+  // A search's answer with each card the run staged swapped for its staged
+  // version (ADR 027 §1.3): which cards match, and their order, are the
+  // index's, so a card returned staged may no longer match the query, and a
+  // card the run created isn't found. The card's attributes, relationships
+  // and type come from what the run staged, and the rest of what the search
+  // answered for it stays.
+  async #withStagedCards<T>(run: RunOverlayKey, doc: T): Promise<T> {
+    let staged = new Set(await runOverlayPathsUnder(this.#dbAdapter, run, ''));
+    if (staged.size === 0) {
+      return doc;
+    }
+    let { data, included } = doc as {
+      data?: unknown;
+      included?: unknown;
+    };
+    let resources = [
+      ...(Array.isArray(data) ? data : data ? [data] : []),
+      ...(Array.isArray(included) ? included : []),
+    ] as { type?: unknown; id?: unknown }[];
+    for (let resource of resources) {
+      if (resource?.type !== 'card' || typeof resource.id !== 'string') {
+        continue;
+      }
+      let localPath: LocalPath;
+      try {
+        let url = this.#virtualNetwork.toURL(resource.id);
+        if (!this.paths.inRealm(url)) {
+          continue;
+        }
+        localPath = this.paths.local(url);
+      } catch {
+        continue;
+      }
+      if (!staged.has(`${localPath}.json`)) {
+        continue;
+      }
+      let card = await this.#stagedCardResource(run, localPath);
+      // A staged file that isn't a card document has no card to swap in, and
+      // the entry that found it links to this resource, so it keeps the
+      // index's version.
+      if (!card || card === 'not-a-card') {
+        continue;
+      }
+      let found = resource as LooseCardResource;
+      found.attributes = card.attributes;
+      found.relationships = card.relationships;
+      let meta = { ...found.meta } as Record<string, unknown>;
+      delete meta.fields;
+      found.meta = {
+        ...meta,
+        adoptsFrom: card.meta.adoptsFrom,
+        ...(card.meta.fields ? { fields: card.meta.fields } : {}),
+      } as LooseCardResource['meta'];
+    }
+    return doc;
+  }
+
+  // The operation core a run's batch resolves, gates and reads through (ADR
+  // 027 §1.3): the realm's own, except that a file the run staged is the file
+  // as the run staged it.
+  //
+  // - A staged card's index row is built from the staged document, with the
+  //   adoption chain its `adoptsFrom` names. So an operation on a card the run
+  //   created or re-typed resolves against the staged card's type, and the
+  //   policy gate matches rules against that type.
+  // - A `read` of a staged card answers the staged document, as the run's
+  //   card read does. Staged files aren't indexed, so it carries no computed
+  //   fields, no expanded links, no rendering and no source version. Its
+  //   generation is the realm's row's where the realm holds one, and 0 for a
+  //   card the run created.
+  // - A `read` of a staged file that isn't a card answers that file's
+  //   metadata, derived from the staged bytes.
+  // - The stored text of a file the run staged is the staged text, which is
+  //   what a policy predicate reads a card's fields from.
+  //
+  // A staged `.json` that isn't a card document is never answered with the
+  // realm's version: the run sees no card row there, and a `read` of it is
+  // refused with 422, as the run's card read refuses it.
+  //
+  // A search runs on the index, as the run's search does, so an entry that
+  // finds its targets with a query finds the cards the index holds. A read of
+  // a file's stored bytes isn't an operation a batch carries; the byte routes
+  // serve a run's staged files themselves.
+  //
+  // A core serves one batch. The run's staged paths are listed once, so a
+  // path the run hasn't staged costs no overlay read, and each staged file is
+  // read once.
+  #runOperationCore(run: RunOverlayKey): OperationCore {
+    let core = this.operationCore;
+    let index = core.indexQueryEngine;
+    let paths: Promise<Set<string>> | undefined;
+    let reads = new Map<LocalPath, Promise<Uint8Array | undefined>>();
+    let stagedBytes = async (path: LocalPath) => {
+      paths ??= runOverlayPathsUnder(this.#dbAdapter, run, '').then(
+        (list) => new Set(list),
+      );
+      if (!(await paths).has(path)) {
+        return undefined;
+      }
+      let read = reads.get(path);
+      if (!read) {
+        read = readRunOverlayFile(this.#dbAdapter, run, path);
+        reads.set(path, read);
+      }
+      return await read;
+    };
+    let cards = new Map<
+      string,
+      Promise<
+        | { card: CardResource; types: string[] | null }
+        | { notACard: LocalPath }
+        | undefined
+      >
+    >();
+    let stagedCard = (url: URL) => {
+      let card = cards.get(url.href);
+      if (!card) {
+        card = (async () => {
+          if (!this.paths.inRealm(url)) {
+            return undefined;
+          }
+          let localPath = this.paths.local(url);
+          let path = `${localPath}.json` as LocalPath;
+          let bytes = await stagedBytes(path);
+          if (!bytes) {
+            return undefined;
+          }
+          let content = new TextDecoder().decode(bytes);
+          let resource = this.#stagedCardFrom(localPath, content);
+          if (resource === 'not-a-card') {
+            return { notACard: localPath };
+          }
+          return {
+            card: resource as unknown as CardResource,
+            types: (await this.#adoptedTypes(path, content)) ?? null,
+          };
+        })();
+        cards.set(url.href, card);
+      }
+      return card;
+    };
+    let indexQueryEngine: OperationIndexQueryEngine = {
+      instance: async (url, opts) => {
+        let staged = await stagedCard(url);
+        if (!staged) {
+          return await index.instance(url, opts);
+        }
+        if ('notACard' in staged) {
+          return undefined;
+        }
+        // Resolution and the gate read the type and the stored values; the
+        // rest of a row describes an indexed version the run's card doesn't
+        // have.
+        // Each answer is its own copy: a read assembles its document by
+        // rewriting the resource it is handed, and the scope keeps a peeked
+        // row for the rest of the batch.
+        let row: InstanceOrError = {
+          type: 'instance',
+          instance: structuredClone(staged.card),
+          canonicalURL: url.href,
+          lastModified: null,
+          resourceCreatedAt: Math.floor(Date.now() / 1000),
+          isolatedHtml: null,
+          headHtml: null,
+          embeddedHtml: null,
+          fittedHtml: null,
+          atomHtml: null,
+          markdown: null,
+          searchDoc: null,
+          types: staged.types,
+          deps: null,
+          captures: null,
+          generation: 0,
+          realmURL: this.url,
+          indexedAt: null,
+          sourceContentHash: null,
+          renderError: null,
+        };
+        return row;
+      },
+      cardDocument: async (url, opts) => {
+        let staged = await stagedCard(url);
+        if (!staged) {
+          return await index.cardDocument(url, opts);
+        }
+        if ('notACard' in staged) {
+          throw new OperationFailure({
+            id: url.href,
+            status: 422,
+            code: 'target-errored',
+            title: 'Not a card document',
+            detail: `This run staged ${staged.notACard}.json, which isn't a card document`,
+          });
+        }
+        let indexed = await index.instance(url, { includeErrors: true });
+        return {
+          type: 'doc',
+          doc: { data: structuredClone(staged.card) },
+          generation: indexed?.generation ?? 0,
+          version: null,
+          indexedAt: null,
+          deps: null,
+          captures: null,
+          renderError: null,
+          queryBacked: false,
+        };
+      },
+      file: (url) => index.file(url),
+      searchEntries: (query, opts) => index.searchEntries(query, opts),
+    };
+    return {
+      ...core,
+      indexQueryEngine,
+      readFileAsText: async (localPath) => {
+        let bytes = await stagedBytes(localPath);
+        return bytes
+          ? new TextDecoder().decode(bytes)
+          : await core.readFileAsText(localPath);
+      },
+      // A path whose `.json` the run staged is that card's, not a file.
+      fileMetaDocument: async (localPath) => {
+        if (await stagedBytes(`${localPath}.json` as LocalPath)) {
+          return undefined;
+        }
+        let bytes = localPath.endsWith('.json')
+          ? undefined
+          : await stagedBytes(localPath);
+        if (!bytes) {
+          return await core.fileMetaDocument(localPath);
+        }
+        let lastModified = Math.floor(Date.now() / 1000);
+        return await this.#fileMetaDocumentOf(localPath, {
+          lastModified,
+          createdAt: (await this.getCreatedTime(localPath)) ?? lastModified,
+          contentHash: computeContentHash(bytes),
+          contentSize: bytes.byteLength,
+        });
+      },
+    };
+  }
+
+  // The batch coordinator's collaborators for a run's batch (ADR 027 §1.2):
+  // the realm's own, except that every read of a file the batch stages from
+  // reads the run's staged copy where it has one, and the commit stages the
+  // batch's result in the run's overlay instead of writing the realm. So a
+  // write operation runs against the overlay's view of each file, and the
+  // overlay holds its result. The write locks are still the realm's, and
+  // every route that stages a run's write takes them, so nothing staged at a
+  // file this batch reads can change between its reads and its commit. That
+  // is also why each staged file is read once per batch: a splice measured on
+  // the staged bytes is read out of the same bytes.
+  #runBatchCore(requestContext: RequestContext, run: RunOverlayKey): BatchCore {
+    let core = this.batchCore;
+    let reads = new Map<LocalPath, Promise<Uint8Array | undefined>>();
+    let staged = (path: LocalPath) => {
+      let read = reads.get(path);
+      if (!read) {
+        read = readRunOverlayFile(this.#dbAdapter, run, path);
+        reads.set(path, read);
+      }
+      return read;
+    };
+    let readRange = async (path: LocalPath, start: number, end: number) => {
+      let bytes = await staged(path);
+      if (bytes) {
+        return bytesIterable(bytes.subarray(start, end));
+      }
+      return this.#adapter.readRange(path, start, end);
+    };
+    let openSourceBytes = async (
+      path: LocalPath,
+    ): Promise<SourceBytes | undefined> => {
+      let bytes = await staged(path);
+      return bytes
+        ? {
+            size: bytes.byteLength,
+            read: (start, end) => bytesIterable(bytes.subarray(start, end)),
+          }
+        : await core.openSourceBytes(path);
+    };
+    return {
+      ...core,
+      // A program reads a card's computed and linked values off its index
+      // row, which describes the realm's version of the card. A card the run
+      // staged has no row for its staged version, so it reads as not indexed,
+      // as a card the run created does.
+      indexedCardValues: async (url) =>
+        this.paths.inRealm(url) &&
+        (await staged(`${this.paths.local(url)}.json` as LocalPath))
+          ? undefined
+          : await core.indexedCardValues(url),
+      // A run's write to a reserved path is refused as the run's commit
+      // refuses it (see `#runFileRefusal`).
+      reservedWriteRefusal: (path, reason) =>
+        new OperationFailure({
+          status: 403,
+          code: 'forbidden-path',
+          title: 'Forbidden',
+          detail: reservedWriteDestination(path) ?? reason,
+        }),
+      fileExists: async (path) =>
+        (await staged(path)) !== undefined || (await core.fileExists(path)),
+      readSourceFile: async (path) => {
+        let bytes = await staged(path);
+        return bytes
+          ? {
+              content: new TextDecoder().decode(bytes),
+              lastModified: Math.floor(Date.now() / 1000),
+            }
+          : await core.readSourceFile(path);
+      },
+      openSourceBytes,
+      commitUnlocked: async ({ writes, appends, deletes }) => {
+        // An overlay row holds a file's bytes, with nothing to mark a staged
+        // removal, so a run's batch removes nothing.
+        if (deletes && deletes.length > 0) {
+          throw new OperationFailure({
+            status: 403,
+            code: 'run-write-not-staged',
+            title: 'Forbidden',
+            detail: `an automation run may not remove ${deletes.join(', ')}`,
+          });
+        }
+        let files = new Map<LocalPath, Uint8Array>();
+        for (let [path, content] of writes ?? []) {
+          files.set(
+            path,
+            await runBatchBytes(content, (start, end) =>
+              readRange(path, start, end),
+            ),
+          );
+        }
+        for (let [path, addition] of appends ?? []) {
+          let base = files.get(path);
+          if (!base) {
+            let source = await openSourceBytes(path);
+            base = source
+              ? await collectBytes(source.read(0, source.size))
+              : new Uint8Array();
+          }
+          let added =
+            typeof addition === 'string'
+              ? new TextEncoder().encode(addition)
+              : addition;
+          let joined = new Uint8Array(base.byteLength + added.byteLength);
+          joined.set(base);
+          joined.set(added, base.byteLength);
+          files.set(path, joined);
+        }
+        let list = [...files].map(([path, content]) => ({ path, content }));
+        let refusal = await this.#stageRunFiles(requestContext, run, list);
+        if (refusal) {
+          throw new OperationFailure({
+            status: refusal.status,
+            // The commit's code where the commit makes the same refusal.
+            code: refusal.code ?? 'run-write-refused',
+            title: refusal.title,
+            detail: refusal.detail,
+          });
+        }
+        let lastModified = Math.floor(Date.now() / 1000);
+        return {
+          writes: list.map(({ path, content }) => ({
+            path,
+            lastModified,
+            created: null,
+            contentHash: computeContentHash(content),
+          })),
+          generation: null,
+        };
+      },
+    };
+  }
+
+  // A run acts as a direct writer of its realm (ADR 026 §1.5), so a run's
+  // write that the realm ACL declines is refused before it stages, in the
+  // words the run's commit refuses it in. The verbatim write routes take such
+  // a write to the realm's policy for anyone else, and a policy grant never
+  // reaches a run's writes.
+  #runWriteWithoutDirectWrite(
+    requestContext: RequestContext,
+  ): Response | undefined {
+    if (this.#coarseDeclined(requestContext) === 'none') {
+      return undefined;
+    }
+    return createResponse({
+      body: JSON.stringify({
+        errors: [
+          {
+            status: '403',
+            code: 'not-a-direct-writer',
+            title: 'Forbidden',
+            detail:
+              "The person this run acts as is not a direct writer of this workspace, so the run's write was not staged",
+          },
+        ],
+      }),
+      init: {
+        status: 403,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
+  // Commits a run's overlay to the realm as one all-or-nothing batch (ADR
+  // 027 §1.4): every file the attempt staged lands, or none does, under one
+  // write lock and one index pass that the commit doesn't wait for. A file
+  // whose text matches the stored file's changes nothing and causes no
+  // indexing.
+  //
+  // Only the run's own call, carrying its token, commits, and it was
+  // admitted as the run's identity under their current permissions. Inside
+  // the batch's write lock, before anything is staged, the commit checks
+  // again what staging checked: the identity is still a direct writer of the
+  // realm (ADR 026 §1.5), so someone who lost direct write but keeps a policy
+  // grant can't write through it; the files are within the run's `writes`
+  // cap; and none is refused by `#runFileRefusal`, which staging also asks:
+  // none is at a reserved path, `realm.json`, the realm's policy card, a
+  // RealmPolicy card or an automation card (ADR 026 §1.4), and none would be
+  // a file where the realm holds a directory, or under a path it holds as a
+  // file. Paths are realm-local, so every file is in the run's realm, and the
+  // batch is built from staged files alone, so it carries no `callApi` entry.
+  //
+  // Then it claims the commit on the run's row, which succeeds only while the
+  // run is running, owned by this attempt, has never claimed one, and its
+  // overlay still holds exactly the files read. Staging refuses a run whose
+  // commit is claimed, so those are the files the batch sends, and a run
+  // commits at most once however many times it is retried. A batch that
+  // refuses an entry writes nothing, and its claim is released. A batch that
+  // fails while writing (a file system error) may have written some files,
+  // so its claim stays, unrecorded, and the run finishes as an error. Once
+  // the batch lands, the run row records it, the files committed are added to
+  // the run's `writes`, and the overlay is discarded. Asking again after the
+  // batch landed answers the same success.
+  private async appendScriptRunLog(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let answer = (status: number, body: unknown) =>
+      createResponse({
+        body: JSON.stringify(body),
+        init: {
+          status,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    let refuse = (status: number, code: string, detail: string) =>
+      answer(status, { errors: [{ status: String(status), code, detail }] });
+    let call = requestContext.automationRun;
+    if (!call || call.readOnly) {
+      return refuse(
+        403,
+        'not-a-run',
+        "Only an automation run writes its log, in the run's own realm",
+      );
+    }
+    let declared = Number(request.headers.get('content-length'));
+    if (declared > RUN_LOG_MAX_REQUEST_BYTES) {
+      return refuse(
+        413,
+        'too-large',
+        `A run's log request carries at most ${RUN_LOG_MAX_REQUEST_BYTES} bytes`,
+      );
+    }
+    let text = await request.text();
+    if (text.length > RUN_LOG_MAX_REQUEST_BYTES) {
+      return refuse(
+        413,
+        'too-large',
+        `A run's log request carries at most ${RUN_LOG_MAX_REQUEST_BYTES} bytes`,
+      );
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return refuse(400, 'invalid-body', 'The body is not JSON');
+    }
+    let parsed = scriptRunLogLines(body);
+    if (!parsed.ok) {
+      return refuse(400, 'invalid-body', parsed.error);
+    }
+    let token = request.headers.get('Authorization')?.replace(/^Bearer /, '');
+    let result = await appendRunLog(this.#dbAdapter, call.runId, parsed.lines, {
+      secrets: token ? [token] : [],
+    });
+    return answer(200, {
+      data: {
+        type: 'run-log',
+        id: call.runId,
+        attributes: { stored: result.stored, dropped: result.dropped },
+      },
+    });
+  }
+
+  // Commits a run's overlay, and logs on the run what the commit did.
+  private async commitRunOverlay(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let run = requestContext.automationRun;
+    let startedAt = Date.now();
+    // A repeat of a commit that already landed answers as it did, and its
+    // line is already in the log.
+    let repeat =
+      run && !run.readOnly
+        ? Boolean(
+            (await getAutomationRun(this.#dbAdapter, run.runId))?.committedAt,
+          )
+        : false;
+    let response: Response;
+    try {
+      response = await this.#commitRunOverlay(request, requestContext);
+    } catch (err: unknown) {
+      if (run && !run.readOnly) {
+        await logRunPlatformLine(this.#dbAdapter, run.runId, {
+          kind: 'commit',
+          level: 'error',
+          message: `The commit failed while writing, so some files may have been saved: ${err instanceof Error ? err.message : String(err)}`,
+          data: { ms: Date.now() - startedAt },
+        });
+      }
+      throw err;
+    }
+    if (run && !run.readOnly && !repeat) {
+      let body = (await response
+        .clone()
+        .json()
+        .catch(() => undefined)) as
+        | {
+            data?: { attributes?: { files?: string[] } };
+            errors?: { code?: string; detail?: string }[];
+          }
+        | undefined;
+      let ms = Date.now() - startedAt;
+      if (response.ok) {
+        let files = body?.data?.attributes?.files ?? [];
+        await logRunPlatformLine(this.#dbAdapter, run.runId, {
+          kind: 'commit',
+          level: 'info',
+          message:
+            files.length === 0
+              ? 'The commit saved no files'
+              : `The commit saved ${files.length} ${files.length === 1 ? 'file' : 'files'}: ${files.join(', ')}`,
+          data: { status: response.status, files: files.length, ms },
+        });
+      } else {
+        let error = body?.errors?.[0];
+        await logRunPlatformLine(this.#dbAdapter, run.runId, {
+          kind: 'commit',
+          level: 'error',
+          message: `The commit was refused (${error?.code ?? response.status}): ${error?.detail ?? response.statusText}`,
+          data: {
+            status: response.status,
+            ...(error?.code ? { code: error.code } : {}),
+            ms,
+          },
+        });
+      }
+    }
+    return response;
+  }
+
+  async #commitRunOverlay(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let refuse = (
+      status: number,
+      code: string,
+      title: string,
+      detail: string,
+    ) =>
+      createResponse({
+        body: JSON.stringify({
+          errors: [{ status: String(status), code, title, detail }],
+        }),
+        init: {
+          status,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    let committed = (files: string[]) =>
+      createResponse({
+        body: JSON.stringify({
+          data: { type: 'run-commit', id: runId, attributes: { files } },
+        }),
+        init: {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    let call = requestContext.automationRun;
+    if (!call || call.readOnly) {
+      return refuse(
+        403,
+        'not-a-run',
+        'Forbidden',
+        "Only an automation run commits its overlay, in the run's own realm",
+      );
+    }
+    let { runId, attempt, actsAs, writesCap } = call;
+    let key = { runId, attempt };
+    let files = await runOverlayFiles(this.#dbAdapter, key);
+    let claimed = false;
+    let refusal = (
+      status: number,
+      code: string,
+      title: string,
+      detail: string,
+    ) => new RunCommitRefusal(status, code, title, detail);
+    let precondition = async () => {
+      if (
+        !(await isDirectWriter(
+          this.#dbAdapter,
+          new URL(this.url),
+          actsAs,
+          this.#matrixClient.serverName,
+        ))
+      ) {
+        this.#log.warn(
+          `run ${runId} commit refused: ${actsAs} is no longer a direct writer of ${this.url}`,
+        );
+        throw refusal(
+          403,
+          'not-a-direct-writer',
+          'Forbidden',
+          "The person this run acts as is no longer a direct writer of this workspace, so the run's writes were not saved",
+        );
+      }
+      if (files.length > writesCap) {
+        throw refusal(
+          403,
+          'writes-cap',
+          'Writes cap reached',
+          `This run staged ${files.length} files, more than the ${writesCap} it may write; nothing was saved`,
+        );
+      }
+      for (let { path, content } of files) {
+        let refused = await this.#runFileRefusal(
+          path,
+          path.endsWith('.json') ? utf8OrUndefined(content) : undefined,
+        );
+        if (refused) {
+          throw refusal(
+            refused.status,
+            refused.code,
+            refused.title,
+            `${refused.detail}; nothing was saved`,
+          );
+        }
+      }
+      let claim = await claimRunOverlayCommit(this.#dbAdapter, key, files);
+      if (claim.kind === 'overlay-changed') {
+        throw refusal(
+          409,
+          'overlay-changed',
+          'Conflict',
+          'The run staged another write while its commit was starting; nothing was saved, and the commit can be asked for again',
+        );
+      }
+      if (claim.kind === 'refused') {
+        throw refusal(
+          409,
+          'commit-refused',
+          'Conflict',
+          claim.claimedByThisAttempt
+            ? 'This attempt has already started its commit, and it has not landed'
+            : 'The run is not running under this attempt',
+        );
+      }
+      claimed = true;
+    };
+
+    // A repeat of a commit that landed, such as one whose answer was lost,
+    // gets the same success.
+    let run = await getAutomationRun(this.#dbAdapter, runId);
+    if (run?.committedAt && run.attempt === attempt) {
+      return committed([]);
+    }
+
+    try {
+      await commitBatch(
+        this.batchCore,
+        // Text goes as text, as the card+source write sends it, so a file
+        // whose text matches the stored file's is left alone.
+        files.map(({ path, content }) => ({
+          op: 'update' as const,
+          href: this.paths.fileURL(path).href,
+          content: utf8OrUndefined(content) ?? content,
+          rawSource: true,
+        })),
+        {
+          actor: actsAs,
+          // The files the batch creates are recorded as this run's
+          // automation's, which is what the automation's payer is charged
+          // storage for.
+          automationRun: { runId, automationId: call.automationId },
+          waitForIndex: false,
+          broadcastRealmEvents: true,
+          precondition,
+        },
+      );
+    } catch (err: unknown) {
+      if (err instanceof RunCommitRefusal) {
+        // Refused by the precondition, before anything was claimed.
+        return refuse(err.status, err.code, err.title, err.detail);
+      }
+      if (isOperationFailure(err)) {
+        // Refused by the batch's own entry checks, which run before it
+        // writes anything, so the claim it holds can go.
+        if (claimed) {
+          await releaseRunOverlayCommitClaim(this.#dbAdapter, key);
+        }
+        this.#log.warn(
+          `run ${runId} commit refused before any file was written: ${err.error.code ?? err.message}`,
+        );
+        return refuse(
+          err.error.status ?? 422,
+          err.error.code ?? 'commit-failed',
+          err.error.title ?? 'Commit failed',
+          claimed
+            ? `${err.error.detail ?? err.message}; nothing was saved`
+            : (err.error.detail ?? err.message),
+        );
+      }
+      // A failure while writing can leave the files written before it on
+      // disk. The claim stays, unrecorded, so the run reads as an
+      // interrupted commit, and the next run catches up from the realm.
+      this.#log.warn(
+        `run ${runId} commit of ${files.length} files failed while writing, so some may have landed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw err;
+    }
+    await recordAutomationRunCommitted(this.#dbAdapter, runId);
+    // The batch has landed, so the answer is a success from here on: the
+    // count and the discard are bookkeeping, and the run's finish discards
+    // the overlay again.
+    try {
+      // The run's `writes` count is the files its commit saved, an unchanged
+      // file included, metered here where the realm did the work.
+      await addAutomationRunCounts(this.#dbAdapter, runId, {
+        writes: files.length,
+      });
+      await discardRunOverlay(this.#dbAdapter, runId);
+    } catch (err: unknown) {
+      this.#log.warn(
+        `run ${runId} committed, but counting its writes or discarding its overlay failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return committed(files.map((f) => f.path));
+  }
+
+  // Why a run's commit refuses to write the file at `path`, for a reason that
+  // concerns that file alone: a reserved path; `realm.json`, the realm's
+  // policy card, a RealmPolicy card or an automation card, which a run may
+  // not write (ADR 026 §1.4); or a file or directory the realm holds in the
+  // way of it. `text` is the file's content when it is a `.json` that
+  // decodes, which is what decides whether it would be a RealmPolicy or an
+  // automation card. Staging asks the same question of every file it stages,
+  // and the commit asks it again of every file it sends, since the realm can
+  // change in between. Undefined when there is no such reason.
+  async #runFileRefusal(
+    path: LocalPath,
+    text: string | undefined,
+  ): Promise<RunFileRefusal | undefined> {
+    let reserved = reservedWriteDestination(path);
+    if (reserved) {
+      return {
+        status: 403,
+        code: 'forbidden-path',
+        title: 'Forbidden',
+        detail: reserved,
+      };
+    }
+    let protectedTarget = await this.#runMayNotWrite(path, text);
+    if (protectedTarget) {
+      return {
+        status: 403,
+        code: 'forbidden-path',
+        title: 'Forbidden',
+        detail: `An automation run may not write ${protectedTarget}`,
+      };
+    }
+    let clash = await this.#realmPathClash(path);
+    if (clash) {
+      return {
+        status: 409,
+        code: 'path-clash',
+        title: 'Conflict',
+        detail: `The workspace holds ${clash}, so ${path} would make one of them both a file and a directory`,
+      };
+    }
+    return undefined;
+  }
+
+  // A file or directory the realm holds that `path` can't be written beside:
+  // a file at one of the directories `path` is under, or a directory at
+  // `path` itself. Undefined when there is none.
+  async #realmPathClash(path: LocalPath): Promise<string | undefined> {
+    let parts = path.split('/');
+    for (let i = 1; i < parts.length; i++) {
+      let parent = parts.slice(0, i).join('/');
+      if (await this.#adapter.openFile(parent)) {
+        return `a file at ${parent}`;
+      }
+    }
+    let isDirectory: boolean;
+    try {
+      isDirectory = !!(await this.directoryEntries(
+        this.paths.directoryURL(path),
+      ));
+    } catch (err: unknown) {
+      // Listing a path that holds a file, or nothing, finds no directory.
+      let code = (err as { code?: unknown } | null)?.code;
+      if (code !== 'ENOTDIR' && code !== 'ENOENT') {
+        throw err;
+      }
+      isDirectory = false;
+    }
+    if (isDirectory) {
+      return `a directory at ${path}`;
+    }
+    return undefined;
+  }
+
+  // What a run may not write at `path`, named for a person, or undefined
+  // when it may (ADR 026 §1.4): `realm.json`, any module or file a module's
+  // name would resolve to, the card the realm's policy pointer names, any
+  // card that is a RealmPolicy or an automation, either as the realm stores
+  // it at the path or as the run's bytes would make it, and any card whose
+  // type the realm can't judge. So a run can't change who reaches its realm
+  // or widen the declaration that bounds its next run.
+  async #runMayNotWrite(
+    path: LocalPath,
+    text: string | undefined,
+  ): Promise<string | undefined> {
+    if (path === 'realm.json') {
+      return 'realm.json';
+    }
+    // Whether a card is a RealmPolicy or an automation is settled by the
+    // module its class comes from, and the type lookup below reads modules
+    // from the index, which a staged module never reaches. A run that could
+    // write a module could make a new or existing card an automation where
+    // no check sees it, so a run writes no module at all.
+    if (executableExtensions.some((extension) => path.endsWith(extension))) {
+      return 'a module';
+    }
+    // A module's name resolves to the file at that exact path before the
+    // module it names, so a file there would be served in the module's place.
+    for (let extension of executableExtensions) {
+      if (await this.#adapter.exists(path + extension)) {
+        return 'a module';
+      }
+    }
+    if (!path.endsWith('.json')) {
+      return undefined;
+    }
+    let policy = await this.getRealmPolicy();
+    if (policy) {
+      let cardURL = this.paths.fileURL(path.slice(0, -'.json'.length)).href;
+      try {
+        if (
+          new URL(this.#virtualNetwork.toURL(policy.card).href, this.url)
+            .href === cardURL
+        ) {
+          return "the realm's policy card";
+        }
+      } catch {
+        // A pointer that names nothing protects no path.
+      }
+    }
+    // Readers of a stored document decode it leniently, turning a bad byte
+    // into U+FFFD and dropping a leading byte-order mark, so bytes that don't
+    // decode strictly may still read as a card of any type. Such a document
+    // can't be judged here, so it isn't staged.
+    if (text === undefined || text.startsWith('\uFEFF')) {
+      return 'a .json file that isn’t UTF-8 text without a byte-order mark';
+    }
+    if (!(await this.#runCardTypeJudged(path, text))) {
+      return 'a card whose type the realm has no definition for';
+    }
+    let stored = (await this.readFileAsText(path))?.content;
+    for (let content of [text, stored]) {
+      if (content === undefined) {
+        continue;
+      }
+      let types = await this.#adoptedTypes(path, content);
+      if (types && this.#isTypeOrNone(types, 'policy')) {
+        return 'a RealmPolicy card';
+      }
+      if (types && this.#isTypeOrNone(types, 'automation')) {
+        return 'an automation card';
+      }
+    }
+    return undefined;
+  }
+
+  // Whether the type a run's card names is one the index has judged, so the
+  // checks above see the chain it really has. A type with no definition would
+  // be known by its own name alone, though its module may still load: the
+  // module route serves a path that isn't a module as its stored bytes, and
+  // the loader evaluates whatever source it's served, so a run that staged
+  // plain source at such a path could name a class from it that no check
+  // sees. So a run's card names a type the definition lookup resolves, from a
+  // file with a module extension where it's in this realm. A document naming
+  // no type is judged by having none.
+  async #runCardTypeJudged(path: LocalPath, text: string): Promise<boolean> {
+    if (this.#adoptsFromOf(text) === undefined) {
+      return true;
+    }
+    let codeRef = this.#adoptedCodeRef(path, text);
+    if (!codeRef) {
+      // It names something as its type, but nothing the realm can resolve.
+      return false;
+    }
+    try {
+      let moduleURL = this.#virtualNetwork.toURL(codeRef.module);
+      if (this.paths.inRealm(moduleURL)) {
+        let file = await this.getFileWithFallbacks(
+          this.paths.local(moduleURL),
+          executableExtensions,
+        );
+        if (!file || !hasExecutableExtension(file.path)) {
+          return false;
+        }
+      }
+      await this.#definitionLookup.lookupDefinitionEntry(codeRef);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // A file the run staged, served as the source route serves the realm's
+  // copy: the bytes as written, never from a cache.
+  #stagedFileResponse(
+    request: Request,
+    requestContext: RequestContext,
+    path: LocalPath,
+    content: Uint8Array<ArrayBuffer>,
+  ): Response {
+    return createResponse({
+      body: request.method === 'HEAD' ? null : content,
+      init: {
+        status: 200,
+        headers: {
+          'content-type': inferContentType(path),
+          'content-length': String(content.byteLength),
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
+  }
+
   private async upsertCardSource(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    return await this.replaceFileContent(
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      return (
+        this.#runWriteWithoutDirectWrite(requestContext) ??
+        (await this.#stageRunWrite(request, requestContext, run))
+      );
+    }
+    let text = await request.text();
+    // The gate's refusal and the batch's are answered from this one place,
+    // so a path no grant admits and a path holding nothing get the same
+    // bytes (see `#sourceWriteRefusal`).
+    try {
+      let admission = await this.#admitSourceWrite(
+        request,
+        requestContext,
+        text,
+      );
+      return await this.replaceFileContent(
+        request,
+        requestContext,
+        text,
+        admission,
+      );
+    } catch (err: unknown) {
+      return this.#sourceWriteRefusal(err, request, requestContext);
+    }
+  }
+
+  // The policy gate's part in a card+source write of `request`'s path, whose
+  // text is `text` where the path is a `.json` (see `#admitVerbatimWrites`).
+  async #admitSourceWrite(
+    request: Request,
+    requestContext: RequestContext,
+    text: string | undefined,
+  ): Promise<VerbatimAdmission> {
+    let path = this.paths.local(new URL(request.url));
+    return await this.#admitVerbatimWrites(
       request,
       requestContext,
-      await request.text(),
+      () => [
+        {
+          path,
+          ...(path.endsWith('.json') && text !== undefined ? { text } : {}),
+        },
+      ],
+      byteRoute('source'),
     );
+  }
+
+  // A refusal of a card+source write or removal by a caller the realm ACL
+  // declined, as such a caller may be told it (see `#refusalSeenBy`): a path
+  // no grant admits them to is the not-found a path holding nothing gets,
+  // byte for byte. Anything that is not an operation's refusal is the
+  // router's to answer.
+  #sourceWriteRefusal(
+    err: unknown,
+    request: Request,
+    requestContext: RequestContext,
+  ): Response {
+    if (!isOperationFailure(err)) {
+      throw err;
+    }
+    let error = this.#refusalSeenBy(err.error, requestContext);
+    if (error.status === 404) {
+      return notFound(request, requestContext);
+    }
+    let cardError = new CardError(error.detail ?? err.message, {
+      status: error.status,
+      title: error.title,
+    });
+    if (error.meta) {
+      cardError.meta = error.meta;
+    }
+    throw cardError;
   }
 
   private async upsertBinaryFile(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      return (
+        this.#runWriteWithoutDirectWrite(requestContext) ??
+        (await this.#stageRunWrite(request, requestContext, run))
+      );
+    }
     let path = this.paths.local(new URL(request.url));
     // A `.json` document is read as text by the write path (the policy-share
     // audit, the card checks), and its limit is the card limit, so it stays
-    // in memory. Every other upload streams to disk.
+    // in memory. Every other upload streams to disk, once the policy gate has
+    // admitted the write, so a caller no grant admits sends nothing to disk.
+    // The gate's refusal and the batch's are answered from one place, as the
+    // card+source write answers them (see `upsertCardSource`).
+    try {
+      return await this.#upsertBinaryFileAdmitted(
+        request,
+        requestContext,
+        path,
+      );
+    } catch (err: unknown) {
+      return this.#sourceWriteRefusal(err, request, requestContext);
+    }
+  }
+
+  async #upsertBinaryFileAdmitted(
+    request: Request,
+    requestContext: RequestContext,
+    path: LocalPath,
+  ): Promise<Response> {
     if (path.endsWith('.json')) {
+      let bytes = new Uint8Array(await request.arrayBuffer());
+      let admission = await this.#admitSourceWrite(
+        request,
+        requestContext,
+        new TextDecoder().decode(bytes),
+      );
       return await this.replaceFileContent(
         request,
         requestContext,
-        new Uint8Array(await request.arrayBuffer()),
+        bytes,
+        admission,
       );
     }
+    let admission = await this.#admitSourceWrite(
+      request,
+      requestContext,
+      undefined,
+    );
     let limit = fileSizeLimitFor(path, {
       default: this.#fileSizeLimitBytes,
       audio: this.#audioSizeLimitBytes,
@@ -13175,7 +15126,12 @@ export class Realm {
       throw err;
     }
     try {
-      return await this.replaceFileContent(request, requestContext, staged);
+      return await this.replaceFileContent(
+        request,
+        requestContext,
+        staged,
+        admission,
+      );
     } finally {
       await this.#adapter.disposeStaged(staged);
     }
@@ -13203,14 +15159,22 @@ export class Realm {
   // its index job, since it reports a generation per entry and that only
   // exists once the job has landed, but only as `indexWaitOptions` allows;
   // otherwise an entry reports its generation as pending.
+  //
+  // `admission` is the policy gate's decision on the write, for a caller the
+  // realm ACL declined: the batch judges the write again under its lock, just
+  // before it commits.
   private async replaceFileContent(
     request: Request,
     requestContext: RequestContext,
     content: string | Uint8Array | StagedFile,
+    admission: VerbatimAdmission = COARSE_VERBATIM_WRITE,
   ): Promise<Response> {
     let url = new URL(request.url);
     let result: Awaited<ReturnType<typeof commitBatch>>[number];
     try {
+      if (requestContext.archivedSeal) {
+        throw await admission.sealed(requestContext.archivedSeal);
+      }
       [result] = await commitBatch(
         this.batchCore,
         [{ op: 'update', href: url.href, content, rawSource: true }],
@@ -13224,9 +15188,16 @@ export class Realm {
             request,
             requestContext.authenticatedUser,
           ),
+          beforeCommit: () => admission.locked(),
         },
       );
-    } catch (err: unknown) {
+    } catch (thrown: unknown) {
+      let err = await admission.seenBy(thrown);
+      // A caller the realm ACL declined is answered by the route's own catch
+      // (see `#sourceWriteRefusal`).
+      if (admission !== COARSE_VERBATIM_WRITE) {
+        throw err;
+      }
       if (isOperationFailure(err)) {
         // A batch reports a refusal as an operations error, which is the
         // envelope's currency. This route answers in statuses, and the status
@@ -13339,6 +15310,16 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
     let url = new URL(request.url);
+    // A run reads its own writes: a file it staged is served from its overlay,
+    // at the exact path it wrote.
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      let path = this.paths.local(url);
+      let staged = await readRunOverlayFile(this.#dbAdapter, run, path);
+      if (staged) {
+        return this.#stagedFileResponse(request, requestContext, path, staged);
+      }
+    }
     // A caller the realm ACL declined, whose read the policy gate decides (see
     // `#grantableBytesDispatch`). They read the path exactly as named, with no
     // extension fallback and so no redirect, and outside the source cache,
@@ -13605,15 +15586,56 @@ export class Realm {
       ...executableExtensions,
       '.json',
     ]);
-    if (!handle) {
+    let declined = this.#coarseDeclined(requestContext) !== 'none';
+    if (!handle && !declined) {
       return notFound(request, requestContext, `${localName} not found`);
     }
-    await this.delete(handle.path, {
+    let options = {
       waitForIndex: false,
       initiatingUser: requestContext.authenticatedUser ?? null,
       history: writeContextFromHeaders(request.headers),
       broadcastRealmEvents: !realmEventsSuppressed(request),
-    });
+    };
+    if (!declined) {
+      await this.delete(handle!.path, options);
+    } else {
+      // The removal of the file the path resolved to, judged by the policy
+      // gate as the operation it amounts to, and judged again under the
+      // removal's own write lock. A path holding nothing is refused from the
+      // same catch as one no grant admits, so the two get the same bytes.
+      let admission = COARSE_VERBATIM_WRITE;
+      try {
+        if (!handle) {
+          // The gate loads the policy before it resolves anything for a
+          // caller who may not read the realm, so a policy that won't load
+          // answers a missing path as it answers one that holds a card.
+          if (this.#coarseDeclined(requestContext) === 'all') {
+            await loadPolicy(this.operationCore);
+          }
+          throw notPermitted({ kind: 'instance', url: request.url }, 'delete');
+        }
+        let path = handle.path;
+        admission = await this.#admitVerbatimWrites(
+          request,
+          requestContext,
+          () => [{ path, removal: true }],
+          byteRoute('source'),
+        );
+        if (requestContext.archivedSeal) {
+          throw await admission.sealed(requestContext.archivedSeal);
+        }
+        await this.#dbAdapter.withFileWriteLocks(this.url, [path], async () => {
+          await admission.locked();
+          await this._deleteUnlocked(path, options);
+        });
+      } catch (err: unknown) {
+        return this.#sourceWriteRefusal(
+          await admission.seenBy(err),
+          request,
+          requestContext,
+        );
+      }
+    }
     return createResponse({
       body: null,
       init: { status: 204 },
@@ -13851,19 +15873,40 @@ export class Realm {
     if (!fileRef) {
       return undefined;
     }
+    let createdAt = await this.getCreatedTime(localPath);
+    let persistedMeta = this.#dbAdapter
+      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+      : { contentHash: undefined, contentSize: undefined };
+    return await this.#fileMetaDocumentOf(localPath, {
+      lastModified: fileRef.lastModified,
+      createdAt: createdAt ?? fileRef.lastModified,
+      contentHash:
+        persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef)),
+      contentSize:
+        persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef)),
+    });
+  }
+
+  // A file's metadata document, from what is known about its bytes.
+  async #fileMetaDocumentOf(
+    localPath: LocalPath,
+    {
+      lastModified,
+      createdAt,
+      contentHash,
+      contentSize,
+    }: {
+      lastModified: number;
+      createdAt: number;
+      contentHash: string | undefined;
+      contentSize: number | undefined;
+    },
+  ): Promise<SingleFileMetaDocument> {
     let fileURL = this.paths.fileURL(localPath).href;
     let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
-    let createdAt = await this.getCreatedTime(localPath);
     let { info: realmInfo } = await this.parseRealmInfo();
-    let persistedMeta = this.#dbAdapter
-      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
-      : { contentHash: undefined, contentSize: undefined };
-    let contentHash =
-      persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef));
-    let contentSize =
-      persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef));
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
@@ -13875,8 +15918,8 @@ export class Realm {
           contentType: inferredContentType,
           contentHash,
           contentSize,
-          lastModified: fileRef.lastModified,
-          createdAt: createdAt ?? fileRef.lastModified,
+          lastModified,
+          createdAt,
         },
         meta: {
           adoptsFrom: fileDefCodeRef,
@@ -13884,10 +15927,7 @@ export class Realm {
           realmURL: this.url as RealmIdentifier,
           // This un-indexed fallback must stamp the timestamps too, so a file's
           // `meta` timestamps don't hinge on whether the row is in the index yet.
-          ...fileMetaTimestamps(
-            fileRef.lastModified,
-            createdAt ?? fileRef.lastModified,
-          ),
+          ...fileMetaTimestamps(lastModified, createdAt),
         },
         links: { self: fileURL },
       },
@@ -15262,6 +17302,288 @@ export class Realm {
     };
   }
 
+  // The policy gate's part in a request's verbatim writes, for the caller of
+  // `request`: the card+source write and removal, and `/_atomic`.
+  //
+  // A caller the realm ACL allowed is not judged at all. A caller it declined
+  // reaches here only in a realm that names a policy, and each write is
+  // resolved through the gate as the operation it amounts to (see
+  // `#verbatimOperation`), all or nothing: the first write no grant admits
+  // refuses the request, and nothing lands. What the gate leaves to the write
+  // lock, the handler hands back through `locked` once it holds the lock over
+  // every path, where each write is judged again from the bytes stored there.
+  async #admitVerbatimWrites(
+    request: Request,
+    requestContext: RequestContext,
+    // Asked only for a caller the ACL declined, so a caller it allowed pays
+    // nothing to describe the writes.
+    writesOf: () => VerbatimWrite[],
+    route: PolicyRoute,
+  ): Promise<VerbatimAdmission> {
+    let coarseDeclined = this.#coarseDeclined(requestContext);
+    if (coarseDeclined === 'none') {
+      return COARSE_VERBATIM_WRITE;
+    }
+    let writes = writesOf();
+    let core = this.operationCore;
+    let scope = newOperationScope(core, {
+      caller: scopeCallerFor(this.#callerOf(request, requestContext).actor),
+      coarseDeclined,
+      route,
+      anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
+    });
+    let judged: {
+      write: VerbatimWrite;
+      operation: VerbatimOperation;
+      pending: PendingWrite | undefined;
+    }[] = [];
+    for (let write of writes) {
+      let operation: VerbatimOperation;
+      try {
+        operation = this.#verbatimOperation(
+          write,
+          await this.#storedForVerbatimWrite(write.path),
+          coarseDeclined,
+        );
+      } catch (refusal: unknown) {
+        // A write no operation describes is refused before the gate, by what
+        // the path holds. The gate loads the policy before it resolves
+        // anything for a caller who may not read the realm, so a policy that
+        // won't load answers the same whatever a target holds, and this
+        // refusal does too.
+        if (coarseDeclined === 'all') {
+          await loadPolicy(core);
+        }
+        throw refusal;
+      }
+      let decision = await resolveFacadeWrite(
+        core,
+        operation.target,
+        operation.base,
+        scope,
+        operation.kind === 'file' ? { asFile: true } : {},
+      );
+      judged.push({
+        write,
+        operation,
+        pending: pendingWriteFor(
+          operation.target,
+          operation.base,
+          decision,
+          scope,
+        ),
+      });
+    }
+    // The card each write the lock decides is judged by: the card it changes,
+    // as `stored` holds its document, or for a create the card it writes.
+    let judgedCard = (
+      { write, operation }: (typeof judged)[number],
+      stored: string | undefined,
+    ): AdmissionSubject | undefined => {
+      let source = operation.base === 'create' ? write.text : stored;
+      return operation.kind === 'card' && source !== undefined
+        ? { id: operation.cardURL.href, source }
+        : undefined;
+    };
+    // Whether the lock has decided the writes. Until it has, an answer other
+    // than the gate's own refusal would tell a caller who may not read the
+    // realm that a card is there, so it is replaced by the gate's refusal
+    // unless every write the lock decides would hold against the card as
+    // stored now, as `#admitCardWrite` answers one.
+    let decided = false;
+    let hidden = async () => {
+      if (coarseDeclined !== 'all' || decided) {
+        return false;
+      }
+      for (let { pending } of judged) {
+        if (pending && !(await pendingWriteHolds(core, pending))) {
+          return true;
+        }
+      }
+      return false;
+    };
+    let sealedAnswer: unknown;
+    await this.#testOnlyBeforeBatchLock?.();
+    return {
+      locked: async () => {
+        try {
+          for (let entry of judged) {
+            let stored = await this.#storedForVerbatimWrite(entry.write.path);
+            // A write judged as one operation and made as another, say over a
+            // document another writer turned into a card, or into another
+            // type, is refused.
+            let now = this.#verbatimOperation(
+              entry.write,
+              stored,
+              coarseDeclined,
+            );
+            if (
+              now.kind !== entry.operation.kind ||
+              now.base !== entry.operation.base
+            ) {
+              throw notPermitted(entry.operation.target, entry.operation.base);
+            }
+            if (entry.pending) {
+              await dischargePendingDecision(
+                core,
+                entry.pending,
+                judgedCard(entry, stored.text),
+              );
+            }
+          }
+        } finally {
+          decided = true;
+        }
+      },
+      seenBy: async (err) =>
+        (sealedAnswer !== undefined && err === sealedAnswer) ||
+        (isOperationFailure(err) &&
+          err.error.code === 'operation-not-permitted') ||
+        judged.length === 0 ||
+        !(await hidden())
+          ? err
+          : notPermitted(judged[0].operation.target, judged[0].operation.base),
+      sealed: async (seal) => {
+        for (let entry of judged) {
+          if (!entry.pending) {
+            continue;
+          }
+          let refusal =
+            entry.operation.base === 'create'
+              ? await pendingWriteRefusal(
+                  core,
+                  entry.pending,
+                  judgedCard(entry, undefined),
+                )
+              : await storedWriteRefusal(core, entry.pending);
+          if (refusal) {
+            sealedAnswer = refusal;
+            return refusal;
+          }
+        }
+        sealedAnswer = seal;
+        return seal;
+      },
+    };
+  }
+
+  // What is stored at a verbatim write's path: whether anything is, and for a
+  // `.json` its text, which says whether it is a card's document.
+  async #storedForVerbatimWrite(
+    path: LocalPath,
+  ): Promise<{ exists: boolean; text?: string }> {
+    if (path.endsWith('.json')) {
+      let text = (await this.readFileAsText(path))?.content;
+      return text === undefined ? { exists: false } : { exists: true, text };
+    }
+    return { exists: await this.#adapter.exists(path) };
+  }
+
+  // The operation a verbatim write amounts to for a caller the realm ACL
+  // declined, which is what the policy gate judges it as. A write no
+  // operation describes is refused by throwing.
+  //
+  // - A card's document is written and removed as the card. A `.json` whose
+  //   document is a card, written where nothing is stored, is a `create` of
+  //   the type it adopts; written over a card's document, an `update` of that
+  //   card; and removed, a `delete` of it.
+  // - Any other file is written as the file: an `update` of the file stored
+  //   at the path, matched on the type the gate gives the file (see
+  //   `storedBytesSubject`). Module source is among them, typed as
+  //   `TsFileDef` or `GtsFileDef`: a realm that grants a write to its code
+  //   lets the grantee change the code, as a direct writer can.
+  //
+  // So these are refused, since no operation does any of them:
+  //
+  // - a write that changes what a path holds: a card's document replaced by
+  //   one that adopts another type, or by bytes that are not a card, and a
+  //   file's bytes replaced by a card's document. A grant is matched on the
+  //   type a write's target has, and a write that leaves its target another
+  //   type would escape the grants it was matched on — or turn a card into a
+  //   `RealmPolicy` that the gate judged as its old type.
+  // - a file written where nothing is stored, and a file removed. A file def
+  //   carries no `create` and no `delete`.
+  // - a card's document written where nothing is stored, by a caller who may
+  //   not read the realm. Such a caller creates a card only where the realm
+  //   mints its id (see `#mintPosture`), and a verbatim write names its path.
+  #verbatimOperation(
+    write: VerbatimWrite,
+    stored: { exists: boolean; text?: string },
+    coarseDeclined: CoarseDeclined,
+  ): VerbatimOperation {
+    let fileURL = this.paths.fileURL(write.path);
+    let file: OperationTarget = { kind: 'instance', url: fileURL.href };
+    let refuse = (base: string): never => {
+      throw notPermitted(file, base);
+    };
+    if (write.path.endsWith('.json')) {
+      let cardURL = new URL(fileURL.href.slice(0, -'.json'.length));
+      let card: OperationTarget = { kind: 'instance', url: cardURL.href };
+      let storedType =
+        stored.text === undefined
+          ? undefined
+          : this.#documentType(stored.text, cardURL);
+      if (write.removal) {
+        return storedType
+          ? { kind: 'card', base: 'delete', cardURL, target: card }
+          : refuse('delete');
+      }
+      let writtenType =
+        write.text === undefined
+          ? undefined
+          : this.#documentType(write.text, cardURL);
+      if (writtenType && storedType) {
+        return sameCodeRef(writtenType, storedType)
+          ? { kind: 'card', base: 'update', cardURL, target: card }
+          : refuse('update');
+      }
+      if (writtenType && !stored.exists) {
+        return coarseDeclined === 'all' || writtenType === 'unresolved'
+          ? refuse('create')
+          : {
+              kind: 'card',
+              base: 'create',
+              cardURL,
+              target: { kind: 'type', codeRef: writtenType, realm: this.url },
+            };
+      }
+      if (writtenType || storedType) {
+        return refuse('update');
+      }
+    }
+    if (write.removal) {
+      return refuse('delete');
+    }
+    return stored.exists
+      ? { kind: 'file', base: 'update', target: file }
+      : refuse('create');
+  }
+
+  // The type a card document at `cardURL` adopts, resolved to an absolute
+  // module, or undefined where the text is not a card's document. A document
+  // whose type does not resolve is still a card's, and is typed by nothing a
+  // grant is matched on.
+  #documentType(
+    text: string,
+    cardURL: URL,
+  ): ResolvedCodeRef | 'unresolved' | undefined {
+    let resource: unknown;
+    try {
+      resource = (JSON.parse(text) as { data?: unknown })?.data;
+    } catch {
+      return undefined;
+    }
+    if (!isCardResource(resource)) {
+      return undefined;
+    }
+    let adoptsFrom = resource.meta?.adoptsFrom;
+    return (
+      (adoptsFrom
+        ? this.operationCore.resolveCodeRef(adoptsFrom, cardURL)
+        : undefined) ?? 'unresolved'
+    );
+  }
+
   // How the write lock would decide a card+json create against a type that the
   // gate left to a predicate: the refusal it would give, or undefined where it
   // would admit the create. The predicate reads the card the create mints, so
@@ -15921,6 +18243,46 @@ export class Realm {
     let localPath = requestedLocalPath;
     if (localPath === '') {
       localPath = 'index';
+    }
+    // A run reads its own writes: a card it staged is served as it staged
+    // it, never from a cache.
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      let staged = await this.#stagedCardResource(run, localPath);
+      if (staged === 'not-a-card') {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '422',
+                title: 'Not a card document',
+                detail: `This run staged ${localPath}.json, which isn't a card document`,
+              },
+            ],
+          }),
+          init: {
+            status: 422,
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              'cache-control': 'no-store',
+            },
+          },
+          requestContext,
+        });
+      }
+      if (staged) {
+        staged.meta.realmInfo = await this.getRealmInfo();
+        return createResponse({
+          body: JSON.stringify({ data: staged }, null, 2),
+          init: {
+            headers: {
+              'content-type': SupportedMimeType.CardJson,
+              'cache-control': 'no-store',
+            },
+          },
+          requestContext,
+        });
+      }
     }
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
@@ -16723,6 +19085,27 @@ export class Realm {
     let localPath: LocalPath = this.paths.local(new URL(request.url));
     let url = this.paths.directoryURL(localPath);
     let entries = await this.directoryEntries(url);
+    // A run lists its own writes too: each file it staged under this
+    // directory, and each directory a staged file makes, beside the realm's
+    // own entries. A directory only the run's files make is listed for it.
+    let run = this.#runOverlay(requestContext);
+    let stagedFiles = new Set<string>();
+    if (run) {
+      let dir = this.paths.local(url);
+      let prefix = dir ? `${dir}/` : '';
+      let named = new Set((entries ?? []).map((e) => `${e.kind}:${e.name}`));
+      for (let path of await runOverlayPathsUnder(this.#dbAdapter, run, dir)) {
+        let [name, ...rest] = path.slice(prefix.length).split('/');
+        let kind: Kind = rest.length ? 'directory' : 'file';
+        if (kind === 'file') {
+          stagedFiles.add(name);
+        }
+        if (!named.has(`${kind}:${name}`)) {
+          named.add(`${kind}:${name}`);
+          (entries ??= []).push({ name, kind, path: join(dir, name) });
+        }
+      }
+    }
     if (!entries) {
       this.#log.warn(`can't find directory ${url.href}`);
       return notFound(request, requestContext);
@@ -16742,7 +19125,9 @@ export class Realm {
     );
     for (let entry of entries) {
       let meta: FileMeta | DirectoryMeta;
-      if (entry.kind === 'file') {
+      if (entry.kind === 'file' && stagedFiles.has(entry.name)) {
+        meta = { kind: 'file', lastModified: null } as FileMeta;
+      } else if (entry.kind === 'file') {
         let innerPath = this.paths.local(
           new URL(`${this.paths.directoryURL(dir).href}${entry.name}`),
         );
@@ -17130,6 +19515,12 @@ export class Realm {
           : await runSearch(),
         scopedRealms,
       );
+      // A run's search runs on the index and answers each card it staged
+      // as staged (see `#withStagedCards`).
+      let run = this.#runOverlay(requestContext);
+      if (run) {
+        doc = await this.#withStagedCards(run, doc);
+      }
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -19816,4 +22207,81 @@ function includedCardOf(
     return included as { lid: string; id?: string; adoptsFrom?: unknown };
   }
   return undefined;
+}
+
+// Why a run's write was not staged, as the route that staged it answers.
+// `notRunning` marks the refusal of a run that has stopped running, or that
+// another attempt owns. `code` is the one the run's commit answers the same
+// refusal with, where the commit makes it.
+interface RunStageRefusal {
+  status: number;
+  code?: 'forbidden-path' | 'path-clash' | 'writes-cap' | 'payload-too-large';
+  title: string;
+  detail: string;
+  notRunning?: true;
+}
+
+// Why a run's commit refuses one file (see `Realm.#runFileRefusal`), as
+// staging and the commit both answer it.
+interface RunFileRefusal {
+  status: number;
+  code: 'forbidden-path' | 'path-clash';
+  title: string;
+  detail: string;
+}
+
+async function* bytesIterable(bytes: Uint8Array): AsyncIterable<Uint8Array> {
+  yield bytes;
+}
+
+async function collectBytes(
+  chunks: AsyncIterable<Uint8Array>,
+): Promise<Uint8Array> {
+  let parts: Uint8Array[] = [];
+  let size = 0;
+  for await (let chunk of chunks) {
+    parts.push(chunk);
+    size += chunk.byteLength;
+  }
+  let bytes = new Uint8Array(size);
+  let offset = 0;
+  for (let part of parts) {
+    bytes.set(part, offset);
+    offset += part.byteLength;
+  }
+  return bytes;
+}
+
+// The bytes a run's batch stages for one file. A described edit is read out
+// through `readRange`, which reads the file as the run sees it.
+async function runBatchBytes(
+  content: StagedContent,
+  readRange: (start: number, end: number) => Promise<AsyncIterable<Uint8Array>>,
+): Promise<Uint8Array> {
+  if (typeof content === 'string') {
+    return new TextEncoder().encode(content);
+  }
+  if (isSplicedSource(content)) {
+    return await collectBytes(
+      streamSpliced(content, (start, end) =>
+        lazyIterable(readRange(start, end)),
+      ),
+    );
+  }
+  if (isStagedFile(content)) {
+    // Only an upload stages a file on disk, and an upload is not a batch.
+    throw new OperationFailure({
+      status: 500,
+      code: 'internal-error',
+      title: 'Unexpected staged file',
+      detail: 'a batch staged an uploaded file, which a run cannot stage',
+    });
+  }
+  return content;
+}
+
+async function* lazyIterable(
+  pending: Promise<AsyncIterable<Uint8Array>>,
+): AsyncIterable<Uint8Array> {
+  yield* await pending;
 }

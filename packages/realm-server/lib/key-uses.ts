@@ -83,10 +83,13 @@ function hostOf(url: string | null): string | null {
 // one to its minute's row (`refusal_window`, the start of that UTC minute, by
 // the database's clock) and moves the row's `created_at` forward to it, never
 // back, so the row reads as its latest refusal even when an earlier statement
-// takes the row's lock after a later one. The unique index on the row's
-// identity (the migration that adds `refusal_window`) makes that atomic
-// however many refusals arrive at once; the ON CONFLICT target names its
-// columns and expressions exactly. A refusal of
+// takes the row's lock after a later one. A unique index on the row's
+// identity makes that atomic however many refusals arrive at once: a run's
+// refusal keys the run (`key_uses_refusal_window_run_idx`, over rows with a
+// `run_id`) and an interactive one does not
+// (`key_uses_refusal_window_interactive_idx`, over rows without). The ON
+// CONFLICT target names that index's columns, expressions and predicate
+// exactly. A refusal of
 // `credential-rejected` made once the request was built is the vendor's 401
 // (a rejection known beforehand refuses before any URL exists), so it is
 // recorded with that status among the vendor's answers.
@@ -126,7 +129,7 @@ export async function recordKeyUses(
             `, date_trunc('minute', NOW())) ON CONFLICT `,
             use.runId
               ? `(share_id, key_id, md5(realm_url), md5(operation), md5(caller), mode, run_id, code, status, host, refusal_window) WHERE refusal_window IS NOT NULL AND run_id IS NOT NULL`
-              : `(share_id, key_id, md5(realm_url), md5(operation), md5(caller), mode, code, status, host, refusal_window) WHERE refusal_window IS NOT NULL`,
+              : `(share_id, key_id, md5(realm_url), md5(operation), md5(caller), mode, code, status, host, refusal_window) WHERE refusal_window IS NOT NULL AND run_id IS NULL`,
             ` DO UPDATE SET count = key_uses.count + 1, created_at = GREATEST(key_uses.created_at, EXCLUDED.created_at)`,
           ]
         : [`, NULL)`]),
