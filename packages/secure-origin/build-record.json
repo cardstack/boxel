@@ -2071,7 +2071,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 574599,
+      "bytes": 574671,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2093,9 +2093,9 @@
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/info-small.js",
-          "sha256": "379a5a5d7e50d54af94e098bf5ad2c1fe43139d53c7aceed4b36e820a585fddb",
-          "size": 924
+          "module": "dist/@cardstack/boxel-icons/v1/icons/info-circle.js",
+          "sha256": "8ce595f477b3e34a8f36df39e2e418ae581b9cf55b420f87fe4041de52862e4c",
+          "size": 1003
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2238,7 +2238,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/alert.gts",
-          "sha256": "57d59371aab2dc67af51ea7ce5e5f5ab3a7ad99fd766b16d8778ca52f1b23ebb",
+          "sha256": "c13a5dcec38b734c776a11c58f5f50ce09dd86510e7ad5118ffd0d7669595d08",
           "size": 2964
         },
         {

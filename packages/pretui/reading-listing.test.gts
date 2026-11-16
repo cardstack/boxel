@@ -782,6 +782,196 @@ module('Pretui | reading-listing', function (hooks) {
     );
   });
 
+  test('List: after arrowing, a re-render does not pull focus back once it leaves the rows', async function (assert) {
+    class Holder {
+      @tracked items = LOTS;
+    }
+    let holder = new Holder();
+    let reorder = () => (holder.items = [...holder.items].reverse());
+    await render(
+      <template>
+        <List @items={{holder.items}} @key={{rowKey}} @label='Lots'>
+          <:item as |row|>{{row.tea}}</:item>
+        </List>
+        <button type='button' data-test-outside {{on 'click' reorder}}>
+          Reorder
+        </button>
+      </template>,
+    );
+    (listRows()[0] as HTMLElement).focus();
+    await triggerKeyEvent(listRows()[0] as HTMLElement, 'keydown', 'ArrowDown');
+    assert.strictEqual(
+      document.activeElement,
+      listRows()[1],
+      'arrowing moves focus within the rows',
+    );
+    await click('[data-test-outside]');
+    await settled();
+    assert
+      .dom('[data-test-outside]')
+      .isFocused('the re-render leaves focus on the outside control');
+  });
+
+  test('List: a re-render that removes the focused row does not later steal focus', async function (assert) {
+    class Holder {
+      @tracked items = LOTS;
+    }
+    let holder = new Holder();
+    let dropSecond = () =>
+      (holder.items = holder.items.filter((_, i) => i !== 1));
+    let reverse = () => (holder.items = [...holder.items].reverse());
+    await render(
+      <template>
+        <List @items={{holder.items}} @key={{rowKey}} @label='Lots'>
+          <:item as |row|>{{row.tea}}</:item>
+        </List>
+        <input aria-label='Elsewhere' data-test-elsewhere />
+      </template>,
+    );
+    (listRows()[0] as HTMLElement).focus();
+    await triggerKeyEvent(listRows()[0] as HTMLElement, 'keydown', 'ArrowDown');
+    dropSecond();
+    await settled();
+    assert.strictEqual(
+      document.activeElement,
+      listRows()[1],
+      'focus moves to the row that took the removed one’s place',
+    );
+    (document.querySelector('[data-test-elsewhere]') as HTMLElement).focus();
+    reverse();
+    await settled();
+    assert
+      .dom('[data-test-elsewhere]')
+      .isFocused('a later re-render leaves focus where the user put it');
+  });
+
+  test('List: after arrowing, Space on a row checkbox keeps focus there through the re-render', async function (assert) {
+    let knobs = new Knobs();
+    knobs.selectionMode = 'multi';
+    await render(
+      <template>
+        <List
+          @items={{LOTS}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @selectionMode={{knobs.selectionMode}}
+          @onSelectionChange={{knobs.onSelectionChange}}
+        >
+          <:item as |row|>{{row.tea}}</:item>
+        </List>
+      </template>,
+    );
+    (listRows()[0] as HTMLElement).focus();
+    await triggerKeyEvent(listRows()[0] as HTMLElement, 'keydown', 'ArrowDown');
+    let box = listRows()[1]!.querySelector(
+      '[data-test-pretui-list-select]',
+    ) as HTMLInputElement;
+    box.focus();
+    await settled();
+    // what Space does on a focused checkbox
+    await click(box);
+    assert.deepEqual(knobs.selections.at(-1), ['B-2'], 'the row is selected');
+    assert.strictEqual(
+      document.activeElement,
+      box,
+      'the selection re-render leaves focus on the checkbox',
+    );
+  });
+
+  test('List: collapsing a detail that held focus after arrowing lands on the expander and stays', async function (assert) {
+    class Holder {
+      @tracked items = LOTS;
+      @tracked keys: RowKey[] = ['B-2'];
+    }
+    let state = new Holder();
+    let noop = () => {};
+    await render(
+      <template>
+        <List
+          @items={{state.items}}
+          @key={{rowKey}}
+          @rowLabel={{rowLabel}}
+          @expandedKeys={{state.keys}}
+          @onExpandedChange={{noop}}
+        >
+          <:item as |row|>{{row.tea}}</:item>
+          <:expanded as |row|><input
+              aria-label='Note'
+              data-test-note
+              value={{row.place}}
+            /></:expanded>
+        </List>
+      </template>,
+    );
+    (listRows()[0] as HTMLElement).focus();
+    await triggerKeyEvent(listRows()[0] as HTMLElement, 'keydown', 'ArrowDown');
+    (listRoot().querySelector('[data-test-note]') as HTMLElement).focus();
+    await settled();
+
+    state.keys = [];
+    await settled();
+    let expander = listRows()[1]!.querySelector(
+      '[data-test-pretui-list-expand]',
+    );
+    assert.strictEqual(
+      document.activeElement,
+      expander,
+      "focus lands on that row's expander",
+    );
+    state.items = [...state.items];
+    await settled();
+    assert.strictEqual(
+      document.activeElement,
+      expander,
+      'a later re-render does not pull focus back onto the row',
+    );
+  });
+
+  test('DataTable: removing the focused row by paging does not backtrack, and paging does not steal focus', async function (assert) {
+    class Holder {
+      @tracked rows = LOTS;
+    }
+    let holder = new Holder();
+    let knobs = new Knobs();
+    knobs.pageSize = 2;
+    await render(
+      <template>
+        <DataTable
+          @columns={{COLUMNS}}
+          @rows={{holder.rows}}
+          @key={{rowKey}}
+          @pageSize={{knobs.pageSize}}
+          @onActivate={{knobs.onActivate}}
+        />
+      </template>,
+    );
+    (bodyRows()[0] as HTMLElement).focus();
+    await triggerKeyEvent(bodyRows()[0] as HTMLElement, 'keydown', 'ArrowDown');
+    assert.strictEqual(document.activeElement, bodyRows()[1]);
+
+    // the page shrinks under the focused row: focusout fires mid-render
+    knobs.pageSize = 1;
+    await settled();
+    assert.strictEqual(bodyRows().length, 1, 'the focused row is gone');
+
+    knobs.pageSize = 2;
+    await settled();
+    await click('[data-test-pretui-pagination] button[aria-label="Page 2"]');
+    assert.strictEqual(bodyRows().length, 1, 'page two is showing');
+    let pager = document.activeElement;
+    assert.ok(
+      pager?.closest('[data-test-pretui-pagination]'),
+      'focus stays in the pagination',
+    );
+    holder.rows = [...holder.rows];
+    await settled();
+    assert.strictEqual(
+      document.activeElement,
+      pager,
+      'a later re-render leaves focus in the pagination',
+    );
+  });
+
   test('List selection is a named control, and Space toggles it from the row', async function (assert) {
     let knobs = new Knobs();
     knobs.selectionMode = 'multi';
