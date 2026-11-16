@@ -112,7 +112,9 @@ export async function checkAnonymousHomePage(
 // What the realm serves at its root, decided as the host-mode index serve
 // decides it (`serveIndex`): the routing rule for `/`, where the realm's
 // routing map has one, and otherwise the realm's index card. Routing rules
-// only ever name cards in the realm they belong to.
+// only ever name cards in the realm they belong to. The routing map holds only
+// the fixed rules, but no dynamic route can answer `/`: each has a `:name`
+// segment, and a `:name` segment matches one non-empty path segment.
 async function homePage(
   realm: Realm,
 ): Promise<{ cardId: string } | { redirectTo: string }> {
