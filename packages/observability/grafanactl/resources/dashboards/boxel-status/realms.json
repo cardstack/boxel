@@ -493,7 +493,169 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Permissions for this realm. Set the Matrix Username and Permission Level above, then click the Grant Permission button.",
+        "description": "Operator action: take a user's `read` or `read/write` access to this realm away. Pick from the users that hold a permission row on this realm (sourced from `realm_user_permissions`; the list leaves out the realm owner and the realm-wide `*` and `users` grants, which the endpoint refuses). POSTs to `/_grafana-remove-realm-user-permission` through the realm-server-operator datasource proxy. The removal deletes the user's permission row, takes the realm out of the user's workspace list, and refuses the user's existing realm sessions on the next request. The removal does not touch access the user holds through a `*` or `users` grant or a realm policy, and does not touch the user's Matrix account.",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 24,
+          "x": 0,
+          "y": 12
+        },
+        "id": 10,
+        "options": {
+          "buttonGroup": {
+            "orientation": "center",
+            "size": "md"
+          },
+          "confirmModal": {
+            "body": "Please confirm the action.",
+            "cancel": "Cancel",
+            "columns": {
+              "include": [
+                "name",
+                "newValue"
+              ],
+              "name": "Field",
+              "newValue": "Value",
+              "oldValue": "Previous"
+            },
+            "confirm": "Confirm",
+            "elementDisplayMode": "modified",
+            "title": "Confirm operator action"
+          },
+          "elements": [
+            {
+              "id": "matrix_username",
+              "type": "select",
+              "title": "Matrix username",
+              "tooltip": "Users that hold a permission row on this realm. The list leaves out the realm owner and the realm-wide `*` and `users` grants.",
+              "labelWidth": 28,
+              "section": "input",
+              "value": "",
+              "options": [],
+              "optionsSource": "Query",
+              "queryOptions": {
+                "source": "B",
+                "value": "username",
+                "label": "username"
+              }
+            },
+            {
+              "id": "btn_remove",
+              "type": "button",
+              "title": "",
+              "buttonLabel": "Remove from ${realm_url:text}",
+              "tooltip": "POST /_grafana-remove-realm-user-permission?realm=...&user=...",
+              "labelWidth": 28,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "destructive",
+              "value": "",
+              "customCode": "const realm = ${realm_url:doublequote};\nconst username = (context.panel.elements.find(function(e){return e.id==='matrix_username';})||{}).value || '';\nconst trimmed = String(username).trim();\nif (!trimmed) {\n  context.grafana.notifyWarning(['Username required', 'Pick a user that holds a permission on this realm.']);\n  return;\n}\nif (!window.confirm('Remove ' + trimmed + ' from ' + realm + '?\\n\\nThe removal deletes the user\\'s permission row on this realm and refuses the user\\'s existing realm sessions. The removal does not touch access the user holds through a * or users grant or a realm policy, and does not touch the user\\'s Matrix account.')) { return; }\n(async () => {\ntry {\n  const url = '/api/datasources/proxy/uid/realm-server-operator/_grafana-remove-realm-user-permission?realm=' + encodeURIComponent(realm)\n            + '&user=' + encodeURIComponent(trimmed);\n  const r = await fetch(url, { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Permission removed', (await r.json()).message]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Remove failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Remove failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+            }
+          ],
+          "initial": {
+            "code": "",
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "highlight": false,
+            "method": "query",
+            "payload": {}
+          },
+          "layout": {
+            "orientation": "horizontal",
+            "padding": 10,
+            "sectionVariant": "default",
+            "sections": [
+              {
+                "id": "input",
+                "name": "Remove"
+              },
+              {
+                "id": "actions",
+                "name": "Action"
+              }
+            ],
+            "variant": "split"
+          },
+          "reset": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "process",
+            "text": "Refresh",
+            "variant": "hidden"
+          },
+          "resetAction": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "mode": "initial",
+            "payload": {}
+          },
+          "saveDefault": {
+            "icon": "save",
+            "text": "Save Default",
+            "variant": "hidden"
+          },
+          "submit": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "cloud-upload",
+            "text": "Submit",
+            "variant": "hidden"
+          },
+          "sync": false,
+          "update": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "payload": {},
+            "payloadMode": "all"
+          },
+          "updateEnabled": "disabled"
+        },
+        "pluginVersion": "6.2.0",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT 1 AS noop;",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT username FROM realm_user_permissions WHERE realm_url = ${realm_url:sqlstring} AND realm_owner = false AND username LIKE '@%:%' ORDER BY username;",
+            "refId": "B"
+          }
+        ],
+        "title": "Remove Permission",
+        "type": "volkovlabs-form-panel"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Permissions for this realm. To add or change a user's access, set the Matrix username and permission level in Grant Permission and click the Grant button. To take a user's access away, pick the user in Remove Permission and click the Remove button.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -561,7 +723,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 12
+          "y": 18
         },
         "id": 6,
         "options": {
@@ -726,7 +888,7 @@
           "h": 4,
           "w": 24,
           "x": 0,
-          "y": 22
+          "y": 28
         },
         "id": 7,
         "options": {
@@ -772,7 +934,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 26
+          "y": 32
         },
         "id": 100,
         "options": {
@@ -961,7 +1123,7 @@
           "h": 7,
           "w": 24,
           "x": 0,
-          "y": 34
+          "y": 40
         },
         "id": 101,
         "options": {
@@ -1209,7 +1371,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 41
+          "y": 47
         },
         "id": 8,
         "options": {
@@ -1515,7 +1677,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 51
+          "y": 57
         },
         "id": 9,
         "options": {
