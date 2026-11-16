@@ -258,8 +258,12 @@ module(basename(import.meta.filename), function (hooks) {
     {
       checks,
       realmAdmission,
+      triggerKind,
       calls = [],
     }: {
+      // The job's `triggerKind`; by default a run labeled `manual` says so,
+      // and any other is its trigger's.
+      triggerKind?: 'manual' | 'batch';
       // Stands in for the worker's admission checks; undefined for a worker
       // that has none.
       checks?: (
@@ -318,7 +322,11 @@ module(basename(import.meta.filename), function (hooks) {
         scheduledAt: new Date().toISOString(),
         dryRun: false,
         // A run started by hand says so; any other run is its trigger's.
-        ...(run.trigger === 'manual' ? { triggerKind: 'manual' as const } : {}),
+        ...(triggerKind
+          ? { triggerKind }
+          : run.trigger === 'manual'
+            ? { triggerKind: 'manual' as const }
+            : {}),
       },
       automationRunDedupeKey(run),
       jobInfo,
@@ -519,7 +527,16 @@ module(basename(import.meta.filename), function (hooks) {
   test('a payer whose sessions were revoked or whose account can’t sign in pauses the automation with payer-lost-access', async function (assert) {
     let automation = await switchOn(CLEAN);
     await revokeSessionsAt(OWNER, automation.scheduledSince + 60);
+    // The run was enqueued well after the revocation, so only the payer's
+    // switch-on, not the run's own start, places the revocation after the
+    // run was given the payer's authority.
     let revoked = await newRun(CLEAN, { trigger: 'nightly' });
+    await query(dbAdapter, [
+      'UPDATE automation_runs SET created_at = to_timestamp(',
+      param(automation.scheduledSince + 3600),
+      ') WHERE id =',
+      param(revoked.id),
+    ]);
     let calls: RunCommandArgs[] = [];
     let result = await attempt(revoked, { calls });
     await assertRefused(assert, revoked, result, calls, 'session-revoked');
@@ -575,6 +592,71 @@ module(basename(import.meta.filename), function (hooks) {
       }),
     });
     await assertRefused(assert, failing, result, calls, 'account-unverifiable');
+    let row = await getAutomationRun(dbAdapter, failing.id);
+    assert.false(
+      row?.errorMessage?.includes('the Matrix server is down'),
+      'what the Matrix server answered stays out of the run, which the realm’s writers read',
+    );
+  });
+
+  // A batch's follow-up: its slot is the batch's id, and the batch names the
+  // run that submitted it.
+  async function batchFollowUp(submitting: AutomationRun) {
+    let batchId = `batch-${randomUUID()}`;
+    await query(dbAdapter, [
+      'INSERT INTO ai_batches (batch_id, run_id, acts_as, realm, automation_id, model, request_count, estimated_usd, run_ai_reservation, deadline, state) VALUES (',
+      param(batchId),
+      ',',
+      param(submitting.id),
+      ',',
+      param(OWNER),
+      ',',
+      param(realm.url),
+      ',',
+      param(automationId(CLEAN)),
+      ", 'test/model', 1, 0, 'reservation', now() + interval '1 day', 'completed')",
+    ]);
+    return await createAutomationRun(dbAdapter, {
+      automationId: automationId(CLEAN),
+      realm: ri(realm.url),
+      trigger: 'batch',
+      slot: batchId,
+      actsAs: OWNER,
+    });
+  }
+
+  test('a batch’s follow-up runs while its automation is paused, and is held to the submitting run’s authority', async function (assert) {
+    let automation = await switchOn(CLEAN);
+    let submitting = await newRun(CLEAN, { trigger: 'nightly' });
+    await pauseAutomation(
+      dbAdapter,
+      { automationId: automationId(CLEAN), user: OWNER },
+      { matrixServerName: 'localhost', virtualNetwork },
+    );
+    let followUp = await batchFollowUp(submitting);
+    let result = await attempt(followUp, { triggerKind: 'batch' });
+    assert.strictEqual(
+      result.state,
+      'complete',
+      'the batch’s results are read, though the automation is paused',
+    );
+
+    // Revoked after the submitting run started but before the follow-up was
+    // enqueued: the follow-up still acts on the authority the submitting run
+    // had, so it is refused.
+    let submittedAt = Math.floor(Date.parse(submitting.createdAt) / 1000);
+    assert.true(submittedAt >= automation.scheduledSince);
+    let late = await batchFollowUp(submitting);
+    await query(dbAdapter, [
+      'UPDATE automation_runs SET created_at = to_timestamp(',
+      param(submittedAt + 3600),
+      ') WHERE id =',
+      param(late.id),
+    ]);
+    await revokeSessionsAt(OWNER, submittedAt + 60);
+    let calls: RunCommandArgs[] = [];
+    result = await attempt(late, { triggerKind: 'batch', calls });
+    await assertRefused(assert, late, result, calls, 'session-revoked');
   });
 
   test('a script that doesn’t parse is refused before it runs', async function (assert) {

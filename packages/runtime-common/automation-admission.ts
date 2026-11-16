@@ -6,20 +6,24 @@
 //
 // 1. The automation's row. A run of one of the card's own triggers (cron,
 //    one-time, webhook) or a batch's follow-up is refused when the
-//    automation was removed (`not-switched-on`) or is paused
-//    (`automation-paused`), so a run enqueued before a pause or a remove
-//    doesn't start, and a trigger's run that no longer acts as the payer
+//    automation was removed (`not-switched-on`), and a trigger's run when it
+//    is paused (`automation-paused`), so a run enqueued before a pause or a
+//    remove doesn't start. A batch's follow-up still runs while paused: it
+//    reads results its submitting run already paid for, and nothing runs it
+//    again after a resume. A trigger's run that no longer acts as the payer
 //    (a resume made someone else the payer) is refused (`payer-changed`). A
-//    run someone started by hand (Preview, Run now) needs no row. A `waiting-for-credits` row is
-//    admitted here and left to the billing check, and a `done` row is
-//    admitted, since the run of its last slot is enqueued before it is done.
+//    run someone started by hand (Preview, Run now) needs no row. A
+//    `waiting-for-credits` row is admitted here and left to the billing
+//    check, and a `done` row is admitted, since the run of its last slot is
+//    enqueued before it is done.
 // 2. The run's identity: the person the run acts as (the payer, or whoever
 //    clicked).
 //    - They are still a direct writer of the realm (`not-a-direct-writer`).
 //    - Their sessions weren't revoked since the run was given their
 //      authority (`session-revoked`): since they switched the automation on
-//      or last resumed it, for a run of its triggers, or since they started
-//      the run, for one started by hand.
+//      or last resumed it, for a run of its triggers; since the submitting
+//      run started, for a batch's follow-up; or since they started the run,
+//      for one started by hand.
 //    - Their account can still sign in (`account-deactivated`): the Matrix
 //      server, which alone knows, says it isn't deactivated or locked. A
 //      worker that can't ask refuses the run (`account-unverifiable`).
@@ -58,8 +62,12 @@ import {
 import type { DBAdapter } from './db.ts';
 import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import { isSessionRevoked } from './db-queries/user-queries.ts';
+import { param, query } from './expression.ts';
+import { logger } from './log.ts';
 import { wrapRealmRunnerScript } from './realm-runner-script.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
+
+const log = logger('automation-admission');
 
 // What the Matrix server says of an account: it can sign in, it was
 // deactivated, it is locked, or there is no such account.
@@ -119,7 +127,10 @@ export async function admitRunIdentity(
         `The automation ${run.automationId} isn't switched on, so its scheduled run doesn't start`,
       );
     }
-    if (automation.state === 'paused') {
+    // A batch's follow-up reads results its submitting run already paid
+    // for, and nothing runs it again after a resume, so a pause doesn't stop
+    // it.
+    if (automation.state === 'paused' && kind === 'trigger') {
       return refuse(
         'automation-paused',
         `The automation is paused (${automation.pauseReason}), so its scheduled run doesn't start`,
@@ -166,13 +177,15 @@ export async function admitRunIdentity(
   }
 
   // The moment the run was given its identity's authority: the payer's
-  // switch-on or last resume (when the payer was set), for a run that acts as
-  // the payer; the run's own start, for a run started by hand or a batch's
-  // follow-up that acts as someone else.
+  // switch-on or last resume (when the payer was set), for a trigger's run;
+  // the submitting run's start, for a batch's follow-up, which acts as whoever
+  // that run acted as; the run's own start, for a run started by hand.
   let authorizedAt =
-    isPayer && automation
+    kind === 'trigger' && automation
       ? automation.scheduledSince
-      : Math.floor(Date.parse(run.createdAt) / 1000);
+      : kind === 'batch'
+        ? await submittingRunStart(dbAdapter, run)
+        : Math.floor(Date.parse(run.createdAt) / 1000);
   if (await isSessionRevoked(dbAdapter, actsAs, authorizedAt)) {
     await payerLostAccess();
     return refuse(
@@ -191,9 +204,14 @@ export async function admitRunIdentity(
   try {
     standing = await ctx.checks.accountStanding(actsAs);
   } catch (e: any) {
+    // The failure can name the platform's Matrix admin account, so it goes
+    // to the server's log, never to the run, which the realm's writers read.
+    log.warn(
+      `run ${run.id}: couldn't ask the Matrix server about ${actsAs}'s account: ${e?.message ?? e}`,
+    );
     return refuse(
       'account-unverifiable',
-      `The Matrix server couldn't be asked whether ${actsAs}'s account can still sign in: ${e?.message ?? e}`,
+      `The Matrix server couldn't be asked whether ${actsAs}'s account can still sign in`,
     );
   }
   if (standing !== 'usable') {
@@ -292,6 +310,21 @@ async function askRealm(
   } catch (e: any) {
     return { failure: redact(String(e?.message ?? e)) };
   }
+}
+
+// Unix seconds: when the run that submitted a batch's follow-up started.
+// The follow-up's slot is the batch's id. A follow-up whose batch isn't found
+// falls back to its own start.
+async function submittingRunStart(
+  dbAdapter: DBAdapter,
+  run: AutomationRun,
+): Promise<number> {
+  let [row] = await query(dbAdapter, [
+    'SELECT r.created_at FROM ai_batches b JOIN automation_runs r ON r.id = b.run_id WHERE b.batch_id =',
+    param(run.slot),
+  ]);
+  let started = row?.created_at ?? run.createdAt;
+  return Math.floor(new Date(started as string).getTime() / 1000);
 }
 
 function refuse(
