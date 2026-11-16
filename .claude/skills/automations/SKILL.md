@@ -1408,6 +1408,7 @@ The tests that pin these claims are the `queue - automation lane`, `queue - auto
 
 - **Worker task memory.** The worker manager divides its task's memory across every worker it starts, automation workers included (`workerHeapLimitMb` in `lib/worker-heap-limit.ts`). Each automation worker added shrinks every other worker's heap in that task.
 - **Prerender tabs.** An automation run is a run-command job, which runs its command in a prerender tab at its job priority. Each worker that can claim a run is one more tab the prerender servers may have to hold at once. See the `prerender-sizing` skill before raising the count.
+- **The deployed counts.** The `prerender-sizing` skill's _Automation runs and the worker lanes_ records the counts each environment runs, why, what a run's tab was measured to cost, and how to measure it again.
 
 ### The prerender high-priority tier
 
