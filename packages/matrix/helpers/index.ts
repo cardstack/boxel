@@ -1221,6 +1221,70 @@ export async function getRoomEvents(
   return await getAllRoomEvents(roomId, accessToken);
 }
 
+// The Boxel message events the server holds in the room the page is showing,
+// once there is one whose body matches each of `bodies`. The transcript
+// renders a sent message as a pending local echo the moment it is queued, and
+// the send itself only goes out after the message's attached cards and files
+// finish uploading, so a passing `assertMessages` does not mean the server has
+// the event yet. Resolves to every Boxel message event in the room, in
+// timeline order. A timeout reports both sides: every event the server holds
+// in that room and the transcript as rendered.
+export async function waitForBoxelMessageEvents(
+  page: Page,
+  username: string,
+  password: string,
+  bodies: string[],
+  timeout = 20_000,
+) {
+  let roomId = await getRoomId(page);
+  let start = Date.now();
+  let deadline = start + timeout;
+  let polls = 0;
+  let events: Awaited<ReturnType<typeof getRoomEvents>> = [];
+  let boxelMessages: typeof events = [];
+  let missing: string[] = [];
+  for (;;) {
+    polls++;
+    events = await getRoomEvents(username, password, roomId);
+    boxelMessages = events.filter(
+      (event) =>
+        event.type === 'm.room.message' &&
+        event.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE,
+    );
+    missing = bodies.filter(
+      (body) => !boxelMessages.some((event) => event.content?.body === body),
+    );
+    if (missing.length === 0 || Date.now() >= deadline) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (missing.length === 0) {
+    if (polls > 1) {
+      console.log(
+        `waitForBoxelMessageEvents: the server held all ${bodies.length} expected Boxel message(s) in ${roomId} after ${Date.now() - start}ms and ${polls} polls`,
+      );
+    }
+    return boxelMessages;
+  }
+  let serverEvents = events
+    .map((event) =>
+      JSON.stringify({
+        type: event.type,
+        msgtype: event.content?.msgtype,
+        sender: event.sender,
+        ts: event.origin_server_ts,
+        body: event.content?.body?.slice(0, 80),
+      }),
+    )
+    .join('\n');
+  throw new Error(
+    `Expected the server to hold Boxel messages with these bodies in ${roomId} within ${timeout}ms; missing: ${JSON.stringify(missing)}.\n` +
+      `server events in the room (${events.length}):\n${serverEvents}\n` +
+      (await describeMessages(page)),
+  );
+}
+
 export function getAgentId(
   roomEvents: {
     content?: {
