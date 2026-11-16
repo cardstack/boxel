@@ -921,8 +921,10 @@ realm server's log for Loki. The code is
 | `platform` | `finish`                                                     | `finishAutomationRun`, `abandonAutomationRun` and `cancelAutomationRun`, once the row changes: how the run ended, with the row's `error_reason` and `error_message` (a cap that ended it, a time limit, a script error) or who canceled it |
 
 `RunLogSink` implements `FlushableRunProgressSink`. It sends a batch of at
-most `RUN_LOG_MAX_BATCH_LINES` (500) events once that many wait or a second
-after the first of them, one batch at a time, each given up on after
+most `RUN_LOG_MAX_BATCH_LINES` (500) events and `RUN_LOG_MAX_BATCH_BYTES`
+encoded bytes (`RUN_LOG_MAX_REQUEST_BYTES`, 2 MiB, less headroom; the realm
+counts the body in bytes, so text outside ASCII fills a batch first) once
+either is reached or a second after the first of them, one batch at a time, each given up on after
 `RUN_LOG_SEND_TIMEOUT_MS` (10 s), so `flush` always settles. Whoever runs the
 script calls `await sink.flush()` before the commit and before finishing the
 run.
@@ -1142,7 +1144,11 @@ lines, its activity and milestones, and the error it ends with reach
 `automation_run_log` and Loki (_The run log_). The tool flushes the sink
 before it answers, while the run is still running, since `/_run-log` takes
 lines only from a running run and the worker finishes the run once it has
-the answer.
+the answer. It waits on that flush only until `FINAL_FLUSH_MARGIN_MS` (5 s)
+before the run's `endsAt`, so a slow log never costs the run its commit; a
+line sent past the limit is refused with the expired token anyway. A batch
+the log refuses or can't take is reported with the tab's `console.warn`,
+prefixed `[automation run <run id>]`.
 
 ### Running one automation by hand in development
 
@@ -1169,7 +1175,8 @@ error (<reason>)` or `left alone: …`;
 - the run's log: the script's console lines, progress and the error it
   ended with, beside the platform's lines (_Reading a run's log in
   Postgres_). A batch the run's log refused or couldn't be sent shows in
-  the prerender server's log as the tab's `console.warn` of why.
+  the prerender server's log as the tab's `[automation run <run id>]`
+  warning, saying why.
 
 A run that stays `pending` was never claimed: check that a worker can claim
 priority 5 (_The lanes_). One that stays `running` lost its attempt; see

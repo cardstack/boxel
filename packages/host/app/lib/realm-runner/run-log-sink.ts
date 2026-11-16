@@ -1,5 +1,6 @@
 import {
   RUN_LOG_MAX_BATCH_LINES,
+  RUN_LOG_MAX_REQUEST_BYTES,
   RUN_LOG_PATH,
 } from '@cardstack/runtime-common/automation-run-log';
 
@@ -16,11 +17,25 @@ export const RUN_LOG_SEND_TIMEOUT_MS = 10_000;
 // server that answers slowly must not fill a tab other runs share.
 export const RUN_LOG_MAX_PENDING = 5000;
 
+// The most encoded bytes of events one batch carries. The realm refuses a
+// request body past `RUN_LOG_MAX_REQUEST_BYTES`, which counts bytes, so text
+// outside ASCII fills a batch before its line count does. The headroom covers
+// the body's envelope and the dropped-lines line.
+export const RUN_LOG_MAX_BATCH_BYTES = RUN_LOG_MAX_REQUEST_BYTES - 4096;
+
+const encoder = new TextEncoder();
+
+// An event's share of a batch's body: its JSON and the comma after it.
+function encodedSize(event: RunProgressEvent): number {
+  return encoder.encode(JSON.stringify(event)).length + 1;
+}
+
 // Sends an automation run's progress to its run log: the realm's
 // `RUN_LOG_PATH`, with the run's token, in batches of at most
-// `RUN_LOG_MAX_BATCH_LINES` events. A batch goes once that many are waiting
-// or `RUN_LOG_FLUSH_INTERVAL_MS` after the first of them, so the console
-// shows a run's lines while it runs. One batch is sent at a time, in order,
+// `RUN_LOG_MAX_BATCH_LINES` events and `RUN_LOG_MAX_BATCH_BYTES` encoded
+// bytes. A batch goes once either is reached or `RUN_LOG_FLUSH_INTERVAL_MS`
+// after the first of its events, so the console shows a run's lines while it
+// runs. An event bigger than a batch on its own goes alone. One batch is sent at a time, in order,
 // and each send is given up on after `RUN_LOG_SEND_TIMEOUT_MS`.
 //
 // The log never fails or stalls the run: a batch the realm refuses (the run
@@ -29,7 +44,8 @@ export const RUN_LOG_MAX_PENDING = 5000;
 // reaching it are already redacted by `runAutomationScript`, and the realm
 // server redacts them again.
 export class RunLogSink implements FlushableRunProgressSink {
-  #pending: RunProgressEvent[] = [];
+  #pending: { event: RunProgressEvent; bytes: number }[] = [];
+  #pendingBytes = 0;
   #dropped = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   // The send in flight, if any.
@@ -64,12 +80,14 @@ export class RunLogSink implements FlushableRunProgressSink {
   }
 
   record(event: RunProgressEvent): void {
-    this.#pending.push(event);
+    let bytes = encodedSize(event);
+    this.#pending.push({ event, bytes });
+    this.#pendingBytes += bytes;
     if (this.#pending.length > RUN_LOG_MAX_PENDING) {
-      this.#pending.shift();
+      this.#pendingBytes -= this.#pending.shift()!.bytes;
       this.#dropped++;
     }
-    if (this.#pending.length >= RUN_LOG_MAX_BATCH_LINES) {
+    if (this.#batchIsFull()) {
       this.#sendNext();
     } else if (!this.#timer && !this.#sending) {
       this.#timer = setTimeout(
@@ -87,6 +105,31 @@ export class RunLogSink implements FlushableRunProgressSink {
     }
   }
 
+  #batchIsFull(): boolean {
+    return (
+      this.#pending.length >= RUN_LOG_MAX_BATCH_LINES ||
+      this.#pendingBytes >= RUN_LOG_MAX_BATCH_BYTES
+    );
+  }
+
+  // The waiting events that fit the next batch, oldest first, taken off the
+  // queue. At least one, when any wait.
+  #takeBatch(): RunProgressEvent[] {
+    let count = 0;
+    let bytes = 0;
+    while (
+      count < this.#pending.length &&
+      count < RUN_LOG_MAX_BATCH_LINES &&
+      (count === 0 ||
+        bytes + this.#pending[count].bytes <= RUN_LOG_MAX_BATCH_BYTES)
+    ) {
+      bytes += this.#pending[count].bytes;
+      count++;
+    }
+    this.#pendingBytes -= bytes;
+    return this.#pending.splice(0, count).map(({ event }) => event);
+  }
+
   // Starts the next batch unless one is in flight; the in-flight batch
   // starts the next when it settles.
   #sendNext(): void {
@@ -97,8 +140,12 @@ export class RunLogSink implements FlushableRunProgressSink {
     if (this.#sending) {
       return;
     }
-    let events = this.#pending.splice(0, RUN_LOG_MAX_BATCH_LINES);
-    if (this.#dropped > 0 && events.length < RUN_LOG_MAX_BATCH_LINES) {
+    let events = this.#takeBatch();
+    if (
+      this.#dropped > 0 &&
+      events.length < RUN_LOG_MAX_BATCH_LINES &&
+      this.#pending.length === 0
+    ) {
       events.push({
         kind: 'console',
         at: Date.now(),
@@ -112,7 +159,7 @@ export class RunLogSink implements FlushableRunProgressSink {
     }
     this.#sending = this.#post(events).finally(() => {
       this.#sending = undefined;
-      if (this.#pending.length >= RUN_LOG_MAX_BATCH_LINES) {
+      if (this.#batchIsFull()) {
         this.#sendNext();
       } else if (
         (this.#pending.length > 0 || this.#dropped > 0) &&

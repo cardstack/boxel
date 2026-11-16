@@ -29,6 +29,11 @@ import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type * as BaseToolModule from '@cardstack/base/command';
 
+// How long before the run's time limit its last progress stops being waited
+// on, leaving the worker's commit its round trip before the run's token
+// expires.
+export const FINAL_FLUSH_MARGIN_MS = 5000;
+
 // The automation command (ADR 025 §1.3): runs one automation run's script on
 // Realm Runner's automation surface, in a prerender tab on the run's own
 // affinity. The worker gives it the script and `realm.current.automation`;
@@ -75,13 +80,20 @@ export default class RunAutomationTool extends HostBaseTool<
       );
     }
     let secrets = [runToken];
+    let { run } = claimsFromRawToken(runToken) as { run?: { id?: unknown } };
+    let runId = typeof run?.id === 'string' ? run.id : 'unknown';
+    let endsAt = Date.parse(scriptInput.endsAt);
     // The run's console lines, progress and the error it ends with go to its
     // run log, sent with the run's token through the same network as the
-    // run's other realm calls.
+    // run's other realm calls. A batch the log refuses or can't take is
+    // reported in the tab's console, which the prerender server logs, named
+    // by its run.
     let progress = new RunLogSink({
       realmURL,
       runToken,
       fetch: this.network.fetch,
+      onError: (message) =>
+        console.warn(`[automation run ${runId}] ${message}`),
     });
     let runner = new RunRealmCodeTool(this.toolContext);
     let send = this.runTokenSend(runToken);
@@ -94,7 +106,7 @@ export default class RunAutomationTool extends HostBaseTool<
     // this tab comes off what the script gets.
     let secondsCap = Math.min(
       scriptInput.secondsCap,
-      (Date.parse(scriptInput.endsAt) - Date.now()) / 1000,
+      (endsAt - Date.now()) / 1000,
     );
     let outcome: AutomationScriptOutcome;
     if (secondsCap <= 0) {
@@ -122,8 +134,11 @@ export default class RunAutomationTool extends HostBaseTool<
     }
     // The run's progress is sent before the run answers, while the run is
     // still running: the run log takes lines only from a running run, and
-    // the worker finishes the run once it has the answer.
-    await progress.flush();
+    // the worker finishes the run once it has the answer. The wait ends short
+    // of the run's time limit, so a slow log never costs the run its commit;
+    // a line sent past the limit would be refused with the expired token
+    // anyway.
+    await flushBefore(progress, endsAt - FINAL_FLUSH_MARGIN_MS);
 
     let commandModule = await this.loadToolModule();
     return new commandModule.JsonCard({ json: outcome });
@@ -168,6 +183,25 @@ export default class RunAutomationTool extends HostBaseTool<
       }
       return response;
     };
+  }
+}
+
+// Resolves once `progress` has sent what it holds, or at `deadline` (ms since
+// the epoch), whichever comes first. The sends carry on after a deadline.
+async function flushBefore(
+  progress: RunLogSink,
+  deadline: number,
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      progress.flush(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
