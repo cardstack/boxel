@@ -931,7 +931,7 @@ module('Integration | key usage and limits', function (hooks) {
         .includesText(
           'the service refused the key that the operation “sync” uses.',
         )
-        .includesText('Reconnect or replace the key on its tile below');
+        .includesText('Reconnect or replace the key on the key’s tile below');
       assert.dom('[data-test-automation-notice-approve]').doesNotExist();
     });
 

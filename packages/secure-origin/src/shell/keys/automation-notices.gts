@@ -119,8 +119,8 @@ const AutomationNotices: TOC<Signature> = <template>
                       A direct writer of the workspace resumes the share, or the
                       key’s owner swaps another key into the share.
                     {{else}}
-                      Reconnect or replace the key on its tile below, and the
-                      automation’s next run goes ahead.
+                      Reconnect or replace the key on the key’s tile below, and
+                      the automation’s next run goes ahead.
                     {{/if}}
                   </p>
                 </:default>
