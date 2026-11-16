@@ -21,20 +21,7 @@ Element: HTMLDivElement
 
 **`@size`** takes the house scale (`xs | s | m | l | xl` and the `sm` / `md` / `lg` / `small` / `medium` / `large` / `default` aliases) and paints two steps. `s` is the compact well for an empty note inside a card section: `--boxel-sp` padding on every side and the title at `--boxel-font-size`. `m`, the default, is sized for a page section. `xs` lands on `s`, and `l` / `xl` on `m`. The resolved step lands as `data-size`, `'s'` or `'m'`, on every render, the default included.
 
-**EmptyState places its actions; it does not lay them out.** Whether two actions are equal alternatives, a primary and a secondary, or an action and a link is the caller's call, so `<:actions>` renders under the message exactly as given. One action is a **Button** on its own. Several go in a **ButtonGroup**, which lays them out: in a row while they fit, stacked all at once when they don't, never two and one. Primary versus secondary comes from each Button's `@appearance`. Anything else between or around the actions, such as an "or", is the caller's own markup in the block:
-
-```hbs
-<EmptyState @title='No proofs yet'>
-  <:actions>
-    <ButtonGroup @label='Ways forward'>
-      <Button @appearance='accent'>Go to checkout</Button>
-      <Button @appearance='outlined'>Back to the shop</Button>
-    </ButtonGroup>
-  </:actions>
-</EmptyState>
-```
-
-The actions wrapper stretches to the content width, so a ButtonGroup inside it measures its row against the room the EmptyState really has. `<:action>` is a deprecated alias that renders in the same place.
+**EmptyState places its actions; it does not lay them out.** Whether two actions are equal alternatives, a primary and a secondary, or an action and a link is the caller's call, so `<:actions>` renders under the message exactly as given. One action is a **Button** on its own. For several, the caller brings the layout, such as a **ButtonGroup** or its own flex row, along with anything between them, such as an "or". Primary versus secondary comes from each Button's `@appearance`. `<:action>` is a deprecated alias that renders in the same place.
 
 `max-width: 34ch` on the message is the measure at which a centred paragraph stays scannable — wider and the eye loses the line, and centred text is much less forgiving of long measures than left-aligned.
 

@@ -25,8 +25,8 @@ export interface EmptyStateSignature {
     /** The message with markup in it (a Token, a link, emphasis); wins over @message when both are given. */
     default: [];
     /**
-     * The ways forward, placed under the message as given: one Button, or
-     * several in a ButtonGroup, which lays them out.
+     * The ways forward, placed under the message as given. The caller lays
+     * out several actions.
      */
     actions: [];
     /** @deprecated use `<:actions>`; renders in the same place */
@@ -108,15 +108,8 @@ export class EmptyState extends Component<EmptyStateSignature> {
           font-size: var(--boxel-font-size-xs);
           max-width: 34ch;
         }
-        /* stretched to the content width, so a ButtonGroup inside measures
-           its row against the room the EmptyState really has; min-inline-size
-           keeps that row from widening an auto-sized EmptyState */
         .pretui-empty-action {
           position: relative;
-          justify-self: stretch;
-          min-inline-size: 0;
-          display: flex;
-          justify-content: center;
           margin-top: var(--boxel-sp-2xs);
         }
       }

@@ -3,13 +3,10 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { Button } from './button';
-import { ButtonGroup } from './button-group';
 import { Token } from './token';
 import { EmptyState, type EmptyStateSize } from './empty-state';
 
 const SIZES: EmptyStateSize[] = ['m', 's'];
-// Two actions in a ButtonGroup, at a width that holds the row and one that doesn't.
-const PATH_FRAMES = ['wide', 'narrow'];
 
 class EmptyStateUsage extends Component {
   @tracked title = 'No lots match';
@@ -70,20 +67,6 @@ class EmptyStateUsage extends Component {
             <:actions><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:actions>
           </EmptyState>
         {{/if}}
-        <div class='empty-state-usage-paths'>
-          {{#each PATH_FRAMES as |width|}}
-            <div class='empty-state-usage-frame' data-width={{width}}>
-              <EmptyState @title='No proofs yet' @size={{this.size}} @texture={{this.texture}}>
-                <:actions>
-                  <ButtonGroup @label='Ways forward' @size={{this.size}}>
-                    <Button @appearance='accent'>Go to checkout</Button>
-                    <Button @tone='neutral' @appearance='outlined'>Back to the shop</Button>
-                  </ButtonGroup>
-                </:actions>
-              </EmptyState>
-            </div>
-          {{/each}}
-        </div>
       </:example>
       <:api as |Args|>
         <Args.String
@@ -117,24 +100,11 @@ class EmptyStateUsage extends Component {
         />
         <Args.Yield
           @name='actions'
-          @description="The ways forward, placed under the message as given: one Button, or several in a ButtonGroup, which lays them out."
+          @description="The ways forward, placed under the message as given: one Button, or several in the caller's own layout."
         />
         <Args.Yield @name='action' @description='Deprecated alias of actions.' />
       </:api>
     </FreestyleUsage>
-    <style scoped>
-      .empty-state-usage-paths {
-        display: grid;
-        gap: var(--boxel-sp);
-        margin-top: var(--boxel-sp);
-      }
-      .empty-state-usage-frame[data-width='wide'] {
-        max-inline-size: 36rem;
-      }
-      .empty-state-usage-frame[data-width='narrow'] {
-        max-inline-size: 18rem;
-      }
-    </style>
   </template>
 }
 

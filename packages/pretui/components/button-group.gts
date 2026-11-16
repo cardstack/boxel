@@ -1,6 +1,5 @@
 // Pretui — ButtonGroup: related Buttons fused into one visual unit.
 import Component from '@glimmer/component';
-import { modifier } from 'ember-modifier';
 import type {
   PretuiAppearance,
   PretuiSize,
@@ -41,51 +40,9 @@ export interface ButtonGroupSignature {
   Element: HTMLDivElement;
 }
 
-function px(v: string): number {
-  return parseFloat(v) || 0;
-}
-
-// A horizontal group stacks all at once when its row is wider than its
-// container: never 2 + 1. Measured, because a breakpoint can't know the labels
-// and a container query would collapse an auto-sized parent. Each pass lays
-// the row out at max-content (synchronously, so nothing paints in between),
-// compares it with the parent's content width, and sets data-fold.
-const foldWhenFull = modifier((group: HTMLElement) => {
-  let host = group.parentElement;
-  if (!host || typeof ResizeObserver === 'undefined') return;
-  let apply = () => {
-    if (group.dataset.orientation !== 'horizontal') return;
-    group.dataset.fold = 'row';
-    let cs = getComputedStyle(host);
-    let room = host.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight);
-    // a parent with no box (display: contents, inline, hidden) gives no room to measure
-    if (room <= 0) return;
-    let callerSize = group.style.inlineSize;
-    group.style.inlineSize = 'max-content';
-    let need = group.getBoundingClientRect().width;
-    group.style.inlineSize = callerSize;
-    group.dataset.fold = need > room + 0.5 ? 'stack' : 'row';
-  };
-  let resizes = new ResizeObserver(apply);
-  resizes.observe(host);
-  resizes.observe(group);
-  // a label or a button swapped in by the caller changes the row's width
-  let mutations = new MutationObserver(apply);
-  mutations.observe(group, { childList: true, subtree: true, characterData: true });
-  apply();
-  return () => {
-    mutations.disconnect();
-    resizes.disconnect();
-  };
-});
-
 export class ButtonGroup extends Component<ButtonGroupSignature> {
   get orientation() {
     return this.args.orientation ?? 'horizontal';
-  }
-  // the modifier owns data-fold after the first render; vertical never folds
-  get fold() {
-    return this.orientation === 'horizontal' ? 'row' : undefined;
   }
   <template>
     {{! template-lint-disable no-unsupported-role-attributes }}
@@ -99,8 +56,6 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
       data-appearance={{@appearance}}
       data-size={{@size}}
       data-shape={{@shape}}
-      data-fold={{this.fold}}
-      {{foldWhenFull}}
       data-test-pretui-button-group
       ...attributes
     >
@@ -116,8 +71,7 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
           position: relative;
           isolation: isolate;
         }
-        .pretui-btngroup[data-orientation='vertical'],
-        .pretui-btngroup[data-fold='stack'] {
+        .pretui-btngroup[data-orientation='vertical'] {
           flex-direction: column;
           align-items: stretch;
         }
@@ -144,21 +98,21 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
            adjacent edges collapse into one shared line. Siblings are matched
            by class, so a non-button child (CopyButton's status region) does
            not count as a neighbor */
-        .pretui-btngroup[data-fold='row'] :deep(.pretui-btn ~ .pretui-btn) {
+        .pretui-btngroup[data-orientation='horizontal'] :deep(.pretui-btn ~ .pretui-btn) {
           margin-left: -1px;
           border-top-left-radius: 0;
           border-bottom-left-radius: 0;
         }
-        .pretui-btngroup[data-fold='row'] :deep(.pretui-btn:has(~ .pretui-btn)) {
+        .pretui-btngroup[data-orientation='horizontal'] :deep(.pretui-btn:has(~ .pretui-btn)) {
           border-top-right-radius: 0;
           border-bottom-right-radius: 0;
         }
-        .pretui-btngroup:is([data-orientation='vertical'], [data-fold='stack']) :deep(.pretui-btn ~ .pretui-btn) {
+        .pretui-btngroup[data-orientation='vertical'] :deep(.pretui-btn ~ .pretui-btn) {
           margin-top: -1px;
           border-top-left-radius: 0;
           border-top-right-radius: 0;
         }
-        .pretui-btngroup:is([data-orientation='vertical'], [data-fold='stack']) :deep(.pretui-btn:has(~ .pretui-btn)) {
+        .pretui-btngroup[data-orientation='vertical'] :deep(.pretui-btn:has(~ .pretui-btn)) {
           border-bottom-left-radius: 0;
           border-bottom-right-radius: 0;
         }

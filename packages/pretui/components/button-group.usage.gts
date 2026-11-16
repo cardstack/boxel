@@ -72,7 +72,7 @@ class ButtonGroupUsage extends Component {
   <template>
     <FreestyleUsage
       @name='ButtonGroup'
-      @description="Related Pretui Buttons fused into one visual unit — toolbars, segmented actions, split alignments. A row that doesn't fit its container stacks all at once. Inner corners square off and adjacent hairlines collapse to one shared line; the group's tone/appearance/size cascade to the children through CSS custom props, so the Buttons themselves carry no args. Transcribed from wa-button-group."
+      @description="Related Pretui Buttons fused into one visual unit — toolbars, segmented actions, split alignments. Inner corners square off and adjacent hairlines collapse to one shared line; the group's tone/appearance/size cascade to the children through CSS custom props, so the Buttons themselves carry no args. Transcribed from wa-button-group."
       @source={{this.usage}}
     >
       <:example>

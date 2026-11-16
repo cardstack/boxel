@@ -12,7 +12,6 @@ It is not a **ToggleGroup** — nothing here has a pressed state. These are acti
 @tone?        — inherited by every child Button
 @appearance?  — recipe applied to every child Button
 @size?        — font-size scale applied to every child Button
-@shape?       — outer-corner treatment; inner corners stay square
 
 <:default> — the buttons
 ```
@@ -21,17 +20,13 @@ It is not a **ToggleGroup** — nothing here has a pressed state. These are acti
 
 **`@label` is strongly recommended rather than required**, and that is a real gap: an unnamed group of three buttons is announced as three loose buttons.
 
-**A horizontal group stacks all at once when its row doesn't fit.** The row is measured against the parent's content width, and the moment it is wider every button takes its own line: never two and one. The group lands `data-fold='row'` or `'stack'`, and a stacked group fuses vertically like `@orientation='vertical'`. It is measured, not a breakpoint, because a breakpoint can't know the labels or `@size`, and a container query would collapse an auto-sized parent. A vertical group never folds.
-
 ## Prior art
 
 Web Awesome's button group, and the same component in every kit.
 
 Where Pretui is better: the inheritance channel. Most implementations either clone props onto children — which breaks the moment a child is wrapped in anything — or require a special child component.
 
-React Aria and Radix leave stacking to the caller's CSS. Polaris `ButtonGroup` and Atlassian `ButtonGroup` wrap the buttons, which can leave one button on its own line; this group stacks them all at once instead. shadcn `Empty` and Polaris/Atlassian `EmptyState` put their actions in one slot and leave the layout to a button group, which is how EmptyState uses this one.
-
-Where it is thinner: no split-button behaviour, no overflow menu, and no per-child override of the inherited axes short of setting them on the child directly.
+Where it is thinner: no split-button behaviour, no overflow, and no per-child override of the inherited axes short of setting them on the child directly.
 
 **An open design tension, worth knowing:** the group restyles plain children rather than yielding a contextual `G.Button`. Yielding would make the contract explicit and let the group know its own membership; restyling keeps ordinary buttons usable inside it, including ones wrapped in something the group cannot see through.
 

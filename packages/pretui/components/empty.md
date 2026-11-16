@@ -20,7 +20,7 @@
 
 **shadcn `Empty`** is a composition of parts — `Empty`, `EmptyHeader`, `EmptyMedia` (with an `icon` variant), `EmptyTitle`, `EmptyDescription`, `EmptyContent` — styled as a dashed, centred well. **Ant `Empty`** takes `image` (with two built-in illustrations), `description` and children for the action.
 
-Where this is better: nothing to compose for the common case, a required title, and a generated texture in place of stock illustration so the state reads as designed with zero assets. Several actions go in one `<:actions>` block, in a **ButtonGroup**, the same as shadcn's `EmptyContent` holding its buttons.
+Where this is better: nothing to compose for the common case, a required title, and a generated texture in place of stock illustration so the state reads as designed with zero assets. Several actions go in one `<:actions>` block with the caller's own layout, the same as shadcn's `EmptyContent` holding its buttons.
 
 Where it is thinner: there is no media slot, so shadcn's `EmptyMedia` and Ant's `image` have nowhere to land. There are two sizes, the compact well (`@size='s'`) and the page-section default.
 
