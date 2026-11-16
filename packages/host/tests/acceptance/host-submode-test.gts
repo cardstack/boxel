@@ -322,6 +322,9 @@ module('Acceptance | host submode', function (hooks) {
     // The realm-server tests cover how the realm finds the duplicates; these
     // cover what the publish dialog shows for an answer.
     let answer: HostRouteDuplicates;
+    // How the endpoint answers; a test can hold an answer back.
+    let respond: () => Promise<HostRouteDuplicates>;
+    let calls: number;
     let answered: Deferred<void>;
     let originalFetch: RealmService['fetchHostRouteDuplicates'];
 
@@ -342,11 +345,14 @@ module('Acceptance | host submode', function (hooks) {
       });
       let realmService = getService('realm') as RealmService;
       await realmService.ensureRealmMeta(testRealmURL);
+      calls = 0;
+      respond = async () => answer;
       answered = new Deferred<void>();
       originalFetch = realmService.fetchHostRouteDuplicates;
       realmService.fetchHostRouteDuplicates = async () => {
+        calls++;
         answered.fulfill();
-        return answer;
+        return await respond();
       };
     });
 
@@ -355,29 +361,50 @@ module('Acceptance | host submode', function (hooks) {
         originalFetch;
     });
 
-    async function openPublishModal() {
+    async function visitHostMode() {
       await visitOperatorMode({
         submode: 'host',
         trail: [`${testRealmURL}Person/1.json`],
       });
+    }
+
+    async function openDialog() {
+      answered = new Deferred<void>();
       await click('[data-test-publish-realm-button]');
       await waitFor('[data-test-publish-realm-modal]');
       await answered.promise;
       await settled();
     }
 
+    async function closeDialog() {
+      await click('[data-test-publish-realm-modal] [data-test-close-modal]');
+    }
+
+    async function openPublishModal() {
+      await visitHostMode();
+      await openDialog();
+    }
+
+    function warningLines() {
+      return [
+        ...document.querySelectorAll('[data-test-host-route-duplicate]'),
+      ].map((el) => el.textContent?.replace(/\s+/g, ' ').trim());
+    }
+
+    const POST_DUPLICATE = {
+      position: [0],
+      fullPath: '/posts/:slug',
+      values: { slug: 'hello' },
+      parentCardId: undefined,
+      cardIds: [`${testRealmURL}Post/a`, `${testRealmURL}Post/b`],
+      servedCardId: `${testRealmURL}Post/a`,
+    };
+
     test('publish modal names the cards that share an address, and the one served', async function (assert) {
       answer = {
         complete: true,
         duplicates: [
-          {
-            position: [0],
-            fullPath: '/posts/:slug',
-            values: { slug: 'hello' },
-            parentCardId: undefined,
-            cardIds: [`${testRealmURL}Post/a`, `${testRealmURL}Post/b`],
-            servedCardId: `${testRealmURL}Post/a`,
-          },
+          POST_DUPLICATE,
           {
             position: [1, 0],
             fullPath: '/c/:category/:product',
@@ -397,16 +424,20 @@ module('Acceptance | host submode', function (hooks) {
       assert
         .dom('[data-test-host-route-duplicates-warning]')
         .exists('the warning shows in the publish modal');
+      assert
+        .dom('[role="status"] [data-test-host-route-duplicates-warning]')
+        .exists('the warning is announced as it appears');
       assert.deepEqual(
-        [...document.querySelectorAll('[data-test-host-route-duplicate]')].map(
-          (el) => el.textContent?.trim(),
-        ),
+        warningLines(),
         [
-          '2 cards share the address /posts/hello. Only Post/a is served; Post/b cannot be reached.',
-          '3 cards share the address /c/:category/trail in Category/shoes. Only Product/a is served; Product/b and Product/c cannot be reached.',
+          '2 cards share the address /posts/hello. Only Post/a is served; Post/b cannot be reached. Give one of them a different value.',
+          '3 cards share the address /c/:category/trail in Category/shoes. Only Product/a is served; Product/b and Product/c cannot be reached. Give one of them a different value.',
         ],
         'one line for each group of cards',
       );
+      assert
+        .dom('[data-test-host-route-duplicate] code')
+        .hasText('/posts/hello', 'the address is shown as code');
       assert
         .dom('[data-test-host-route-duplicates-incomplete]')
         .doesNotExist('every route was checked');
@@ -431,8 +462,48 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('[data-test-host-route-duplicates-warning]').exists();
       assert
         .dom('[data-test-host-route-duplicates-incomplete]')
-        .hasText('Some routes could not be checked yet.');
+        .hasText(
+          'Some routes could not be checked yet. Close and open this dialog again to check them.',
+        );
       assert.dom('[data-test-host-route-duplicate]').doesNotExist();
+    });
+
+    test('publish modal checks again each time it opens', async function (assert) {
+      answer = { complete: false, duplicates: [] };
+      await openPublishModal();
+      assert.dom('[data-test-host-route-duplicates-incomplete]').exists();
+      await closeDialog();
+
+      answer = { complete: true, duplicates: [POST_DUPLICATE] };
+      await openDialog();
+      assert
+        .dom('[data-test-host-route-duplicates-incomplete]')
+        .doesNotExist('the note from the last open is gone');
+      assert.strictEqual(warningLines().length, 1, 'the new result is shown');
+      await closeDialog();
+
+      // The author gave one of the posts a different slug.
+      answer = { complete: true, duplicates: [] };
+      await openDialog();
+      assert
+        .dom('[data-test-host-route-duplicates-warning]')
+        .doesNotExist('the fixed duplicate is no longer listed');
+      assert.strictEqual(calls, 3, 'one check for each open');
+    });
+
+    test('publish modal drops a result that arrives after it closed', async function (assert) {
+      let late = new Deferred<HostRouteDuplicates>();
+      respond = () => late.promise;
+      await openPublishModal();
+      await closeDialog();
+      late.fulfill({ complete: true, duplicates: [POST_DUPLICATE] });
+      await settled();
+
+      respond = async () => ({ complete: true, duplicates: [] });
+      await openDialog();
+      assert
+        .dom('[data-test-host-route-duplicates-warning]')
+        .doesNotExist('the late result of the closed dialog is not shown');
     });
   });
 

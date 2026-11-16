@@ -15,6 +15,7 @@ import { ignoredByPasswordManagers } from '@cardstack/pretui/password-managers';
 import { formatDistance } from 'date-fns';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import { modifier } from 'ember-modifier';
 
 import {
   BoxelButton,
@@ -92,13 +93,20 @@ interface Signature {
 
 // One line of the pre-publish warning for cards that share an address, such
 // as "2 cards share the address /posts/hello. Only Post/a is served; Post/b
-// cannot be reached." Card ids in the realm are shown relative to it. The
-// route's own `:name`s are filled in; a parent route's stay as written, with
-// the parent card named after the address.
+// cannot be reached. Give one of them a different value." Split around the
+// address, which the template shows as code. Card ids in the realm are shown
+// relative to it. The route's own `:name`s are filled in; a parent route's
+// stay as written, with the parent card named after the address.
+interface HostRouteDuplicateLine {
+  lead: string;
+  address: string;
+  rest: string;
+}
+
 function describeHostRouteDuplicate(
   duplicate: HostRouteDuplicate,
   realmURL: string,
-): string {
+): HostRouteDuplicateLine {
   let shortId = (id: string) =>
     id.startsWith(realmURL) ? id.slice(realmURL.length) : id;
   let address = duplicate.fullPath
@@ -120,7 +128,11 @@ function describeHostRouteDuplicate(
     others.length > 1
       ? `${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}`
       : (others[0] ?? '');
-  return `${duplicate.cardIds.length} cards share the address ${address}${parent}. Only ${shortId(duplicate.servedCardId)} is served; ${othersText} cannot be reached.`;
+  return {
+    lead: `${duplicate.cardIds.length} cards share the address`,
+    address,
+    rest: `${parent}. Only ${shortId(duplicate.servedCardId)} is served; ${othersText} cannot be reached. Give one of them a different value.`,
+  };
 }
 
 export default class PublishRealmModal extends Component<Signature> {
@@ -177,7 +189,6 @@ export default class PublishRealmModal extends Component<Signature> {
     this.loadUnlistedPathTask.perform();
     this.checkPrivateDependenciesTask.perform();
     this.checkDanglingRoutingRulesTask.perform();
-    this.checkHostRouteDuplicatesTask.perform();
   }
 
   private async loadCardAPI() {
@@ -252,7 +263,7 @@ export default class PublishRealmModal extends Component<Signature> {
     );
   }
 
-  get hostRouteDuplicateLines(): string[] {
+  get hostRouteDuplicateLines(): HostRouteDuplicateLine[] {
     let realmURL = ensureTrailingSlash(String(this.currentRealmURL ?? ''));
     return (this.hostRouteDuplicates?.duplicates ?? []).map((duplicate) =>
       describeHostRouteDuplicate(duplicate, realmURL),
@@ -712,7 +723,14 @@ export default class PublishRealmModal extends Component<Signature> {
   // Pre-publish check for cards that share an address: two cards a
   // field-match route serves with the same value, of which only the first
   // by card id is served there. Warns only; publishing goes ahead.
+  // Runs each time the dialog opens, since the dialog stays rendered between
+  // opens and the author may have fixed a duplicate in the meantime. Closing
+  // the dialog cancels it, so a result that arrives after the close is
+  // dropped.
   private checkHostRouteDuplicatesTask = restartableTask(async () => {
+    // Started by a modifier while the opened dialog renders: clear the last
+    // open's result once that render is done.
+    await Promise.resolve();
     this.hostRouteDuplicates = null;
     let realmURL = this.currentRealmURL;
     if (!realmURL) {
@@ -729,6 +747,13 @@ export default class PublishRealmModal extends Component<Signature> {
       );
       this.hostRouteDuplicates = null;
     }
+  });
+
+  private checkHostRouteDuplicatesOnOpen = modifier(() => {
+    this.checkHostRouteDuplicatesTask.perform();
+    return () => {
+      this.checkHostRouteDuplicatesTask.cancelAll();
+    };
   });
 
   private fetchBoxelClaimedDomain = restartableTask(async () => {
@@ -1206,67 +1231,73 @@ export default class PublishRealmModal extends Component<Signature> {
           {{/if}}
         {{/if}}
 
-        {{#if this.shouldShowDanglingRoutingWarning}}
-          <div
-            class='publish-warning warning'
-            data-test-dangling-routing-warning
-          >
-            <WarningIcon
-              class='publish-warning-icon'
-              width='20'
-              height='20'
-              role='presentation'
-            />
-            <div class='publish-warning-body'>
-              <div>
-                Some host routing rules point to a card that no longer exists.
-                Visitors to these paths will see a "page not found" error after
-                publishing.
-              </div>
-              <ul class='violation-list'>
-                {{#each this.danglingRoutingRules as |rule|}}
-                  <li>
-                    <code>{{rule.path}}</code>
-                    →
-                    {{rule.reference}}
-                  </li>
-                {{/each}}
-              </ul>
-            </div>
-          </div>
-        {{/if}}
-
-        {{#if this.shouldShowHostRouteDuplicatesWarning}}
-          <div
-            class='publish-warning warning'
-            data-test-host-route-duplicates-warning
-          >
-            <WarningIcon
-              class='publish-warning-icon'
-              width='20'
-              height='20'
-              role='presentation'
-            />
-            <div class='publish-warning-body'>
-              {{#if this.hostRouteDuplicateLines.length}}
+        {{! The checks behind these warnings finish after the dialog opens,
+          so they are announced as they appear. }}
+        <div role='status' {{this.checkHostRouteDuplicatesOnOpen}}>
+          {{#if this.shouldShowDanglingRoutingWarning}}
+            <div
+              class='publish-warning warning'
+              data-test-dangling-routing-warning
+            >
+              <WarningIcon
+                class='publish-warning-icon'
+                width='20'
+                height='20'
+                role='presentation'
+              />
+              <div class='publish-warning-body'>
                 <div>
-                  Some host routes serve more than one card at the same address.
-                  Visitors see only one of them.
+                  Some host routing rules point to a card that no longer exists.
+                  Visitors to these paths will see a "page not found" error
+                  after publishing.
                 </div>
                 <ul class='violation-list'>
-                  {{#each this.hostRouteDuplicateLines as |line|}}
-                    <li data-test-host-route-duplicate>{{line}}</li>
+                  {{#each this.danglingRoutingRules as |rule|}}
+                    <li>
+                      <code>{{rule.path}}</code>
+                      →
+                      {{rule.reference}}
+                    </li>
                   {{/each}}
                 </ul>
-              {{/if}}
-              {{#if this.isHostRouteCheckIncomplete}}
-                <div data-test-host-route-duplicates-incomplete>
-                  Some routes could not be checked yet.
-                </div>
-              {{/if}}
+              </div>
             </div>
-          </div>
-        {{/if}}
+          {{/if}}
+
+          {{#if this.shouldShowHostRouteDuplicatesWarning}}
+            <div
+              class='publish-warning warning'
+              data-test-host-route-duplicates-warning
+            >
+              <WarningIcon
+                class='publish-warning-icon'
+                width='20'
+                height='20'
+                role='presentation'
+              />
+              <div class='publish-warning-body'>
+                {{#if this.hostRouteDuplicateLines.length}}
+                  <div>
+                    Some host routes serve more than one card at the same
+                    address. Visitors see only one of them.
+                  </div>
+                  <ul class='violation-list'>
+                    {{#each this.hostRouteDuplicateLines as |line|}}
+                      <li data-test-host-route-duplicate>{{line.lead}}
+                        <code>{{line.address}}</code>{{line.rest}}</li>
+                    {{/each}}
+                  </ul>
+                {{/if}}
+                {{#if this.isHostRouteCheckIncomplete}}
+                  <div data-test-host-route-duplicates-incomplete>
+                    Some routes could not be checked yet. Close and open this
+                    dialog again to check them.
+                  </div>
+                {{/if}}
+              </div>
+            </div>
+          {{/if}}
+        </div>
 
         <div class='domain-options'>
           <div class='domain-option'>
