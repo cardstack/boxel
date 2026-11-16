@@ -3,10 +3,13 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { Button } from './button';
+import { ButtonGroup } from './button-group';
 import { Token } from './token';
 import { EmptyState, type EmptyStateSize } from './empty-state';
 
 const SIZES: EmptyStateSize[] = ['m', 's'];
+// Two equal paths in a ButtonGroup, at a width that holds the row and one that doesn't.
+const PATH_FRAMES = ['wide', 'narrow'];
 
 class EmptyStateUsage extends Component {
   @tracked title = 'No lots match';
@@ -34,12 +37,12 @@ class EmptyStateUsage extends Component {
     let message = this.messageVal
       ? ''
       : '<:default>Try clearing the <Token …/> filters.</:default>';
-    return `<EmptyState ${bits.join(' ')}>${message}<:action>…</:action></EmptyState>`;
+    return `<EmptyState ${bits.join(' ')}>${message}<:actions>…</:actions></EmptyState>`;
   }
   <template>
     <FreestyleUsage
       @name='EmptyState'
-      @description='A named absence with optional action. Texture is confined to this low-information surface and never competes with data.'
+      @description='A named absence with optional actions. Texture is confined to this low-information surface and never competes with data.'
       @source={{this.usage}}
     >
       <:example>
@@ -51,7 +54,7 @@ class EmptyStateUsage extends Component {
             @texture={{this.texture}}
             @size={{this.size}}
           >
-            <:action><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:action>
+            <:actions><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:actions>
           </EmptyState>
         {{else}}
           <EmptyState
@@ -64,9 +67,23 @@ class EmptyStateUsage extends Component {
               and
               <Token @value='harvest' />
               filters.</:default>
-            <:action><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:action>
+            <:actions><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:actions>
           </EmptyState>
         {{/if}}
+        <div class='empty-state-usage-paths'>
+          {{#each PATH_FRAMES as |width|}}
+            <div class='empty-state-usage-frame' data-width={{width}}>
+              <EmptyState @title='No proofs yet' @size={{this.size}} @texture={{this.texture}}>
+                <:actions>
+                  <ButtonGroup @label='Ways forward' @separator='or' @size={{this.size}}>
+                    <Button @appearance='accent'>Go to checkout</Button>
+                    <Button @tone='neutral' @appearance='outlined'>Back to the shop</Button>
+                  </ButtonGroup>
+                </:actions>
+              </EmptyState>
+            </div>
+          {{/each}}
+        </div>
       </:example>
       <:api as |Args|>
         <Args.String
@@ -98,13 +115,26 @@ class EmptyStateUsage extends Component {
           @name='default'
           @description='The message with markup in it (a Token, a link, emphasis), in the same place and type as @message. Wins over @message when both are given.'
         />
-        <Args.Yield @name='action' />
         <Args.Yield
-          @name='altAction'
-          @description='The second way in, given equal billing with a separator between.'
+          @name='actions'
+          @description="The ways forward, placed under the message as given: one Button, or several in a ButtonGroup, which lays them out. Two equal paths take the group's @separator='or'."
         />
+        <Args.Yield @name='action' @description='Deprecated alias of actions.' />
       </:api>
     </FreestyleUsage>
+    <style scoped>
+      .empty-state-usage-paths {
+        display: grid;
+        gap: var(--boxel-sp);
+        margin-top: var(--boxel-sp);
+      }
+      .empty-state-usage-frame[data-width='wide'] {
+        max-inline-size: 36rem;
+      }
+      .empty-state-usage-frame[data-width='narrow'] {
+        max-inline-size: 18rem;
+      }
+    </style>
   </template>
 }
 

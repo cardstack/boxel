@@ -4,7 +4,7 @@
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
 // not applied).
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { render, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { ButtonGroup } from './button-group';
 import { Button } from './button';
@@ -47,5 +47,43 @@ module('Pretui | components/button-group', function (hooks) {
     let group = q('[data-test-pretui-button-group]');
     assert.strictEqual(group.dataset['tone'], undefined, 'so a child Button keeps its own tone');
     assert.strictEqual(group.dataset['appearance'], undefined);
+  });
+
+  test('ButtonGroup @separator names the word between the paths', async function (assert) {
+    await render(
+      <template>
+        <ButtonGroup @label='Ways in' @separator='or'>
+          <Button>Go to checkout</Button>
+          <Button>Back to the shop</Button>
+        </ButtonGroup>
+      </template>,
+    );
+    assert.strictEqual(q('[data-test-pretui-button-group]').dataset.separator, 'or');
+  });
+
+  // The stacked look is in scoped styles this harness doesn't apply; the
+  // usage page's wide and narrow frames are the visual check. Here only the
+  // measurement that picks data-fold is covered.
+  test('ButtonGroup stacks all at once when its row does not fit', async function (assert) {
+    await render(
+      <template>
+        <div data-test-wide>
+          <ButtonGroup @label='Wide'><Button>Go to checkout</Button><Button>Back to the shop</Button></ButtonGroup>
+        </div>
+        <div data-test-narrow>
+          <ButtonGroup @label='Narrow'><Button>Go to checkout</Button><Button>Back to the shop</Button></ButtonGroup>
+        </div>
+        <div data-test-vertical>
+          <ButtonGroup @label='Column' @orientation='vertical'><Button>A</Button></ButtonGroup>
+        </div>
+      </template>,
+    );
+    q('[data-test-wide]').style.inlineSize = '1600px';
+    q('[data-test-narrow]').style.inlineSize = '80px';
+    let fold = (sel: string) => q(`${sel} [data-test-pretui-button-group]`).dataset.fold;
+    await waitUntil(() => fold('[data-test-narrow]') === 'stack');
+    assert.strictEqual(fold('[data-test-wide]'), 'row', 'room for the row');
+    assert.strictEqual(fold('[data-test-narrow]'), 'stack', 'no room: every button stacks');
+    assert.strictEqual(fold('[data-test-vertical]'), undefined, 'a vertical group never folds');
   });
 });

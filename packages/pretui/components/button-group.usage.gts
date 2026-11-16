@@ -33,11 +33,16 @@ class ButtonGroupUsage extends Component {
   @tracked tone = 'neutral';
   @tracked appearance = 'outlined';
   @tracked size = 'm';
+  @tracked separator = '';
   setLabel = (v: string) => (this.labelText = v);
   setOrientation = (v: string) => (this.orientation = v);
   setTone = (v: string) => (this.tone = v);
   setAppearance = (v: string) => (this.appearance = v);
   setSize = (v: string) => (this.size = v);
+  setSeparator = (v: string) => (this.separator = v);
+  get separatorVal() {
+    return this.separator || undefined;
+  }
   get orientationVal() {
     return this.orientation as 'horizontal' | 'vertical';
   }
@@ -67,12 +72,13 @@ class ButtonGroupUsage extends Component {
     if (this.tone !== 'neutral') bits.push(`@tone='${this.tone}'`);
     if (this.appearance !== 'outlined')
       bits.push(`@appearance='${this.appearance}'`);
+    if (this.separatorVal) bits.push(`@separator='${this.separatorVal}'`);
     return `<ButtonGroup ${bits.join(' ')}>\n  <Button>Left</Button>\n  <Button>Center</Button>\n  <Button>Right</Button>\n</ButtonGroup>`;
   }
   <template>
     <FreestyleUsage
       @name='ButtonGroup'
-      @description="Related Pretui Buttons fused into one visual unit — toolbars, segmented actions, split alignments. Inner corners square off and adjacent hairlines collapse to one shared line; the group's tone/appearance/size cascade to the children through CSS custom props, so the Buttons themselves carry no args. Transcribed from wa-button-group."
+      @description="Related Pretui Buttons fused into one visual unit — toolbars, segmented actions, split alignments. A row that doesn't fit stacks all at once; @separator spaces two equal paths with a word between. Inner corners square off and adjacent hairlines collapse to one shared line; the group's tone/appearance/size cascade to the children through CSS custom props, so the Buttons themselves carry no args. Transcribed from wa-button-group."
       @source={{this.usage}}
     >
       <:example>
@@ -82,6 +88,7 @@ class ButtonGroupUsage extends Component {
           @tone={{this.toneVal}}
           @appearance={{this.appearanceVal}}
           @size={{this.sizeVal}}
+          @separator={{this.separatorVal}}
         >
           <Button>Left</Button>
           <Button>Center</Button>
@@ -123,6 +130,12 @@ class ButtonGroupUsage extends Component {
           @options={{this.sizeOptions}}
           @description='Font-size scale applied to every child Button (internals ride the em).'
           @onInput={{this.setSize}}
+        />
+        <Args.String
+          @name='separator'
+          @value={{this.separator}}
+          @description="Word drawn as '— or —' between two equal paths; spaces the buttons instead of fusing them. Pretui addition."
+          @onInput={{this.setSeparator}}
         />
         <Args.Yield
           @description='Plain <Button> children — no per-child args needed.'

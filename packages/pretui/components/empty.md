@@ -8,10 +8,10 @@
 @title           — required; the absence is always named
 @message?        — the explanation, kept to a 34ch measure
 @texture?        — the tinted radial behind the title (default true)
-@separator?      — the word between two actions (default 'or')
 @size?           — 's' for the compact well inside a card section, 'm' (default) for a page section
 <:default>       — the message with markup in it; wins over @message
-<:action>  <:altAction>
+<:actions>       — the ways forward: one Button, or a ButtonGroup
+<:action>        — deprecated alias of <:actions>
 ```
 
 **`@title` is required.** shadcn lets `EmptyTitle` be omitted; here an empty state that does not say what is missing is not accepted.
@@ -20,7 +20,7 @@
 
 **shadcn `Empty`** is a composition of parts — `Empty`, `EmptyHeader`, `EmptyMedia` (with an `icon` variant), `EmptyTitle`, `EmptyDescription`, `EmptyContent` — styled as a dashed, centred well. **Ant `Empty`** takes `image` (with two built-in illustrations), `description` and children for the action.
 
-Where this is better: nothing to compose for the common case, a required title, and a generated texture in place of stock illustration so the state reads as designed with zero assets. The `<:altAction>` block gives the second honest path equal billing, which neither kit models.
+Where this is better: nothing to compose for the common case, a required title, and a generated texture in place of stock illustration so the state reads as designed with zero assets. Two equal paths go in one `<:actions>` block as a **ButtonGroup** with `@separator='or'`, the same as shadcn's `EmptyContent` holding its buttons.
 
 Where it is thinner: there is no media slot, so shadcn's `EmptyMedia` and Ant's `image` have nowhere to land. There are two sizes, the compact well (`@size='s'`) and the page-section default.
 
@@ -38,6 +38,6 @@ EmptyState's tokens: `--canvas` (the recess, deliberately not `--card`), `--prim
 | ---------------------------------------- | ----------------------------------------------------- |
 | `<EmptyTitle>`                           | `@title`                                              |
 | `<EmptyDescription>` / Ant `description` | `@message`, or `<:default>` when it carries markup    |
-| `<EmptyContent>` / Ant children          | `<:action>`, and `<:altAction>` for the second path   |
+| `<EmptyContent>` / Ant children          | `<:actions>`, with a ButtonGroup for several          |
 | `<EmptyMedia>` / Ant `image`             | no equivalent; the texture stands in for art          |
 | `<EmptyHeader>`                          | no equivalent; title and message are laid out for you |

@@ -1,14 +1,15 @@
 ## What it is
 
-What a region shows when it has nothing to show: a title, an optional message, and an optional action. Reach for it in place of a blank area whenever a list, table, search result or panel body is legitimately empty. If the region is _loading_ rather than empty, use **Skeleton** or **LoadingState** — an empty state shown during a fetch is a lie. If the emptiness is an error, use **Alert**. If a single reference is missing, **BrokenLink**.
+What a region shows when it has nothing to show: a title, an optional message, and optional actions. Reach for it in place of a blank area whenever a list, table, search result or panel body is legitimately empty. If the region is _loading_ rather than empty, use **Skeleton** or **LoadingState** — an empty state shown during a fetch is a lie. If the emptiness is an error, use **Alert**. If a single reference is missing, **BrokenLink**.
 
 ## The contract
 
 ```
 @title: string   (required)
-@message?, @texture? (default true), @separator? (default 'or'), @size? (default 'm')
+@message?, @texture? (default true), @size? (default 'm')
 <:default>   — the message with markup in it; wins over @message
-<:action>  <:altAction>
+<:actions>   — the ways forward, placed under the message as given
+<:action>    — deprecated alias of <:actions>
 Element: HTMLDivElement
 ```
 
@@ -19,6 +20,21 @@ Element: HTMLDivElement
 **The message takes markup through `<:default>`.** `@message` is plain text. When the message needs a **Token**, a link or emphasis, pass the message as the block; it renders in the same place with the same type, colour and measure. The `@message` arg renders in a `<p>`; the block renders in a `<div>`, because the caller's markup may contain block elements. A block wins over its arg, as on **Notification**, **AlertDialog** and **Card**: if both are given, the block renders and `@message` does not.
 
 **`@size`** takes the house scale (`xs | s | m | l | xl` and the `sm` / `md` / `lg` / `small` / `medium` / `large` / `default` aliases) and paints two steps. `s` is the compact well for an empty note inside a card section: `--boxel-sp` padding on every side and the title at `--boxel-font-size`. `m`, the default, is sized for a page section. `xs` lands on `s`, and `l` / `xl` on `m`. The resolved step lands as `data-size`, `'s'` or `'m'`, on every render, the default included.
+
+**EmptyState places its actions; it does not lay them out.** Whether two actions are equal alternatives, a primary and a secondary, or an action and a link is the caller's call, so `<:actions>` renders under the message exactly as given. One action is a **Button** on its own. Several go in a **ButtonGroup**, which lays them out: in a row while they fit, stacked all at once when they don't, never two and one. Primary versus secondary comes from each Button's `@appearance`. Two equal paths take `@separator='or'` on the group:
+
+```hbs
+<EmptyState @title='No proofs yet'>
+  <:actions>
+    <ButtonGroup @label='Ways forward' @separator='or'>
+      <Button @appearance='accent'>Go to checkout</Button>
+      <Button @appearance='outlined'>Back to the shop</Button>
+    </ButtonGroup>
+  </:actions>
+</EmptyState>
+```
+
+The actions wrapper stretches to the content width, so a ButtonGroup inside it measures its row against the room the EmptyState really has. `<:action>` is a deprecated alias that renders in the same place.
 
 `max-width: 34ch` on the message is the measure at which a centred paragraph stays scannable — wider and the eye loses the line, and centred text is much less forgiving of long measures than left-aligned.
 
@@ -45,13 +61,13 @@ Gaps, and the first two are the real ones:
 - **The texture layer has no `aria-hidden`**, though it is an empty `<div>` with no content, so nothing is announced — correct by accident rather than by declaration.
 - **The empty state does not replace a table's semantics.** If you render it _instead of_ a `<tbody>`, screen-reader users lose the table's structure and get a bare region. React Spectrum's `renderEmptyState` renders inside the grid for exactly this reason. Placement is the caller's responsibility here.
 - `@message` is limited to `34ch` and centred; long messages will be several short centred lines, which is harder to read for users with dyslexia (WCAG **1.4.8**, AAA).
-- The action in `<:action>` is an ordinary tab stop, which is right — an empty state should not trap or auto-focus.
+- Each action in `<:actions>` is an ordinary tab stop, which is right — an empty state should not trap or auto-focus.
 
 ## Theming
 
-`--canvas` with its paired `--foreground` (the surface and the ink for the title, message and separator — note it is **not** `--card`, so an EmptyState reads as a recess inside a Panel rather than as another card), `--border` (the separator rules), `--primary` (the texture tint, at 8%), `--font-serif`, `--boxel-heading-font-size` and `--boxel-heading-font-weight` (title), `--boxel-font-size-xs` (message), `--boxel-font-size-2xs` (separator), `--radius`, and `--boxel-sp-2xs/xs/sm/lg/3xl` for the gaps and padding. At `@size='s'` the padding is `--boxel-sp` and the title reads `--boxel-font-size`, so `--boxel-sp-lg/3xl` padding and `--boxel-heading-font-size` no longer apply.
+`--canvas` with its paired `--foreground` (the surface and the ink for the title and message — note it is **not** `--card`, so an EmptyState reads as a recess inside a Panel rather than as another card), `--primary` (the texture tint, at 8%), `--font-serif`, `--boxel-heading-font-size` and `--boxel-heading-font-weight` (title), `--boxel-font-size-xs` (message), `--radius`, and `--boxel-sp-2xs/xs/sm/lg/3xl` for the gaps and padding. At `@size='s'` the padding is `--boxel-sp` and the title reads `--boxel-font-size`, so `--boxel-sp-lg/3xl` padding and `--boxel-heading-font-size` no longer apply.
 
-The message and separator are set in `--foreground`, at the smaller size, because the contract guarantees `--muted-foreground` only on `--background`, `--card` and `--muted`, not on the neutral `--canvas`.
+The message is set in `--foreground`, at the smaller size, because the contract guarantees `--muted-foreground` only on `--background`, `--card` and `--muted`, not on the neutral `--canvas`.
 
 The title uses the theme's `--font-serif` (IBM Plex Serif by default), which is used almost nowhere else in the kit, so it is the component's one moment of typographic voice. A theme must also keep `--canvas` distinguishable from `--card`, or the empty state stops reading as a recess and the whole effect flattens.
 
