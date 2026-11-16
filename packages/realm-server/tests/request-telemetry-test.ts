@@ -508,6 +508,39 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    test('an OAuth access token in a form-encoded body is masked', function (assert) {
+      let body = 'note=kept&access_token=body-token-marker';
+      for (let data of [
+        body,
+        { note: 'kept', access_token: 'body-token-marker' },
+      ]) {
+        let event = scrubRequestTelemetry({
+          request: {
+            method: 'POST',
+            url: 'https://app.telemetry.test/mcp',
+            data,
+          },
+        });
+        assert.false(
+          JSON.stringify(event).includes('body-token-marker'),
+          `no token in ${typeof data} data`,
+        );
+        assert.true(JSON.stringify(event).includes('kept'), 'the rest stays');
+      }
+      let json = scrubRequestTelemetry({
+        request: {
+          method: 'POST',
+          url: 'https://app.telemetry.test/_search',
+          data: '{"token":"kept-json"}',
+        },
+      });
+      assert.strictEqual(
+        (json.request as { data?: unknown }).data,
+        '{"token":"kept-json"}',
+        'a JSON body is left as it is',
+      );
+    });
+
     test("an event masks the app page's login token", function (assert) {
       let event = scrubRequestTelemetry({
         request: {

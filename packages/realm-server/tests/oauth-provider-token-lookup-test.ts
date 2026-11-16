@@ -424,12 +424,18 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('a token in a form-encoded body is answered 400 and never looked up', async function (assert) {
       let { token, grantId } = await accessToken({ scope: 'boxel:write' });
-      let response = await supertest(server!)
-        .post('/test-a/write')
-        .set('Host', OAUTH_TEST_SERVER_URL.host)
-        .set('Content-Type', 'application/x-www-form-urlencoded')
-        .send(new URLSearchParams({ access_token: token }).toString());
-      assert.strictEqual(response.status, 400);
+      for (let contentType of [
+        'application/x-www-form-urlencoded',
+        'Application/X-WWW-Form-Urlencoded; charset=utf-8',
+        'application/x-www-form-urlencoded ; charset=utf-8',
+      ]) {
+        let response = await supertest(server!)
+          .post('/test-a/write')
+          .set('Host', OAUTH_TEST_SERVER_URL.host)
+          .set('Content-Type', contentType)
+          .send(new URLSearchParams({ access_token: token }).toString());
+        assert.strictEqual(response.status, 400, contentType);
+      }
       assert.strictEqual((await grant(grantId)).last_used_at, null);
     });
 

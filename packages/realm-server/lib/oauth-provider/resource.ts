@@ -145,12 +145,17 @@ type BearerToken =
 //
 // A form body is recognized by its `Content-Type` alone. `ctxt.is()` also
 // asks for a `Content-Length` or `Transfer-Encoding`, and an HTTP/2 request
-// may send neither, so it would miss a body sent that way.
+// may send neither, so it would miss a body sent that way. `request.type`
+// keeps any whitespace before the `;` that starts the parameters, which RFC
+// 9110 allows, so it is trimmed.
 export async function bearerToken(ctxt: Koa.Context): Promise<BearerToken> {
   if (new URLSearchParams(ctxt.querystring).has('access_token')) {
     return { kind: 'elsewhere' };
   }
-  if (ctxt.request.type.toLowerCase() === 'application/x-www-form-urlencoded') {
+  if (
+    ctxt.request.type.trim().toLowerCase() ===
+    'application/x-www-form-urlencoded'
+  ) {
     let body = await readBody(ctxt, FORM_BODY_LIMIT_BYTES);
     if (body === undefined || new URLSearchParams(body).has('access_token')) {
       return { kind: 'elsewhere' };
