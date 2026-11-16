@@ -1,14 +1,22 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { basename, join } from 'path';
+import { mkdirSync, writeFileSync } from 'fs';
 import type { SuperTest, Test } from 'supertest';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import { param, query, SupportedMimeType } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import type { RealmHttpServer as Server } from '../server.ts';
-import { closeServer, setupPermissionedRealmCached } from './helpers/index.ts';
+import type { RealmHttpServer as Server, RealmServer } from '../server.ts';
+import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes.ts';
+import { insertPermissions } from '@cardstack/runtime-common/db-queries/realm-permission-queries';
+import {
+  closeServer,
+  realmConfigCardJSON,
+  setupPermissionedRealmCached,
+} from './helpers/index.ts';
 import {
   HostURLResolver,
+  hostKey,
   hostURLDomainFilter,
   notifyHostURLsChanged,
   toRealmURL,
@@ -70,8 +78,51 @@ module(basename(import.meta.filename), function () {
       assert.false(mayHave('someone.localhost:4202'));
     });
 
+    test('admits a custom domain configured without a port on any port, as publishing does', function (assert) {
+      let mayHave = hostURLDomainFilter({
+        customDomains: ['choreo.example.test', 'pinned.example.test:4201'],
+      })!;
+      assert.true(mayHave('choreo.example.test'));
+      assert.true(mayHave('choreo.example.test:4201'));
+      assert.true(mayHave('pinned.example.test:4201'));
+      assert.false(
+        mayHave('pinned.example.test:4202'),
+        'a domain configured with a port admits only that port',
+      );
+      assert.false(mayHave('pinned.example.test'));
+    });
+
+    test('parses the Space and site domains as it parses custom domains', function (assert) {
+      for (let boxelSpace of [
+        'Boxel.Space',
+        'boxel.space:443',
+        'https://boxel.space/',
+        'boxel.space.',
+      ]) {
+        let mayHave = hostURLDomainFilter({ boxelSpace })!;
+        assert.true(mayHave('someone.boxel.space'), boxelSpace);
+      }
+    });
+
     test('is undefined when no domain is configured', function (assert) {
       assert.strictEqual(hostURLDomainFilter({}), undefined);
+    });
+  });
+
+  module('hostKey', function () {
+    test('drops a trailing dot, a default port and case', function (assert) {
+      assert.strictEqual(
+        hostKey(new URL('https://Someone.Boxel.Space./page')),
+        'someone.boxel.space',
+      );
+      assert.strictEqual(
+        hostKey(new URL('https://someone.boxel.space.:443/')),
+        'someone.boxel.space',
+      );
+      assert.strictEqual(
+        hostKey(new URL('http://someone.localhost.:4201/')),
+        'someone.localhost:4201',
+      );
     });
   });
 
@@ -196,11 +247,17 @@ module(basename(import.meta.filename), function () {
 
   module('requests on a host URL', function (hooks) {
     let testRealm: Realm;
+    let testRealmServer: RealmServer;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dbAdapter: PgAdapter;
 
+    const PUB_REALM_URL = 'http://pub.localhost/';
+
     hooks.afterEach(async function () {
+      testRealmServer?.testingOnlyReconciler.mounted
+        .get(PUB_REALM_URL)
+        ?.unsubscribe();
       await closeServer(testRealmHttpServer);
     });
 
@@ -209,6 +266,7 @@ module(basename(import.meta.filename), function () {
       fileSystem: { 'hello.txt': 'hello from the realm' },
       onRealmSetup(args) {
         testRealm = args.testRealm;
+        testRealmServer = args.testRealmServer.testRealmServer;
         testRealmHttpServer = args.testRealmHttpServer;
         request = args.request;
         dbAdapter = args.dbAdapter;
@@ -320,24 +378,48 @@ module(basename(import.meta.filename), function () {
     // During migration a v1 published URL is both a published copy's registry
     // URL and its source realm's host URL. The host URL must win.
     test('a host URL is resolved before a registry URL on the same host', async function (assert) {
-      await register('http://pub.localhost/');
-      let before = await getSource('pub.localhost', '/hello.txt');
-      assert.notStrictEqual(
-        before.text,
-        'hello from the realm',
-        'the registry URL is not the test realm',
+      // A realm of its own at the registry URL, so the request is served
+      // there before the host URL exists.
+      let diskId = 'pub-localhost';
+      let dir = join(testRealmServer.testingOnlyRealmsRootPath, diskId);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, 'realm.json'),
+        realmConfigCardJSON({ name: 'Registry realm' }),
       );
+      writeFileSync(join(dir, 'hello.txt'), 'hello from the registry realm');
+      await insertSourceRealmInRegistry(dbAdapter, {
+        url: PUB_REALM_URL,
+        diskId,
+        ownerUsername: 'test-owner',
+      });
+      await insertPermissions(dbAdapter, new URL(PUB_REALM_URL), {
+        '*': ['read'],
+      });
+      await testRealmServer.testingOnlyReconcile();
+
+      let before = await getSource('pub.localhost', '/hello.txt');
+      assert.strictEqual(before.status, 200, 'the registry URL is served');
+      assert.strictEqual(before.text, 'hello from the registry realm');
 
       await addHostURL(await register(testRealm.url), 'pub.localhost');
       await notifyHostURLsChanged(dbAdapter, 'pub.localhost');
 
+      let after = await getSource('pub.localhost', '/hello.txt');
+      for (
+        let attempt = 0;
+        attempt < 50 && after.text !== 'hello from the realm';
+        attempt++
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        after = await getSource('pub.localhost', '/hello.txt');
+      }
+      assert.strictEqual(after.status, 200);
       assert.strictEqual(
-        await statusOnceSettled('pub.localhost', '/hello.txt', 200),
-        200,
+        after.text,
+        'hello from the realm',
         'the host URL now routes the request to the test realm',
       );
-      let after = await getSource('pub.localhost', '/hello.txt');
-      assert.strictEqual(after.text, 'hello from the realm');
     });
 
     test('a host outside the configured domains is never looked up', async function (assert) {

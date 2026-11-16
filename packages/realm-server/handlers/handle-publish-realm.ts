@@ -25,6 +25,11 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { getUnlistedSlug } from '../lib/unlisted-realm-path.ts';
+import {
+  domainHostOf,
+  isOnDomain,
+  parseDomainHost,
+} from '../lib/domain-host.ts';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 import { effectiveRealmPermissions } from '@cardstack/runtime-common/realm-permission-checker';
 
@@ -120,27 +125,6 @@ const PUBLISHED_REALM_DOMAIN_OVERRIDES = getPublishedRealmDomainOverrides(
   process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
 );
 
-type OverrideHost = {
-  host: string;
-  hostname: string;
-  port: string;
-};
-
-function parseOverrideHost(rawOverride: string): OverrideHost | null {
-  try {
-    let overrideURL = rawOverride.includes('://')
-      ? new URL(rawOverride)
-      : new URL(`https://${rawOverride}`);
-    return {
-      host: overrideURL.host.toLowerCase(),
-      hostname: overrideURL.hostname.toLowerCase(),
-      port: overrideURL.port,
-    };
-  } catch {
-    return null;
-  }
-}
-
 async function maybeApplyPublishedRealmOverride(
   dbAdapter: DBAdapter,
   ownerUserId: string,
@@ -153,7 +137,7 @@ async function maybeApplyPublishedRealmOverride(
     return { applied: false, publishedRealmURL };
   }
 
-  let overrideHost = parseOverrideHost(overrideDomain);
+  let overrideHost = parseDomainHost(overrideDomain);
   if (!overrideHost) {
     return { applied: false, publishedRealmURL };
   }
@@ -165,12 +149,7 @@ async function maybeApplyPublishedRealmOverride(
     return { applied: false, publishedRealmURL };
   }
 
-  let publishedHost = publishedURL.host.toLowerCase();
-  let publishedHostname = publishedURL.hostname.toLowerCase();
-  let matchesOverride = overrideHost.port
-    ? publishedHost === overrideHost.host
-    : publishedHostname === overrideHost.hostname;
-  if (!matchesOverride) {
+  if (!isOnDomain(domainHostOf(publishedURL), overrideHost)) {
     return { applied: false, publishedRealmURL };
   }
 

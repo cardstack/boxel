@@ -3,6 +3,12 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger, param, query } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { fullRequestURL } from '../middleware/index.ts';
+import {
+  domainHostOf,
+  isOnDomain,
+  parseDomainHost,
+  type DomainHost,
+} from './domain-host.ts';
 
 // Host URLs: the addresses a realm is served at besides its own URL
 // (ADR 033). A host URL is a host and a path prefix stored in
@@ -63,41 +69,39 @@ export interface HostURLDomains {
 }
 
 // Whether a host could carry a host URL under the given domains. Undefined
-// when no domain is configured, which means every host is looked up.
+// when no domain is configured, which means every host is looked up. `host`
+// is a request's host as `hostKey` gives it. Every domain is parsed as
+// publishing parses a custom domain (`parseDomainHost`). A custom domain with
+// no port admits its hostname on any port, as publishing does.
 export function hostURLDomainFilter(
   domains: HostURLDomains,
 ): ((host: string) => boolean) | undefined {
   let parents = [domains.boxelSpace, domains.boxelSite]
-    .filter((domain): domain is string => Boolean(domain))
-    .map((domain) => `.${domain.toLowerCase()}`);
-  let exact = new Set(
-    (domains.customDomains ?? [])
-      .map(customDomainHost)
-      .filter((host): host is string => host !== undefined),
-  );
-  if (parents.length === 0 && exact.size === 0) {
+    .map((domain) => (domain ? parseDomainHost(domain) : undefined))
+    .filter((domain): domain is DomainHost => domain !== undefined)
+    .map((domain) => `.${domain.host}`);
+  let custom = (domains.customDomains ?? [])
+    .map(parseDomainHost)
+    .filter((domain): domain is DomainHost => domain !== undefined);
+  if (parents.length === 0 && custom.length === 0) {
     return undefined;
   }
-  return (host) =>
-    exact.has(host) || parents.some((parent) => host.endsWith(parent));
+  return (host) => {
+    if (parents.some((parent) => host.endsWith(parent))) {
+      return true;
+    }
+    let requestHost = parseDomainHost(host);
+    return (
+      requestHost !== undefined &&
+      custom.some((domain) => isOnDomain(requestHost, domain))
+    );
+  };
 }
 
-// A custom domain may be configured as a bare host (`example.test`) or as a
-// URL (`https://example.test/`), as publishing accepts both. Either way it is
-// compared as the host a request names. Undefined when it can't be parsed.
-function customDomainHost(domain: string): string | undefined {
-  try {
-    let url = new URL(domain.includes('://') ? domain : `https://${domain}`);
-    return url.host.toLowerCase();
-  } catch {
-    return undefined;
-  }
-}
-
-// The key a host is cached and stored under: its lowercased host, with the
-// port when it isn't the default one. `URL#host` already drops a default port.
+// The key a host is cached and stored under: its lowercased host, without a
+// trailing dot, with the port when it isn't the default one (ADR 033 §1.1).
 export function hostKey(url: URL): string {
-  return url.host.toLowerCase();
+  return domainHostOf(url).host;
 }
 
 export class HostURLResolver {
