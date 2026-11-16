@@ -21183,6 +21183,15 @@ export class Realm {
   async #findHostRouteDuplicates(): Promise<HostRouteDuplicates> {
     try {
       let validation = await this.getHostRoutes();
+      if (!validation.complete && this.#hostRouteTypeWarmups.size > 0) {
+        // A route type whose definition isn't cached yet, as after a restart
+        // or a change to its module, is being read into the cache in the
+        // background. No page request waits on this check, so it waits for
+        // those reads and validates again, rather than answering that the
+        // routes could not be checked.
+        await Promise.all([...this.#hostRouteTypeWarmups.values()]);
+        validation = await this.getHostRoutes();
+      }
       let result = await findHostRouteDuplicates(
         validation.routes,
         {

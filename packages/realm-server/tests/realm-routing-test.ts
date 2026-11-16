@@ -11,6 +11,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import type { CachingDefinitionLookup } from '@cardstack/runtime-common';
 import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
 import {
+  createJWT,
   setupDB,
   setupPermissionedRealmCached,
   withRealmPath,
@@ -1362,6 +1363,79 @@ module(basename(import.meta.filename), function () {
       } finally {
         RealmIndexQueryEngine.prototype.findSharedFieldValues = original;
       }
+    });
+  });
+
+  module('Realm.getHostRouteDuplicates in a private realm', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/routing-duplicates-private/');
+    let owner = '@owner:localhost';
+    let testRealm: Realm;
+    let definitionLookup: CachingDefinitionLookup;
+    let request: RealmRequest;
+
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
+      permissions: { [owner]: ['read', 'write', 'realm-owner'] },
+      fileSystem: makeDuplicatesFixture(),
+      onRealmSetup({ testRealm: realm, testRealmServer, request: req }) {
+        testRealm = realm;
+        definitionLookup = serverDefinitionLookup(testRealmServer);
+        request = withRealmPath(req, realmURL);
+      },
+    });
+
+    hooks.beforeEach(async function () {
+      await testRealm.indexing();
+      // As after a restart, or a change to the module: the route types
+      // aren't in the definitions cache.
+      await definitionLookup.clearRealmDefinitions(realmURL.href);
+      testRealm.clearRealmIndexCaches();
+    });
+
+    test('waits for the route types to be read into the cache, then finds the duplicates', async function (assert) {
+      assert.strictEqual(await testRealm.visibility(), 'private');
+      let response = await request
+        .get('/_host-route-duplicates')
+        .set('Accept', SupportedMimeType.JSON)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, owner, ['read', 'write', 'realm-owner'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.true(
+        response.body.complete,
+        'the types were read into the cache before the routes were checked',
+      );
+      assert.deepEqual(
+        (
+          response.body.duplicates as { fullPath: string; cardIds: string[] }[]
+        ).map((d) => [d.fullPath, d.cardIds]),
+        [
+          [
+            '/posts/:slug',
+            [`${realmURL.href}post-a`, `${realmURL.href}post-b`],
+          ],
+          [
+            '/c/:category/:product',
+            [`${realmURL.href}trail-1`, `${realmURL.href}trail-2`],
+          ],
+          [
+            '/s/:shelf/:item',
+            [`${realmURL.href}lamp-1`, `${realmURL.href}lamp-2`],
+          ],
+        ],
+      );
+      assert.true(
+        (await testRealm.getHostRoutes()).complete,
+        'the routes stay validated for the host pages',
+      );
+    });
+
+    test('a request without access to the realm is refused', async function (assert) {
+      let response = await request
+        .get('/_host-route-duplicates')
+        .set('Accept', SupportedMimeType.JSON);
+      assert.strictEqual(response.status, 401);
     });
   });
 
