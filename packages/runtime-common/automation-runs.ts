@@ -24,7 +24,13 @@ import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import { logRunPlatformLine } from './automation-run-log.ts';
 import type { DBAdapter } from './db.ts';
-import { param, query, type Expression, type Querier } from './expression.ts';
+import {
+  dbAdapterQuerier,
+  param,
+  query,
+  type Expression,
+  type Querier,
+} from './expression.ts';
 import type { PgPrimitive } from './index.ts';
 import type {
   RealmIdentifier,
@@ -56,6 +62,9 @@ export interface AutomationRun extends AutomationRunCounts {
   slot: string;
   // The Matrix user id of the person the run acts as.
   actsAs: string;
+  // A Preview: the run stops before its commit, and once it finishes
+  // complete it keeps the files it staged as the batch it shows.
+  dryRun: boolean;
   // The queue attempt (the job's reservation id) that owns the run, once one
   // has started it.
   attempt: number | null;
@@ -86,6 +95,8 @@ export interface NewAutomationRun {
   trigger: string;
   slot: string;
   actsAs: string;
+  // A Preview; false when absent.
+  dryRun?: boolean;
 }
 
 // What an attempt that has just taken a run must do with it:
@@ -126,8 +137,16 @@ export async function createAutomationRun(
   dbAdapter: DBAdapter,
   run: NewAutomationRun,
 ): Promise<AutomationRun> {
-  let [created] = await query(dbAdapter, [
-    'INSERT INTO automation_runs (automation_id, realm, trigger, slot, acts_as) VALUES (',
+  return await insertAutomationRun(dbAdapterQuerier(dbAdapter), run);
+}
+
+// `createAutomationRun` inside the caller's transaction.
+export async function insertAutomationRun(
+  querier: Querier,
+  run: NewAutomationRun,
+): Promise<AutomationRun> {
+  let [created] = await querier([
+    'INSERT INTO automation_runs (automation_id, realm, trigger, slot, acts_as, dry_run) VALUES (',
     param(run.automationId),
     ',',
     param(run.realm),
@@ -137,12 +156,14 @@ export async function createAutomationRun(
     param(run.slot),
     ',',
     param(run.actsAs),
+    ',',
+    param(run.dryRun ?? false),
     ') ON CONFLICT ON CONSTRAINT automation_runs_slot_key DO NOTHING RETURNING *',
   ]);
   if (created) {
     return runFromRow(created);
   }
-  let [existing] = await query(dbAdapter, [
+  let [existing] = await querier([
     'SELECT * FROM automation_runs WHERE automation_id =',
     param(run.automationId),
     'AND trigger =',
@@ -697,6 +718,12 @@ async function updateOwned(
 // the update: a file staged while the update waited on the run's row lock has
 // committed by then, and a later stage waits on the lock and then finds the
 // run no longer running.
+//
+// A Preview that finishes complete keeps the files its owning attempt staged:
+// they are the batch the Preview shows. Nothing can change them from then on,
+// since staging and the commit both take only a running run. Only a person's
+// latest kept batch for an automation stays: keeping one discards the batch
+// of every earlier finished Preview they ran of it.
 async function endRun(
   dbAdapter: DBAdapter,
   update: Expression,
@@ -704,10 +731,25 @@ async function endRun(
   return await dbAdapter.withTransaction(async (txQuery) => {
     let [row] = await txQuery(update);
     if (row) {
+      let keepsBatch = row.dry_run === true && row.state === 'complete';
       await txQuery([
         'DELETE FROM run_overlay_files WHERE run_id =',
         param(String(row.id)),
+        ...(keepsBatch && row.attempt != null
+          ? ['AND attempt <>', param(Number(row.attempt))]
+          : []),
       ]);
+      if (keepsBatch) {
+        await txQuery([
+          'DELETE FROM run_overlay_files WHERE run_id IN (SELECT id FROM automation_runs WHERE automation_id =',
+          param(String(row.automation_id)),
+          'AND acts_as =',
+          param(String(row.acts_as)),
+          "AND dry_run AND state IN ('complete', 'error', 'canceled') AND id <>",
+          param(String(row.id)),
+          ')',
+        ]);
+      }
     }
     return row;
   });
@@ -721,6 +763,7 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     trigger: String(row.trigger),
     slot: String(row.slot),
     actsAs: String(row.acts_as),
+    dryRun: row.dry_run === true || row.dry_run === 1,
     attempt: row.attempt == null ? null : Number(row.attempt),
     scriptId: (row.script_id as RealmResourceIdentifier | null) ?? null,
     scriptHash: (row.script_hash as string | null) ?? null,

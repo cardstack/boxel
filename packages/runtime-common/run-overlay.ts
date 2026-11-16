@@ -15,7 +15,9 @@
 // empty overlay, so writes the replaced attempt staged never reach the
 // newer attempt's commit, and the run row's start drops them. Every way a run
 // ends (finished, canceled, abandoned) discards its overlay in the same
-// statement that ends it (`automation-runs.ts`), and deleting the run row
+// statement that ends it (`automation-runs.ts`), except a Preview that
+// finishes complete: it keeps its attempt's files, which nothing can stage
+// over or commit from then on, as the batch it shows. Deleting the run row
 // deletes its overlay with it.
 //
 // The table is server-only and excluded from the SQLite schema dump.

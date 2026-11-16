@@ -127,6 +127,8 @@ export async function runAutomationAttempt(
       return { state: 'left', reason: start.kind };
   }
   let run = start.run;
+  // A Preview, as its row or its job says.
+  let dryRun = run.dryRun || input.dryRun;
   let fail = (reason: string, message: string) =>
     finish(ctx, tag, runId, attempt, { state: 'error', reason, message });
 
@@ -224,7 +226,7 @@ export async function runAutomationAttempt(
       ...(input.webhookPayload !== undefined
         ? { webhookPayload: input.webhookPayload }
         : {}),
-      dryRun: input.dryRun,
+      dryRun,
     },
     secondsCap: remainingMs / 1000,
     endsAt: new Date(deadline).toISOString(),
@@ -257,8 +259,9 @@ export async function runAutomationAttempt(
         : outcome.message;
     return await fail(outcome.reason, message);
   }
-  if (input.dryRun) {
-    // A Preview stops before the commit; its finish discards the overlay.
+  if (dryRun) {
+    // A Preview stops before the commit. Its finish keeps what it staged as
+    // the batch it shows, and nothing reaches the realm.
     return await finish(ctx, tag, runId, attempt, { state: 'complete' });
   }
   return await commit(ctx, tag, run, attempt, realmURL, token);
@@ -438,7 +441,8 @@ function triggerKind(
   return triggers.find((t) => t.label === run.trigger)?.kind ?? 'manual';
 }
 
-// When the automation's last complete run started, other than this one.
+// When the automation's last complete run started, other than this one. A
+// Preview wrote nothing, so it never counts.
 async function lastSuccessAt(
   dbAdapter: DBAdapter,
   run: AutomationRun,
@@ -446,7 +450,7 @@ async function lastSuccessAt(
   let [row] = await query(dbAdapter, [
     'SELECT started_at FROM automation_runs WHERE automation_id =',
     param(run.automationId),
-    "AND state = 'complete' AND started_at IS NOT NULL AND id <>",
+    "AND state = 'complete' AND NOT dry_run AND started_at IS NOT NULL AND id <>",
     param(run.id),
     'ORDER BY started_at DESC LIMIT 1',
   ]);

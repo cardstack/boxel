@@ -62,6 +62,12 @@ description: >-
   prerender affinity and warm tab, the run token as the tab's only session,
   handed to the tab in memory rather than in `localStorage`, the commit or the recorded error, and how to run one automation by hand in
   development (`pnpm run-automation`) and read its outcome.
+  Also covers Preview and Run now (`automation-manual-runs.ts`):
+  `startAutomationPreview` and `startAutomationRunNow`, which start a run at
+  once for a direct writer, acting as and charged to whoever clicked, the
+  batch a finished Preview keeps, `readAutomationRunReport` (a run's state,
+  log, timings, cost, and the files it staged or saved), and how to compare
+  a Preview with a Run now.
   Also covers a run's log — `automation_run_log`, `appendRunLog` and
   `readRunLog` in `automation-run-log.ts`, the `/_run-log` route and the
   host's `RunLogSink`, the platform's `callApi`, `resolve`, commit and cap
@@ -302,6 +308,7 @@ cancel works by changing it. The functions that change it are in
 | `automation_id`, `realm`                                                       | The automation card and its realm, as canonical identifiers (ADR 002), never served URLs                                                                                                           |
 | `trigger`, `slot`                                                              | The trigger's label and the slot it fired for: the scheduled instant, a webhook delivery's id, a batch's id, or a click's id                                                                       |
 | `acts_as`                                                                      | The Matrix user id of the person the run acts as (ADR 026 §1.1)                                                                                                                                    |
+| `dry_run`                                                                      | A Preview: the run stops before its commit, and a complete one keeps its staged files (_Preview and Run now_)                                                                                      |
 | `attempt`                                                                      | The queue attempt that owns the run: the job's reservation id, which grows with each reservation                                                                                                   |
 | `script_id`, `script_hash`                                                     | The script file the run read, as an identifier, and the hash of the text it ran                                                                                                                    |
 | `state`                                                                        | `pending`, `running`, `complete`, `error` or `canceled`                                                                                                                                            |
@@ -362,7 +369,8 @@ says why) rather than throwing.
 - **`finishAutomationRun`** ends a running run as `complete` or `error`, owner
   only. A run that claimed its commit can't finish as complete until the
   commit is recorded as landed, and a run whose commit landed can't finish as
-  an error. A Preview never claims a commit and finishes complete.
+  an error. A Preview never claims a commit and finishes complete, keeping
+  the files its attempt staged.
 - **`abandonAutomationRun(db, id, reason)`** closes a pending or running run
   whose job is gone, whoever owned it: the queue gives up on a job after its
   last reservation, and no attempt is left to finish the run. This is for the
@@ -629,7 +637,8 @@ retry starts from an empty overlay and a replaced attempt's writes never
 reach its commit. A run whose commit was already claimed keeps its files,
 since the claiming attempt may still be sending them. Every way a run ends
 (`finishAutomationRun`, `cancelAutomationRun`, `abandonAutomationRun`)
-discards its overlay in the transaction that ends it, as a statement of its
+discards its overlay in the transaction that ends it (except a Preview that
+finishes complete, below), as a statement of its
 own after the update, so it also catches a file staged while the end waited
 on the run's row lock. Deleting a run row deletes its overlay
 (`ON DELETE CASCADE`).
@@ -648,7 +657,8 @@ SELECT attempt, path, size, updated_at
   FROM run_overlay_files WHERE run_id = '<run id>' ORDER BY attempt, path;
 ```
 
-A finished run has no rows. Rows from more than one attempt would mean a
+A finished run has no rows, except a complete Preview's, which keeps the
+files of the attempt that ran it. Rows from more than one attempt would mean a
 start that didn't drop its predecessors' files. To read a staged file's text:
 `SELECT convert_from(content, 'UTF8') FROM run_overlay_files WHERE run_id = …
 AND path = …`.
@@ -705,8 +715,8 @@ Failure modes, and what the caller does:
 | 5xx from a failure while writing                          | kept, unrecorded             | some files may have landed                                                       | finish as an error; a retry finds `commit-interrupted`, and the next run compares and catches up |
 | 200 again                                                 | recorded                     | the commit landed earlier (a repeat after a lost answer)                         | finish complete                                                                                  |
 
-A Preview never commits: it finishes complete, and the finish discards its
-overlay. A run with nothing staged commits an empty batch, which claims and
+A Preview never commits: it finishes complete, and the finish keeps its
+attempt's staged files as the batch it shows (_Preview and Run now_). A run with nothing staged commits an empty batch, which claims and
 records the commit and writes nothing.
 
 ### The AI spending cap
@@ -844,7 +854,7 @@ of the person who switched the automation on.
 | `url`            | the automation card's URL                                                                       |
 | `trigger`        | `{ label?, kind }`, kind one of `cron`, `once`, `webhook`, `manual` (Preview, Run now), `batch` |
 | `scheduledAt`    | when the trigger was due, or when a manual run was asked for (ISO 8601)                         |
-| `lastSuccessAt`  | when the automation's last complete run started, if it has had one                              |
+| `lastSuccessAt`  | when the automation's last complete run started, if it has had one; a Preview never counts      |
 | `params`         | the card's params with the trigger's own merged over them                                       |
 | `webhookPayload` | the delivery's JSON body, for a webhook run                                                     |
 | `dryRun`         | true for a Preview                                                                              |
@@ -1060,8 +1070,9 @@ for a run row its trigger has already made with `createAutomationRun`:
    (`AUTOMATION_TAB_GRACE_MS`). The input carries `endsAt`, when the time
    limit passes, so time spent waiting for the tab comes off the script's.
 6. Finishes the run from what the tab answers:
-   - `complete`, Preview: finishes complete without a commit, which discards
-     the overlay;
+   - `complete`, Preview (the row's `dry_run`, or the job's `dryRun`):
+     finishes complete without a commit, keeping the staged files as the
+     Preview's batch;
    - `complete`: commits with `POST /_run-commit` carrying the token, sent
      again up to three times on `overlay-changed` or when its answer is lost
      (the realm answers this attempt's commit again with the same success),
@@ -1150,7 +1161,10 @@ pnpm run-automation \
 
 It creates a `manual` run row for the card, enqueues its job, waits for it
 and prints the run row. `--as` must be a direct writer of the realm, since the
-commit re-confirms it. Then read the outcome:
+commit re-confirms it. The script skips the direct-writer check
+`startAutomationRunNow` makes before the row; with `--preview` the row is a
+Preview (`dry_run`), and its staged files stay in `run_overlay_files` once it
+completes. Then read the outcome:
 
 - the printed row: `state`, `error_reason`, `error_message` (a script error
   starts `line N:`), `script_hash`, `committed_at`;
@@ -1164,6 +1178,100 @@ error (<reason>)` or `left alone: …`;
 A run that stays `pending` was never claimed: check that a worker can claim
 priority 5 (_The lanes_). One that stays `running` lost its attempt; see
 _Diagnosing a run_.
+
+## Preview and Run now
+
+A direct writer starts a run of an automation at once, whether or not it is
+switched on, acting as and charged to whoever clicked (not the payer). The
+functions are in `packages/runtime-common/automation-manual-runs.ts`,
+imported as `@cardstack/runtime-common/automation-manual-runs`:
+
+- **`startAutomationPreview(ctx, request, options)`**: a run with
+  `dry_run` true. The script runs as usual and sees
+  `realm.current.automation.dryRun`, its writes are staged, and it stops
+  before the commit, so the realm is left as it was.
+- **`startAutomationRunNow(ctx, request, options)`**: the same run, which
+  commits.
+
+`ctx` is `{ dbAdapter, queue }`, `options` the `AutomationActorOptions` the
+lifecycle functions take, and `request` is `{ automationId, realm, user,
+click, declaration }`: `user` is whoever clicked, `click` a fresh id per
+click, and `declaration` the card as `readAutomationDeclaration` read it.
+Each checks, in this order, that the automation is in `realm`
+(`outside-realm`), that the declaration is the card's own (`other-card`),
+and that `user` is a direct writer of the realm (`not-a-direct-writer`,
+asked with `isDirectWriterLocked` in the transaction that makes the row).
+It then makes an ordinary run row, trigger `manual` (`MANUAL_RUN_TRIGGER`),
+slot the click, `acts_as` the clicker, and enqueues it with
+`enqueueAutomationRunJob` (`triggerKind: 'manual'`, the card's `seconds`
+cap for the job's timeout, `scheduledAt` the row's `created_at`). So both
+reach the worker through the same path as a scheduled run: the same
+admission and checks in `runAutomationAttempt`, the caps
+(`readRunLimits`: the card's caps, held to the snapshot once the
+automation is switched on), the automation's concurrency group, which
+queues a click behind a run of the same automation already going, and the
+automation tier. The commit re-confirms the clicker's direct write, as for
+any run.
+
+They answer `{ ok: true, run, job? }`, with the run `pending`. Sending the
+same click again answers the same run: a pending one joins the job already
+enqueued (the job's key is the run's), and a finished one isn't enqueued
+again (`job` absent). A click that already started a run for someone else,
+or a run of the other kind, is refused (`click-reused`). Both then move
+through `pending`, `running`, and `complete` or `error`, like any run.
+
+### The batch a Preview keeps
+
+A Preview that finishes complete keeps the files its attempt staged in
+`run_overlay_files`: it is the batch the Preview shows. Nothing can change
+it afterwards, since staging and the commit both take only a running run.
+A Preview that errors or is canceled discards its overlay like any run. Only
+a person's latest kept batch per automation stays: the finish that keeps
+one discards the batch of every earlier finished Preview that person ran of
+it (`endRun` in `automation-runs.ts`). A Preview is never the automation's
+`lastSuccessAt`.
+
+### The run's report
+
+`readAutomationRunReport(dbAdapter, { runId, user }, options)` answers
+`not-a-direct-writer` unless `user` directly writes the run's realm, and
+`missing` for no such run. Otherwise its `report` holds:
+
+- `run`: the run row (`state`, `acts_as`, `dryRun`, `error_reason`, …);
+- `timings`: the row's times, plus `queuedMs` (enqueue to first start),
+  `runMs` (first start to finish) and `commitMs` (claim to landing);
+- `cost`: the run's charges in `credits_ledger` by `charge_kind` and in
+  total (`credits`, `creditsByKind`), and the metered counts against its
+  caps (`callApiCalls`, `callApiResponseBytes`, `resolveCalls`, `writes`,
+  `aiCreditsSpent`, `aiCreditsReserved`);
+- `log`: the run's log (`readRunLog`);
+- `stagedFiles`: for a complete Preview, `{ path, size, content }` per
+  staged file, in path order. An empty list means a newer Preview by the
+  same person replaced this one's batch;
+- `committedPaths`: for a run whose commit landed, the realm-local paths
+  its commit line records (`data.paths` on the `commit` platform line).
+
+### Comparing a Preview with a Run now
+
+Both read the realm and call every vendor fresh: nothing a Preview fetched
+is reused by the Run now that follows it, and each pays its own `callApi`
+and `resolve` calls. So a Preview shows what a run would write at the time
+it ran, not what the next run will write. To compare them, set the
+Preview's `stagedFiles` paths beside the Run now's `committedPaths`, and
+read each file's committed text from the realm. A difference comes from
+one of:
+
+- an upstream answer that changed between the two runs (compare the
+  `call-api` lines in both logs: status, size and time);
+- the realm changing between them: a search reads what the realm held when
+  the run started (_The run overlay_), and the commit leaves a file whose
+  text matches the stored file's alone, though `committedPaths` names it
+  too;
+- the card or script changing between them (`script_hash` on each row);
+- a cap reached in one and not the other (`error_reason` `hit-a-cap`).
+
+`cost.writes` is 0 for a Preview, which commits nothing, and counts every
+file the commit wrote for a Run now.
 
 ## The queue tier and worker lane
 

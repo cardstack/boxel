@@ -26,6 +26,7 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { presentsAsRunToken } from '@cardstack/runtime-common/run-token';
+import { runOverlayFiles } from '@cardstack/runtime-common/run-overlay';
 import {
   TEST_AUTOMATION_PATH,
   automationFixture,
@@ -88,13 +89,16 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
-  async function newRun(): Promise<AutomationRun> {
+  async function newRun({
+    dryRun = false,
+  }: { dryRun?: boolean } = {}): Promise<AutomationRun> {
     return await createAutomationRun(dbAdapter, {
       automationId: rri(`${realm.url}${TEST_AUTOMATION_PATH}`),
       realm: ri(realm.url),
       trigger: 'manual',
       slot: randomUUID(),
       actsAs: OWNER,
+      dryRun,
     });
   }
 
@@ -523,6 +527,41 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(after?.state, 'complete');
     assert.strictEqual(after?.commitStartedAt, null, 'no commit was claimed');
     assert.strictEqual(await readFile('out/preview.txt'), undefined);
+  });
+
+  test("a Preview row runs as a Preview whatever its job says, keeps its batch, and is never the automation's last success", async function (assert) {
+    let preview = await newRun({ dryRun: true });
+    let calls: TabCall[] = [];
+    await attempt(
+      preview,
+      stubTab(calls, {
+        writes: { 'out/kept.txt': 'the batch a Preview shows' },
+        answer: { state: 'complete' },
+      }),
+    );
+    assert.true(calls[0].input.automation.dryRun, 'the script sees dryRun');
+    let after = await getAutomationRun(dbAdapter, preview.id);
+    assert.strictEqual(after?.state, 'complete');
+    assert.strictEqual(after?.commitStartedAt, null, 'no commit was claimed');
+    assert.strictEqual(await readFile('out/kept.txt'), undefined);
+    let kept = await runOverlayFiles(dbAdapter, {
+      runId: preview.id,
+      attempt: after!.attempt!,
+    });
+    assert.deepEqual(
+      kept.map(({ path }) => path),
+      ['out/kept.txt'],
+      'the finished Preview keeps the files it staged',
+    );
+
+    let next = await newRun();
+    let nextCalls: TabCall[] = [];
+    await attempt(next, stubTab(nextCalls, { answer: { state: 'complete' } }));
+    assert.strictEqual(
+      nextCalls[0].input.automation.lastSuccessAt,
+      undefined,
+      'a complete Preview is not a last success',
+    );
   });
 
   test("a job whose key isn't its run's runs nothing", async function (assert) {

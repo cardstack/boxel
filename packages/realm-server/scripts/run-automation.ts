@@ -13,10 +13,12 @@ import { MAX_RUN_SECONDS } from '@cardstack/runtime-common/automation-declaratio
 import { enqueueAutomationRunJob } from '@cardstack/runtime-common/jobs/run-command';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 
-// Runs one automation by hand in development, as Run now does: creates a run
-// row for the automation card, enqueues its job at the automation tier and
-// waits for it, then prints the run row. A worker on the stack runs the job
-// in a prerender tab. Pass `--preview` to stop before the commit.
+// Runs one automation by hand in development, the way Run now and Preview
+// do but without their direct-writer check: creates a run row for the
+// automation card, enqueues its job at the automation tier and waits for it,
+// then prints the run row. A worker on the stack runs the job in a prerender
+// tab. Pass `--preview` to stop before the commit; the run row then keeps the
+// files the script staged (`run_overlay_files`).
 //
 //   pnpm run-automation --realm http://localhost:4201/user/my-realm/ \
 //     --card http://localhost:4201/user/my-realm/automation/sync \
@@ -47,6 +49,7 @@ async function main() {
       trigger: 'manual',
       slot: randomUUID(),
       actsAs: values.as,
+      dryRun: values.preview,
     });
     let job = await enqueueAutomationRunJob(queue, {
       automationId: run.automationId,
