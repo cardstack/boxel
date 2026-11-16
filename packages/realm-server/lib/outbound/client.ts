@@ -549,6 +549,10 @@ export interface OutboundRequest {
   // put there itself, such as a token request's client secret or refresh
   // token, which a 307 or 308 would otherwise resend wherever it points.
   sameOriginOnly?: boolean;
+  // Never follow a redirect at all: the redirect itself is the response. For
+  // a caller that refuses any answer but the one it asked for, such as an
+  // OAuth client ID metadata document, which must be served at its own URL.
+  noRedirects?: boolean;
   // Every form of the attached credential is registered here, and the
   // response comes back with each registered value removed. A caller that
   // sends a credential some other way (substituted into the body, or a
@@ -835,6 +839,7 @@ async function send(
     if (
       !REDIRECT_STATUSES.has(response.status) ||
       !location ||
+      request.noRedirects === true ||
       (staysOnOrigin && leavesOrigin(location, current))
     ) {
       let sizeCap =

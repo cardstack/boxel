@@ -10,6 +10,7 @@
 // so a computed style would read as an initial value and prove nothing.
 //
 // LOCAL-ONLY. Never push a *.test.gts to a realm.
+import { on } from '@ember/modifier';
 import { module, test } from 'qunit';
 import { tracked } from '@glimmer/tracking';
 import {
@@ -24,6 +25,8 @@ import { DataTable } from './components/data-table';
 import { Descriptions } from './components/descriptions';
 import { Item } from './components/item';
 import { List } from './components/list';
+import { Menu } from './components/menu';
+import type { MenuEntry } from './internal/menu';
 import { RowCursor } from './internal/reading-listing';
 import type { DataColumn, FilterState } from './components/data-table';
 import type { DescriptionsItem } from './components/descriptions';
@@ -872,6 +875,93 @@ module('Pretui | reading-listing', function (hooks) {
       )[0] as HTMLElement,
     );
     assert.deepEqual(knobs.activations, ['B-2'], 'the radio does not');
+  });
+
+  test('a press on a widget inside a List row does not activate it', async function (assert) {
+    let knobs = new Knobs();
+    await render(
+      <template>
+        <List @items={{LOTS}} @key={{rowKey}} @onActivate={{knobs.onActivate}}>
+          <:item as |row|>
+            <span>{{row.tea}}</span>
+            <div
+              role='slider'
+              tabindex='0'
+              aria-label='Grade'
+              aria-valuenow='0'
+              data-test-row-widget
+            ></div>
+          </:item>
+        </List>
+      </template>,
+    );
+    await click(
+      listRoot().querySelectorAll('[data-test-row-widget]')[0] as HTMLElement,
+    );
+    assert.deepEqual(
+      knobs.activations,
+      [],
+      'a non-native widget keeps its click',
+    );
+  });
+
+  test('choosing an item in a List row Menu does not activate the row', async function (assert) {
+    let knobs = new Knobs();
+    let chosen = '';
+    let items: MenuEntry[] = [
+      { label: 'Archive', onSelect: () => (chosen = 'archive') },
+    ];
+    await render(
+      <template>
+        <List @items={{LOTS}} @key={{rowKey}} @onActivate={{knobs.onActivate}}>
+          <:item as |row|>
+            <span>{{row.tea}}</span>
+            <Menu @items={{items}} @label='Row actions'>
+              <:trigger as |isOpen toggle|>
+                <button
+                  type='button'
+                  data-open={{if isOpen 'true'}}
+                  data-test-menu-trigger
+                  {{on 'click' toggle}}
+                >⋯</button>
+              </:trigger>
+            </Menu>
+          </:item>
+        </List>
+      </template>,
+    );
+    await click(
+      listRoot().querySelectorAll('[data-test-menu-trigger]')[0] as HTMLElement,
+    );
+    await click('[role="menuitem"]');
+    assert.strictEqual(chosen, 'archive', 'the menu item ran');
+    assert.deepEqual(knobs.activations, [], 'and the row did not open');
+  });
+
+  test('ending a text selection inside a List row does not activate it', async function (assert) {
+    let knobs = new Knobs();
+    await render(
+      <template>
+        <List @items={{LOTS}} @key={{rowKey}} @onActivate={{knobs.onActivate}}>
+          <:item as |row|><span data-test-tea>{{row.tea}}</span></:item>
+        </List>
+      </template>,
+    );
+    let tea = listRoot().querySelectorAll('[data-test-tea]')[0] as HTMLElement;
+    window.getSelection()!.selectAllChildren(tea);
+    await click(tea);
+    window.getSelection()!.removeAllRanges();
+    assert.deepEqual(
+      knobs.activations,
+      [],
+      'a drag-select that ends in a click keeps the row closed',
+    );
+    await click(tea);
+    assert.deepEqual(
+      knobs.activations,
+      ['B-1'],
+      'a plain click still opens it',
+    );
   });
 
   test('List without an expanded block renders no expander', async function (assert) {

@@ -295,6 +295,16 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(response.text, 'hello');
   });
 
+  test('a run token without its Bearer prefix, as the host sends a session, is still a run token', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let response = await request
+      .get('/run-token-test/notes.txt')
+      .set('Accept', SOURCE)
+      .set('Authorization', token);
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.text, 'hello');
+  });
+
   test('capture URLs signed with a run token are not bound to the person the run acts as', async function (assert) {
     let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
     let url = `${realmURL.href}_capture/notes`;

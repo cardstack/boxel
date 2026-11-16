@@ -8,7 +8,7 @@ const {
   copySync,
 } = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
-import { mintRunToken } from '../../lib/run-token.ts';
+import { buildMintRunToken, mintRunToken } from '../../lib/run-token.ts';
 import { automationRef } from '@cardstack/runtime-common/automation-declaration';
 import {
   createAutomationRun,
@@ -1709,6 +1709,7 @@ export async function createRealm({
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
+      mintRunToken: buildMintRunToken(realmSecretSeed),
       mediaCacheAdapter,
       meteredCharges: meteredChargesFor(dbAdapter, testPricing),
     });
@@ -1832,6 +1833,7 @@ export async function runTestRealmServer({
   googleSignIn,
   oauthProvider,
   oauthTestResources,
+  oauthTestDocumentOrigins,
   oauthNewClientLimit,
   oauthAuthorizationLimit,
   secureOriginAppOrigins,
@@ -1877,6 +1879,9 @@ export async function runTestRealmServer({
   oauthTestResources?: ConstructorParameters<
     typeof RealmServer
   >[0]['__testOnlyOAuthResources'];
+  // Client ID metadata documents served from a stub: each `https://` origin
+  // maps to the stub's plain HTTP origin.
+  oauthTestDocumentOrigins?: ReadonlyMap<string, string>;
   // The provider's limit on new clients; omit for the production default.
   oauthNewClientLimit?: ConstructorParameters<
     typeof RealmServer
@@ -1917,6 +1922,7 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mintRunToken: buildMintRunToken(realmSecretSeed),
     // The indexing worker persists declared captures when a store is
     // configured — same wiring as the production worker child.
     mediaCacheAdapter,
@@ -1995,6 +2001,9 @@ export async function runTestRealmServer({
     ...(oauthProvider ? { oauthProvider } : {}),
     ...(oauthTestResources
       ? { __testOnlyOAuthResources: oauthTestResources }
+      : {}),
+    ...(oauthTestDocumentOrigins
+      ? { __testOnlyOAuthDocumentOrigins: oauthTestDocumentOrigins }
       : {}),
     ...(oauthNewClientLimit ? { oauthNewClientLimit } : {}),
     ...(oauthAuthorizationLimit ? { oauthAuthorizationLimit } : {}),
@@ -2111,6 +2120,7 @@ export async function runTestRealmServerWithRealms({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mintRunToken: buildMintRunToken(realmSecretSeed),
     mediaCacheAdapter,
     meteredCharges: meteredChargesFor(dbAdapter, testPricing),
   });

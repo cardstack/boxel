@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 134736,
+      "bytes": 136131,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -1802,11 +1802,11 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "internal/9af661bf35.css"
+          "module": "internal/4c6211e961.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "internal/a06279a4f5.css"
+          "module": "internal/567e7f44ec.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2071,7 +2071,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 574496,
+      "bytes": 574593,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2304,8 +2304,8 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/radio-card.gts",
-          "sha256": "8ea03d7a18c8fe7e03c99b4ad37b60946d6d34d1f37b6a597065c876b14d9665",
-          "size": 2329
+          "sha256": "610dcdb44afcd67811168034c0c5a3831fd9d6e129a15567b879d23ad67db860",
+          "size": 2393
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -2358,8 +2358,8 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "internal/choice-cards.gts",
-          "sha256": "9d95ff8b8b95fd4c4a31c2ff96b28ad62d17d599f40df3779ccb38310a358f79",
-          "size": 2473
+          "sha256": "3fa95424f4600b1c35852517da42f09fe70b107f0db57483c2987c4f10a36658",
+          "size": 2516
         },
         {
           "package": "@cardstack/pretui@0.0.0",

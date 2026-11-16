@@ -44,10 +44,8 @@ import {
 import ENV from '@cardstack/host/config/environment';
 import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
 import { TokenRefreshSchedule } from '@cardstack/host/lib/token-refresh-schedule';
-import {
-  RealmServerSessionLocalStorageKey,
-  SessionLocalStorageKey,
-} from '@cardstack/host/utils/local-storage-keys';
+import { RealmServerSessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
+import { readRealmSessions } from '@cardstack/host/utils/realm-sessions';
 
 import { createServerRequestTimingMiddleware } from './client-telemetry';
 
@@ -662,10 +660,8 @@ export default class RealmServerService
   }
 
   private readSessionTokens(): Record<string, string> {
-    let sessionStr =
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
     try {
-      return JSON.parse(sessionStr) as Record<string, string>;
+      return readRealmSessions() ?? {};
     } catch {
       return {};
     }
