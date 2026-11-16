@@ -18,6 +18,10 @@ import {
   resolve as resolveJSON,
   type ProxySend,
 } from '../lib/realm-runner/research';
+import {
+  AutomationRunStoppedError,
+  RunStateWatch,
+} from '../lib/realm-runner/run-state-watch';
 import { RealmScriptError } from '../lib/realm-runner/runner';
 import { claimsFromRawToken } from '../services/realm';
 
@@ -103,6 +107,15 @@ export default class RunAutomationTool extends HostBaseTool<
           'The automation run reached its time limit before its script could start',
       };
     } else {
+      // A run canceled, paused or taken over while its script runs is
+      // refused at its next call; this stops the script in this tab too,
+      // whether or not it makes another call.
+      let watch = new RunStateWatch({
+        realmURL,
+        runToken,
+        fetch: this.network.fetch,
+      });
+      watch.start();
       try {
         await runAutomationScript({
           code: scriptInput.code,
@@ -112,10 +125,13 @@ export default class RunAutomationTool extends HostBaseTool<
           io,
           progress,
           secrets,
+          signal: watch.signal,
         });
         outcome = { state: 'complete' };
       } catch (error) {
-        outcome = errorOutcome(error, secrets);
+        outcome = errorOutcome(error, secrets, Date.parse(scriptInput.endsAt));
+      } finally {
+        watch.stop();
       }
     }
     // The run's progress is sent before the run answers, while the run is
@@ -171,6 +187,7 @@ export default class RunAutomationTool extends HostBaseTool<
 function errorOutcome(
   error: unknown,
   secrets: string[],
+  endsAt: number,
 ): AutomationScriptOutcome {
   let message = redactSecrets(
     error instanceof Error ? error.message : String(error),
@@ -178,6 +195,17 @@ function errorOutcome(
   );
   if (error instanceof AutomationTimeLimitError) {
     return { state: 'error', reason: 'timed-out', message };
+  }
+  if (error instanceof AutomationRunStoppedError) {
+    // The run's token expires at its time limit, so a realm that stops
+    // admitting the run's calls once the limit has passed is the time limit.
+    return Date.now() >= endsAt
+      ? {
+          state: 'error',
+          reason: 'timed-out',
+          message: 'The automation run reached its time limit',
+        }
+      : { state: 'error', reason: 'stopped', message };
   }
   if (error instanceof RealmScriptError) {
     let { line } = error.scriptError;
