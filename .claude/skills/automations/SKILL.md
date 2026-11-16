@@ -62,6 +62,12 @@ description: >-
   prerender affinity and warm tab, the run token as the tab's only session,
   the commit or the recorded error, and how to run one automation by hand in
   development (`pnpm run-automation`) and read its outcome.
+  Also covers a run's log — `automation_run_log`, `appendRunLog` and
+  `readRunLog` in `automation-run-log.ts`, the `/_run-log` route and the
+  host's `RunLogSink`, the platform's `callApi`, `resolve`, commit and cap
+  lines, redaction, the per-run size cap, and the `[automation-run-log]` lines
+  in Loki. Use when reading a run's log in Postgres or Loki, adding a line the
+  platform logs for a run, or diagnosing a run whose log is missing lines.
 ---
 
 # Automations
@@ -423,8 +429,9 @@ SELECT state, attempt, error_reason, error_message, canceled_by,
   after a retry or the reconcile pass had closed the run as an error, and
   recording the landing made it complete.
 
-The row holds run state only. A run's log (its console lines and platform
-calls) doesn't go on it.
+The row holds run state, and the counts its log's cap is checked against
+(`log_lines`, `log_chars`, `log_dropped`). The log itself is in
+`automation_run_log` (_The run log_).
 
 ### The run token
 
@@ -577,6 +584,24 @@ And the run's reads:
   and no expanded links, since staged files aren't indexed. A card the run
   created is read this way too. A staged `.json` that isn't a card document
   answers 422, never the realm's version.
+- **Operations** (`operations.invoke`, `operations.invokeBatchOperation`):
+  `handleOperations` resolves a run's batch against `Realm.#runOperationCore`,
+  the realm's operation core with each card the attempt staged answered from
+  the overlay. Its index row is built from the staged document, with the
+  adoption chain its `adoptsFrom` names, so an operation on a card the run
+  created or re-typed resolves against the staged type (a declared name the
+  staged type carries runs, and the policy gate matches rules against that
+  type), and a predicate reads the staged fields. A `read` entry answers the
+  staged document as the realm's card+json `GET` of it does, so with no
+  computed fields and no expanded links (unlike a script's `cards.get`, whose
+  `readCard` computes them). Its generation is taken from the realm's index
+  row, or 0 for a card the run created, and a `read` of a staged file that
+  isn't a card answers its metadata from the staged bytes. A staged `.json`
+  that isn't a card document is no card to an entry, and a `read` of it
+  answers 422, as the card+json `GET` does. A transform program reads a
+  staged card as not indexed (`#runBatchCore`'s `indexedCardValues`), so it
+  never sees the realm row's computed or linked values. An entry that finds
+  its targets with a query searches the index, as `cards.search` does.
 - **`cards.search`** runs on the index, and answers each card the attempt
   staged as staged (`Realm.#withStagedCards`): its attributes,
   relationships and type come from the staged document, and the rest of what
@@ -861,9 +886,125 @@ token) and every credential it recognizes:
 …`, `?token=…`, `&key=…`).
 
 The name it was found under stays (`Authorization: Bearer [REDACTED]`,
-`"api_key":"[REDACTED]"`). The sink is where the run log takes these lines;
-the scrubber still removes a vendor's own key from a `callApi` response
-before the script sees it.
+`"api_key":"[REDACTED]"`). `redactSecrets` lives in
+`packages/runtime-common/redact-secrets.ts`, a leaf module the worker bundle
+and the realm server both import. The scrubber still removes a vendor's own
+key from a `callApi` response before the script sees it.
+
+When the run rejects, `runAutomationScript` records one last event before it
+does: `{ kind: 'error', message, line?, stack? }`. `line` is the script's line
+the error was thrown on, and `stack` keeps only the stack's frames on the
+script's own lines, each naming its `script line N` (the bootstrap's frames
+and the wrapper's call to the script are left out). The worker maps them from
+QuickJS's dumped stack, minus the wrapper's line
+(`REALM_RUNNER_WRAPPER_LINES`), for every error the script throws, not only
+the four kinds `RealmScriptError` describes. A run stopped at its time limit
+ends with that message and no line or stack, since it was stopped wherever it
+was. The run's token expires at that same limit, so the tab's send of that
+line is usually refused; the realm server's `finish` line (below) says why the
+run ended either way.
+
+## The run log
+
+A run's log is its script's lines and the platform's lines (ADR 025 §1.1). It is stored in Postgres for the console and written to the
+realm server's log for Loki. The code is
+`packages/runtime-common/automation-run-log.ts`.
+
+### Where the lines come from
+
+| `source`   | `kind`                                                       | Written by                                                                                                                                                                                                                                 |
+| ---------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `script`   | `console`, `activity`, `plan`, `milestone`, `count`, `error` | the run's tab: `RunLogSink` (`packages/host/app/lib/realm-runner/run-log-sink.ts`) sends the progress sink's events to the realm's `POST /_run-log` with the run token                                                                     |
+| `platform` | `call-api`                                                   | `callApiOperation`, through the run's `CallApiRunMeter.logCall`: operation, method, destination with query values masked, status, time and size, or why it was refused                                                                     |
+| `platform` | `resolve`                                                    | `_request-forward`, for a forward that carried the run's token: model, status, time and cost                                                                                                                                               |
+| `platform` | `commit`                                                     | `/_run-commit`: the files saved, or the refusal's code and detail                                                                                                                                                                          |
+| `platform` | `finish`                                                     | `finishAutomationRun`, `abandonAutomationRun` and `cancelAutomationRun`, once the row changes: how the run ended, with the row's `error_reason` and `error_message` (a cap that ended it, a time limit, a script error) or who canceled it |
+
+`RunLogSink` implements `FlushableRunProgressSink`. It sends a batch of at
+most `RUN_LOG_MAX_BATCH_LINES` (500) events once that many wait or a second
+after the first of them, one batch at a time, each given up on after
+`RUN_LOG_SEND_TIMEOUT_MS` (10 s), so `flush` always settles. Whoever runs the
+script calls `await sink.flush()` before the commit and before finishing the
+run.
+
+**Order.** The realm server stores its lines as it does the work, while the
+script's lines wait in the sink. So `runAutomationScript` flushes a flushable
+sink before each `operations.*` and `resolve` call, and the script's lines
+from before a call are stored before the call's own line. `seq` is the order
+lines were stored in.
+`/_run-log` goes through `Realm.handleAutomation` like every run-token call,
+so it takes lines only while the run is `running` under the token's attempt.
+A flush after the run finished is refused with a 401, and the sink reports
+that to its `onError` and never throws: the log never fails a run. A route
+takes only the script's kinds, so nothing the tab sends can pass for a
+platform line.
+
+Every line is redacted again as it is stored, with `redactSecrets` and the
+token it arrived with, whoever sent it. A message is cut at
+`RUN_LOG_MAX_MESSAGE_CHARS` (10,000) and says how much it lost. Query values
+in a logged URL are always masked (`maskedRunLogURL`); header values are
+never logged.
+
+### The cap
+
+A run's log holds at most `RUN_LOG_MAX_LINES` (10,000) lines and
+`RUN_LOG_MAX_CHARS` (5,000,000) characters of messages and data together.
+`appendRunLog` locks the run row, checks the cap against `log_lines` and
+`log_chars`, stores what fits and adds the rest to `log_dropped`. `readRunLog`
+ends a capped log with one `warn` line saying how many were dropped. Separately,
+the worker drops one-way calls past `MAX_RUN_NOTIFICATIONS`, and `RunLogSink`
+drops the oldest past `RUN_LOG_MAX_PENDING` (5,000) waiting events, besides
+the batch in flight, when the realm server answers slowly; each says how many
+in a line of its own. A time no `Date` holds is stored as the time the line
+arrived, and a script line past Postgres's `integer` is left off, so one bad
+event doesn't cost its batch.
+
+### Reading a run's log in Postgres
+
+```sql
+SELECT seq, at, source, kind, level, script_line, message, data
+  FROM automation_run_log WHERE run_id = '<run id>' ORDER BY seq;
+
+-- the log's size against its cap
+SELECT log_lines, log_chars, log_dropped FROM automation_runs WHERE id = '<run id>';
+
+-- just the errors and refusals, across an automation's recent runs
+SELECT l.run_id, l.at, l.kind, l.message
+  FROM automation_run_log l JOIN automation_runs r ON r.id = l.run_id
+ WHERE r.automation_id = '<automation card id>' AND l.level = 'error'
+ ORDER BY l.at DESC LIMIT 50;
+```
+
+Deleting a run row deletes its log (`ON DELETE CASCADE`).
+
+### Reading a run's log in Loki
+
+Each stored line is also logged once by the realm server on the
+`automation-run-log` logger, as
+
+```
+[automation-run-log] automation=<card id> run=<run id> job=<queue job id> seq=3 source=platform kind=call-api level=info status=200 ms=41 msg="callApi latest GET https://…: 200 in 41 ms, 912 bytes"
+```
+
+The tags are in the line, not Loki labels (a run id per label would be a
+series per run). `job` is the queue job that owns the run's attempt
+(`job_reservations.job_id` for the row's `attempt`), absent when there is
+none. The tags come right after the prefix and the message is last and
+JSON-quoted, but a script can print text that looks like tags, and LogQL's
+`|=` and `|~` match anywhere in the line. Anchor a query on the prefix and the
+tags, so it reads the tags the platform wrote. With the `tail-logs` skill:
+
+```bash
+packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+  --regex '\[automation-run-log\] automation=\S+ run=<run id> ' --since 1h --no-follow
+# one queue job's run
+packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+  --regex '\[automation-run-log\] automation=\S+ run=\S+ job=42 ' --since 1h --no-follow
+```
+
+A log that reaches its cap logs one `warn` line saying later lines are
+dropped. Lines come from whichever realm-server task took the request, so
+query by the run, not by one task.
 
 ## The automation command
 
