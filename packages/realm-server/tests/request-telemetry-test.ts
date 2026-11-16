@@ -508,37 +508,48 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    test('an OAuth access token in a form-encoded body is masked', function (assert) {
-      let body = 'note=kept&access_token=body-token-marker';
-      for (let data of [
-        body,
-        { note: 'kept', access_token: 'body-token-marker' },
-      ]) {
+    test('an OAuth access token in a form-encoded body is masked, and no other body is changed', function (assert) {
+      let form = 'note=kept&access_token=body-token-marker';
+      for (let [contentType, data] of [
+        ['application/x-www-form-urlencoded', form],
+        ['Application/X-WWW-Form-Urlencoded ; charset=utf-8', form],
+        [undefined, { note: 'kept', access_token: 'body-token-marker' }],
+      ] as const) {
         let event = scrubRequestTelemetry({
           request: {
             method: 'POST',
             url: 'https://app.telemetry.test/mcp',
+            ...(contentType
+              ? { headers: { 'content-type': contentType } }
+              : {}),
             data,
           },
         });
+        let recorded = JSON.stringify(event);
         assert.false(
-          JSON.stringify(event).includes('body-token-marker'),
-          `no token in ${typeof data} data`,
+          recorded.includes('body-token-marker'),
+          `no token in ${contentType ?? 'recorded fields'}`,
         );
-        assert.true(JSON.stringify(event).includes('kept'), 'the rest stays');
+        assert.true(recorded.includes('note'), 'the rest stays');
       }
-      let json = scrubRequestTelemetry({
-        request: {
-          method: 'POST',
-          url: 'https://app.telemetry.test/_search',
-          data: '{"token":"kept-json"}',
-        },
-      });
-      assert.strictEqual(
-        (json.request as { data?: unknown }).data,
-        '{"token":"kept-json"}',
-        'a JSON body is left as it is',
-      );
+      for (let [contentType, data] of [
+        ['application/json', '{"access_token":"kept-json","note":"a b"}'],
+        ['text/plain', 'a note & more&access_token=kept-text'],
+      ]) {
+        let event = scrubRequestTelemetry({
+          request: {
+            method: 'POST',
+            url: 'https://app.telemetry.test/_search',
+            headers: { 'content-type': contentType },
+            data,
+          },
+        });
+        assert.strictEqual(
+          (event.request as { data?: unknown }).data,
+          data,
+          `a ${contentType} body is left exactly as recorded`,
+        );
+      }
     });
 
     test("an event masks the app page's login token", function (assert) {

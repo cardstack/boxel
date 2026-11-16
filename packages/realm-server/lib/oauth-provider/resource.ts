@@ -6,7 +6,7 @@
 // metadata (RFC 9728).
 //
 // The token never leaves the controller: it removes the `Authorization`
-// header before the route runs, and the verified caller is what goes on to
+// header, parsed and raw, before the route runs, and the verified caller is what goes on to
 // the route, as `ctxt.state.oauthCaller`, never a session token's claims.
 
 import type Koa from 'koa';
@@ -135,13 +135,15 @@ type BearerToken =
   | { kind: 'none' }
   | { kind: 'header'; token: string }
   // A token outside the header, which is refused without a lookup.
-  | { kind: 'elsewhere' };
+  | { kind: 'elsewhere' }
+  // A form-encoded body too large to look through for a token.
+  | { kind: 'body-too-large' };
 
 // Reads the request's bearer token from `Authorization: Bearer` only. A token
 // in the query string, or in a form-encoded body (RFC 6750 §2.2, §2.3), is
 // `elsewhere`, even beside one in the header. A form-encoded body is read
 // here to look for one, and isn't left for the route: no OAuth resource's
-// route takes one.
+// route takes one. One over `FORM_BODY_LIMIT_BYTES` is refused unread.
 //
 // A form body is recognized by its `Content-Type` alone. `ctxt.is()` also
 // asks for a `Content-Length` or `Transfer-Encoding`, and an HTTP/2 request
@@ -157,7 +159,10 @@ export async function bearerToken(ctxt: Koa.Context): Promise<BearerToken> {
     'application/x-www-form-urlencoded'
   ) {
     let body = await readBody(ctxt, FORM_BODY_LIMIT_BYTES);
-    if (body === undefined || new URLSearchParams(body).has('access_token')) {
+    if (body === undefined) {
+      return { kind: 'body-too-large' };
+    }
+    if (new URLSearchParams(body).has('access_token')) {
       return { kind: 'elsewhere' };
     }
   }
@@ -195,6 +200,7 @@ export interface OAuthResourceControllerDeps {
 // answers as RFC 6750 §3.1 and ADR 021 §1.5 say:
 //
 // - a token outside the header: `400 invalid_request`, without a lookup;
+// - a form-encoded body too large to look through: `413`, without a lookup;
 // - no token: `401`, with the challenge naming the resource's metadata;
 // - a token the lookup refuses, or a route no scope maps: `401
 //   invalid_token`;
@@ -214,6 +220,14 @@ export function oauthResourceController({
       log.info(`token refused: not in the header, resource ${resource.id}`);
       ctxt.status = 400;
       ctxt.set('WWW-Authenticate', 'Bearer error="invalid_request"');
+      ctxt.body = { error: 'invalid_request' };
+      return;
+    }
+    if (found.kind === 'body-too-large') {
+      log.info(
+        `request refused: form body over ${FORM_BODY_LIMIT_BYTES} bytes, resource ${resource.id}`,
+      );
+      ctxt.status = 413;
       ctxt.body = { error: 'invalid_request' };
       return;
     }
@@ -260,11 +274,23 @@ export function oauthResourceController({
       return;
     }
     // The token stops here: the route sees the verified caller, and no
-    // header it could forward or log.
-    delete ctxt.req.headers.authorization;
+    // header, parsed or raw, it could forward or log.
+    withoutAuthorization(ctxt.req);
     ctxt.state.oauthCaller = caller;
     await next();
   };
+}
+
+// Removes the `Authorization` header from the request: from its parsed
+// headers, and from its raw headers, which list each name and value in turn.
+function withoutAuthorization(req: Koa.Context['req']) {
+  delete req.headers.authorization;
+  let raw = req.rawHeaders;
+  for (let i = raw.length - 2; i >= 0; i -= 2) {
+    if (raw[i].toLowerCase() === 'authorization') {
+      raw.splice(i, 2);
+    }
+  }
 }
 
 function refuseToken(

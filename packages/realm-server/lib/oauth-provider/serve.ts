@@ -56,7 +56,6 @@ export function registerOAuthProviderRoutes(
     consentHandlers,
     issuer,
     registry,
-    testOnlyResourceIds,
     resourceController,
   }: OAuthProviderService,
   consentDeps: ConsentRouteDeps,
@@ -94,21 +93,20 @@ export function registerOAuthProviderRoutes(
       Promise.resolve(handle(ctxt, async () => {}));
 
   router.get(OAUTH_DISCOVERY_PATH, onIssuerHost(serve));
-  // Each resource's protected-resource metadata (RFC 9728), which a client
-  // reads from the challenge a resource answers without a token.
   for (let resource of registry) {
+    // Each resource's protected-resource metadata (RFC 9728), which a client
+    // reads from the challenge a resource answers without a token.
     router.get(
       `${OAUTH_PROTECTED_RESOURCE_PATH}${resourcePath(resource)}`,
       onIssuerHost(protectedResourceMetadataHandler(issuer, resource)),
     );
-  }
-  // A resource a test adds has no route of its own, so each server route its
-  // scopes map is served here, behind its controller, answering the verified
-  // caller and any `Authorization` header that reached it. So is one route
-  // no scope maps, `<resource path>/unmapped`, which the controller refuses.
-  // Nothing in production adds a test resource (`registry.ts`).
-  for (let resource of registry) {
-    if (!testOnlyResourceIds.has(resource.id)) {
+    // A resource a test adds has no route of its own, so each server route
+    // its scopes map is served here, behind its controller, answering the
+    // verified caller and whether the token reached it in any header. So is
+    // one route no scope maps, `<resource path>/unmapped`, which the
+    // controller refuses. Nothing in production adds a test resource
+    // (`registry.ts`).
+    if (!resource.testOnly) {
       continue;
     }
     let controller = resourceController(resource);
@@ -134,6 +132,11 @@ export function registerOAuthProviderRoutes(
                 ctxt.body = {
                   caller: ctxt.state.oauthCaller,
                   authorization: ctxt.get('Authorization') || null,
+                  rawAuthorization: ctxt.req.rawHeaders.filter(
+                    (_value, i, raw) =>
+                      i % 2 === 1 &&
+                      raw[i - 1].toLowerCase() === 'authorization',
+                  ),
                 };
               }),
             ),

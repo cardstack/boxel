@@ -67,6 +67,9 @@ export interface OAuthResource extends Omit<OAuthResourceDefinition, 'path'> {
   // of its tokens. Clients compare it as a string, so it never ends in a
   // slash.
   id: string;
+  // Set on a resource a test added, which the realm server serves a
+  // test-only route for (`serve.ts`). Never set outside tests.
+  testOnly?: true;
 }
 
 const MCP: OAuthResourceDefinition = {
@@ -114,10 +117,14 @@ export function buildRegistry(
   testOnlyResources: readonly OAuthResourceDefinition[] = [],
 ): readonly OAuthResource[] {
   let base = oauthIssuer(issuer);
-  let registry = [...RESOURCES, ...testOnlyResources].map(
-    ({ path, scopes, ...resource }): OAuthResource =>
+  let registry = [
+    ...RESOURCES.map((definition) => ({ definition, testOnly: false })),
+    ...testOnlyResources.map((definition) => ({ definition, testOnly: true })),
+  ].map(
+    ({ definition: { path, scopes, ...resource }, testOnly }): OAuthResource =>
       Object.freeze({
         ...resource,
+        ...(testOnly ? { testOnly: true as const } : {}),
         scopes: Object.freeze(
           scopes.map(({ routes, ...scope }) =>
             Object.freeze({

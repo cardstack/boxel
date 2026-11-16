@@ -4,6 +4,7 @@ import { basename } from 'path';
 import { connect, createServer } from 'http2';
 import type { AddressInfo } from 'net';
 import Koa from 'koa';
+import Router from '@koa/router';
 import supertest from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
@@ -288,6 +289,66 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('ends a grant the revocation covers whichever token of it is presented, and wherever', async function (assert) {
+      async function coveredGrant() {
+        let issued = await accessToken({
+          resources: [RESOURCE_A, RESOURCE_B],
+          resource: RESOURCE_A,
+        });
+        await dbAdapter.execute(
+          `UPDATE users SET oauth_grants_revoked_at = g.created_at
+             FROM oauth_provider_grants AS g
+            WHERE g.id = $1 AND users.id = g.user_id`,
+          { bind: [issued.grantId] },
+        );
+        return issued;
+      }
+      let expired = await coveredGrant();
+      await dbAdapter.execute(
+        `UPDATE oauth_provider_tokens
+            SET expires_at = now() - interval '1 second'
+          WHERE id_hash = decode($1, 'hex')`,
+        { bind: [sha256Hex(expired.token)] },
+      );
+      assert.deepEqual(
+        await resolveOAuthAccessToken(dbAdapter, expired.token, RESOURCE_A),
+        { ok: false, reason: 'revoked' },
+        'an expired token',
+      );
+      assert.strictEqual(
+        (await grant(expired.grantId)).ended_reason,
+        'sessions-revoked',
+      );
+      let elsewhere = await coveredGrant();
+      assert.deepEqual(
+        await resolveOAuthAccessToken(dbAdapter, elsewhere.token, RESOURCE_B),
+        { ok: false, reason: 'revoked' },
+        'a token presented at another resource',
+      );
+      assert.strictEqual(
+        (await grant(elsewhere.grantId)).ended_reason,
+        'sessions-revoked',
+      );
+    });
+
+    test('answers only the token’s scopes its grant still approves for the resource', async function (assert) {
+      let { token, grantId } = await accessToken({
+        scope: 'boxel:read boxel:write',
+      });
+      await dbAdapter.execute(
+        `UPDATE oauth_provider_grants SET resources = $2::jsonb WHERE id = $1`,
+        {
+          bind: [grantId, JSON.stringify({ [RESOURCE_A]: ['boxel:read'] })],
+        },
+      );
+      let result = await resolveOAuthAccessToken(dbAdapter, token, RESOURCE_A);
+      assert.deepEqual(result.ok ? result.caller.scopes : result, [
+        'boxel:read',
+      ]);
+      let response = await call('/test-a/write', token, { method: 'post' });
+      assert.strictEqual(response.status, 403, 'the narrowed scope is refused');
+    });
+
     test('writes "last used" at most once every 5 minutes', async function (assert) {
       let { token, grantId } = await accessToken();
       assert.strictEqual((await grant(grantId)).last_used_at, null);
@@ -338,6 +399,11 @@ module(basename(import.meta.filename), function (hooks) {
         null,
         'the route never sees the token',
       );
+      assert.deepEqual(
+        response.body.rawAuthorization,
+        [],
+        'nor in the raw headers',
+      );
     });
 
     test('a route is matched as its router selected it, not by the request’s path', async function (assert) {
@@ -348,6 +414,37 @@ module(basename(import.meta.filename), function (hooks) {
         200,
         'a trailing slash reaches the route its router selected',
       );
+    });
+
+    test('a route is checked as itself, even when a later route also matches its path', async function (assert) {
+      let { token } = await accessToken();
+      let resource = buildRegistry(OAUTH_TEST_ISSUER, TEST_RESOURCES).find(
+        ({ id }) => id === RESOURCE_A,
+      )!;
+      let router = new Router();
+      router.get(
+        '/test-a/read',
+        oauthResourceController({
+          dbAdapter,
+          issuer: OAUTH_TEST_ISSUER,
+          resource,
+        }),
+        async (ctxt) => {
+          ctxt.body = { reached: 'read' };
+        },
+      );
+      // Registered after it, so the router names it as the most specific
+      // match for `/test-a/read` too.
+      router.get('/test-a/:anything', async (ctxt) => {
+        ctxt.body = { reached: 'other' };
+      });
+      let app = new Koa();
+      app.use(router.routes());
+      let response = await supertest(app.callback())
+        .get('/test-a/read')
+        .set('Authorization', `Bearer ${token}`);
+      assert.strictEqual(response.status, 200, response.text);
+      assert.deepEqual(response.body, { reached: 'read' });
     });
 
     test('a route no scope maps is answered as an unknown token', async function (assert) {
@@ -436,6 +533,17 @@ module(basename(import.meta.filename), function (hooks) {
           .send(new URLSearchParams({ access_token: token }).toString());
         assert.strictEqual(response.status, 400, contentType);
       }
+      assert.strictEqual((await grant(grantId)).last_used_at, null);
+    });
+
+    test('a form-encoded body too large to look through is answered 413, not as a misplaced token', async function (assert) {
+      let { token, grantId } = await accessToken({ scope: 'boxel:write' });
+      let response = await call('/test-a/write', token, { method: 'post' })
+        .set('Content-Type', 'application/x-www-form-urlencoded')
+        .send(`note=${'a'.repeat(64 * 1024)}`);
+      assert.strictEqual(response.status, 413);
+      assert.deepEqual(response.body, { error: 'invalid_request' });
+      assert.strictEqual(response.headers['www-authenticate'], undefined);
       assert.strictEqual((await grant(grantId)).last_used_at, null);
     });
 

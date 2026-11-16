@@ -12,7 +12,7 @@
 
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import { GRANT_STATE_COLUMNS, grantUsable, type GrantState } from './grants.ts';
-import { sha256Hex } from './objects.ts';
+import { asRecord, sha256Hex } from './objects.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -31,7 +31,7 @@ export interface OAuthCaller {
   userId: string;
   grantId: string;
   clientId: string;
-  // The token's own scopes.
+  // The token's scopes that its grant still approves for the resource.
   scopes: readonly string[];
   // When the grant was created (its consent), in epoch seconds.
   grantCreatedAt: number;
@@ -61,11 +61,12 @@ interface LookupRow extends GrantState {
   matrix_user_id: string;
 }
 
-// Checks, in order: (1) the token exists and hasn't expired; (2) it was
-// issued for this resource; (3) its grant hasn't ended or expired, and still
-// holds this resource; (4) its grant was created after the user's OAuth
-// grants were last revoked. A grant that fails (4) is ended, with reason
-// `sessions-revoked`. The token is never logged or kept.
+// Checks: the token exists; its grant hasn't ended or expired, and was
+// created after the user's OAuth grants were last revoked; the token hasn't
+// expired; it was issued for this resource; and its grant still holds this
+// resource. A grant created at or before that revocation is ended, with
+// reason `sessions-revoked`, whichever of the token's own checks would also
+// refuse it. The token is never logged or kept.
 export async function resolveOAuthAccessToken(
   dbAdapter: DBAdapter,
   token: string,
@@ -74,8 +75,10 @@ export async function resolveOAuthAccessToken(
   let started = Date.now();
   let result = await lookup(dbAdapter, token, resource);
   let ms = Date.now() - started;
+  // Every request to a resource is a lookup, so only a refusal is logged
+  // at `info`.
   if (result.ok) {
-    log.info(
+    log.debug(
       `token accepted: resource ${resource}, client ${result.caller.clientId}, ${ms}ms`,
     );
   } else {
@@ -109,25 +112,23 @@ async function lookup(
   if (!row) {
     return { ok: false, reason: 'unknown' };
   }
+  // The grant checks the token endpoint applies too. They come first, so a
+  // grant the user's revocation covers is ended whichever token of it is
+  // presented, and wherever.
+  if (!(await grantUsable(dbAdapter, row.grant_id, row))) {
+    return { ok: false, reason: 'revoked' };
+  }
   if (row.token_expired) {
     return { ok: false, reason: 'expired' };
   }
   if (row.resource !== resource) {
     return { ok: false, reason: 'wrong-resource' };
   }
-  let resources = (
-    typeof row.resources === 'string'
-      ? JSON.parse(row.resources)
-      : row.resources
-  ) as Record<string, string[]>;
-  // Checks 3 and 4: the grant checks the token endpoint applies too, and
-  // that the grant still holds this resource.
-  if (
-    !(await grantUsable(dbAdapter, row.grant_id, row)) ||
-    !Object.prototype.hasOwnProperty.call(resources, resource)
-  ) {
+  let resources = asRecord(row.resources) as Record<string, string[]>;
+  if (!Object.prototype.hasOwnProperty.call(resources, resource)) {
     return { ok: false, reason: 'revoked' };
   }
+  let approved = resources[resource];
 
   if (row.last_used_stale) {
     // Conditional, so two replicas reading a stale value write it once.
@@ -147,7 +148,9 @@ async function lookup(
       userId: String(row.user_id),
       grantId: row.grant_id,
       clientId: row.client_id,
-      scopes: row.scope.split(' ').filter(Boolean),
+      scopes: row.scope
+        .split(' ')
+        .filter((scope) => scope && approved.includes(scope)),
       grantCreatedAt: Number(row.grant_created),
     },
   };

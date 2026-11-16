@@ -378,7 +378,28 @@ function queryWithTokenMasked(
 // records a request body only from `data` listeners, and a resource's
 // controller reads the body without one, so this masks the token for any
 // other reader of such a body.
+//
+// Only a form-encoded body is masked, and the rest of it is kept: RFC 6750
+// defines a token in a body only in that form, and no resource reads one
+// from any other, so a JSON or text body is left exactly as recorded.
 const BODY_TOKEN_PARAMS = ['access_token'];
+
+function bodyWithTokenMasked(request: SentryRequestData): unknown {
+  let { data, headers } = request;
+  if (typeof data !== 'string') {
+    return queryWithTokenMasked(data, BODY_TOKEN_PARAMS);
+  }
+  let contentType = Object.entries(headers ?? {}).find(
+    ([name]) => name.toLowerCase() === 'content-type',
+  )?.[1];
+  let type = String(contentType ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  return type === 'application/x-www-form-urlencoded'
+    ? queryWithTokenMasked(data, BODY_TOKEN_PARAMS)
+    : data;
+}
 
 function withoutCredentials(request: SentryRequestData): SentryRequestData {
   let { cookies: _cookies, headers, ...rest } = request;
@@ -388,9 +409,7 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
     ...(rest.query_string !== undefined
       ? { query_string: queryWithTokenMasked(rest.query_string) }
       : {}),
-    ...(rest.data !== undefined
-      ? { data: queryWithTokenMasked(rest.data, BODY_TOKEN_PARAMS) }
-      : {}),
+    ...(rest.data !== undefined ? { data: bodyWithTokenMasked(request) } : {}),
   };
   if (!headers) {
     return kept;
