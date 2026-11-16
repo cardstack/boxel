@@ -1221,6 +1221,64 @@ export async function getRoomEvents(
   return await getAllRoomEvents(roomId, accessToken);
 }
 
+// The Boxel message events the server holds in the user's chat room, once
+// there are at least `count` of them. The transcript renders a sent message
+// as a pending local echo the moment it is queued, and the send itself only
+// goes out after the message's attached cards and files finish uploading, so
+// a passing `assertMessages` does not mean the server has the event yet. A
+// timeout reports both sides: the events the server holds and the transcript
+// as rendered.
+export async function waitForBoxelMessageEvents(
+  page: Page,
+  username: string,
+  password: string,
+  count: number,
+  timeout = 20_000,
+) {
+  let start = Date.now();
+  let deadline = start + timeout;
+  let polls = 0;
+  let events: Awaited<ReturnType<typeof getRoomEvents>> = [];
+  let boxelMessages: typeof events = [];
+  for (;;) {
+    polls++;
+    events = await getRoomEvents(username, password);
+    boxelMessages = events.filter(
+      (event) =>
+        event.type === 'm.room.message' &&
+        event.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE,
+    );
+    if (boxelMessages.length >= count || Date.now() >= deadline) {
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (boxelMessages.length >= count) {
+    if (polls > 1) {
+      console.log(
+        `waitForBoxelMessageEvents: the server held ${boxelMessages.length} of ${count} Boxel message event(s) after ${Date.now() - start}ms and ${polls} polls`,
+      );
+    }
+    return boxelMessages;
+  }
+  let serverEvents = events
+    .map((event) =>
+      JSON.stringify({
+        type: event.type,
+        msgtype: event.content?.msgtype,
+        sender: event.sender,
+        ts: event.origin_server_ts,
+        body: event.content?.body?.slice(0, 80),
+      }),
+    )
+    .join('\n');
+  throw new Error(
+    `Expected the server to hold ${count} Boxel message event(s) within ${timeout}ms, found ${boxelMessages.length}.\n` +
+      `server events in the chat room (${events.length}):\n${serverEvents}\n` +
+      (await describeMessages(page)),
+  );
+}
+
 export function getAgentId(
   roomEvents: {
     content?: {

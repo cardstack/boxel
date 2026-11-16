@@ -22,6 +22,7 @@ import {
   setupTwoStackItems,
   showAllCards,
   waitUntil,
+  waitForBoxelMessageEvents,
 } from '../helpers/index.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants.ts';
@@ -288,7 +289,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents(username, password);
+    let messages = await waitForBoxelMessageEvents(page, username, password, 1);
     let message = messages[messages.length - 1];
     let messageData = JSON.parse(message.content.data);
     let cardText = await (
@@ -361,7 +362,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents(username, password);
+    let messages = await waitForBoxelMessageEvents(page, username, password, 1);
     let lastMessage = messages[messages.length - 1];
     let attachedFiles = JSON.parse(lastMessage.content.data).attachedFiles;
     expect(attachedFiles.length).toStrictEqual(1);
@@ -1063,11 +1064,11 @@ test.describe('Room messages', () => {
 
     // There should only be one card fragments event for multiple message events
     // if the card remains unchanged and is attached multiple times.
-    let events = await getRoomEvents(username, password);
-    let messageEvents = events.filter(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE,
+    let messageEvents = await waitForBoxelMessageEvents(
+      page,
+      username,
+      password,
+      3,
     );
     expect(messageEvents.length).toEqual(3);
   });
