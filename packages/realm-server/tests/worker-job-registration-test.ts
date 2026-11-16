@@ -60,6 +60,7 @@ module(basename(import.meta.filename), function () {
       registered.sort(),
       [
         'automation-storage-charge',
+        'automation-tick',
         'capture',
         'capture-card',
         'daily-credit-grant',

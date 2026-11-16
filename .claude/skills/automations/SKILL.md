@@ -15,6 +15,10 @@ description: >-
   the card's index hook, which recomputes the row's next run and *done* when
   the card is indexed and removes the row when the card is deleted or stops
   being an automation, and archiving a realm, which pauses its automations.
+  Also covers the tick (`runtime-common/automation-tick.ts`), the
+  every-minute `automation-tick` job that claims due rows, starts a run per due
+  trigger or joins a pending one (*skipped*), and advances the row, with how to
+  see what it enqueued and why a due run didn't start.
   Use when calling or changing those functions, adding a column to
   `automations`, changing the indexer tasks or the realm archive handler, or
   diagnosing why an automation is paused, has no next run, isn't running, or
@@ -284,6 +288,50 @@ SELECT state, pause_reason, paused_by, payer, next_run, scheduled_since,
 - `paused` with `payer-lost-access`: the payer's own permission row no longer grants write. Another direct writer resumes it and becomes the payer.
 - `active` with a null `next_run`: only webhook triggers, or none left that the schedule can place.
 - A run canceled with no `canceled_by`: an automatic pause canceled it; its `error_reason` names which.
+
+### The tick: enqueueing due runs
+
+`tickAutomations` (`packages/runtime-common/automation-tick.ts`, imported as `@cardstack/runtime-common/automation-tick`) starts the runs of every trigger that has come due. A system cron (`lib/automation-tick-config.ts`, every minute, `AUTOMATION_TICK_CRON_SCHEDULE` overrides it) enqueues an `automation-tick` job from every worker manager, at the automation tier in the `automation-tick` concurrency group. A tick that arrives while another is still waiting joins it; one that arrives while another runs queues behind it. The job (`tasks/automation-tick.ts`) reads each card's declaration with `readRunDeclaration`, as a run does.
+
+For each row due at `now` (`state` `active` or `waiting-for-credits`, `next_run` at or before now; the `automations_due_idx` rows), one transaction:
+
+1. Claims the row with `FOR UPDATE SKIP LOCKED`. A row another tick holds, or one no longer due, is skipped.
+2. Reads the card. A card that doesn't read as a declaration leaves the row due and unchanged (`unreadable`). A card that raises a cap above the snapshot enqueues nothing (`caps-raised`); the index hook pauses it.
+3. Follows an edit the index hook hasn't applied yet the way the hook does (`withEditCursors`), then computes the schedule with `now`.
+4. For each trigger due at the next run: if the automation had a **pending** run before this tick, the slot **joins** it (_skipped_): no run, no job, the trigger's `runs` stays, its `lastSlot` moves to the slot, and the pending run's log gets a `trigger` line naming the slot. Otherwise it makes the run row (`trigger` = label, `slot` = the instant as ISO text, `acts_as` = the payer) and enqueues its job with `enqueueAutomationRunJob` (the card's `seconds` cap sets the timeout), then counts the run and moves `lastSlot`. A pending run whose trigger and slot are the ones being handled is that same run, not one to join. A run already running is never joined: the new run waits behind it in the automation's concurrency group.
+5. Repeats for any other trigger due by now (each cron trigger owes at most one make-up run), then writes `trigger_runs` (each entry's `timing` and `live` recorded as the index hook records them), `next_run`, `done` when every trigger is spent, and `last_enqueued_at` when a run started.
+
+Two triggers due at the same instant start two runs, keyed apart by their labels, which the concurrency group runs one after the other.
+
+The run row and the job are written before the row is advanced, while the claim is held: the queue publishes in a transaction of its own, and a worker taking the job must find the run row. Both are keyed by the automation, trigger and slot, so a tick that dies before the advance leaves the slot due, and the next tick finds the same run (`createAutomationRun` returns it) and joins the same job (the `dedupeKey` and identical args), or, once that job has run, enqueues one that finds the run over and leaves it.
+
+**What the tick enqueued.** The worker logs one `automation-tick` line per trigger it handled and a summary per tick that had anything due:
+
+```
+automation-tick: automation <id> trigger <label> started run <run id> (job <job id>) for <slot>
+automation-tick: automation <id> trigger <label> skipped <slot>: it joined pending run <run id>
+automation-tick: <n> due, <n> started, <n> skipped, <n> unreadable, <n> caps raised, <n> failed
+```
+
+In Postgres, a run's log starts with a `trigger` line saying which trigger and slot started it, and a run that slots joined carries one `trigger` line per joined slot (`data.skipped` is true):
+
+```sql
+SELECT r.id, r.trigger, r.slot, r.state, r.created_at, l.message
+  FROM automation_runs r
+  LEFT JOIN automation_run_log l ON l.run_id = r.id AND l.kind = 'trigger'
+ WHERE r.automation_id = '<automation card id>'
+ ORDER BY r.created_at DESC, l.seq;
+```
+
+The ticks themselves are `automation-tick` rows in `jobs`; their `result` counts what each did.
+
+**Why a due run didn't start.** Check in this order:
+
+- The row: `state` must be `active` or `waiting-for-credits` and `next_run` at or before now (see _Inspecting an automation_). A paused or _done_ row is never due, and an `active` row with a null `next_run` has nothing to schedule.
+- `next_run` long past and not moving: the tick isn't claiming it. Look for `automation-tick` lines naming the automation: `can't be read` (the card fails to read as a declaration: the index row's `has_error`, an invalid trigger or cap), `asks for more than its caps snapshot` (the index hook should pause it; check its log), or `failed`. No lines at all: check that `automation-tick` jobs are being enqueued and completed (the cron logs `automation-tick cron scheduled for …` at startup, and `automation-tick cron failed to enqueue job` on an error) and that some worker claims the automation tier.
+- A slot reported _skipped_: the automation had a run still pending (waiting for its turn in the concurrency group, or for a worker). That pending run covers the slot. Several skipped slots in a row mean runs take longer than the trigger's interval, or the automation tier is backed up (see _The queue tier and worker lane_).
+- A run made but never started: its job is waiting. `SELECT id, status, priority, concurrency_group FROM jobs WHERE job_type = 'run-command' AND args->>'dedupeKey' LIKE 'automation:<automation card id>:%'`.
+- A trigger with `runs` at its `count`, or whose next slot is past `until`, is spent and doesn't run again.
 
 ## The run row
 

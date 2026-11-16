@@ -675,7 +675,7 @@ function triggerTiming(trigger: AutomationTriggerDeclaration): string {
 // followed the card. A run state that predates those records starts nothing
 // afresh. Run states of labels the card no longer has are kept, so a label
 // that comes back keeps its count.
-function withEditCursors(
+export function withEditCursors(
   triggerRuns: Record<string, AutomationTriggerRuns>,
   triggers: AutomationTriggerDeclaration[],
   editedAt: number,
@@ -697,7 +697,7 @@ function withEditCursors(
 
 // Records, on each run state, the trigger's timing and whether it is live
 // under `schedule`. A label the card no longer has is recorded as not live.
-function recordTriggers(
+export function recordTriggers(
   triggerRuns: Record<string, AutomationTriggerRuns>,
   triggers: AutomationTriggerDeclaration[],
   schedule: AutomationSchedule,
@@ -859,7 +859,9 @@ function snapshotCaps(
   } as AutomationCapsSnapshot;
 }
 
-function automationFromRow(row: Record<string, PgPrimitive>): AutomationRow {
+export function automationFromRow(
+  row: Record<string, PgPrimitive>,
+): AutomationRow {
   return {
     automationId: row.automation_id as RealmResourceIdentifier,
     realm: row.realm as RealmIdentifier,
