@@ -50,7 +50,7 @@ function rowNeed(paths: HTMLElement): number {
   let cs = getComputedStyle(paths);
   let need = px(cs.columnGap) * 2;
   for (let item of Array.from(paths.children) as HTMLElement[]) {
-    if (item.classList.contains('pretui-empty-sep')) {
+    if (item.hasAttribute('data-empty-sep')) {
       let rule = px(getComputedStyle(item, '::before').minInlineSize);
       let word = item.firstElementChild?.getBoundingClientRect().width ?? 0;
       need += word + 2 * (rule + px(getComputedStyle(item).columnGap));
@@ -67,19 +67,29 @@ function rowNeed(paths: HTMLElement): number {
 // Folds the two paths all at once: one row while they fit, a stack the moment
 // they don't. Measured rather than a container query, because containment
 // would collapse an auto-sized EmptyState and a fixed threshold can't know
-// the label widths. The observer is disconnected on cleanup.
+// the label widths. Both observers are disconnected on cleanup.
 const foldPaths = modifier((paths: HTMLElement) => {
   let apply = () => {
     paths.dataset.fold = rowNeed(paths) > paths.clientWidth + 0.5 ? 'stack' : 'row';
   };
   if (typeof ResizeObserver === 'undefined') return;
   let observer = new ResizeObserver(apply);
-  observer.observe(paths);
-  for (let item of Array.from(paths.children)) {
-    for (let c of Array.from(item.children)) observer.observe(c);
-  }
-  apply();
-  return () => observer.disconnect();
+  // A yielded block can swap its element ({{#if}}), so re-observe on change.
+  let observeAll = () => {
+    observer.disconnect();
+    observer.observe(paths);
+    for (let item of Array.from(paths.children)) {
+      for (let c of Array.from(item.children)) observer.observe(c);
+    }
+    apply();
+  };
+  let mutations = new MutationObserver(observeAll);
+  mutations.observe(paths, { childList: true, subtree: true });
+  observeAll();
+  return () => {
+    mutations.disconnect();
+    observer.disconnect();
+  };
 });
 
 // The one place texture lives (Law 6).
@@ -112,7 +122,7 @@ export class EmptyState extends Component<EmptyStateSignature> {
       {{#if (has-block 'altAction')}}
         <div class='pretui-empty-paths' data-fold='row' {{foldPaths}}>
           <div class='pretui-empty-action'>{{yield to='action'}}</div>
-          <div class='pretui-empty-sep' aria-hidden='true'><span>{{this.separator}}</span></div>
+          <div class='pretui-empty-sep' data-empty-sep aria-hidden='true'><span>{{this.separator}}</span></div>
           <div class='pretui-empty-action'>{{yield to='altAction'}}</div>
         </div>
       {{else if (has-block 'action')}}
