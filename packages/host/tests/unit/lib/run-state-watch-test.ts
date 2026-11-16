@@ -2,17 +2,19 @@ import { module, test } from 'qunit';
 
 import { RUN_STATE_PATH } from '@cardstack/runtime-common/automation-run-command';
 
-import {
-  AutomationRunStoppedError,
-  RunStateWatch,
-} from '@cardstack/host/lib/realm-runner/run-state-watch';
+import { AutomationRunStoppedError } from '@cardstack/host/lib/realm-runner/automation';
+import { RunStateWatch } from '@cardstack/host/lib/realm-runner/run-state-watch';
 
 const REALM = 'https://realm.example/team/';
 const TOKEN = 'run-token-for-the-watch';
 
 // Answers each ask with the next status in `statuses` (the last one repeats),
-// or throws for a status of 0.
-function answering(statuses: number[]) {
+// or throws for a status of 0. A 401 says the run is not running, unless
+// `body` says otherwise.
+function answering(
+  statuses: number[],
+  body = 'The automation run is not running',
+) {
   let asked: { url: string; init: RequestInit }[] = [];
   let fetch = (async (url: string, init: RequestInit) => {
     asked.push({ url, init });
@@ -20,7 +22,7 @@ function answering(statuses: number[]) {
     if (status === 0) {
       throw new TypeError('Failed to fetch');
     }
-    return new Response('', { status });
+    return new Response(status === 401 ? body : '', { status });
   }) as unknown as typeof globalThis.fetch;
   return { asked, fetch };
 }
@@ -70,6 +72,20 @@ module('Unit | Lib | run state watch', function () {
     });
     watch.start();
     await waitFor(() => asked.length >= 6);
+    watch.stop();
+    assert.false(watch.signal.aborted);
+  });
+
+  test('a 401 saying the token expired is the time limit, not a stop', async function (assert) {
+    let { asked, fetch } = answering([401], 'Token expired');
+    let watch = new RunStateWatch({
+      realmURL: REALM,
+      runToken: TOKEN,
+      fetch,
+      intervalMs: 5,
+    });
+    watch.start();
+    await waitFor(() => asked.length >= 3);
     watch.stop();
     assert.false(watch.signal.aborted);
   });

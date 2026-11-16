@@ -80,6 +80,7 @@ import {
   proposeFix,
 } from '../lib/realm-runner/auto-fix';
 import {
+  AutomationRunStoppedError,
   AutomationTimeLimitError,
   automationTimeLimitMs,
   redactSecrets,
@@ -3402,6 +3403,9 @@ function redactedError(error: unknown, secrets: readonly string[]): unknown {
   }
   if (error instanceof AutomationTimeLimitError) {
     return new AutomationTimeLimitError(redactSecrets(error.message, secrets));
+  }
+  if (error instanceof AutomationRunStoppedError) {
+    return new AutomationRunStoppedError(redactSecrets(error.message, secrets));
   }
   if (error instanceof Error) {
     return new Error(redactSecrets(error.message, secrets));

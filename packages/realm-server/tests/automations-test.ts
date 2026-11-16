@@ -104,6 +104,45 @@ function runCounts(automation: AutomationRow) {
   );
 }
 
+// The adapter as `PgAdapter.withTransaction` behaves when the database
+// aborts a transaction (a deadlock or a serialization failure): its first
+// transaction runs the whole callback and is rolled back, and the callback
+// runs again in a new one.
+function rollsBackFirstTransaction(db: DBAdapter): DBAdapter {
+  class RolledBack extends Error {}
+  let rolledBack = false;
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop === 'withTransaction') {
+        return async (
+          change: Parameters<DBAdapter['withTransaction']>[0],
+          ...rest: unknown[]
+        ) => {
+          if (!rolledBack) {
+            rolledBack = true;
+            try {
+              await (target.withTransaction as any)(
+                async (txQuery: unknown) => {
+                  await (change as any)(txQuery);
+                  throw new RolledBack();
+                },
+                ...rest,
+              );
+            } catch (e) {
+              if (!(e instanceof RolledBack)) {
+                throw e;
+              }
+            }
+          }
+          return await (target.withTransaction as any)(change, ...rest);
+        };
+      }
+      let value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 module(basename(import.meta.filename), function () {
   module('the automation row', function (hooks) {
     let dbAdapter: DBAdapter;
@@ -557,6 +596,26 @@ module(basename(import.meta.filename), function () {
           log?.lines.map(({ kind, message }) => ({ kind, message })),
           [{ kind: 'finish', message: `The run was canceled by ${ADMIN}` }],
           'its log ends with who canceled it',
+        );
+      });
+
+      test('a pause the database rolls back and retries logs each canceled run once', async function (assert) {
+        await switchOn();
+        let running = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, running.id, 1);
+
+        let result = await pauseAutomation(
+          rollsBackFirstTransaction(dbAdapter),
+          { automationId: AUTOMATION, user: ADMIN },
+          options,
+        );
+        assert.true(result.ok);
+        assert.deepEqual(
+          (await readRunLog(dbAdapter, running.id))?.lines.map(
+            ({ kind, message }) => ({ kind, message }),
+          ),
+          [{ kind: 'finish', message: `The run was canceled by ${ADMIN}` }],
+          'the rolled-back attempt adds no line of its own',
         );
       });
 

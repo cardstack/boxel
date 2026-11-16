@@ -429,8 +429,8 @@ permission row before the run's row, the order every change here takes them
 in, and returns `{ ok: true, run }` or a refusal: `missing`,
 `not-a-direct-writer`, or `not-cancelable` with the run as it stands (it
 already ended, or its commit was claimed). The automation's own row doesn't
-change: it stays active, and its next run comes due as scheduled. There is
-no route for it yet; the console's routes call it.
+change: it stays active, and its next run comes due as scheduled. It is a
+server function, and no route serves it.
 
 What a cancel leaves behind:
 
@@ -458,9 +458,10 @@ What a cancel leaves behind:
   401 the watch aborts the signal `runAutomationScript` runs under, which
   terminates the QuickJS web worker at once, so a script spinning in a loop
   with no calls of its own stops too. The tool answers `error` with reason
-  `stopped`, or `timed-out` when the run's time limit had passed (the token
-  expires at the limit, which is also a 401). A failed or slow ask is not a
-  stop; the time limit still bounds the script.
+  `stopped`. A 401 saying `Token expired` is not a stop: the token expires
+  at the run's time limit, which the runner enforces and reports as
+  `timed-out`. A failed or slow ask is not a stop either; the time limit
+  still bounds the script.
 
 A pause or remove stops a running run the same way (_States and who changes
 them_, above), with `canceled_by` the person who paused or removed it, or

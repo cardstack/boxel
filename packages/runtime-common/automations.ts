@@ -832,15 +832,18 @@ async function pause(
 // Runs a change to automations in one transaction, collecting the runs it
 // cancels in `canceled`, and writes each canceled run's last log line once
 // the transaction has committed: a log line locks its run's row, which the
-// transaction holds until then.
+// transaction holds until then. A transaction the database rolls back and
+// retries starts its collection afresh, so only the attempt that committed
+// is logged.
 async function withRunCancels<T>(
   dbAdapter: DBAdapter,
   change: (txQuery: Querier, canceled: AutomationRun[]) => Promise<T>,
 ): Promise<T> {
   let canceled: AutomationRun[] = [];
-  let result = await dbAdapter.withTransaction((txQuery) =>
-    change(txQuery, canceled),
-  );
+  let result = await dbAdapter.withTransaction((txQuery) => {
+    canceled = [];
+    return change(txQuery, canceled);
+  });
   for (let run of canceled) {
     await logAutomationRunEnded(dbAdapter, run);
   }

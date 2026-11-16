@@ -6,7 +6,10 @@ import type {
   FlushableRunProgressSink,
   RunProgressEvent,
 } from '@cardstack/host/lib/realm-runner/automation';
-import { REDACTED } from '@cardstack/host/lib/realm-runner/automation';
+import {
+  AutomationRunStoppedError,
+  REDACTED,
+} from '@cardstack/host/lib/realm-runner/automation';
 import runRealmCode, {
   RealmScriptError,
 } from '@cardstack/host/lib/realm-runner/runner';
@@ -498,6 +501,20 @@ return 'done';`,
     await assert.rejects(
       done,
       /reached its time limit of 1 s \(its seconds cap\)/,
+    );
+  });
+
+  test('a script whose run stops running is stopped, and rejects as a stopped run', async function (assert) {
+    let controller = new AbortController();
+    let { done } = run('while (true) {}', { signal: controller.signal });
+    setTimeout(() => controller.abort(new AutomationRunStoppedError()), 200);
+    let error = await done.then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    assert.true(
+      error instanceof AutomationRunStoppedError,
+      `it rejects with the stopped error, not a plain Error: ${String(error)}`,
     );
   });
 

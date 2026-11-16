@@ -9,6 +9,7 @@ import { presentsAsRunToken } from '@cardstack/runtime-common/run-token';
 
 import HostBaseTool from '../lib/host-base-tool';
 import {
+  AutomationRunStoppedError,
   AutomationTimeLimitError,
   redactSecrets,
   type RunProgressEvent,
@@ -18,10 +19,7 @@ import {
   resolve as resolveJSON,
   type ProxySend,
 } from '../lib/realm-runner/research';
-import {
-  AutomationRunStoppedError,
-  RunStateWatch,
-} from '../lib/realm-runner/run-state-watch';
+import { RunStateWatch } from '../lib/realm-runner/run-state-watch';
 import { RealmScriptError } from '../lib/realm-runner/runner';
 import { claimsFromRawToken } from '../services/realm';
 
@@ -129,7 +127,7 @@ export default class RunAutomationTool extends HostBaseTool<
         });
         outcome = { state: 'complete' };
       } catch (error) {
-        outcome = errorOutcome(error, secrets, Date.parse(scriptInput.endsAt));
+        outcome = errorOutcome(error, secrets);
       } finally {
         watch.stop();
       }
@@ -187,7 +185,6 @@ export default class RunAutomationTool extends HostBaseTool<
 function errorOutcome(
   error: unknown,
   secrets: string[],
-  endsAt: number,
 ): AutomationScriptOutcome {
   let message = redactSecrets(
     error instanceof Error ? error.message : String(error),
@@ -197,15 +194,7 @@ function errorOutcome(
     return { state: 'error', reason: 'timed-out', message };
   }
   if (error instanceof AutomationRunStoppedError) {
-    // The run's token expires at its time limit, so a realm that stops
-    // admitting the run's calls once the limit has passed is the time limit.
-    return Date.now() >= endsAt
-      ? {
-          state: 'error',
-          reason: 'timed-out',
-          message: 'The automation run reached its time limit',
-        }
-      : { state: 'error', reason: 'stopped', message };
+    return { state: 'error', reason: 'stopped', message };
   }
   if (error instanceof RealmScriptError) {
     let { line } = error.scriptError;
