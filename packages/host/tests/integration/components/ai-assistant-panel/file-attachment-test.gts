@@ -152,6 +152,82 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
     await click('[data-test-choose-file-modal-add-button]');
   }
 
+  // Holds every Matrix upload open until `release` is called, and resolves
+  // `started` when the first upload reaches the Matrix client. The room sets
+  // a file's status to "uploading" before it calls the client, so once
+  // `started` resolves the pill is already in the uploading state.
+  function blockMatrixUploads() {
+    let release!: () => void;
+    let released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markStarted!: () => void;
+    let started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    mockMatrixUtils.setUploadContentInterceptor(() => {
+      markStarted();
+      return released;
+    });
+    return {
+      started,
+      release() {
+        mockMatrixUtils.setUploadContentInterceptor(undefined);
+        release();
+      },
+    };
+  }
+
+  function describeAttachedFiles(): string {
+    let pills = Array.from(
+      document.querySelectorAll('[data-test-attached-file]'),
+    ).map(
+      (el) =>
+        `${el.getAttribute('data-test-attached-file')} status=${
+          el.getAttribute('data-test-file-upload-status') ?? '(none)'
+        }`,
+    );
+    let modalOpen = Boolean(
+      document.querySelector('[data-test-choose-file-modal-add-button]'),
+    );
+    return `attached files: [${pills.join(', ') || 'none'}]; file chooser open: ${modalOpen}`;
+  }
+
+  // Waits until the blocked upload reaches the Matrix client, then until the
+  // pill renders the uploading state. Choosing a workspace file closes the
+  // modal, loads the file and prefetches its content before the upload starts.
+  // On a loaded CI runner that can take longer than waitFor's default
+  // one-second window, so the first wait is on the upload itself, not a timer.
+  async function waitForUploadingPill(
+    started: Promise<void>,
+    sourceUrl: string,
+  ) {
+    let selector = `[data-test-attached-file="${sourceUrl}"][data-test-file-upload-status="uploading"]`;
+    let begin = performance.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = new Promise<'timed-out'>((resolve) => {
+      timer = setTimeout(() => resolve('timed-out'), 20_000);
+    });
+    let outcome = await Promise.race([started, timedOut]);
+    clearTimeout(timer);
+    let elapsed = Math.round(performance.now() - begin);
+    if (outcome === 'timed-out') {
+      throw new Error(
+        `the upload of ${sourceUrl} did not reach the Matrix client within ${elapsed} ms; ${describeAttachedFiles()}`,
+      );
+    }
+    console.info(
+      `[file-attachment-test] upload of ${sourceUrl} reached the Matrix client after ${elapsed} ms`,
+    );
+    try {
+      await waitFor(selector);
+    } catch (e: any) {
+      throw new Error(
+        `${e.message}; the upload started ${elapsed} ms after the attach; ${describeAttachedFiles()}`,
+      );
+    }
+  }
+
   test('can send a message with only file attachments and no text', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -671,23 +747,16 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
     );
     await openAiAssistant();
 
-    let resolveUpload!: () => void;
-    let uploadPromise = new Promise<void>((resolve) => {
-      resolveUpload = resolve;
-    });
-    mockMatrixUtils.setUploadContentInterceptor(() => uploadPromise);
+    let upload = blockMatrixUploads();
 
-    // Don't await the last click — it triggers startFileUpload which blocks
-    // settled() via test waiters. Instead, fire-and-forget and waitFor the
-    // transient "uploading" state.
+    // Don't await the last click — it triggers startFileUpload, whose blocked
+    // upload holds settled() open via test waiters.
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');
     await click(`[data-test-file="person.gts"]`);
     click('[data-test-choose-file-modal-add-button]'); // intentionally not awaited
 
-    await waitFor(
-      `[data-test-attached-file="${testRealmURL}person.gts"][data-test-file-upload-status="uploading"]`,
-    );
+    await waitForUploadingPill(upload.started, `${testRealmURL}person.gts`);
 
     // During the eager upload, the file pill should show uploading status
     assert
@@ -697,8 +766,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
       .exists('file pill should show uploading status during upload');
 
     // Clean up: resolve the blocked upload
-    mockMatrixUtils.setUploadContentInterceptor(undefined);
-    resolveUpload();
+    upload.release();
     await settled();
   });
 
@@ -711,11 +779,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
     );
     await openAiAssistant();
 
-    let resolveUpload!: () => void;
-    let uploadPromise = new Promise<void>((resolve) => {
-      resolveUpload = resolve;
-    });
-    mockMatrixUtils.setUploadContentInterceptor(() => uploadPromise);
+    let upload = blockMatrixUploads();
 
     // Don't await the last click — it blocks settled() via test waiters
     await click('[data-test-attach-button]');
@@ -723,9 +787,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
     await click(`[data-test-file="person.gts"]`);
     click('[data-test-choose-file-modal-add-button]'); // intentionally not awaited
 
-    await waitFor(
-      `[data-test-attached-file="${testRealmURL}person.gts"][data-test-file-upload-status="uploading"]`,
-    );
+    await waitForUploadingPill(upload.started, `${testRealmURL}person.gts`);
 
     // After attaching, the file should show its upload status (eagerly uploading)
     assert
@@ -752,8 +814,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
       );
 
     // Clean up: resolve the blocked upload
-    mockMatrixUtils.setUploadContentInterceptor(undefined);
-    resolveUpload();
+    upload.release();
     await settled();
   });
 
@@ -818,20 +879,14 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
       .exists('failed file pill should have a retry button');
 
     // Set up blocking interceptor for retry so we can observe "uploading" state
-    let resolveRetry!: () => void;
-    let retryPromise = new Promise<void>((resolve) => {
-      resolveRetry = resolve;
-    });
-    mockMatrixUtils.setUploadContentInterceptor(() => retryPromise);
+    let retry = blockMatrixUploads();
 
     // Don't await — retry triggers startFileUpload which blocks settled()
     click(
       `[data-test-attached-file="${testRealmURL}person.gts"] [data-test-file-retry-btn]`,
     );
 
-    await waitFor(
-      `[data-test-attached-file="${testRealmURL}person.gts"][data-test-file-upload-status="uploading"]`,
-    );
+    await waitForUploadingPill(retry.started, `${testRealmURL}person.gts`);
 
     assert
       .dom(
@@ -840,8 +895,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
       .exists('file should go back to uploading state after retry');
 
     // Clean up: resolve the blocked retry upload
-    mockMatrixUtils.setUploadContentInterceptor(undefined);
-    resolveRetry();
+    retry.release();
     await settled();
   });
 
