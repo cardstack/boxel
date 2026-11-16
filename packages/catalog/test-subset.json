@@ -39,6 +39,8 @@
       "automation-run-attempt-test",
       "automation-run-command-test",
       "automation-run-limits-test",
+      "automation-run-log-redaction-test",
+      "automation-run-log-test",
       "automation-status-test",
       "catalog-test-subset-test",
       "direct-writer-queries-test",
@@ -86,6 +88,7 @@
       "realm-policy-source-read-test",
       "realm-policy-validate-test",
       "realm-policy-write-lock-test",
+      "run-overlay-policy-test",
       "server-endpoints/delegated-session-federated-endpoints-test",
       "server-endpoints/policy-scoped-search-test"
     ]

@@ -8,6 +8,7 @@ import WorkerURL from './worker?worker&url';
 
 import type {
   RealmScriptErrorInfo,
+  RealmScriptLocation,
   RealmRunnerCallHandler,
   RealmRunnerRequest,
   RealmRunnerResponse,
@@ -79,6 +80,16 @@ export class RealmScriptError extends Error {
   ) {
     super(message);
   }
+}
+
+const scriptLocations = new WeakMap<Error, RealmScriptLocation>();
+
+// Where in the script the error a run rejected with came from, when the
+// script threw it: its line and its stack in the script's own lines.
+export function scriptLocationOf(
+  error: unknown,
+): RealmScriptLocation | undefined {
+  return error instanceof Error ? scriptLocations.get(error) : undefined;
 }
 
 // `onCall` does the work of each `realm.*` call the script makes. Its answer,
@@ -225,11 +236,13 @@ export default function runRealmCode(
       }
       settle(() => {
         if (message.type === 'error') {
-          reject(
-            message.scriptError
-              ? new RealmScriptError(message.error, message.scriptError)
-              : new Error(message.error),
-          );
+          let error = message.scriptError
+            ? new RealmScriptError(message.error, message.scriptError)
+            : new Error(message.error);
+          if (message.scriptLocation) {
+            scriptLocations.set(error, message.scriptLocation);
+          }
+          reject(error);
         } else {
           resolve(message.result);
         }

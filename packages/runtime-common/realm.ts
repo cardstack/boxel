@@ -225,6 +225,13 @@ import {
   type RunOverlayKey,
 } from './run-overlay.ts';
 import { automationRunCallApiMeter } from './automation-run-limits.ts';
+import {
+  RUN_LOG_MAX_REQUEST_BYTES,
+  RUN_LOG_PATH,
+  appendRunLog,
+  logRunPlatformLine,
+  scriptRunLogLines,
+} from './automation-run-log.ts';
 import type { CallApiRunMeter } from './card-operations/call-api.ts';
 import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
@@ -387,6 +394,7 @@ import {
 import type {
   CoarseDeclined,
   OperationCore,
+  OperationIndexQueryEngine,
   OperationScope,
   OperationStoredFile,
   OperationStoredFileMeta,
@@ -595,6 +603,7 @@ import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import type { SearchResultDoc } from './realm-index-query-engine.ts';
+import type { InstanceOrError } from './index-query-engine.ts';
 import {
   REALM_IGNORE_FILES,
   RealmIndexUpdater,
@@ -3851,6 +3860,15 @@ export class Realm {
         this.commitRunOverlay.bind(this),
         { ...ACL_ONLY, takesRunWrites: true },
       )
+      // An automation run's script lines: its console, activity, milestones
+      // and uncaught error, which the run's tab sends as they happen. They go
+      // to the run's log, never the realm.
+      .post(
+        RUN_LOG_PATH,
+        SupportedMimeType.JSONAPI,
+        this.appendScriptRunLog.bind(this),
+        { ...ACL_ONLY, takesRunWrites: true },
+      )
       // The operations envelope, under the media type that carries its
       // extension and under the plain JSON:API one it extends. Both reach the
       // same handler, which reads the `ext` parameter itself: matching only the
@@ -5801,15 +5819,18 @@ export class Realm {
     if (!codeRef) {
       return undefined;
     }
-    let types = [internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
+    let own = internalKeyFor(codeRef, undefined, this.#virtualNetwork);
+    let types: string[];
     try {
-      types.push(
-        ...(await this.#definitionLookup.lookupDefinitionEntry(codeRef)).types,
-      );
+      types = (await this.#definitionLookup.lookupDefinitionEntry(codeRef))
+        .types;
     } catch {
       // A type with no definition is known only by its own name.
+      return [own];
     }
-    return types;
+    // The definition's chain starts with the type itself, which the index
+    // records once.
+    return types.includes(own) ? types : [own, ...types];
   }
 
   // What the document `content` holds at `data.meta.adoptsFrom`, as a parse
@@ -7616,7 +7637,16 @@ export class Realm {
     // target's stored type.
     let caller = this.#callerOf(request, requestContext);
     let coarseDeclined = this.#coarseDeclined(requestContext);
-    let scope = newOperationScope(this.operationCore, {
+    // A run's batch resolves, is gated and reads against the realm as the run
+    // sees it, with the cards it staged as it staged them (see
+    // `#runOperationCore`), and its writes stage in its overlay (see
+    // `#runBatchCore`).
+    let run = this.#runOverlay(requestContext);
+    let core = run ? this.#runOperationCore(run) : this.operationCore;
+    let batchCore = run
+      ? this.#runBatchCore(requestContext, run)
+      : this.batchCore;
+    let scope = newOperationScope(core, {
       caller: scopeCallerFor(caller.actor),
       coarseDeclined,
       route: ENVELOPE_ROUTE,
@@ -7636,12 +7666,7 @@ export class Realm {
     // the realm ACL would not let read the realm, it is an ad-hoc search, and
     // it finds only the cards a `query` grant on its type admits. Each card it
     // finds is then gated for the entry's own operation like a named one.
-    let tree = await resolveQueryTargets(
-      this.operationCore,
-      scope,
-      parsed,
-      envelopeOptions,
-    );
+    let tree = await resolveQueryTargets(core, scope, parsed, envelopeOptions);
     let entries = invocationsIn(tree);
     // Settled rather than raced, so the entry a refusal names is the earliest
     // one the caller got wrong rather than whichever index read came back
@@ -7656,7 +7681,7 @@ export class Realm {
     // batch would put that many point reads on the pool at once and reach the
     // staging limiter only after the pool was already spent.
     let outcomes = await settledWithin(STAGING_WIDTH, entries, (entry) =>
-      this.#resolveEnvelopeEntry(entry, scope),
+      this.#resolveEnvelopeEntry(core, entry, scope),
     );
     let fulfilled = (outcome: (typeof outcomes)[number]) =>
       (outcome as PromiseFulfilledResult<ResolvedEnvelopeEntry>).value;
@@ -7671,7 +7696,7 @@ export class Realm {
       // Nothing has reached the write lock, so it has decided nothing.
       throw await this.#disclosableFailure(
         (outcomes[refusedAt] as PromiseRejectedResult).reason,
-        { coarseDeclined, tree, caller },
+        { coarseDeclined, tree, caller, core, batchCore },
         outcomes.slice(0, refusedAt).map(fulfilled),
         new Map(),
       );
@@ -7728,7 +7753,6 @@ export class Realm {
       // stages against the overlay's view of each file and the overlay holds
       // the result (see `#runBatchCore`). The overlay can't hold a removal,
       // so a run's batch removes nothing.
-      let run = this.#runOverlay(requestContext);
       if (requestContext.automationRun) {
         let removal = resolved.find(
           ({ definition }) => definition.base === 'delete',
@@ -7867,7 +7891,7 @@ export class Realm {
           // On the decision the entry resolved to, so the gate decides each
           // entry once.
           result = await runOperation(
-            this.operationCore,
+            core,
             {
               target,
               name: entry.name,
@@ -7921,11 +7945,7 @@ export class Realm {
             caller,
             async (pending, judged, position) => {
               try {
-                await dischargePendingDecision(
-                  this.operationCore,
-                  pending,
-                  judged,
-                );
+                await dischargePendingDecision(core, pending, judged);
               } catch (refusal: unknown) {
                 decided.set(position, refusal);
                 throw refusal;
@@ -7945,28 +7965,24 @@ export class Realm {
         // refusal from the coordinator names that one rather than the position
         // it took among the entries that write — in the key, in the key beside
         // it naming a conflicting entry, and in the prose.
-        let committed = await commitBatch(
-          run ? this.#runBatchCore(requestContext, run) : this.batchCore,
-          stagedTree(tree, staged),
-          {
-            clientRequestId: caller.clientRequestId || null,
-            actor: caller.actor || undefined,
-            history: writeContextFromHeaders(request.headers),
-            ...(caller.policyAudit ? { policyAudit: caller.policyAudit } : {}),
-            // One request, several cards, and not all of them from the same
-            // place — which is the case the event's authorship naming exists
-            // for, and the only front door that produces it.
-            reportAuthorship: true,
-            // The caller is waiting on this request, and the batch's own index
-            // pass waits on the prerender pool. The wait is bounded, or skipped
-            // when the caller asks, so a stalled pool costs the caller a
-            // pending generation rather than an answer to a write that has
-            // already landed.
-            ...indexWaitOptions(request, { bounded: true }),
-            ...this.#mintPosture(coarseDeclined),
-            ...anonymousCommit,
-          },
-        );
+        let committed = await commitBatch(batchCore, stagedTree(tree, staged), {
+          clientRequestId: caller.clientRequestId || null,
+          actor: caller.actor || undefined,
+          history: writeContextFromHeaders(request.headers),
+          ...(caller.policyAudit ? { policyAudit: caller.policyAudit } : {}),
+          // One request, several cards, and not all of them from the same
+          // place — which is the case the event's authorship naming exists
+          // for, and the only front door that produces it.
+          reportAuthorship: true,
+          // The caller is waiting on this request, and the batch's own index
+          // pass waits on the prerender pool. The wait is bounded, or skipped
+          // when the caller asks, so a stalled pool costs the caller a
+          // pending generation rather than an answer to a write that has
+          // already landed.
+          ...indexWaitOptions(request, { bounded: true }),
+          ...this.#mintPosture(coarseDeclined),
+          ...anonymousCommit,
+        });
         // The coordinator answers in the flat order of the entries it staged,
         // which is the order they were sent in.
         for (let [index, { entry, definition }] of writes.entries()) {
@@ -8010,7 +8026,7 @@ export class Realm {
     } catch (err: unknown) {
       throw await this.#disclosableFailure(
         err,
-        { coarseDeclined, tree, caller },
+        { coarseDeclined, tree, caller, core, batchCore },
         resolved,
         decided,
       );
@@ -8062,6 +8078,7 @@ export class Realm {
   // the wire — the envelope carries the operation's name, and what a `delete`
   // does is whatever the card's type says it does.
   async #resolveEnvelopeEntry(
+    core: OperationCore,
     entry: EnvelopeEntry,
     scope: OperationScope,
   ): Promise<ResolvedEnvelopeEntry> {
@@ -8073,16 +8090,13 @@ export class Realm {
       // exact URL — so resolving the raw spelling would report a declared
       // operation as unknown on a card whose type declares it, and would leave
       // the entry's result carrying an id no other surface spells that way.
-      let target = canonicalizeTarget(
-        this.operationCore,
-        targetFor(entry, this.url),
-      );
+      let target = canonicalizeTarget(core, targetFor(entry, this.url));
       let canonical =
         target.kind === 'instance' && target.url !== entry.href
           ? { ...entry, href: target.url }
           : entry;
       let { definition, decision } = await resolveGatedOperation(
-        this.operationCore,
+        core,
         target,
         canonical.name,
         scope,
@@ -8143,10 +8157,16 @@ export class Realm {
       coarseDeclined,
       tree,
       caller,
+      core,
+      batchCore,
     }: {
       coarseDeclined: CoarseDeclined;
       tree: readonly EnvelopeNode[];
       caller: OperationsCaller;
+      // What the batch resolved and staged against: the realm's own, or a
+      // run's view of it (see `#runOperationCore`, `#runBatchCore`).
+      core: OperationCore;
+      batchCore: BatchCore;
     },
     resolved: readonly ResolvedEnvelopeEntry[],
     // The lock's decisions, for a batch that reached it.
@@ -8173,7 +8193,7 @@ export class Realm {
         } else {
           let refusal = decided.has(position)
             ? decided.get(position)
-            : await storedWriteRefusal(this.operationCore, pending);
+            : await storedWriteRefusal(core, pending);
           if (refusal !== undefined) {
             refused = { position, refusal };
             break;
@@ -8195,6 +8215,8 @@ export class Realm {
         ahead,
         caller,
         coarseDeclined,
+        core,
+        batchCore,
       );
       for (let entry of ahead) {
         let { position } = entry.entry;
@@ -8220,7 +8242,8 @@ export class Realm {
   // undefined where it would admit the write.
   //
   // The writes are staged in request order as the lock stages them, against
-  // the realm as stored now, and nothing is committed. What they are staged
+  // the realm as stored now (for a run, as the run sees it: `core` and
+  // `batchCore`), and nothing is committed. What they are staged
   // with is `resolved` and nothing else, local ids included. A write that
   // cannot be staged ends the rehearsal there, since nothing can say what it
   // would leave its card. So does anything staging refuses, as it ends the
@@ -8234,6 +8257,8 @@ export class Realm {
     // under (see `#mintPosture`), so a card a write is judged by is the card
     // the lock would judge it by.
     coarseDeclined: CoarseDeclined,
+    core: OperationCore,
+    batchCore: BatchCore,
   ): Promise<Map<EntryPosition, OperationFailure | undefined>> {
     let rehearsed = new Map<EntryPosition, OperationFailure | undefined>();
     let admit = async (
@@ -8241,11 +8266,7 @@ export class Realm {
       judged: AdmissionSubject | undefined,
       position: EntryPosition,
     ) => {
-      let refusal = await pendingWriteRefusal(
-        this.operationCore,
-        pending,
-        judged,
-      );
+      let refusal = await pendingWriteRefusal(core, pending, judged);
       rehearsed.set(position, refusal);
       if (refusal) {
         throw refusal;
@@ -8264,7 +8285,7 @@ export class Realm {
       }
     }
     try {
-      await rehearseBatch(this.batchCore, stagedTree(tree, staged), {
+      await rehearseBatch(batchCore, stagedTree(tree, staged), {
         actor: caller.actor || undefined,
         ...this.#mintPosture(coarseDeclined),
       });
@@ -13782,12 +13803,21 @@ export class Realm {
       run,
       `${localPath}.json` as LocalPath,
     );
-    if (!bytes) {
-      return undefined;
-    }
+    return bytes
+      ? this.#stagedCardFrom(localPath, new TextDecoder().decode(bytes))
+      : undefined;
+  }
+
+  // The card resource the staged document `content` at `localPath` (the
+  // card's path, without `.json`) serves as (see `#stagedCardResource`), or
+  // `not-a-card` when `content` isn't a card document.
+  #stagedCardFrom(
+    localPath: LocalPath,
+    content: string,
+  ): LooseCardResource | 'not-a-card' {
     let doc: unknown;
     try {
-      doc = JSON.parse(new TextDecoder().decode(bytes));
+      doc = JSON.parse(content);
     } catch {
       return 'not-a-card';
     }
@@ -13881,6 +13911,190 @@ export class Realm {
     return doc;
   }
 
+  // The operation core a run's batch resolves, gates and reads through (ADR
+  // 027 §1.3): the realm's own, except that a file the run staged is the file
+  // as the run staged it.
+  //
+  // - A staged card's index row is built from the staged document, with the
+  //   adoption chain its `adoptsFrom` names. So an operation on a card the run
+  //   created or re-typed resolves against the staged card's type, and the
+  //   policy gate matches rules against that type.
+  // - A `read` of a staged card answers the staged document, as the run's
+  //   card read does. Staged files aren't indexed, so it carries no computed
+  //   fields, no expanded links, no rendering and no source version. Its
+  //   generation is the realm's row's where the realm holds one, and 0 for a
+  //   card the run created.
+  // - A `read` of a staged file that isn't a card answers that file's
+  //   metadata, derived from the staged bytes.
+  // - The stored text of a file the run staged is the staged text, which is
+  //   what a policy predicate reads a card's fields from.
+  //
+  // A staged `.json` that isn't a card document is never answered with the
+  // realm's version: the run sees no card row there, and a `read` of it is
+  // refused with 422, as the run's card read refuses it.
+  //
+  // A search runs on the index, as the run's search does, so an entry that
+  // finds its targets with a query finds the cards the index holds. A read of
+  // a file's stored bytes isn't an operation a batch carries; the byte routes
+  // serve a run's staged files themselves.
+  //
+  // A core serves one batch. The run's staged paths are listed once, so a
+  // path the run hasn't staged costs no overlay read, and each staged file is
+  // read once.
+  #runOperationCore(run: RunOverlayKey): OperationCore {
+    let core = this.operationCore;
+    let index = core.indexQueryEngine;
+    let paths: Promise<Set<string>> | undefined;
+    let reads = new Map<LocalPath, Promise<Uint8Array | undefined>>();
+    let stagedBytes = async (path: LocalPath) => {
+      paths ??= runOverlayPathsUnder(this.#dbAdapter, run, '').then(
+        (list) => new Set(list),
+      );
+      if (!(await paths).has(path)) {
+        return undefined;
+      }
+      let read = reads.get(path);
+      if (!read) {
+        read = readRunOverlayFile(this.#dbAdapter, run, path);
+        reads.set(path, read);
+      }
+      return await read;
+    };
+    let cards = new Map<
+      string,
+      Promise<
+        | { card: CardResource; types: string[] | null }
+        | { notACard: LocalPath }
+        | undefined
+      >
+    >();
+    let stagedCard = (url: URL) => {
+      let card = cards.get(url.href);
+      if (!card) {
+        card = (async () => {
+          if (!this.paths.inRealm(url)) {
+            return undefined;
+          }
+          let localPath = this.paths.local(url);
+          let path = `${localPath}.json` as LocalPath;
+          let bytes = await stagedBytes(path);
+          if (!bytes) {
+            return undefined;
+          }
+          let content = new TextDecoder().decode(bytes);
+          let resource = this.#stagedCardFrom(localPath, content);
+          if (resource === 'not-a-card') {
+            return { notACard: localPath };
+          }
+          return {
+            card: resource as unknown as CardResource,
+            types: (await this.#adoptedTypes(path, content)) ?? null,
+          };
+        })();
+        cards.set(url.href, card);
+      }
+      return card;
+    };
+    let indexQueryEngine: OperationIndexQueryEngine = {
+      instance: async (url, opts) => {
+        let staged = await stagedCard(url);
+        if (!staged) {
+          return await index.instance(url, opts);
+        }
+        if ('notACard' in staged) {
+          return undefined;
+        }
+        // Resolution and the gate read the type and the stored values; the
+        // rest of a row describes an indexed version the run's card doesn't
+        // have.
+        // Each answer is its own copy: a read assembles its document by
+        // rewriting the resource it is handed, and the scope keeps a peeked
+        // row for the rest of the batch.
+        let row: InstanceOrError = {
+          type: 'instance',
+          instance: structuredClone(staged.card),
+          canonicalURL: url.href,
+          lastModified: null,
+          resourceCreatedAt: Math.floor(Date.now() / 1000),
+          isolatedHtml: null,
+          headHtml: null,
+          embeddedHtml: null,
+          fittedHtml: null,
+          atomHtml: null,
+          markdown: null,
+          searchDoc: null,
+          types: staged.types,
+          deps: null,
+          captures: null,
+          generation: 0,
+          realmURL: this.url,
+          indexedAt: null,
+          sourceContentHash: null,
+          renderError: null,
+        };
+        return row;
+      },
+      cardDocument: async (url, opts) => {
+        let staged = await stagedCard(url);
+        if (!staged) {
+          return await index.cardDocument(url, opts);
+        }
+        if ('notACard' in staged) {
+          throw new OperationFailure({
+            id: url.href,
+            status: 422,
+            code: 'target-errored',
+            title: 'Not a card document',
+            detail: `This run staged ${staged.notACard}.json, which isn't a card document`,
+          });
+        }
+        let indexed = await index.instance(url, { includeErrors: true });
+        return {
+          type: 'doc',
+          doc: { data: structuredClone(staged.card) },
+          generation: indexed?.generation ?? 0,
+          version: null,
+          indexedAt: null,
+          deps: null,
+          captures: null,
+          renderError: null,
+          queryBacked: false,
+        };
+      },
+      file: (url) => index.file(url),
+      searchEntries: (query, opts) => index.searchEntries(query, opts),
+    };
+    return {
+      ...core,
+      indexQueryEngine,
+      readFileAsText: async (localPath) => {
+        let bytes = await stagedBytes(localPath);
+        return bytes
+          ? new TextDecoder().decode(bytes)
+          : await core.readFileAsText(localPath);
+      },
+      // A path whose `.json` the run staged is that card's, not a file.
+      fileMetaDocument: async (localPath) => {
+        if (await stagedBytes(`${localPath}.json` as LocalPath)) {
+          return undefined;
+        }
+        let bytes = localPath.endsWith('.json')
+          ? undefined
+          : await stagedBytes(localPath);
+        if (!bytes) {
+          return await core.fileMetaDocument(localPath);
+        }
+        let lastModified = Math.floor(Date.now() / 1000);
+        return await this.#fileMetaDocumentOf(localPath, {
+          lastModified,
+          createdAt: (await this.getCreatedTime(localPath)) ?? lastModified,
+          contentHash: computeContentHash(bytes),
+          contentSize: bytes.byteLength,
+        });
+      },
+    };
+  }
+
   // The batch coordinator's collaborators for a run's batch (ADR 027 §1.2):
   // the realm's own, except that every read of a file the batch stages from
   // reads the run's staged copy where it has one, and the commit stages the
@@ -13922,6 +14136,15 @@ export class Realm {
     };
     return {
       ...core,
+      // A program reads a card's computed and linked values off its index
+      // row, which describes the realm's version of the card. A card the run
+      // staged has no row for its staged version, so it reads as not indexed,
+      // as a card the run created does.
+      indexedCardValues: async (url) =>
+        this.paths.inRealm(url) &&
+        (await staged(`${this.paths.local(url)}.json` as LocalPath))
+          ? undefined
+          : await core.indexedCardValues(url),
       // A run's write to a reserved path is refused as the run's commit
       // refuses it (see `#runFileRefusal`).
       reservedWriteRefusal: (path, reason) =>
@@ -14035,7 +14258,137 @@ export class Realm {
   // the batch lands, the run row records it, the files committed are added to
   // the run's `writes`, and the overlay is discarded. Asking again after the
   // batch landed answers the same success.
+  private async appendScriptRunLog(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let answer = (status: number, body: unknown) =>
+      createResponse({
+        body: JSON.stringify(body),
+        init: {
+          status,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    let refuse = (status: number, code: string, detail: string) =>
+      answer(status, { errors: [{ status: String(status), code, detail }] });
+    let call = requestContext.automationRun;
+    if (!call || call.readOnly) {
+      return refuse(
+        403,
+        'not-a-run',
+        "Only an automation run writes its log, in the run's own realm",
+      );
+    }
+    let declared = Number(request.headers.get('content-length'));
+    if (declared > RUN_LOG_MAX_REQUEST_BYTES) {
+      return refuse(
+        413,
+        'too-large',
+        `A run's log request carries at most ${RUN_LOG_MAX_REQUEST_BYTES} bytes`,
+      );
+    }
+    let text = await request.text();
+    if (text.length > RUN_LOG_MAX_REQUEST_BYTES) {
+      return refuse(
+        413,
+        'too-large',
+        `A run's log request carries at most ${RUN_LOG_MAX_REQUEST_BYTES} bytes`,
+      );
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return refuse(400, 'invalid-body', 'The body is not JSON');
+    }
+    let parsed = scriptRunLogLines(body);
+    if (!parsed.ok) {
+      return refuse(400, 'invalid-body', parsed.error);
+    }
+    let token = request.headers.get('Authorization')?.replace(/^Bearer /, '');
+    let result = await appendRunLog(this.#dbAdapter, call.runId, parsed.lines, {
+      secrets: token ? [token] : [],
+    });
+    return answer(200, {
+      data: {
+        type: 'run-log',
+        id: call.runId,
+        attributes: { stored: result.stored, dropped: result.dropped },
+      },
+    });
+  }
+
+  // Commits a run's overlay, and logs on the run what the commit did.
   private async commitRunOverlay(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let run = requestContext.automationRun;
+    let startedAt = Date.now();
+    // A repeat of a commit that already landed answers as it did, and its
+    // line is already in the log.
+    let repeat =
+      run && !run.readOnly
+        ? Boolean(
+            (await getAutomationRun(this.#dbAdapter, run.runId))?.committedAt,
+          )
+        : false;
+    let response: Response;
+    try {
+      response = await this.#commitRunOverlay(request, requestContext);
+    } catch (err: unknown) {
+      if (run && !run.readOnly) {
+        await logRunPlatformLine(this.#dbAdapter, run.runId, {
+          kind: 'commit',
+          level: 'error',
+          message: `The commit failed while writing, so some files may have been saved: ${err instanceof Error ? err.message : String(err)}`,
+          data: { ms: Date.now() - startedAt },
+        });
+      }
+      throw err;
+    }
+    if (run && !run.readOnly && !repeat) {
+      let body = (await response
+        .clone()
+        .json()
+        .catch(() => undefined)) as
+        | {
+            data?: { attributes?: { files?: string[] } };
+            errors?: { code?: string; detail?: string }[];
+          }
+        | undefined;
+      let ms = Date.now() - startedAt;
+      if (response.ok) {
+        let files = body?.data?.attributes?.files ?? [];
+        await logRunPlatformLine(this.#dbAdapter, run.runId, {
+          kind: 'commit',
+          level: 'info',
+          message:
+            files.length === 0
+              ? 'The commit saved no files'
+              : `The commit saved ${files.length} ${files.length === 1 ? 'file' : 'files'}: ${files.join(', ')}`,
+          data: { status: response.status, files: files.length, ms },
+        });
+      } else {
+        let error = body?.errors?.[0];
+        await logRunPlatformLine(this.#dbAdapter, run.runId, {
+          kind: 'commit',
+          level: 'error',
+          message: `The commit was refused (${error?.code ?? response.status}): ${error?.detail ?? response.statusText}`,
+          data: {
+            status: response.status,
+            ...(error?.code ? { code: error.code } : {}),
+            ms,
+          },
+        });
+      }
+    }
+    return response;
+  }
+
+  async #commitRunOverlay(
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
@@ -15196,19 +15549,40 @@ export class Realm {
     if (!fileRef) {
       return undefined;
     }
+    let createdAt = await this.getCreatedTime(localPath);
+    let persistedMeta = this.#dbAdapter
+      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
+      : { contentHash: undefined, contentSize: undefined };
+    return await this.#fileMetaDocumentOf(localPath, {
+      lastModified: fileRef.lastModified,
+      createdAt: createdAt ?? fileRef.lastModified,
+      contentHash:
+        persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef)),
+      contentSize:
+        persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef)),
+    });
+  }
+
+  // A file's metadata document, from what is known about its bytes.
+  async #fileMetaDocumentOf(
+    localPath: LocalPath,
+    {
+      lastModified,
+      createdAt,
+      contentHash,
+      contentSize,
+    }: {
+      lastModified: number;
+      createdAt: number;
+      contentHash: string | undefined;
+      contentSize: number | undefined;
+    },
+  ): Promise<SingleFileMetaDocument> {
     let fileURL = this.paths.fileURL(localPath).href;
     let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
-    let createdAt = await this.getCreatedTime(localPath);
     let { info: realmInfo } = await this.parseRealmInfo();
-    let persistedMeta = this.#dbAdapter
-      ? await getContentMeta(this.#dbAdapter, this.url, localPath)
-      : { contentHash: undefined, contentSize: undefined };
-    let contentHash =
-      persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef));
-    let contentSize =
-      persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef));
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
@@ -15220,8 +15594,8 @@ export class Realm {
           contentType: inferredContentType,
           contentHash,
           contentSize,
-          lastModified: fileRef.lastModified,
-          createdAt: createdAt ?? fileRef.lastModified,
+          lastModified,
+          createdAt,
         },
         meta: {
           adoptsFrom: fileDefCodeRef,
@@ -15229,10 +15603,7 @@ export class Realm {
           realmURL: this.url as RealmIdentifier,
           // This un-indexed fallback must stamp the timestamps too, so a file's
           // `meta` timestamps don't hinge on whether the row is in the index yet.
-          ...fileMetaTimestamps(
-            fileRef.lastModified,
-            createdAt ?? fileRef.lastModified,
-          ),
+          ...fileMetaTimestamps(lastModified, createdAt),
         },
         links: { self: fileURL },
       },
