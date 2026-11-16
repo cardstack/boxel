@@ -7,7 +7,14 @@ import { Token } from './token';
 import { EmptyState, type EmptyStateSize } from './empty-state';
 
 const SIZES: EmptyStateSize[] = ['m', 's'];
-const WIDTHS = ['wide', 'narrow'];
+// Two ways in at each width and size, and with labels long enough to fold early.
+const FOLD_FRAMES: { width: string; size: EmptyStateSize; go: string; back: string }[] = [
+  { width: 'wide', size: 's', go: 'Go to checkout', back: 'Back to the shop' },
+  { width: 'wide', size: 'm', go: 'Go to checkout', back: 'Back to the shop' },
+  { width: 'wide', size: 'm', go: 'Review and approve every proof', back: 'Keep browsing the whole shop' },
+  { width: 'narrow', size: 's', go: 'Go to checkout', back: 'Back to the shop' },
+  { width: 'narrow', size: 'm', go: 'Go to checkout', back: 'Back to the shop' },
+];
 
 class EmptyStateUsage extends Component {
   @tracked title = 'No lots match';
@@ -68,13 +75,13 @@ class EmptyStateUsage extends Component {
             <:action><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:action>
           </EmptyState>
         {{/if}}
-        {{! Two ways in, wide then narrow: one row, or a full stack. }}
+        {{! Two ways in: one row while they fit, a stack the moment they don't. }}
         <div class='empty-state-usage-widths'>
-          {{#each WIDTHS as |w|}}
-            <div class='empty-state-usage-frame' data-width={{w}}>
-              <EmptyState @title='No proofs yet' @size='s'>
-                <:action><Button>Go to checkout</Button></:action>
-                <:altAction><Button @tone='neutral' @appearance='outlined'>Back to the shop</Button></:altAction>
+          {{#each FOLD_FRAMES as |f|}}
+            <div class='empty-state-usage-frame' data-width={{f.width}}>
+              <EmptyState @title='No proofs yet' @size={{f.size}}>
+                <:action><Button @size={{f.size}}>{{f.go}}</Button></:action>
+                <:altAction><Button @size={{f.size}} @tone='neutral' @appearance='outlined'>{{f.back}}</Button></:altAction>
               </EmptyState>
             </div>
           {{/each}}

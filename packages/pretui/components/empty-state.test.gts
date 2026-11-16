@@ -4,7 +4,7 @@
 // is inert in this harness (the scoped-css attribute is stamped, the rules are
 // not applied).
 import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
+import { render, waitUntil } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { EmptyState } from './empty-state';
 
@@ -158,5 +158,31 @@ module('Pretui | components/empty-state', function (hooks) {
     for (let sel of ['[data-test-m]', '[data-test-default]', '[data-test-xl]']) {
       assert.strictEqual(q(sel).dataset.size, 'm', `${sel} lands on the page-section default`);
     }
+  });
+  // The fold's look (row vs stack) is in scoped styles this harness doesn't
+  // apply; the wide and narrow frames on the EmptyState usage page are the
+  // visual check. Here only the measurement that picks data-fold is covered.
+  test('EmptyState folds both paths to a stack when they do not fit in one row', async function (assert) {
+    await render(
+      <template>
+        <div data-test-wide>
+          <EmptyState @title='No proofs'>
+            <:action><button type='button'>Go to checkout</button></:action>
+            <:altAction><button type='button'>Back to the shop</button></:altAction>
+          </EmptyState>
+        </div>
+        <div data-test-narrow>
+          <EmptyState @title='No proofs'>
+            <:action><button type='button'>Go to checkout</button></:action>
+            <:altAction><button type='button'>Back to the shop</button></:altAction>
+          </EmptyState>
+        </div>
+      </template>,
+    );
+    q('[data-test-wide]').style.inlineSize = '1600px';
+    q('[data-test-narrow]').style.inlineSize = '120px';
+    await waitUntil(() => q('[data-test-narrow] .pretui-empty-paths').dataset.fold === 'stack');
+    assert.strictEqual(q('[data-test-wide] .pretui-empty-paths').dataset.fold, 'row', 'room for all three: one row');
+    assert.strictEqual(q('[data-test-narrow] .pretui-empty-paths').dataset.fold, 'stack', 'no room: the whole row folds');
   });
 });

@@ -1,6 +1,7 @@
 // Pretui — EmptyState: the kit's zero-data surface, with one or two honest
 // ways forward and the texture that marks it as intentional.
 import Component from '@glimmer/component';
+import { modifier } from 'ember-modifier';
 import { resolveSize, type PretuiSizeArg } from '../pretui-primitives';
 
 /** The two steps an EmptyState paints: 's' is the compact well, 'm' the page-section default. */
@@ -39,6 +40,48 @@ export interface EmptyStateSignature {
   Element: HTMLDivElement;
 }
 
+function px(v: string | undefined): number {
+  return parseFloat(v ?? '') || 0;
+}
+
+// The row the two paths need: each action's own content, the separator's
+// word plus its two shortest rules, and the gaps between the three.
+function rowNeed(paths: HTMLElement): number {
+  let cs = getComputedStyle(paths);
+  let need = px(cs.columnGap) * 2;
+  for (let item of Array.from(paths.children) as HTMLElement[]) {
+    if (item.classList.contains('pretui-empty-sep')) {
+      let rule = px(getComputedStyle(item, '::before').minInlineSize);
+      let word = item.firstElementChild?.getBoundingClientRect().width ?? 0;
+      need += word + 2 * (rule + px(getComputedStyle(item).columnGap));
+    } else {
+      let rects = Array.from(item.children).map((c) => c.getBoundingClientRect());
+      if (rects.length) {
+        need += Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left));
+      }
+    }
+  }
+  return need;
+}
+
+// Folds the two paths all at once: one row while they fit, a stack the moment
+// they don't. Measured rather than a container query, because containment
+// would collapse an auto-sized EmptyState and a fixed threshold can't know
+// the label widths. The observer is disconnected on cleanup.
+const foldPaths = modifier((paths: HTMLElement) => {
+  let apply = () => {
+    paths.dataset.fold = rowNeed(paths) > paths.clientWidth + 0.5 ? 'stack' : 'row';
+  };
+  if (typeof ResizeObserver === 'undefined') return;
+  let observer = new ResizeObserver(apply);
+  observer.observe(paths);
+  for (let item of Array.from(paths.children)) {
+    for (let c of Array.from(item.children)) observer.observe(c);
+  }
+  apply();
+  return () => observer.disconnect();
+});
+
 // The one place texture lives (Law 6).
 export class EmptyState extends Component<EmptyStateSignature> {
   get showTexture() {
@@ -67,9 +110,9 @@ export class EmptyState extends Component<EmptyStateSignature> {
         <p class='pretui-empty-msg'>{{@message}}</p>
       {{/if}}
       {{#if (has-block 'altAction')}}
-        <div class='pretui-empty-paths'>
+        <div class='pretui-empty-paths' data-fold='row' {{foldPaths}}>
           <div class='pretui-empty-action'>{{yield to='action'}}</div>
-          <div class='pretui-empty-sep' aria-hidden='true'>{{this.separator}}</div>
+          <div class='pretui-empty-sep' aria-hidden='true'><span>{{this.separator}}</span></div>
           <div class='pretui-empty-action'>{{yield to='altAction'}}</div>
         </div>
       {{else if (has-block 'action')}}
@@ -123,26 +166,31 @@ export class EmptyState extends Component<EmptyStateSignature> {
           position: relative;
           margin-top: var(--boxel-sp-2xs);
         }
-        /* Two equal paths with a rule drawn on the separator itself. They
-           fold all at once, without a container query (containment would
-           collapse an auto-sized EmptyState): each item's basis is hugely
-           negative above --pretui-empty-fold and hugely positive below it, so
-           the three share one row or each take a full line, never 2 + 1. */
+        /* Two equal paths with a rule drawn on the separator itself, so it
+           stretches across the row or the stack. foldPaths sets data-fold;
+           the separator shrinks first, then the whole row folds at once. */
         .pretui-empty-paths {
           position: relative;
           justify-self: stretch;
+          /* the row's own width must not widen the EmptyState, or it never folds */
+          min-inline-size: 0;
           display: flex;
-          flex-wrap: wrap;
           align-items: center;
+          justify-content: center;
           gap: var(--boxel-sp-sm);
         }
-        .pretui-empty-paths > * {
+        .pretui-empty-paths[data-fold='stack'] {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .pretui-empty-paths > .pretui-empty-action {
           display: flex;
+          flex: none;
           justify-content: center;
-          flex-grow: 1;
-          flex-basis: calc((var(--pretui-empty-fold, 24rem) - 100%) * 999);
         }
         .pretui-empty-sep {
+          display: flex;
+          flex: 1 1 auto;
           align-items: center;
           gap: var(--boxel-sp-xs);
           margin-top: var(--boxel-sp-2xs);
