@@ -58,11 +58,14 @@ const foldWhenFull = modifier((group: HTMLElement) => {
   let apply = () => {
     if (group.dataset.orientation !== 'horizontal') return;
     group.dataset.fold = 'row';
-    group.style.inlineSize = 'max-content';
-    let need = group.getBoundingClientRect().width;
-    group.style.inlineSize = '';
     let cs = getComputedStyle(host);
     let room = host.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight);
+    // a parent with no box (display: contents, inline, hidden) gives no room to measure
+    if (room <= 0) return;
+    let callerSize = group.style.inlineSize;
+    group.style.inlineSize = 'max-content';
+    let need = group.getBoundingClientRect().width;
+    group.style.inlineSize = callerSize;
     group.dataset.fold = need > room + 0.5 ? 'stack' : 'row';
   };
   let resizes = new ResizeObserver(apply);
