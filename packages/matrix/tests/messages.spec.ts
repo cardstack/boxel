@@ -289,8 +289,12 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await waitForBoxelMessageEvents(page, username, password, 1);
-    let message = messages[messages.length - 1];
+    let messages = await waitForBoxelMessageEvents(page, username, password, [
+      'This is a card without base64',
+    ]);
+    let message = messages.find(
+      (event) => event.content.body === 'This is a card without base64',
+    )!;
     let messageData = JSON.parse(message.content.data);
     let cardText = await (
       await fetch(messageData.attachedCards[0].url, {
@@ -362,9 +366,14 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await waitForBoxelMessageEvents(page, username, password, 1);
-    let lastMessage = messages[messages.length - 1];
-    let attachedFiles = JSON.parse(lastMessage.content.data).attachedFiles;
+    let messages = await waitForBoxelMessageEvents(page, username, password, [
+      'Are there any computed fields in person.gts?',
+    ]);
+    let message = messages.find(
+      (event) =>
+        event.content.body === 'Are there any computed fields in person.gts?',
+    )!;
+    let attachedFiles = JSON.parse(message.content.data).attachedFiles;
     expect(attachedFiles.length).toStrictEqual(1);
     expect(attachedFiles[0].name).toStrictEqual('person.gts');
     expect(attachedFiles[0].contentType).toStrictEqual(
@@ -1062,15 +1071,20 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    // There should only be one card fragments event for multiple message events
-    // if the card remains unchanged and is attached multiple times.
     let messageEvents = await waitForBoxelMessageEvents(
       page,
       username,
       password,
-      3,
+      ['Message - 1', 'Message - 2', 'Message - 3'],
     );
     expect(messageEvents.length).toEqual(3);
+
+    // An unchanged card attached to several messages is uploaded once, so
+    // every message points at the same uploaded file.
+    let attachedCardUrls = messageEvents.map(
+      (event) => JSON.parse(event.content.data).attachedCards[0].url,
+    );
+    expect(new Set(attachedCardUrls).size).toEqual(1);
   });
 
   test('it escapes html code sent by the user', async ({ page }) => {
