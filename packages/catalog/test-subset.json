@@ -36,6 +36,7 @@
     "realmServer": [
       "anonymous-key-use-test",
       "automation-card-test",
+      "automation-manual-runs-test",
       "automation-run-attempt-test",
       "automation-run-command-test",
       "automation-run-limits-test",

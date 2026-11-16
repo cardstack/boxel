@@ -15,8 +15,9 @@
 // empty overlay, so writes the replaced attempt staged never reach the
 // newer attempt's commit, and the run row's start drops them. Every way a run
 // ends (finished, canceled, abandoned) discards its overlay in the same
-// statement that ends it (`automation-runs.ts`), and deleting the run row
-// deletes its overlay with it.
+// statement that ends it (`automation-runs.ts`); a Preview that finishes
+// complete copies its attempt's files out first, as the batch it shows.
+// Deleting the run row deletes its overlay with it.
 //
 // The table is server-only and excluded from the SQLite schema dump.
 
@@ -336,7 +337,8 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function fromBase64(text: string): Uint8Array<ArrayBuffer> {
+// The bytes of a `bytea` column read with Postgres's `encode(…, 'base64')`.
+export function fromBase64(text: string): Uint8Array<ArrayBuffer> {
   // Postgres's base64 encoding breaks lines every 76 characters.
   let binary = atob(text.replace(/\s/g, ''));
   let bytes = new Uint8Array(binary.length);
