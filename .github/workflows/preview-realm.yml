@@ -122,6 +122,12 @@ jobs:
       || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: Deploy preview realm
     runs-on: ubuntu-latest
+    # Every step runs outside the checkout unless it says otherwise: the CLI
+    # reads `.env` from the directory it runs in, and the checkout's files
+    # are content.
+    defaults:
+      run:
+        working-directory: /tmp
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -145,7 +151,6 @@ jobs:
       - name: Configure boxel profile
         id: profile
         if: steps.install.outcome == 'success'
-        working-directory: ${{ runner.temp }}
         continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         env:
           MATRIX_URL: ${{ inputs.matrix-url }}
@@ -174,7 +179,6 @@ jobs:
       - name: Create preview realm
         id: create
         if: steps.profile.outcome == 'success'
-        working-directory: ${{ runner.temp }}
         continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         env:
           REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
@@ -214,7 +218,11 @@ jobs:
           if [ -n "${PUSH_PATHS//[[:space:]]/}" ]; then
             SOURCE_DIR="${RUNNER_TEMP}/preview-content"
             mkdir -p "$SOURCE_DIR"
+            cd "$GITHUB_WORKSPACE"
             while IFS= read -r path; do
+              # A trailing slash would have every test below look through
+              # a link to what it points at.
+              while [ "$path" != "${path%/}" ]; do path="${path%/}"; done
               [ -z "$path" ] && continue
               case "$path" in
                 /* | .. | ../* | */../* | */..)
@@ -247,7 +255,9 @@ jobs:
               dir=$(dirname "$path")
               while :; do
                 for ignore in .gitignore .boxelignore; do
-                  if [ -f "${dir}/${ignore}" ] && [ ! -e "${SOURCE_DIR}/${dir}/${ignore}" ]; then
+                  # A linked ignore file is left behind: copying it would
+                  # stage what it points at as a regular file.
+                  if [ -f "${dir}/${ignore}" ] && [ ! -L "${dir}/${ignore}" ] && [ ! -e "${SOURCE_DIR}/${dir}/${ignore}" ]; then
                     mkdir -p "${SOURCE_DIR}/${dir}"
                     cp "${dir}/${ignore}" "${SOURCE_DIR}/${dir}/${ignore}"
                   fi
@@ -258,8 +268,6 @@ jobs:
             done <<< "$PUSH_PATHS"
             echo "Staged $(find "$SOURCE_DIR" -type f | wc -l | tr -d ' ') file(s) from the listed paths"
           fi
-          # The CLI reads `.env` from the directory it runs in, so it runs
-          # outside the checkout.
           cd "$RUNNER_TEMP"
           echo "Pushing content to ${SOURCE_REALM_URL}"
           boxel realm push "$SOURCE_DIR" "${SOURCE_REALM_URL}" --delete
@@ -292,7 +300,6 @@ jobs:
       - name: Publish preview realm
         id: publish
         if: steps.push.outcome == 'success'
-        working-directory: ${{ runner.temp }}
         continue-on-error: ${{ !inputs.fail-on-deploy-error }}
         env:
           REALM_SERVER: ${{ inputs.realm-server-url }}
@@ -342,7 +349,10 @@ jobs:
             _${{ steps.stamp.outputs.now }} UTC_
 
   cleanup:
-    if: github.event.action == 'closed' || inputs.unpublish
+    if: >-
+      ${{ (github.event.action == 'closed' || inputs.unpublish)
+      && (inputs.allow-fork-content
+      || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: Cleanup preview realm
     runs-on: ubuntu-latest
     steps:
