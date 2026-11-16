@@ -132,11 +132,25 @@ export function registerOAuthProviderRoutes(
 }
 
 // The realm server's CORS, except on the routes where the library answers
-// CORS itself, by the client a request names: the token endpoint. The
-// library leaves CORS alone on a response that already has it, so the realm
-// server's would let any origin call those routes.
-export function leaveCORSToOAuthProvider(cors: Koa.Middleware): Koa.Middleware {
-  return (ctxt, next) => (isTokenPath(ctxt.path) ? next() : cors(ctxt, next));
+// CORS itself, by the client a request names: the token endpoint's `POST`
+// and its preflight, on the issuer's host. The library leaves CORS alone on
+// a response that already has it, so the realm server's would let any origin
+// call those routes. Every other request keeps the realm server's CORS,
+// including one to the same path when the provider is off (`issuer`
+// undefined), on another host, or with another method, since the provider
+// doesn't serve it and it goes on to the realm server's own routing.
+export function leaveCORSToOAuthProvider(
+  cors: Koa.Middleware,
+  issuer: string | undefined,
+): Koa.Middleware {
+  let issuerHost = issuer ? new URL(issuer).host : undefined;
+  return (ctxt, next) =>
+    issuerHost &&
+    (ctxt.method === 'POST' || ctxt.method === 'OPTIONS') &&
+    isTokenPath(ctxt.path) &&
+    fullRequestURL(ctxt).host === issuerHost
+      ? next()
+      : cors(ctxt, next);
 }
 
 // Whether a path reaches the token route. Both the realm server's router and

@@ -1016,6 +1016,66 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(grant.ended_reason, 'reuse', 'it ends the grant');
     });
 
+    test('a code sent without its verifier counts against the address, not its grant', async function (assert) {
+      let clientId = await registerOAuthClient(server());
+      let matrixId = randomMatrixId('limit');
+      await insertUser(db(), matrixId, `cus_${matrixId}`, null);
+      let code = await codeForOAuthClient(
+        server(),
+        clientId,
+        await secureSessionAuth(db(), matrixId),
+      );
+      // As many as the grant's limit, as someone who saw the code in the
+      // redirect URL could send.
+      for (let i = 0; i < 3; i++) {
+        let response = await exchangeOAuthCode(server(), clientId, code, {
+          verifier: `wrong-verifier-${i}`.padEnd(64, 'x'),
+        });
+        assert.strictEqual(response.status, 400, `guess ${i + 1}`);
+      }
+      let limited = await exchangeOAuthCode(server(), clientId, code, {
+        verifier: 'wrong-verifier-4'.padEnd(64, 'x'),
+      });
+      assert.strictEqual(limited.status, 429, 'the address is limited');
+      let exchanged = await exchangeOAuthCode(server(), clientId, code);
+      assert.strictEqual(
+        exchanged.status,
+        200,
+        "the client's own exchange still goes through",
+      );
+    });
+
+    test('a used code presented without its verifier over its grant’s limit leaves the grant live', async function (assert) {
+      let clientId = await registerOAuthClient(server());
+      let matrixId = randomMatrixId('limit');
+      await insertUser(db(), matrixId, `cus_${matrixId}`, null);
+      let code = await codeForOAuthClient(
+        server(),
+        clientId,
+        await secureSessionAuth(db(), matrixId),
+      );
+      let exchanged = await exchangeOAuthCode(server(), clientId, code);
+      let token = exchanged.body.refresh_token as string;
+      for (let i = 0; i < 2; i++) {
+        token = (await refreshOAuthTokens(server(), clientId, token)).body
+          .refresh_token;
+      }
+      let replay = await exchangeOAuthCode(server(), clientId, code, {
+        verifier: 'wrong-verifier'.padEnd(64, 'x'),
+      });
+      assert.strictEqual(replay.status, 400, 'it is refused');
+      let [grant] = (await db().execute(
+        `SELECT ended_reason FROM oauth_provider_grants`,
+      )) as { ended_reason: string | null }[];
+      assert.strictEqual(grant.ended_reason, null, 'and the grant stays');
+      let withVerifier = await exchangeOAuthCode(server(), clientId, code);
+      assert.strictEqual(withVerifier.status, 400, 'with its verifier');
+      [grant] = (await db().execute(
+        `SELECT ended_reason FROM oauth_provider_grants`,
+      )) as { ended_reason: string | null }[];
+      assert.strictEqual(grant.ended_reason, 'reuse', 'it ends the grant');
+    });
+
     async function failThrice(clientId: string) {
       for (let i = 0; i < 3; i++) {
         let response = await refreshOAuthTokens(
