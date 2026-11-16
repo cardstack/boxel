@@ -145,9 +145,25 @@ export default function handleClaimBoxelDomainRequest({
         return;
       }
 
+      // The claim names its realm by registry id, so it stays with the realm
+      // if the realm's URL changes. The request names the realm by its URL,
+      // which is resolved to the id here.
+      const realmRows = (await query(dbAdapter, [
+        `SELECT id FROM realm_registry WHERE url = `,
+        param(sourceRealmURL),
+      ])) as { id: string }[];
+      if (realmRows.length === 0) {
+        await sendResponseForNotFound(
+          ctxt,
+          `Realm not found: ${sourceRealmURL}`,
+        );
+        return;
+      }
+
       const { valueExpressions, nameExpressions } = asExpressions({
         user_id: user.id,
         hostname: normalizedHostname,
+        realm_id: realmRows[0].id,
         source_realm_url: sourceRealmURL,
         claimed_at: Math.floor(Date.now() / 1000),
       });

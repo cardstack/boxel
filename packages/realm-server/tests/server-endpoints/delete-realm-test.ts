@@ -300,8 +300,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     await context.dbAdapter.execute(`INSERT INTO job_reservations
       (job_id, locked_until, worker_id)
       VALUES (${unrelatedJob.id}, NOW() + INTERVAL '5 minutes', 'worker-unrelated')`);
+    let [{ id: realmId }] = (await context.dbAdapter.execute(
+      `SELECT id FROM realm_registry WHERE url = '${realmURL}'`,
+    )) as { id: string }[];
     let { valueExpressions, nameExpressions } = asExpressions({
       user_id: user.id,
+      realm_id: realmId,
       source_realm_url: realmURL,
       hostname: 'delete-me.boxel.site',
       claimed_at: Math.floor(Date.now() / 1000),
@@ -643,11 +647,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     );
 
     let claimedDomains = (await context.dbAdapter.execute(
-      `SELECT removed_at FROM claimed_domains_for_sites WHERE source_realm_url = '${realmURL}'`,
-    )) as { removed_at: number | null }[];
-    assert.ok(
-      claimedDomains.every((row) => row.removed_at != null),
-      'claimed domains are soft deleted',
+      `SELECT removed_at, realm_id FROM claimed_domains_for_sites WHERE hostname = 'delete-me.boxel.site'`,
+    )) as { removed_at: number | null; realm_id: string | null }[];
+    assert.strictEqual(claimedDomains.length, 1, 'the claim row is kept');
+    assert.notStrictEqual(
+      claimedDomains[0].removed_at,
+      null,
+      'the realm claim is soft deleted',
+    );
+    assert.strictEqual(
+      claimedDomains[0].realm_id,
+      null,
+      'the claim no longer names the deleted realm',
     );
 
     let unlistedPaths = (await context.dbAdapter.execute(

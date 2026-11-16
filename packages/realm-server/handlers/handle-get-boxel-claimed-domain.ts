@@ -48,12 +48,18 @@ export default function handleGetBoxelClaimedDomainRequest({
         return;
       }
 
+      // The request names the realm by its URL. The claim names it by its
+      // registry id, so the URL is resolved to the id through the registry,
+      // and the response carries the realm's URL as the registry has it.
       const claims = await query(dbAdapter, [
-        `SELECT id, hostname, source_realm_url, claimed_at FROM claimed_domains_for_sites WHERE user_id = `,
+        `SELECT c.id, c.hostname, r.url AS realm_url, c.claimed_at
+         FROM claimed_domains_for_sites c
+         JOIN realm_registry r ON r.id = c.realm_id
+         WHERE c.user_id = `,
         param(user.id),
-        ` AND source_realm_url = `,
+        ` AND r.url = `,
         param(sourceRealmURL),
-        ` AND removed_at IS NULL`,
+        ` AND c.removed_at IS NULL`,
       ]);
 
       if (claims.length === 0) {
@@ -80,7 +86,7 @@ export default function handleGetBoxelClaimedDomainRequest({
                 attributes: {
                   hostname,
                   subdomain,
-                  sourceRealmURL: String(claim.source_realm_url),
+                  sourceRealmURL: String(claim.realm_url),
                 },
               },
             },

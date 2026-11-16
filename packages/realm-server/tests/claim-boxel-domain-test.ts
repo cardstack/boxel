@@ -80,6 +80,19 @@ module(basename(import.meta.filename), function () {
       return await requestBuilder;
     }
 
+    // A registry row for a realm URL, so a claim can name the realm. Returns
+    // the row's id.
+    async function register(url: string): Promise<string> {
+      let rows = (await query(dbAdapter, [
+        `INSERT INTO realm_registry (url, kind, disk_id, owner_username) VALUES (`,
+        param(url),
+        `, 'source', `,
+        param(`test/${url}`),
+        `, 'test-user') RETURNING id`,
+      ])) as { id: string }[];
+      return rows[0].id;
+    }
+
     function assertErrorIncludes(response: any, message: string) {
       return response.body.errors && response.body.errors[0].includes(message);
     }
@@ -275,9 +288,36 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('should return 404 when the realm is not in the registry', async function (assert) {
+      const response = await makePostRequest(defaultToken, {
+        data: {
+          type: 'claimed-domain',
+          attributes: {
+            source_realm_url: 'https://unregistered-realm.com/',
+            hostname: 'unregistered.boxel.site',
+          },
+        },
+      });
+
+      assert.strictEqual(
+        response.status,
+        404,
+        'Should return 404 for a realm that is not registered',
+      );
+      assert.ok(
+        assertErrorIncludes(response, 'Realm not found'),
+        'Should have error message about the realm not being found',
+      );
+      const claims = await query(dbAdapter, [
+        `SELECT id FROM claimed_domains_for_sites WHERE hostname = 'unregistered.boxel.site'`,
+      ]);
+      assert.strictEqual(claims.length, 0, 'Should not store a claim');
+    });
+
     test('should successfully claim a valid hostname', async function (assert) {
       const hostname = 'my-site.boxel.site';
-      const sourceRealmURL = 'https://test-realm.com';
+      const sourceRealmURL = 'https://test-realm.com/';
+      const realmId = await register(sourceRealmURL);
 
       const response = await makePostRequest(defaultToken, {
         data: {
@@ -334,6 +374,11 @@ module(basename(import.meta.filename), function () {
         sourceRealmURL,
         'Should have correct source realm URL',
       );
+      assert.strictEqual(
+        claims[0].realm_id,
+        realmId,
+        'Should name the realm by its registry id',
+      );
       assert.ok(claims[0].claimed_at, 'Should have claimed_at timestamp');
       assert.strictEqual(claims[0].removed_at, null, 'Should not be removed');
     });
@@ -354,7 +399,8 @@ module(basename(import.meta.filename), function () {
         insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
       );
 
-      const sourceRealmURL = 'https://new-realm.com';
+      const sourceRealmURL = 'https://new-realm.com/';
+      const realmId = await register(sourceRealmURL);
       const response = await makePostRequest(defaultToken, {
         data: {
           type: 'claimed-domain',
@@ -380,6 +426,11 @@ module(basename(import.meta.filename), function () {
         claims[0].source_realm_url,
         sourceRealmURL,
         'Should have new source realm URL',
+      );
+      assert.strictEqual(
+        claims[0].realm_id,
+        realmId,
+        'Should name the new realm by its registry id',
       );
     });
   });
