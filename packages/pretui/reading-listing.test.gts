@@ -927,7 +927,7 @@ module('Pretui | reading-listing', function (hooks) {
     );
   });
 
-  test('DataTable: paging after arrowing neither backtracks nor steals focus', async function (assert) {
+  test('DataTable: removing the focused row by paging does not backtrack, and paging does not steal focus', async function (assert) {
     class Holder {
       @tracked rows = LOTS;
     }
@@ -949,6 +949,13 @@ module('Pretui | reading-listing', function (hooks) {
     await triggerKeyEvent(bodyRows()[0] as HTMLElement, 'keydown', 'ArrowDown');
     assert.strictEqual(document.activeElement, bodyRows()[1]);
 
+    // the page shrinks under the focused row: focusout fires mid-render
+    knobs.pageSize = 1;
+    await settled();
+    assert.strictEqual(bodyRows().length, 1, 'the focused row is gone');
+
+    knobs.pageSize = 2;
+    await settled();
     await click('[data-test-pretui-pagination] button[aria-label="Page 2"]');
     assert.strictEqual(bodyRows().length, 1, 'page two is showing');
     let pager = document.activeElement;
