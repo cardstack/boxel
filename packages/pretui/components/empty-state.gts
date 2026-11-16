@@ -123,26 +123,27 @@ export class EmptyState extends Component<EmptyStateSignature> {
           position: relative;
           margin-top: var(--boxel-sp-2xs);
         }
-        /* Two equal paths with a rule between. The rule is drawn on the
-           separator itself so it stretches to whatever the row/column is —
-           no measurement, and it flips axis with the fold. */
-        /* flex-wrap rather than a container query: EmptyState is often an auto
-           -sized grid/flex item, and `container-type: inline-size` would apply
-           inline-size containment to it and collapse that case. Wrapping folds
-           the two paths into a stack at exactly the width where they stop
-           fitting, with no containment side effect. */
+        /* Two equal paths with a rule drawn on the separator itself. They
+           fold all at once, without a container query (containment would
+           collapse an auto-sized EmptyState): each item's basis is hugely
+           negative above --pretui-empty-fold and hugely positive below it, so
+           the three share one row or each take a full line, never 2 + 1. */
         .pretui-empty-paths {
           position: relative;
+          justify-self: stretch;
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          justify-content: center;
           gap: var(--boxel-sp-sm);
         }
-        .pretui-empty-sep {
+        .pretui-empty-paths > * {
           display: flex;
+          justify-content: center;
+          flex-grow: 1;
+          flex-basis: calc((var(--pretui-empty-fold, 24rem) - 100%) * 999);
+        }
+        .pretui-empty-sep {
           align-items: center;
-          flex: 1 1 6rem;
           gap: var(--boxel-sp-xs);
           margin-top: var(--boxel-sp-2xs);
           font-size: var(--boxel-font-size-2xs);

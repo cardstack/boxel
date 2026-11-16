@@ -20,6 +20,8 @@ Element: HTMLDivElement
 
 **`@size`** takes the house scale (`xs | s | m | l | xl` and the `sm` / `md` / `lg` / `small` / `medium` / `large` / `default` aliases) and paints two steps. `s` is the compact well for an empty note inside a card section: `--boxel-sp` padding on every side and the title at `--boxel-font-size`. `m`, the default, is sized for a page section. `xs` lands on `s`, and `l` / `xl` on `m`. The resolved step lands as `data-size`, `'s'` or `'m'`, on every render, the default included.
 
+**Two ways in fold all at once.** With `<:action>` and `<:altAction>`, the two paths and the separator share one row while the EmptyState is at least `--pretui-empty-fold` wide (default `24rem`), and below that each takes its own centered line, with the separator rule running full width between them. There is no halfway state with one button left beside the separator. The fold is a flex-basis switch, not a container query, so an auto-sized EmptyState keeps its intrinsic width. With long labels or `@size='m'` buttons, set `--pretui-empty-fold` on the EmptyState to at least the width the two buttons and the separator need on one row, or the row wraps before it folds.
+
 `max-width: 34ch` on the message is the measure at which a centred paragraph stays scannable — wider and the eye loses the line, and centred text is much less forgiving of long measures than left-aligned.
 
 The title is set in `--font-serif`. That is the only serif in the control and structure territories, and it is the signal that this is a moment of address rather than a label.

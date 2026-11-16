@@ -7,6 +7,7 @@ import { Token } from './token';
 import { EmptyState, type EmptyStateSize } from './empty-state';
 
 const SIZES: EmptyStateSize[] = ['m', 's'];
+const WIDTHS = ['wide', 'narrow'];
 
 class EmptyStateUsage extends Component {
   @tracked title = 'No lots match';
@@ -67,6 +68,30 @@ class EmptyStateUsage extends Component {
             <:action><Button @tone='neutral' @appearance='outlined'>Clear filters</Button></:action>
           </EmptyState>
         {{/if}}
+        {{! Two ways in, wide then narrow: one row, or a full stack. }}
+        <div class='empty-state-usage-widths'>
+          {{#each WIDTHS as |w|}}
+            <div class='empty-state-usage-frame' data-width={{w}}>
+              <EmptyState @title='No proofs yet' @size='s'>
+                <:action><Button>Go to checkout</Button></:action>
+                <:altAction><Button @tone='neutral' @appearance='outlined'>Back to the shop</Button></:altAction>
+              </EmptyState>
+            </div>
+          {{/each}}
+        </div>
+        <style scoped>
+          .empty-state-usage-widths {
+            display: grid;
+            gap: var(--boxel-sp);
+            margin-top: var(--boxel-sp);
+          }
+          .empty-state-usage-frame[data-width='wide'] {
+            max-inline-size: 36rem;
+          }
+          .empty-state-usage-frame[data-width='narrow'] {
+            max-inline-size: 20rem;
+          }
+        </style>
       </:example>
       <:api as |Args|>
         <Args.String
