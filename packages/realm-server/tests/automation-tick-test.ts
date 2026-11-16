@@ -475,7 +475,7 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(automation.nextRun, null, 'no next run is left');
     assert.false(
       automation.triggerRuns.hourly.live,
-      'the trigger is recorded as no longer live',
+      'the trigger is recorded as not live',
     );
 
     assert.deepEqual(
