@@ -22,6 +22,7 @@ import {
 
 import type {
   RealmScriptErrorInfo,
+  RealmScriptLocation,
   RealmRunnerCallMethod,
   RealmRunnerRequest,
   RealmRunnerResponse,
@@ -302,6 +303,17 @@ class ScriptFailure extends Error {
   }
 }
 
+// The script location of each error the script threw (see `scriptLocation`).
+const locations = new WeakMap<object, RealmScriptLocation>();
+
+function located(error: Error, dumped: unknown, code: string): Error {
+  let location = scriptLocation(dumped, code);
+  if (location) {
+    locations.set(error, location);
+  }
+  return error;
+}
+
 function scriptFailure(
   dumped: unknown,
   code: string,
@@ -327,6 +339,52 @@ function scriptFailure(
       : {}),
     phase,
   });
+}
+
+// Where a dumped error came from in the script: its stack's frames in the
+// script, each naming the script's own line, and the first of those lines.
+// Frames outside the script's own lines (the bootstrap's, and the wrapper's
+// call to the script) are left out.
+function scriptLocation(
+  dumped: unknown,
+  code: string,
+): RealmScriptLocation | undefined {
+  let error = (dumped ?? {}) as { stack?: unknown; lineNumber?: unknown };
+  let scriptLines = code.split('\n').length;
+  let inScript = (line: number) => line >= 1 && line <= scriptLines;
+  let frame = new RegExp(`${SCRIPT_FILE_PATTERN}:(\\d+)(?::\\d+)?`);
+  let frames: { text: string; line: number }[] = [];
+  if (typeof error.stack === 'string') {
+    for (let text of error.stack.split('\n')) {
+      let found = frame.exec(text);
+      if (!found) {
+        continue;
+      }
+      let line = Number(found[1]) - REALM_RUNNER_WRAPPER_LINES;
+      if (inScript(line)) {
+        frames.push({
+          text: text.replace(frame, `script line ${line}`),
+          line,
+        });
+      }
+    }
+  }
+  let lineNumber =
+    typeof error.lineNumber === 'number'
+      ? error.lineNumber - REALM_RUNNER_WRAPPER_LINES
+      : undefined;
+  let line =
+    frames[0]?.line ??
+    (lineNumber !== undefined && inScript(lineNumber) ? lineNumber : undefined);
+  if (line === undefined && frames.length === 0) {
+    return undefined;
+  }
+  return {
+    ...(line !== undefined ? { line } : {}),
+    ...(frames.length > 0
+      ? { stack: frames.map(({ text }) => text).join('\n') }
+      : {}),
+  };
 }
 
 // A worker runs one script. These hold that run's open host calls so a
@@ -475,7 +533,11 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     if (evaluated.error) {
       let dumped = context.dump(evaluated.error);
       evaluated.error.dispose();
-      throw scriptFailure(dumped, request.code, 'compile');
+      throw located(
+        scriptFailure(dumped, request.code, 'compile'),
+        dumped,
+        request.code,
+      );
     }
     let promise = evaluated.value;
     let resolvedPromise = context.resolvePromise(promise);
@@ -485,7 +547,11 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     if (resolved.error) {
       let dumped = context.dump(resolved.error);
       resolved.error.dispose();
-      throw scriptFailure(dumped, request.code, 'run');
+      throw located(
+        scriptFailure(dumped, request.code, 'run'),
+        dumped,
+        request.code,
+      );
     }
     let value = resolved.value;
     let scriptResult = JSON.stringify(context.dump(value)) ?? '';
@@ -502,10 +568,12 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     worker.postMessage({ type: 'success', result: { scriptResult } });
   } catch (error) {
     reportDropped();
+    let location = locations.get(error as object);
     worker.postMessage({
       type: 'error',
       error: error instanceof Error ? error.message : String(error),
       ...(error instanceof ScriptFailure ? { scriptError: error.info } : {}),
+      ...(location ? { scriptLocation: location } : {}),
     });
   }
   // The caller terminates the worker once it has an answer, which frees the
