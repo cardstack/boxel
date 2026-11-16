@@ -10,6 +10,8 @@ import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  MAX_COMMAND_TIMEOUT_MS,
+  commandRequestTimeoutMs,
 } from '../prerender/prerender-constants.ts';
 
 module(basename(import.meta.filename), function (hooks) {
@@ -200,6 +202,103 @@ module(basename(import.meta.filename), function (hooks) {
           },
           'run-command payload uses user affinity fields',
         );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    test("an automation run's command goes on its realm's affinity, with its own time limit", async function (assert) {
+      let receivedBody: any;
+      let server = createServer((req, res) => {
+        let body: Buffer[] = [];
+        req.on('data', (chunk) => body.push(chunk));
+        req.on('end', () => {
+          receivedBody = JSON.parse(Buffer.concat(body).toString('utf-8'));
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({ data: { attributes: { status: 'ready' } } }),
+          );
+        });
+      }).listen(0);
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        await createRemotePrerenderer(url).runCommand({
+          userId: '@alice:localhost',
+          runRealm: 'http://localhost:4201/alice/feeds/',
+          auth: '{"http://localhost:4201/alice/feeds/":"run-token"}',
+          command: '@cardstack/boxel-host/tools/run-automation/default',
+          commandInput: { json: {} },
+          timeoutMs: 90_000,
+        });
+        assert.deepEqual(receivedBody?.data?.attributes, {
+          affinityType: 'realm',
+          affinityValue: 'http://localhost:4201/alice/feeds/',
+          auth: '{"http://localhost:4201/alice/feeds/":"run-token"}',
+          command: '@cardstack/boxel-host/tools/run-automation/default',
+          commandInput: { json: {} },
+          timeoutMs: 90_000,
+        });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    test("a command's own time limit widens the request timeout, up to the longest run", function (assert) {
+      assert.strictEqual(
+        commandRequestTimeoutMs(120_000, undefined),
+        120_000,
+        'a command without one keeps the layer timeout',
+      );
+      assert.strictEqual(
+        commandRequestTimeoutMs(120_000, 10_000),
+        120_000,
+        'a shorter one never shortens it',
+      );
+      assert.strictEqual(
+        commandRequestTimeoutMs(120_000, 300_000),
+        360_000,
+        'a longer one adds the request overhead',
+      );
+      assert.strictEqual(
+        commandRequestTimeoutMs(120_000, 10 * MAX_COMMAND_TIMEOUT_MS),
+        MAX_COMMAND_TIMEOUT_MS + 60_000,
+        'held to the longest run',
+      );
+      for (let bad of [-1, 0, Number.NaN, '600000']) {
+        assert.strictEqual(commandRequestTimeoutMs(120_000, bad), 120_000);
+      }
+    });
+
+    test('a command given a time limit is waited on past the request timeout', async function (assert) {
+      process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS = '1000';
+      process.env.PRERENDER_MANAGER_RETRY_ATTEMPTS = '1';
+      let server = createServer((_req, res) => {
+        setTimeout(() => {
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({ data: { attributes: { status: 'ready' } } }),
+          );
+        }, 1_500);
+      }).listen(0);
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let args = {
+          userId: '@alice:localhost',
+          auth: '{}',
+          command: 'https://example.com/commands/test/default',
+        };
+        await assert.rejects(
+          createRemotePrerenderer(url).runCommand(args),
+          /aborted after 1000ms/,
+          'without a time limit the request gives up at its timeout',
+        );
+        let result = await createRemotePrerenderer(url).runCommand({
+          ...args,
+          timeoutMs: 2_000,
+        });
+        assert.strictEqual(result.status, 'ready', 'with one it is answered');
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }

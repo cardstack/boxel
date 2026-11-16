@@ -20,9 +20,10 @@ import {
 import type { MatrixClient } from 'matrix-js-sdk';
 
 function helpMessage() {
-  let features = Object.entries(SKILL_FEATURES)
-    .map(([name, description]) => `- \`${name}\` — ${description}`)
-    .join('\n');
+  let features =
+    Object.entries(SKILL_FEATURES)
+      .map(([name, description]) => `- \`${name}\` — ${description}`)
+      .join('\n') || 'No features are available.';
   return `**Debug commands.** Send one as its own message. The assistant does not see it.
 
 ### Dumps
@@ -141,12 +142,14 @@ export async function handleDebugCommands(
     let features = sessionSkillFeatures(eventList, userId);
     let code = (name: string) => `\`${name}\``;
     let available = Object.keys(SKILL_FEATURES).map(code).join(', ');
+    let availableLine = available
+      ? `Available features: ${available}.`
+      : 'No features are available.';
     let status =
       (features.length
         ? `Features enabled in this room: ${features.map(code).join(', ')}.`
-        : 'No features are enabled in this room.') +
-      `\n\nAvailable features: ${available}.`;
-    if (command && !(command.feature in SKILL_FEATURES)) {
+        : 'No features are enabled in this room.') + `\n\n${availableLine}`;
+    if (command && !Object.hasOwn(SKILL_FEATURES, command.feature)) {
       status = `There is no feature named ${code(command.feature)}.\n\n${status}`;
     } else if (command) {
       status = `**${code(command.feature)} is now ${command.enable ? 'enabled' : 'disabled'}** for this room, from your next message.\n\n${status}`;

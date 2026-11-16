@@ -343,6 +343,39 @@ module(basename(import.meta.filename), function () {
       close(assert, settled.aiCreditsReserved, 0, 'nothing held');
     });
 
+    test('a request admitted for an attempt a retry has taken the run over from is refused', async function (assert) {
+      let run = await runningRun();
+      let retry = await startAutomationRunAttempt(dbAdapter, run.id, 2);
+      assert.strictEqual(retry.kind, 'run', 'the retry owns the run');
+
+      let stale = await admitAutomationRunAIRequest(dbAdapter, {
+        runId: run.id,
+        attempt: 1,
+        aiCreditsCap: 50,
+        body: request(100),
+        price: PRICE,
+      });
+      assert.strictEqual(
+        stale.kind === 'refused' ? stale.reason : stale.kind,
+        'run-not-running',
+      );
+      assert.strictEqual(
+        (await current(run.id)).aiCreditsReserved,
+        0,
+        'nothing is reserved for the replaced attempt',
+      );
+
+      admitted(
+        await admitAutomationRunAIRequest(dbAdapter, {
+          runId: run.id,
+          attempt: 2,
+          aiCreditsCap: 50,
+          body: request(100),
+          price: PRICE,
+        }),
+      );
+    });
+
     test('a run that isn’t running can’t make AI requests, but settles those it made', async function (assert) {
       let run = await runningRun();
       let admission = admitted(

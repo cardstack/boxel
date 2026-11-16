@@ -111,6 +111,7 @@ module(basename(import.meta.filename), function (hooks) {
       run,
       realmURL: elsewhereURL.href,
       readRealms,
+      writesCap: 100,
       realmServerURL: realm.realmServerURL,
       timeLimitSeconds: 600,
     });
@@ -196,6 +197,7 @@ module(basename(import.meta.filename), function (hooks) {
       run: { ...run, attempt: 2 },
       realmURL: realmURL.href,
       readRealms: [],
+      writesCap: 100,
       realmServerURL: realm.realmServerURL,
       timeLimitSeconds: 600,
     });
@@ -211,7 +213,7 @@ module(basename(import.meta.filename), function (hooks) {
         realm: realmURL.href,
         permissions: [],
         realmServerURL: realm.realmServerURL,
-        run: { id: run.id, attempt: 1, readRealms: [] },
+        run: { id: run.id, attempt: 1, readRealms: [], writesCap: 100 },
         iat: now - 700,
         exp: now - 100,
       },
@@ -230,7 +232,7 @@ module(basename(import.meta.filename), function (hooks) {
         realm: realmURL.href,
         permissions: ['read', 'write'],
         realmServerURL: realm.realmServerURL,
-        run: { id: run.id, attempt: 1, readRealms: [] },
+        run: { id: run.id, attempt: 1, readRealms: [], writesCap: 100 },
       },
       realmSecretSeed,
       { expiresIn: 600 },
@@ -289,6 +291,16 @@ module(basename(import.meta.filename), function (hooks) {
       .get('/run-token-test/notes.txt')
       .set('Accept', SOURCE)
       .set('Authorization', `Bearer ${token}`);
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.text, 'hello');
+  });
+
+  test('a run token without its Bearer prefix, as the host sends a session, is still a run token', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let response = await request
+      .get('/run-token-test/notes.txt')
+      .set('Accept', SOURCE)
+      .set('Authorization', token);
     assert.strictEqual(response.status, 200);
     assert.strictEqual(response.text, 'hello');
   });
@@ -355,6 +367,7 @@ module(basename(import.meta.filename), function (hooks) {
       run,
       realmURL: realmURL.href,
       readRealms: [],
+      writesCap: 100,
       realmServerURL: realm.realmServerURL,
       timeLimitSeconds: 600,
     });
@@ -397,6 +410,7 @@ module(basename(import.meta.filename), function (hooks) {
       run: { ...run, attempt: 2 },
       realmURL: realmURL.href,
       readRealms: [],
+      writesCap: 100,
       realmServerURL: realm.realmServerURL,
       timeLimitSeconds: 600,
       now: started + 400_000,
@@ -413,6 +427,7 @@ module(basename(import.meta.filename), function (hooks) {
           run,
           realmURL: realmURL.href,
           readRealms: [],
+          writesCap: 100,
           realmServerURL: realm.realmServerURL,
           timeLimitSeconds: 600,
           now: started + 601_000,

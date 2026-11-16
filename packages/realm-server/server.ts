@@ -51,9 +51,13 @@ import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
-import type Provider from 'oidc-provider';
 import type { OAuthProviderConfig } from './lib/oauth-provider/config.ts';
-import { startOAuthProvider } from './lib/oauth-provider/provider.ts';
+import {
+  startOAuthProvider,
+  type OAuthProviderService,
+} from './lib/oauth-provider/provider.ts';
+import type { NewClientLimit } from './lib/oauth-provider/new-client-limit.ts';
+import type { CallerLimit } from './lib/oauth-provider/caller-limit.ts';
 import type { OAuthResourceDefinition } from './lib/oauth-provider/registry.ts';
 import {
   appOrigin,
@@ -63,6 +67,7 @@ import {
 } from './lib/secure-origin.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import { HostURLResolver, resolveHostURLs } from './lib/realm-host-urls.ts';
 import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
@@ -741,7 +746,7 @@ export class RealmServer {
   private clientAddress: ReturnType<typeof clientAddressSettingsFromEnv>;
   private secureOrigin: SecureOrigin | undefined;
   private googleSignIn: GoogleSignInConfig | undefined;
-  private oauthProvider: Provider | undefined;
+  private oauthProvider: OAuthProviderService | undefined;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
@@ -780,7 +785,10 @@ export class RealmServer {
     secureOriginAppOrigins = [],
     googleSignIn,
     oauthProvider,
+    oauthNewClientLimit,
+    oauthAuthorizationLimit,
     __testOnlyOAuthResources,
+    __testOnlyOAuthDocumentOrigins,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -855,9 +863,19 @@ export class RealmServer {
     // pages are on the secure origin, so it needs `secureOriginURL` too.
     // Unset, the provider is off and none of its routes are served.
     oauthProvider?: OAuthProviderConfig;
+    // The provider's limit on new clients. Unset, the default
+    // (`new-client-limit.ts`).
+    oauthNewClientLimit?: NewClientLimit;
+    // The provider's limit on starting a flow. Unset, the default
+    // (`authorization.ts`).
+    oauthAuthorizationLimit?: CallerLimit;
     // Resources a test adds to the provider's registry. main.ts never passes
     // it: production resources are declared in the registry's code.
     __testOnlyOAuthResources?: OAuthResourceDefinition[];
+    // Client ID metadata documents a test serves from a stub on loopback:
+    // each `https://` origin is downloaded from the plain HTTP origin it maps
+    // to, still through the outbound guard. main.ts never passes it.
+    __testOnlyOAuthDocumentOrigins?: ReadonlyMap<string, string>;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -939,8 +957,17 @@ export class RealmServer {
       this.oauthProvider = startOAuthProvider({
         serverURL,
         config: oauthProvider,
-        hasSecureOrigin: Boolean(this.secureOrigin),
+        dbAdapter,
+        secureOriginURL: this.secureOrigin ? secureOriginURL : undefined,
+        appOrigins: secureOriginAppOrigins,
+        publishedDomains: [
+          domainsForPublishedRealms?.boxelSite,
+          domainsForPublishedRealms?.boxelSpace,
+        ].filter((domain): domain is string => Boolean(domain)),
+        newClientLimit: oauthNewClientLimit,
+        authorizationLimit: oauthAuthorizationLimit,
         testOnlyResources: __testOnlyOAuthResources,
+        testOnlyDocumentOrigins: __testOnlyOAuthDocumentOrigins,
       });
     }
   }
@@ -984,6 +1011,9 @@ export class RealmServer {
       .use(clientAddress(this.clientAddress))
       .use(httpLogging)
       .use(instanceIdHeader)
+      // A request on a host URL is made to name its realm's URL here, ahead
+      // of every route that looks a realm up (ADR 033 §1.2).
+      .use(resolveHostURLs(new HostURLResolver(this.dbAdapter)))
       .use(
         cors({
           origin: '*',

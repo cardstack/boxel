@@ -9,6 +9,7 @@ import type { CreateRoutesArgs } from '../routes.ts';
 import type { CreateRealmDeps } from './create-realm.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
+  accountContact,
   changePassword,
   endSecureSession,
   endWindowSessions,
@@ -21,6 +22,7 @@ import {
   secureSignInConfigured,
   signInWithGoogle,
   signInWithPassword,
+  type AccountContact,
   type PasswordChange,
   type SecureSessionClient,
   type SecureSessionDeps,
@@ -57,6 +59,14 @@ function deps(
     googleSignIn: args.googleSignIn,
     createRealm,
   };
+}
+
+// How a secure-origin page names the signed-in account to its own user (see
+// `accountContact`), for the OAuth provider's consent.
+export function accountContactLookup(
+  args: CreateRoutesArgs,
+): (user: string) => Promise<AccountContact> {
+  return (user) => accountContact(deps(args), user);
 }
 
 async function sendJSON(
