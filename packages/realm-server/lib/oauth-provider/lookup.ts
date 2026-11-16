@@ -11,7 +11,7 @@
 // must not end an OAuth grant (§1.9).
 
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
-import { endGrant } from './grants.ts';
+import { GRANT_STATE_COLUMNS, grantUsable, type GrantState } from './grants.ts';
 import { sha256Hex } from './objects.ts';
 
 const log = logger('boxel:oauth-provider');
@@ -48,7 +48,7 @@ export type OAuthLookupResult =
   | { ok: true; caller: OAuthCaller }
   | { ok: false; reason: OAuthLookupRefusal };
 
-interface LookupRow {
+interface LookupRow extends GrantState {
   resource: string | null;
   scope: string;
   token_expired: boolean;
@@ -56,9 +56,6 @@ interface LookupRow {
   client_id: string;
   resources: string | Record<string, string[]>;
   grant_created: number | string;
-  grant_ended: boolean;
-  grant_expired: boolean;
-  grants_revoked: boolean;
   last_used_stale: boolean;
   user_id: string;
   matrix_user_id: string;
@@ -97,10 +94,7 @@ async function lookup(
             t.expires_at <= now() AS token_expired,
             g.id AS grant_id, g.client_id, g.resources,
             floor(extract(epoch FROM g.created_at)) AS grant_created,
-            g.ended_at IS NOT NULL AS grant_ended,
-            g.expires_at <= now() AS grant_expired,
-            COALESCE(g.created_at <= u.oauth_grants_revoked_at, false)
-              AS grants_revoked,
+            ${GRANT_STATE_COLUMNS},
             (g.last_used_at IS NULL
               OR g.last_used_at <= now() - make_interval(secs => $2))
               AS last_used_stale,
@@ -126,15 +120,12 @@ async function lookup(
       ? JSON.parse(row.resources)
       : row.resources
   ) as Record<string, string[]>;
+  // Checks 3 and 4: the grant checks the token endpoint applies too, and
+  // that the grant still holds this resource.
   if (
-    row.grant_ended ||
-    row.grant_expired ||
+    !(await grantUsable(dbAdapter, row.grant_id, row)) ||
     !Object.prototype.hasOwnProperty.call(resources, resource)
   ) {
-    return { ok: false, reason: 'revoked' };
-  }
-  if (row.grants_revoked) {
-    await endGrant(dbAdapter, row.grant_id, 'sessions-revoked');
     return { ok: false, reason: 'revoked' };
   }
 

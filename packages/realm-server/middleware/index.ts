@@ -241,9 +241,12 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 // `_download-realm` links) and a `loginToken` (the single-use Matrix login
 // token `boxel browse` hands the app page), and an `access_token`, an OAuth
 // access token a client put in the query string, which a resource refuses
-// unread (ADR 021 §1.5). (ALB access logs still record the raw request line;
-// each token's single-URL scope or single use and short TTL are the
-// mitigation there.)
+// unread (ADR 021 §1.5). ALB access logs still record the raw request line.
+// For a capture or login token, its single-URL scope or single use and short
+// TTL are the mitigation there. An OAuth access token has neither: it works
+// at its resource for its whole lifetime, up to 60 minutes, so one a client
+// sends in a query string can be replayed from those logs until it expires.
+// Only the client can avoid that, by never sending one there.
 const MASKED_QUERY_PARAMS = ['token', 'loginToken', 'access_token'];
 
 function loggableRequestURL(ctxt: Koa.Context): string {

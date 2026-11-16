@@ -1,6 +1,9 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import { connect, createServer } from 'http2';
+import type { AddressInfo } from 'net';
+import Koa from 'koa';
 import supertest from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
@@ -34,8 +37,14 @@ import {
 } from '../lib/oauth-provider/grants.ts';
 import { resolveOAuthAccessToken } from '../lib/oauth-provider/lookup.ts';
 import { sha256Hex } from '../lib/oauth-provider/objects.ts';
-import type { OAuthResourceDefinition } from '../lib/oauth-provider/registry.ts';
-import { admitsRoute } from '../lib/oauth-provider/resource.ts';
+import {
+  buildRegistry,
+  type OAuthResourceDefinition,
+} from '../lib/oauth-provider/registry.ts';
+import {
+  admitsRoute,
+  oauthResourceController,
+} from '../lib/oauth-provider/resource.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
 // Two test resources, each with a route its read scope admits and one its
@@ -141,7 +150,13 @@ module(basename(import.meta.filename), function (hooks) {
         WHERE id_hash = decode($1, 'hex')`,
       { bind: [sha256Hex(tokens.access_token)] },
     )) as { grant_id: string }[];
-    return { clientId, user: who, token: tokens.access_token, grantId };
+    return {
+      clientId,
+      user: who,
+      token: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      grantId,
+    };
   }
 
   function call(
@@ -195,6 +210,20 @@ module(basename(import.meta.filename), function (hooks) {
         RESOURCE_A,
       );
       assert.deepEqual(result, { ok: false, reason: 'unknown' });
+    });
+
+    test('refuses a refresh token presented as an access token', async function (assert) {
+      let { refreshToken } = await accessToken();
+      assert.ok(refreshToken, 'the grant renews, so it has a refresh token');
+      let result = await resolveOAuthAccessToken(
+        dbAdapter,
+        refreshToken!,
+        RESOURCE_A,
+      );
+      assert.deepEqual(result, { ok: false, reason: 'unknown' });
+      let response = await call('/test-a/read', refreshToken);
+      assert.strictEqual(response.status, 401);
+      assert.deepEqual(response.body, { error: 'invalid_token' });
     });
 
     test('refuses an expired token', async function (assert) {
@@ -304,6 +333,33 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(response.body.caller.user, who.matrixId);
       assert.deepEqual(response.body.caller.scopes, ['boxel:read']);
       assert.false('secureSession' in response.body.caller);
+      assert.strictEqual(
+        response.body.authorization,
+        null,
+        'the route never sees the token',
+      );
+    });
+
+    test('a route is matched as its router selected it, not by the request’s path', async function (assert) {
+      let { token } = await accessToken();
+      let response = await call('/test-a/read/', token);
+      assert.strictEqual(
+        response.status,
+        200,
+        'a trailing slash reaches the route its router selected',
+      );
+    });
+
+    test('a route no scope maps is answered as an unknown token', async function (assert) {
+      let { token } = await accessToken({ scope: 'boxel:read boxel:write' });
+      let response = await call('/test-a/unmapped', token);
+      assert.strictEqual(response.status, 401);
+      assert.true(
+        String(response.headers['www-authenticate']).startsWith(
+          'Bearer error="invalid_token"',
+        ),
+        String(response.headers['www-authenticate']),
+      );
     });
 
     test('a refused token is answered 401 invalid_token, whatever the reason', async function (assert) {
@@ -375,6 +431,52 @@ module(basename(import.meta.filename), function (hooks) {
         .send(new URLSearchParams({ access_token: token }).toString());
       assert.strictEqual(response.status, 400);
       assert.strictEqual((await grant(grantId)).last_used_at, null);
+    });
+
+    test('a token in a form-encoded body sent over HTTP/2 with no Content-Length is answered 400', async function (assert) {
+      let { token, grantId } = await accessToken({ scope: 'boxel:write' });
+      let resource = buildRegistry(OAUTH_TEST_ISSUER, TEST_RESOURCES).find(
+        ({ id }) => id === RESOURCE_A,
+      )!;
+      let app = new Koa();
+      app.use(
+        oauthResourceController({
+          dbAdapter,
+          issuer: OAUTH_TEST_ISSUER,
+          resource,
+        }),
+      );
+      let h2 = createServer(app.callback());
+      await new Promise<void>((resolve) => h2.listen(0, resolve));
+      try {
+        let { port } = h2.address() as AddressInfo;
+        let status = await new Promise<number>((resolve, reject) => {
+          let client = connect(`http://127.0.0.1:${port}`);
+          let request = client.request({
+            ':method': 'POST',
+            ':path': '/test-a/write',
+            'content-type': 'application/x-www-form-urlencoded',
+          });
+          let answered = 0;
+          request.on('response', (headers) => {
+            answered = Number(headers[':status']);
+          });
+          // Read the response to its end, so the session can close and the
+          // server with it.
+          request.resume();
+          request.on('end', () => client.close(() => resolve(answered)));
+          request.on('error', reject);
+          request.end(new URLSearchParams({ access_token: token }).toString());
+        });
+        assert.strictEqual(status, 400);
+      } finally {
+        await new Promise((resolve) => h2.close(resolve));
+      }
+      assert.strictEqual(
+        (await grant(grantId)).last_used_at,
+        null,
+        'no lookup accepted it',
+      );
     });
 
     test('disconnecting a grant applies on the next request', async function (assert) {

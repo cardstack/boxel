@@ -5,8 +5,9 @@
 // scopes, exactly when it should. Also each resource's protected-resource
 // metadata (RFC 9728).
 //
-// The token never leaves the controller: the verified caller is what goes on
-// to the route, as `ctxt.state.oauthCaller`, never a session token's claims.
+// The token never leaves the controller: it removes the `Authorization`
+// header before the route runs, and the verified caller is what goes on to
+// the route, as `ctxt.state.oauthCaller`, never a session token's claims.
 
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
@@ -141,11 +142,15 @@ type BearerToken =
 // `elsewhere`, even beside one in the header. A form-encoded body is read
 // here to look for one, and isn't left for the route: no OAuth resource's
 // route takes one.
+//
+// A form body is recognized by its `Content-Type` alone. `ctxt.is()` also
+// asks for a `Content-Length` or `Transfer-Encoding`, and an HTTP/2 request
+// may send neither, so it would miss a body sent that way.
 export async function bearerToken(ctxt: Koa.Context): Promise<BearerToken> {
   if (new URLSearchParams(ctxt.querystring).has('access_token')) {
     return { kind: 'elsewhere' };
   }
-  if (ctxt.is('application/x-www-form-urlencoded')) {
+  if (ctxt.request.type.toLowerCase() === 'application/x-www-form-urlencoded') {
     let body = await readBody(ctxt, FORM_BODY_LIMIT_BYTES);
     if (body === undefined || new URLSearchParams(body).has('access_token')) {
       return { kind: 'elsewhere' };
@@ -249,6 +254,9 @@ export function oauthResourceController({
       ctxt.body = { error: 'insufficient_scope' };
       return;
     }
+    // The token stops here: the route sees the verified caller, and no
+    // header it could forward or log.
+    delete ctxt.req.headers.authorization;
     ctxt.state.oauthCaller = caller;
     await next();
   };

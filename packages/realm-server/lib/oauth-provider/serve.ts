@@ -104,7 +104,9 @@ export function registerOAuthProviderRoutes(
   }
   // A resource a test adds has no route of its own, so each server route its
   // scopes map is served here, behind its controller, answering the verified
-  // caller. Nothing in production adds a test resource (`registry.ts`).
+  // caller and any `Authorization` header that reached it. So is one route
+  // no scope maps, `<resource path>/unmapped`, which the controller refuses.
+  // Nothing in production adds a test resource (`registry.ts`).
   for (let resource of registry) {
     if (!testOnlyResourceIds.has(resource.id)) {
       continue;
@@ -118,6 +120,8 @@ export function registerOAuthProviderRoutes(
         }
       }
     }
+    let unmapped = `${resourcePath(resource)}/unmapped`;
+    routes.set(`GET ${unmapped}`, { method: 'GET', path: unmapped });
     for (let { method, path } of routes.values()) {
       router.register(
         path,
@@ -127,7 +131,10 @@ export function registerOAuthProviderRoutes(
             Promise.resolve(
               controller(ctxt, async () => {
                 ctxt.status = 200;
-                ctxt.body = { caller: ctxt.state.oauthCaller };
+                ctxt.body = {
+                  caller: ctxt.state.oauthCaller,
+                  authorization: ctxt.get('Authorization') || null,
+                };
               }),
             ),
           ),
