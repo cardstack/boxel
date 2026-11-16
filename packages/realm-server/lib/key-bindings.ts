@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { clearApprovedAutomationNotices } from '@cardstack/runtime-common/automation-notices';
 import {
   keyFitsSlot,
   logger,
@@ -606,15 +605,6 @@ export async function approveBindings(
         approved.push({ binding, snapshot, grant, grantCreated: created });
       }
     }
-  });
-  // The approver's automations that were refused for want of these
-  // approvals can run now, so the notices saying so end.
-  await clearApprovedAutomationNotices(dbAdapter, {
-    recipient: approver,
-    operations: planned.map(({ operation, type }) => ({
-      operation,
-      name: type.name,
-    })),
   });
   return { batchId, approved };
 }

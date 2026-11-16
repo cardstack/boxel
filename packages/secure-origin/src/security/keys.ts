@@ -538,66 +538,6 @@ export async function markLimitNoticesRead(
   });
 }
 
-// A notice the user is owed because an automation run that acts as them
-// didn't start: admission refused one of the operations its card declares,
-// over something they fix here. `reason` says what:
-// - `binding-not-approved`: they haven't approved the operation for
-//   automations;
-// - `binding-needs-reapproval`: the operation's request changed since they
-//   approved it;
-// - `share-suspended`: the realm's share the operation uses is suspended;
-// - `credential-rejected`: the vendor refused the key or connection the
-//   operation uses.
-// Listed while the user still directly writes the automation's realm, until
-// what it reports is fixed.
-export interface AutomationNotice {
-  id: string;
-  // The automation card and its realm, as canonical identifiers: a URL or a
-  // prefix-form id.
-  automationId: string;
-  realm: string;
-  runId: string | null;
-  reason:
-    | 'binding-not-approved'
-    | 'binding-needs-reapproval'
-    | 'share-suspended'
-    | 'credential-rejected';
-  operation: string | null;
-  // The card definition the operation is declared on.
-  targetType: { module: string; name: string } | null;
-  detail: string;
-  // When this page first listed it; null while it is unread, which the app
-  // counts in the badge on the user's avatar.
-  readAt: string | null;
-  createdAt: string;
-  // The most recent refusal it reports. A later refusal of the same kind
-  // refreshes the notice rather than adding another.
-  lastRefusedAt: string;
-}
-
-// The user's automation notices, most recently refused first.
-export async function automationNotices(
-  config: Config,
-): Promise<AutomationNotice[]> {
-  return resources<AutomationNotice>(
-    await authorizedRequest(config, '_automation-notices', { method: 'GET' }),
-  );
-}
-
-// Marks the automation notices this page has shown read, which takes them out
-// of the app's badge. Only the secure origin's own session may.
-export async function markAutomationNoticesRead(
-  config: Config,
-  noticeIds: string[],
-): Promise<void> {
-  await authorizedRequest(config, '_automation-notices/read', {
-    method: 'POST',
-    body: {
-      data: noticeIds.map((id) => ({ type: 'automation-notice', id })),
-    },
-  });
-}
-
 // The shares holding one of the user's keys: those deleting it suspends.
 export async function sharesOfKey(
   config: Config,

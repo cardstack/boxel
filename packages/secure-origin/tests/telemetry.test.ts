@@ -33,8 +33,6 @@ describe('endpoint labels', () => {
       ['_key-policy-notices/42/decline', '_key-policy-notices/:id/decline'],
       ['_key-limit-notices', '_key-limit-notices'],
       ['_key-limit-notices/read', '_key-limit-notices/read'],
-      ['_automation-notices', '_automation-notices'],
-      ['_automation-notices/read', '_automation-notices/read'],
       [`_user-keys/${KEY}/usage`, '_user-keys/:id/usage'],
       [`_user-keys/${KEY}/limits`, '_user-keys/:id/limits'],
       ['_key-write-tickets', '_key-write-tickets'],

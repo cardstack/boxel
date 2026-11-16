@@ -36,26 +36,18 @@
 //    resolves the declared type and reads its definition as the realm does.
 //    A refusal ends the run with its code, such as `binding-not-approved`,
 //    `share-suspended`, `binding-needs-reapproval` or `credential-rejected`;
-//    a realm that can't be asked refuses it (`run-admission-failed`). The
-//    refusals a person fixes in the secure window also leave that person a
-//    notice (`automation-notices.ts`).
+//    a realm that can't be asked refuses it (`run-admission-failed`).
 // 5. The run's spending: `AutomationAdmissionChecks.admitSpending`, which
 //    checks the balance and the monthly cap where one is configured.
 //
 // A refused run finishes as an error whose `error_reason` is the refusal's
-// code. An admitted run records `admitted_at`, and ends the notices about
-// the automation that its identity was owed. Either way the run's log gets
+// code. An admitted run records `admitted_at`. Either way the run's log gets
 // one `admission` line saying which.
 
 import {
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
 } from './automation-admission-route.ts';
-import {
-  clearAutomationNotices,
-  recordAutomationNotice,
-  isNoticedAdmissionRefusal,
-} from './automation-notices.ts';
 import type { AutomationRun } from './automation-runs.ts';
 import {
   checkAutomationPayer,
@@ -228,9 +220,7 @@ export function scriptParseError(code: string): string | undefined {
 }
 
 // The checks on the card's declared operations and the run's spending (steps
-// 4 and 5), made with the run's token once the script has been read. A
-// refusal of an operation that a person fixes in the secure window records
-// them a notice.
+// 4 and 5), made with the run's token once the script has been read.
 export async function admitRunOperations(
   ctx: AdmissionContext,
   run: AutomationRun,
@@ -256,24 +246,6 @@ export async function admitRunOperations(
   }
   let { refusal } = asked.answer;
   if (refusal) {
-    if (isNoticedAdmissionRefusal(refusal.code)) {
-      await recordAutomationNotice(ctx.dbAdapter, {
-        recipient: run.actsAs,
-        automationId: run.automationId,
-        realm: run.realm,
-        runId: run.id,
-        reason: refusal.code,
-        ...(refusal.operation && refusal.targetType
-          ? {
-              operation: {
-                operation: refusal.operation,
-                targetType: refusal.targetType,
-              },
-            }
-          : {}),
-        detail: refusal.detail,
-      });
-    }
     return refuse(
       refusal.code,
       refusal.operation
@@ -281,12 +253,6 @@ export async function admitRunOperations(
         : refusal.detail,
     );
   }
-  // Every declared operation would be served, so no notice about this
-  // automation that the run's identity was owed still stands.
-  await clearAutomationNotices(ctx.dbAdapter, {
-    recipient: run.actsAs,
-    automationId: run.automationId,
-  });
   let spending = await ctx.checks?.admitSpending?.({ run, automation });
   if (spending) {
     return { ok: false, ...spending };

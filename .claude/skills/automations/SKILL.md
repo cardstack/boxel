@@ -73,12 +73,9 @@ description: >-
   identity's direct write, revoked sessions and Matrix account, the script,
   every declared operation, which the realm checks through
   `automationAdmission` at `/_run-admission`, and the spending hook), each
-  refusal code and what fixes it, the `admission` log line and
-  `admitted_at`, and the automation notices a refusal leaves
-  (`automation_notices`, `/_automation-notices`, the key page's Automations
-  section). Use when a run ended with one of those codes, when changing what
-  admission checks, or when adding a notice a person is owed about an
-  automation.
+  refusal code and what fixes it, and the `admission` log line and
+  `admitted_at`. Use when a run ended with one of those codes, or when
+  changing what admission checks.
 ---
 
 # Automations
@@ -1131,8 +1128,8 @@ spending hook. A worker without them refuses every run as
 | `account-deactivated`                                                             | The Matrix server's admin API says the account is deactivated or locked, or has no such user. A payer's also pauses the automation with `payer-lost-access`                                                                                                                                                                                                | Another direct writer resumes the automation and becomes the payer                                                     |
 | `account-unverifiable`                                                            | The worker can't ask: it has no admission checks, no Matrix server name, no admin credentials (`MATRIX_ADMIN_USERNAME`/`MATRIX_ADMIN_PASSWORD`, set on the worker task in infra's `configs/boxel-worker`), or the Matrix server didn't answer                                                                                                              | Fix the worker's credentials or the Matrix server; the next run is admitted                                            |
 | `not-an-automation`, `missing-script`, `script-error`                             | The card doesn't read as an automation, the script can't be read with the run's token, or it is empty, too long, or doesn't parse as the Realm Runner wraps it (`scriptParseError`)                                                                                                                                                                        | Fix the card or the script                                                                                             |
-| `binding-not-approved`                                                            | A declared operation has no approval for automations by the run's identity                                                                                                                                                                                                                                                                                 | The person approves the operation in the secure window (the notice's Approve…)                                         |
-| `binding-needs-reapproval`                                                        | The operation's request changed since it was approved                                                                                                                                                                                                                                                                                                      | The person reviews the changes and approves again (the notice's Review changes…)                                       |
+| `binding-not-approved`                                                            | A declared operation has no approval for automations by the run's identity                                                                                                                                                                                                                                                                                 | The person approves the operation in the secure window                                                                 |
+| `binding-needs-reapproval`                                                        | The operation's request changed since it was approved                                                                                                                                                                                                                                                                                                      | The person reviews the changes and approves again in the secure window                                                 |
 | `share-suspended`                                                                 | The realm's share the operation's `{{apiKey}}` slot uses is suspended                                                                                                                                                                                                                                                                                      | A direct writer resumes the share, or the key's owner swaps another key into it                                        |
 | `credential-rejected`                                                             | The vendor refused the key or connection the operation uses, or its OAuth client is broken (see the `oauth-connections` skill)                                                                                                                                                                                                                             | Reconnect or replace the key                                                                                           |
 | any other `automationAdmission` code (`target-not-found`, `invalid-operation`, …) | The declared operation can't be found or lowered for the run's identity                                                                                                                                                                                                                                                                                    | Fix the card's declaration or the operation's module                                                                   |
@@ -1146,38 +1143,13 @@ admitted for an `active`, `waiting-for-credits` (left to the spending check)
 or `done` row (the run of the last slot is enqueued before the row is done).
 A manual run needs no row and runs while the automation is paused.
 
-**Notices.** The four refusals a person fixes in the secure window
-(`NOTICED_ADMISSION_REFUSALS` in `automation-notices.ts`) leave the run's
-identity a row in `automation_notices`: the automation, the run, the
-refusal's code, the operation and the type it is declared on, and the
-refusal's detail. One notice stands per recipient, automation, reason,
-operation and type: a later refusal of the same kind refreshes it
-(`last_refused_at`, the run, the detail) and keeps whether it was read, so an
-automation that comes due every few minutes holds one notice and the badge
-doesn't come back. A notice ends when what it reports is fixed: a run of the
-automation acting as the recipient passes the operation check
-(`clearAutomationNotices`), or the recipient approves an operation of that
-name on a type of that name (`clearApprovedAutomationNotices`, called by
-`approveBindings`). `GET /_automation-notices` lists a person's notices,
-most recently refused first, for realms they still directly write and
-refused in the last `NOTICE_LISTED_DAYS` (30), with `meta.unread`; the app
-counts it in the key notices badge (`host/app/lib/key-notices.ts`). The
-secure origin's key page lists them in its Automations section
-(`automation-notices.gts`) and marks the ones it shows read with
-`POST /_automation-notices/read`, which only a secure-origin session may
-call. The worker can't send the `key-notices-updated` event, so a session
-already open sees a new notice when it next asks for the count: on sign-in,
-on returning from the secure window, or on any other notice's event.
-
 ```sql
 -- why a run didn't start
 SELECT error_reason, error_message, admitted_at
   FROM automation_runs WHERE id = '<run id>';
--- the notices a person is owed
-SELECT reason, automation_id, operation, target_name, detail, read_at,
-       last_refused_at
-  FROM automation_notices WHERE recipient = '<matrix user id>'
- ORDER BY last_refused_at DESC;
+-- the admission line in its log
+SELECT message, data FROM automation_run_log
+ WHERE run_id = '<run id>' AND kind = 'admission';
 ```
 
 ### The tab

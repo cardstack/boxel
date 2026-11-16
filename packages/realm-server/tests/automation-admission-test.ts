@@ -35,10 +35,6 @@ import {
   removeAutomation,
   switchOnAutomation,
 } from '@cardstack/runtime-common/automations';
-import {
-  clearApprovedAutomationNotices,
-  listAutomationNotices,
-} from '@cardstack/runtime-common/automation-notices';
 import { internalKeyFor } from '@cardstack/runtime-common';
 import {
   ROOMY_AUTOMATION_CAPS,
@@ -50,20 +46,15 @@ import {
   testCreatePrerenderAuth,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
-import { secureSessionAuth } from './helpers/secure-session.ts';
 import { buildMintRunToken } from '../lib/run-token.ts';
-import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 
 // An automation run's admission: before a run costs anything, the worker
 // checks the automation's row, the person the run acts as, the script, every
 // operation the card declares, and the run's spending. A refused run ends as
 // an error named by the refusal's code, its tab is never asked to run the
-// script, and its log says admission refused it. A refusal a person fixes in
-// the secure window leaves them a notice, which the realm server lists for
-// them and the secure window marks read.
+// script, and its log says admission refused it.
 
 const realmURL = new URL('http://127.0.0.1:4444/automation-admission-test/');
-const secureOriginURL = new URL('https://secure.admission.test/secure');
 const OWNER = '@admission-owner:localhost';
 const WRITER = '@admission-writer:localhost';
 const READER = '@admission-reader:localhost';
@@ -144,7 +135,6 @@ module(basename(import.meta.filename), function (hooks) {
   setupCatalogTestSubset(hooks);
   setupPermissionedRealmCached(hooks, {
     realmURL,
-    secureOriginURL,
     permissions: {
       [OWNER]: ['read', 'write'],
       [WRITER]: ['read', 'write'],
@@ -596,42 +586,19 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(row?.errorMessage?.includes("doesn't parse"));
   });
 
-  test('an operation that isn’t approved refuses the run and leaves the run’s identity one notice', async function (assert) {
-    let first = await newRun(NEEDS_APPROVAL);
+  test('an operation that isn’t approved for automations refuses the run', async function (assert) {
+    let run = await newRun(NEEDS_APPROVAL);
     let calls: RunCommandArgs[] = [];
-    let result = await attempt(first, { calls });
-    await assertRefused(assert, first, result, calls, 'binding-not-approved');
-
-    let second = await newRun(NEEDS_APPROVAL);
-    result = await attempt(second, { calls });
-    await assertRefused(assert, second, result, calls, 'binding-not-approved');
-
-    let notices = await listAutomationNotices(dbAdapter, OWNER, {
-      virtualNetwork,
-      matrixServerName: 'localhost',
-    });
-    assert.deepEqual(
-      notices.map((notice) => ({
-        reason: notice.reason,
-        automationId: notice.automationId,
-        operation: notice.operation,
-        targetType: notice.targetType,
-        runId: notice.runId,
-      })),
-      [
-        {
-          reason: 'binding-not-approved',
-          automationId: automationId(NEEDS_APPROVAL),
-          operation: 'list',
-          targetType: INBOX,
-          runId: second.id,
-        },
-      ],
-      'one notice, refreshed by each run it stops',
+    let result = await attempt(run, { calls });
+    await assertRefused(assert, run, result, calls, 'binding-not-approved');
+    let row = await getAutomationRun(dbAdapter, run.id);
+    assert.true(
+      row?.errorMessage?.startsWith('The declared operation "list" on Inbox'),
+      'the run says which operation was refused',
     );
   });
 
-  test('each refusal a person fixes in the secure window ends the run with its code and leaves a notice', async function (assert) {
+  test('each refusal of a declared operation ends the run with its code', async function (assert) {
     for (let code of [
       'share-suspended',
       'binding-needs-reapproval',
@@ -651,89 +618,6 @@ module(basename(import.meta.filename), function (hooks) {
       });
       await assertRefused(assert, run, result, calls, code);
     }
-    let notices = await listAutomationNotices(dbAdapter, OWNER, {
-      virtualNetwork,
-      matrixServerName: 'localhost',
-    });
-    assert.deepEqual(notices.map((notice) => notice.reason).sort(), [
-      'binding-needs-reapproval',
-      'credential-rejected',
-      'share-suspended',
-    ]);
-  });
-
-  test('an operation refused for a reason no one fixes in the secure window leaves no notice', async function (assert) {
-    let run = await newRun(NEEDS_APPROVAL);
-    let calls: RunCommandArgs[] = [];
-    let result = await attempt(run, {
-      calls,
-      realmAdmission: () =>
-        admissionAnswer({
-          code: 'target-not-found',
-          detail: 'no such operation',
-          operation: 'list',
-          targetType: INBOX,
-        }),
-    });
-    await assertRefused(assert, run, result, calls, 'target-not-found');
-    assert.deepEqual(
-      await listAutomationNotices(dbAdapter, OWNER, {
-        virtualNetwork,
-        matrixServerName: 'localhost',
-      }),
-      [],
-    );
-  });
-
-  test('a run that is admitted ends the notices its identity was owed about the automation', async function (assert) {
-    await attempt(await newRun(NEEDS_APPROVAL), {
-      realmAdmission: () =>
-        admissionAnswer({
-          code: 'binding-not-approved',
-          detail: 'not approved',
-          operation: 'list',
-          targetType: INBOX,
-        }),
-    });
-    let listed = () =>
-      listAutomationNotices(dbAdapter, OWNER, {
-        virtualNetwork,
-        matrixServerName: 'localhost',
-      });
-    assert.strictEqual((await listed()).length, 1);
-    let result = await attempt(await newRun(NEEDS_APPROVAL), {
-      realmAdmission: () =>
-        new Response(
-          JSON.stringify({
-            data: {
-              type: 'run-admission',
-              id: 'run',
-              attributes: { refusal: null, operations: 1 },
-            },
-          }),
-          {
-            status: 200,
-            headers: { 'content-type': 'application/vnd.api+json' },
-          },
-        ),
-    });
-    assert.strictEqual(result.state, 'complete');
-    assert.deepEqual(await listed(), [], 'the notice ended');
-  });
-
-  test('approving an operation ends the notices that it wasn’t approved', async function (assert) {
-    await attempt(await newRun(NEEDS_APPROVAL));
-    await clearApprovedAutomationNotices(dbAdapter, {
-      recipient: OWNER,
-      operations: [{ operation: 'list', name: 'Inbox' }],
-    });
-    assert.deepEqual(
-      await listAutomationNotices(dbAdapter, OWNER, {
-        virtualNetwork,
-        matrixServerName: 'localhost',
-      }),
-      [],
-    );
   });
 
   test('a realm that can’t be asked about the operations refuses the run', async function (assert) {
@@ -790,80 +674,5 @@ module(basename(import.meta.filename), function (hooks) {
       }),
     });
     assert.deepEqual(asked, [], 'a run refused earlier is never priced');
-  });
-
-  module('the notice routes', function () {
-    function appSession(user: string): string {
-      return `Bearer ${createRealmServerJWT(
-        { user, sessionRoom: 'test-session' },
-        realmSecretSeed,
-      )}`;
-    }
-
-    async function list(authorization: string) {
-      return await request
-        .get('/_automation-notices')
-        .set('Accept', 'application/vnd.api+json')
-        .set('Authorization', authorization);
-    }
-
-    async function markRead(authorization: string, ids: unknown[]) {
-      return await request
-        .post('/_automation-notices/read')
-        .set('Authorization', authorization)
-        .set('Origin', secureOriginURL.origin)
-        .set('Content-Type', 'application/json')
-        .send({ data: ids.map((id) => ({ type: 'automation-notice', id })) });
-    }
-
-    test('the app’s session lists a person’s notices with the unread count; the secure window marks them read', async function (assert) {
-      await attempt(await newRun(NEEDS_APPROVAL));
-      let listed = await list(appSession(OWNER));
-      assert.strictEqual(listed.status, 200);
-      assert.strictEqual(listed.body.meta.unread, 1);
-      let [notice] = listed.body.data;
-      assert.strictEqual(notice.type, 'automation-notice');
-      assert.strictEqual(notice.attributes.reason, 'binding-not-approved');
-      assert.strictEqual(notice.attributes.operation, 'list');
-
-      let refused = await markRead(appSession(OWNER), [notice.id]);
-      assert.strictEqual(
-        refused.status,
-        403,
-        'the app’s session, which card code holds, can’t clear the badge',
-      );
-
-      let marked = await markRead(await secureSessionAuth(dbAdapter, OWNER), [
-        notice.id,
-      ]);
-      assert.strictEqual(marked.status, 200);
-      assert.deepEqual(marked.body.meta, { marked: 1, unread: 0 });
-
-      // Read, the notice still stands for the next refusal of the same
-      // kind, so the badge doesn't come back.
-      await attempt(await newRun(NEEDS_APPROVAL));
-      let after = await list(appSession(OWNER));
-      assert.strictEqual(after.body.data.length, 1);
-      assert.strictEqual(after.body.meta.unread, 0);
-    });
-
-    test('a notice is listed only while its recipient directly writes the automation’s realm', async function (assert) {
-      await attempt(await newRun(NEEDS_APPROVAL));
-      await query(dbAdapter, [
-        'UPDATE realm_user_permissions SET write = false WHERE realm_url =',
-        param(realm.url),
-        'AND username =',
-        param(OWNER),
-      ]);
-      let listed = await list(appSession(OWNER));
-      assert.deepEqual(listed.body, { data: [], meta: { unread: 0 } });
-    });
-
-    test('a request to mark notices read that names something else is refused', async function (assert) {
-      let response = await markRead(await secureSessionAuth(dbAdapter, OWNER), [
-        'not-an-id',
-      ]);
-      assert.strictEqual(response.status, 400);
-    });
   });
 });
