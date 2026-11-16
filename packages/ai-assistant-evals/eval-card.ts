@@ -247,9 +247,10 @@ function expectedReadsOf(raw: unknown): ExpectedReads[] {
   }
   return raw.map((entry: { files?: unknown } | null) =>
     Array.isArray(entry?.files)
-      ? entry.files.filter(
-          (f: unknown): f is string => typeof f === 'string' && f.trim() !== '',
-        )
+      ? entry.files
+          .filter((f: unknown): f is string => typeof f === 'string')
+          .map((f: string) => f.trim())
+          .filter(Boolean)
       : [],
   );
 }

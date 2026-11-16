@@ -25,17 +25,20 @@ export type RoutingOutcome =
   | 'not-needed'
   // No read needed, but the model read anyway.
   | 'read-anyway'
-  // None of the expected paths is in the skills the stack serves, so the
-  // expectation can't be checked.
+  // None of the expected paths can be checked: each is missing from the
+  // skills the stack serves, or belongs to a feature the run turned off.
   | 'unchecked';
 
 export interface PromptRouting {
   prompt: string;
   expected: string[];
-  // Every file read after this prompt, as skills-realm paths where possible.
+  // Skill files read after this prompt, as paths in the skills realm. Reads
+  // outside the skills realm, such as workspace cards, aren't listed.
   opened: string[];
   // Expected paths the skills don't have.
   notFound: string[];
+  // Expected paths left unchecked because the run turned their feature off.
+  featureOff: string[];
   outcome: RoutingOutcome;
 }
 
@@ -53,57 +56,97 @@ export interface RoutingResult {
 // A read's path inside the skills realm. A model names a skill file by the
 // realm's prefix (`@cardstack/skills/api-keys/SKILL.md`) or by the URL
 // the stack serves it at (`skillsRealmURL`); either way the path is
-// `api-keys/SKILL.md`. A read in neither form is returned as given.
-export function skillsPath(read: string, skillsRealmURL: string): string {
+// `api-keys/SKILL.md`. A read in neither form, or by URL when the URL isn't
+// known, is outside the skills realm and has no path.
+export function skillsPath(
+  read: string,
+  skillsRealmURL: string | undefined,
+): string | undefined {
   let id = rri(read);
-  for (let realm of [
-    new RealmPaths(ri(SKILLS_REALM_PREFIX)),
-    new RealmPaths(new URL(skillsRealmURL)),
-  ]) {
+  let realms = [new RealmPaths(ri(SKILLS_REALM_PREFIX))];
+  if (skillsRealmURL) {
+    realms.push(new RealmPaths(new URL(skillsRealmURL)));
+  }
+  for (let realm of realms) {
     if (realm.inRealm(id)) {
       return realm.local(id);
     }
   }
-  return read;
+  return undefined;
+}
+
+// An expected path as the match reads it: no surrounding whitespace and no
+// leading slash, so `/catalog-reuse/` and ` api-keys/SKILL.md` match like
+// `catalog-reuse/` and `api-keys/SKILL.md`.
+export function normalizeExpected(path: string): string {
+  return path.trim().replace(/^\/+/, '');
 }
 
 const INDEX_PATH = 'index.md';
 
 function covers(expected: string, path: string): boolean {
-  return expected.endsWith('/')
-    ? path.startsWith(expected)
-    : path === expected.replace(/^\/+/, '');
+  return expected.endsWith('/') ? path.startsWith(expected) : path === expected;
+}
+
+// Whether an expected path belongs to `feature`, whose skill is the
+// `<feature>/` folder of the skills realm.
+export function underFeature(path: string, feature: string): boolean {
+  return normalizeExpected(path).startsWith(`${feature}/`);
+}
+
+export interface RoutingOptions {
+  // Where the stack serves the skills realm, for reads by URL. Without it,
+  // only reads by prefix are recognized.
+  skillsRealmURL?: string;
+  // Whether the served skills have an expected path. Every path counts as
+  // present when omitted.
+  exists?: (path: string) => boolean;
+  // Features the run turned off. The index doesn't point to their skills, so
+  // their paths aren't expected.
+  featuresOff?: string[];
 }
 
 export function scoreRouting(
   prompts: string[],
   expectedReads: ExpectedReads[],
   readsByPrompt: string[][],
-  skillsRealmURL: string,
-  exists: (path: string) => boolean = () => true,
+  {
+    skillsRealmURL,
+    exists = () => true,
+    featuresOff = [],
+  }: RoutingOptions = {},
 ): RoutingResult {
-  // The index is in every room's context from the start, so reading it
-  // again is not a read.
+  // Only skill files count. The index is in every room's context from the
+  // start, so reading it again is not a read.
   let reads = readsByPrompt.map((list) =>
     list
       .map((read) => skillsPath(read, skillsRealmURL))
-      .filter((path) => path !== INDEX_PATH),
+      .filter(
+        (path): path is string => path !== undefined && path !== INDEX_PATH,
+      ),
   );
   let rows = prompts.map((prompt, index): PromptRouting => {
-    let expected = expectedReads[index] ?? [];
+    let expected = (expectedReads[index] ?? [])
+      .map(normalizeExpected)
+      .filter(Boolean);
     let opened = reads[index] ?? [];
     let earlier = reads.slice(0, index).flat();
-    let notFound = expected.filter((path) => !exists(path));
-    let checkable = expected.filter((path) => exists(path));
+    let featureOff = expected.filter((path) =>
+      featuresOff.some((feature) => underFeature(path, feature)),
+    );
+    let notFound = expected.filter(
+      (path) => !featureOff.includes(path) && !exists(path),
+    );
+    let checkable = expected.filter(
+      (path) => !featureOff.includes(path) && !notFound.includes(path),
+    );
     let outcome: RoutingOutcome;
     if (expected.length === 0) {
       outcome = opened.length ? 'read-anyway' : 'not-needed';
     } else if (checkable.length === 0) {
       outcome = 'unchecked';
     } else if (
-      checkable.some((path) =>
-        (reads[index] ?? []).some((read) => covers(path, read)),
-      )
+      checkable.some((path) => opened.some((read) => covers(path, read)))
     ) {
       outcome = 'opened';
     } else if (
@@ -113,7 +156,7 @@ export function scoreRouting(
     } else {
       outcome = 'missed';
     }
-    return { prompt, expected, opened, notFound, outcome };
+    return { prompt, expected, opened, notFound, featureOff, outcome };
   });
   let checkedRows = rows.filter((row) => row.outcome !== 'unchecked');
   let result: RoutingResult = {
@@ -133,7 +176,7 @@ const OUTCOME_TEXT: Record<RoutingOutcome, string> = {
   missed: 'missed: opened no expected skill',
   'not-needed': 'no read needed, none made',
   'read-anyway': 'no read needed, but read anyway',
-  unchecked: 'unchecked: no expected skill exists',
+  unchecked: 'unchecked: no expected skill can be checked',
 };
 
 export function routingSummary(result: RoutingResult): string {
@@ -150,6 +193,9 @@ export function routingLines(result: RoutingResult): string[] {
     }
     if (row.notFound.length) {
       parts.push(`not in the skills: ${row.notFound.join(', ')}`);
+    }
+    if (row.featureOff.length) {
+      parts.push(`feature off: ${row.featureOff.join(', ')}`);
     }
     return parts.join('; ');
   });

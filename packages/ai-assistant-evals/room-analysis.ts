@@ -49,19 +49,20 @@ export interface RoomAnalysis {
   // read): the first prompt that carries the full tool list and no
   // conversation beyond the skills, so it tracks the size of the tool list.
   coldPromptTokens: number | undefined;
-  // URLs the model read with readRealmFile. A skill file under test that is
-  // missing here was never in the model's context.
+  // URLs the model read with readRealmFile, counting only reads whose result
+  // was applied. A skill file under test that is missing here was never in
+  // the model's context.
   filesRead: string[];
   // The same reads split by the user prompt they followed: entry n holds
   // what was read after the nth prompt and before the next. The runner's
-  // `boxel-debug:` commands are not prompts.
+  // `boxel-debug:` commands and edits of earlier messages are not prompts.
   readsByPrompt: string[][];
   filesWritten: string[];
   showCardIds: string[];
   lastBotBody: string;
 }
 
-const BOT_MESSAGE_MSGTYPE = 'app.boxel.message';
+const BOXEL_MESSAGE_MSGTYPE = 'app.boxel.message';
 const TOOL_REQUESTS_KEY = 'app.boxel.toolRequests';
 // Tools, other than run-realm-code, whose applied call writes into a realm.
 // Tool names carry a hash suffix (`copy-card_eefc`), so match the prefix. The
@@ -185,7 +186,7 @@ export function analyzeRoom(
       continue;
     }
     if (
-      content.msgtype !== BOT_MESSAGE_MSGTYPE ||
+      content.msgtype !== BOXEL_MESSAGE_MSGTYPE ||
       content.isStreamingFinished !== true
     ) {
       continue;
@@ -206,13 +207,20 @@ export function analyzeRoom(
     }
     let content = event.content;
     if (event.sender !== botUserId) {
-      if (!String(content.body ?? '').startsWith('boxel-debug:')) {
+      // Reads are credited per prompt, so only a prompt starts a new entry:
+      // not a debug command, an edit of an earlier message, or any other
+      // message the host sends from the user's account.
+      if (
+        content.msgtype === BOXEL_MESSAGE_MSGTYPE &&
+        content['m.relates_to']?.rel_type !== 'm.replace' &&
+        !String(content.body ?? '').startsWith('boxel-debug:')
+      ) {
         result.readsByPrompt.push([]);
       }
       continue;
     }
     if (
-      content.msgtype !== BOT_MESSAGE_MSGTYPE ||
+      content.msgtype !== BOXEL_MESSAGE_MSGTYPE ||
       content.isStreamingFinished !== true
     ) {
       continue;
@@ -260,7 +268,8 @@ export function analyzeRoom(
       } else if (outcome.key !== 'applied') {
         result.failedToolCalls.push({ name, reason: outcome.reason });
       }
-      if (name === 'readRealmFile') {
+      // A read whose result wasn't applied never reached the model.
+      if (name === 'readRealmFile' && outcome?.key === 'applied') {
         let args = parseArguments(request.arguments);
         let urls = args.attributes?.urls ?? args.urls;
         if (Array.isArray(urls)) {

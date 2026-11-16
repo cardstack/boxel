@@ -117,24 +117,30 @@ from another website, moving a card between workspaces) and
 `concierge-workspace-help` (a broken link, an empty search, the catalog, a
 report, slow indexing). A judge grades each answer against the criteria, and
 the routing check below shows whether the assistant opened the skill that
-covers each question. They switch on the `catalog-reuse` feature;
-`EVAL_SKILL_FEATURES=-catalog-reuse` runs them on the index without its
-catalog-reuse sections.
+covers each question. `concierge-questions` and `concierge-workspace-help`
+switch on the `catalog-reuse` feature; `EVAL_SKILL_FEATURES=-catalog-reuse`
+runs them on the index without its catalog-reuse sections, and leaves their
+`catalog-reuse/` expectations unchecked.
 
 An evaluation's `expectedReads` turns on the routing check: one entry per
 prompt, in order, each a list of skill files any one of which covers it
 (paths in the skills realm, such as `api-keys/SKILL.md`; a path ending
 in `/` stands for every file under it). An empty entry means the answer needs
-no read. The runner credits each `readRealmFile` to the prompt it followed,
-counts a file read after an earlier prompt as already in context, and never
-counts the always-loaded `index.md`. A path missing from the skills clone
-(`packages/skills-realm/contents/skills`, or `EVAL_SKILLS_DIR`) is reported as
-unchecked rather than missed. A read by URL is matched against where the
-realm server's prefix map serves the skills realm. The result card shows the
-outcome per question, its notes give one line per question, and the summary
-prints `routing N / M`. Such an evaluation skips the note that an enabled
-skill feature's `SKILL.md` was never read, since its routing rows say which
-skills each question needed. `pnpm test` runs the check's unit tests.
+no read. The runner credits each `readRealmFile` whose result was applied to
+the prompt it followed (edits of earlier messages and `boxel-debug:` commands
+aren't prompts), counts a file read after an earlier prompt as already in
+context, and counts only files in the skills realm: neither workspace cards
+nor the always-loaded `index.md` are skill reads. A read by URL is matched
+against where the realm server's prefix map serves the skills realm; when the
+map can't be read, only reads by prefix are recognized and the run's notes
+say so. A path missing from the skills clone
+(`packages/skills-realm/contents/skills`, or `EVAL_SKILLS_DIR`), or under a
+feature the run turns off, is reported as unchecked rather than missed. The
+result card shows the outcome per question, its notes give one line per
+question, and the summary prints `routing N / M`. The note that an enabled
+skill feature's `SKILL.md` was never read is left out for a feature whose
+skill an expected read names, since the routing rows cover it. `pnpm test`
+runs the check's unit tests.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace

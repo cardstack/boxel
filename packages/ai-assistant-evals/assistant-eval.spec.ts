@@ -23,6 +23,7 @@ import {
   routingSummary,
   scoreRouting,
   skillsPath,
+  underFeature,
 } from './routing.ts';
 import { grade, type RunResult, type Verdict } from './run-result.ts';
 
@@ -1204,6 +1205,25 @@ test.beforeAll(async () => {
   await mkdir(RESULTS_DIR, { recursive: true });
 });
 
+// Where the stack serves the skills realm, read off the realm server's prefix
+// map, for reads that name a skill by URL. Only the routing check and the
+// feature check need it, so a map that can't be read doesn't fail the run: it
+// leaves only reads by prefix recognized, and says so in `reasons`.
+async function skillsRealmURLFor(
+  reasons: string[],
+): Promise<string | undefined> {
+  try {
+    return (await prefixRealmNetworkFor(REALM_SERVER_URL)).toURLHref(
+      SKILLS_REALM_PREFIX,
+    );
+  } catch (error) {
+    reasons.push(
+      `skill reads by URL aren't recognized: no skills realm from the realm server's prefix map (${error instanceof Error ? error.message : String(error)})`,
+    );
+    return undefined;
+  }
+}
+
 async function runModel(
   page: Page,
   requestedModel: string,
@@ -1276,12 +1296,6 @@ async function runModel(
     result.prompts = prompts;
     result.evalCardUrl = evaluation?.url;
     result.secondsPerPrompt = evaluation?.secondsPerPrompt;
-    setStep('read the realm server prefix map');
-    // Where the stack serves the skills realm, for reads that name a skill by
-    // URL rather than by its prefix.
-    let skillsRealmURL = (
-      await prefixRealmNetworkFor(REALM_SERVER_URL)
-    ).toURLHref(SKILLS_REALM_PREFIX);
     // Human-readable stamp so the workspace list reads "Models Claude Opus
     // 4.8 2026-09-07 12:43"; the endpoint gets the same stamp, slug-safe.
     let now = new Date();
@@ -1525,14 +1539,33 @@ async function runModel(
     );
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;
-    if (evaluation?.expectedReads.length) {
+    // An enabled feature whose skill the model never opened means the run
+    // did not exercise it, whatever the verdict says. This assumes each
+    // feature's skill is <feature name>/SKILL.md in the skills realm. A
+    // feature whose skill an expected read names is left to the routing rows,
+    // which say which questions needed it and whether it was opened.
+    let expectedReads = evaluation?.expectedReads ?? [];
+    let featureSkills = result.skillFeatures.filter(
+      (feature) =>
+        !expectedReads.some((paths) =>
+          paths.some((path) => underFeature(path, feature)),
+        ),
+    );
+    let skillsRealmURL =
+      expectedReads.length || featureSkills.length
+        ? await skillsRealmURLFor(result.reasons)
+        : undefined;
+    if (evaluation && expectedReads.length) {
       let skillsCloned = existsSync(SKILLS_DIR);
       result.routing = scoreRouting(
         prompts.slice(0, result.promptsSent),
-        evaluation.expectedReads,
+        expectedReads,
         result.analysis.readsByPrompt,
-        skillsRealmURL,
-        (path) => !skillsCloned || existsSync(join(SKILLS_DIR, path)),
+        {
+          skillsRealmURL,
+          exists: (path) => !skillsCloned || existsSync(join(SKILLS_DIR, path)),
+          featuresOff: SKILL_FEATURES_OFF,
+        },
       );
       result.reasons.push(
         routingSummary(result.routing),
@@ -1544,14 +1577,6 @@ async function runModel(
         );
       }
     }
-    // An enabled feature whose skill the model never opened means the run
-    // did not exercise it, whatever the verdict says. This assumes each
-    // feature's skill is <feature name>/SKILL.md in the skills realm. An
-    // evaluation with expected reads skips it: its routing rows say which
-    // skills each question needed and which were opened.
-    let featureSkills = evaluation?.expectedReads.length
-      ? []
-      : result.skillFeatures;
     for (let feature of featureSkills) {
       let read = result.analysis.filesRead.some(
         (url) => skillsPath(url, skillsRealmURL) === `${feature}/SKILL.md`,

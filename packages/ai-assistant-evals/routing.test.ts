@@ -20,11 +20,32 @@ function userMessage(body: string): MatrixEvent {
   } as unknown as MatrixEvent;
 }
 
-function botTurn(reads: string[] = [], body = 'answer'): MatrixEvent {
+function editMessage(body: string): MatrixEvent {
   return {
     type: 'm.room.message',
-    sender: BOT,
+    sender: USER,
     origin_server_ts: ++clock,
+    content: {
+      msgtype: 'app.boxel.message',
+      body: `* ${body}`,
+      'm.new_content': { msgtype: 'app.boxel.message', body },
+      'm.relates_to': { rel_type: 'm.replace', event_id: '$earlier' },
+    },
+  } as unknown as MatrixEvent;
+}
+
+// A finished bot turn, and when it reads files, the read's tool result with
+// `resultKey` (`applied` for a read that reached the model).
+function botTurn(
+  reads: string[] = [],
+  body = 'answer',
+  resultKey = 'applied',
+): MatrixEvent[] {
+  let id = `read-${++clock}`;
+  let turn = {
+    type: 'm.room.message',
+    sender: BOT,
+    origin_server_ts: clock,
     content: {
       msgtype: 'app.boxel.message',
       isStreamingFinished: true,
@@ -33,7 +54,7 @@ function botTurn(reads: string[] = [], body = 'answer'): MatrixEvent {
       'app.boxel.toolRequests': reads.length
         ? [
             {
-              id: `read-${clock}`,
+              id,
               name: 'readRealmFile',
               arguments: { attributes: { urls: reads } },
             },
@@ -41,19 +62,32 @@ function botTurn(reads: string[] = [], body = 'answer'): MatrixEvent {
         : [],
     },
   } as unknown as MatrixEvent;
+  if (!reads.length) {
+    return [turn];
+  }
+  let result = {
+    type: 'app.boxel.toolResult',
+    sender: USER,
+    origin_server_ts: ++clock,
+    content: {
+      commandRequestId: id,
+      'm.relates_to': { rel_type: 'app.boxel.toolResult', key: resultKey },
+    },
+  } as unknown as MatrixEvent;
+  return [turn, result];
 }
 
 test('a read is credited to the prompt it followed, not to a debug command', () => {
   let events = [
     userMessage('boxel-debug:feature:enable:catalog-reuse'),
-    botTurn([], 'catalog-reuse is now enabled'),
+    ...botTurn([], 'catalog-reuse is now enabled'),
     userMessage('Where am I?'),
-    botTurn(),
+    ...botTurn(),
     userMessage('How do I give my card its API key?'),
-    botTurn([`${SKILLS}api-keys/SKILL.md`]),
-    botTurn(),
+    ...botTurn([`${SKILLS}api-keys/SKILL.md`]),
+    ...botTurn(),
     userMessage('Is it safe to paste it here?'),
-    botTurn(),
+    ...botTurn(),
   ];
   let analysis = analyzeRoom(events, BOT);
   assert.deepEqual(analysis.readsByPrompt, [
@@ -61,6 +95,35 @@ test('a read is credited to the prompt it followed, not to a debug command', () 
     [`${SKILLS}api-keys/SKILL.md`],
     [],
   ]);
+});
+
+test('an edit of an earlier message is not a new prompt', () => {
+  let events = [
+    userMessage('Where am I'),
+    editMessage('Where am I?'),
+    ...botTurn(),
+    userMessage('How do I give my card its API key?'),
+    ...botTurn([`${SKILLS}api-keys/SKILL.md`]),
+  ];
+  assert.deepEqual(analyzeRoom(events, BOT).readsByPrompt, [
+    [],
+    [`${SKILLS}api-keys/SKILL.md`],
+  ]);
+});
+
+test('a read whose result was not applied is not credited', () => {
+  let events = [
+    userMessage('How do I give my card its API key?'),
+    ...botTurn([`${SKILLS}api-keys/SKILL.md`], 'answer', 'failed'),
+    userMessage('Is it safe to paste it here?'),
+    ...botTurn([`${SKILLS}boxel-environment/SKILL.md`]),
+  ];
+  let analysis = analyzeRoom(events, BOT);
+  assert.deepEqual(analysis.readsByPrompt, [
+    [],
+    [`${SKILLS}boxel-environment/SKILL.md`],
+  ]);
+  assert.deepEqual(analysis.filesRead, [`${SKILLS}boxel-environment/SKILL.md`]);
 });
 
 test('skillsPath reads a URL or the prefix form as a path in the skills realm', () => {
@@ -74,10 +137,15 @@ test('skillsPath reads a URL or the prefix form as a path in the skills realm', 
     'api-keys/SKILL.md',
   );
   assert.equal(skillsPath('@cardstack/skills/index.md', SKILLS), 'index.md');
+  assert.equal(skillsPath('@cardstack/base/card-api.gts', SKILLS), undefined);
   assert.equal(
-    skillsPath('@cardstack/base/card-api.gts', SKILLS),
-    '@cardstack/base/card-api.gts',
+    skillsPath(
+      'https://realm-server.example.localhost/user/ws/Project/1.json',
+      SKILLS,
+    ),
+    undefined,
   );
+  assert.equal(skillsPath(`${SKILLS}api-keys/SKILL.md`, undefined), undefined);
 });
 
 test('a URL read matches wherever the prefix map serves the skills realm', () => {
@@ -86,10 +154,7 @@ test('a URL read matches wherever the prefix map serves the skills realm', () =>
     skillsPath(`${served}api-keys/SKILL.md`, served),
     'api-keys/SKILL.md',
   );
-  assert.equal(
-    skillsPath(`${SKILLS}api-keys/SKILL.md`, served),
-    `${SKILLS}api-keys/SKILL.md`,
-  );
+  assert.equal(skillsPath(`${SKILLS}api-keys/SKILL.md`, served), undefined);
 });
 
 test('a read in prefix form counts the same as one by URL', () => {
@@ -97,7 +162,7 @@ test('a read in prefix form counts the same as one by URL', () => {
     ['What can I do?', 'Keys?'],
     [[], ['api-keys/']],
     [['@cardstack/skills/index.md'], ['@cardstack/skills/api-keys/SKILL.md']],
-    SKILLS,
+    { skillsRealmURL: SKILLS },
   );
   assert.deepEqual(
     result.prompts.map((row) => row.outcome),
@@ -125,7 +190,7 @@ test('each outcome, with any-of and directory matching', () => {
       [`${SKILLS}boxel-environment/SKILL.md`],
       [`${SKILLS}glossary.md`],
     ],
-    SKILLS,
+    { skillsRealmURL: SKILLS },
   );
   assert.deepEqual(
     result.prompts.map((row) => row.outcome),
@@ -141,7 +206,7 @@ test('reading the always-loaded index is not a read', () => {
     ['What can I do?', 'Keys?'],
     [[], ['index.md']],
     [[`${SKILLS}index.md`], [`${SKILLS}index.md`]],
-    SKILLS,
+    { skillsRealmURL: SKILLS },
   );
   assert.deepEqual(
     result.prompts.map((row) => row.outcome),
@@ -154,8 +219,10 @@ test('an expected path the skills lack is unchecked, not missed', () => {
     ['Old question?', 'Keys?'],
     [['renamed/SKILL.md'], ['renamed/SKILL.md', 'api-keys/SKILL.md']],
     [[], []],
-    SKILLS,
-    (path) => path !== 'renamed/SKILL.md',
+    {
+      skillsRealmURL: SKILLS,
+      exists: (path) => path !== 'renamed/SKILL.md',
+    },
   );
   assert.deepEqual(
     result.prompts.map((row) => row.outcome),
@@ -168,9 +235,52 @@ test('an expected path the skills lack is unchecked, not missed', () => {
 });
 
 test('prompts that do not line up with the room are flagged', () => {
-  let result = scoreRouting(['One?', 'Two?'], [[], []], [[]], SKILLS);
+  let result = scoreRouting(['One?', 'Two?'], [[], []], [[]], {
+    skillsRealmURL: SKILLS,
+  });
   assert.match(
     result.mismatch ?? '',
     /1 prompt\(s\) from the user, the evaluation 2/,
   );
+});
+
+test('expected paths match whatever their whitespace or leading slash', () => {
+  let result = scoreRouting(
+    ['Catalog?', 'Keys?'],
+    [['/catalog-reuse/'], [' /api-keys/SKILL.md ']],
+    [[`${SKILLS}catalog-reuse/SKILL.md`], [`${SKILLS}api-keys/SKILL.md`]],
+    { skillsRealmURL: SKILLS },
+  );
+  assert.deepEqual(
+    result.prompts.map((row) => row.outcome),
+    ['opened', 'opened'],
+  );
+  assert.deepEqual(result.prompts[0].expected, ['catalog-reuse/']);
+});
+
+test('a workspace read is not a skill read', () => {
+  let result = scoreRouting(
+    ['Where am I?'],
+    [[]],
+    [['https://realm-server.example.localhost/user/ws/Project/1.json']],
+    { skillsRealmURL: SKILLS },
+  );
+  assert.equal(result.prompts[0].outcome, 'not-needed');
+  assert.deepEqual(result.prompts[0].opened, []);
+});
+
+test('paths under a feature the run turned off are unchecked', () => {
+  let result = scoreRouting(
+    ['Invoices?', 'Kanban?'],
+    [['catalog-reuse/'], ['boxel-patterns/', 'catalog-reuse/']],
+    [[], []],
+    { skillsRealmURL: SKILLS, featuresOff: ['catalog-reuse'] },
+  );
+  assert.deepEqual(
+    result.prompts.map((row) => row.outcome),
+    ['unchecked', 'missed'],
+  );
+  assert.deepEqual(result.prompts[0].featureOff, ['catalog-reuse/']);
+  assert.equal(result.checked, 1);
+  assert.match(routingLines(result)[0], /feature off: catalog-reuse\//);
 });
