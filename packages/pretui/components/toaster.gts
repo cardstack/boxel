@@ -74,7 +74,7 @@
 import AlertCircleIcon from '@cardstack/boxel-icons/alert-circle';
 import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
 import CheckIcon from '@cardstack/boxel-icons/check';
-import InfoIcon from '@cardstack/boxel-icons/info-small';
+import InfoIcon from '@cardstack/boxel-icons/info-circle';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
