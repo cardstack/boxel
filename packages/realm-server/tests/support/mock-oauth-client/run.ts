@@ -6,14 +6,22 @@
 //   pnpm oauth:mock-client [--mode loopback|unverified] [--realm-server <url>] [--port <n>]
 //
 // The stack's realm server must run with its OAuth provider on: set
-// BOXEL_DEV_OAUTH_PROVIDER=true in the worktree's `.envrc`, then start the
-// stack. The realm server defaults to REALM_BASE_URL, which the repo's mise
-// environment sets.
+// BOXEL_DEV_OAUTH_PROVIDER=true before starting the stack, either exported in
+// the shell that starts it or in the `[env]` of the checkout's gitignored
+// `.mise.local.toml`. The realm server defaults to REALM_BASE_URL, which the
+// repo's mise environment sets, so run this from inside the checkout.
+//
+// The `unverified` mode registers a redirect on the web,
+// `https://ai-app.example.com/callback`, which nothing serves: after Boxel's
+// pages, the browser lands on that unreachable URL. To see the result page,
+// open the app's own `/callback` with the same query string.
 //
 // The `cimd` mode runs only in the realm server's tests: a stack downloads a
 // metadata document only from a real HTTPS client ID, and nothing serves one
 // for this app.
 
+// In environment mode, `*.localhost` names resolve to loopback for fetch.
+import '../../../setup-localhost-resolver.ts';
 import { parseArgs } from 'util';
 import {
   EXAMPLE_AI_APP_NAME,

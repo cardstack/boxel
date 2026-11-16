@@ -3,10 +3,12 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import { randomBytes } from 'crypto';
 import supertest from 'supertest';
+import { JSDOM } from 'jsdom';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
   closeServer,
+  ensureMatrixAdminUser,
   insertUser,
   matrixRegistrationSecret,
   matrixURL,
@@ -87,10 +89,34 @@ function inProcessTransport(server: () => Server): ProviderTransport {
   };
 }
 
+// The app's result page, read by its `data-test-*` hooks.
+function readResultPage(html: string) {
+  let document = new JSDOM(html).window.document;
+  let text = (selector: string) =>
+    document.querySelector(selector)?.textContent?.trim();
+  return {
+    html,
+    outcome: document
+      .querySelector('[data-test-result]')
+      ?.getAttribute('data-test-result'),
+    code: text('[data-test-code]'),
+    scopes: [...document.querySelectorAll('[data-test-scopes] code')].map(
+      (scope) => scope.textContent,
+    ),
+    expires: text('[data-test-expires]'),
+    renews: text('[data-test-renews]'),
+  };
+}
+
 module(basename(import.meta.filename), function (hooks) {
   let server: Server | undefined;
   let db: PgAdapter | undefined;
   let running: RunningExampleAIApp | undefined;
+
+  // The consent details read the user's account through Synapse's admin API.
+  hooks.before(async function () {
+    await ensureMatrixAdminUser();
+  });
 
   let templateDatabase = setupTestDatabaseTemplate(hooks, {
     key: import.meta.filename,
@@ -149,7 +175,10 @@ module(basename(import.meta.filename), function (hooks) {
   // browser and the flow's interaction ID.
   async function connect(appPages: OAuthRequester) {
     let connectPage = await appPages.get('/');
-    if (!connectPage.text.includes('href="/connect"')) {
+    let button = new JSDOM(connectPage.text).window.document.querySelector(
+      '[data-test-connect]',
+    );
+    if (button?.getAttribute('href') !== '/connect') {
       throw new Error('the Connect page has no Connect button');
     }
     let started = await appPages.get('/connect');
@@ -178,7 +207,22 @@ module(basename(import.meta.filename), function (hooks) {
       .set('Host', OAUTH_TEST_SERVER_URL.host)
       .set('Origin', testOAuthSecureOriginURL.origin)
       .set('Authorization', session);
+    if (response.status !== 200) {
+      throw new Error(
+        `no consent details: ${response.status} ${JSON.stringify(response.body)}`,
+      );
+    }
     return response.body.app;
+  }
+
+  // Opens the app's `/callback` with the query Boxel sent the browser back
+  // with, and reads the result page.
+  async function resultFor(appPages: OAuthRequester, query: string) {
+    let response = await appPages.get(`/callback${query}`);
+    if (response.status !== 200) {
+      throw new Error(`no result page: ${response.status}`);
+    }
+    return readResultPage(response.text);
   }
 
   test('registers with a loopback redirect, connects, and shows what it got back but never the token', async function (assert) {
@@ -217,37 +261,30 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let code = landed.searchParams.get('code')!;
 
-    let result = await appPages.get(`${landed.pathname}${landed.search}`);
-    assert.strictEqual(result.status, 200);
-    assert.true(
-      result.text.includes('data-test-result="connected"'),
-      result.text,
-    );
-    assert.true(
-      result.text.includes(
-        `<code>${code.slice(0, CODE_PREVIEW_LENGTH)}…</code>`,
-      ),
+    let result = await resultFor(appPages, landed.search);
+    assert.strictEqual(result.outcome, 'connected', result.html);
+    assert.strictEqual(
+      result.code,
+      `${code.slice(0, CODE_PREVIEW_LENGTH)}…`,
       "shows the code's first characters",
     );
-    assert.false(result.text.includes(code), 'never the whole code');
-    assert.true(
-      result.text.includes('<code>boxel:read</code>'),
-      'shows the scopes',
-    );
-    assert.true(result.text.includes('In 10 minutes'), 'shows the expiry');
-    assert.true(
-      result.text.includes('Boxel issued a refresh token'),
+    assert.false(result.html.includes(code), 'never the whole code');
+    assert.deepEqual(result.scopes, ['boxel:read'], 'shows the scopes');
+    assert.strictEqual(result.expires, 'In 10 minutes', 'shows the expiry');
+    assert.strictEqual(
+      result.renews,
+      'Yes: Boxel issued a refresh token',
       'a renewing grant came with a refresh token',
     );
     let tokens = app.app.heldTokensForTests;
     assert.ok(tokens?.accessToken, 'the app holds an access token');
     assert.ok(tokens?.refreshToken, 'and a refresh token');
     assert.false(
-      result.text.includes(tokens!.accessToken),
+      result.html.includes(tokens!.accessToken),
       'never the access token',
     );
     assert.false(
-      result.text.includes(tokens!.refreshToken!),
+      result.html.includes(tokens!.refreshToken!),
       'never the refresh token',
     );
   });
@@ -277,11 +314,8 @@ module(basename(import.meta.filename), function (hooks) {
       'Boxel sends the browser to the redirect on the web',
     );
     // That host serves nothing; the app's own server stands in for it.
-    let result = await appPages.get(`/callback${landed.search}`);
-    assert.true(
-      result.text.includes('data-test-result="connected"'),
-      result.text,
-    );
+    let result = await resultFor(appPages, landed.search);
+    assert.strictEqual(result.outcome, 'connected', result.html);
   });
 
   test('is identified by a client ID metadata document, and named by its domain', async function (assert) {
@@ -312,12 +346,9 @@ module(basename(import.meta.filename), function (hooks) {
       `${app.origin}/callback`,
       "its document's loopback redirect matches the app's port",
     );
-    let result = await appPages.get(`${landed.pathname}${landed.search}`);
-    assert.true(
-      result.text.includes('data-test-result="connected"'),
-      result.text,
-    );
-    assert.true(result.text.includes('<code>boxel:read</code>'));
+    let result = await resultFor(appPages, landed.search);
+    assert.strictEqual(result.outcome, 'connected', result.html);
+    assert.deepEqual(result.scopes, ['boxel:read']);
   });
 
   test('shows a denied connection', async function (assert) {
@@ -331,8 +362,8 @@ module(basename(import.meta.filename), function (hooks) {
     });
     let landed = await landOAuthFlow(browser, uid, ticket);
     assert.strictEqual(landed.searchParams.get('error'), 'access_denied');
-    let result = await appPages.get(`${landed.pathname}${landed.search}`);
-    assert.true(result.text.includes('data-test-result="denied"'), result.text);
+    let result = await resultFor(appPages, landed.search);
+    assert.strictEqual(result.outcome, 'denied', result.html);
     assert.strictEqual(app.app.heldTokensForTests, undefined, 'no tokens');
   });
 
@@ -341,24 +372,48 @@ module(basename(import.meta.filename), function (hooks) {
     let appPages = supertest.agent(app.server);
     let session = await secureSession();
 
-    let stray = await appPages.get('/callback?code=abc&state=not-a-flow');
-    assert.true(
-      stray.text.includes('data-test-result="error"'),
-      'an unknown state',
-    );
+    let stray = await resultFor(appPages, '?code=abc&state=not-a-flow');
+    assert.strictEqual(stray.outcome, 'error', 'an unknown state');
 
     let { uid, browser } = await connect(appPages);
     let ticket = await decideOAuthFlow(server!, uid, session);
     let landed = await landOAuthFlow(browser, uid, ticket);
-    let first = await appPages.get(`${landed.pathname}${landed.search}`);
-    assert.true(
-      first.text.includes('data-test-result="connected"'),
-      first.text,
-    );
-    let again = await appPages.get(`${landed.pathname}${landed.search}`);
-    assert.true(
-      again.text.includes('data-test-result="error"'),
-      'the same state again',
+    let first = await resultFor(appPages, landed.search);
+    assert.strictEqual(first.outcome, 'connected', first.html);
+    let again = await resultFor(appPages, landed.search);
+    assert.strictEqual(again.outcome, 'error', 'the same state again');
+  });
+
+  test('refuses a response that leaves out its issuer, or names another', async function (assert) {
+    let app = await startApp('loopback');
+    let appPages = supertest.agent(app.server);
+    let session = await secureSession();
+
+    for (let [what, iss] of [
+      ['no issuer', undefined],
+      ['another issuer', 'https://elsewhere.example.com'],
+    ] as const) {
+      let { uid, browser } = await connect(appPages);
+      let ticket = await decideOAuthFlow(server!, uid, session);
+      let landed = await landOAuthFlow(browser, uid, ticket);
+      assert.strictEqual(
+        landed.searchParams.get('iss'),
+        OAUTH_TEST_ISSUER,
+        'Boxel names itself',
+      );
+      let query = new URLSearchParams(landed.search);
+      if (iss) {
+        query.set('iss', iss);
+      } else {
+        query.delete('iss');
+      }
+      let result = await resultFor(appPages, `?${query}`);
+      assert.strictEqual(result.outcome, 'error', what);
+    }
+    assert.strictEqual(
+      app.app.heldTokensForTests,
+      undefined,
+      'no code was exchanged',
     );
   });
 });

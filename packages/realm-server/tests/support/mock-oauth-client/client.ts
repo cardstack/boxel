@@ -95,6 +95,7 @@ export interface ProviderMetadata {
   authorization_endpoint: string;
   token_endpoint: string;
   registration_endpoint?: string;
+  authorization_response_iss_parameter_supported?: boolean;
 }
 
 // What a flow ended with, as the result page shows it.
@@ -260,8 +261,14 @@ export class ExampleAIApp {
     }
     this.#pending.delete(state);
     let metadata = this.#requireMetadata();
+    // A provider whose discovery document says it names itself in every
+    // response (RFC 9207 §2.4) is answered only by a response that does.
     let iss = params.get('iss');
-    if (iss !== null && iss !== metadata.issuer) {
+    if (
+      iss === null
+        ? metadata.authorization_response_iss_parameter_supported === true
+        : iss !== metadata.issuer
+    ) {
       return {
         kind: 'error',
         message: 'The response came from a different authorization server.',
