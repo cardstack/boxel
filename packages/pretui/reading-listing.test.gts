@@ -782,6 +782,36 @@ module('Pretui | reading-listing', function (hooks) {
     );
   });
 
+  test('List: after arrowing, a re-render does not pull focus back once it leaves the rows', async function (assert) {
+    class Holder {
+      @tracked items = LOTS;
+    }
+    let holder = new Holder();
+    let reorder = () => (holder.items = [...holder.items].reverse());
+    await render(
+      <template>
+        <List @items={{holder.items}} @key={{rowKey}} @label='Lots'>
+          <:item as |row|>{{row.tea}}</:item>
+        </List>
+        <button type='button' data-test-outside {{on 'click' reorder}}>
+          Reorder
+        </button>
+      </template>,
+    );
+    (listRows()[0] as HTMLElement).focus();
+    await triggerKeyEvent(listRows()[0] as HTMLElement, 'keydown', 'ArrowDown');
+    assert.strictEqual(
+      document.activeElement,
+      listRows()[1],
+      'arrowing moves focus within the rows',
+    );
+    await click('[data-test-outside]');
+    await settled();
+    assert
+      .dom('[data-test-outside]')
+      .isFocused('the re-render leaves focus on the outside control');
+  });
+
   test('List selection is a named control, and Space toggles it from the row', async function (assert) {
     let knobs = new Knobs();
     knobs.selectionMode = 'multi';
