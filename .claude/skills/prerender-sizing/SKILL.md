@@ -1,6 +1,6 @@
 ---
 name: prerender-sizing
-description: Pick or adjust the prerender server's pool envelope (`PRERENDER_PAGE_POOL_MIN` / `_MAX` / `_HIGH_PRIORITY_MAX` / `_HIGH_PRIORITY_THRESHOLD` / `_IDLE_CONTRACTION_MS` / `_SHARED_CONTEXT_CAP`) and ECS task CPU/memory using observed telemetry, not round-number intuition. Use this skill whenever an operator asks "are we sized right?", wants to change the envelope after a workload shift, considers a new ECS task size, or hits memory pressure / OOM on the prerender service. Layers on top of the `aws-access` skill for the underlying CloudWatch + DB plumbing; that skill is a prerequisite.
+description: Pick or adjust the prerender server's pool envelope (`PRERENDER_PAGE_POOL_MIN` / `_MAX` / `_HIGH_PRIORITY_MAX` / `_HIGH_PRIORITY_THRESHOLD` / `_IDLE_CONTRACTION_MS` / `_SHARED_CONTEXT_CAP`) and ECS task CPU/memory using observed telemetry, not round-number intuition. Use this skill whenever an operator asks "are we sized right?", wants to change the envelope after a workload shift, considers a new ECS task size, hits memory pressure / OOM on the prerender service, or changes the worker counts (`WORKER_AUTOMATION_PRIORITY_COUNT` and the other lanes) that decide how many tabs the workers can hold, including automation runs. Layers on top of the `aws-access` skill for the underlying CloudWatch + DB plumbing; that skill is a prerequisite.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -342,6 +342,76 @@ The 16 GB resize is what makes HP_MAX=8 safe. On the existing 8 GB task, MAX=6 i
 ### Cost delta
 
 4 vCPU / 8 GB ($0.197/hr) → 2 vCPU / 16 GB ($0.152/hr) = **−23 %** per task. Doubles the memory ceiling while reducing spend.
+
+## Automation runs and the worker lanes
+
+An automation run is a run-command job at `automationInitiatedPriority` (5). It holds one warm prerender tab for the whole run, up to `MAX_RUN_SECONDS` (20 minutes), where a render gives its tab back within 60 seconds. This section records what a run's tab costs, the worker counts chosen against it, and how to measure it again. The lanes themselves are in the `automations` skill (_The queue tier and worker lane_).
+
+### What a run costs its tab
+
+The script runs in a QuickJS runtime on a Web Worker inside the tab, so its memory is the tab renderer's. The runtime's heap is capped at 8 MB (`runtime.setMemoryLimit` in `packages/host/app/lib/realm-runner/worker.ts`), so a long or busy script can't grow the tab much past a warm host tab. Count a run tab as one render tab.
+
+| Reading                        | Where                       | Value                                                                                                             |
+| ------------------------------ | --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| One run's tab, first run on it | local dev stack, 2026-11-16 | 211 MB PSS / 342 MB RSS at its peak, settling to about 140 MB PSS                                                 |
+| Further runs on the same tab   | local dev stack, 2026-11-16 | no measurable growth (3 minimal runs, then 3 runs of the catalog's card-count example over 60 cards)              |
+| Render tabs beside it          | local dev stack, 2026-11-16 | 151–464 MB PSS each                                                                                               |
+| Render tabs                    | staging, 24 h to 2026-11-16 | task working set p50 1.2 GB at 1 tab, 4.5 GB at 8 tabs: about 400–480 MB per tab                                  |
+| One run's tab                  | staging                     | not yet measured: staging had run no automation. Take it with _Measuring a run's tab_ below once runs exist there |
+
+The local readings and the staging readings are separate populations. Compare a run tab only with render tabs measured in the same place.
+
+### The counts
+
+|            | Worker tasks | Workers per task (all-priority / automation / high-priority) | Task memory | Heap limit per worker |
+| ---------- | -----------: | :----------------------------------------------------------: | ----------: | --------------------: |
+| staging    |            5 |                          1 / 1 / 3                           |    5120 MiB |                454 MB |
+| production |            5 |                          1 / 1 / 3                           |   10240 MiB |               1222 MB |
+
+`WORKER_AUTOMATION_PRIORITY_COUNT` is an SSM parameter the infra repo's boxel-worker config creates at 1 and then leaves to the console, like `WORKER_ALL_PRIORITY_COUNT` and `WORKER_HIGH_PRIORITY_COUNT`. The task count is the worker service's desired count, which Terraform doesn't change after it creates the service; set it with `aws ecs update-service --desired-count`.
+
+Why these values:
+
+1. **One automation worker per task** gives scheduled runs a lane that a system backlog, such as a full reindex, can't hold up. When no run is due, it serves user-initiated work, so it is never idle.
+2. **At most tasks × (automation + all-priority) runs hold tabs at once: 5 × 2 = 10 per environment.** The all-priority workers also claim runs, so the automation count alone doesn't bound it. Fewer is usual: runs of one automation go one at a time (its `automation:<id>` concurrency group), and runs of one realm and identity share one tab.
+3. **No prerender resize.** A run is below `PRERENDER_HIGH_PRIORITY_THRESHOLD` (9), so it can't grow the pool past `PRERENDER_PAGE_POOL_MAX`. `HP_MAX` stays the memory invariant, and a run tab costs no more than the render tab it displaces. Check that the deployed threshold is 9: at 5 or less, runs reach the high-priority headroom and `HP_MAX` has to cover them too.
+4. **The cost is tab occupancy, not memory.** With `MAX = 6` on 4 prerender tasks, the fleet has 24 ordinary tabs. A burst of due runs could hold 10 of them for up to 20 minutes, leaving 14 for index renders. Before raising the automation count, or adding worker tasks, project that split again, and add prerender tasks if index renders' `tabQueueMs` rises during run bursts.
+5. **System-tier work waits behind runs on the all-priority lane.** Only the all-priority workers serve system-tier jobs. While an all-priority worker holds a run, its task serves no system-tier work. When every all-priority worker holds one, system indexing waits up to a run's time limit.
+6. **Task memory keeps each worker's heap at least what four workers had.** The worker manager divides the task's memory across all its workers (`workerHeapLimitMb`). Five workers in a 4096 MiB task get 300 MB each. Staging's 5120 MiB gives each 454 MB, against 440 MB for four workers in 4096 MiB; production's 10240 MiB gives 1222 MB, against 1208 MB for four in 8192 MiB.
+
+Cost at Fargate list prices in us-east-1 (staging on ARM64, production on X86_64), all worker tasks:
+
+|                                 | Before (4 tasks) | After (5 tasks) | Change |
+| ------------------------------- | ---------------: | --------------: | -----: |
+| staging (2 vCPU / 4 → 5 GB)     |       $231/month |      $301/month |   +$71 |
+| production (2 vCPU / 8 → 10 GB) |       $340/month |      $458/month |  +$118 |
+
+Queue wait for runs that come due together is arithmetic. A run waits about (runs due ahead of it ÷ workers that can claim a run) × run length, and two runs of one automation never overlap.
+
+### Measuring a run's tab
+
+**On a local dev stack.** Put an automation card in a realm whose direct writer is a registered Matrix user. The card adopts from `@cardstack/catalog/automation/automation#Automation`, links a script, and needs no triggers. `pnpm run-automation` (the `automations` skill) runs it without switching it on. Then sample the prerender server's Chrome renderers while it runs:
+
+```sh
+PRERENDER_PID=$(lsof -tiTCP:4221 -sTCP:LISTEN | head -1)
+CHROME_PID=$(pgrep -P "$PRERENDER_PID" chrome | head -1)
+# Every renderer under this prerender server's Chrome, with its PSS in MB.
+# Linux only: it reads /proc.
+while sleep 0.5; do
+  for p in $(pstree -pT "$CHROME_PID" | grep -oE '\([0-9]+\)' | tr -d '()'); do
+    grep -qa -- '--type=renderer' /proc/$p/cmdline 2>/dev/null || continue
+    echo "$(date +%s) $p $(awk '/^Pss:/ {print int($2/1024)}' /proc/$p/smaps_rollup)"
+  done
+done
+```
+
+Run the automation a few times, 20 seconds apart, noting each start. The run's tab is the renderer that appears or grows at the first run's start. Compare its peak with the other renderers' over the same window.
+
+**On staging.** Find the window and the prerender task of a run, then read that task's `prerender-chrome-memory` lines across it:
+
+1. `automation_runs` gives each run's `started_at` and `finished_at` (read-only DB access, from the `aws-access` skill).
+2. The prerender server logs a run's progress as `[automation run] {…}` console lines. Their `ecs_task_arn` names the task that held the tab.
+3. On that task's stream, take `chromeRenderers`, `chromeRendererSumMB` and `cgroupWorkingSetMB` just before, during and after the run, and compare the growth with the per-tab cost derived in Step 2.
 
 ## Pitfalls
 
