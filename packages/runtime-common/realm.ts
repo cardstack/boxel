@@ -1306,9 +1306,10 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   is consulted and no projection it declares narrows what they serve. A
 //   caller a grant admits reads the card through the card+json read or the
 //   search, which resolve the read through the gate.
-// - `_types`, `_mtimes`, `_publishability` and `_indexing-errors` answer for
-//   the whole realm at once: every type it holds, every file's modification
-//   time, and every card's indexing state. A grant reaches a card, not the
+// - `_types`, `_mtimes`, `_publishability`, `_indexing-errors` and
+//   `_host-route-duplicates` answer for the whole realm at once: every type
+//   it holds, every file's modification time, every card's indexing state,
+//   and the cards its host routes serve. A grant reaches a card, not the
 //   realm.
 // - `_dependencies`, `_card-dependencies` and `_lint` analyze the realm's
 //   modules for code mode, which a caller works in only with the realm's own
@@ -3885,6 +3886,12 @@ export class Realm {
         '/_indexing-errors',
         SupportedMimeType.JSONAPI,
         this.indexingErrors.bind(this),
+        ACL_ONLY,
+      )
+      .get(
+        '/_host-route-duplicates',
+        SupportedMimeType.JSON,
+        this.hostRouteDuplicatesResponse.bind(this),
         ACL_ONLY,
       )
       .get(
@@ -20159,6 +20166,27 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
+  // The values more than one card of a field-match host route shares, as
+  // `getHostRouteDuplicates` finds them: `{ duplicates, complete }`. Read
+  // by the publish dialog, which warns about them before publishing.
+  private async hostRouteDuplicatesResponse(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
+    let result = await this.getHostRouteDuplicates();
+    return createResponse({
+      body: JSON.stringify(result),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSON },
       },
       requestContext,
     });

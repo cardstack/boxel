@@ -46,6 +46,7 @@ import {
   ri,
   rri,
   SupportedMimeType,
+  type HostRouteDuplicates,
   type RealmIndexCounts,
   type RealmInfo,
   RealmPaths,
@@ -631,6 +632,22 @@ class RealmResource {
         realmURL: this.realmURL,
       }),
     );
+  }
+
+  // The values more than one card of the realm's field-match host routes
+  // shares, from the realm's `_host-route-duplicates` endpoint.
+  async fetchHostRouteDuplicates(): Promise<HostRouteDuplicates> {
+    await this.loginTask.perform();
+    let response = await this.network.authedFetch(
+      `${this.realmURL}_host-route-duplicates`,
+      { headers: { Accept: SupportedMimeType.JSON } },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch host route duplicates for ${this.realmURL}: ${response.status}`,
+      );
+    }
+    return (await waitForPromise(response.json())) as HostRouteDuplicates;
   }
 
   // Re-mints the session on the `TokenRefreshSchedule`, which reports a fresh
@@ -1539,6 +1556,13 @@ export default class RealmService extends Service {
   ): Promise<RealmPrivateDependencyReport> {
     let resource = this.getOrCreateRealmResource(realmURL);
     return await resource.fetchPrivateDependencyReport();
+  }
+
+  async fetchHostRouteDuplicates(
+    realmURL: string,
+  ): Promise<HostRouteDuplicates> {
+    let resource = this.getOrCreateRealmResource(realmURL);
+    return await resource.fetchHostRouteDuplicates();
   }
 
   async unpublish(realmURL: string, publishedRealmURL: string) {

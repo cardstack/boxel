@@ -2050,6 +2050,7 @@ export * from './host-routing-validation.ts';
 export * from './host-routes.ts';
 export * from './host-route-resolver.ts';
 export * from './host-route-address.ts';
+export * from './host-route-duplicates.ts';
 export * from './route-pattern.ts';
 
 export type {

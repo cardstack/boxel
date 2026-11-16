@@ -20,6 +20,7 @@ import {
   param,
   query,
   ReadinessTimeoutError,
+  type HostRouteDuplicates,
   type PublishProgress,
 } from '@cardstack/runtime-common';
 
@@ -307,6 +308,131 @@ module('Acceptance | host submode', function (hooks) {
           'does-not-exist',
           'the warning names the missing routing target',
         );
+    });
+  });
+
+  module('with cards that share a host route address', function (hooks) {
+    // Each snapshot this module's tests create stays attached until it is
+    // deleted, and SQLite caps attached databases per connection. The prefix is
+    // derived from the running module's name, and nested modules have distinct
+    // names, so every scope that runs tests registers its own teardown.
+    setupRealmCacheTeardown(hooks);
+
+    // What the realm's `_host-route-duplicates` endpoint answers in each test.
+    // The realm-server tests cover how the realm finds the duplicates; these
+    // cover what the publish dialog shows for an answer.
+    let answer: HostRouteDuplicates;
+    let answered: Deferred<void>;
+    let originalFetch: RealmService['fetchHostRouteDuplicates'];
+
+    hooks.beforeEach(async function () {
+      let dbAdapter = await getDbAdapter();
+      await query(dbAdapter, [
+        `INSERT INTO realm_metadata (url, publishable) VALUES (`,
+        param(testRealmURL),
+        `,`,
+        param(true),
+        `) ON CONFLICT (url) DO UPDATE SET publishable = true`,
+      ]);
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: realmContents,
+        });
+      });
+      let realmService = getService('realm') as RealmService;
+      await realmService.ensureRealmMeta(testRealmURL);
+      answered = new Deferred<void>();
+      originalFetch = realmService.fetchHostRouteDuplicates;
+      realmService.fetchHostRouteDuplicates = async () => {
+        answered.fulfill();
+        return answer;
+      };
+    });
+
+    hooks.afterEach(function () {
+      (getService('realm') as RealmService).fetchHostRouteDuplicates =
+        originalFetch;
+    });
+
+    async function openPublishModal() {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+      await click('[data-test-publish-realm-button]');
+      await waitFor('[data-test-publish-realm-modal]');
+      await answered.promise;
+      await settled();
+    }
+
+    test('publish modal names the cards that share an address, and the one served', async function (assert) {
+      answer = {
+        complete: true,
+        duplicates: [
+          {
+            position: [0],
+            fullPath: '/posts/:slug',
+            values: { slug: 'hello' },
+            parentCardId: undefined,
+            cardIds: [`${testRealmURL}Post/a`, `${testRealmURL}Post/b`],
+            servedCardId: `${testRealmURL}Post/a`,
+          },
+          {
+            position: [1, 0],
+            fullPath: '/c/:category/:product',
+            values: { product: 'trail' },
+            parentCardId: `${testRealmURL}Category/shoes`,
+            cardIds: [
+              `${testRealmURL}Product/a`,
+              `${testRealmURL}Product/b`,
+              `${testRealmURL}Product/c`,
+            ],
+            servedCardId: `${testRealmURL}Product/a`,
+          },
+        ],
+      };
+      await openPublishModal();
+
+      assert
+        .dom('[data-test-host-route-duplicates-warning]')
+        .exists('the warning shows in the publish modal');
+      assert.deepEqual(
+        [...document.querySelectorAll('[data-test-host-route-duplicate]')].map(
+          (el) => el.textContent?.trim(),
+        ),
+        [
+          '2 cards share the address /posts/hello. Only Post/a is served; Post/b cannot be reached.',
+          '3 cards share the address /c/:category/trail in Category/shoes. Only Product/a is served; Product/b and Product/c cannot be reached.',
+        ],
+        'one line for each group of cards',
+      );
+      assert
+        .dom('[data-test-host-route-duplicates-incomplete]')
+        .doesNotExist('every route was checked');
+
+      await click('[data-test-default-domain-checkbox]');
+      assert
+        .dom('[data-test-publish-button]')
+        .isNotDisabled('the warning does not block publishing');
+    });
+
+    test('publish modal shows nothing when no cards share an address', async function (assert) {
+      answer = { complete: true, duplicates: [] };
+      await openPublishModal();
+
+      assert.dom('[data-test-host-route-duplicates-warning]').doesNotExist();
+    });
+
+    test('publish modal says when some routes could not be checked', async function (assert) {
+      answer = { complete: false, duplicates: [] };
+      await openPublishModal();
+
+      assert.dom('[data-test-host-route-duplicates-warning]').exists();
+      assert
+        .dom('[data-test-host-route-duplicates-incomplete]')
+        .hasText('Some routes could not be checked yet.');
+      assert.dom('[data-test-host-route-duplicate]').doesNotExist();
     });
   });
 

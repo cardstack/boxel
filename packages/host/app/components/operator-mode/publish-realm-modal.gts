@@ -34,6 +34,8 @@ import {
   nowDate,
   publishedSpaceHost,
   resolvePublishedRealmUrl,
+  type HostRouteDuplicate,
+  type HostRouteDuplicates,
 } from '@cardstack/runtime-common';
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
@@ -88,6 +90,39 @@ interface Signature {
   };
 }
 
+// One line of the pre-publish warning for cards that share an address, such
+// as "2 cards share the address /posts/hello. Only Post/a is served; Post/b
+// cannot be reached." Card ids in the realm are shown relative to it. The
+// route's own `:name`s are filled in; a parent route's stay as written, with
+// the parent card named after the address.
+function describeHostRouteDuplicate(
+  duplicate: HostRouteDuplicate,
+  realmURL: string,
+): string {
+  let shortId = (id: string) =>
+    id.startsWith(realmURL) ? id.slice(realmURL.length) : id;
+  let address = duplicate.fullPath
+    .split('/')
+    .map((segment) => {
+      let value = segment.startsWith(':')
+        ? duplicate.values[segment.slice(1)]
+        : undefined;
+      return value ?? segment;
+    })
+    .join('/');
+  let parent = duplicate.parentCardId
+    ? ` in ${shortId(duplicate.parentCardId)}`
+    : '';
+  let others = duplicate.cardIds
+    .filter((id) => id !== duplicate.servedCardId)
+    .map(shortId);
+  let othersText =
+    others.length > 1
+      ? `${others.slice(0, -1).join(', ')} and ${others[others.length - 1]}`
+      : (others[0] ?? '');
+  return `${duplicate.cardIds.length} cards share the address ${address}${parent}. Only ${shortId(duplicate.servedCardId)} is served; ${othersText} cannot be reached.`;
+}
+
 export default class PublishRealmModal extends Component<Signature> {
   @service declare private hostModeService: HostModeService;
   @service declare private loaderService: LoaderService;
@@ -130,6 +165,7 @@ export default class PublishRealmModal extends Component<Signature> {
   @tracked private danglingRoutingRules:
     | { path: string; reference: string }[]
     | null = null;
+  @tracked private hostRouteDuplicates: HostRouteDuplicates | null = null;
 
   @tracked private initialSelectionsSet = false;
   @tracked private realmMetaLoaded = false;
@@ -141,6 +177,7 @@ export default class PublishRealmModal extends Component<Signature> {
     this.loadUnlistedPathTask.perform();
     this.checkPrivateDependenciesTask.perform();
     this.checkDanglingRoutingRulesTask.perform();
+    this.checkHostRouteDuplicatesTask.perform();
   }
 
   private async loadCardAPI() {
@@ -212,6 +249,23 @@ export default class PublishRealmModal extends Component<Signature> {
     return (
       Array.isArray(this.danglingRoutingRules) &&
       this.danglingRoutingRules.length > 0
+    );
+  }
+
+  get hostRouteDuplicateLines(): string[] {
+    let realmURL = ensureTrailingSlash(String(this.currentRealmURL ?? ''));
+    return (this.hostRouteDuplicates?.duplicates ?? []).map((duplicate) =>
+      describeHostRouteDuplicate(duplicate, realmURL),
+    );
+  }
+
+  get isHostRouteCheckIncomplete() {
+    return this.hostRouteDuplicates?.complete === false;
+  }
+
+  get shouldShowHostRouteDuplicatesWarning() {
+    return (
+      this.hostRouteDuplicateLines.length > 0 || this.isHostRouteCheckIncomplete
     );
   }
 
@@ -652,6 +706,28 @@ export default class PublishRealmModal extends Component<Signature> {
         error,
       );
       this.danglingRoutingRules = null;
+    }
+  });
+
+  // Pre-publish check for cards that share an address: two cards a
+  // field-match route serves with the same value, of which only the first
+  // by card id is served there. Warns only; publishing goes ahead.
+  private checkHostRouteDuplicatesTask = restartableTask(async () => {
+    this.hostRouteDuplicates = null;
+    let realmURL = this.currentRealmURL;
+    if (!realmURL) {
+      return;
+    }
+    try {
+      this.hostRouteDuplicates = await this.realm.fetchHostRouteDuplicates(
+        String(realmURL),
+      );
+    } catch (error) {
+      console.error(
+        'Failed to check for cards that share a host route address before publishing',
+        error,
+      );
+      this.hostRouteDuplicates = null;
     }
   });
 
@@ -1156,6 +1232,38 @@ export default class PublishRealmModal extends Component<Signature> {
                   </li>
                 {{/each}}
               </ul>
+            </div>
+          </div>
+        {{/if}}
+
+        {{#if this.shouldShowHostRouteDuplicatesWarning}}
+          <div
+            class='publish-warning warning'
+            data-test-host-route-duplicates-warning
+          >
+            <WarningIcon
+              class='publish-warning-icon'
+              width='20'
+              height='20'
+              role='presentation'
+            />
+            <div class='publish-warning-body'>
+              {{#if this.hostRouteDuplicateLines.length}}
+                <div>
+                  Some host routes serve more than one card at the same address.
+                  Visitors see only one of them.
+                </div>
+                <ul class='violation-list'>
+                  {{#each this.hostRouteDuplicateLines as |line|}}
+                    <li data-test-host-route-duplicate>{{line}}</li>
+                  {{/each}}
+                </ul>
+              {{/if}}
+              {{#if this.isHostRouteCheckIncomplete}}
+                <div data-test-host-route-duplicates-incomplete>
+                  Some routes could not be checked yet.
+                </div>
+              {{/if}}
             </div>
           </div>
         {{/if}}

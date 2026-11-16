@@ -1,7 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { rri } from '@cardstack/runtime-common';
+import { rri, SupportedMimeType } from '@cardstack/runtime-common';
 import type {
   HostFieldMatchRoute,
   LooseSingleCardDocument,
@@ -10,7 +10,12 @@ import type {
 import type { PgAdapter } from '@cardstack/postgres';
 import type { CachingDefinitionLookup } from '@cardstack/runtime-common';
 import { RealmIndexQueryEngine } from '@cardstack/runtime-common/realm-index-query-engine';
-import { setupDB, setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  setupDB,
+  setupPermissionedRealmCached,
+  withRealmPath,
+  type RealmRequest,
+} from './helpers/index.ts';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
@@ -1111,14 +1116,16 @@ module(basename(import.meta.filename), function () {
     let realmURL = new URL('http://127.0.0.1:4444/routing-duplicates/');
     let testRealm: Realm;
     let definitionLookup: CachingDefinitionLookup;
+    let request: RealmRequest;
 
     setupPermissionedRealmCached(hooks, {
       realmURL,
       permissions: { '*': ['read'] },
       fileSystem: makeDuplicatesFixture(),
-      onRealmSetup({ testRealm: realm, testRealmServer }) {
+      onRealmSetup({ testRealm: realm, testRealmServer, request: req }) {
         testRealm = realm;
         definitionLookup = serverDefinitionLookup(testRealmServer);
+        request = withRealmPath(req, realmURL);
       },
     });
 
@@ -1172,6 +1179,55 @@ module(basename(import.meta.filename), function () {
           },
         ],
         'the draft post fails the where, so it is not counted, and a value only a draft shares is not reported',
+      );
+    });
+
+    test('the realm answers its duplicates at _host-route-duplicates', async function (assert) {
+      let response = await request
+        .get('/_host-route-duplicates')
+        .set('Accept', SupportedMimeType.JSON);
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.true(response.body.complete, 'every route was checked');
+      assert.deepEqual(
+        (
+          response.body.duplicates as {
+            fullPath: string;
+            values: Record<string, string>;
+            parentCardId?: string;
+            servedCardId: string;
+            cardIds: string[];
+          }[]
+        ).map((d) => [
+          d.fullPath,
+          d.values,
+          d.parentCardId ?? null,
+          d.servedCardId,
+          d.cardIds,
+        ]),
+        [
+          [
+            '/posts/:slug',
+            { slug: 'hello' },
+            null,
+            `${realmURL.href}post-a`,
+            [`${realmURL.href}post-a`, `${realmURL.href}post-b`],
+          ],
+          [
+            '/c/:category/:product',
+            { product: 'trail' },
+            `${realmURL.href}shoes`,
+            `${realmURL.href}trail-1`,
+            [`${realmURL.href}trail-1`, `${realmURL.href}trail-2`],
+          ],
+          [
+            '/s/:shelf/:item',
+            { item: 'lamp' },
+            `${realmURL.href}shelf-a`,
+            `${realmURL.href}lamp-1`,
+            [`${realmURL.href}lamp-1`, `${realmURL.href}lamp-2`],
+          ],
+        ],
+        'the duplicates of every route, as the realm finds them',
       );
     });
 
