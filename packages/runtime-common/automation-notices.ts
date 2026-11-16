@@ -9,7 +9,6 @@
 // writer can act on it. The secure origin's key page lists them and marks the
 // ones it shows read; the app reads only the unread count, for its badge.
 
-import type { AutomationOperationDeclaration } from './automation-declaration.ts';
 import type { DBAdapter } from './db.ts';
 import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import {
@@ -94,7 +93,11 @@ export async function recordAutomationNotice(
     realm: RealmIdentifier;
     runId: string;
     reason: NoticedAdmissionRefusal;
-    operation?: AutomationOperationDeclaration;
+    // The declared operation refused, and the type it is declared on.
+    operation?: {
+      operation: string;
+      targetType: { module: string; name: string };
+    };
     detail: string;
   },
 ): Promise<boolean> {

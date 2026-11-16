@@ -75,8 +75,8 @@ export interface TaskArgs {
   // automation, and a run's job there ends the run as an error.
   mintRunToken?: MintRunToken;
   // What an automation run's admission asks of the realm server's side of the
-  // worker: the Matrix server's view of an account and the operation-binding
-  // checks. Optional: a worker without it admits no automation run.
+  // worker: the Matrix server's view of an account, and the run's spending.
+  // Optional: a worker without it admits no automation run.
   automationAdmissionChecks?: AutomationAdmissionChecks;
   // Writes metered charges at the process's prices. Optional: a worker
   // without it, such as a test harness's, measures what it would charge and

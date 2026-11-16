@@ -18,7 +18,7 @@ import {
   type KeyReadiness,
 } from '@cardstack/runtime-common/card-operations';
 import type { PublishedFrom } from '../published-realm.ts';
-import { fillSlots } from '../key-bindings.ts';
+import { automationAdmission, fillSlots } from '../key-bindings.ts';
 import {
   clearGrantRejection,
   credentialRejected,
@@ -128,6 +128,15 @@ export function createCallApiSender(
       return source ? fixableOnPublishedRealm(answer) : answer;
     },
     recordUse: (use) => recordKeyUses(dbAdapter, use),
+    // A published realm runs no automation, so only a realm's own sender
+    // admits one.
+    ...(publishedFrom
+      ? {}
+      : {
+          admitAutomation: async (args) =>
+            (await automationAdmission(dbAdapter, { ...args, probeIntervalMs }))
+              ?.error,
+        }),
     send: async (request, credentials, options) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
         log.warn(

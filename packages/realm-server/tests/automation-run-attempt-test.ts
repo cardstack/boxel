@@ -199,10 +199,7 @@ module(basename(import.meta.filename), function (hooks) {
         prerenderer,
         mintRunToken: buildMintRunToken(realmSecretSeed),
         matrixServerName: 'localhost',
-        admissionChecks: testAutomationAdmissionChecks(
-          dbAdapter,
-          virtualNetwork,
-        )({ definitionLookup }),
+        admissionChecks: testAutomationAdmissionChecks,
         log,
       },
       {

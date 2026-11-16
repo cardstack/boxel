@@ -93,11 +93,12 @@ export interface AutomationAttemptResult {
 
 // Runs one attempt of an automation run (ADR 025, ADR 027 §1.4): takes the
 // run through its row, admits it (`automation-admission.ts`), which refuses a
-// run that can't go ahead before it costs anything, runs its script in a warm prerender tab on the run's
-// own affinity with the run's token, then commits the overlay as one batch
-// or, for a script that threw or ran out of time, discards it and records the
-// error. The run row is the source of truth: every step is refused once a
-// newer attempt owns the run, a person cancels it, or it ends at a cap.
+// run that can't go ahead before it costs anything, runs its script in a warm
+// prerender tab on the run's own affinity with the run's token, then commits
+// the overlay as one batch or, for a script that threw or ran out of time,
+// discards it and records the error. The run row is the source of truth:
+// every step is refused once a newer attempt owns the run, a person cancels
+// it, or it ends at a cap.
 export async function runAutomationAttempt(
   ctx: AutomationAttemptContext,
   input: AutomationJobInput,
@@ -247,7 +248,8 @@ export async function runAutomationAttempt(
   }
   let operationsAdmitted = await admitRunOperations(admission, run, {
     automation: identity.automation,
-    operations: limits.operations,
+    realmURL,
+    token,
   });
   if (!operationsAdmitted.ok) {
     return await refuse(operationsAdmitted.reason, operationsAdmitted.message);
@@ -259,11 +261,11 @@ export async function runAutomationAttempt(
   await logRunPlatformLine(dbAdapter, runId, {
     kind: 'admission',
     level: 'info',
-    message: `Admitted the run as ${run.actsAs}, with ${limits.operations.length} declared ${limits.operations.length === 1 ? 'operation' : 'operations'} checked`,
+    message: `Admitted the run as ${run.actsAs}, with ${operationsAdmitted.operations} declared ${operationsAdmitted.operations === 1 ? 'operation' : 'operations'} checked`,
     data: {
       admitted: true,
       actsAs: run.actsAs,
-      operations: limits.operations.length,
+      operations: operationsAdmitted.operations,
     },
   });
   let recorded = await recordAutomationRunScript(dbAdapter, runId, attempt, {

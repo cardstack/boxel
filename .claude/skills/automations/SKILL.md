@@ -71,8 +71,9 @@ description: >-
   Also covers a run's admission (`automation-admission.ts`): the checks the
   worker makes before a run costs anything (the automation's row, the run's
   identity's direct write, revoked sessions and Matrix account, the script,
-  every declared operation through `automationAdmission`, and the spending
-  hook), each refusal code and what fixes it, the `admission` log line and
+  every declared operation, which the realm checks through
+  `automationAdmission` at `/_run-admission`, and the spending hook), each
+  refusal code and what fixes it, the `admission` log line and
   `admitted_at`, and the automation notices a refusal leaves
   (`automation_notices`, `/_automation-notices`, the key page's Automations
   section). Use when a run ended with one of those codes, when changing what
@@ -1102,13 +1103,22 @@ line at level `error` with `data.reason`. An admitted run sets
 `automation_runs.admitted_at` and logs an `admission` line with
 `data.admitted = true`.
 
-The worker's side of the checks that need the realm server
-(`AutomationAdmissionChecks`) is built in `realm-server/worker.ts` by
-`buildAutomationAdmissionChecks` (`lib/automation-admission-checks.ts`): the
-Matrix account lookup and `automationAdmission` over an operation core of the
-worker's own (`workerOperationCore`, which finds a module's realm from
-`realm_user_permissions` and reads its ACL from the same rows a request is
-checked against). A worker without them refuses every run as
+The declared operations are checked by the automation's realm, not the
+worker. The worker asks `GET <realm>/_run-admission` (`RUN_ADMISSION_PATH` in
+`automation-admission-route.ts`) with the run's token, and the realm checks
+each operation the card declares as the run's identity through
+`CallApiSender.admitAutomation`, which realm-server implements with
+`automationAdmission` over the realm's own operation core. Only a realm can
+check an operation the way its call is checked: the worker mounts no realm,
+and its definition cache can't read a private realm's modules. The route
+answers the first refusal, or none. Anything but the run's own token in its
+own realm gets 403 `not-a-run`, and a realm the worker can't ask refuses the
+run (`run-admission-failed`).
+
+The worker's own checks (`AutomationAdmissionChecks`) are built in
+`realm-server/worker.ts` by `buildAutomationAdmissionChecks`
+(`lib/automation-admission-checks.ts`): the Matrix account lookup, and the
+spending hook. A worker without them refuses every run as
 `account-unverifiable`.
 
 | Code                                                                              | Why                                                                                                                                                                                                                                                                                  | What fixes it                                                                                                          |
@@ -1125,6 +1135,7 @@ checked against). A worker without them refuses every run as
 | `share-suspended`                                                                 | The realm's share the operation's `{{apiKey}}` slot uses is suspended                                                                                                                                                                                                                | A direct writer resumes the share, or the key's owner swaps another key into it                                        |
 | `credential-rejected`                                                             | The vendor refused the key or connection the operation uses, or its OAuth client is broken (see the `oauth-connections` skill)                                                                                                                                                       | Reconnect or replace the key                                                                                           |
 | any other `automationAdmission` code (`target-not-found`, `invalid-operation`, …) | The declared operation can't be found or lowered for the run's identity                                                                                                                                                                                                              | Fix the card's declaration or the operation's module                                                                   |
+| `run-admission-failed`, `run-admission-unavailable`                               | The worker couldn't ask the realm (the realm's answer is in `error_message`), or the realm has no `admitAutomation` (a published realm)                                                                                                                                              | Look at the realm server's log for the `_run-admission` request                                                        |
 | the spending hook's code                                                          | `AutomationAdmissionChecks.admitSpending`: the balance and the monthly cap                                                                                                                                                                                                           | See the `pricing` skill                                                                                                |
 
 Scheduled runs are admitted for an `active`, `waiting-for-credits` (left to

@@ -39,8 +39,8 @@ import { listAutomationNotices } from '@cardstack/runtime-common/automation-noti
 import { internalKeyFor } from '@cardstack/runtime-common';
 import {
   ROOMY_AUTOMATION_CAPS,
-  insertUser,
   realmSecretSeed,
+  createJWT,
   setupPermissionedRealmCached,
   testAccountStandings,
   testAutomationAdmissionChecks,
@@ -230,6 +230,17 @@ module(basename(import.meta.filename), function (hooks) {
     return switched.automation;
   }
 
+  // Records that `user`'s sessions were revoked at `seconds`.
+  async function revokeSessionsAt(user: string, seconds: number) {
+    await query(dbAdapter, [
+      'INSERT INTO users (matrix_user_id, sessions_revoked_at) VALUES (',
+      param(user),
+      ',',
+      param(seconds),
+      ') ON CONFLICT (matrix_user_id) DO UPDATE SET sessions_revoked_at = EXCLUDED.sessions_revoked_at',
+    ]);
+  }
+
   // A tab that answers `outcome`, counting how often it is asked.
   function stubTab(calls: RunCommandArgs[]): Prerenderer {
     let outcome: AutomationScriptOutcome = {
@@ -253,13 +264,16 @@ module(basename(import.meta.filename), function (hooks) {
     run: AutomationRun,
     {
       checks,
+      realmAdmission,
       calls = [],
     }: {
-      // Stands in for the worker's admission checks; null for a worker that
-      // has none.
+      // Stands in for the worker's admission checks; undefined for a worker
+      // that has none.
       checks?: (
         real: AutomationAdmissionChecks,
       ) => AutomationAdmissionChecks | undefined;
+      // Stands in for the realm's answer to the run's admission request.
+      realmAdmission?: () => Response;
       calls?: RunCommandArgs[];
     } = {},
   ) {
@@ -270,10 +284,23 @@ module(basename(import.meta.filename), function (hooks) {
       virtualNetwork,
       testCreatePrerenderAuth,
     );
-    let real = testAutomationAdmissionChecks(
-      dbAdapter,
-      virtualNetwork,
-    )({ definitionLookup });
+    let real = testAutomationAdmissionChecks;
+    let network = realmAdmission
+      ? (new Proxy(virtualNetwork, {
+          get(target, property) {
+            if (property === 'fetch') {
+              return (url: string | URL | Request, init?: RequestInit) => {
+                let href = String(url instanceof Request ? url.url : url);
+                return href.endsWith('_run-admission')
+                  ? Promise.resolve(realmAdmission())
+                  : target.fetch(url, init);
+              };
+            }
+            let value = Reflect.get(target, property, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        }) as VirtualNetwork)
+      : virtualNetwork;
     let jobInfo: JobInfo = {
       jobId: 1,
       reservationId: 7,
@@ -286,7 +313,7 @@ module(basename(import.meta.filename), function (hooks) {
       {
         dbAdapter,
         definitionLookup,
-        virtualNetwork,
+        virtualNetwork: network,
         prerenderer,
         mintRunToken: buildMintRunToken(realmSecretSeed),
         matrixServerName: 'localhost',
@@ -300,6 +327,29 @@ module(basename(import.meta.filename), function (hooks) {
       },
       automationRunDedupeKey(run),
       jobInfo,
+    );
+  }
+
+  // The realm's answer to a run's admission request, refusing with
+  // `refusal`.
+  function admissionAnswer(refusal: {
+    code: string;
+    detail: string;
+    operation?: string;
+    targetType?: { module: string; name: string };
+  }) {
+    return new Response(
+      JSON.stringify({
+        data: {
+          type: 'run-admission',
+          id: 'run',
+          attributes: { refusal },
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/vnd.api+json' },
+      },
     );
   }
 
@@ -430,28 +480,22 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a run whose identity’s sessions were revoked after the run was given their authority is refused', async function (assert) {
-    await insertUser(dbAdapter, OWNER, 'cus_admission', 'owner@example.com');
     let run = await newRun(CLEAN);
-    await query(dbAdapter, [
-      'UPDATE users SET sessions_revoked_at =',
-      param(Math.floor(Date.parse(run.createdAt) / 1000) + 60),
-      'WHERE matrix_user_id =',
-      param(OWNER),
-    ]);
+    await revokeSessionsAt(
+      OWNER,
+      Math.floor(Date.parse(run.createdAt) / 1000) + 60,
+    );
     let calls: RunCommandArgs[] = [];
     let result = await attempt(run, { calls });
     await assertRefused(assert, run, result, calls, 'session-revoked');
   });
 
   test('sessions revoked before the run was given its identity’s authority don’t refuse it', async function (assert) {
-    await insertUser(dbAdapter, OWNER, 'cus_admission', 'owner@example.com');
     let run = await newRun(CLEAN);
-    await query(dbAdapter, [
-      'UPDATE users SET sessions_revoked_at =',
-      param(Math.floor(Date.parse(run.createdAt) / 1000) - 60),
-      'WHERE matrix_user_id =',
-      param(OWNER),
-    ]);
+    await revokeSessionsAt(
+      OWNER,
+      Math.floor(Date.parse(run.createdAt) / 1000) - 60,
+    );
     let result = await attempt(run);
     assert.strictEqual(result.state, 'complete');
   });
@@ -539,15 +583,13 @@ module(basename(import.meta.filename), function (hooks) {
       let calls: RunCommandArgs[] = [];
       let result = await attempt(run, {
         calls,
-        checks: (real) => ({
-          ...real,
-          admitOperation: async () => ({
-            status: 403,
-            code: code as any,
-            title: 'Refused',
+        realmAdmission: () =>
+          admissionAnswer({
+            code,
             detail: `refused with ${code}`,
+            operation: 'list',
+            targetType: INBOX,
           }),
-        }),
       });
       await assertRefused(assert, run, result, calls, code);
     }
@@ -567,15 +609,13 @@ module(basename(import.meta.filename), function (hooks) {
     let calls: RunCommandArgs[] = [];
     let result = await attempt(run, {
       calls,
-      checks: (real) => ({
-        ...real,
-        admitOperation: async () => ({
-          status: 404,
+      realmAdmission: () =>
+        admissionAnswer({
           code: 'target-not-found',
-          title: 'Unknown operation',
           detail: 'no such operation',
+          operation: 'list',
+          targetType: INBOX,
         }),
-      }),
     });
     await assertRefused(assert, run, result, calls, 'target-not-found');
     assert.deepEqual(
@@ -585,6 +625,28 @@ module(basename(import.meta.filename), function (hooks) {
       }),
       [],
     );
+  });
+
+  test('a realm that can’t be asked about the operations refuses the run', async function (assert) {
+    let run = await newRun(NEEDS_APPROVAL);
+    let calls: RunCommandArgs[] = [];
+    let result = await attempt(run, {
+      calls,
+      realmAdmission: () => new Response('down', { status: 503 }),
+    });
+    await assertRefused(assert, run, result, calls, 'run-admission-failed');
+  });
+
+  test('the realm refuses an admission request that doesn’t carry a run’s token', async function (assert) {
+    let response = await request
+      .get(`/${new URL(realm.url).pathname.split('/')[1]}/_run-admission`)
+      .set('Accept', 'application/vnd.api+json')
+      .set(
+        'Authorization',
+        `Bearer ${createJWT(realm, OWNER, ['read', 'write'])}`,
+      );
+    assert.strictEqual(response.status, 403);
+    assert.strictEqual(response.body.errors[0].code, 'not-a-run');
   });
 
   test('the spending check runs last, and its refusal ends the run', async function (assert) {

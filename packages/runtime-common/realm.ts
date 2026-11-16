@@ -229,7 +229,14 @@ import {
   stageRunOverlayFiles,
   type RunOverlayKey,
 } from './run-overlay.ts';
-import { automationRunCallApiMeter } from './automation-run-limits.ts';
+import {
+  automationRunCallApiMeter,
+  readRunLimits,
+} from './automation-run-limits.ts';
+import {
+  RUN_ADMISSION_PATH,
+  type RunAdmissionAnswer,
+} from './automation-admission-route.ts';
 import {
   RUN_LOG_MAX_REQUEST_BYTES,
   RUN_LOG_PATH,
@@ -3943,6 +3950,16 @@ export class Realm {
         SupportedMimeType.JSONAPI,
         this.commitRunOverlay.bind(this),
         { ...ACL_ONLY, takesRunWrites: true },
+      )
+      // An automation run's admission of the operations its automation
+      // declares, asked by the worker with the run's token before the script
+      // runs. It reads nothing of the realm's files, and each operation is
+      // checked as the run's identity, the way that operation's call would be.
+      .get(
+        RUN_ADMISSION_PATH,
+        SupportedMimeType.JSONAPI,
+        this.admitRunOperations.bind(this),
+        ACL_ONLY,
       )
       // An automation run's script lines: its console, activity, milestones
       // and uncaught error, which the run's tab sends as they happen. They go
@@ -14515,6 +14532,85 @@ export class Realm {
   }
 
   // Commits a run's overlay, and logs on the run what the commit did.
+  // Checks each operation the run's automation declares as the run's
+  // identity, without opening any key (`CallApiSender.admitAutomation`), and
+  // answers the first refusal, or none (see `automation-admission-route.ts`).
+  private async admitRunOperations(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let respond = (status: number, body: unknown) =>
+      createResponse({
+        body: JSON.stringify(body),
+        init: {
+          status,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        },
+        requestContext,
+      });
+    let call = requestContext.automationRun;
+    if (!call || call.readOnly) {
+      return respond(403, {
+        errors: [
+          {
+            status: '403',
+            code: 'not-a-run',
+            title: 'Forbidden',
+            detail:
+              "Only an automation run is admitted, in the run's own realm",
+          },
+        ],
+      });
+    }
+    let answer = (attributes: RunAdmissionAnswer) =>
+      respond(200, {
+        data: { type: 'run-admission', id: call.runId, attributes },
+      });
+    let admit = this.#callApi?.admitAutomation;
+    if (!admit) {
+      return answer({
+        refusal: {
+          code: 'run-admission-unavailable',
+          detail: "This realm can't check an automation's operations",
+        },
+      });
+    }
+    let limits = await readRunLimits({
+      dbAdapter: this.#dbAdapter,
+      definitionLookup: this.#definitionLookup,
+      virtualNetwork: this.#virtualNetwork,
+      automationId: call.automationId,
+    });
+    if (!limits.ok) {
+      return answer({
+        refusal: { code: 'not-an-automation', detail: limits.message },
+      });
+    }
+    for (let declared of limits.operations) {
+      let refused = await admit({
+        core: this.operationCore,
+        realmURL: new URL(this.url),
+        codeRef: declared.targetType,
+        operation: declared.operation,
+        payer: call.actsAs,
+      });
+      if (refused) {
+        return answer({
+          refusal: {
+            code: refused.code,
+            detail: refused.detail,
+            operation: declared.operation,
+            targetType: {
+              module: String(declared.targetType.module),
+              name: declared.targetType.name,
+            },
+          },
+        });
+      }
+    }
+    return answer({ refusal: null, operations: limits.operations.length });
+  }
+
   private async commitRunOverlay(
     request: Request,
     requestContext: RequestContext,

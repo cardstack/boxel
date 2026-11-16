@@ -31,11 +31,6 @@ import type { MeteredCharges } from './metered-charges.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs, MintRunToken } from './tasks/index.ts';
 import type { AutomationAdmissionChecks } from './automation-admission.ts';
-import type { DefinitionLookup } from './definition-lookup.ts';
-
-export type BuildAutomationAdmissionChecks = (deps: {
-  definitionLookup: DefinitionLookup;
-}) => AutomationAdmissionChecks;
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { heartbeatJob } from './queue.ts';
 
@@ -237,7 +232,7 @@ export class Worker {
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #createPrerenderAuth: CreatePrerenderAuth;
   #mintRunToken: MintRunToken | undefined;
-  #buildAutomationAdmissionChecks: BuildAutomationAdmissionChecks | undefined;
+  #automationAdmissionChecks: AutomationAdmissionChecks | undefined;
   #meteredCharges: MeteredCharges | undefined;
 
   constructor({
@@ -256,7 +251,7 @@ export class Worker {
     prerenderer,
     createPrerenderAuth,
     mintRunToken,
-    buildAutomationAdmissionChecks,
+    automationAdmissionChecks,
     indexJobsOnly,
     skipPrerenderHtmlRealms,
     mediaCacheAdapter,
@@ -287,9 +282,8 @@ export class Worker {
     createPrerenderAuth: CreatePrerenderAuth;
     // See `TaskArgs.mintRunToken`.
     mintRunToken?: MintRunToken;
-    // Builds `TaskArgs.automationAdmissionChecks` over the worker's own
-    // definition cache.
-    buildAutomationAdmissionChecks?: BuildAutomationAdmissionChecks;
+    // See `TaskArgs.automationAdmissionChecks`.
+    automationAdmissionChecks?: AutomationAdmissionChecks;
     // See `TaskArgs.meteredCharges`.
     meteredCharges?: MeteredCharges;
   }) {
@@ -308,7 +302,7 @@ export class Worker {
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
     this.#mintRunToken = mintRunToken;
-    this.#buildAutomationAdmissionChecks = buildAutomationAdmissionChecks;
+    this.#automationAdmissionChecks = automationAdmissionChecks;
     this.#indexJobsOnly = indexJobsOnly ?? false;
     this.#skipPrerenderHtmlRealms = skipPrerenderHtmlRealms ?? [];
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -339,9 +333,7 @@ export class Worker {
       reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
       mintRunToken: this.#mintRunToken,
-      automationAdmissionChecks: this.#buildAutomationAdmissionChecks?.({
-        definitionLookup,
-      }),
+      automationAdmissionChecks: this.#automationAdmissionChecks,
       mediaCacheAdapter: this.#mediaCacheAdapter,
       skipPrerenderHtmlRealms: this.#skipPrerenderHtmlRealms,
       meteredCharges: this.#meteredCharges,

@@ -284,16 +284,11 @@ let autoMigrate = migrateDB || undefined;
     // An automation run's admission asks the Matrix server whether the
     // account the run acts as can still sign in, with the admin credentials
     // the realm server also holds.
-    buildAutomationAdmissionChecks: ({ definitionLookup }) =>
-      buildAutomationAdmissionChecks({
-        dbAdapter,
-        definitionLookup,
-        virtualNetwork,
-        matrixURL: new URL(matrixURL),
-        matrixServerName: matrixServerNameFromEnv(),
-        matrixAdminUsername: process.env.MATRIX_ADMIN_USERNAME,
-        matrixAdminPassword: process.env.MATRIX_ADMIN_PASSWORD,
-      }),
+    automationAdmissionChecks: buildAutomationAdmissionChecks({
+      matrixURL: new URL(matrixURL),
+      matrixAdminUsername: process.env.MATRIX_ADMIN_USERNAME,
+      matrixAdminPassword: process.env.MATRIX_ADMIN_PASSWORD,
+    }),
     indexJobsOnly,
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),

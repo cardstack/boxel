@@ -9,8 +9,10 @@ const {
 } = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
 import { buildMintRunToken, mintRunToken } from '../../lib/run-token.ts';
-import { buildAutomationAdmissionChecks } from '../../lib/automation-admission-checks.ts';
-import type { AccountStanding } from '@cardstack/runtime-common/automation-admission';
+import type {
+  AccountStanding,
+  AutomationAdmissionChecks,
+} from '@cardstack/runtime-common/automation-admission';
 import { automationRef } from '@cardstack/runtime-common/automation-declaration';
 import {
   createAutomationRun,
@@ -35,7 +37,6 @@ import type {
   LinkShapePolicy,
   ServedRealm,
   DBAdapter,
-  BuildAutomationAdmissionChecks,
 } from '@cardstack/runtime-common';
 import {
   Realm,
@@ -1713,10 +1714,7 @@ export async function createRealm({
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
       mintRunToken: buildMintRunToken(realmSecretSeed),
-      buildAutomationAdmissionChecks: testAutomationAdmissionChecks(
-        dbAdapter,
-        virtualNetwork,
-      ),
+      automationAdmissionChecks: testAutomationAdmissionChecks,
       mediaCacheAdapter,
       meteredCharges: meteredChargesFor(dbAdapter, testPricing),
     });
@@ -1930,10 +1928,7 @@ export async function runTestRealmServer({
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
     mintRunToken: buildMintRunToken(realmSecretSeed),
-    buildAutomationAdmissionChecks: testAutomationAdmissionChecks(
-      dbAdapter,
-      virtualNetwork,
-    ),
+    automationAdmissionChecks: testAutomationAdmissionChecks,
     // The indexing worker persists declared captures when a store is
     // configured — same wiring as the production worker child.
     mediaCacheAdapter,
@@ -2132,10 +2127,7 @@ export async function runTestRealmServerWithRealms({
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
     mintRunToken: buildMintRunToken(realmSecretSeed),
-    buildAutomationAdmissionChecks: testAutomationAdmissionChecks(
-      dbAdapter,
-      virtualNetwork,
-    ),
+    automationAdmissionChecks: testAutomationAdmissionChecks,
     mediaCacheAdapter,
     meteredCharges: meteredChargesFor(dbAdapter, testPricing),
   });
@@ -4141,23 +4133,9 @@ export function realmConfigCardJSON(
 // deactivates one sets it here and clears it when it's done.
 export const testAccountStandings = new Map<string, AccountStanding>();
 
-// The admission checks a test worker uses: the real operation checks, with
-// account standings read from `testAccountStandings` rather than the Matrix
-// server, where the test users have no accounts.
-export function testAutomationAdmissionChecks(
-  dbAdapter: DBAdapter,
-  virtualNetwork: VirtualNetwork,
-): BuildAutomationAdmissionChecks {
-  return ({ definitionLookup }) => ({
-    ...buildAutomationAdmissionChecks({
-      dbAdapter,
-      definitionLookup,
-      virtualNetwork,
-      matrixURL: realmServerTestMatrix.url,
-      matrixServerName: 'localhost',
-      matrixAdminUsername: undefined,
-      matrixAdminPassword: undefined,
-    }),
-    accountStanding: async (user) => testAccountStandings.get(user) ?? 'usable',
-  });
-}
+// The admission checks a test worker uses: account standings read from
+// `testAccountStandings` rather than the Matrix server, where the test users
+// have no accounts.
+export const testAutomationAdmissionChecks: AutomationAdmissionChecks = {
+  accountStanding: async (user) => testAccountStandings.get(user) ?? 'usable',
+};

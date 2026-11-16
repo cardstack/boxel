@@ -26,10 +26,15 @@
 // 3. The script parses (`script-error`). The card and the script file are
 //    read before this, by the attempt.
 // 4. Every operation the card declares passes `automationAdmission` as the
-//    run's identity. A refusal ends the run with its code, such as
-//    `binding-not-approved`, `share-suspended`, `binding-needs-reapproval` or
-//    `credential-rejected`. The ones a person fixes in the secure window also
-//    leave that person a notice (`automation-notices.ts`).
+//    run's identity. The worker asks the automation's realm with the run's
+//    token (`RUN_ADMISSION_PATH`), since only a realm can check an operation
+//    the way its call would be checked: with its own operation core, which
+//    resolves the declared type and reads its definition as the realm does.
+//    A refusal ends the run with its code, such as `binding-not-approved`,
+//    `share-suspended`, `binding-needs-reapproval` or `credential-rejected`;
+//    a realm that can't be asked refuses it (`run-admission-failed`). The
+//    refusals a person fixes in the secure window also leave that person a
+//    notice (`automation-notices.ts`).
 // 5. The run's spending: `AutomationAdmissionChecks.admitSpending`, which
 //    checks the balance and the monthly cap where one is configured.
 //
@@ -37,7 +42,10 @@
 // code. An admitted run records `admitted_at`. Either way the run's log gets
 // one `admission` line saying which.
 
-import type { AutomationOperationDeclaration } from './automation-declaration.ts';
+import {
+  RUN_ADMISSION_PATH,
+  type RunAdmissionAnswer,
+} from './automation-admission-route.ts';
 import {
   recordAutomationNotice,
   isNoticedAdmissionRefusal,
@@ -48,7 +56,6 @@ import {
   getAutomation,
   type AutomationRow,
 } from './automations.ts';
-import type { OperationError } from './card-operations/types.ts';
 import type { DBAdapter } from './db.ts';
 import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import { isSessionRevoked } from './db-queries/user-queries.ts';
@@ -60,19 +67,12 @@ import type { VirtualNetwork } from './virtual-network.ts';
 export type AccountStanding = 'usable' | 'deactivated' | 'locked' | 'missing';
 
 // What admission asks of the realm server's side of the worker, which holds
-// what this package can't: the Matrix server's admin API and the
-// operation-binding checks.
+// what this package can't: the Matrix server's admin API, and the run's
+// spending.
 export interface AutomationAdmissionChecks {
   // Asks the Matrix server about `user`'s account. Throws when it can't be
   // asked.
   accountStanding(user: string): Promise<AccountStanding>;
-  // `automationAdmission` for one declared operation, as `actsAs`: the
-  // refusal its call would get, or undefined when it would be served.
-  admitOperation(args: {
-    realmURL: URL;
-    operation: AutomationOperationDeclaration;
-    actsAs: string;
-  }): Promise<OperationError | undefined>;
   // The run's balance and the automation's monthly cap. Undefined admits
   // every run.
   admitSpending?(args: {
@@ -194,57 +194,98 @@ export function scriptParseError(code: string): string | undefined {
 }
 
 // The checks on the card's declared operations and the run's spending (steps
-// 4 and 5). A refusal of an operation that a person fixes in the secure
-// window records them a notice.
+// 4 and 5), made with the run's token once the script has been read. A
+// refusal of an operation that a person fixes in the secure window records
+// them a notice.
 export async function admitRunOperations(
   ctx: AdmissionContext,
   run: AutomationRun,
   {
     automation,
-    operations,
+    realmURL,
+    token,
   }: {
     automation: AutomationRow | undefined;
-    operations: readonly AutomationOperationDeclaration[];
+    // The URL the automation's realm is served at.
+    realmURL: string;
+    token: string;
   },
-): Promise<{ ok: true } | ({ ok: false } & AdmissionRefusal)> {
-  let { checks } = ctx;
-  if (!checks) {
+): Promise<
+  { ok: true; operations: number } | ({ ok: false } & AdmissionRefusal)
+> {
+  let asked = await askRealm(ctx, realmURL, token);
+  if ('failure' in asked) {
     return refuse(
-      'account-unverifiable',
-      "This worker can't check the automation's declared operations",
+      'run-admission-failed',
+      `The realm couldn't be asked about the automation's operations: ${asked.failure}`,
     );
   }
-  let realmURL = ctx.virtualNetwork.toURL(run.realm);
-  for (let operation of operations) {
-    let refused = await checks.admitOperation({
-      realmURL,
-      operation,
-      actsAs: run.actsAs,
-    });
-    if (!refused) {
-      continue;
-    }
-    if (isNoticedAdmissionRefusal(refused.code)) {
+  let { refusal } = asked.answer;
+  if (refusal) {
+    if (isNoticedAdmissionRefusal(refusal.code)) {
       await recordAutomationNotice(ctx.dbAdapter, {
         recipient: run.actsAs,
         automationId: run.automationId,
         realm: run.realm,
         runId: run.id,
-        reason: refused.code,
-        operation,
-        detail: refused.detail,
+        reason: refusal.code,
+        ...(refusal.operation && refusal.targetType
+          ? {
+              operation: {
+                operation: refusal.operation,
+                targetType: refusal.targetType,
+              },
+            }
+          : {}),
+        detail: refusal.detail,
       });
     }
     return refuse(
-      refused.code,
-      `The declared operation "${operation.operation}" on ${operation.targetType.name} was refused: ${refused.detail}`,
+      refusal.code,
+      refusal.operation
+        ? `The declared operation "${refusal.operation}"${refusal.targetType ? ` on ${refusal.targetType.name}` : ''} was refused: ${refusal.detail}`
+        : refusal.detail,
     );
   }
-  let spending = await checks.admitSpending?.({ run, automation });
+  let spending = await ctx.checks?.admitSpending?.({ run, automation });
   if (spending) {
     return { ok: false, ...spending };
   }
-  return { ok: true };
+  return { ok: true, operations: asked.answer.operations ?? 0 };
+}
+
+async function askRealm(
+  ctx: AdmissionContext,
+  realmURL: string,
+  token: string,
+): Promise<{ answer: RunAdmissionAnswer } | { failure: string }> {
+  let url = new URL(RUN_ADMISSION_PATH.replace(/^\//, ''), realmURL).href;
+  let redact = (text: string) => text.split(token).join('[REDACTED]');
+  try {
+    let response = await ctx.virtualNetwork.fetch(url, {
+      headers: {
+        Accept: 'application/vnd.api+json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) {
+      return {
+        failure: redact(
+          `${response.status} ${(await response.text()).slice(0, 500)}`,
+        ),
+      };
+    }
+    let body = (await response.json()) as {
+      data?: { attributes?: RunAdmissionAnswer };
+    };
+    let answer = body.data?.attributes;
+    if (!answer || !('refusal' in answer)) {
+      return { failure: 'the realm answered no admission' };
+    }
+    return { answer };
+  } catch (e: any) {
+    return { failure: redact(String(e?.message ?? e)) };
+  }
 }
 
 function refuse(
