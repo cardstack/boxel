@@ -932,6 +932,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     assert.strictEqual(response.status, 403, 'deletion is forbidden');
   });
 
+  test('DELETE /_delete-realm lets a platform service account delete a realm it created under its own name', async function (assert) {
+    let serviceAccountUserId = '@sync_writer:localhost';
+    let realmURL = await createRealmFor(serviceAccountUserId);
+
+    let response = await context.request
+      .delete('/_delete-realm')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user: serviceAccountUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`,
+      )
+      .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+
+    assert.strictEqual(response.status, 204, 'realm deleted');
+  });
+
   test('DELETE /_delete-realm refuses a bootstrap realm, whatever writes its permissions grant', async function (assert) {
     let writerUserId = `@mango-${uuidv4()}:localhost`;
     let realmURL = `http://127.0.0.1:4444/bootstrap-${uuidv4()}/`;

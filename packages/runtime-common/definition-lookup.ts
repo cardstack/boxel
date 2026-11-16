@@ -383,6 +383,12 @@ export interface PopulateDefinitionCacheEntryArgs {
   priority?: number;
 }
 
+export type CachedDefinitionEntryResult =
+  | { status: 'not-cached' }
+  | { status: 'missing-export' }
+  | { status: 'module-error' }
+  | { status: 'found'; entry: ModuleDefinitionResult };
+
 export interface DefinitionLookup {
   lookupDefinition(
     codeRef: ResolvedCodeRef,
@@ -404,6 +410,16 @@ export interface DefinitionLookup {
   lookupCachedDefinition(
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined>;
+  // Like lookupCachedDefinition, never rendering a module, but it says why
+  // there is no definition: the cache doesn't hold the module yet
+  // (`not-cached`), the cached module has no such export
+  // (`missing-export`), or the cached render of the module, or of the
+  // export's definition, failed (`module-error`; an error row expires, so the
+  // module renders again later). It answers with the whole entry, the type's
+  // adoption chain included.
+  lookupCachedDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+  ): Promise<CachedDefinitionEntryResult>;
   invalidate(moduleURL: string): Promise<string[]>;
   clearRealmDefinitions(resolvedRealmURL: string): Promise<void>;
   clearAllDefinitions(): Promise<void>;
@@ -598,6 +614,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
   ): Promise<Definition | undefined> {
+    let result = await this.lookupCachedDefinitionEntry(codeRef, contextOpts);
+    return result.status === 'found' ? result.entry.definition : undefined;
+  }
+
+  async lookupCachedDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+    contextOpts?: LookupContext,
+  ): Promise<CachedDefinitionEntryResult> {
     let canonicalModuleURL = canonicalURL(
       codeRef.module,
       undefined,
@@ -608,7 +632,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       contextOpts,
     );
     if (!context) {
-      return undefined;
+      return { status: 'not-cached' };
     }
     let { cacheUserId, cacheScope, resolvedRealmURL } = context;
 
@@ -620,18 +644,25 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       );
       if (cached) {
+        // A row can hold definitions and an error_doc together. The
+        // export's definition, when the row has one, is the answer, as it
+        // always was for lookupCachedDefinition; the error only explains a
+        // missing one.
         let entry = this.definitionEntryFor(
           cached.definitions,
           codeRef,
           canonicalModuleURL,
         );
         if (entry && 'definition' in entry) {
-          return entry.definition;
+          return { status: 'found', entry };
         }
-        return undefined;
+        if (entry || cached.error) {
+          return { status: 'module-error' };
+        }
+        return { status: 'missing-export' };
       }
     }
-    return undefined;
+    return { status: 'not-cached' };
   }
 
   async getCachedDefinitions(
@@ -2367,6 +2398,14 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined> {
     return await this.#inner.lookupCachedDefinition(codeRef, {
+      requestingRealm: this.#realm,
+    });
+  }
+
+  async lookupCachedDefinitionEntry(
+    codeRef: ResolvedCodeRef,
+  ): Promise<CachedDefinitionEntryResult> {
+    return await this.#inner.lookupCachedDefinitionEntry(codeRef, {
       requestingRealm: this.#realm,
     });
   }

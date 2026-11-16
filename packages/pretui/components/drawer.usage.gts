@@ -10,6 +10,8 @@ import { DRAWER_PLACEMENT_OPTIONS } from '../demo-structure';
 // Dropped knobs: layer (stacking comes from the native <dialog> top layer).
 // size and the boxel-modal-offset-* CSS variables fold into the
 // --pretui-drawer-size row below.
+const SCROLL_PARAGRAPHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
 class DrawerUsage extends GlimmerComponent {
   @tracked open = false;
   @tracked placement = 'end';
@@ -37,9 +39,14 @@ class DrawerUsage extends GlimmerComponent {
           @dismissible={{this.dismissible}}
         >
           <:title>Pretui Drawer</:title>
-          <:default>Hi! This is some content. The drawer rides the native
-            dialog top layer — focus trap, Escape, and backdrop come from the
-            platform.</:default>
+          <:default>
+            <p>Hi! This is some content. The drawer rides the native dialog top
+              layer — focus trap, Escape, and backdrop come from the platform.</p>
+            {{#each SCROLL_PARAGRAPHS as |n|}}
+              <p>Paragraph {{n}}: enough text to make the body scroll, so the
+                scrollbar shows beside the content rather than over it.</p>
+            {{/each}}
+          </:default>
           <:footer>
             <Button @tone='primary' {{on 'click' this.hide}}>OK</Button>
           </:footer>

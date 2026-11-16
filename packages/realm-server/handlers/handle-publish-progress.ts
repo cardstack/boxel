@@ -62,6 +62,7 @@ interface PublishProgressRow {
 export default function handlePublishProgress({
   dbAdapter,
   matrixClient,
+  serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
@@ -106,11 +107,18 @@ export default function handlePublishProgress({
         `SELECT source_url FROM realm_registry WHERE kind = 'published' AND url =`,
         param(publishedRealmURL),
       ])) as { source_url: string | null }[];
-      let permissions = published?.source_url
-        ? await fetchRealmPermissions(dbAdapter, new URL(published.source_url))
-        : {};
+      let sourceRealmURL = published?.source_url
+        ? new URL(published.source_url)
+        : undefined;
       if (
-        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+        !sourceRealmURL ||
+        !isRealmAdministrator(
+          await fetchRealmPermissions(dbAdapter, sourceRealmURL),
+          ownerUserId,
+          matrixClient.serverName,
+          sourceRealmURL,
+          new URL(serverURL),
+        )
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,

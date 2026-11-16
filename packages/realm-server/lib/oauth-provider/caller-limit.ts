@@ -111,12 +111,14 @@ export type CallerLimitOutcome =
 
 // Takes one from the caller's address, network and overall buckets, in that
 // order, each kept under `counter`. `address` is the `CLIENT_IP_HEADER`
-// value.
+// value. With `overall: false` the overall bucket is left alone, for a request
+// that shares a caller's allowance but none of the ceiling over everyone.
 export async function takeFromCallerLimit(
   store: RateLimitStore,
   counter: string,
   address: string | undefined,
   limit: CallerLimit,
+  { overall: takeOverall = true }: { overall?: boolean } = {},
 ): Promise<CallerLimitOutcome> {
   let parsed = address ? parseIP(address) : undefined;
   if (!parsed) {
@@ -135,6 +137,9 @@ export async function takeFromCallerLimit(
   );
   if (!byNetwork.admitted) {
     return refusal(byNetwork);
+  }
+  if (!takeOverall) {
+    return { admitted: true, busy: false };
   }
   let overall = await store.take(
     counterKey(counter, 'all'),

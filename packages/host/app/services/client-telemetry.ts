@@ -215,7 +215,7 @@ export interface ClientErrorEvent extends BaseEvent {
 
 // One entry search the AI assistant made that was sent to a catalog realm:
 // `realm.entries.search` in a run-realm-code script, or a search-entries tool
-// call. A search the room's feature gate kept out of the catalog is not one.
+// call.
 export interface CatalogSearchEvent extends BaseEvent {
   event_type: 'catalog-search';
   // The tool that searched: 'run-realm-code' or 'search-entries'.

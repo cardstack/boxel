@@ -42,6 +42,7 @@ import {
   type OperationWriteResult,
 } from '@cardstack/runtime-common';
 import {
+  SKILL_FEATURE_REALMS,
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
@@ -5169,6 +5170,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // on the default of every readable realm. Answers whether a realm is gated
   // in the room.
   private featureGate(roomId: string): (realm: string) => boolean {
+    // With no feature gating a realm, nothing is gated, and the room's events
+    // are not read.
+    if (Object.keys(SKILL_FEATURE_REALMS).length === 0) {
+      return () => false;
+    }
     // Only delivered events: one still sending, or that failed to send, has
     // not reached the bot that built the prompt.
     let events = (

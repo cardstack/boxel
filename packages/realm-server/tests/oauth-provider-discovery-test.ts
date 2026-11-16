@@ -474,10 +474,12 @@ module(basename(import.meta.filename), function () {
         response_types_supported: ['code'],
         code_challenge_methods_supported: ['S256'],
         token_endpoint_auth_methods_supported: ['none'],
+        authorization_response_iss_parameter_supported: true,
         grant_types_supported: ['authorization_code'],
         scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
         authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
         registration_endpoint: 'http://127.0.0.1:0/_oauth-provider/reg',
+        client_id_metadata_document_supported: true,
       });
       assert.strictEqual(
         response.headers['access-control-allow-origin'],

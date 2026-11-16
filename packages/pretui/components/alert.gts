@@ -2,7 +2,7 @@
 import Component from '@glimmer/component';
 import AlertTriangleIcon from '@cardstack/boxel-icons/alert-triangle';
 import CheckIcon from '@cardstack/boxel-icons/check';
-import InfoIcon from '@cardstack/boxel-icons/info-small';
+import InfoIcon from '@cardstack/boxel-icons/info-circle';
 import XIcon from '@cardstack/boxel-icons/x';
 import { keepStyle, type KeptProperty } from '../internal/keep-style';
 import { resolveTone } from '../pretui-primitives';
