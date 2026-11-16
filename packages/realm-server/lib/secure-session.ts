@@ -734,11 +734,19 @@ export async function runDueDeviceSweeps(
         // The first revocation after a password change also ends the
         // account's OAuth connections (ADR 021 §1.9), before the Matrix
         // sign-out, so a Matrix server that is down doesn't hold it up. Its
-        // cutoff is when the sweep was due, not when it runs: a sweep tried
-        // again later leaves the grants made since with the new password.
-        // The later revocation, for OpenID tokens, leaves them: an OpenID
-        // token can't create a grant.
-        await revokeUserOAuthGrants(deps.dbAdapter, user, new Date(sweepAt));
+        // cutoff is the latest change, which the sweep is due a fixed delay
+        // after (`scheduleDeviceSweep`), not the sweep itself. A grant is
+        // consented under a secure session, which only the password or a
+        // Google sign-in buys (ADR 005 §1.3), and the change ended every
+        // secure session, so a grant consented since was made with the new
+        // password, whether before the sweep or after, or by a sweep tried
+        // again later. The later revocation, for OpenID tokens, leaves them:
+        // an OpenID token can't create a grant.
+        await revokeUserOAuthGrants(
+          deps.dbAdapter,
+          user,
+          new Date(new Date(sweepAt).getTime() - DEVICE_SWEEP_DELAY_MS),
+        );
         await signOutDevicesExcept(deps, user, keepDevice ?? undefined);
       }
       // A device the sweep signed out may have minted a realm-server session

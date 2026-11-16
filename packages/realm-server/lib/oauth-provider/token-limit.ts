@@ -5,11 +5,15 @@
 //   names. A connection refreshes about every 10 minutes, so the default
 //   allows ten times that. Not per address or per client: a hosted client
 //   refreshes every user's tokens from a few server addresses.
-// - Failed attempts per address, for requests that name no code or refresh
-//   token the provider holds, or a code without the verifier its PKCE
-//   challenge needs: such a request can never succeed, so each counts
-//   against the caller's address as it arrives, and a caller with none left
-//   is refused, so guessing codes or refresh tokens is slow. Anyone who sees
+// - Failed attempts, for requests that name no code or refresh token the
+//   provider holds, or a code without the verifier its PKCE challenge needs:
+//   such a request can never succeed, so each counts as it arrives, and a
+//   caller with none left is refused, so guessing codes or refresh tokens is
+//   slow. They are counted as the provider's other unsigned endpoints count
+//   requests (`caller-limit.ts`): per address (an IPv4 address or IPv6 /64),
+//   per network (a /24 or /48, so a holder of many addresses is still one
+//   caller), and overall. The overall limit refuses only such requests, so
+//   reaching it never refuses an exchange that could succeed. Anyone who sees
 //   a code in a redirect URL can send it, but without the verifier it never
 //   counts against the code's grant, so it can't use up the limit the real
 //   exchange and the grant's refreshes need, or end the grant as a reuse. A
@@ -17,10 +21,10 @@
 //   the one the `clientAddress` middleware works out, never the socket's.
 //
 // Ending a grant deletes its tokens, so a refresh that names a token of an
-// ended grant counts against its address too. A hosted client whose users'
-// grants have ended refreshes those tokens from a few server addresses until
-// each is told `invalid_grant`; where that is many, `failures` in
-// `BOXEL_OAUTH_TOKEN_RATE_LIMIT` raises the limit.
+// ended grant counts as a failure too. A hosted client whose users' grants
+// have ended refreshes those tokens from a few server addresses until each is
+// told `invalid_grant`; where that is many, `address` and `network` in
+// `BOXEL_OAUTH_TOKEN_RATE_LIMIT` raise the limit.
 //
 // A code or refresh token presented again after it was used ends its grant
 // (§1.9) even when the grant is over its limit: the limit is checked after
@@ -35,15 +39,18 @@ import {
   counterKey,
   isRateLimitUnavailable,
   logger,
-  parseIP,
   parseRateLimitSpec,
-  rateLimitKey,
   type AnonymousRateLimit,
   type DBAdapter,
   type RateLimitStore,
-  type TokenBucketLimit,
-  type TokenBucketOutcome,
 } from '@cardstack/runtime-common';
+import {
+  CallerLimitAlert,
+  parseCallerLimit,
+  takeFromCallerLimit,
+  tokenBucket,
+  type CallerLimit,
+} from './caller-limit.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { endGrant } from './grants.ts';
 import { sha256Hex } from './objects.ts';
@@ -59,53 +66,61 @@ const MAX_BODY_BYTES = 8 * 1024;
 
 export interface TokenLimit {
   perGrant: AnonymousRateLimit;
-  failuresPerAddress: AnonymousRateLimit;
+  failures: CallerLimit;
 }
 
 export const DEFAULT_TOKEN_LIMIT: TokenLimit = Object.freeze({
   perGrant: Object.freeze({ requests: 60, windowSeconds: 3600 }),
-  failuresPerAddress: Object.freeze({ requests: 60, windowSeconds: 600 }),
+  failures: Object.freeze({
+    perAddress: Object.freeze({ requests: 60, windowSeconds: 600 }),
+    perNetwork: Object.freeze({ requests: 300, windowSeconds: 600 }),
+    overall: Object.freeze({ requests: 3000, windowSeconds: 600 }),
+    alertAfter: 1500,
+  }),
 });
 
-const LIMIT_PARTS = {
-  grant: 'perGrant',
-  failures: 'failuresPerAddress',
-} as const;
-
 // Comma-separated named parts, each optional, with the default for any left
-// out: `grant` and `failures` as `requests/windowSeconds`, for example
-// `grant=60/3600,failures=60/600`. Undefined when a part is unknown, repeated
-// or malformed.
+// out: `grant` as `requests/windowSeconds`, and the failures limit's parts as
+// `parseCallerLimit` reads them, for example
+// `grant=60/3600,address=60/600,network=300/600,all=3000/600,alert=1500`.
+// Undefined when a part is unknown, repeated or malformed.
 export function parseTokenLimit(spec: string): TokenLimit | undefined {
-  let limit: TokenLimit = { ...DEFAULT_TOKEN_LIMIT };
-  let seen = new Set<string>();
+  let perGrant: AnonymousRateLimit = DEFAULT_TOKEN_LIMIT.perGrant;
+  let failureParts: string[] = [];
+  let grantSeen = false;
   for (let part of spec.split(',')) {
     let [name, value, ...rest] = part.split('=').map((text) => text.trim());
-    if (
-      !name ||
-      value === undefined ||
-      rest.length > 0 ||
-      seen.has(name) ||
-      !(name in LIMIT_PARTS)
-    ) {
+    if (name !== 'grant') {
+      failureParts.push(part);
+      continue;
+    }
+    if (grantSeen || value === undefined || rest.length > 0) {
       return undefined;
     }
-    seen.add(name);
+    grantSeen = true;
     let bucket = parseRateLimitSpec(value);
     if (!bucket) {
       return undefined;
     }
-    limit[LIMIT_PARTS[name as keyof typeof LIMIT_PARTS]] = bucket;
+    perGrant = bucket;
   }
-  return limit;
+  let failures =
+    failureParts.length === 0
+      ? DEFAULT_TOKEN_LIMIT.failures
+      : parseCallerLimit(failureParts.join(','), DEFAULT_TOKEN_LIMIT.failures);
+  return failures ? { perGrant, failures } : undefined;
 }
 
 export function tokenLimitFormat(): string {
-  let { perGrant, failuresPerAddress } = DEFAULT_TOKEN_LIMIT;
+  let bucket = ({ requests, windowSeconds }: AnonymousRateLimit) =>
+    `${requests}/${windowSeconds}`;
+  let { perGrant, failures } = DEFAULT_TOKEN_LIMIT;
   return (
-    `named parts, each optional: grant and failures as requests/windowSeconds, for example ` +
-    `grant=${perGrant.requests}/${perGrant.windowSeconds},` +
-    `failures=${failuresPerAddress.requests}/${failuresPerAddress.windowSeconds}`
+    `named parts, each optional: grant, address, network and all as requests/windowSeconds, ` +
+    `and alert as a count below all's requests, for example ` +
+    `grant=${bucket(perGrant)},address=${bucket(failures.perAddress)},` +
+    `network=${bucket(failures.perNetwork)},all=${bucket(failures.overall)},` +
+    `alert=${failures.alertAfter}`
   );
 }
 
@@ -118,8 +133,9 @@ export function tokenLimitFormat(): string {
 // never against its address, so a hosted client's users can't be locked out
 // by failures someone else causes through the client's address. One the
 // grant's limit refuses still ends the grant if it presents a code or token
-// already used. Any other request counts against its address's failures. One whose address can't be worked out is
-// refused, since it can't be counted.
+// already used. Any other request counts as a failure, against its address,
+// its network and the overall limit. One whose address can't be worked out
+// is refused, since it can't be counted.
 export function tokenHandler({
   provider,
   dbAdapter,
@@ -131,8 +147,13 @@ export function tokenHandler({
   rateLimitStore: RateLimitStore;
   limit: TokenLimit;
 }): Koa.Middleware {
-  let failures = tokenBucket(limit.failuresPerAddress);
   let perGrant = tokenBucket(limit.perGrant);
+  let alert = new CallerLimitAlert(
+    limit.failures,
+    ({ overall, alertAfter }) =>
+      `more than ${alertAfter} failed OAuth token requests within ${overall.windowSeconds} seconds; ` +
+      `they are refused for everyone at ${overall.requests}`,
+  );
 
   return async function handleToken(ctxt, next) {
     let body: string | undefined;
@@ -172,20 +193,33 @@ export function tokenHandler({
             error_description: 'grant request is invalid',
           });
         }
-        return refuse(answer, ctxt, taken, 'grant');
+        return refuse(
+          answer,
+          ctxt,
+          isRateLimitUnavailable(taken)
+            ? { reason: 'unavailable' }
+            : { reason: 'limited', retryAfterSeconds: taken.retryAfterSeconds },
+          'grant',
+        );
       }
     } else {
-      let key = failureKey(ctxt.req.headers[CLIENT_IP_HEADER]);
-      if (!key) {
-        log.info('token request refused: unknown address');
-        return answer(403, {
-          error: 'access_denied',
-          error_description: 'token requests are refused from this address',
-        });
-      }
-      let taken = await rateLimitStore.take(key, failures);
-      if (!taken.admitted) {
-        return refuse(answer, ctxt, taken, 'failures');
+      let address = ctxt.req.headers[CLIENT_IP_HEADER];
+      let admitted = await takeFromCallerLimit(
+        rateLimitStore,
+        'oauth-token-failure',
+        typeof address === 'string' ? address : undefined,
+        limit.failures,
+      );
+      alert.note(admitted);
+      if (!admitted.admitted) {
+        if (admitted.reason === 'unknown-address') {
+          log.info('token request refused: unknown address');
+          return answer(403, {
+            error: 'access_denied',
+            error_description: 'token requests are refused from this address',
+          });
+        }
+        return refuse(answer, ctxt, admitted, 'failures');
       }
     }
     if (body !== undefined) {
@@ -286,25 +320,18 @@ function pkceCanPass(
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-function failureKey(
-  address: string | string[] | undefined,
-): string | undefined {
-  let parsed = typeof address === 'string' ? parseIP(address) : undefined;
-  return parsed
-    ? counterKey('oauth-token-failure', rateLimitKey(parsed))
-    : undefined;
-}
-
 async function refuse(
   answer: (
     status: number,
     error: { error: string; error_description: string },
   ) => Promise<void>,
   ctxt: Koa.Context,
-  outcome: Exclude<TokenBucketOutcome, { admitted: true }>,
+  outcome:
+    | { reason: 'unavailable' }
+    | { reason: 'limited'; retryAfterSeconds: number },
   limit: 'grant' | 'failures',
 ) {
-  if (isRateLimitUnavailable(outcome)) {
+  if (outcome.reason === 'unavailable') {
     log.warn(`token request refused: rate limit unavailable`);
     return answer(503, {
       error: 'temporarily_unavailable',
@@ -341,11 +368,4 @@ function respond(
   ctxt.status = status;
   ctxt.set('Cache-Control', 'no-store');
   ctxt.body = body;
-}
-
-function tokenBucket({
-  requests,
-  windowSeconds,
-}: AnonymousRateLimit): TokenBucketLimit {
-  return { burst: requests, refillPerMinute: (requests * 60) / windowSeconds };
 }

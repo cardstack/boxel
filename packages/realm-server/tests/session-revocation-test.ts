@@ -275,6 +275,41 @@ module(basename(import.meta.filename), function () {
         'sessions-revoked',
         "and the user's OAuth grants end with them",
       );
+      let [recorded] = (await dbAdapter.execute(
+        `SELECT sessions_revoked_at,
+                EXTRACT(EPOCH FROM oauth_grants_revoked_at)::bigint
+                  AS oauth_grants_revoked_at
+           FROM users WHERE matrix_user_id = $1`,
+        { bind: [user] },
+      )) as {
+        sessions_revoked_at: string | number;
+        oauth_grants_revoked_at: string | number;
+      }[];
+      assert.strictEqual(
+        Number(recorded.oauth_grants_revoked_at),
+        Number(recorded.sessions_revoked_at),
+        'at the same instant',
+      );
+      assert.strictEqual(
+        response.body.revokedAt,
+        Number(recorded.sessions_revoked_at),
+        'which the answer names',
+      );
+    });
+
+    test('revokes a user who has no row yet', async function (assert) {
+      let other = '@nobody-yet:localhost';
+      let response = await supertest(buildApp().callback())
+        .post(
+          `/_grafana-revoke-user-sessions?user=${encodeURIComponent(other)}`,
+        )
+        .set('Authorization', `Bearer ${grafanaSecret}`);
+
+      assert.strictEqual(response.status, 200, 'the action succeeds');
+      assert.true(
+        await isSessionRevoked(dbAdapter, other, nowInSeconds() - 60),
+        'sessions issued before the call are revoked',
+      );
     });
 
     test('rejects a missing user param', async function (assert) {
