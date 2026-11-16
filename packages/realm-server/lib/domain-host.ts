@@ -30,6 +30,14 @@ export function parseDomainHost(domain: string): DomainHost | undefined {
   }
 }
 
+// A host as `domainHostOf` gives it, read back into its parts. A string that
+// isn't such a host, a URL for example, keeps its whole text as the hostname,
+// so it is on no domain.
+export function domainHostFromKey(host: string): DomainHost {
+  let [, hostname, port = ''] = /^(.*?)(?::(\d+))?$/.exec(host)!;
+  return { host, hostname, port };
+}
+
 // Whether `host` is on a configured `domain`. A domain configured with a port
 // matches only that port. One configured without a port matches its hostname
 // on any port, as local development serves it on one.

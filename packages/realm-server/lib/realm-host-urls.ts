@@ -4,6 +4,7 @@ import { logger, param, query } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { fullRequestURL } from '../middleware/index.ts';
 import {
+  domainHostFromKey,
   domainHostOf,
   isOnDomain,
   parseDomainHost,
@@ -90,11 +91,8 @@ export function hostURLDomainFilter(
     if (parents.some((parent) => host.endsWith(parent))) {
       return true;
     }
-    let requestHost = parseDomainHost(host);
-    return (
-      requestHost !== undefined &&
-      custom.some((domain) => isOnDomain(requestHost, domain))
-    );
+    let requestHost = domainHostFromKey(host);
+    return custom.some((domain) => isOnDomain(requestHost, domain));
   };
 }
 
