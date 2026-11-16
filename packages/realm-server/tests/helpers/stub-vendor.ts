@@ -214,6 +214,32 @@ export async function startStubVendor({
           numberParam(url, 'ms', 1000),
         );
         res.on('close', () => clearTimeout(timer));
+      } else if (url.pathname.startsWith('/leak/')) {
+        // Answers with the credential the request carried, the way a careless
+        // vendor might: in a body, in an error, or in the address it
+        // redirects to (on its other loopback name, another origin).
+        let credential = String(req.headers.authorization ?? '').replace(
+          /^Bearer /,
+          '',
+        );
+        let leak = url.pathname.slice('/leak/'.length);
+        if (leak === 'redirect') {
+          res.writeHead(302, {
+            location: `http://localhost:${(server.address() as { port: number }).port}/landing/${credential}`,
+          });
+          res.end();
+        } else {
+          res.writeHead(leak === 'error' ? 500 : 200, {
+            'content-type': 'application/json',
+          });
+          res.end(
+            JSON.stringify(
+              leak === 'error'
+                ? { error: `invalid request for key ${credential}` }
+                : { items: [], echoedKey: credential },
+            ),
+          );
+        }
       } else if (url.pathname === '/reflect-credential') {
         let credential =
           url.searchParams.get('key') ??
