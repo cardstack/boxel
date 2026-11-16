@@ -21,6 +21,7 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 const AUTOMATION = `${testRealmURL}automations/nightly`;
+const PLANNED = `${testRealmURL}automations/planned`;
 const AUTOMATION_MODULE = rri('@cardstack/catalog/automation/automation');
 
 function trigger(kind: string, extra: Record<string, unknown> = {}) {
@@ -148,6 +149,20 @@ module('Acceptance | automation view', function (hooks) {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'scripts/nightly.js': `const { cards } = await realm.cards.search({});\n`,
         'automations/nightly.json': automationJSON,
+        'scripts/planned.js': [
+          "realm.progress.plan(['Fetch open issues', 'Group by label', 'Write digest']);",
+          "realm.progress.milestone('Fetch open issues');",
+          '',
+        ].join('\n'),
+        'automations/planned.json': {
+          ...automationJSON,
+          data: {
+            ...automationJSON.data,
+            relationships: {
+              script: { links: { self: '../scripts/planned.js' } },
+            },
+          },
+        },
       },
     });
 
@@ -184,9 +199,9 @@ module('Acceptance | automation view', function (hooks) {
     );
   });
 
-  async function openIsolated() {
+  async function openIsolated(id = AUTOMATION) {
     await visitOperatorMode({
-      stacks: [[{ id: AUTOMATION, format: 'isolated' }]],
+      stacks: [[{ id, format: 'isolated' }]],
     });
     await waitFor('[data-test-automation]', {
       timeout: 10000,
@@ -451,6 +466,43 @@ module('Acceptance | automation view', function (hooks) {
         'The milestones the script reports show here after a run ends.',
       );
     assert.dom('[data-test-automation-milestones-lead]').doesNotExist();
+  });
+
+  test('before any run, the section lists the milestones the script declares, each not reached yet', async function (assert) {
+    answer = { status: 200, attributes: { ...ACTIVE, lastRun: null } };
+    await openIsolated(PLANNED);
+    await waitFor('[data-test-automation-milestones] [data-state]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-milestones-lead]')
+      .hasText(
+        'The milestones the script plans to reach, in order. Each run reports how far the script got.',
+      );
+    let steps = [
+      ...document.querySelectorAll(
+        '[data-test-automation-milestones] [data-state]',
+      ),
+    ];
+    assert.deepEqual(
+      steps.map((step) => step.getAttribute('data-state')),
+      ['upcoming', 'upcoming', 'upcoming'],
+    );
+    let milestones = text('[data-test-automation-milestones]') ?? '';
+    for (let name of ['Fetch open issues', 'Group by label', 'Write digest']) {
+      assert.true(milestones.includes(name), `lists "${name}"`);
+    }
+  });
+
+  test('a viewer the route refuses still sees the milestones the script declares', async function (assert) {
+    await openIsolated(PLANNED);
+    await waitFor('[data-test-automation-who-pays]', { timeout: 10000 });
+    await waitFor('[data-test-automation-milestones] [data-state]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-milestones]')
+      .includesText('Group by label');
   });
 
   test('a last run that reported no milestones says so', async function (assert) {
