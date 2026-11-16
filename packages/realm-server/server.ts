@@ -66,8 +66,13 @@ import {
   type SecureOrigin,
 } from './lib/secure-origin.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
+import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
-import { HostURLResolver, resolveHostURLs } from './lib/realm-host-urls.ts';
+import {
+  HostURLResolver,
+  hostURLDomainFilter,
+  resolveHostURLs,
+} from './lib/realm-host-urls.ts';
 import { translateAtHostURLs } from './lib/realm-host-urls-boundary.ts';
 import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
 
@@ -1014,7 +1019,20 @@ export class RealmServer {
       .use(instanceIdHeader)
       // A request on a host URL is made to name its realm's URL here, ahead
       // of every route that looks a realm up (ADR 033 §1.2).
-      .use(resolveHostURLs(new HostURLResolver(this.dbAdapter)))
+      .use(
+        resolveHostURLs(
+          new HostURLResolver(this.dbAdapter, {
+            mayHaveHostURLs: hostURLDomainFilter({
+              ...this.domainsForPublishedRealms,
+              customDomains: Object.values(
+                getPublishedRealmDomainOverrides(
+                  process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
+                ),
+              ),
+            }),
+          }),
+        ),
+      )
       // Then the rest of the request is translated to the realm's URL, and
       // its response back to the host URL it came in on (ADR 033 §1.5).
       .use(translateAtHostURLs())
