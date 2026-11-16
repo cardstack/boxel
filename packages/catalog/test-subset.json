@@ -37,6 +37,8 @@
       "anonymous-key-use-test",
       "automation-card-test",
       "automation-run-limits-test",
+      "automation-run-log-redaction-test",
+      "automation-run-log-test",
       "automation-status-test",
       "catalog-test-subset-test",
       "direct-writer-queries-test",
