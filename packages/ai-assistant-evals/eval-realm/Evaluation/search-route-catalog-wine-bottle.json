@@ -10,8 +10,7 @@
         "summary": "One prompt asks for a single wine bottle, which the catalog's `WineBottle` definition already answers. This eval tests whether the assistant searches the catalog in a `run-realm-code` script, with `realm.entries.search` or `realm.cards.search`, rather than with `search-entries` or a `search-cards` tool, and then reuses the definition.",
         "notes": "A deliberately small, one-prompt eval: the expected run is one search script, one write of an instance JSON and a show-card. It replaces, for search-route questions, the multi-turn reuse evals, which cost far more per run.\n\n`WineBottle` was chosen because its Spec is in the catalog and its fields cover the prompt without a subclass.",
         "cardThumbnailURL": null
-      },
-      "skillFeatures": ["catalog-reuse"]
+      }
     },
     "relationships": {
       "cardInfo.theme": {

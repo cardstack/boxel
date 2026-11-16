@@ -15,6 +15,7 @@ scope:
   - packages/realm-server/handlers/handle-create-session.ts
   - packages/realm-server/handlers/handle-delegate-session.ts
   - packages/realm-server/handlers/handle-upsert-realm-user-permission.ts
+  - packages/realm-server/handlers/handle-remove-realm-user-permission.ts
   - packages/realm-server/handlers/handle-delete-realm.ts
   - packages/realm-server/handlers/handle-publish-realm.ts
   - packages/realm-server/handlers/handle-unpublish-realm.ts

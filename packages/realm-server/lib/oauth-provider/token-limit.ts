@@ -6,12 +6,15 @@
 //   allows ten times that. Not per address or per client: a hosted client
 //   refreshes every user's tokens from a few server addresses.
 // - Failed attempts per address, for requests that name no code or refresh
-//   token the provider holds: such a request can never succeed, so each
-//   counts against the caller's address as it arrives, and a caller with
-//   none left is refused, so guessing codes or refresh tokens is slow. A
-//   request that names one the provider holds is bounded by its grant
-//   instead. The address is the one the `clientAddress` middleware works
-//   out, never the socket's.
+//   token the provider holds, or a code without the verifier its PKCE
+//   challenge needs: such a request can never succeed, so each counts
+//   against the caller's address as it arrives, and a caller with none left
+//   is refused, so guessing codes or refresh tokens is slow. Anyone who sees
+//   a code in a redirect URL can send it, but without the verifier it never
+//   counts against the code's grant, so it can't use up the limit the real
+//   exchange and the grant's refreshes need, or end the grant as a reuse. A
+//   request that can succeed is bounded by its grant instead. The address is
+//   the one the `clientAddress` middleware works out, never the socket's.
 //
 // Ending a grant deletes its tokens, so a refresh that names a token of an
 // ended grant counts against its address too. A hosted client whose users'
@@ -22,8 +25,9 @@
 // A code or refresh token presented again after it was used ends its grant
 // (§1.9) even when the grant is over its limit: the limit is checked after
 // that, so a grant whose limit is kept spent can't put off the reuse that
-// ends it.
+// ends it. A code does so only with its verifier, as in the library.
 
+import { createHash, timingSafeEqual } from 'crypto';
 import type Koa from 'koa';
 import type Provider from 'oidc-provider';
 import {
@@ -109,12 +113,12 @@ export function tokenLimitFormat(): string {
 // the library, which reads the body Boxel left on `req.body` once the body
 // itself has been read.
 //
-// A request that names a code or refresh token the provider holds counts
-// only against that token's grant, never against its address, so a hosted
-// client's users can't be locked out by failures someone else causes through
-// the client's address. One the grant's limit refuses still ends the grant
-// if it presents a code or token already used. Any other request counts
-// against its address's failures. One whose address can't be worked out is
+// A request that names a code or refresh token the provider holds, and
+// for a code also its verifier, counts only against that token's grant,
+// never against its address, so a hosted client's users can't be locked out
+// by failures someone else causes through the client's address. One the
+// grant's limit refuses still ends the grant if it presents a code or token
+// already used. Any other request counts against its address's failures. One whose address can't be worked out is
 // refused, since it can't be counted.
 export function tokenHandler({
   provider,
@@ -215,7 +219,10 @@ async function allowClientOrigin(
 }
 
 // The grant a code or refresh exchange names, if the code or token is one
-// the provider issued, and whether presenting it again ends the grant.
+// the provider issued and, for a code, the request proves it with the
+// verifier its PKCE challenge needs; and whether presenting it again ends
+// the grant. A code without its verifier is refused by the library before it
+// checks for reuse, so it names no grant here.
 async function grantOfExchange(
   dbAdapter: DBAdapter,
   params: URLSearchParams,
@@ -231,12 +238,20 @@ async function grantOfExchange(
     }
     let [row] = (await dbAdapter.execute(
       `SELECT payload->>'grantId' AS grant_id,
+              payload->>'codeChallenge' AS challenge,
+              payload->>'codeChallengeMethod' AS method,
               payload->'consumed' IS NOT NULL AND expires_at > now() AS reused
          FROM oauth_provider_objects
         WHERE kind = 'AuthorizationCode' AND id_hash = decode($1, 'hex')`,
       { bind: [sha256Hex(code)] },
-    )) as { grant_id: string | null; reused: boolean }[];
-    return row?.grant_id
+    )) as {
+      grant_id: string | null;
+      challenge: string | null;
+      method: string | null;
+      reused: boolean;
+    }[];
+    return row?.grant_id &&
+      pkceCanPass(params.get('code_verifier'), row.challenge, row.method)
       ? { grantId: row.grant_id, reused: row.reused, what: 'code' }
       : undefined;
   }
@@ -249,6 +264,26 @@ async function grantOfExchange(
     return presented ? { ...presented, what: 'refresh token' } : undefined;
   }
   return undefined;
+}
+
+// The library's PKCE check (`helpers/pkce.js`), as a test rather than a
+// refusal.
+function pkceCanPass(
+  verifier: string | null,
+  challenge: string | null,
+  method: string | null,
+): boolean {
+  if (!verifier && !challenge) {
+    return true;
+  }
+  if (!verifier || !challenge || method !== 'S256') {
+    return false;
+  }
+  let expected = Buffer.from(
+    createHash('sha256').update(verifier).digest('base64url'),
+  );
+  let actual = Buffer.from(challenge);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 function failureKey(

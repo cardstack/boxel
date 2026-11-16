@@ -43,6 +43,7 @@ export async function resolveAndAuthorizeArchiveTarget(
   dbAdapter: DBAdapter,
   action: 'archive' | 'unarchive',
   matrixServerName: string,
+  serverURL: string,
 ): Promise<ArchiveTarget | null> {
   let token = ctxt.state.token as RealmServerTokenClaim;
   if (!token) {
@@ -115,7 +116,15 @@ export async function resolveAndAuthorizeArchiveTarget(
   let { user: requesterUserId } = token;
   let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
 
-  if (!isRealmAdministrator(permissions, requesterUserId, matrixServerName)) {
+  if (
+    !isRealmAdministrator(
+      permissions,
+      requesterUserId,
+      matrixServerName,
+      parsedRealmURL,
+      new URL(serverURL),
+    )
+  ) {
     await sendResponseForForbiddenRequest(
       ctxt,
       `${requesterUserId} does not have enough permission to ${action} realm ${realmURL}`,

@@ -392,6 +392,95 @@ export async function appendRealmServerToUserAccountData({
   });
 }
 
+// Remove a single realm URL from a user's `app.boxel.realms` account_data,
+// preserving every other entry. Idempotent: when `realmURL` is absent no PUT
+// is fired and `{ wasPresent: false }` is returned, so callers can tell a
+// no-op from a removal. A 404 from the GET means the user has no realms list
+// yet, which is the same as an empty array. Requires a user-scoped access
+// token (admin-impersonate first; synapse admin tokens cannot write other
+// users' account_data). The same lost-update protection as the append
+// applies: after the PUT the entry is re-read, and the loop retries while a
+// concurrent writer has put the realm back.
+export async function removeRealmFromUserAccountData({
+  matrixURL,
+  userId,
+  userAccessToken,
+  realmURL,
+}: {
+  matrixURL: URL;
+  userId: string;
+  userAccessToken: string;
+  realmURL: string;
+}): Promise<{ wasPresent: boolean }> {
+  return removeStringFromUserAccountDataArray({
+    matrixURL,
+    userId,
+    userAccessToken,
+    eventType: APP_BOXEL_REALMS_EVENT_TYPE,
+    arrayKey: 'realms',
+    value: realmURL,
+  });
+}
+
+async function removeStringFromUserAccountDataArray({
+  matrixURL,
+  userId,
+  userAccessToken,
+  eventType,
+  arrayKey,
+  value,
+}: {
+  matrixURL: URL;
+  userId: string;
+  userAccessToken: string;
+  eventType: string;
+  arrayKey: string;
+  value: string;
+}): Promise<{ wasPresent: boolean }> {
+  let firstAttemptWasPresent: boolean | undefined;
+  for (let attempt = 1; attempt <= APPEND_REALM_MAX_ATTEMPTS; attempt++) {
+    let existing = await fetchAccountData(
+      matrixURL,
+      userId,
+      userAccessToken,
+      eventType,
+    );
+    let entries = Array.isArray(existing[arrayKey])
+      ? (existing[arrayKey] as unknown[]).filter(
+          (v): v is string => typeof v === 'string',
+        )
+      : [];
+    if (!entries.includes(value)) {
+      // On the first attempt the value was never there, so this call removed
+      // nothing. On a retry a concurrent writer dropped it for us, which is
+      // still a removal from the caller's perspective.
+      return { wasPresent: firstAttemptWasPresent ?? false };
+    }
+    firstAttemptWasPresent = true;
+    await putAccountData(matrixURL, userId, userAccessToken, eventType, {
+      ...existing,
+      [arrayKey]: entries.filter((entry) => entry !== value),
+    });
+    let verified = await fetchAccountData(
+      matrixURL,
+      userId,
+      userAccessToken,
+      eventType,
+    );
+    let verifiedEntries = Array.isArray(verified[arrayKey])
+      ? (verified[arrayKey] as unknown[]).filter(
+          (v): v is string => typeof v === 'string',
+        )
+      : [];
+    if (!verifiedEntries.includes(value)) {
+      return { wasPresent: true };
+    }
+  }
+  throw new Error(
+    `matrix ${eventType} removal for "${userId}" lost to a concurrent writer after ${APPEND_REALM_MAX_ATTEMPTS} attempts`,
+  );
+}
+
 async function appendStringToUserAccountDataArray({
   matrixURL,
   userId,

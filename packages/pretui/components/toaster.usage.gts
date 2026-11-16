@@ -55,6 +55,7 @@ class ToasterState extends GlimmerComponent {
   @tracked limit = 3;
   @tracked seconds = 6;
   @tracked pauseOnHover = true;
+  @tracked icon = true;
   @tracked nth = 0;
   @tracked undone = '—';
 
@@ -62,6 +63,7 @@ class ToasterState extends GlimmerComponent {
   setLimit = (value: number | null) => (this.limit = value ?? 3);
   setSeconds = (value: number | null) => (this.seconds = value ?? 6);
   setPauseOnHover = (value: boolean) => (this.pauseOnHover = value);
+  setIcon = (value: boolean) => (this.icon = value);
 
   get placementValue() {
     return this.placement as ToastPlacement;
@@ -82,6 +84,7 @@ class ToasterState extends GlimmerComponent {
       title: receipt.title,
       message: receipt.message,
       tone: receipt.tone,
+      icon: this.icon,
       duration: this.seconds,
     });
   };
@@ -112,6 +115,7 @@ class ToasterState extends GlimmerComponent {
         title: receipt.title,
         message: receipt.message,
         tone: receipt.tone,
+        icon: this.icon,
         duration: this.seconds,
       });
     }
@@ -165,7 +169,7 @@ class ToasterUsage extends ToasterState {
       <:api as |Args|>
         <Args.Base
           @name='store'
-          @description='A ToastStore instance — the imperative half. store.show({title, message, tone, duration, actionLabel, onAction}) returns an id; store.dismiss(id) and store.clear() do what they say. Showing with an id that already exists replaces that toast in place, which is how a Saving… becomes a Saved without the stack jumping. It is a class you instantiate rather than a module singleton, because module-scope mutable state in a realm is evaluated by the indexer, shared by every card that imports it, and impossible to reset between tests.'
+          @description='A ToastStore instance — the imperative half. store.show({title, message, tone, icon, duration, actionLabel, onAction}) returns an id; store.dismiss(id) and store.clear() do what they say. Showing with an id that already exists replaces that toast in place, which is how a Saving… becomes a Saved without the stack jumping. It is a class you instantiate rather than a module singleton, because module-scope mutable state in a realm is evaluated by the indexer, shared by every card that imports it, and impossible to reset between tests.'
           @hideControls={{true}}
         />
         <Args.Base
@@ -205,6 +209,13 @@ class ToasterUsage extends ToasterState {
           @value={{this.pauseOnHover}}
           @defaultValue={{true}}
           @onInput={{this.setPauseOnHover}}
+        />
+        <Args.Bool
+          @name='icon (per toast)'
+          @description='A field on each toast, not a Toaster argument: icon: true shows the tone glyph before the title — a check on success, an info mark, a warning triangle, a circled alert on danger. It is aria-hidden, because the title already says what happened, and painted in the tone ink, the color the theme pairs with text and icons. Neutral toasts have none.'
+          @value={{this.icon}}
+          @defaultValue={{false}}
+          @onInput={{this.setIcon}}
         />
         <Args.Base
           @name='label / dismissLabel / hotkey'

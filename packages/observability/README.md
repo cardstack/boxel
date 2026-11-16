@@ -692,7 +692,8 @@ Grafana's own `fetch` actions. There are no plain GET links.
 rather than in one central console: per-realm reindex on `realms.json`, full
 reindex on `indexing.json`, job completion on `job-queue.json` /
 `indexing.json` / `prerender-html.json`, credit on `users.json`, permission
-grants on `realms.json` / `published-realms.json` / `users.json`. An operator
+grants on `realms.json` / `published-realms.json` / `users.json`, permission
+removal on `realms.json`, beside the table that lists who holds one. An operator
 looking at the numbers that prompted the action finds the button already in
 front of them.
 

@@ -1087,6 +1087,7 @@ export class RealmServer {
             // blocking the QUERY behind it.
             maxAge: 86400,
           }),
+          this.oauthProvider?.provider.issuer,
         ),
       )
       .use(searchAdmission)
