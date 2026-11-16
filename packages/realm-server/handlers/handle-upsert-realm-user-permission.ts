@@ -102,7 +102,7 @@ export default function handleUpsertRealmUserPermission({
     if (!read && !write) {
       await sendResponseForBadRequest(
         ctxt,
-        `at least one of read or write must be true (use the realm-permissions delete flow to revoke)`,
+        `at least one of read or write must be true (POST /_grafana-remove-realm-user-permission to revoke)`,
       );
       return;
     }

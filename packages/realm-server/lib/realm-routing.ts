@@ -3,12 +3,17 @@ import fsExtra from 'fs-extra';
 const { existsSync } = fsExtra;
 import type {
   DBAdapter,
+  HostRoute,
+  HostRouteLoad,
+  HostRouteResolution,
+  HostRouteSearch,
   HostRoutingRule,
   Realm,
   ServedRealm,
 } from '@cardstack/runtime-common';
 import {
   executableExtensions,
+  resolveHostRoute,
   fetchRealmPermissions,
   hasExtension,
   logger,
@@ -202,6 +207,65 @@ export async function matchHostRoutingRule(
   };
 }
 
+// Whether a realm's validated host routes hold any route the fixed routing
+// map leaves out: a card id template, a field match, a route or redirect
+// with `:name` segments, or a child route. Only such a realm needs the
+// resolver when no fixed route matches.
+export function hasDynamicHostRoutes(routes: readonly HostRoute[]): boolean {
+  return routes.some(
+    (route) =>
+      route.kind === 'card-id' ||
+      route.kind === 'field-match' ||
+      route.paramNames.length > 0 ||
+      route.routes.length > 0,
+  );
+}
+
+// A request path resolved through a realm's validated host routes, with the
+// canonical pathname a served card answers at: the realm's mount pathname
+// joined with the path, without a trailing slash. Callers redirect to it
+// with a 308 when the request arrived under another form, as for a fixed
+// route.
+export type ResolvedHostRoute = {
+  resolution: HostRouteResolution;
+  canonicalPathname: string;
+};
+
+// Runs the host route resolver for a request URL in `realm`, with lookups
+// that run as the visitor. The path handed to the resolver is relative to
+// the realm's root and still percent-encoded. Returns undefined when the
+// request is not within the realm.
+export async function resolveDynamicHostRoute(
+  requestURL: URL,
+  realm: Realm,
+  routes: readonly HostRoute[],
+  lookups: { load: HostRouteLoad; search: HostRouteSearch },
+): Promise<ResolvedHostRoute | undefined> {
+  // Only the pathname is compared, so a request under another protocol
+  // than the realm's still matches. Card ids are filled under the realm's
+  // own URL, the form the realm and its index key cards by.
+  let mountPathname = new URL(realm.url).pathname;
+  let pathname = requestURL.pathname;
+  let realmRoot = mountPathname.replace(/\/$/, '');
+  if (pathname !== realmRoot && !pathname.startsWith(mountPathname)) {
+    return undefined;
+  }
+  let path = '/' + pathname.slice(mountPathname.length);
+  let resolution = await resolveHostRoute({
+    path,
+    routes,
+    realmURL: new URL(realm.url),
+    load: lookups.load,
+    search: lookups.search,
+  });
+  let stripped =
+    path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+  return {
+    resolution,
+    canonicalPathname: mountPathname + stripped.slice(1),
+  };
+}
+
 export async function getPublishedRealmInfo(
   requestURL: URL,
   deps: RealmRoutingDeps,
@@ -324,6 +388,29 @@ export async function hasExtensionlessSourceModule(
   }
 
   return false;
+}
+
+// Whether `url` names a file or directory of its realm on disk, or a module
+// by its path without the extension. A page request for such a path is not
+// one a host route answers with not found: the path is the file's own.
+export async function isRealmFilePath(
+  url: URL,
+  deps: RealmRoutingDeps,
+): Promise<boolean> {
+  let realm = await findOrMountRealm(url, deps);
+  if (!realm?.dir) {
+    return false;
+  }
+  let localPath: string;
+  try {
+    localPath = realm.paths.local(url);
+  } catch {
+    return false;
+  }
+  if (localPath && existsSync(join(realm.dir, localPath))) {
+    return true;
+  }
+  return await hasExtensionlessSourceModule(url, deps);
 }
 
 export async function hasPublicPermissions(

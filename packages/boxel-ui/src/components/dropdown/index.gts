@@ -11,6 +11,7 @@ import {
 } from 'ember-modifier';
 
 import cn from '../../helpers/cn.ts';
+import { SELECT_WORMHOLE_KNOBS } from './wormhole-knobs.ts';
 
 type DropdownTriggerElement = HTMLButtonElement | HTMLAnchorElement;
 type DropdownTriggerNamedArgs = {
@@ -77,6 +78,13 @@ class BoxelDropdown extends Component<Signature> {
       return;
     }
     const cs = getComputedStyle(this.dropdownEl);
+
+    // A BoxelSelect leaves the knobs it copied onto the wormhole behind. The
+    // content would inherit them for every knob its own @contentClass leaves
+    // unset, in place of the fallbacks its styles were written against.
+    SELECT_WORMHOLE_KNOBS.forEach((varName) => {
+      this.dropdownContainer?.style.removeProperty(varName);
+    });
 
     const themeVars = [
       '--background',

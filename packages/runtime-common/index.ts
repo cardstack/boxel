@@ -2047,6 +2047,9 @@ export * from './code-ref.ts';
 export * from './command-parsing-utils.ts';
 export * from './serializers/index.ts';
 export * from './host-routing-validation.ts';
+export * from './host-routes.ts';
+export * from './host-route-resolver.ts';
+export * from './host-route-address.ts';
 export * from './route-pattern.ts';
 
 export type {
