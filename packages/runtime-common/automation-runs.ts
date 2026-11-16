@@ -86,6 +86,9 @@ export interface AutomationRun extends AutomationRunCounts {
   // `reserveAutomationRunAICredits`).
   aiCreditsSpent: number;
   aiCreditsReserved: number;
+  // Milliseconds of prerender tab time the run's script took, summed over
+  // the attempts that ran it (see `addAutomationRunTabTime`).
+  prerenderTabMs: number;
   createdAt: string;
   startedAt: string | null;
   commitStartedAt: string | null;
@@ -466,6 +469,31 @@ export async function cancelPendingAutomationRuns(
   ]);
 }
 
+// Adds the prerender tab time one attempt's script took to the run. The tab
+// was held whatever state the run is in by then, so the time is added in any
+// state, like the counts below.
+export async function addAutomationRunTabTime(
+  dbAdapter: DBAdapter,
+  id: string,
+  ms: number,
+): Promise<void> {
+  let whole = Math.ceil(ms);
+  if (!Number.isSafeInteger(whole) || whole < 0) {
+    throw new Error(
+      `a run's tab time can only grow by 0 ms or more, not ${ms}`,
+    );
+  }
+  if (whole === 0) {
+    return;
+  }
+  await query(dbAdapter, [
+    'UPDATE automation_runs SET prerender_tab_ms = prerender_tab_ms +',
+    param(whole),
+    'WHERE id =',
+    param(id),
+  ]);
+}
+
 // Adds to the run's metered counts. The work they count was done whatever
 // state the run is in, so the counts are added in any state.
 export async function addAutomationRunCounts(
@@ -839,6 +867,7 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     writes: Number(row.writes),
     aiCreditsSpent: Number(row.ai_credits_spent ?? 0),
     aiCreditsReserved: Number(row.ai_credits_reserved ?? 0),
+    prerenderTabMs: Number(row.prerender_tab_ms ?? 0),
     createdAt: iso(row.created_at)!,
     startedAt: iso(row.started_at),
     commitStartedAt: iso(row.commit_started_at),

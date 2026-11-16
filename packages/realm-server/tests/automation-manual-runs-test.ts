@@ -5,6 +5,10 @@ import { basename } from 'path';
 import { randomUUID } from 'crypto';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  addToCreditsLedger,
+  getLedgerEntries,
+} from '@cardstack/billing/billing-queries';
+import {
   createAutomationRun,
   finishAutomationRun,
   param,
@@ -31,6 +35,7 @@ import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   automationFixture,
+  insertUser,
   ROOMY_AUTOMATION_CAPS,
   setupPermissionedRealmCached,
   testCreatePrerenderAuth,
@@ -281,6 +286,51 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(report.stagedFiles, undefined);
     assert.strictEqual(report.cost.writes, 1, 'the commit counted its file');
     assert.strictEqual(typeof report.timings.commitMs, 'number');
+  });
+
+  test("Run now charges the run's compute to the clicker, not the automation's owner", async function (assert) {
+    let clicker = await insertUser(dbAdapter, CLICKER, 'cus_clicker', null);
+    let owner = await insertUser(dbAdapter, OWNER, 'cus_owner', null);
+    for (let user of [clicker, owner]) {
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: 10_000,
+        creditType: 'extra_credit',
+        subscriptionCycleId: null,
+      });
+    }
+    let run = await finished(
+      await startAutomationRunNow(
+        { dbAdapter, queue: publisher },
+        request(CLICKER),
+        options,
+      ),
+    );
+
+    let charges = await getLedgerEntries(dbAdapter, {
+      runId: run.id,
+      chargeKind: 'run',
+    });
+    assert.true(charges.length > 0, "the run's compute is charged");
+    assert.true(
+      charges.every((e) => e.userId === clicker.id),
+      'to the person who clicked',
+    );
+    assert.deepEqual(
+      await getLedgerEntries(dbAdapter, {
+        userId: owner.id,
+        chargeKind: 'run',
+      }),
+      [],
+      "and nothing to the automation's owner",
+    );
+    let report = await reportFor(run.id);
+    assert.true(report.run.prerenderTabMs > 0, 'the row holds its tab time');
+    assert.strictEqual(
+      report.cost.creditsByKind.run,
+      -charges.reduce((sum, e) => sum + e.creditAmount, 0),
+      "the run's report answers what it cost",
+    );
   });
 
   test('a Preview whose script throws keeps nothing it staged', async function (assert) {

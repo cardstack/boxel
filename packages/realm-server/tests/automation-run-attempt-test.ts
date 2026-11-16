@@ -29,13 +29,22 @@ import {
 } from '@cardstack/runtime-common';
 import { presentsAsRunToken } from '@cardstack/runtime-common/run-token';
 import { runOverlayFiles } from '@cardstack/runtime-common/run-overlay';
+import type { MeteredCharges } from '@cardstack/runtime-common/metered-charges';
+import {
+  addToCreditsLedger,
+  getLedgerEntries,
+  getLedgerUsage,
+} from '@cardstack/billing/billing-queries';
 import {
   TEST_AUTOMATION_PATH,
   automationFixture,
+  insertUser,
   realmSecretSeed,
   setupPermissionedRealmCached,
   testCreatePrerenderAuth,
+  testPricing,
 } from './helpers/index.ts';
+import { meteredChargesFor } from '../lib/metered-charge.ts';
 import { nodeStreamToBuffer } from '../stream.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { buildMintRunToken, verifyRunToken } from '../lib/run-token.ts';
@@ -158,6 +167,7 @@ module(basename(import.meta.filename), function (hooks) {
       dedupeKey = automationRunDedupeKey(run),
       reservationId = 7,
       commit,
+      meteredCharges,
     }: {
       input?: Partial<AutomationJobInput>;
       dedupeKey?: string | null;
@@ -165,6 +175,7 @@ module(basename(import.meta.filename), function (hooks) {
       // Stands in for the network on the worker's commit requests only;
       // `send` sends one to the realm.
       commit?: (send: () => Promise<Response>) => Promise<Response>;
+      meteredCharges?: MeteredCharges;
     } = {},
   ) {
     let network = commit
@@ -202,6 +213,7 @@ module(basename(import.meta.filename), function (hooks) {
         virtualNetwork: network,
         prerenderer,
         mintRunToken: buildMintRunToken(realmSecretSeed),
+        meteredCharges,
         log,
       },
       {
@@ -580,6 +592,100 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(after?.commitStartedAt, null);
     }
     assert.strictEqual(await readFile('out/mismatch.txt'), undefined);
+  });
+
+  // The run's identity, with credits to pay for its run.
+  async function fundOwner() {
+    let user = await insertUser(dbAdapter, OWNER, 'cus_attempt_owner', null);
+    await addToCreditsLedger(dbAdapter, {
+      userId: user.id,
+      creditAmount: 10_000,
+      creditType: 'extra_credit',
+      subscriptionCycleId: null,
+    });
+    return user;
+  }
+
+  test("an attempt adds its script's tab time to the run, and the run is charged its compute once it ends", async function (assert) {
+    let owner = await fundOwner();
+    let run = await newRun();
+    let result = await attempt(
+      run,
+      stubTab([], {
+        answer: () => ({
+          status: 'ready',
+          cardResultString: JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { json: { state: 'complete' } },
+            },
+          }),
+          meta: {
+            diagnostics: { renderElapsedMs: 4200, totalElapsedMs: 4500 },
+          },
+        }),
+      }),
+      { meteredCharges: meteredChargesFor(dbAdapter, testPricing) },
+    );
+
+    assert.deepEqual(result, { state: 'complete' });
+    let after = await getAutomationRun(dbAdapter, run.id);
+    assert.strictEqual(
+      after?.prerenderTabMs,
+      4200,
+      "the tab time is the server's measure of the render",
+    );
+    let charges = await getLedgerEntries(dbAdapter, {
+      runId: run.id,
+      chargeKind: 'run',
+    });
+    assert.true(charges.length > 0, 'the run is charged');
+    assert.true(
+      charges.every((e) => e.userId === owner.id),
+      "to the run's identity",
+    );
+    let usage = Object.fromEntries(
+      (await getLedgerUsage(dbAdapter, { runId: run.id }))
+        .filter((u) => u.chargeKind === 'run')
+        .map(({ unit, quantity }) => [unit, quantity]),
+    );
+    assert.strictEqual(
+      usage.prerender_tab_seconds,
+      4.2,
+      'for the tab time its script took',
+    );
+  });
+
+  test('a run whose tab fails is charged for the time the call took', async function (assert) {
+    await fundOwner();
+    let run = await newRun();
+    let result = await attempt(
+      run,
+      stubTab([], {
+        answer: () => {
+          // The call takes a measurable time before it fails.
+          let until = Date.now() + 20;
+          while (Date.now() < until) {
+            // wait
+          }
+          throw new Error('the tab crashed');
+        },
+      }),
+      { meteredCharges: meteredChargesFor(dbAdapter, testPricing) },
+    );
+
+    assert.strictEqual(result.state, 'error');
+    assert.strictEqual(result.reason, 'run-failed');
+    let after = await getAutomationRun(dbAdapter, run.id);
+    assert.true(
+      (after?.prerenderTabMs ?? 0) >= 20,
+      'the time the call took is on the row',
+    );
+    assert.true(
+      (await getLedgerEntries(dbAdapter, { runId: run.id, chargeKind: 'run' }))
+        .length > 0,
+      'and the run is charged for it',
+    );
   });
 
   test("a job whose key isn't its run's runs nothing", async function (assert) {

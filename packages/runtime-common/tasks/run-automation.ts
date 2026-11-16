@@ -13,7 +13,9 @@ import {
   isAutomationScriptOutcome,
 } from '../automation-run-command.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
+import { chargeAutomationRun } from '../automation-run-charge.ts';
 import {
+  addAutomationRunTabTime,
   finishAutomationRun,
   getAutomationRun,
   recordAutomationRunScript,
@@ -22,6 +24,7 @@ import {
   type AutomationRunOutcome,
 } from '../automation-runs.ts';
 import type { DBAdapter } from '../db.ts';
+import type { MeteredCharges } from '../metered-charges.ts';
 import type { DefinitionLookup } from '../definition-lookup.ts';
 import { param, query } from '../expression.ts';
 import {
@@ -30,6 +33,7 @@ import {
   type Prerenderer,
   type RunCommandResponse,
 } from '../index.ts';
+import { renderTabMs } from '../run-indexing.ts';
 import { RUN_COMMIT_PATH } from '../run-overlay.ts';
 import { SupportedMimeType } from '../supported-mime-type.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
@@ -67,6 +71,9 @@ export interface AutomationAttemptContext {
   virtualNetwork: VirtualNetwork;
   prerenderer: Prerenderer;
   mintRunToken: MintRunToken | undefined;
+  // Writes the run's compute and network charge once the run has ended.
+  // Without it, as in a harness, the run is measured and nothing is charged.
+  meteredCharges?: MeteredCharges;
   log: Log;
 }
 
@@ -84,7 +91,32 @@ export interface AutomationAttemptResult {
 // or, for a script that threw or ran out of time, discards it and records the
 // error. The run row is the source of truth: every step is refused once a
 // newer attempt owns the run, a person cancels it, or it ends at a cap.
+//
+// The tab time the script takes is added to the run's row, and once the
+// attempt is done, a run that has ended (however it ended, including one a
+// person canceled while its script ran) is charged its compute and network
+// (`chargeAutomationRun`).
 export async function runAutomationAttempt(
+  ctx: AutomationAttemptContext,
+  input: AutomationJobInput,
+  dedupeKey: string | null,
+  jobInfo: JobInfo | undefined,
+): Promise<AutomationAttemptResult> {
+  let result = await attemptRun(ctx, input, dedupeKey, jobInfo);
+  if (result.reason !== NOT_THE_RUNS_JOB) {
+    await chargeAutomationRun({
+      dbAdapter: ctx.dbAdapter,
+      meteredCharges: ctx.meteredCharges,
+      runId: input.runId,
+      log: ctx.log,
+    });
+  }
+  return result;
+}
+
+const NOT_THE_RUNS_JOB = 'not-the-runs-job';
+
+async function attemptRun(
   ctx: AutomationAttemptContext,
   input: AutomationJobInput,
   dedupeKey: string | null,
@@ -106,7 +138,7 @@ export async function runAutomationAttempt(
     log.warn(
       `${tag} refused: the job's key ${JSON.stringify(dedupeKey)} isn't the run's`,
     );
-    return { state: 'left', reason: 'not-the-runs-job' };
+    return { state: 'left', reason: NOT_THE_RUNS_JOB };
   }
 
   let start = await startAutomationRunAttempt(dbAdapter, runId, attempt);
@@ -242,6 +274,7 @@ export async function runAutomationAttempt(
   };
 
   let outcome: AutomationScriptOutcome;
+  let tabStartedAt = Date.now();
   try {
     let result = await ctx.prerenderer.runCommand({
       userId: run.actsAs,
@@ -252,8 +285,10 @@ export async function runAutomationAttempt(
       priority: jobInfo.priority,
       timeoutMs: remainingMs + AUTOMATION_TAB_GRACE_MS,
     });
+    await addTabTime(ctx, runId, renderTabMs(result?.meta, tabStartedAt));
     outcome = outcomeOf(result, redact);
   } catch (e: any) {
+    await addTabTime(ctx, runId, Date.now() - tabStartedAt);
     outcome = {
       state: 'error',
       reason: 'run-failed',
@@ -275,6 +310,21 @@ export async function runAutomationAttempt(
     return await finish(ctx, tag, runId, attempt, { state: 'complete' });
   }
   return await commit(ctx, tag, run, attempt, realmURL, token);
+}
+
+// Records the tab time the script took on the run's row, where the run's
+// charge reads it. A failure to record it is logged rather than failing the
+// run, whose script has already run.
+async function addTabTime(
+  ctx: AutomationAttemptContext,
+  runId: string,
+  ms: number,
+): Promise<void> {
+  try {
+    await addAutomationRunTabTime(ctx.dbAdapter, runId, ms);
+  } catch (e) {
+    ctx.log.error(`could not record ${ms} ms of tab time on run ${runId}`, e);
+  }
 }
 
 async function commit(
