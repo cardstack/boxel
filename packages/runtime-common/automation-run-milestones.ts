@@ -243,7 +243,9 @@ export async function readRunMilestones(
 }
 
 // The automation's last run that started and has ended, with its milestones:
-// what the automation card shows. Undefined when no run has ended.
+// what the automation card shows. A Preview is a test of the script, not one
+// of the automation's runs, so it is left out. Undefined when no run has
+// ended.
 export async function readLastRunMilestones(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
@@ -251,7 +253,7 @@ export async function readLastRunMilestones(
   let [run] = (await query(dbAdapter, [
     'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped FROM automation_runs WHERE automation_id =',
     param(automationId),
-    'AND finished_at IS NOT NULL AND started_at IS NOT NULL',
+    'AND finished_at IS NOT NULL AND started_at IS NOT NULL AND NOT dry_run',
     'ORDER BY finished_at DESC, id LIMIT 1',
   ])) as unknown as RunRow[];
   return run ? await milestonesOf(dbAdapter, run, Date.now()) : undefined;
@@ -259,6 +261,7 @@ export async function readLastRunMilestones(
 
 // The automation's run in progress, if one is running, with its milestones so
 // far: the one it is in reads as `current`, with the time spent in it so far.
+// A Preview in progress is left out, as in `readLastRunMilestones`.
 export async function readCurrentRunMilestones(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
@@ -267,7 +270,7 @@ export async function readCurrentRunMilestones(
   let [run] = (await query(dbAdapter, [
     'SELECT id, state, started_at, finished_at, milestone_plan, milestones_dropped FROM automation_runs WHERE automation_id =',
     param(automationId),
-    "AND state = 'running'",
+    "AND state = 'running' AND NOT dry_run",
     'ORDER BY started_at DESC NULLS LAST, id LIMIT 1',
   ])) as unknown as RunRow[];
   return run ? await milestonesOf(dbAdapter, run, now) : undefined;

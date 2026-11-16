@@ -274,18 +274,20 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     // A run of the automation that reached `names` in order, then ended as
-    // `outcome`.
+    // `outcome`. With `dryRun`, a Preview.
     async function ranThrough(
       names: string[],
       plan: string[],
       outcome: Parameters<typeof finishAutomationRun>[3],
+      { dryRun = false }: { dryRun?: boolean } = {},
     ) {
       let created = await createAutomationRun(dbAdapter, {
         automationId: rri(automationURL()),
         realm: ri(testRealm.url),
         trigger: 'nightly',
-        slot: `slot-${names.join('-')}-${outcome.state}`,
+        slot: `slot-${names.join('-')}-${outcome.state}${dryRun ? '-preview' : ''}`,
         actsAs: PAYER,
+        dryRun,
       });
       await startAutomationRunAttempt(dbAdapter, created.id, 1);
       let at = Date.parse('2026-11-10T18:00:00.000Z');
@@ -352,6 +354,38 @@ module(basename(import.meta.filename), function (hooks) {
 
       let reader = await statusOf(READER, ['read']);
       assert.strictEqual(reader.status, 403, 'a reader never sees a run');
+    });
+
+    test('a Preview never reads as the last run or the run in progress', async function (assert) {
+      await writeAutomation();
+      let runId = await ranThrough(['Import'], ['Import'], {
+        state: 'complete',
+      });
+      await ranThrough(
+        ['Import', 'Index'],
+        ['Import', 'Index'],
+        { state: 'complete' },
+        { dryRun: true },
+      );
+      let running = await createAutomationRun(dbAdapter, {
+        automationId: rri(automationURL()),
+        realm: ri(testRealm.url),
+        trigger: 'nightly',
+        slot: 'running-preview-slot',
+        actsAs: PAYER,
+        dryRun: true,
+      });
+      await startAutomationRunAttempt(dbAdapter, running.id, 2);
+
+      let attributes = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      assert.strictEqual(
+        attributes.lastRun?.runId,
+        runId,
+        'the last run is the run before the Preview',
+      );
+      assert.strictEqual(attributes.currentRun, null, 'no run is in progress');
     });
 
     test('a run in progress reads as currentRun, with the milestone it is in', async function (assert) {
