@@ -69,6 +69,25 @@ ruleTester.run('missing-card-api-import', rule, {
         },
       ],
     },
+    // A TypeScript interface or type-literal key named after a mapped
+    // export is not a reference either.
+    {
+      code: `
+        export interface Art {
+          field?: number;
+          contains(other: Art): boolean;
+        }
+        export type Placed = { field: number } | null;
+      `,
+      options: [
+        {
+          importMappings: {
+            contains: ['contains', '@cardstack/base/card-api'],
+            field: ['field', '@cardstack/base/card-api'],
+          },
+        },
+      ],
+    },
   ],
 
   invalid: [
