@@ -1204,14 +1204,21 @@ asked with `isDirectWriterLocked` in the transaction that makes the row).
 It then makes an ordinary run row, trigger `manual` (`MANUAL_RUN_TRIGGER`),
 slot the click, `acts_as` the clicker, and enqueues it with
 `enqueueAutomationRunJob` (`triggerKind: 'manual'`, the card's `seconds`
-cap for the job's timeout, `scheduledAt` the row's `created_at`). So both
-reach the worker through the same path as a scheduled run: the same
-admission and checks in `runAutomationAttempt`, the caps
-(`readRunLimits`: the card's caps, held to the snapshot once the
-automation is switched on), the automation's concurrency group, which
-queues a click behind a run of the same automation already going, and the
-automation tier. The commit re-confirms the clicker's direct write, as for
-any run.
+cap for the job's timeout, `scheduledAt` the row's `created_at`). The
+declaration reader refuses a card trigger labelled `manual`
+(`reserved-label`), so a click never shares a slot and dedupe key with a
+scheduled run. A worker runs it exactly as it runs a scheduled run, through
+`runAutomationAttempt`: every check that makes before the script starts
+applies to it, as do the caps (`readRunLimits`: the card's caps, held to
+the snapshot once the automation is switched on), the automation's
+concurrency group, which queues a click behind a run of the same automation
+already going, and the automation tier. The commit re-confirms the
+clicker's direct write, as for any run.
+
+The row's `dry_run` alone decides whether a run is a Preview: everything
+after the run (its batch, its report, `lastSuccessAt`) reads the row. A job
+whose `dryRun` disagrees with its row runs nothing and ends the run as an
+error with `error_reason` `dry-run-mismatch`.
 
 They answer `{ ok: true, run, job? }`, with the run `pending`. Sending the
 same click again answers the same run: a pending one joins the job already
@@ -1226,11 +1233,18 @@ A Preview that finishes complete copies the files its attempt staged into
 `automation_preview_files` (run, realm-local path, bytes and size), in the
 transaction that finishes it, and then discards its overlay like every run
 (ADR 027 §1.4). The copy is the batch the Preview shows, and nothing writes
-to it afterwards. A Preview that errors or is canceled keeps nothing. Only a
-person's latest batch per automation stays: the finish that keeps one
-deletes the batch of every earlier Preview that person ran of it (`endRun`
-in `automation-runs.ts`). `readAutomationPreviewFiles(dbAdapter, runId)`
-reads a batch. A Preview is never the automation's `lastSuccessAt`.
+to it afterwards. A Preview that errors or is canceled keeps nothing.
+
+Only a person's latest complete Preview of an automation keeps its batch,
+"latest" by when each was asked for (`created_at`, then `id`), not by when
+it finished (`keepPreviewBatch` in `automation-runs.ts`). The finish that
+keeps a batch deletes the batch of every earlier complete Preview by that
+person of that automation and records itself in their
+`preview_replaced_by`. A Preview that finishes after a later one has
+completed keeps nothing, and records that one. The finishes of one
+person's Previews of one automation take a transaction-scoped advisory
+lock, so two finishing together never both keep a batch. A Preview is
+never the automation's `lastSuccessAt`.
 
 To read a batch by hand:
 
@@ -1253,11 +1267,20 @@ SELECT path, size, convert_from(content, 'UTF8') AS text
   caps (`callApiCalls`, `callApiResponseBytes`, `resolveCalls`, `writes`,
   `aiCreditsSpent`, `aiCreditsReserved`);
 - `log`: the run's log (`readRunLog`);
-- `stagedFiles`: for a complete Preview, `{ path, size, content }` per
-  staged file, in path order. An empty list means a newer Preview by the
-  same person replaced this one's batch;
+- `stagedFiles`: for a complete Preview, `{ path, size }` per staged file,
+  in path order. Empty when the script staged nothing, or when
+  `stagedFilesReplacedBy` names the later Preview whose batch replaced
+  this one's;
 - `committedPaths`: for a run whose commit landed, the realm-local paths
   its commit line records (`data.paths` on the `commit` platform line).
+  Absent when the log dropped that line at its cap (_The cap_); `cost.writes`
+  still counts the files.
+
+The report carries no file bytes, since a Preview's batch can reach
+`RUN_OVERLAY_MAX_BYTES`. `readAutomationPreviewFile(dbAdapter, { runId,
+path, user }, options)` answers one staged file's `content`, for a direct
+writer of the run's realm, or `missing` when the Preview kept no file at
+`path`.
 
 ### Comparing a Preview with a Run now
 

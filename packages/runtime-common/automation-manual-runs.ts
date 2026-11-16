@@ -5,13 +5,17 @@
 // would have written. Run now does the same and commits.
 //
 // Both make an ordinary run row, slotted by the click, and enqueue it as the
-// automation command's job (`enqueueAutomationRunJob`), so they reach the
-// worker through the same admission, caps, concurrency group and priority as
-// a scheduled run. They move through pending, running, complete or error,
-// and `readAutomationRunReport` answers where a run is: its state, log,
-// timings, cost and the files it staged or saved.
+// automation command's job (`enqueueAutomationRunJob`). So a worker runs it
+// exactly as it runs a scheduled run, through `runAutomationAttempt`: every
+// check that makes before a run starts applies to it, as do the caps, the
+// concurrency group and the priority. They move through pending, running,
+// complete or error, and `readAutomationRunReport` answers where a run is:
+// its state, log, timings, cost and the files it staged or saved.
 
-import type { AutomationDeclaration } from './automation-declaration.ts';
+import {
+  MANUAL_RUN_TRIGGER,
+  type AutomationDeclaration,
+} from './automation-declaration.ts';
 import { readRunLog, type RunLog } from './automation-run-log.ts';
 import {
   getAutomationRun,
@@ -36,9 +40,7 @@ import type {
 } from './realm-identifiers.ts';
 import type { RunCommandResponse } from './index.ts';
 
-// The trigger label a Preview's or a Run now's row carries. Its slot is the
-// click.
-export const MANUAL_RUN_TRIGGER = 'manual';
+export { MANUAL_RUN_TRIGGER };
 
 export interface ManualRunRequest {
   automationId: RealmResourceIdentifier;
@@ -157,12 +159,12 @@ async function startManualRun(
   return { ok: true, run, job };
 }
 
-// A file a run staged, as a Preview shows it.
+// A file a Preview staged, as its report lists it. Its bytes come from
+// `readAutomationPreviewFile`.
 export interface StagedRunFile {
   // Realm-local.
   path: string;
   size: number;
-  content: Uint8Array;
 }
 
 export interface AutomationRunTimings {
@@ -199,10 +201,15 @@ export interface AutomationRunReport {
   cost: AutomationRunCost;
   log: RunLog;
   // A Preview that finished complete: the files it would have written, in
-  // path order. Absent for any other run.
+  // path order, or none when the script staged nothing or when
+  // `stagedFilesReplacedBy` is set. Absent for any other run.
   stagedFiles?: StagedRunFile[];
+  // The later Preview, by the same person of the same automation, whose
+  // batch replaced this one's: its files are gone.
+  stagedFilesReplacedBy?: string;
   // A run whose commit landed: the realm-local paths the commit saved, as
-  // its commit line records them.
+  // its commit line records them. Absent when the run's log dropped that
+  // line at its cap; the row's `writes` still counts them.
   committedPaths?: string[];
 }
 
@@ -252,30 +259,72 @@ export async function readAutomationRunReport(
     log: runLog,
   };
   if (run.dryRun && run.state === 'complete') {
-    report.stagedFiles = await readAutomationPreviewFiles(dbAdapter, run.id);
+    report.stagedFiles = await listAutomationPreviewFiles(dbAdapter, run.id);
+    if (run.previewReplacedBy) {
+      report.stagedFilesReplacedBy = run.previewReplacedBy;
+    }
   }
   if (run.committedAt) {
-    report.committedPaths = committedPathsOf(runLog);
+    let paths = committedPathsOf(runLog);
+    if (paths) {
+      report.committedPaths = paths;
+    }
   }
   return { ok: true, report };
 }
 
-// The batch a complete Preview kept, in path order: empty once a newer
-// Preview by the same person of the same automation replaced it.
-export async function readAutomationPreviewFiles(
+// The batch a complete Preview kept, in path order, without the bytes.
+async function listAutomationPreviewFiles(
   dbAdapter: DBAdapter,
   runId: string,
 ): Promise<StagedRunFile[]> {
   let rows = await query(dbAdapter, [
-    "SELECT path, size, encode(content, 'base64') AS content FROM automation_preview_files WHERE run_id =",
+    'SELECT path, size FROM automation_preview_files WHERE run_id =',
     param(runId),
     'ORDER BY path',
   ]);
   return rows.map((row) => ({
     path: String(row.path),
     size: Number(row.size),
-    content: fromBase64(String(row.content)),
   }));
+}
+
+export type AutomationPreviewFileRead =
+  | { ok: true; content: Uint8Array }
+  | { ok: false; reason: 'missing' | 'not-a-direct-writer' };
+
+// The bytes of one file a complete Preview kept, for a direct writer of the
+// run's realm. `missing` when there's no such run, or the Preview kept no
+// file at `path` (it staged none there, or a later Preview replaced its
+// batch).
+export async function readAutomationPreviewFile(
+  dbAdapter: DBAdapter,
+  { runId, path, user }: { runId: string; path: string; user: string },
+  options: Pick<AutomationActorOptions, 'matrixServerName' | 'virtualNetwork'>,
+): Promise<AutomationPreviewFileRead> {
+  let run = await getAutomationRun(dbAdapter, runId);
+  if (!run) {
+    return { ok: false, reason: 'missing' };
+  }
+  if (
+    !(await isDirectWriterOf(
+      dbAdapterQuerier(dbAdapter),
+      run.realm,
+      user,
+      options,
+    ))
+  ) {
+    return { ok: false, reason: 'not-a-direct-writer' };
+  }
+  let [row] = await query(dbAdapter, [
+    "SELECT encode(content, 'base64') AS content FROM automation_preview_files WHERE run_id =",
+    param(runId),
+    'AND path =',
+    param(path),
+  ]);
+  return row
+    ? { ok: true, content: fromBase64(String(row.content)) }
+    : { ok: false, reason: 'missing' };
 }
 
 function timingsOf(run: AutomationRun): AutomationRunTimings {
@@ -311,13 +360,14 @@ async function runCreditsByKind(
   return byKind;
 }
 
-// The paths the run's landed commit saved, from its successful commit line.
-function committedPathsOf(log: RunLog): string[] {
+// The paths the run's landed commit saved, from its successful commit line,
+// or undefined when the log has no such line (dropped past the log's cap).
+function committedPathsOf(log: RunLog): string[] | undefined {
   let line = log.lines.find(
     (l) =>
       l.source === 'platform' &&
       l.kind === 'commit' &&
       Array.isArray(l.data?.paths),
   );
-  return (line?.data?.paths as string[] | undefined) ?? [];
+  return line?.data?.paths as string[] | undefined;
 }

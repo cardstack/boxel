@@ -5,16 +5,20 @@ import { basename } from 'path';
 import { randomUUID } from 'crypto';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  createAutomationRun,
+  finishAutomationRun,
   param,
   query,
   ri,
   rri,
+  startAutomationRunAttempt,
   type AutomationRun,
   type QueuePublisher,
   type Realm,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  readAutomationPreviewFile,
   readAutomationRunReport,
   startAutomationPreview,
   startAutomationRunNow,
@@ -23,6 +27,7 @@ import {
   type ManualRunStart,
 } from '@cardstack/runtime-common/automation-manual-runs';
 import type { AutomationActorOptions } from '@cardstack/runtime-common/automations';
+import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   automationFixture,
@@ -47,6 +52,7 @@ const SOURCE = 'application/vnd.card+source';
 
 const WRITES = 'automation/writes';
 const THROWS = 'automation/throws';
+const SLOW = 'automation/slow';
 
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
@@ -79,6 +85,14 @@ module(basename(import.meta.filename), function (hooks) {
         `await realm.fs.writeText('out/before-throw.txt', 'staged, never lands');`,
         `throw new Error('upstream said no');`,
       ].join('\n'),
+      // Holds the automation's concurrency group for its 5 s time limit, so
+      // a run of it queued behind stays pending meanwhile.
+      ...automationFixture({
+        operations: [],
+        path: SLOW,
+        caps: { seconds: 5 },
+      }),
+      [`${SLOW}-script.js`]: `while (true) {}`,
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -192,20 +206,35 @@ module(basename(import.meta.filename), function (hooks) {
       'nothing reached the realm',
     );
     assert.deepEqual(
-      report.stagedFiles?.map(({ path, size, content }) => ({
-        path,
-        size,
-        text: new TextDecoder().decode(content),
-      })),
+      report.stagedFiles,
       [
         {
           path: `out/${file}.txt`,
           size: 'dryRun=true trigger=manual'.length,
-          text: 'dryRun=true trigger=manual',
         },
       ],
-      'the report answers the batch the script staged',
+      'the report lists the batch the script staged',
     );
+    let staged = await readAutomationPreviewFile(
+      dbAdapter,
+      { runId: run.id, path: `out/${file}.txt`, user: CLICKER },
+      options,
+    );
+    assert.deepEqual(
+      staged.ok ? new TextDecoder().decode(staged.content) : staged,
+      'dryRun=true trigger=manual',
+      'and a staged file reads back with the text the script wrote',
+    );
+    assert.deepEqual(
+      await readAutomationPreviewFile(
+        dbAdapter,
+        { runId: run.id, path: `out/${file}.txt`, user: READER },
+        options,
+      ),
+      { ok: false, reason: 'not-a-direct-writer' },
+      "a reader can't read a staged file",
+    );
+    assert.strictEqual(report.stagedFilesReplacedBy, undefined);
     assert.strictEqual(report.committedPaths, undefined);
     assert.ok(
       report.log.lines.some((l) => l.kind === 'finish'),
@@ -265,12 +294,15 @@ module(basename(import.meta.filename), function (hooks) {
     let report = await reportFor(run.id);
     assert.strictEqual(report.run.state, 'error');
     assert.strictEqual(report.run.errorReason, 'script-error');
-    assert.strictEqual(report.stagedFiles, undefined);
-    let [{ count }] = await query(dbAdapter, [
-      'SELECT count(*)::int AS count FROM run_overlay_files WHERE run_id =',
+    let [{ kept, staged }] = await query(dbAdapter, [
+      'SELECT (SELECT count(*)::int FROM automation_preview_files WHERE run_id =',
       param(run.id),
+      ') AS kept, (SELECT count(*)::int FROM run_overlay_files WHERE run_id =',
+      param(run.id),
+      ') AS staged',
     ]);
-    assert.strictEqual(count, 0, 'its overlay was discarded');
+    assert.strictEqual(kept, 0, 'no batch was kept');
+    assert.strictEqual(staged, 0, 'its overlay was discarded');
     assert.strictEqual(await readFile('out/before-throw.txt'), undefined);
   });
 
@@ -291,15 +323,106 @@ module(basename(import.meta.filename), function (hooks) {
       await startAutomationPreview(ctx, request(CLICKER), options),
     );
     assert.strictEqual((await reportFor(second.id)).stagedFiles?.length, 1);
+    let firstReport = await reportFor(first.id);
     assert.deepEqual(
-      (await reportFor(first.id)).stagedFiles,
+      firstReport.stagedFiles,
       [],
       "the newer Preview discarded the earlier one's batch",
+    );
+    assert.strictEqual(
+      firstReport.stagedFilesReplacedBy,
+      second.id,
+      'and the earlier report names the Preview that replaced it',
     );
     assert.strictEqual(
       (await reportFor(owners.id, OWNER)).stagedFiles?.length,
       1,
       "another person's Preview keeps its batch",
+    );
+  });
+
+  test('a Preview that finishes after a later one has completed keeps nothing', async function (assert) {
+    let automationId = rri(`${realm.url}${WRITES}`);
+    let preview = (slot: string) =>
+      createAutomationRun(dbAdapter, {
+        automationId,
+        realm: ri(realm.url),
+        trigger: 'manual',
+        slot,
+        actsAs: CLICKER,
+        dryRun: true,
+      });
+    // Asked for in this order; the later one's attempt finishes first.
+    let earlier = await preview(randomUUID());
+    let later = await preview(randomUUID());
+    for (let [run, attempt] of [
+      [later, 2],
+      [earlier, 1],
+    ] as const) {
+      await startAutomationRunAttempt(dbAdapter, run.id, attempt);
+      await stageRunOverlayFile(
+        dbAdapter,
+        { runId: run.id, attempt },
+        `out/${run.id}.txt`,
+        new TextEncoder().encode('staged'),
+        10,
+      );
+      await finishAutomationRun(dbAdapter, run.id, attempt, {
+        state: 'complete',
+      });
+    }
+    assert.deepEqual(
+      (await reportFor(later.id)).stagedFiles?.map(({ path }) => path),
+      [`out/${later.id}.txt`],
+      'the later Preview keeps its batch',
+    );
+    let earlierReport = await reportFor(earlier.id);
+    assert.deepEqual(earlierReport.stagedFiles, []);
+    assert.strictEqual(
+      earlierReport.stagedFilesReplacedBy,
+      later.id,
+      'the earlier Preview, finishing last, keeps nothing and names the later one',
+    );
+  });
+
+  test('a click sent again while its run is pending joins the job it enqueued', async function (assert) {
+    let ctx = { dbAdapter, queue: publisher };
+    // A slow run holds the automation's concurrency group, so the click's
+    // run stays pending behind it.
+    let holding = await startAutomationRunNow(
+      ctx,
+      request(CLICKER, { path: SLOW }),
+      options,
+    );
+    let click = randomUUID();
+    let first = await startAutomationPreview(
+      ctx,
+      request(CLICKER, { path: SLOW, click }),
+      options,
+    );
+    let again = await startAutomationPreview(
+      ctx,
+      request(CLICKER, { path: SLOW, click }),
+      options,
+    );
+    if (!first.ok || !again.ok) {
+      throw new Error('expected both sends to answer the run');
+    }
+    assert.strictEqual(again.run.id, first.run.id, 'one click is one run');
+    assert.strictEqual(again.run.state, 'pending');
+    assert.ok(first.job, 'the first send enqueued the run');
+    assert.strictEqual(
+      again.job?.id,
+      first.job?.id,
+      'the second send joined the job the first enqueued',
+    );
+    await finished(holding);
+    await finished(first);
+    let after = await reportFor(first.run.id);
+    assert.strictEqual(
+      after.log.lines.filter((l) => l.kind === 'finish').length,
+      1,
+      'the run ran once',
     );
   });
 

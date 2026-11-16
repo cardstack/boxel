@@ -127,10 +127,19 @@ export async function runAutomationAttempt(
       return { state: 'left', reason: start.kind };
   }
   let run = start.run;
-  // A Preview, as its row or its job says.
-  let dryRun = run.dryRun || input.dryRun;
   let fail = (reason: string, message: string) =>
     finish(ctx, tag, runId, attempt, { state: 'error', reason, message });
+  // The row decides whether the run is a Preview, since everything after
+  // the run (its kept batch, its report, `lastSuccessAt`) reads the row. A
+  // job that says otherwise runs nothing, so a run its job calls a Preview
+  // never commits.
+  let dryRun = run.dryRun;
+  if (input.dryRun !== dryRun) {
+    return await fail(
+      'dry-run-mismatch',
+      `The run's job ${input.dryRun ? 'is' : "isn't"} a Preview and its row ${dryRun ? 'is' : "isn't"}, so the run didn't start`,
+    );
+  }
 
   let realmURL = ensureTrailingSlash(ctx.virtualNetwork.toURLHref(run.realm));
   let [limits, declaration] = await Promise.all([

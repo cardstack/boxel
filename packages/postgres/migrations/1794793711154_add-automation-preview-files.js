@@ -6,13 +6,17 @@
 // row per realm-local path with the bytes inline, copied out of the run's
 // overlay in the transaction that finishes the Preview complete. The overlay
 // itself is discarded there, as for every run. Only a person's latest
-// Preview of an automation keeps its files. Deleting the run row deletes
-// them. The table is server-only, and excluded from the SQLite schema dump.
+// complete Preview of an automation (by when it was asked for) keeps its
+// files; `preview_replaced_by` names the Preview whose batch replaced an
+// earlier one's, so a replaced batch reads apart from one that staged
+// nothing. Deleting the run row deletes its files. The table is server-only,
+// and excluded from the SQLite schema dump.
 
 exports.up = (pgm) => {
   pgm.sql(`
     ALTER TABLE automation_runs
-      ADD COLUMN IF NOT EXISTS dry_run boolean NOT NULL DEFAULT false
+      ADD COLUMN IF NOT EXISTS dry_run boolean NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS preview_replaced_by uuid
   `);
   pgm.sql(`
     CREATE TABLE IF NOT EXISTS automation_preview_files (
@@ -29,6 +33,7 @@ exports.down = (pgm) => {
   pgm.sql(`DROP TABLE IF EXISTS automation_preview_files`);
   pgm.sql(`
     ALTER TABLE automation_runs
+      DROP COLUMN IF EXISTS preview_replaced_by,
       DROP COLUMN IF EXISTS dry_run
   `);
 };

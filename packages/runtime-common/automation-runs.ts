@@ -66,6 +66,9 @@ export interface AutomationRun extends AutomationRunCounts {
   // complete the files it staged are kept as the batch it shows
   // (`automation_preview_files`).
   dryRun: boolean;
+  // For a complete Preview whose batch a later one by the same person
+  // replaced: that Preview.
+  previewReplacedBy: string | null;
   // The queue attempt (the job's reservation id) that owns the run, once one
   // has started it.
   attempt: number | null;
@@ -720,10 +723,8 @@ async function updateOwned(
 // committed by then, and a later stage waits on the lock and then finds the
 // run no longer running.
 //
-// A Preview that finishes complete first copies the files its owning attempt
-// staged into `automation_preview_files`: they are the batch the Preview
-// shows. Only a person's latest such batch for an automation stays, so
-// keeping one deletes the batch of every earlier Preview they ran of it.
+// A Preview that finishes complete first keeps the files its owning attempt
+// staged, as the batch it shows (`keepPreviewBatch`).
 async function endRun(
   dbAdapter: DBAdapter,
   update: Expression,
@@ -731,35 +732,88 @@ async function endRun(
   return await dbAdapter.withTransaction(async (txQuery) => {
     let [row] = await txQuery(update);
     if (row) {
-      let runId = String(row.id);
       if (
         row.dry_run === true &&
         row.state === 'complete' &&
         row.attempt != null
       ) {
-        await txQuery([
-          'DELETE FROM automation_preview_files WHERE run_id IN (SELECT id FROM automation_runs WHERE automation_id =',
-          param(String(row.automation_id)),
-          'AND acts_as =',
-          param(String(row.acts_as)),
-          'AND dry_run AND id <>',
-          param(runId),
-          ')',
-        ]);
-        await txQuery([
-          'INSERT INTO automation_preview_files (run_id, path, content, size) SELECT run_id, path, content, size FROM run_overlay_files WHERE run_id =',
-          param(runId),
-          'AND attempt =',
-          param(Number(row.attempt)),
-        ]);
+        await keepPreviewBatch(txQuery, row);
       }
       await txQuery([
         'DELETE FROM run_overlay_files WHERE run_id =',
-        param(runId),
+        param(String(row.id)),
       ]);
     }
     return row;
   });
+}
+
+// Copies a complete Preview's staged files into `automation_preview_files`,
+// inside the transaction that finishes it. Only a person's latest complete
+// Preview of an automation, ordered by when each was asked for, keeps its
+// batch: keeping one deletes the batch of every earlier one and records it
+// in their `preview_replaced_by`, and a Preview that finishes after a later
+// one has completed keeps nothing and records that one. The finishes of one
+// person's Previews of one automation take a transaction-scoped advisory
+// lock, so two finishing together can't both keep a batch, and each sees
+// the other's finish once it has the lock.
+async function keepPreviewBatch(
+  txQuery: Querier,
+  row: Record<string, PgPrimitive>,
+): Promise<void> {
+  let runId = String(row.id);
+  let samePerson: Expression = [
+    'automation_id =',
+    param(String(row.automation_id)),
+    'AND acts_as =',
+    param(String(row.acts_as)),
+    "AND dry_run AND state = 'complete' AND id <>",
+    param(runId),
+  ];
+  await txQuery([
+    'SELECT pg_advisory_xact_lock(hashtext(',
+    param(`automation-preview:${row.automation_id}:${row.acts_as}`),
+    '))',
+  ]);
+  let [later] = await txQuery([
+    'SELECT id FROM automation_runs WHERE',
+    ...samePerson,
+    'AND (created_at, id) > (SELECT created_at, id FROM automation_runs WHERE id =',
+    param(runId),
+    ') ORDER BY created_at DESC, id DESC LIMIT 1',
+  ]);
+  if (later) {
+    await txQuery([
+      'UPDATE automation_runs SET preview_replaced_by =',
+      param(String(later.id)),
+      'WHERE id =',
+      param(runId),
+    ]);
+    return;
+  }
+  let earlier = [
+    'SELECT id FROM automation_runs WHERE',
+    ...samePerson,
+    'AND preview_replaced_by IS NULL',
+  ];
+  await txQuery([
+    'DELETE FROM automation_preview_files WHERE run_id IN (',
+    ...earlier,
+    ')',
+  ]);
+  await txQuery([
+    'UPDATE automation_runs SET preview_replaced_by =',
+    param(runId),
+    'WHERE id IN (',
+    ...earlier,
+    ')',
+  ]);
+  await txQuery([
+    'INSERT INTO automation_preview_files (run_id, path, content, size) SELECT run_id, path, content, size FROM run_overlay_files WHERE run_id =',
+    param(runId),
+    'AND attempt =',
+    param(Number(row.attempt)),
+  ]);
 }
 
 function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
@@ -771,6 +825,7 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     slot: String(row.slot),
     actsAs: String(row.acts_as),
     dryRun: row.dry_run === true || row.dry_run === 1,
+    previewReplacedBy: (row.preview_replaced_by as string | null) ?? null,
     attempt: row.attempt == null ? null : Number(row.attempt),
     scriptId: (row.script_id as RealmResourceIdentifier | null) ?? null,
     scriptHash: (row.script_hash as string | null) ?? null,
