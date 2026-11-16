@@ -374,6 +374,7 @@ export class List<T> extends Component<ListSignature<T>> {
             aria-label={{this.label}}
             {{listen 'keydown' this.onKeydown}}
             {{listen 'focusin' this.onFocusIn}}
+            {{listen 'focusout' this.cursor.leave}}
             {{listen 'click' this.onClick}}
           >
             {{#each this.lines key='key' as |line|}}
