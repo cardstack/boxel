@@ -29,7 +29,7 @@ import { MatrixClient } from './matrix-client.ts';
 import type { MediaCacheAdapter } from './media-cache.ts';
 import type { MeteredCharges } from './metered-charges.ts';
 import * as Tasks from './tasks/index.ts';
-import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
+import type { WorkerArgs, TaskArgs, MintRunToken } from './tasks/index.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { heartbeatJob } from './queue.ts';
 
@@ -230,6 +230,7 @@ export class Worker {
   #skipPrerenderHtmlRealms: string[];
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #createPrerenderAuth: CreatePrerenderAuth;
+  #mintRunToken: MintRunToken | undefined;
   #meteredCharges: MeteredCharges | undefined;
 
   constructor({
@@ -247,6 +248,7 @@ export class Worker {
     reportRealmEvent,
     prerenderer,
     createPrerenderAuth,
+    mintRunToken,
     indexJobsOnly,
     skipPrerenderHtmlRealms,
     mediaCacheAdapter,
@@ -275,6 +277,8 @@ export class Worker {
     // configured (media-cache tasks then no-op).
     mediaCacheAdapter?: MediaCacheAdapter;
     createPrerenderAuth: CreatePrerenderAuth;
+    // See `TaskArgs.mintRunToken`.
+    mintRunToken?: MintRunToken;
     // See `TaskArgs.meteredCharges`.
     meteredCharges?: MeteredCharges;
   }) {
@@ -292,6 +296,7 @@ export class Worker {
     this.#queuePublisher = queuePublisher;
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
+    this.#mintRunToken = mintRunToken;
     this.#indexJobsOnly = indexJobsOnly ?? false;
     this.#skipPrerenderHtmlRealms = skipPrerenderHtmlRealms ?? [];
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -321,6 +326,7 @@ export class Worker {
       reportProgress: this.reportProgress.bind(this),
       reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
+      mintRunToken: this.#mintRunToken,
       mediaCacheAdapter: this.#mediaCacheAdapter,
       skipPrerenderHtmlRealms: this.#skipPrerenderHtmlRealms,
       meteredCharges: this.#meteredCharges,

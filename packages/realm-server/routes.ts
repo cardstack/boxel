@@ -13,7 +13,6 @@ import { DBRateLimitStore } from '@cardstack/runtime-common';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
-import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session.ts';
 import handleCreateRealmRequest, {
   type CreateRealmDeps,
@@ -51,7 +50,7 @@ import {
   sendResponseForUnauthorizedRequest,
 } from './middleware/index.ts';
 import type Koa from 'koa';
-import { carriesRunToken } from '@cardstack/runtime-common/run-token';
+import { runTokenOf } from '@cardstack/runtime-common/run-token';
 import { verifyRunToken } from './lib/run-token.ts';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
 import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
@@ -635,16 +634,11 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(
     REQUEST_FORWARD_PATH,
     async (ctxt: Koa.Context, next: Koa.Next) => {
-      let authorization = ctxt.req.headers['authorization'] ?? null;
-      if (!carriesRunToken(authorization)) {
+      let runToken = runTokenOf(ctxt.req.headers['authorization'] ?? null);
+      if (!runToken) {
         return await requestForwardSession(ctxt, next);
       }
-      if (
-        !verifyRunToken(
-          authorization!.slice('Bearer '.length),
-          args.realmSecretSeed,
-        )
-      ) {
+      if (!verifyRunToken(runToken, args.realmSecretSeed)) {
         return await sendResponseForUnauthorizedRequest(
           ctxt,
           AuthenticationErrorMessages.TokenInvalid,
@@ -977,15 +971,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleUnlistedRealmPathRequest(args),
   );
-  // Matrix tests don't need the GitHub PR integration, and skipping this route
-  // keeps the realm server from loading Octokit's ESM entrypoint during boot.
-  if (process.env.DISABLE_GITHUB_PR_ROUTE !== 'true') {
-    router.post(
-      '/_github-pr',
-      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-      handleGitHubPRRequestLazy(args),
-    );
-  }
   router.get('/_download-realm', handleDownloadRealm(args));
   router.post(
     '/_bot-registration',
@@ -1055,21 +1040,4 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_webhooks/:webhookPath', handleWebhookReceiverRequest(args));
 
   return router.routes();
-}
-
-function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
-  let handler:
-    | ((ctxt: Koa.Context, next: Koa.Next) => Promise<void>)
-    | undefined;
-
-  return async function (ctxt: Koa.Context, next: Koa.Next) {
-    if (!handler) {
-      handler = (
-        createRequire(import.meta.filename)(
-          './handlers/handle-github-pr',
-        ) as typeof import('./handlers/handle-github-pr.ts')
-      ).default(args);
-    }
-    return await handler(ctxt, next);
-  };
 }

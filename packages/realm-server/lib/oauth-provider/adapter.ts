@@ -4,9 +4,23 @@
 // would lose it on restart and differ between the realm server's processes.
 // Short-lived objects share `oauth_provider_objects` (`objects.ts`).
 
+import { randomBytes } from 'crypto';
 import type { Adapter, AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { InteractionAdapter } from './objects.ts';
+
+// The ID dynamic client registration gives a client: 24 random bytes in
+// base64url, so always 32 characters of that alphabet. A client ID metadata
+// document's ID is an `https://` URL, which can never take this form.
+const DYNAMIC_CLIENT_ID = /^[A-Za-z0-9_-]{32}$/;
+
+export function newDynamicClientId(): string {
+  return randomBytes(24).toString('base64url');
+}
+
+export function isDynamicClientId(id: string): boolean {
+  return DYNAMIC_CLIENT_ID.test(id);
+}
 
 export class OAuthProviderStorageError extends Error {
   name = 'OAuthProviderStorageError';
@@ -44,6 +58,11 @@ export function oauthProviderAdapter(
 // is off. A second store under an ID fails rather than replacing the client.
 // It never consumes a client, and finds none by grant, user code or
 // interaction.
+//
+// The library looks here for every client ID it is sent before it turns to a
+// metadata document, so an ID registration could not have given (a metadata
+// document's URL, say) is not found without asking the database. No row can
+// then stand in for a metadata document, whatever is in the table.
 class DynamicClientAdapter implements Adapter {
   #dbAdapter: DBAdapter;
 
@@ -60,6 +79,9 @@ class DynamicClientAdapter implements Adapter {
   }
 
   async find(id: string): Promise<AdapterPayload | undefined> {
+    if (!isDynamicClientId(id)) {
+      return undefined;
+    }
     let [row] = (await this.#dbAdapter.execute(
       `SELECT metadata FROM oauth_provider_dynamic_clients WHERE client_id = $1`,
       { bind: [id] },

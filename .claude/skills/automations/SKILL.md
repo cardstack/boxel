@@ -55,6 +55,19 @@ description: >-
   progress sink with secrets redacted, and `runAutomationScript`. Use when
   adding or moving a Realm Runner method, changing what an automation script
   can call, or diagnosing a method an automation run refused.
+  Also covers the automation command that runs one attempt of a run
+  (`AUTOMATION_COMMAND`, `runAutomationAttempt` in
+  `runtime-common/tasks/run-automation.ts`, `enqueueAutomationRunJob`, the
+  host's `run-automation` tool): the run's job and its timeout, the run's own
+  prerender affinity and warm tab, the run token as the tab's only session,
+  handed to the tab in memory rather than in `localStorage`, the commit or the recorded error, and how to run one automation by hand in
+  development (`pnpm run-automation`) and read its outcome.
+  Also covers a run's log — `automation_run_log`, `appendRunLog` and
+  `readRunLog` in `automation-run-log.ts`, the `/_run-log` route and the
+  host's `RunLogSink`, the platform's `callApi`, `resolve`, commit and cap
+  lines, redaction, the per-run size cap, and the `[automation-run-log]` lines
+  in Loki. Use when reading a run's log in Postgres or Loki, adding a line the
+  platform logs for a run, or diagnosing a run whose log is missing lines.
 ---
 
 # Automations
@@ -416,8 +429,9 @@ SELECT state, attempt, error_reason, error_message, canceled_by,
   after a retry or the reconcile pass had closed the run as an error, and
   recording the landing made it complete.
 
-The row holds run state only. A run's log (its console lines and platform
-calls) doesn't go on it.
+The row holds run state, and the counts its log's cap is checked against
+(`log_lines`, `log_chars`, `log_dropped`). The log itself is in
+`automation_run_log` (_The run log_).
 
 ### The run token
 
@@ -872,9 +886,284 @@ token) and every credential it recognizes:
 …`, `?token=…`, `&key=…`).
 
 The name it was found under stays (`Authorization: Bearer [REDACTED]`,
-`"api_key":"[REDACTED]"`). The sink is where the run log takes these lines;
-the scrubber still removes a vendor's own key from a `callApi` response
-before the script sees it.
+`"api_key":"[REDACTED]"`). `redactSecrets` lives in
+`packages/runtime-common/redact-secrets.ts`, a leaf module the worker bundle
+and the realm server both import. The scrubber still removes a vendor's own
+key from a `callApi` response before the script sees it.
+
+When the run rejects, `runAutomationScript` records one last event before it
+does: `{ kind: 'error', message, line?, stack? }`. `line` is the script's line
+the error was thrown on, and `stack` keeps only the stack's frames on the
+script's own lines, each naming its `script line N` (the bootstrap's frames
+and the wrapper's call to the script are left out). The worker maps them from
+QuickJS's dumped stack, minus the wrapper's line
+(`REALM_RUNNER_WRAPPER_LINES`), for every error the script throws, not only
+the four kinds `RealmScriptError` describes. A run stopped at its time limit
+ends with that message and no line or stack, since it was stopped wherever it
+was. The run's token expires at that same limit, so the tab's send of that
+line is usually refused; the realm server's `finish` line (below) says why the
+run ended either way.
+
+## The run log
+
+A run's log is its script's lines and the platform's lines (ADR 025 §1.1). It is stored in Postgres for the console and written to the
+realm server's log for Loki. The code is
+`packages/runtime-common/automation-run-log.ts`.
+
+### Where the lines come from
+
+| `source`   | `kind`                                                       | Written by                                                                                                                                                                                                                                 |
+| ---------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `script`   | `console`, `activity`, `plan`, `milestone`, `count`, `error` | the run's tab: `RunLogSink` (`packages/host/app/lib/realm-runner/run-log-sink.ts`) sends the progress sink's events to the realm's `POST /_run-log` with the run token                                                                     |
+| `platform` | `call-api`                                                   | `callApiOperation`, through the run's `CallApiRunMeter.logCall`: operation, method, destination with query values masked, status, time and size, or why it was refused                                                                     |
+| `platform` | `resolve`                                                    | `_request-forward`, for a forward that carried the run's token: model, status, time and cost                                                                                                                                               |
+| `platform` | `commit`                                                     | `/_run-commit`: the files saved, or the refusal's code and detail                                                                                                                                                                          |
+| `platform` | `finish`                                                     | `finishAutomationRun`, `abandonAutomationRun` and `cancelAutomationRun`, once the row changes: how the run ended, with the row's `error_reason` and `error_message` (a cap that ended it, a time limit, a script error) or who canceled it |
+
+`RunLogSink` implements `FlushableRunProgressSink`. It sends a batch of at
+most `RUN_LOG_MAX_BATCH_LINES` (500) events once that many wait or a second
+after the first of them, one batch at a time, each given up on after
+`RUN_LOG_SEND_TIMEOUT_MS` (10 s), so `flush` always settles. Whoever runs the
+script calls `await sink.flush()` before the commit and before finishing the
+run.
+
+**Order.** The realm server stores its lines as it does the work, while the
+script's lines wait in the sink. So `runAutomationScript` flushes a flushable
+sink before each `operations.*` and `resolve` call, and the script's lines
+from before a call are stored before the call's own line. `seq` is the order
+lines were stored in.
+`/_run-log` goes through `Realm.handleAutomation` like every run-token call,
+so it takes lines only while the run is `running` under the token's attempt.
+A flush after the run finished is refused with a 401, and the sink reports
+that to its `onError` and never throws: the log never fails a run. A route
+takes only the script's kinds, so nothing the tab sends can pass for a
+platform line.
+
+Every line is redacted again as it is stored, with `redactSecrets` and the
+token it arrived with, whoever sent it. A message is cut at
+`RUN_LOG_MAX_MESSAGE_CHARS` (10,000) and says how much it lost. Query values
+in a logged URL are always masked (`maskedRunLogURL`); header values are
+never logged.
+
+### The cap
+
+A run's log holds at most `RUN_LOG_MAX_LINES` (10,000) lines and
+`RUN_LOG_MAX_CHARS` (5,000,000) characters of messages and data together.
+`appendRunLog` locks the run row, checks the cap against `log_lines` and
+`log_chars`, stores what fits and adds the rest to `log_dropped`. `readRunLog`
+ends a capped log with one `warn` line saying how many were dropped. Separately,
+the worker drops one-way calls past `MAX_RUN_NOTIFICATIONS`, and `RunLogSink`
+drops the oldest past `RUN_LOG_MAX_PENDING` (5,000) waiting events, besides
+the batch in flight, when the realm server answers slowly; each says how many
+in a line of its own. A time no `Date` holds is stored as the time the line
+arrived, and a script line past Postgres's `integer` is left off, so one bad
+event doesn't cost its batch.
+
+### Reading a run's log in Postgres
+
+```sql
+SELECT seq, at, source, kind, level, script_line, message, data
+  FROM automation_run_log WHERE run_id = '<run id>' ORDER BY seq;
+
+-- the log's size against its cap
+SELECT log_lines, log_chars, log_dropped FROM automation_runs WHERE id = '<run id>';
+
+-- just the errors and refusals, across an automation's recent runs
+SELECT l.run_id, l.at, l.kind, l.message
+  FROM automation_run_log l JOIN automation_runs r ON r.id = l.run_id
+ WHERE r.automation_id = '<automation card id>' AND l.level = 'error'
+ ORDER BY l.at DESC LIMIT 50;
+```
+
+Deleting a run row deletes its log (`ON DELETE CASCADE`).
+
+### Reading a run's log in Loki
+
+Each stored line is also logged once by the realm server on the
+`automation-run-log` logger, as
+
+```
+[automation-run-log] automation=<card id> run=<run id> job=<queue job id> seq=3 source=platform kind=call-api level=info status=200 ms=41 msg="callApi latest GET https://…: 200 in 41 ms, 912 bytes"
+```
+
+The tags are in the line, not Loki labels (a run id per label would be a
+series per run). `job` is the queue job that owns the run's attempt
+(`job_reservations.job_id` for the row's `attempt`), absent when there is
+none. The tags come right after the prefix and the message is last and
+JSON-quoted, but a script can print text that looks like tags, and LogQL's
+`|=` and `|~` match anywhere in the line. Anchor a query on the prefix and the
+tags, so it reads the tags the platform wrote. With the `tail-logs` skill:
+
+```bash
+packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+  --regex '\[automation-run-log\] automation=\S+ run=<run id> ' --since 1h --no-follow
+# one queue job's run
+packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+  --regex '\[automation-run-log\] automation=\S+ run=\S+ job=42 ' --since 1h --no-follow
+```
+
+A log that reaches its cap logs one `warn` line saying later lines are
+dropped. Lines come from whichever realm-server task took the request, so
+query by the run, not by one task.
+
+## The automation command
+
+One attempt of a run is a `run-command` job naming `AUTOMATION_COMMAND`
+(`@cardstack/boxel-host/tools/run-automation/default`, in
+`runtime-common/automation-run-command.ts`). The run-command task hands such a
+job to `runAutomationAttempt` (`runtime-common/tasks/run-automation.ts`)
+instead of the ordinary command path. No other path runs it:
+`prepareRunCommand` refuses it, so `/_run-command`, bot commands and webhook
+receivers can't run it with a person's sessions (ADR 025 §1.3).
+
+### The job
+
+`enqueueAutomationRunJob` (`runtime-common/jobs/run-command.ts`) enqueues it
+for a run row its trigger has already made with `createAutomationRun`:
+
+- `commandInput` is an `AutomationJobInput`: the run's id, `scheduledAt`,
+  `dryRun`, and for a run no trigger on the card names, `triggerKind`
+  (`manual` or `batch`), plus a webhook run's `webhookPayload`;
+- `dedupeKey` is `automationRunDedupeKey(run)`,
+  `automation:<id>:<trigger>:<slot>`. The worker runs a job only when its key
+  is its run's, so a job some other publisher enqueued that names a run id
+  touches nothing (`not-the-runs-job`);
+- `concurrencyGroup` is `automation:<id>`, so an automation runs one at a time;
+- the priority is `automationInitiatedPriority`;
+- the timeout is `automationJobTimeoutSec(secondsCap)`: the run's time limit
+  plus `AUTOMATION_JOB_OVERHEAD_SEC` (120 s) for the steps around the script.
+  Every other `run-command` job keeps `RUN_COMMAND_JOB_TIMEOUT_SEC` (60 s).
+
+### One attempt
+
+`runAutomationAttempt`, in order:
+
+1. Checks the job's key against the run, then `startAutomationRunAttempt`
+   with the job's reservation id as the attempt, and does what the start says
+   (_An attempt, start to finish_).
+2. Reads the card's declaration and the run's limits from the index. A card
+   that doesn't read as an automation ends the run (`not-an-automation`). A
+   retry gets what is left of the run's time, counted from its first start,
+   never a fresh limit; none left ends it (`timed-out`).
+3. Mints the run's token with the worker's `mintRunToken`
+   (`buildMintRunToken` in `realm-server/lib/run-token.ts`, wired in
+   `worker.ts`). Read realms are `RUN_READ_REALMS`, the base and catalog
+   realms.
+4. Reads the script file with the run's token, so the read takes the realm's
+   check as the run's identity (`missing-script` when it can't), and records
+   its id and the sha256 of its text with `recordAutomationRunScript`. At
+   most `MAX_AUTOMATION_SCRIPT_CHARS` (100,000) characters.
+5. Sends the script to a prerender tab with `prerenderer.runCommand`, with
+   `runRealm` set to the automation's realm, the run's token as the whole of
+   the tab's auth, the `AutomationScriptInput` as a `JsonCard`'s `json`, and
+   `timeoutMs` of what's left of the time limit plus 30 s
+   (`AUTOMATION_TAB_GRACE_MS`). The input carries `endsAt`, when the time
+   limit passes, so time spent waiting for the tab comes off the script's.
+6. Finishes the run from what the tab answers:
+   - `complete`, Preview: finishes complete without a commit, which discards
+     the overlay;
+   - `complete`: commits with `POST /_run-commit` carrying the token, sent
+     again up to three times on `overlay-changed` or when its answer is lost
+     (the realm answers this attempt's commit again with the same success),
+     and finishes complete on `200`. Any other answer finishes the run as an
+     error named by the refusal's code (_Committing the overlay_), unless
+     the row says the batch landed, which finishes it complete;
+   - `error`: finishes the run as an error with the outcome's reason
+     (`script-error`, `timed-out`, `run-failed`) and its message, prefixed
+     `line N:` for a script error that has a line. The finish discards the
+     overlay, so nothing the script staged lands;
+   - a tab that never answered (`unusable`) is `timed-out`; a command that
+     failed or a request that failed is `run-failed`.
+
+The run's token is redacted from every message the row records.
+
+### The tab
+
+The run goes to its realm's **run affinity**, `realm:<realm>#run:<identity>`
+(`renderSessionOf` reads a run token as a `run` session; `toAffinityKey`). The
+prerender server takes a realm affinity for `/run-command` only when the
+whole of the auth is one run token, so no other session reaches a run's tab
+and a run's token reaches no other tab. The pool holds a run affinity to one
+tab (`isRunAffinityKey`), so runs of one realm and identity take turns on that
+tab and never hold more than one of the tabs index renders also draw on. The
+tab is a warm one, never one the run starts itself (ADR 025 §1.2); see the
+`prerender-sizing` skill.
+
+**The token reaches the tab in memory.** A run's token MUST NOT be written
+anywhere the tab keeps state (ADR 026 §1.2), so the run's sessions never go
+through `localStorage['boxel-session']`, which hands every render and every
+other command its sessions. `runCommandAttempt` in `render-runner.ts` sees a
+`run` session and sets the sessions map on the page global
+`__boxelInMemorySessions` (`inMemorySessionsGlobal` in
+`runtime-common/in-memory-sessions.ts`), and removes `boxel-session` from the
+tab's storage, so the tab holds no other session. While that global is set the
+host reads and writes the tab's sessions there and nowhere else: the realm
+service's session store and `restoreSessionsFromStorage`
+(`host/app/utils/realm-sessions.ts`), `RealmAuthClient.getJWT` in a render
+context, and the realm-server service's session read. No session is synced to
+the auth service worker, which would keep the token past the run, and the
+visit's start clears the worker's tokens (`clearServiceWorkerTokens`), since a
+tab taken from another affinity brings that affinity's worker with it. The
+`command-runner` route answers through `#answer`, which first calls
+`RealmService.dropInMemorySessions`: every realm holding a session is removed,
+along with its token and refresher, and the global is deleted, so nothing of
+the run is left in the tab once the run answers. A run that doesn't answer
+(the tab's wait times out, or the attempt throws) may still be running its
+script with the token, so `runCommandAttempt` evicts the run's affinity and
+the page never goes back to the pool. Every other prerender visit
+(render, module, capture, ordinary command) sets `boxel-session` and deletes
+the global, so a tab that served a run and is then handed to another affinity
+never reads the run's sessions in place of its own.
+
+To check a tab by hand after a run, read `localStorage` and
+`globalThis.__boxelInMemorySessions` in it: neither holds the run's token.
+
+`timeoutMs` widens every layer's timeout for this one request: the worker's
+request to the manager, the manager's proxy, and the tab's wait on the
+command (`commandRequestTimeoutMs` in `prerender-constants.ts`, up to
+`MAX_COMMAND_TIMEOUT_MS`, which is `MAX_RUN_SECONDS` plus the tab's grace).
+
+In the tab, the `run-automation` tool (`host/app/tools/run-automation.ts`)
+refuses to run unless the tab's session for the realm is a run token. It runs
+the script with `runAutomationScript` on `automationRealmIO`, with `resolve`
+sent to the realm server's `_request-forward` carrying the run's token, so it
+is counted and priced against the run's caps. It answers an
+`AutomationScriptOutcome`: an error the script throws itself
+(`RealmScriptError`) is `script-error` with its line, a run out of time
+(`AutomationTimeLimitError`) is `timed-out`, and a realm call's error the
+script didn't catch is `run-failed`. In the script, a realm call's error is
+an `Error` named `RealmCallError`. A script that couldn't start before the
+run's `endsAt` is `timed-out`. It flushes the run's progress
+sink before it answers, while the run is still running.
+
+### Running one automation by hand in development
+
+With the dev stack up (a worker and the prerender server running), from
+`packages/realm-server`:
+
+```sh
+pnpm run-automation \
+  --realm http://localhost:4201/user/my-realm/ \
+  --card http://localhost:4201/user/my-realm/automation/sync \
+  --as @user:localhost          # add --preview to stop before the commit
+```
+
+It creates a `manual` run row for the card, enqueues its job, waits for it
+and prints the run row. `--as` must be a direct writer of the realm, since the
+commit re-confirms it. Then read the outcome:
+
+- the printed row: `state`, `error_reason`, `error_message` (a script error
+  starts `line N:`), `script_hash`, `committed_at`;
+- the files: a complete run's writes are in the realm, indexed in the
+  background (`writes` on the row counts them);
+- the worker's log: `automation run <id> attempt <n> complete`, `ended as an
+error (<reason>)` or `left alone: …`;
+- the prerender server's log: the tab's progress lines, logged as
+  `[automation run] {…}` console lines.
+
+A run that stays `pending` was never claimed: check that a worker can claim
+priority 5 (_The lanes_). One that stays `running` lost its attempt; see
+_Diagnosing a run_.
 
 ## The queue tier and worker lane
 

@@ -15,6 +15,7 @@ One-of-N where every option is a card. The card is the label and the whole hit t
 @name?             — the form field the radios submit under; a generated name groups them otherwise
 @orientation?      — 'vertical' (default) | 'horizontal'
 @columns?          — 2 | 3 | 4, a fixed count for 'horizontal'
+@variant?          — 'cards' (default) | 'list'
 <:default as |option selected|>   — replaces the generated title and description
 <:media as |option|>              — an icon or thumbnail on the card's start edge
 ```
@@ -27,7 +28,9 @@ One-of-N where every option is a card. The card is the label and the whole hit t
 
 **Selection is a hairline, not a border.** The chosen card wears a 1px ring in `--primary` and a soft 4px halo of the same hue at 12%; the rest of the card does not change. The corner mark is the same 15px disc **RadioGroup** draws, so a card group and a plain group read as one family.
 
-**State attributes are strings both ways.** `data-selected='true' | 'false'` and `data-disabled='true' | 'false'` on every card, and `data-test-pretui-choice-card` with the option's value; `data-orientation` and `data-columns` on the root.
+**`@variant='list'` is the compact look.** The options become rows inside one bordered group, split by hairlines, each with its mark on the trailing edge and `meta` just before it: a name and a price per line, so six add-ons fit in one short group on a phone. The selected row is tinted with the tone at 8% instead of ringed, and the focus ring is drawn inside the row so the group's edge doesn't cut it. `list` always stacks; `@orientation` and `@columns` don't apply. The radios, keyboard model and `description` work as in `cards`.
+
+**State attributes are strings both ways.** `data-selected='true' | 'false'` and `data-disabled='true' | 'false'` on every card, and `data-test-pretui-choice-card` with the option's value; `data-orientation`, `data-columns` and `data-variant` on the root, and `data-variant` on every card.
 
 ## Prior art
 
@@ -35,7 +38,7 @@ One-of-N where every option is a card. The card is the label and the whole hit t
 
 Where this is better: **it is a single component, not an assembly.** An option is a value, a title, a description and a figure, and the card is generated from that; the hidden input, the indicator and the selected ring do not have to be composed by hand each time, which is where the recipes go wrong (an indicator outside the label, a card that is not the hit target). The keyboard model is the platform's because the inputs are real radios sharing a name, not a Radix roving-tabindex reimplementation.
 
-Where it is thinner: **one visual recipe.** There is no `variant` axis — no filled or solid card — and no per-card tone. The **media** slot is a start-edge slot only; there is no addon band under the body. The card's title and description are strings unless you take over the whole body with the default block. There is no `size` axis.
+Where it is thinner: **one visual recipe.** The `variant` axis is layout only, `cards` or `list` — no filled or solid card — and there is no per-card tone. The **media** slot is a start-edge slot only; there is no addon band under the body. The card's title and description are strings unless you take over the whole body with the default block. There is no `size` axis.
 
 ## Accessibility
 

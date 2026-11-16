@@ -4,7 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { iconFor } from '../icon-registry';
 import { RadioCard } from './radio-card';
-import type { ChoiceCardOption, ChoiceCardOrientation } from '../internal/choice-cards';
+import type { ChoiceCardOption, ChoiceCardOrientation, ChoiceCardVariant } from '../internal/choice-cards';
 
 const PLANS: ChoiceCardOption[] = [
   {
@@ -28,6 +28,7 @@ const PLANS: ChoiceCardOption[] = [
 ];
 const PLAN_VALUES = PLANS.map((p) => p.value);
 const ORIENTATIONS = ['horizontal', 'vertical'];
+const VARIANTS = ['cards', 'list'];
 const PLAN_ICONS: Record<string, string> = {
   starter: 'rocket',
   team: 'radio-tower',
@@ -38,12 +39,18 @@ export class RadioCardUsage extends Component {
   plans = PLANS;
   planValues = PLAN_VALUES;
   orientations = ORIENTATIONS;
+  variants = VARIANTS;
   @tracked value = 'team';
   @tracked orientation = 'horizontal';
   @tracked disabled = false;
+  @tracked variant = 'cards';
   setValue = (v: string) => (this.value = v);
   setOrientation = (v: string) => (this.orientation = v);
   setDisabled = (v: boolean) => (this.disabled = v);
+  setVariant = (v: string) => (this.variant = v);
+  get variantVal() {
+    return this.variant as ChoiceCardVariant;
+  }
   get orientationVal() {
     return this.orientation as ChoiceCardOrientation;
   }
@@ -55,6 +62,7 @@ export class RadioCardUsage extends Component {
       `@orientation='${this.orientation}'`,
       '@columns={{3}}',
     ];
+    if (this.variant === 'list') bits.push(`@variant='list'`);
     if (this.disabled) bits.push('@disabled={{true}}');
     bits.push('@onValueChange={{this.setValue}}');
     return `<RadioCard ${bits.join(' ')}><:media as |o|>…</:media></RadioCard>`;
@@ -73,6 +81,7 @@ export class RadioCardUsage extends Component {
           @value={{this.value}}
           @orientation={{this.orientationVal}}
           @columns={{3}}
+          @variant={{this.variantVal}}
           @disabled={{this.disabled}}
           @onValueChange={{this.setValue}}
         >
@@ -105,6 +114,15 @@ export class RadioCardUsage extends Component {
           @options={{this.orientations}}
           @description='vertical stacks the cards; horizontal lays them side by side.'
           @onInput={{this.setOrientation}}
+        />
+        <Args.String
+          @name='variant'
+          @optional={{true}}
+          @defaultValue='cards'
+          @value={{this.variant}}
+          @options={{this.variants}}
+          @description='cards draws each option as its own card; list draws them as rows in one bordered group, split by hairlines, with meta as the trailing figure. list always stacks, whatever the orientation.'
+          @onInput={{this.setVariant}}
         />
         <Args.Number
           @name='columns'

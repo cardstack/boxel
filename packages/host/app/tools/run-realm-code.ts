@@ -42,6 +42,7 @@ import {
   type OperationWriteResult,
 } from '@cardstack/runtime-common';
 import {
+  SKILL_FEATURE_REALMS,
   realmsOfDisabledFeatures,
   sessionSkillFeatures,
 } from '@cardstack/runtime-common/ai/debug';
@@ -80,6 +81,7 @@ import {
   proposeFix,
 } from '../lib/realm-runner/auto-fix';
 import {
+  AutomationTimeLimitError,
   automationTimeLimitMs,
   redactSecrets,
 } from '../lib/realm-runner/automation';
@@ -116,6 +118,7 @@ import {
 import runRealmCode, {
   DeadlineExtension,
   RealmScriptError,
+  scriptLocationOf,
 } from '../lib/realm-runner/runner';
 import {
   AUTOMATION_METHODS,
@@ -164,6 +167,7 @@ import UpdateRoomSkillsTool from './update-room-skills';
 
 import type {
   ConsoleLevel,
+  FlushableRunProgressSink,
   RunProgressEvent,
   RunProgressSink,
 } from '../lib/realm-runner/automation';
@@ -591,18 +595,25 @@ function notNamedError(name: ClickRequiredCall) {
 // Calls that need write access to the run's workspace. A Record over every
 // method, so a new method does not type-check until it is listed here. The
 // workspace calls act on other workspaces and keep their own checks.
+//
+// The file and card writes are not listed: the realm judges each by its
+// policy, for a user its permissions don't let write, as the operation it
+// amounts to (a card's create, update or delete, or a file's update), so it
+// decides them. An image a run generates is always saved as a new file,
+// which no grant creates, so the realm refuses that save to such a user
+// too, and the run refuses it before the image spends the user's credit.
 const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'fs.readText': false,
   'fs.exists': false,
   'fs.list': false,
-  'fs.replace': true,
-  'fs.writeText': true,
-  'fs.copy': true,
-  'fs.writeBytes': true,
-  'fs.download': true,
+  'fs.replace': false,
+  'fs.writeText': false,
+  'fs.copy': false,
+  'fs.writeBytes': false,
+  'fs.download': false,
   'cards.search': false,
   'cards.get': false,
-  'cards.update': true,
+  'cards.update': false,
   // An operation is authorized by the realm's policy for the operation, not
   // by write access to the workspace, so it can run where the user can only
   // read. The realm refuses one the policy does not allow.
@@ -611,7 +622,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   // Asking runs nothing, and the realm answers a caller who can only read.
   'operations.capabilities': false,
   'entries.search': false,
-  'fs.delete': true,
+  'fs.delete': false,
   capture: false,
   'images.generate': true,
   'workspaces.create': false,
@@ -968,9 +979,9 @@ class RealmFsSession {
   // Why a call needs access the user's permissions don't give, or undefined
   // for one they cover. The realm refuses such a call anyway; this says why
   // before any work. A user who can neither read nor write runs here only
-  // where the realm's policy judges them, and a change it grants reaches the
-  // realm as an operation: the write calls send bytes or whole documents,
-  // which only the realm's own write permission admits.
+  // where the realm's policy judges them, and the calls refused here are the
+  // ones no grant reaches: the index calls, which administer the realm, and
+  // the image save, which creates a file.
   private refusalFor(method: RealmRunnerCallMethod): string | undefined {
     if (REQUIRES_WRITE[method] && !this.access.mayWrite) {
       return this.access.mayRead
@@ -3113,6 +3124,12 @@ function redactEvent(
       return { ...event, message: redactSecrets(event.message, secrets) };
     case 'count':
       return event;
+    case 'error':
+      return {
+        ...event,
+        message: redactSecrets(event.message, secrets),
+        ...(event.stack ? { stack: redactSecrets(event.stack, secrets) } : {}),
+      };
   }
 }
 
@@ -3184,6 +3201,20 @@ export async function runAutomationScript(
   options: AutomationRunOptions,
 ): Promise<AutomationRunResult> {
   let { code, automation, io, progress, signal } = options;
+  // The realm server logs each call it makes for the run as it makes it, so
+  // the script's lines recorded before a call are sent first, and the run's
+  // log keeps one order.
+  let flushProgress = async () => {
+    if ('flush' in progress) {
+      await (progress as FlushableRunProgressSink).flush();
+    }
+  };
+  let afterFlush =
+    <A extends unknown[], R>(call: (...args: A) => Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      await flushProgress();
+      return await call(...args);
+    };
   let secrets = options.secrets ?? [];
   let timeoutMs = automationTimeLimitMs(options.secondsCap);
   let realmURL = ensureTrailingSlash(options.realmURL);
@@ -3211,7 +3242,7 @@ export async function runAutomationScript(
     io.searchCards,
     io.resolveURL,
     io.readCard,
-    io.runOperations,
+    afterFlush(io.runOperations),
     io.searchEntries,
     // Every search stays in the automation's realm.
     (realms) => {
@@ -3249,7 +3280,7 @@ export async function runAutomationScript(
     {
       search: refused('realm.web.search'),
       read: refused('realm.web.read'),
-      resolve: io.resolve,
+      resolve: afterFlush(io.resolve),
     },
     () => undefined,
     refused('realm.operations.capabilities'),
@@ -3299,7 +3330,24 @@ export async function runAutomationScript(
     if (!session.isClosed) {
       await settle();
     }
-    throw redactedError(automationRunError(error, timeoutMs), secrets);
+    let failure = automationRunError(error, timeoutMs);
+    // The run's log ends with the error it ended with, where the script
+    // threw it. A run stopped at its time limit was stopped wherever it was,
+    // which names no line of the script's own doing.
+    let location = failure === error ? scriptLocationOf(error) : undefined;
+    let line =
+      location?.line ??
+      (failure instanceof RealmScriptError
+        ? failure.scriptError.line
+        : undefined);
+    record({
+      kind: 'error',
+      at: Date.now(),
+      message: failure instanceof Error ? failure.message : String(failure),
+      ...(line !== undefined ? { line } : {}),
+      ...(location?.stack ? { stack: location.stack } : {}),
+    });
+    throw redactedError(failure, secrets);
   }
   return {
     scriptResult: redactSecrets(result.scriptResult, secrets),
@@ -3353,6 +3401,9 @@ function redactedError(error: unknown, secrets: readonly string[]): unknown {
       message: redactSecrets(error.scriptError.message, secrets),
     });
   }
+  if (error instanceof AutomationTimeLimitError) {
+    return new AutomationTimeLimitError(redactSecrets(error.message, secrets));
+  }
   if (error instanceof Error) {
     return new Error(redactSecrets(error.message, secrets));
   }
@@ -3369,7 +3420,7 @@ function automationRunError(error: unknown, timeoutMs: number): unknown {
   ) {
     return error;
   }
-  return new Error(
+  return new AutomationTimeLimitError(
     `The automation run reached its time limit of ${timeoutMs / 1000} s (its seconds cap)`,
   );
 }
@@ -5119,6 +5170,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // on the default of every readable realm. Answers whether a realm is gated
   // in the room.
   private featureGate(roomId: string): (realm: string) => boolean {
+    // With no feature gating a realm, nothing is gated, and the room's events
+    // are not read.
+    if (Object.keys(SKILL_FEATURE_REALMS).length === 0) {
+      return () => false;
+    }
     // Only delivered events: one still sending, or that failed to send, has
     // not reached the bot that built the prompt.
     let events = (
