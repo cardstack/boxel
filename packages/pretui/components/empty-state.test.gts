@@ -56,7 +56,7 @@ module('Pretui | components/empty-state', function (hooks) {
       </template>,
     );
     assert.deepEqual(texts('.pretui-empty-action > *'), ['Start blank', 'Import CSV'], 'the block, untouched');
-    assert.notOk(q('[data-test-pretui-empty]').textContent?.includes(' or '), 'no built-in separator');
+    assert.notOk(q('.pretui-empty-sep'), 'no built-in separator');
   });
 
   test('EmptyState renders its default block as the message, markup included', async function (assert) {
