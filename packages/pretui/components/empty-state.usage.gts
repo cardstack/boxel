@@ -79,19 +79,6 @@ class EmptyStateUsage extends Component {
             </div>
           {{/each}}
         </div>
-        <style scoped>
-          .empty-state-usage-widths {
-            display: grid;
-            gap: var(--boxel-sp);
-            margin-top: var(--boxel-sp);
-          }
-          .empty-state-usage-frame[data-width='wide'] {
-            max-inline-size: 36rem;
-          }
-          .empty-state-usage-frame[data-width='narrow'] {
-            max-inline-size: 20rem;
-          }
-        </style>
       </:example>
       <:api as |Args|>
         <Args.String
@@ -130,6 +117,19 @@ class EmptyStateUsage extends Component {
         />
       </:api>
     </FreestyleUsage>
+    <style scoped>
+      .empty-state-usage-widths {
+        display: grid;
+        gap: var(--boxel-sp);
+        margin-top: var(--boxel-sp);
+      }
+      .empty-state-usage-frame[data-width='wide'] {
+        max-inline-size: 36rem;
+      }
+      .empty-state-usage-frame[data-width='narrow'] {
+        max-inline-size: 20rem;
+      }
+    </style>
   </template>
 }
 
