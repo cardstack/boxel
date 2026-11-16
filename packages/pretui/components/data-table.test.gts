@@ -9,7 +9,7 @@
 // usage page, not here.
 import { on } from '@ember/modifier';
 import { module, test } from 'qunit';
-import { click, focus, render, triggerKeyEvent } from '@ember/test-helpers';
+import { click, fillIn, focus, render, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { DataTable } from './data-table';
 import { Menu } from './menu';
@@ -358,6 +358,52 @@ module('Pretui | components/data-table', function (hooks) {
     assert.dom(row(1)).hasAttribute('aria-selected', 'true', 'Space selects');
     await triggerKeyEvent(row(1), 'keydown', 'Enter');
     assert.deepEqual(calls, ['a@0'], 'Enter activates the focused row');
+  });
+
+  test('@onActivate: after arrowing, the toolbar, sort and pager keep focus', async function (assert) {
+    let rows: Row[] = ['Assam', 'Bancha', 'Ceylon', 'Darjeeling'].map(
+      (name) => ({ id: name, name }),
+    );
+    let columns: DataColumn<Row>[] = [
+      { key: 'name', label: 'Name', sortable: true, filter: { kind: 'text' } },
+    ];
+    let onActivate = () => {};
+    await render(
+      <template>
+        <DataTable
+          @columns={{columns}}
+          @rows={{rows}}
+          @key={{rowKey}}
+          @pageSize={{2}}
+          @onActivate={{onActivate}}
+        />
+      </template>,
+    );
+    let row = (n: number) => `[data-test-pretui-dt-row]:nth-child(${n})`;
+    await focus(row(1));
+    await triggerKeyEvent(row(1), 'keydown', 'ArrowDown');
+    assert.dom(row(2)).isFocused('arrowing moves focus within the rows');
+
+    await click('[data-test-pretui-pagination] [aria-label="Next"]');
+    assert
+      .dom('[data-test-pretui-pagination] [aria-label="Next"]')
+      .isFocused('paging does not pull focus back to a row');
+
+    await focus(row(1));
+    await triggerKeyEvent(row(1), 'keydown', 'ArrowDown');
+    await click('[data-test-pretui-dt-sort]');
+    assert
+      .dom('[data-test-pretui-dt-sort]')
+      .isFocused('sorting does not pull focus back to a row');
+
+    await focus(row(1));
+    await triggerKeyEvent(row(1), 'keydown', 'ArrowDown');
+    await fillIn('[data-test-pretui-dt-filter]', 'a');
+    await fillIn('[data-test-pretui-dt-filter]', 'an');
+    assert
+      .dom('[data-test-pretui-dt-filter]')
+      .isFocused('typing in the filter keeps focus in the input');
+    assert.dom('[data-test-pretui-dt-filter]').hasValue('an');
   });
 
   test('without @onActivate rows are not focusable', async function (assert) {

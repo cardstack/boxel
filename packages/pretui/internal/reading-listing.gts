@@ -187,6 +187,17 @@ export class RowCursor {
     this.index = index;
   };
 
+  /** `focusout` on the rows container: once focus leaves the rows the
+   * keyboard is no longer driving them, so a later re-render (filter, sort,
+   * page) must not pull focus back. A row-to-row move keeps `relatedTarget`
+   * inside, so `focusWhen`'s own `el.focus()` writes nothing mid-render. */
+  leave = (event: Event): void => {
+    let next = (event as FocusEvent).relatedTarget as Node | null;
+    if (!next || !(event.currentTarget as HTMLElement).contains(next)) {
+      this.navigating = false;
+    }
+  };
+
   /** returns true when the key was consumed and the caller should
    * `preventDefault()` */
   handleKey = (key: string): boolean => {

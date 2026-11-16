@@ -1153,7 +1153,7 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                   {{/if}}
                 </tr>
               </thead>
-              <tbody>
+              <tbody {{listen 'focusout' this.cursor.leave}}>
                 {{#each this.lines key='key' as |line|}}
                   <tr
                     class='pretui-dt-row'
