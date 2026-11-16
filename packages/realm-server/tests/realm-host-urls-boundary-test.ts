@@ -341,29 +341,28 @@ module(basename(import.meta.filename), function () {
           JSON.stringify({
             'boxel:operations': [
               {
-                op: 'update',
-                href: `${SPACE_HOST_URL}person-1.json`,
-                card: JSON.stringify({
-                  data: {
-                    type: 'card',
-                    attributes: {
-                      firstName: 'Grace',
-                      website: `${SPACE_HOST_URL}contact`,
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: `${SPACE_HOST_URL}person`,
-                        name: 'Person',
-                      },
+                op: 'invoke',
+                'boxel:name': 'update',
+                href: `${SPACE_HOST_URL}person-1`,
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Grace',
+                    website: `${SPACE_HOST_URL}contact`,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: `${SPACE_HOST_URL}person`,
+                      name: 'Person',
                     },
                   },
-                }),
+                },
               },
             ],
           }),
         );
 
-      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.status, 200, response.text);
       let stored = readFileSync(join(testRealmPath, 'person-1.json'), 'utf8');
       let doc = JSON.parse(stored);
       assert.strictEqual(doc.data.attributes.firstName, 'Grace');
