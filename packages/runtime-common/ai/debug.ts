@@ -1,5 +1,3 @@
-import { CATALOG_REALM_PREFIX } from '../realm-prefixes.ts';
-
 export const DEBUG_COMMAND_PREFIX = 'boxel-debug';
 
 // The skill features a room can enable, with what each one does. A feature
@@ -20,9 +18,7 @@ export const SKILL_FEATURES = {
 // realm no room can ever enable.
 export const SKILL_FEATURE_REALMS: {
   [feature in keyof typeof SKILL_FEATURES]?: string[];
-} = {
-  'catalog-reuse': [CATALOG_REALM_PREFIX],
-};
+} = {};
 
 // The realms gated behind a feature that `enabledFeatures` does not include.
 export function realmsOfDisabledFeatures(enabledFeatures: string[]): string[] {
@@ -81,7 +77,7 @@ export function sessionSkillFeatures(
     let body = (event.content as { body?: unknown })?.body;
     let command =
       typeof body === 'string' ? parseFeatureCommand(body) : undefined;
-    if (!command || !(command.feature in SKILL_FEATURES)) {
+    if (!command || !Object.hasOwn(SKILL_FEATURES, command.feature)) {
       continue;
     }
     if (command.enable) {
