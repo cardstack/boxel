@@ -110,7 +110,8 @@ module.exports = {
         }
 
         // Skip identifiers that name class members or TypeScript type
-        // members (e.g. a method named `contains`, an interface key `field`). A member key is not a scope reference, so an
+        // members (e.g. a method named `contains`, an interface key
+        // `field`). A member key is not a scope reference, so an
         // injected import can never satisfy it — the new binding would
         // have no references, the unused-import fix would remove it, and
         // the two autofixes would ping-pong until ESLint gives up.
@@ -125,6 +126,21 @@ module.exports = {
             node.parent.type === 'TSMethodSignature') &&
           node.parent.key === node &&
           !node.parent.computed
+        ) {
+          return;
+        }
+
+        // Other names that aren't scope references: an enum member, the
+        // right side of a qualified type name (`NS.field`), and the
+        // outside name of an export alias (`export { x as field }`).
+        if (
+          node.parent &&
+          ((node.parent.type === 'TSEnumMember' && node.parent.id === node) ||
+            (node.parent.type === 'TSQualifiedName' &&
+              node.parent.right === node) ||
+            (node.parent.type === 'ExportSpecifier' &&
+              node.parent.exported === node &&
+              node.parent.local !== node))
         ) {
           return;
         }

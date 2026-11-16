@@ -88,6 +88,24 @@ ruleTester.run('missing-card-api-import', rule, {
         },
       ],
     },
+    // Nor is an enum member, the right side of a qualified type name,
+    // or the outside name of an export alias.
+    {
+      code: `
+        import * as NS from './ns';
+        export enum Kind { field, other }
+        export type T = NS.field;
+        const x = 1;
+        export { x as field };
+      `,
+      options: [
+        {
+          importMappings: {
+            field: ['field', '@cardstack/base/card-api'],
+          },
+        },
+      ],
+    },
   ],
 
   invalid: [
