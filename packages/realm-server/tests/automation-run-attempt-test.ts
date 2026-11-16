@@ -658,19 +658,47 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a run whose tab fails is charged for the time the call took', async function (assert) {
+  test("a script's tab time past the run's time limit isn't charged", async function (assert) {
+    await fundOwner();
+    let run = await newRun();
+    await attempt(
+      run,
+      stubTab([], {
+        answer: () => ({
+          status: 'ready',
+          cardResultString: JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { json: { state: 'complete' } },
+            },
+          }),
+          // Longer than the run's 300 s seconds cap: the tab answered in the
+          // grace its call gets past the limit.
+          meta: { diagnostics: { renderElapsedMs: 330_000 } },
+        }),
+      }),
+      { meteredCharges: meteredChargesFor(dbAdapter, testPricing) },
+    );
+
+    let after = await getAutomationRun(dbAdapter, run.id);
+    assert.true(
+      after!.prerenderTabMs <= 300_000,
+      `the recorded tab time (${after!.prerenderTabMs} ms) is held to the run's time limit`,
+    );
+    assert.true(
+      after!.prerenderTabMs > 290_000,
+      'and is what the run had left when its script started',
+    );
+  });
+
+  test('a tab call that throws adds no tab time, and leaves nothing to charge', async function (assert) {
     await fundOwner();
     let run = await newRun();
     let result = await attempt(
       run,
       stubTab([], {
         answer: () => {
-          // The call takes a measurable time before it fails.
-          let until = Date.now() + 20;
-          while (Date.now() < until) {
-            // wait
-          }
-          throw new Error('the tab crashed');
+          throw new Error('no prerender server answered');
         },
       }),
       { meteredCharges: meteredChargesFor(dbAdapter, testPricing) },
@@ -679,14 +707,11 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(result.state, 'error');
     assert.strictEqual(result.reason, 'run-failed');
     let after = await getAutomationRun(dbAdapter, run.id);
-    assert.true(
-      (after?.prerenderTabMs ?? 0) >= 20,
-      'the time the call took is on the row',
-    );
-    assert.true(
-      (await getLedgerEntries(dbAdapter, { runId: run.id, chargeKind: 'run' }))
-        .length > 0,
-      'and the run is charged for it',
+    assert.strictEqual(after?.prerenderTabMs, 0, 'no tab time is recorded');
+    assert.deepEqual(
+      await getLedgerEntries(dbAdapter, { runId: run.id, chargeKind: 'run' }),
+      [],
+      'and the run is not charged',
     );
   });
 

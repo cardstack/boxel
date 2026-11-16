@@ -197,9 +197,14 @@ its tabs, so a tab-second is the tab's share of its server. The tab time is
 what the script took in its tab, measured by the worker around the
 automation command (`renderTabMs`: the prerender server's `renderElapsedMs`,
 falling back to `totalElapsedMs`, then to the call's wall clock) and added
-to the row by each attempt that ran it (`addAutomationRunTabTime`). A
-`callApi` transform runs inside the script, so its time is part of that tab
-time. The bytes are the response bytes the realm server counted for the
+to the row by each attempt that ran it (`addAutomationRunTabTime`). Each
+attempt's time is held to what was left of the run's time limit when its
+script started: the tab call gets a grace past the limit so the tab can
+answer, and that grace isn't charged, so a run's compute never costs more
+than the seconds cap prices it at in the minimum balance and the estimate
+below. A tab call that throws carries no measure from a prerender server and
+may never have reached a tab, so it adds no tab time. A `callApi` transform
+runs inside the script, so its time is part of that tab time. The bytes are the response bytes the realm server counted for the
 run's `callApi` calls, divided by `BYTES_PER_GB`, the same GB the switch-on
 estimate prices the response-bytes cap in.
 
@@ -213,7 +218,12 @@ left for the attempt running it, and a run that used no tab time and
 downloaded nothing (one canceled before it started) has nothing to charge.
 The charge is written once per run, priced from what the row holds when it
 is first written, and a charge that can't be written is retried a few times
-and then logged on the attempt's log, never failing the job.
+and then logged on the attempt's log, never failing the job. An attempt that
+a retry replaced can still be in its tab; when that tab answers after the
+newer attempt has ended and charged the run, its time reaches
+`prerender_tab_ms` but isn't billed, so the row can read more tab time than
+the charge's usage. A run closed without an attempt (`abandonAutomationRun`)
+is charged by whatever closes it.
 
 ```sql
 -- A run's compute and network: credits beside the usage they priced.

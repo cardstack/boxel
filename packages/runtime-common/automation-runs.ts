@@ -405,7 +405,8 @@ async function logRunEnded(
 // Closes a pending or running run whose job is gone, such as one whose job ran
 // out of retries, whoever owned it. A run whose commit landed finishes as
 // complete. Any other run finishes as an error with `reason`, including one
-// whose commit was claimed but never recorded as landed.
+// whose commit was claimed but never recorded as landed. No attempt is left to
+// charge the run, so the caller charges it (`chargeAutomationRun`).
 export async function abandonAutomationRun(
   dbAdapter: DBAdapter,
   id: string,

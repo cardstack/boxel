@@ -92,26 +92,32 @@ export interface AutomationAttemptResult {
 // error. The run row is the source of truth: every step is refused once a
 // newer attempt owns the run, a person cancels it, or it ends at a cap.
 //
-// The tab time the script takes is added to the run's row, and once the
-// attempt is done, a run that has ended (however it ended, including one a
-// person canceled while its script ran) is charged its compute and network
-// (`chargeAutomationRun`).
+// The tab time the script takes is added to the run's row (see
+// `addTabTime`), and once the attempt is done, a run that has ended (however
+// it ended, including one a person canceled while its script ran) is charged
+// its compute and network (`chargeAutomationRun`). The charge is written even
+// when the attempt throws, since the run may have ended before it did, and
+// the queue doesn't run a job again after its handler throws.
 export async function runAutomationAttempt(
   ctx: AutomationAttemptContext,
   input: AutomationJobInput,
   dedupeKey: string | null,
   jobInfo: JobInfo | undefined,
 ): Promise<AutomationAttemptResult> {
-  let result = await attemptRun(ctx, input, dedupeKey, jobInfo);
-  if (result.reason !== NOT_THE_RUNS_JOB) {
-    await chargeAutomationRun({
-      dbAdapter: ctx.dbAdapter,
-      meteredCharges: ctx.meteredCharges,
-      runId: input.runId,
-      log: ctx.log,
-    });
+  let result: AutomationAttemptResult | undefined;
+  try {
+    result = await attemptRun(ctx, input, dedupeKey, jobInfo);
+    return result;
+  } finally {
+    if (result?.reason !== NOT_THE_RUNS_JOB) {
+      await chargeAutomationRun({
+        dbAdapter: ctx.dbAdapter,
+        meteredCharges: ctx.meteredCharges,
+        runId: input.runId,
+        log: ctx.log,
+      });
+    }
   }
-  return result;
 }
 
 const NOT_THE_RUNS_JOB = 'not-the-runs-job';
@@ -285,10 +291,17 @@ async function attemptRun(
       priority: jobInfo.priority,
       timeoutMs: remainingMs + AUTOMATION_TAB_GRACE_MS,
     });
-    await addTabTime(ctx, runId, renderTabMs(result?.meta, tabStartedAt));
+    await addTabTime(
+      ctx,
+      runId,
+      renderTabMs(result?.meta, tabStartedAt),
+      remainingMs,
+    );
     outcome = outcomeOf(result, redact);
   } catch (e: any) {
-    await addTabTime(ctx, runId, Date.now() - tabStartedAt);
+    // A call that throws carries no measure from a prerender server, and
+    // may never have reached a tab (the request found no server, or every
+    // try was refused), so it adds no tab time.
     outcome = {
       state: 'error',
       reason: 'run-failed',
@@ -313,13 +326,19 @@ async function attemptRun(
 }
 
 // Records the tab time the script took on the run's row, where the run's
-// charge reads it. A failure to record it is logged rather than failing the
-// run, whose script has already run.
+// charge reads it. The time is held to `remainingMs`, what was left of the
+// run's time limit when the script started: the tab call's grace past the
+// limit (`AUTOMATION_TAB_GRACE_MS`) lets the tab answer, and isn't charged,
+// so a run's compute never costs more than its seconds cap prices it at in
+// the minimum balance and the switch-on estimate. A failure to record it is
+// logged rather than failing the run, whose script has already run.
 async function addTabTime(
   ctx: AutomationAttemptContext,
   runId: string,
-  ms: number,
+  measuredMs: number,
+  remainingMs: number,
 ): Promise<void> {
+  let ms = Math.max(0, Math.min(measuredMs, remainingMs));
   try {
     await addAutomationRunTabTime(ctx.dbAdapter, runId, ms);
   } catch (e) {

@@ -13,9 +13,9 @@ import { withRunIndexingRetries } from './run-indexing.ts';
 // once the run has ended (ADR 029 §1.1):
 //
 // - compute: the prerender tab time its script took, summed over the
-//   attempts that ran it (`prerender_tab_ms`), priced per tab-second. Every
-//   `callApi` transform runs inside the script, so its time is part of the
-//   tab time.
+//   attempts that ran it (`prerender_tab_ms`), each held to the time the run
+//   had left when it started, priced per tab-second. Every `callApi`
+//   transform runs inside the script, so its time is part of the tab time.
 // - network: the bytes its `callApi` calls downloaded
 //   (`call_api_response_bytes`, metered by the realm server), in GB of
 //   `BYTES_PER_GB`.
@@ -48,14 +48,18 @@ export function automationRunUsage(
 // Charges the run's compute and network, priced from its row, once the run
 // has ended: complete, an error or canceled, each for the tab time and bytes
 // it used. A pending or running run is left uncharged: the attempt that
-// runs it charges it when it ends. A run that used
+// runs it charges it when it ends, and a run closed without an attempt
+// (`abandonAutomationRun`) is charged by whoever closes it. A run that used
 // no tab time and downloaded nothing, such as one canceled before it
 // started, has nothing to charge.
 //
 // The charge is written once per run (see `spendCredits`), so calling this
 // again, from a retry or from an attempt that ends after another attempt
 // charged the run, charges nothing more. It is priced from what the row holds
-// when it is first written.
+// when it is first written. Attempts usually run one after another, so that
+// covers every attempt. An attempt a retry replaced can still be in its tab,
+// though, and when its tab answers after the newer attempt has ended the run
+// and charged it, its time reaches the row but isn't billed.
 //
 // It never throws. A transient failure is retried a few times (see
 // `withRunIndexingRetries`), and a charge that still can't be written is
