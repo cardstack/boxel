@@ -6,6 +6,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
   closeServer,
+  ensureMatrixAdminUser,
   insertUser,
   matrixURL,
   setupDB,
@@ -36,13 +37,17 @@ import {
   telemetryDuring,
 } from './helpers/oauth-provider-secrets.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
-import { revokeUserOAuthGrants } from '../lib/oauth-provider/grants.ts';
+import {
+  endGrant,
+  revokeUserOAuthGrants,
+} from '../lib/oauth-provider/grants.ts';
 import {
   AuthorizationCodeAdapter,
   sha256Hex,
 } from '../lib/oauth-provider/objects.ts';
 import type { OAuthResourceDefinition } from '../lib/oauth-provider/registry.ts';
 import type { TokenLimit } from '../lib/oauth-provider/token-limit.ts';
+import { TokenAdapter } from '../lib/oauth-provider/tokens.ts';
 import { runDueDeviceSweeps } from '../lib/secure-session.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
@@ -284,13 +289,22 @@ module(basename(import.meta.filename), function () {
           exchangeOAuthCode(server(), clientId, code),
           exchangeOAuthCode(server(), clientId, code),
         ]);
-        assert.deepEqual(
-          responses.map(({ status }) => status).sort(),
-          [200, 400],
-          'one exchange gets tokens',
+        let statuses = responses.map(({ status }) => status).sort();
+        // The second ends the grant, and the first's tokens are refused if
+        // it ends before they are stored.
+        assert.true(
+          [JSON.stringify([200, 400]), JSON.stringify([400, 400])].includes(
+            JSON.stringify(statuses),
+          ),
+          `at most one exchange gets tokens (${statuses})`,
         );
         let [grant] = await grants();
         assert.strictEqual(grant.ended_reason, 'reuse', 'the grant ended');
+        assert.deepEqual(
+          await tokenRows(),
+          [],
+          'and none of its tokens is left',
+        );
       });
 
       test('a code that expires before it is marked used is refused without ending its grant', async function (assert) {
@@ -527,13 +541,81 @@ module(basename(import.meta.filename), function () {
           refreshOAuthTokens(server(), clientId, a.body.refresh_token),
           refreshOAuthTokens(server(), clientId, b.body.refresh_token),
         ]);
-        assert.deepEqual(
-          responses.map(({ status }) => status).sort(),
-          [200, 400],
-          'one sibling is used, and the other refused',
+        let statuses = responses.map(({ status }) => status).sort();
+        // The one refused ends the grant, and the other's tokens are refused
+        // too if it ends before they are stored.
+        assert.true(
+          [JSON.stringify([200, 400]), JSON.stringify([400, 400])].includes(
+            JSON.stringify(statuses),
+          ),
+          `at most one sibling gets tokens (${statuses})`,
         );
         let [grant] = await grants();
         assert.strictEqual(grant.ended_reason, 'reuse', 'and the grant ended');
+        assert.deepEqual(
+          await tokenRows(),
+          [],
+          'and none of its tokens is left',
+        );
+      });
+
+      test('a sibling stored after another was used is refused, and ends the grant', async function (assert) {
+        let { clientId, tokens } = await tokensFor();
+        let a = await refreshOAuthTokens(
+          server(),
+          clientId,
+          tokens.refresh_token!,
+        );
+        let b = await refreshOAuthTokens(
+          server(),
+          clientId,
+          tokens.refresh_token!,
+        );
+        assert.strictEqual(b.status, 200, 'the retry gets a sibling');
+        let used = await refreshOAuthTokens(
+          server(),
+          clientId,
+          a.body.refresh_token,
+        );
+        assert.strictEqual(used.status, 200, 'one sibling is used');
+        // As though the other were stored only after its sibling's use
+        // revoked the rest: neither used nor revoked.
+        await db().execute(
+          `UPDATE oauth_provider_tokens SET revoked_at = NULL
+            WHERE id_hash = decode($1, 'hex')`,
+          { bind: [sha256Hex(b.body.refresh_token)] },
+        );
+        let sibling = await refreshOAuthTokens(
+          server(),
+          clientId,
+          b.body.refresh_token,
+        );
+        assert.strictEqual(sibling.status, 400, 'the other is refused');
+        let [grant] = await grants();
+        assert.strictEqual(grant.ended_reason, 'reuse', 'and the grant ended');
+      });
+
+      test('the grace window runs from first use, which a retry within it does not move', async function (assert) {
+        let { clientId, tokens } = await tokensFor();
+        let first = await refreshOAuthTokens(
+          server(),
+          clientId,
+          tokens.refresh_token!,
+        );
+        assert.strictEqual(first.status, 200);
+        await usedSecondsAgo(tokens.refresh_token!, 20);
+        let retry = await refreshOAuthTokens(
+          server(),
+          clientId,
+          tokens.refresh_token!,
+        );
+        assert.strictEqual(retry.status, 200, 'a retry 20 seconds on works');
+        let [{ still }] = (await db().execute(
+          `SELECT consumed_at <= now() - interval '19 seconds' AS still
+             FROM oauth_provider_tokens WHERE id_hash = decode($1, 'hex')`,
+          { bind: [sha256Hex(tokens.refresh_token!)] },
+        )) as { still: boolean }[];
+        assert.true(still, 'and leaves when the token was first used');
       });
 
       test('a refresh fails once the grant has expired', async function (assert) {
@@ -569,7 +651,60 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    module('revocation', function () {
+    module('storing tokens', function () {
+      test('no token is stored for a grant that has ended', async function (assert) {
+        await tokensFor();
+        let [grant] = await grants();
+        await endGrant(db(), grant.id, 'user');
+        let adapter = new TokenAdapter(db(), 'RefreshToken');
+        await assert.rejects(
+          adapter.upsert(
+            'a-token-issued-as-its-grant-ended',
+            { grantId: grant.id, scope: 'boxel:read', rotations: 1 },
+            60,
+          ),
+          (e: any) => e?.error === 'invalid_grant',
+          'the token is refused',
+        );
+        assert.deepEqual(await tokenRows(), [], 'and nothing is stored');
+      });
+
+      test('an access token is stored only with one resource', async function (assert) {
+        await tokensFor();
+        let [grant] = await grants();
+        let adapter = new TokenAdapter(db(), 'AccessToken');
+        await assert.rejects(
+          adapter.upsert(
+            'an-access-token-with-no-resource',
+            { grantId: grant.id, scope: 'boxel:read' },
+            60,
+          ),
+          /names no single resource/,
+          'one with no resource is refused',
+        );
+        await assert.rejects(
+          adapter.upsert(
+            'an-access-token-with-two-resources',
+            {
+              grantId: grant.id,
+              scope: 'boxel:read',
+              aud: [OAUTH_TEST_MCP, `${OAUTH_TEST_MCP}/other`] as any,
+            },
+            60,
+          ),
+          /names no single resource/,
+          'and so is one with two',
+        );
+      });
+    });
+
+    module('revocation', function (hooks) {
+      // A password change's sweep signs devices out as the Matrix server's
+      // admin, whom CI's Matrix server doesn't have until it is registered.
+      hooks.before(async function () {
+        await ensureMatrixAdminUser();
+      });
+
       test("revoking a user's OAuth grants ends them, and their refresh fails", async function (assert) {
         let { clientId, user: who, tokens } = await tokensFor();
         await revokeUserOAuthGrants(db(), who.matrixId);
@@ -855,6 +990,32 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(other.status, 200, 'grant B is not');
     });
 
+    test('a used refresh token presented over its grant’s limit still ends the grant', async function (assert) {
+      let a = await tokensFor();
+      let first = await refreshOAuthTokens(
+        server(),
+        a.clientId,
+        a.refreshToken,
+      );
+      let second = await refreshOAuthTokens(
+        server(),
+        a.clientId,
+        first.body.refresh_token,
+      );
+      assert.strictEqual(second.status, 200, 'the grant has used its limit');
+      let replay = await refreshOAuthTokens(
+        server(),
+        a.clientId,
+        a.refreshToken,
+      );
+      assert.strictEqual(replay.status, 400, 'a replay is not just limited');
+      assert.strictEqual(replay.body.error, 'invalid_grant');
+      let [grant] = (await db().execute(
+        `SELECT ended_reason FROM oauth_provider_grants`,
+      )) as { ended_reason: string | null }[];
+      assert.strictEqual(grant.ended_reason, 'reuse', 'it ends the grant');
+    });
+
     async function failThrice(clientId: string) {
       for (let i = 0; i < 3; i++) {
         let response = await refreshOAuthTokens(
@@ -866,8 +1027,6 @@ module(basename(import.meta.filename), function () {
           throw new Error(`failure ${i + 1} was answered ${response.status}`);
         }
       }
-      // The library counts a failure after it answers.
-      await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
     test("an address that keeps failing is refused, but a known grant's refresh from it is not", async function (assert) {
@@ -908,7 +1067,6 @@ module(basename(import.meta.filename), function () {
         });
         assert.strictEqual(response.status, 400, `refusal ${i + 1}`);
       }
-      await new Promise((resolve) => setTimeout(resolve, 50));
       // The address still has all three of its failures, so three unknown
       // tokens are each refused by the library, not by the limit.
       await failThrice(known.clientId);

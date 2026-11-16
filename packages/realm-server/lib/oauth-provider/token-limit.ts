@@ -6,11 +6,23 @@
 //   allows ten times that. Not per address or per client: a hosted client
 //   refreshes every user's tokens from a few server addresses.
 // - Failed attempts per address, for requests that name no code or refresh
-//   token the provider holds: each the library refuses counts against the
-//   caller's address, and a caller with none left is refused, so guessing
-//   codes or refresh tokens is slow. A request that names one the provider
-//   holds is bounded by its grant instead. The address is the one the
-//   `clientAddress` middleware works out, never the socket's.
+//   token the provider holds: such a request can never succeed, so each
+//   counts against the caller's address as it arrives, and a caller with
+//   none left is refused, so guessing codes or refresh tokens is slow. A
+//   request that names one the provider holds is bounded by its grant
+//   instead. The address is the one the `clientAddress` middleware works
+//   out, never the socket's.
+//
+// Ending a grant deletes its tokens, so a refresh that names a token of an
+// ended grant counts against its address too. A hosted client whose users'
+// grants have ended refreshes those tokens from a few server addresses until
+// each is told `invalid_grant`; where that is many, `failures` in
+// `BOXEL_OAUTH_TOKEN_RATE_LIMIT` raises the limit.
+//
+// A code or refresh token presented again after it was used ends its grant
+// (§1.9) even when the grant is over its limit: the limit is checked after
+// that, so a grant whose limit is kept spent can't put off the reuse that
+// ends it.
 
 import type Koa from 'koa';
 import type Provider from 'oidc-provider';
@@ -29,7 +41,9 @@ import {
   type TokenBucketOutcome,
 } from '@cardstack/runtime-common';
 import { browserOriginAllowed } from './client-cors.ts';
+import { endGrant } from './grants.ts';
 import { sha256Hex } from './objects.ts';
+import { presentedRefreshToken } from './tokens.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -98,9 +112,10 @@ export function tokenLimitFormat(): string {
 // A request that names a code or refresh token the provider holds counts
 // only against that token's grant, never against its address, so a hosted
 // client's users can't be locked out by failures someone else causes through
-// the client's address. Any other request is checked against its address's
-// failures, and counted there if the library refuses it. One whose address
-// can't be worked out is refused, since it can't be counted.
+// the client's address. One the grant's limit refuses still ends the grant
+// if it presents a code or token already used. Any other request counts
+// against its address's failures. One whose address can't be worked out is
+// refused, since it can't be counted.
 export function tokenHandler({
   provider,
   dbAdapter,
@@ -114,19 +129,6 @@ export function tokenHandler({
 }): Koa.Middleware {
   let failures = tokenBucket(limit.failuresPerAddress);
   let perGrant = tokenBucket(limit.perGrant);
-  // The requests that named no code or token the provider holds, which are
-  // the only ones whose refusals count against their address.
-  let unknownExchanges = new WeakSet<object>();
-
-  provider.on('grant.error', (ctx: { req: Koa.Context['req'] }) => {
-    if (!unknownExchanges.has(ctx.req)) {
-      return;
-    }
-    let key = failureKey(ctx.req.headers[CLIENT_IP_HEADER]);
-    if (key) {
-      void rateLimitStore.take(key, failures);
-    }
-  });
 
   return async function handleToken(ctxt, next) {
     let body: string | undefined;
@@ -149,14 +151,23 @@ export function tokenHandler({
       respond(ctxt, status, error);
     };
 
-    let grantId =
+    let exchange =
       body === undefined ? undefined : await grantOfExchange(dbAdapter, params);
-    if (grantId) {
+    if (exchange) {
       let taken = await rateLimitStore.take(
-        counterKey('oauth-token-grant', grantId),
+        counterKey('oauth-token-grant', exchange.grantId),
         perGrant,
       );
       if (!taken.admitted) {
+        if (exchange.reused) {
+          // What the library does with a reuse it sees.
+          log.info(`${exchange.what} reused`);
+          await endGrant(dbAdapter, exchange.grantId, 'reuse');
+          return answer(400, {
+            error: 'invalid_grant',
+            error_description: 'grant request is invalid',
+          });
+        }
         return refuse(answer, ctxt, taken, 'grant');
       }
     } else {
@@ -168,11 +179,10 @@ export function tokenHandler({
           error_description: 'token requests are refused from this address',
         });
       }
-      let left = await rateLimitStore.peek(key, failures);
-      if (!left.admitted) {
-        return refuse(answer, ctxt, left, 'failures');
+      let taken = await rateLimitStore.take(key, failures);
+      if (!taken.admitted) {
+        return refuse(answer, ctxt, taken, 'failures');
       }
-      unknownExchanges.add(ctxt.req);
     }
     if (body !== undefined) {
       // The library reads `req.body` when the request stream has been read,
@@ -205,11 +215,14 @@ async function allowClientOrigin(
 }
 
 // The grant a code or refresh exchange names, if the code or token is one
-// the provider issued.
+// the provider issued, and whether presenting it again ends the grant.
 async function grantOfExchange(
   dbAdapter: DBAdapter,
   params: URLSearchParams,
-): Promise<string | undefined> {
+): Promise<
+  | { grantId: string; reused: boolean; what: 'code' | 'refresh token' }
+  | undefined
+> {
   let grantType = params.get('grant_type');
   if (grantType === 'authorization_code') {
     let code = params.get('code');
@@ -217,23 +230,23 @@ async function grantOfExchange(
       return undefined;
     }
     let [row] = (await dbAdapter.execute(
-      `SELECT payload->>'grantId' AS grant_id FROM oauth_provider_objects
+      `SELECT payload->>'grantId' AS grant_id,
+              payload->'consumed' IS NOT NULL AND expires_at > now() AS reused
+         FROM oauth_provider_objects
         WHERE kind = 'AuthorizationCode' AND id_hash = decode($1, 'hex')`,
       { bind: [sha256Hex(code)] },
-    )) as { grant_id: string | null }[];
-    return row?.grant_id ?? undefined;
+    )) as { grant_id: string | null; reused: boolean }[];
+    return row?.grant_id
+      ? { grantId: row.grant_id, reused: row.reused, what: 'code' }
+      : undefined;
   }
   if (grantType === 'refresh_token') {
     let token = params.get('refresh_token');
     if (!token) {
       return undefined;
     }
-    let [row] = (await dbAdapter.execute(
-      `SELECT grant_id FROM oauth_provider_tokens
-        WHERE kind = 'RefreshToken' AND id_hash = decode($1, 'hex')`,
-      { bind: [sha256Hex(token)] },
-    )) as { grant_id: string }[];
-    return row?.grant_id;
+    let presented = await presentedRefreshToken(dbAdapter, token);
+    return presented ? { ...presented, what: 'refresh token' } : undefined;
   }
   return undefined;
 }

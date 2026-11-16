@@ -89,24 +89,28 @@ export async function readGrantTerms(
 // Ends a grant, keeping its row with when and why (ADR 021 §1.2), and deletes
 // its tokens. A grant ends once: a grant already ended keeps its first
 // reason. Answers whether this call ended it.
+//
+// The tokens are deleted by a second statement, after the grant's row is
+// updated, so that it sees a token whose store held the row while the update
+// waited for it; one statement would read the tokens as they were when it
+// began.
 export async function endGrant(
   dbAdapter: DBAdapter,
   grantId: string,
   reason: GrantEndReason,
 ): Promise<boolean> {
-  let rows = (await dbAdapter.execute(
-    `WITH ended AS (
-       UPDATE oauth_provider_grants
-          SET ended_at = now(), ended_reason = $2
-        WHERE id = $1 AND ended_at IS NULL
-        RETURNING id
-     ), deleted AS (
-       DELETE FROM oauth_provider_tokens WHERE grant_id = $1
-     )
-     SELECT count(*)::int AS ended FROM ended`,
+  let rows = await dbAdapter.execute(
+    `UPDATE oauth_provider_grants
+        SET ended_at = now(), ended_reason = $2
+      WHERE id = $1 AND ended_at IS NULL
+      RETURNING id`,
     { bind: [grantId, reason] },
-  )) as { ended: number }[];
-  let ended = (rows[0]?.ended ?? 0) > 0;
+  );
+  await dbAdapter.execute(
+    `DELETE FROM oauth_provider_tokens WHERE grant_id = $1`,
+    { bind: [grantId] },
+  );
+  let ended = rows.length > 0;
   if (ended) {
     log.info(`grant ended: ${reason}`);
   }
@@ -115,9 +119,10 @@ export async function endGrant(
 
 // Revokes a user's OAuth grants (ADR 021 §1.9): records the cutoff, so that
 // any grant created at or before it is refused wherever it is next used, and
-// ends every grant already created by then, in one statement. The cutoff
-// never moves earlier. `cutoff` is now unless given. A user with no row has
-// no grant to revoke.
+// ends every grant already created by then, in one statement, then deletes
+// their tokens in a second, as `endGrant` does. The cutoff never moves
+// earlier. `cutoff` is now unless given. A user with no row has no grant to
+// revoke.
 //
 // Called beside an operator's revocation of the user's sessions, and on the
 // first revocation after a password change, never on the later one that
@@ -144,16 +149,16 @@ export async function revokeUserOAuthGrants(
           AND g.ended_at IS NULL
           AND g.created_at <= revoked.oauth_grants_revoked_at
         RETURNING g.id
-     ), deleted AS (
-       DELETE FROM oauth_provider_tokens AS t
-        USING ended
-        WHERE t.grant_id = ended.id
      )
-     SELECT count(*)::int AS ended FROM ended`,
+     SELECT id FROM ended`,
     { bind: [matrixUserId, cutoff ? cutoff.toISOString() : null] },
-  )) as { ended: number }[];
-  let ended = rows[0]?.ended ?? 0;
+  )) as { id: string }[];
+  let ended = rows.length;
   if (ended > 0) {
+    await dbAdapter.execute(
+      `DELETE FROM oauth_provider_tokens WHERE grant_id = ANY($1::varchar[])`,
+      { bind: [rows.map(({ id }) => id)] },
+    );
     log.info(`grants ended: sessions-revoked, ${ended}`);
   }
   return ended;

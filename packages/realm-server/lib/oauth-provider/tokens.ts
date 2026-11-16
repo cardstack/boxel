@@ -12,11 +12,18 @@
 // once, keeps its connection. The tokens a grace-window refresh adds are
 // siblings of the first: once one of them is used, the others are revoked,
 // and presenting a revoked one ends the grant. Either way one chain is left.
+//
+// A token is stored only while its grant is current: a grant that has ended
+// keeps no tokens, even one issued by an exchange that raced the end.
 
-import { errors, type Adapter, type AdapterPayload } from 'oidc-provider';
+import { errors, type AdapterPayload } from 'oidc-provider';
 import { logger, param, type DBAdapter } from '@cardstack/runtime-common';
 import { endGrant } from './grants.ts';
-import { OAuthProviderObjectError, sha256Hex } from './objects.ts';
+import {
+  OAuthProviderAdapter,
+  OAuthProviderObjectError,
+  sha256Hex,
+} from './objects.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -38,11 +45,12 @@ interface TokenRow {
   child_used: boolean;
 }
 
-export class TokenAdapter implements Adapter {
+export class TokenAdapter extends OAuthProviderAdapter {
   #dbAdapter: DBAdapter;
   #kind: TokenKind;
 
   constructor(dbAdapter: DBAdapter, kind: TokenKind) {
+    super(kind);
     this.#dbAdapter = dbAdapter;
     this.#kind = kind;
   }
@@ -64,6 +72,12 @@ export class TokenAdapter implements Adapter {
         `the OAuth provider's ${this.#kind} names no grant`,
       );
     }
+    // An access token is bound to exactly one resource (§1.2).
+    if (this.#kind === 'AccessToken' && typeof payload.aud !== 'string') {
+      throw new OAuthProviderObjectError(
+        `the OAuth provider's AccessToken names no single resource`,
+      );
+    }
     if (Math.random() * EXPIRED_SWEEP_ONE_IN < 1) {
       await this.#dbAdapter.execute(
         `DELETE FROM oauth_provider_tokens WHERE expires_at <= now()`,
@@ -71,13 +85,21 @@ export class TokenAdapter implements Adapter {
     }
     let resource =
       this.#kind === 'AccessToken' ? payload.aud : (payload.resource ?? null);
-    await this.#dbAdapter.execute(
+    // Stored only while the grant is current. The share lock makes a store
+    // that races `endGrant` wait for it and then find the grant ended, or
+    // makes `endGrant` wait for the store, after which it deletes the token
+    // with the grant's others.
+    let inserted = await this.#dbAdapter.execute(
       `INSERT INTO oauth_provider_tokens
          (id_hash, kind, grant_id, resource, scope, payload, expires_at, rotation)
-         VALUES (decode($1, 'hex'), $2, $3, $4, $5, $6::jsonb,
-                 now() + make_interval(secs => $7), $8)
+         SELECT decode($1, 'hex'), $2, g.id, $4, $5, $6::jsonb,
+                now() + make_interval(secs => $7), $8
+           FROM oauth_provider_grants AS g
+          WHERE g.id = $3 AND g.ended_at IS NULL
+            FOR SHARE
          ON CONFLICT (id_hash) DO UPDATE
-           SET payload = EXCLUDED.payload, expires_at = EXCLUDED.expires_at`,
+           SET payload = EXCLUDED.payload, expires_at = EXCLUDED.expires_at
+         RETURNING 1`,
       {
         bind: [
           sha256Hex(id),
@@ -95,6 +117,10 @@ export class TokenAdapter implements Adapter {
         ],
       },
     );
+    if (inserted.length === 0) {
+      log.info(`token not stored: grant ended`);
+      throw new errors.InvalidGrant('grant has ended');
+    }
   }
 
   async find(id: string): Promise<AdapterPayload | undefined> {
@@ -140,9 +166,7 @@ export class TokenAdapter implements Adapter {
   // the grant as reuse.
   async consume(id: string): Promise<void> {
     if (this.#kind !== 'RefreshToken') {
-      throw new OAuthProviderObjectError(
-        `the OAuth provider's ${this.#kind} has no consume`,
-      );
+      throw this.unused('consume');
     }
     let hash = sha256Hex(id);
     let outcome = await this.#dbAdapter.withTransaction(async (query) => {
@@ -247,18 +271,44 @@ export class TokenAdapter implements Adapter {
       { bind: [this.#kind, grantId] },
     );
   }
+}
 
-  async findByUserCode(): Promise<never> {
-    throw this.#unused('findByUserCode');
-  }
-
-  async findByUid(): Promise<never> {
-    throw this.#unused('findByUid');
-  }
-
-  #unused(method: string) {
-    return new OAuthProviderObjectError(
-      `the OAuth provider's ${this.#kind} has no ${method}`,
-    );
-  }
+// Whether a refresh token, by its value, has been used in a way that ends
+// its grant if it is presented: revoked, a sibling used, or used itself
+// outside the grace window or after one of its children was used. The same
+// rule `TokenAdapter.consume` applies, read without the grant's lock, for a
+// request refused before the library sees it. Undefined for a token the
+// provider doesn't hold.
+export async function presentedRefreshToken(
+  dbAdapter: DBAdapter,
+  token: string,
+): Promise<{ grantId: string; reused: boolean } | undefined> {
+  let [row] = (await dbAdapter.execute(
+    `SELECT t.grant_id,
+            t.expires_at > now() AND (
+              t.revoked_at IS NOT NULL
+              OR EXISTS (
+                SELECT 1 FROM oauth_provider_tokens AS s
+                 WHERE s.grant_id = t.grant_id
+                   AND s.kind = 'RefreshToken'
+                   AND s.rotation = t.rotation
+                   AND s.id_hash <> t.id_hash
+                   AND s.consumed_at IS NOT NULL
+              )
+              OR (t.consumed_at IS NOT NULL AND (
+                t.consumed_at <= now() - make_interval(secs => $2)
+                OR EXISTS (
+                  SELECT 1 FROM oauth_provider_tokens AS c
+                   WHERE c.grant_id = t.grant_id
+                     AND c.kind = 'RefreshToken'
+                     AND c.rotation = t.rotation + 1
+                     AND c.consumed_at IS NOT NULL
+                )
+              ))
+            ) AS reused
+       FROM oauth_provider_tokens AS t
+      WHERE t.kind = 'RefreshToken' AND t.id_hash = decode($1, 'hex')`,
+    { bind: [sha256Hex(token), REFRESH_GRACE_SECONDS] },
+  )) as { grant_id: string; reused: boolean }[];
+  return row ? { grantId: row.grant_id, reused: row.reused } : undefined;
 }
