@@ -18,6 +18,7 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { validateSubdomain } from '../lib/user-subdomain-validation.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 
 interface ClaimedBoxelDomainJSON {
   data: {
@@ -80,8 +81,18 @@ export default function handleClaimBoxelDomainRequest({
         return;
       }
 
-      const { source_realm_url: sourceRealmURL, hostname } =
+      const { source_realm_url: rawSourceRealmURL, hostname } =
         json.data.attributes;
+
+      const parsedSourceRealmURL = normalizeRealmURL(rawSourceRealmURL);
+      if (!parsedSourceRealmURL) {
+        await sendResponseForBadRequest(
+          ctxt,
+          'json.data.attributes.source_realm_url must be a valid URL',
+        );
+        return;
+      }
+      const sourceRealmURL = parsedSourceRealmURL.href;
 
       const trimmedHostname = hostname.trim();
       const normalizedHostname = trimmedHostname.toLowerCase();

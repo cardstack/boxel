@@ -311,5 +311,67 @@ module(basename(import.meta.filename), function () {
         'Should not find the claim by the realm old URL',
       );
     });
+
+    test('should find a claim by a realm URL without its trailing slash', async function (assert) {
+      const realmId = await register('https://slashless-realm.com/');
+
+      let { valueExpressions, nameExpressions } = asExpressions({
+        user_id: user.id,
+        realm_id: realmId,
+        source_realm_url: 'https://slashless-realm.com/',
+        hostname: 'slashless.boxel.site',
+        claimed_at: Math.floor(Date.now() / 1000),
+      });
+      await query(
+        dbAdapter,
+        insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
+      );
+
+      const response = await makeGetRequest(defaultToken, {
+        source_realm_url: 'https://slashless-realm.com',
+      });
+      assert.strictEqual(response.status, 200, 'Should find the claim');
+      assert.strictEqual(
+        response.body.data.attributes.hostname,
+        'slashless.boxel.site',
+        'Should return the claimed hostname',
+      );
+    });
+
+    test('should find a claim written with only its realm URL', async function (assert) {
+      // The previous code revision writes a claim with source_realm_url only,
+      // stored as the caller sent it. The database fills in realm_id.
+      const realmId = await register('https://url-only-realm.com/');
+
+      let { valueExpressions, nameExpressions } = asExpressions({
+        user_id: user.id,
+        source_realm_url: 'https://url-only-realm.com',
+        hostname: 'url-only.boxel.site',
+        claimed_at: Math.floor(Date.now() / 1000),
+      });
+      await query(
+        dbAdapter,
+        insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
+      );
+
+      const claims = await query(dbAdapter, [
+        `SELECT realm_id FROM claimed_domains_for_sites WHERE hostname = 'url-only.boxel.site'`,
+      ]);
+      assert.strictEqual(
+        claims[0].realm_id,
+        realmId,
+        'Should fill in the realm registry id',
+      );
+
+      const response = await makeGetRequest(defaultToken, {
+        source_realm_url: 'https://url-only-realm.com/',
+      });
+      assert.strictEqual(response.status, 200, 'Should find the claim');
+      assert.strictEqual(
+        response.body.data.attributes.hostname,
+        'url-only.boxel.site',
+        'Should return the claimed hostname',
+      );
+    });
   });
 });

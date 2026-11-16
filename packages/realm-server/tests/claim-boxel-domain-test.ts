@@ -383,6 +383,35 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(claims[0].removed_at, null, 'Should not be removed');
     });
 
+    test('should claim for a realm URL without its trailing slash', async function (assert) {
+      const realmId = await register('https://slashless-realm.com/');
+
+      const response = await makePostRequest(defaultToken, {
+        data: {
+          type: 'claimed-domain',
+          attributes: {
+            source_realm_url: 'https://slashless-realm.com',
+            hostname: 'slashless.boxel.site',
+          },
+        },
+      });
+
+      assert.strictEqual(response.status, 201, 'Should return 201');
+      assert.strictEqual(
+        response.body.data.attributes.sourceRealmURL,
+        'https://slashless-realm.com/',
+        'Should return the normalized realm URL',
+      );
+      const claims = await query(dbAdapter, [
+        `SELECT realm_id FROM claimed_domains_for_sites WHERE hostname = 'slashless.boxel.site'`,
+      ]);
+      assert.strictEqual(
+        claims[0].realm_id,
+        realmId,
+        'Should name the realm by its registry id',
+      );
+    });
+
     test('should allow claiming a hostname that was previously removed', async function (assert) {
       const hostname = 'removed-site.boxel.site';
 

@@ -300,12 +300,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     await context.dbAdapter.execute(`INSERT INTO job_reservations
       (job_id, locked_until, worker_id)
       VALUES (${unrelatedJob.id}, NOW() + INTERVAL '5 minutes', 'worker-unrelated')`);
-    let [{ id: realmId }] = (await context.dbAdapter.execute(
-      `SELECT id FROM realm_registry WHERE url = '${realmURL}'`,
-    )) as { id: string }[];
+    // A claim written with only its realm URL, as the previous code revision
+    // writes it. The database fills in realm_id, and the delete finds the
+    // claim by that id.
     let { valueExpressions, nameExpressions } = asExpressions({
       user_id: user.id,
-      realm_id: realmId,
       source_realm_url: realmURL,
       hostname: 'delete-me.boxel.site',
       claimed_at: Math.floor(Date.now() / 1000),

@@ -9,6 +9,7 @@ import {
 } from '../middleware/index.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 
 export default function handleGetBoxelClaimedDomainRequest({
   dbAdapter,
@@ -38,15 +39,27 @@ export default function handleGetBoxelClaimedDomainRequest({
         return;
       }
 
-      const sourceRealmURL = ctxt.query.source_realm_url as string | undefined;
+      const rawSourceRealmURL = ctxt.query.source_realm_url as
+        | string
+        | undefined;
 
-      if (!sourceRealmURL) {
+      if (!rawSourceRealmURL) {
         await sendResponseForBadRequest(
           ctxt,
           'source_realm_url query parameter is required',
         );
         return;
       }
+
+      const parsedSourceRealmURL = normalizeRealmURL(rawSourceRealmURL);
+      if (!parsedSourceRealmURL) {
+        await sendResponseForBadRequest(
+          ctxt,
+          'source_realm_url query parameter must be a valid URL',
+        );
+        return;
+      }
+      const sourceRealmURL = parsedSourceRealmURL.href;
 
       // The request names the realm by its URL. The claim names it by its
       // registry id, so the URL is resolved to the id through the registry,
