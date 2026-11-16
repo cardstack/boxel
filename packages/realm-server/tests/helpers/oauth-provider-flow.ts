@@ -70,9 +70,13 @@ export async function startOAuthProviderServer(
   {
     tokenLimit,
     testResources,
+    documentOrigins,
   }: {
     tokenLimit?: TokenLimit;
     testResources?: OAuthResourceDefinition[];
+    // Client ID metadata documents served from a stub: each `https://` origin
+    // maps to the stub's plain HTTP origin on loopback.
+    documentOrigins?: ReadonlyMap<string, string>;
   } = {},
 ): Promise<Server> {
   let realmsRootPath = join(dirSync().name, name);
@@ -95,6 +99,7 @@ export async function startOAuthProviderServer(
     oauthAuthorizationLimit: ROOMY_LIMIT,
     oauthTokenLimit: tokenLimit ?? ROOMY_TOKEN_LIMIT,
     ...(testResources ? { oauthTestResources: testResources } : {}),
+    ...(documentOrigins ? { oauthTestDocumentOrigins: documentOrigins } : {}),
   });
   return testRealmHttpServer;
 }
@@ -211,6 +216,22 @@ export async function finishOAuthFlow(
   uid: string,
   ticket: string,
 ): Promise<string> {
+  let landed = await landOAuthFlow(browser, uid, ticket);
+  let code = landed.searchParams.get('code');
+  if (!code) {
+    throw new Error(`the app got no code: ${landed.href}`);
+  }
+  return code;
+}
+
+// Finishes a decided flow in the browser that started it, follows the
+// library's resume, and answers the URL the browser is sent to at the app:
+// its redirect URI, with the code or the error, and the flow's `state`.
+export async function landOAuthFlow(
+  browser: OAuthRequester,
+  uid: string,
+  ticket: string,
+): Promise<URL> {
   let finished = await browser
     .get(
       `/_oauth-provider/interaction/${uid}/finish?${new URLSearchParams({ ticket })}`,
@@ -224,11 +245,12 @@ export async function finishOAuthFlow(
     .get(new URL(resume).pathname)
     .set('Host', OAUTH_TEST_SERVER_URL.host);
   let landed = resumed.headers.location as string | undefined;
-  let code = landed ? new URL(landed).searchParams.get('code') : null;
-  if (!code) {
-    throw new Error(`the app got no code: ${landed}`);
+  if (!landed) {
+    throw new Error(
+      `the flow didn't send the browser to the app: ${resumed.status}`,
+    );
   }
-  return code;
+  return new URL(landed);
 }
 
 // Runs a whole flow for a client, from its start to the code the app is
