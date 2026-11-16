@@ -11,13 +11,12 @@ import HostBaseTool from '../lib/host-base-tool';
 import {
   AutomationTimeLimitError,
   redactSecrets,
-  type RunProgressEvent,
-  type RunProgressSink,
 } from '../lib/realm-runner/automation';
 import {
   resolve as resolveJSON,
   type ProxySend,
 } from '../lib/realm-runner/research';
+import { RunLogSink } from '../lib/realm-runner/run-log-sink';
 import { RealmScriptError } from '../lib/realm-runner/runner';
 import { claimsFromRawToken } from '../services/realm';
 
@@ -29,10 +28,6 @@ import RunRealmCodeTool, {
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type * as BaseToolModule from '@cardstack/base/command';
-
-// A progress sink that can be told to send what it holds before the run
-// answers.
-type RunSink = RunProgressSink & { flush?(): Promise<void> };
 
 // The automation command (ADR 025 §1.3): runs one automation run's script on
 // Realm Runner's automation surface, in a prerender tab on the run's own
@@ -80,7 +75,14 @@ export default class RunAutomationTool extends HostBaseTool<
       );
     }
     let secrets = [runToken];
-    let progress: RunSink = new ConsoleSink();
+    // The run's console lines, progress and the error it ends with go to its
+    // run log, sent with the run's token through the same network as the
+    // run's other realm calls.
+    let progress = new RunLogSink({
+      realmURL,
+      runToken,
+      fetch: this.network.fetch,
+    });
     let runner = new RunRealmCodeTool(this.toolContext);
     let send = this.runTokenSend(runToken);
     let io: AutomationRealmIO = {
@@ -119,8 +121,9 @@ export default class RunAutomationTool extends HostBaseTool<
       }
     }
     // The run's progress is sent before the run answers, while the run is
-    // still running: the worker finishes the run once it has the answer.
-    await progress.flush?.();
+    // still running: the run log takes lines only from a running run, and
+    // the worker finishes the run once it has the answer.
+    await progress.flush();
 
     let commandModule = await this.loadToolModule();
     return new commandModule.JsonCard({ json: outcome });
@@ -189,12 +192,4 @@ function errorOutcome(
     };
   }
   return { state: 'error', reason: 'run-failed', message };
-}
-
-// Writes the run's progress to the tab's console, which the prerender server
-// logs. Every text in an event is already redacted.
-class ConsoleSink implements RunSink {
-  record(event: RunProgressEvent): void {
-    console.info('[automation run]', JSON.stringify(event));
-  }
 }
