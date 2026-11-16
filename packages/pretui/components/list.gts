@@ -14,7 +14,7 @@ import type {
   SelectionMode,
 } from '../data-component';
 import type { PretuiSize } from '../pretui-primitives';
-import { OWNS_PRESS, focusWhen, listen, rovingTabindex } from '../focus';
+import { clickIsContents, focusWhen, listen, rovingTabindex } from '../focus';
 import { RowCursor } from '../internal/reading-listing';
 import type { ListingSizeArg } from '../internal/reading-listing';
 import { resolveSize } from '../pretui-primitives';
@@ -322,17 +322,17 @@ export class List<T> extends Component<ListSignature<T>> {
     this.args.onActivate?.(row, index);
   };
 
-  /** A click on a row activates it, unless it landed on a control or in the
-   * row's expanded detail. */
+  /** A click on a row activates it, unless it landed on a control or widget,
+   * ended a text selection, or landed in the row's expanded detail. */
   onClick = (event: Event) => {
     if (!this.args.onActivate) {
       return;
     }
     let target = event.target as Element | null;
-    let li = target?.closest?.('li[data-list-index]');
+    let li = target?.closest?.('li[data-list-index]') as HTMLElement | null;
     if (
       !li ||
-      target?.closest?.(OWNS_PRESS) ||
+      clickIsContents(event, li) ||
       target?.closest?.('.pretui-list-detail')
     ) {
       return;
