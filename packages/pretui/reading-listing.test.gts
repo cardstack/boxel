@@ -812,6 +812,34 @@ module('Pretui | reading-listing', function (hooks) {
       .isFocused('the re-render leaves focus on the outside control');
   });
 
+  test('List: a re-render that removes the focused row does not later steal focus', async function (assert) {
+    class Holder {
+      @tracked items = LOTS;
+    }
+    let holder = new Holder();
+    let dropSecond = () =>
+      (holder.items = holder.items.filter((_, i) => i !== 1));
+    let reverse = () => (holder.items = [...holder.items].reverse());
+    await render(
+      <template>
+        <List @items={{holder.items}} @key={{rowKey}} @label='Lots'>
+          <:item as |row|>{{row.tea}}</:item>
+        </List>
+        <input aria-label='Elsewhere' data-test-elsewhere />
+      </template>,
+    );
+    (listRows()[0] as HTMLElement).focus();
+    await triggerKeyEvent(listRows()[0] as HTMLElement, 'keydown', 'ArrowDown');
+    dropSecond();
+    await settled();
+    (document.querySelector('[data-test-elsewhere]') as HTMLElement).focus();
+    reverse();
+    await settled();
+    assert
+      .dom('[data-test-elsewhere]')
+      .isFocused('a later re-render leaves focus where the user put it');
+  });
+
   test('List selection is a named control, and Space toggles it from the row', async function (assert) {
     let knobs = new Knobs();
     knobs.selectionMode = 'multi';

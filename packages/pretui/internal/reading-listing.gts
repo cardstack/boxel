@@ -192,15 +192,21 @@ export class RowCursor {
    * page) must not pull focus back. A row-to-row move keeps `relatedTarget`
    * inside, so `focusWhen`'s own `el.focus()` writes nothing mid-render. */
   leave = (event: Event): void => {
-    // a render that removes the focused element fires focusout mid-render;
-    // that is not the user leaving, and writing here would backtrack
-    if (!this.navigating || !(event.target as Node).isConnected) {
+    if (!this.navigating) {
       return;
     }
+    let rows = event.currentTarget as HTMLElement;
     let next = (event as FocusEvent).relatedTarget as Node | null;
-    if (!next || !(event.currentTarget as HTMLElement).contains(next)) {
-      this.navigating = false;
+    if (next && rows.contains(next)) {
+      return;
     }
+    // deferred: a render that removes the focused row fires focusout
+    // mid-render, where writing tracked state would backtrack
+    queueMicrotask(() => {
+      if (!rows.contains(document.activeElement)) {
+        this.navigating = false;
+      }
+    });
   };
 
   /** returns true when the key was consumed and the caller should
