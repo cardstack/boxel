@@ -8,7 +8,7 @@ const {
   copySync,
 } = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
-import { mintRunToken } from '../../lib/run-token.ts';
+import { buildMintRunToken, mintRunToken } from '../../lib/run-token.ts';
 import { automationRef } from '@cardstack/runtime-common/automation-declaration';
 import {
   createAutomationRun,
@@ -1709,6 +1709,7 @@ export async function createRealm({
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
+      mintRunToken: buildMintRunToken(realmSecretSeed),
       mediaCacheAdapter,
       meteredCharges: meteredChargesFor(dbAdapter, testPricing),
     });
@@ -1917,6 +1918,7 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mintRunToken: buildMintRunToken(realmSecretSeed),
     // The indexing worker persists declared captures when a store is
     // configured — same wiring as the production worker child.
     mediaCacheAdapter,
@@ -2111,6 +2113,7 @@ export async function runTestRealmServerWithRealms({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mintRunToken: buildMintRunToken(realmSecretSeed),
     mediaCacheAdapter,
     meteredCharges: meteredChargesFor(dbAdapter, testPricing),
   });
