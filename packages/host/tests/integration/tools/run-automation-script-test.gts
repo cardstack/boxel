@@ -11,6 +11,7 @@ import {
   REDACTED,
 } from '@cardstack/host/lib/realm-runner/automation';
 import runRealmCode, {
+  RealmCallFailure,
   RealmScriptError,
 } from '@cardstack/host/lib/realm-runner/runner';
 import {
@@ -20,6 +21,7 @@ import {
   NOTIFY_METHODS,
 } from '@cardstack/host/lib/realm-runner/surfaces';
 import type { AutomationRunContext } from '@cardstack/host/lib/realm-runner/types';
+import { watchedScriptOutcome } from '@cardstack/host/tools/run-automation';
 import RunRealmCodeTool, {
   clickRequiredCallsIn,
   runAutomationScript,
@@ -37,6 +39,30 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 const otherRealmURL = 'http://test-realm/test2/';
+
+// Answers requests for `path` in the test realm with `respond`, ahead of the
+// realm, until the returned function is called.
+function answerWith(path: string, respond: () => Response): () => void {
+  let network = getService('network');
+  let url = `${testRealmURL}${path}`;
+  let handler = async (request: Request) =>
+    request.url === url ? respond() : null;
+  network.virtualNetwork.mount(handler, { prepend: true });
+  return () => network.virtualNetwork.unmount(handler);
+}
+
+// A 200 whose body fails partway, as a connection dropped mid-body does.
+function tornBody(): Response {
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('# Par'));
+        controller.error(new TypeError('network error'));
+      },
+    }),
+    { status: 200 },
+  );
+}
 
 const CONTEXT: AutomationRunContext = {
   url: `${testRealmURL}automations/nightly`,
@@ -476,8 +502,129 @@ return 'done';`,
 
     let uncaught = run(`await realm.cards.get('no/such-card');`);
     await assert.rejects(uncaught.done, (error: unknown) => {
-      return error instanceof Error && !(error instanceof RealmScriptError);
+      return error instanceof RealmCallFailure;
     });
+
+    let rethrown = run(`
+      try {
+        await realm.cards.get('no/such-card');
+      } catch (error) {
+        throw new Error('could not read: ' + error.message);
+      }
+    `);
+    await assert.rejects(
+      rethrown.done,
+      (error: unknown) => error instanceof RealmScriptError,
+      'an error the script throws in its place is its own',
+    );
+  });
+
+  test('a card update the realm refuses once the script ends is the call failing the run', async function (assert) {
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let io = tool.automationRealmIO(testRealmURL);
+    let { done } = run(
+      `await realm.cards.update('Pet/mango', { name: 'Mango II' });`,
+      {
+        io: {
+          ...io,
+          saveCards: async () => {
+            throw new Error('The realm refused the write: 422');
+          },
+        },
+      },
+    );
+    await assert.rejects(done, (error: unknown) => {
+      return (
+        error instanceof RealmCallFailure &&
+        error.message === 'The realm refused the write: 422'
+      );
+    });
+  });
+
+  test('a watcher sees what each fetch ended with, and a body that fails while it is read, until it stops watching', async function (assert) {
+    let network = getService('network');
+    let seen: string[] = [];
+    let unwatch = network.watchFetches((url, result) => {
+      seen.push(
+        `${new URL(url).pathname.split('/').pop()} ${
+          'error' in result ? 'error' : result.response.status
+        }`,
+      );
+      throw new Error('a watcher that throws changes nothing');
+    });
+    let unmount = answerWith('notes/torn.md', () => tornBody());
+    try {
+      let found = await network.authedFetch(`${testRealmURL}notes/first.md`, {
+        headers: { Accept: 'application/vnd.card+source' },
+      });
+      let missing = await network.authedFetch(`${testRealmURL}notes/none.md`, {
+        headers: { Accept: 'application/vnd.card+source' },
+      });
+      let torn = await network.fetch(`${testRealmURL}notes/torn.md`);
+      await assert.rejects(torn.text());
+      // The watch reads its own copy of the body, which fails alongside.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      unwatch();
+      await network.authedFetch(`${testRealmURL}notes/first.md`, {
+        headers: { Accept: 'application/vnd.card+source' },
+      });
+      assert.deepEqual([found.status, missing.status], [200, 404]);
+      assert.deepEqual(
+        seen,
+        ['first.md 200', 'none.md 404', 'torn.md 200', 'torn.md error'],
+        'the torn body is reported again as an error, and the fetch after unwatching is not seen',
+      );
+    } finally {
+      unmount();
+    }
+  });
+
+  test('a realm call that fails on its own terms is call-failed, and one the platform failed is run-failed', async function (assert) {
+    let network = getService('network');
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let outcomeOf = (path: string) =>
+      watchedScriptOutcome(
+        network,
+        () =>
+          runAutomationScript({
+            code: `await realm.fs.readText(${JSON.stringify(path)});`,
+            realmURL: testRealmURL,
+            automation: CONTEXT,
+            secondsCap: 30,
+            io: tool.automationRealmIO(testRealmURL),
+            progress: { record: () => undefined },
+          }),
+        [],
+      );
+    let reasonOf = async (path: string) => {
+      let outcome = await outcomeOf(path);
+      return outcome.state === 'error' ? outcome.reason : outcome.state;
+    };
+    let unmounts = [
+      answerWith('notes/down.md', () => new Response('down', { status: 503 })),
+      answerWith('notes/shed.md', () => new Response('busy', { status: 429 })),
+      answerWith('notes/torn.md', () => tornBody()),
+    ];
+    try {
+      assert.deepEqual(
+        {
+          missing: await reasonOf('notes/none.md'),
+          down: await reasonOf('notes/down.md'),
+          shed: await reasonOf('notes/shed.md'),
+          torn: await reasonOf('notes/torn.md'),
+          read: await reasonOf('notes/first.md'),
+        },
+        {
+          missing: 'call-failed',
+          down: 'run-failed',
+          shed: 'run-failed',
+          torn: 'run-failed',
+          read: 'complete',
+        },
+      );
+    } finally {
+      unmounts.forEach((unmountOne) => unmountOne());
+    }
   });
 
   test('a bad progress argument throws in the script', async function (assert) {

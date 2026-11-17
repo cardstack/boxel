@@ -341,10 +341,10 @@ An automation whose own runs keep failing pauses itself with `repeated-failures`
 - **The streak is read from the runs, never stored.** `readAutomationFailures(querier, automationId)` counts the automation's runs that ended as `error` after its latest `complete` one, ordered by `finished_at`, and returns that count (`inARow`) and the latest of them (`last`: run id, `error_reason`, `error_message`, `finished_at`). So a complete run resets it, and a run recorded as an error whose commit lands after all (`recordAutomationRunCommitted` makes it complete) ends it too.
 - **Only the automation's own runs count:** runs its triggers started, a batch follow-up included. A Preview (`dry_run`) and a Run now (trigger `manual`) are a person's runs, acting as and charged to them whether or not the automation is on, so they neither extend nor break the streak. Nor does a canceled run, or a failed run whose reason is in either of two lists:
   - `SPENDING_REFUSAL_REASONS` (`insufficient-credits`, `daily-credit-cap-reached`, `monthly-credit-cap-reached`, `pricing-unavailable`): admission refused the run for the payer's spending, and the automation waits for credits instead and runs again once the payer can pay.
-  - `PLATFORM_FAILURE_REASONS` (`account-unverifiable`, `run-admission-failed`, `run-failed`, `commit-failed`, `commit-interrupted`, `job-lost`, `dry-run-mismatch`): the platform failed the run, not the automation. A Matrix, prerender or worker outage fails every automation's runs this way, and counting them would pause every automation that runs during it.
+  - `PLATFORM_FAILURE_REASONS` (`account-unverifiable`, `run-admission-failed`, `run-failed`, `commit-failed`, `commit-interrupted`, `job-lost`, `dry-run-mismatch`): the platform failed the run, not the automation. A Matrix, prerender, realm or worker outage fails every automation's runs this way, and counting them would pause every automation that runs during it. A realm call that fails on its own terms ends its run as `call-failed`, which counts; the tab answers `run-failed` instead when the platform failed any request the run made (_The tab_ says how the tab tells).
 - **Resuming clears it.** Only runs created at or after the row's `failures_since` count, and switch-on and resume set it.
 - **`pauseAfterRepeatedFailures(dbAdapter, automationId, { failuresBeforePause }, reporters)`** locks the row, reads the streak and pauses once it reaches `failuresBeforePause` (default `AUTOMATION_FAILURES_BEFORE_PAUSE`, 5), cancelling the pending run as every pause does. Like the other pauses it runs in `withChanges`, so `reporters` hear about the paused automation and each canceled run once the pause commits. Only an active automation, or one waiting for credits, pauses: one already paused keeps its reason, and one _done_ has no runs left to stop. It returns `{ automation, paused }`, where `paused` says whether this call paused it. Since the streak is read from the runs, calling it again, or for a run that didn't fail, changes nothing.
-- **Who asks.** The worker's `runAutomationAttempt` asks after every attempt whose run has ended as an error, however it ended: the attempt's own finish, or the realm server ending the run at a cap or a refused credential. The threshold comes from `AutomationAttemptContext.failuresBeforePause`. Reconcile doesn't ask: `abandonAutomationRun` ends a run as `job-lost`, which never counts, or as `complete`, which resets the streak. Anything else that ends an automation's run with a reason that counts calls it too; a call that is missed is made up by the next failed run's.
+- **Who asks.** The worker's `runAutomationAttempt` asks after every attempt whose run has ended as an error, however it ended: the attempt's own finish, or the realm server ending the run at a cap or a refused credential. The threshold comes from `AutomationAttemptContext.failuresBeforePause`. Reconcile asks too, after each lost run it ends as an error and once it has let go of the automation's row (the pause takes the row itself). Its `job-lost` never counts, so the ask only pauses an automation whose streak an earlier run's attempt reached without getting to ask. Anything else that ends an automation's run with a reason that counts calls it too; a call that is missed is made up by the next failed run's.
 - **The run that tripped the pause keeps its own error.** It had ended before the pause, so the pause cancels only the runs after it.
 
 The streak, by hand:
@@ -1507,7 +1507,7 @@ for a run row its trigger has already made with `createAutomationRun`:
      error named by the refusal's code (_Committing the overlay_), unless
      the row says the batch landed, which finishes it complete;
    - `error`: finishes the run as an error with the outcome's reason
-     (`script-error`, `timed-out`, `run-failed`, `stopped`) and its message, prefixed
+     (`script-error`, `timed-out`, `call-failed`, `run-failed`, `stopped`) and its message, prefixed
      `line N:` for a script error that has a line. The finish discards the
      overlay, so nothing the script staged lands;
    - a tab that never answered (`unusable`) is `timed-out`; a command that
@@ -1659,8 +1659,23 @@ is counted and priced against the run's caps. It answers an
 `AutomationScriptOutcome`: an error the script throws itself
 (`RealmScriptError`) is `script-error` with its line, a run out of time
 (`AutomationTimeLimitError`) is `timed-out`, and a realm call's error the
-script didn't catch is `run-failed`. In the script, a realm call's error is
-an `Error` named `RealmCallError`. A script that couldn't start before the
+script didn't catch (`RealmCallFailure`) is `call-failed`. A card update that
+`realm.cards.update` staged and the realm refuses to save once the script ends
+is `call-failed` too. In the script, a realm call's error is an `Error` named
+`RealmCallError`; the sandbox reports that one ended the script with
+`realmCallFailed`.
+
+`call-failed` counts toward a pause for repeated failures, so the tab answers
+`run-failed` in its place when the platform failed any request the tab made
+while the script ran (`watchedScriptOutcome`). `isPlatformFailure` counts a
+server error, a 429 load shed, no answer, and a body that fails while it is
+read; a refusal and an abort don't count. The tab hears every fetch through
+`NetworkService.watchFetches`, which sits on `NetworkService.fetch`, the one
+fetch everything in the tab goes through: `authedFetch` and the realm calls,
+the loader's module fetches, `realm.resolve`'s request forwarding, and the
+run's log and state checks. A prerender tab runs one automation run at a
+time, so those requests are all the run's. Anything else the runner fails
+with is `run-failed`. A script that couldn't start before the
 run's `endsAt` is `timed-out`.
 
 The run's progress goes to its run log: the tool records it with a

@@ -74,13 +74,13 @@ const automationReconcile: Task<
         // A pass after a long outage can outlast the job's timeout; each run,
         // automation and step it handles is progress.
         onProgress: () => heartbeatJob(jobInfo?.reservationId),
-        reportAutomationChange: taskAutomationChangeReporter({
+        reportRunChange: taskRunChangeReporter({
+          dbAdapter,
           virtualNetwork,
           reportRealmEvent,
           log,
         }),
-        reportRunChange: taskRunChangeReporter({
-          dbAdapter,
+        reportAutomationChange: taskAutomationChangeReporter({
           virtualNetwork,
           reportRealmEvent,
           log,
