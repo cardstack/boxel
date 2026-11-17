@@ -10,6 +10,8 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   CAPTURE_SERVING_PREFIXES,
+  CLIENT_CLASS_HEADER,
+  CLIENT_IP_HEADER,
   PRERENDERED_HTML_FORMATS,
   PREFIX_REALMS,
   RealmPaths,
@@ -24,6 +26,7 @@ import {
   query,
   resolveRedirectTarget,
   sanitizeHeadHTMLToString,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
@@ -52,6 +55,8 @@ import {
   visitorHostRouteLookups,
 } from '../lib/host-route-lookups.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
+import { requestHostURL } from '../lib/realm-host-urls.ts';
+import { anonymousStatus } from '../lib/anonymous-home-page.ts';
 import {
   prefixRealmURLsOf,
   type PrefixRealmSource,
@@ -67,25 +72,94 @@ async function unshareableFormatsForPage(
   routedRealm: Realm | undefined,
   routingDeps: RealmRoutingDeps,
 ): Promise<PrerenderedHtmlFormat[]> {
-  let holds = (realm: Realm) => {
-    let realmURL = new URL(realm.url);
-    realmURL.protocol = readURL.protocol;
-    return new RealmPaths(realmURL).inRealm(readURL);
-  };
-  let realm =
-    routedRealm && holds(routedRealm)
-      ? routedRealm
-      : await findOrMountRealm(readURL, routingDeps);
+  let realm = await realmHoldingPage(readURL, routedRealm, routingDeps);
   if (!realm) {
     return [...PRERENDERED_HTML_FORMATS];
   }
-  // The request may arrive under a different protocol than the realm is
-  // mounted with, and the declaration is resolved against the realm's own
-  // spelling of the URL.
-  let url = new URL(readURL);
-  url.protocol = new URL(realm.url).protocol;
-  return await realm.unshareableFormatsFor(url);
+  return await realm.unshareableFormatsFor(inRealmSpelling(readURL, realm));
 }
+
+// The realm that holds the card or file at `readURL`: the one the request was
+// routed to where it holds it, and otherwise the one a routing rule pointed
+// into.
+async function realmHoldingPage(
+  readURL: URL,
+  routedRealm: Realm | undefined,
+  routingDeps: RealmRoutingDeps,
+): Promise<Realm | undefined> {
+  if (routedRealm) {
+    let realmURL = new URL(routedRealm.url);
+    realmURL.protocol = readURL.protocol;
+    if (new RealmPaths(realmURL).inRealm(readURL)) {
+      return routedRealm;
+    }
+  }
+  return await findOrMountRealm(readURL, routingDeps);
+}
+
+// The request may arrive under a different protocol than the realm is mounted
+// with, and the realm resolves a URL in its own spelling.
+function inRealmSpelling(url: URL, realm: Realm): URL {
+  let spelled = new URL(url);
+  spelled.protocol = new URL(realm.url).protocol;
+  return spelled;
+}
+
+// Whether a visitor who isn't signed in may read the card or file at
+// `readURL`, as the realm that holds it answers. Public read in the realm's
+// permissions admits every card, since a policy only widens them. Otherwise
+// the realm is sent the read such a visitor's browser sends: no credentials,
+// and the visitor's address headers, so the realm's policy admits, limits and
+// refuses it as it would the visitor's own read. Nothing here evaluates a
+// permission or a policy grant of its own.
+async function visitorMayReadPage(
+  readURL: URL,
+  routedRealm: Realm | undefined,
+  routingDeps: RealmRoutingDeps,
+  visitorHeaders: Record<string, string | string[] | undefined>,
+): Promise<boolean> {
+  let realm = await realmHoldingPage(readURL, routedRealm, routingDeps);
+  if (!realm) {
+    return false;
+  }
+  if (await hasPublicPermissions(realm, routingDeps)) {
+    return true;
+  }
+  let addressHeaders: Record<string, string> = {};
+  for (let name of [CLIENT_IP_HEADER, CLIENT_CLASS_HEADER]) {
+    let value = visitorHeaders[name];
+    if (typeof value === 'string') {
+      addressHeaders[name] = value;
+    }
+  }
+  // A card's row is read without its `.json` extension, and a file's by its
+  // own URL, extension and all (see `RetrievedMarkup`).
+  let accept = hasExtension(readURL.pathname)
+    ? SupportedMimeType.FileMeta
+    : SupportedMimeType.CardJson;
+  let status = await anonymousStatus(
+    realm,
+    inRealmSpelling(readURL, realm).href,
+    accept,
+    addressHeaders,
+  );
+  return status === 200;
+}
+
+// The markup the prerenderer stores for a realm's default index card when the
+// realm has not opted in to rendering it in full: a placeholder the host app
+// replaces once it boots. It is not the page, so a host URL does not serve it.
+const DEFAULT_INDEX_PLACEHOLDER = /\bdata-boxel-realm-index\b/;
+
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
+}
+
+const CANONICAL_LINK = /<link\b[^>]*\brel\s*=\s*["']?[^"'>]*\bcanonical\b/i;
+const OG_URL_META = /<meta\b[^>]*\bproperty\s*=\s*["']?og:url["'\s/>]/i;
 
 export type ServeIndexDeps = {
   serverURL: URL;
@@ -389,6 +463,13 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // http-vs-https mismatch and mis-serve a module URL as the HTML page.
     let requestURL = fullRequestURL(ctxt);
 
+    // The host URL the request came in on, when it came in on one. The realm
+    // is then served as a site: its routing rules apply, and each page is
+    // server-rendered when a visitor who isn't signed in may read its card
+    // (see below). `resolveHostURLs` has already made `requestURL` name the
+    // realm's URL, and `translateAtHostURLs` translates the response back.
+    let hostURL = requestHostURL(ctxt);
+
     // The request's resolution through its realm's dynamic host routes, run
     // at most once: the generic-Accept gate below may need it before the
     // page is built.
@@ -410,7 +491,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // left to the realm.
     let dynamicRouteAnswers = async () => {
       let realm = await findOrMountRealm(requestURL, routingDeps);
-      if (!realm || !(await hasPublicPermissions(realm, routingDeps))) {
+      if (
+        !realm ||
+        (!hostURL && !(await hasPublicPermissions(realm, routingDeps)))
+      ) {
         return false;
       }
       let { routes, complete } = await realm.getHostRoutes();
@@ -458,7 +542,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         );
         publishedRealmInfoFetched = true;
 
-        if (publishedRealmInfo) {
+        if (publishedRealmInfo || hostURL) {
           return next();
         }
       }
@@ -474,14 +558,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       publishedRealmInfo = await getPublishedRealmInfo(requestURL, routingDeps);
       publishedRealmInfoFetched = true;
 
-      if (!publishedRealmInfo) {
+      if (!publishedRealmInfo && !hostURL) {
         return next();
       }
 
-      // For published realms with generic Accept headers (like */*), we need to
-      // distinguish card URLs from module URLs. Module imports (e.g., "./person")
-      // resolve to URLs without extensions and would incorrectly get HTML served.
-      // Only serve HTML if:
+      // For published realms and host URLs with generic Accept headers (like
+      // */*), we need to distinguish card URLs from module URLs. Module
+      // imports (e.g., "./person") resolve to URLs without extensions and
+      // would incorrectly get HTML served. Only serve HTML if:
       // 1. This is a directory index request (path ends with /), OR
       // 2. The URL corresponds to an indexed card instance
       let isIndexRequest = requestURL.pathname.endsWith('/');
@@ -502,9 +586,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           // route falls through to the generic 200 shell, a non-route 404s).
           // Requiring public read makes routed and non-routed bare paths
           // behave identically (both next() → 404) on a non-public realm.
+          // A host URL serves the realm as a site, whose routes are its
+          // addresses, so there the rule match needs no public read.
           let matchedRule = await matchHostRoutingRule(requestURL, routingDeps);
           if (matchedRule) {
-            if (!(await hasPublicPermissions(matchedRule.realm, routingDeps))) {
+            if (
+              !hostURL &&
+              !(await hasPublicPermissions(matchedRule.realm, routingDeps))
+            ) {
               return next();
             }
           } else if (!(await dynamicRouteAnswers())) {
@@ -604,12 +693,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         return;
       }
     }
-    let publicPermissions = await hasPublicPermissions(
-      routedRealm,
-      routingDeps,
-    );
-
-    if (!publicPermissions) {
+    // A realm without public read is served the bare shell, and renders in
+    // the browser as the visitor. On a host URL the realm is served as a
+    // site instead: its routing rules apply whatever its permissions, as
+    // they are the site's addresses, and each page's stored markup is
+    // served only where a visitor who isn't signed in may read its card.
+    if (!hostURL && !(await hasPublicPermissions(routedRealm, routingDeps))) {
       ctxt.body = injectHeadHTML(
         indexHTML,
         `<title>Boxel</title>\n${defaultIconLinks().join('\n')}`,
@@ -621,7 +710,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // (e.g. /whitepaper) to a target card. This runs AFTER the public-
     // permission gate above so a non-public realm never has its routing map
     // consulted — otherwise the canonical redirect below would disclose that
-    // a private routed path exists to an unauthenticated caller. The map is
+    // a private routed path exists to an unauthenticated caller. A realm on a
+    // host URL is the exception the gate makes: its routes are the site's
+    // published addresses. The map is
     // also written into the @cardstack/host/config/environment meta tag
     // further down so the SPA can resolve the path post-hydration.
     let routingMap: HostRoutingRule[] = routedRealm
@@ -851,12 +942,50 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       }
       return (await formats).includes(format);
     };
-    let [headWithheld, isolatedWithheld] = await Promise.all([
-      withheld(headMarkup, 'head'),
-      withheld(isolatedMarkup, 'isolated'),
-    ]);
-    let headHTML = headWithheld ? null : headMarkup.html;
-    let isolatedHTML = isolatedWithheld ? null : isolatedMarkup.html;
+    // On a host URL, a card's stored markup was rendered with its owner's
+    // authority and goes to every visitor, so it is served only where a
+    // visitor who isn't signed in may read the card. Otherwise the page
+    // renders in the browser, as the visitor. The card's scoped CSS goes
+    // with its markup.
+    let readableFor = new Map<string, Promise<boolean>>();
+    let unreadable = async (markup: {
+      html: string | null;
+      readURL: URL | null;
+    }) => {
+      if (!hostURL || markup.html == null || !markup.readURL) {
+        return false;
+      }
+      let key = markup.readURL.href;
+      let readable = readableFor.get(key);
+      if (!readable) {
+        readable = visitorMayReadPage(
+          markup.readURL,
+          routedRealm,
+          routingDeps,
+          ctxt.req.headers,
+        );
+        readableFor.set(key, readable);
+      }
+      return !(await readable);
+    };
+    let [headWithheld, isolatedWithheld, headUnreadable, isolatedUnreadable] =
+      await Promise.all([
+        withheld(headMarkup, 'head'),
+        withheld(isolatedMarkup, 'isolated'),
+        unreadable(headMarkup),
+        unreadable(isolatedMarkup),
+      ]);
+    let headHTML = headWithheld || headUnreadable ? null : headMarkup.html;
+    let isolatedHTML =
+      isolatedWithheld || isolatedUnreadable ? null : isolatedMarkup.html;
+    let pageScopedCSS = isolatedUnreadable ? null : scopedCSS;
+    if (
+      hostURL &&
+      isolatedHTML != null &&
+      DEFAULT_INDEX_PLACEHOLDER.test(isolatedHTML)
+    ) {
+      isolatedHTML = null;
+    }
 
     let doc = new JSDOM().window.document;
     if (headHTML != null) {
@@ -880,9 +1009,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       );
     }
 
-    if (scopedCSS != null) {
+    if (pageScopedCSS != null) {
       scopedCSSLog.debug(
-        `Using scoped CSS for ${cardURL.href} (length ${scopedCSS.length})`,
+        `Using scoped CSS for ${cardURL.href} (length ${pageScopedCSS.length})`,
       );
     } else {
       scopedCSSLog.debug(
@@ -899,10 +1028,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       headFragments.push('<title>Boxel</title>');
     }
 
-    if (scopedCSS != null) {
+    if (pageScopedCSS != null) {
       scopedCSSLog.debug(`Injecting scoped CSS for ${cardURL.href}`);
       headFragments.push(
-        `<style data-boxel-scoped-css>\n${scopedCSS}\n</style>`,
+        `<style data-boxel-scoped-css>\n${pageScopedCSS}\n</style>`,
       );
     }
 
@@ -923,6 +1052,24 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       headFragments.push(
         `<link href="${webclipURL}" rel="apple-touch-icon" />`,
       );
+    }
+
+    // A page on a host URL names its own address as canonical, unless its
+    // head names one. The address is written in the realm's URL, and
+    // `translateAtHostURLs` puts the canonical host URL in its place, so the
+    // page names the same canonical address on every host URL it is served
+    // at. A not-found page has no address to name.
+    if (hostURL && routedRealm && !notFound) {
+      let pageURL = escapeAttribute(
+        new URL(requestURL.pathname, routedRealm.url).href,
+      );
+      let head = headFragments.join('\n');
+      if (!CANONICAL_LINK.test(head)) {
+        headFragments.push(`<link rel="canonical" href="${pageURL}" />`);
+      }
+      if (!OG_URL_META.test(head)) {
+        headFragments.push(`<meta property="og:url" content="${pageURL}" />`);
+      }
     }
 
     if (headFragments.length > 0) {
