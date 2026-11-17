@@ -5,8 +5,14 @@
 // On `ai_batches`:
 // - `finalized_at` is when the batch reached a final status: OpenRouter's
 //   `finalized_at` when it reports one, otherwise when the platform first
-//   read a final status. A batch that reached it after its `deadline` is
-//   late, and its results are withheld from the runs that read it.
+//   read a final status.
+// - `deadline_missed_at` is when a run first read the batch, at or after its
+//   `deadline`, and found it still open. That run sends the same requests at
+//   the normal price (ADR 030 §1.3), so the batch is late from then on, and
+//   its results are withheld from the runs that read it.
+// - `settle_read_at` is when the settle job last tried to read the batch. The
+//   job reads the least recently tried batches first, so batches OpenRouter
+//   can't answer for don't hold back the rest.
 // - `settled_at` is when the settle job billed the batch, and `billed_usd`
 //   what it billed: OpenRouter's reported cost, or `estimated_usd` when
 //   OpenRouter reported none, in which case `billed_at_estimate` is true. A
@@ -31,13 +37,15 @@ exports.up = (pgm) => {
   pgm.sql(`
     ALTER TABLE ai_batches
       ADD COLUMN IF NOT EXISTS finalized_at timestamptz,
+      ADD COLUMN IF NOT EXISTS deadline_missed_at timestamptz,
+      ADD COLUMN IF NOT EXISTS settle_read_at timestamptz,
       ADD COLUMN IF NOT EXISTS settled_at timestamptz,
       ADD COLUMN IF NOT EXISTS billed_usd numeric,
       ADD COLUMN IF NOT EXISTS billed_at_estimate boolean
   `);
   pgm.sql(`
     CREATE INDEX IF NOT EXISTS ai_batches_unsettled_idx
-      ON ai_batches (submitted_at)
+      ON ai_batches (settle_read_at NULLS FIRST, submitted_at)
       WHERE settled_at IS NULL
   `);
   pgm.sql(`
@@ -52,6 +60,9 @@ exports.up = (pgm) => {
       resolved_at timestamptz
     )
   `);
+  // Added NOT VALID, so this migration holds the table's lock only briefly
+  // instead of scanning every usage row under it; the next migration
+  // validates the check under a lock that lets charges keep writing.
   pgm.sql(`
     ALTER TABLE credit_charge_usage
       DROP CONSTRAINT IF EXISTS credit_charge_usage_unit_check
@@ -68,7 +79,7 @@ exports.up = (pgm) => {
         'ai_estimated_usd',
         'ai_input_tokens',
         'ai_output_tokens'
-      ))
+      )) NOT VALID
   `);
   pgm.sql(creditChargeCostsView({ withEstimates: true }));
 };
@@ -99,6 +110,8 @@ exports.down = (pgm) => {
   pgm.sql(`
     ALTER TABLE ai_batches
       DROP COLUMN IF EXISTS finalized_at,
+      DROP COLUMN IF EXISTS deadline_missed_at,
+      DROP COLUMN IF EXISTS settle_read_at,
       DROP COLUMN IF EXISTS settled_at,
       DROP COLUMN IF EXISTS billed_usd,
       DROP COLUMN IF EXISTS billed_at_estimate

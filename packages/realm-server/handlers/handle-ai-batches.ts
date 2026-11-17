@@ -3,6 +3,7 @@ import {
   automationRunForCall,
   getAIBatch,
   isLateAIBatch,
+  recordAIBatchReadByRun,
   reserveAutomationRunAICredits,
   isSessionRevoked,
   logger,
@@ -294,17 +295,20 @@ export function handleAIBatchStatus(args: AIBatchHandlerArgs) {
     if (status >= 200 && status < 300) {
       let read = readOpenRouterBatch(json);
       if (read && read.id === batch.batchId) {
-        let recorded = await recordAIBatchState(dbAdapter, batch.batchId, {
+        await recordAIBatchState(dbAdapter, batch.batchId, {
           state: read.status,
           expiresAt: read.expiresAt,
           finalizedAt: read.finalizedAt,
         });
-        // A batch that ended after its deadline is late: the follow-up run
-        // has sent its requests at the normal price, so its results are
-        // discarded rather than used twice. It is still billed.
-        if (recorded && isLateAIBatch(recorded)) {
+        // A run that reads the batch still open at or after its deadline
+        // sends the same requests at the normal price (ADR 030 §1.3), so the
+        // batch is late from then on: its results are discarded rather than
+        // used twice. It is still billed.
+        let recorded = await recordAIBatchReadByRun(dbAdapter, batch.batchId);
+        let results = (json as { results?: unknown }).results;
+        if (recorded && isLateAIBatch(recorded) && results != null) {
           log.info(
-            `batch ${batch.batchId} ended at ${recorded.finalizedAt}, after its deadline ${recorded.deadline}, so its results are discarded`,
+            `batch ${batch.batchId} ended after a run read it still open past its deadline, at ${recorded.deadlineMissedAt}, so its results are discarded`,
           );
           text = JSON.stringify({ ...(json as object), results: null });
         }

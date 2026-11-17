@@ -58,6 +58,12 @@ export interface AIBatch {
   // it reports one, otherwise when a final status was first read. Null while
   // the batch is open.
   finalizedAt: string | null;
+  // When a run first read the batch, at or after its deadline, and found it
+  // still open. That run falls back to the normal price, so the batch is
+  // late from then on. Null while no run has.
+  deadlineMissedAt: string | null;
+  // When the settle job last tried to read the batch.
+  settleReadAt: string | null;
   // When the settle job billed the batch, and what it billed, in USD: the
   // cost OpenRouter reported, or the estimate when it reported none. Null
   // until the batch is settled.
@@ -84,15 +90,12 @@ export function aiBatchCost(batch: AIBatch): AIBatchCost {
   };
 }
 
-// Whether the batch reached its final status after the deadline its script
-// set. By then the follow-up run has sent the same requests at the normal
-// price, so a late batch is billed like any other and its results are
-// discarded.
+// Whether the batch is late: a run read it at or after its deadline and
+// found it still open, so that run sends the same requests at the normal
+// price (ADR 030 §1.3). A late batch is billed like any other, and its
+// results are discarded, so the requests aren't answered twice.
 export function isLateAIBatch(batch: AIBatch): boolean {
-  return (
-    batch.finalizedAt !== null &&
-    new Date(batch.finalizedAt).getTime() > new Date(batch.deadline).getTime()
-  );
+  return batch.deadlineMissedAt !== null;
 }
 
 export interface NewAIBatch {
@@ -115,7 +118,12 @@ export interface NewAIBatch {
 // `ai-batch-settle.ts` in realm-server), since only it holds the platform's
 // OpenRouter key and the billing functions.
 export interface AIBatchSettlement {
-  settle(opts?: { now?: Date }): Promise<AIBatchSettlementResult>;
+  // `onProgress` is called as the pass makes progress, after each batch and
+  // each page of OpenRouter's batch list.
+  settle(opts?: {
+    now?: Date;
+    onProgress?: () => void;
+  }): Promise<AIBatchSettlementResult>;
 }
 
 // What a settle pass did: batches it billed (`settled`), batches still
@@ -236,16 +244,47 @@ export async function recordAIBatchState(
   return row ? batchFromRow(row) : undefined;
 }
 
-// The batches the settle job hasn't billed yet, oldest first.
+// The batches the settle job hasn't billed yet, the ones it hasn't tried to
+// read for longest first, so batches OpenRouter can't answer for take their
+// turn behind the rest instead of ahead of them.
 export async function listUnsettledAIBatches(
   dbAdapter: DBAdapter,
   { limit }: { limit: number },
 ): Promise<AIBatch[]> {
   let rows = await query(dbAdapter, [
-    'SELECT * FROM ai_batches WHERE settled_at IS NULL ORDER BY submitted_at LIMIT',
+    'SELECT * FROM ai_batches WHERE settled_at IS NULL ORDER BY settle_read_at NULLS FIRST, submitted_at LIMIT',
     param(limit),
   ]);
   return rows.map(batchFromRow);
+}
+
+// Records that the settle job is trying to read a batch, whatever comes of
+// it.
+export async function recordAIBatchSettleRead(
+  dbAdapter: DBAdapter,
+  batchId: string,
+): Promise<void> {
+  await query(dbAdapter, [
+    'UPDATE ai_batches SET settle_read_at = now() WHERE batch_id =',
+    param(batchId),
+  ]);
+}
+
+// Records that a run read a batch at or after its deadline and found it
+// still open, the first time that happens. Returns the batch as recorded, or
+// undefined when there is no such batch.
+export async function recordAIBatchReadByRun(
+  dbAdapter: DBAdapter,
+  batchId: string,
+): Promise<AIBatch | undefined> {
+  let [row] = await query(dbAdapter, [
+    'UPDATE ai_batches SET deadline_missed_at = COALESCE(deadline_missed_at, CASE WHEN deadline <= now() AND state NOT IN (',
+    ...finalStatesList(),
+    ') THEN now() END) WHERE batch_id =',
+    param(batchId),
+    'RETURNING *',
+  ]);
+  return row ? batchFromRow(row) : undefined;
 }
 
 // The batches a run submitted, oldest first.
@@ -337,6 +376,19 @@ export async function recordUnrecordedAIBatches(
   return batches.filter((batch) => inserted.has(batch.batchId));
 }
 
+// Marks resolved every unrecorded batch that has an `ai_batches` row after
+// all, as a submit slower than the reconciliation's grace period leaves
+// behind. Returns how many it resolved.
+export async function resolveRecordedAIBatches(
+  dbAdapter: DBAdapter,
+): Promise<number> {
+  let rows = await query(dbAdapter, [
+    'UPDATE unrecorded_ai_batches u SET resolved_at = now() WHERE resolved_at IS NULL',
+    'AND EXISTS (SELECT 1 FROM ai_batches b WHERE b.batch_id = u.batch_id) RETURNING batch_id',
+  ]);
+  return rows.length;
+}
+
 function finalStatesList() {
   return AI_BATCH_FINAL_STATES.flatMap((state, index) =>
     index === 0 ? [param(state)] : [',', param(state)],
@@ -360,6 +412,8 @@ function batchFromRow(row: Record<string, PgPrimitive>): AIBatch {
     stateReadAt: iso(row.state_read_at)!,
     submittedAt: iso(row.submitted_at)!,
     finalizedAt: iso(row.finalized_at),
+    deadlineMissedAt: iso(row.deadline_missed_at),
+    settleReadAt: iso(row.settle_read_at),
     settledAt: iso(row.settled_at),
     billedUsd: row.billed_usd == null ? null : Number(row.billed_usd),
     billedAtEstimate:

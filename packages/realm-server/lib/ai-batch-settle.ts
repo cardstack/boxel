@@ -3,8 +3,10 @@ import {
   listUnsettledAIBatches,
   logger,
   recordAIBatchSettled,
+  recordAIBatchSettleRead,
   recordAIBatchState,
   recordUnrecordedAIBatches,
+  resolveRecordedAIBatches,
   type AIBatch,
   type AIBatchSettlement,
   type AIBatchSettlementResult,
@@ -31,7 +33,7 @@ import {
 const log = logger('ai-batch-settle');
 
 // The most unsettled batches one pass reads. The rest wait for the next pass,
-// oldest first.
+// the ones read longest ago first.
 const MAX_BATCHES_PER_PASS = 500;
 
 // How far back a pass looks in OpenRouter's batch list for batches with no
@@ -39,13 +41,11 @@ const MAX_BATCHES_PER_PASS = 500;
 // finds every batch submitted in it.
 const RECONCILE_WINDOW_MS = 48 * 60 * 60 * 1000;
 
-// How old a listed batch must be before it counts as unrecorded. A submit
-// records its batch as soon as OpenRouter answers, so a batch this old with
-// no row will not get one.
-const RECONCILE_GRACE_MS = 10 * 60 * 1000;
-
-// The most pages of the list one pass reads.
-const MAX_LIST_PAGES = 50;
+// How old a listed batch must be before it counts as unrecorded: three times
+// the longest a submit waits for OpenRouter's answer, after which it records
+// the batch at once. A row that lands later all the same resolves the
+// batch's `unrecorded_ai_batches` row on the next pass.
+const RECONCILE_GRACE_MS = 30 * 60 * 1000;
 
 // The batch settle job (ADR 030 §1.4). Each pass:
 //
@@ -58,9 +58,12 @@ const MAX_LIST_PAGES = 50;
 //    billed, and records the batch as settled. Each step is safe to repeat,
 //    so a pass that stops partway is finished by the next one without
 //    billing twice.
-// 2. Lists the batches OpenRouter has accepted in the last 48 hours and
+// 2. Lists every batch OpenRouter has accepted in the last 48 hours and
 //    records any with no `ai_batches` row as unrecorded: a batch the platform
 //    may pay for that nothing bills. Each is reported to Sentry once.
+//
+// `onProgress` is called after each batch and each page of the list, so the
+// job can tell the queue it is still making progress.
 //
 // A batch OpenRouter no longer has results for (a `410`, 30 days after it
 // was submitted) is settled at its estimate. A batch OpenRouter doesn't know
@@ -74,7 +77,10 @@ export function aiBatchSettlementFor(dbAdapter: DBAdapter): AIBatchSettlement {
 
 export async function settleAIBatches(
   dbAdapter: DBAdapter,
-  { now = new Date() }: { now?: Date } = {},
+  {
+    now = new Date(),
+    onProgress = () => {},
+  }: { now?: Date; onProgress?: () => void } = {},
 ): Promise<AIBatchSettlementResult> {
   let result: AIBatchSettlementResult = {
     settled: 0,
@@ -94,9 +100,14 @@ export async function settleAIBatches(
       log.error(`could not settle batch ${batch.batchId}:`, error);
       Sentry.captureException(error, { extra: { batchId: batch.batchId } });
     }
+    onProgress();
   }
   try {
-    result.unrecorded = await reconcileOpenRouterBatches(dbAdapter, now);
+    result.unrecorded = await reconcileOpenRouterBatches(
+      dbAdapter,
+      now,
+      onProgress,
+    );
   } catch (error) {
     log.error(`could not reconcile OpenRouter's batch list:`, error);
     Sentry.captureException(error);
@@ -108,6 +119,7 @@ async function settleAIBatch(
   dbAdapter: DBAdapter,
   batch: AIBatch,
 ): Promise<'settled' | 'open' | 'failed'> {
+  await recordAIBatchSettleRead(dbAdapter, batch.batchId);
   let answer = await callOpenRouterBatchAPI(dbAdapter, {
     url: openRouterBatchURL(batch.batchId),
     method: 'GET',
@@ -211,12 +223,22 @@ async function settle(
 async function reconcileOpenRouterBatches(
   dbAdapter: DBAdapter,
   now: Date,
+  onProgress: () => void,
 ): Promise<number> {
+  let resolved = await resolveRecordedAIBatches(dbAdapter);
+  if (resolved > 0) {
+    log.info(
+      `${resolved} unrecorded batch(es) have an ai_batches row after all, so they are resolved`,
+    );
+  }
   let createdAfter = new Date(now.getTime() - RECONCILE_WINDOW_MS);
   let createdBefore = now.getTime() - RECONCILE_GRACE_MS;
   let found: UnrecordedAIBatch[] = [];
   let after: string | undefined;
-  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+  let pagesRead = new Set<string>();
+  // The list is bounded by `created_after`, so it ends; a cursor OpenRouter
+  // repeats ends it too, rather than reading the same page forever.
+  for (;;) {
     let answer = await callOpenRouterBatchAPI(dbAdapter, {
       url: openRouterBatchListURL({ createdAfter, after }),
       method: 'GET',
@@ -248,9 +270,11 @@ async function reconcileOpenRouterBatches(
           .map(unrecorded),
       )),
     );
-    if (!list.hasMore || !list.lastId) {
+    onProgress();
+    if (!list.hasMore || !list.lastId || pagesRead.has(list.lastId)) {
       break;
     }
+    pagesRead.add(list.lastId);
     after = list.lastId;
   }
   for (let batch of found) {

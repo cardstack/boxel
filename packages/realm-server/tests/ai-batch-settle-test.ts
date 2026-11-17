@@ -8,6 +8,7 @@ import {
   getAIBatch,
   getAutomationRun,
   insertPermissions,
+  listUnsettledAIBatches,
   recordAIBatch,
   reserveAutomationRunAICredits,
   ri,
@@ -658,5 +659,91 @@ module(basename(import.meta.filename), function (hooks) {
 
     let again = await settleAIBatches(dbAdapter);
     assert.strictEqual(again.unrecorded, 0, 'it isn’t reported a second time');
+  });
+
+  test('a batch OpenRouter can’t answer for takes its turn behind the batches not yet read', async function (assert) {
+    await submittedBatch('batch_unknown', '2026-11-11T11:30:00.000Z');
+    await submittedBatch('batch_newer', '2026-11-11T11:31:00.000Z');
+    // Only the older batch has been read, and OpenRouter doesn't know it.
+    await dbAdapter.execute(
+      `UPDATE ai_batches SET submitted_at = now() - interval '1 hour' WHERE batch_id = 'batch_unknown'`,
+    );
+    let [first] = await listUnsettledAIBatches(dbAdapter, { limit: 1 });
+    assert.strictEqual(
+      first.batchId,
+      'batch_unknown',
+      'oldest first while unread',
+    );
+    batchAnswers.set('batch_newer', {
+      status: 200,
+      body: openRouterBatch('batch_newer', { status: 'in_progress' }),
+    });
+    await settleAIBatches(dbAdapter);
+
+    batchAnswers.set('batch_newer', {
+      status: 200,
+      body: openRouterBatch('batch_newer', { status: 'in_progress' }),
+    });
+    await dbAdapter.execute(
+      `UPDATE ai_batches SET settle_read_at = now() - interval '1 minute' WHERE batch_id = 'batch_newer'`,
+    );
+    await dbAdapter.execute(
+      `UPDATE ai_batches SET settle_read_at = now() WHERE batch_id = 'batch_unknown'`,
+    );
+    [first] = await listUnsettledAIBatches(dbAdapter, { limit: 1 });
+    assert.strictEqual(
+      first.batchId,
+      'batch_newer',
+      'the batch read longest ago comes first, so a batch that never settles can’t hold back the rest',
+    );
+    assert.ok(
+      (await getAIBatch(dbAdapter, 'batch_unknown'))!.settleReadAt,
+      'every read is recorded, whatever OpenRouter answers',
+    );
+  });
+
+  test('a pass reports progress after each batch and each page of the list', async function (assert) {
+    await submittedBatch();
+    batchAnswers.set('batch_123', {
+      status: 200,
+      body: openRouterBatch('batch_123', { status: 'in_progress' }),
+    });
+    let progress = 0;
+
+    await settleAIBatches(dbAdapter, { onProgress: () => progress++ });
+
+    assert.strictEqual(progress, 2, 'one batch and one page');
+  });
+
+  test('an unrecorded batch whose row lands later is resolved', async function (assert) {
+    let now = Math.floor(Date.now() / 1000);
+    listPages = [
+      {
+        data: [
+          openRouterBatch('batch_slow', {
+            status: 'in_progress',
+            createdAt: now - 7200,
+          }),
+        ],
+        last_id: 'batch_slow',
+        has_more: false,
+      },
+    ];
+    let first = await settleAIBatches(dbAdapter);
+    assert.strictEqual(first.unrecorded, 1);
+
+    // The submit's row lands after the grace period.
+    await submittedBatch('batch_slow');
+    batchAnswers.set('batch_slow', {
+      status: 200,
+      body: openRouterBatch('batch_slow', { status: 'in_progress' }),
+    });
+    let second = await settleAIBatches(dbAdapter);
+
+    assert.strictEqual(second.unrecorded, 0);
+    let [row] = (await dbAdapter.execute(
+      `SELECT resolved_at FROM unrecorded_ai_batches WHERE batch_id = 'batch_slow'`,
+    )) as { resolved_at: string | null }[];
+    assert.ok(row.resolved_at, 'its unrecorded row is resolved');
   });
 });

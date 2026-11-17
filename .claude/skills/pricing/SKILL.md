@@ -567,6 +567,8 @@ included, so a batch goes out only through the batch path.
 | `expires_at`             | when OpenRouter says the provider stops working on the batch                                                 |
 | `state`, `state_read_at` | OpenRouter's status as last read, and when. A final status is never overwritten                              |
 | `finalized_at`           | when the batch reached a final status: OpenRouter's `finalized_at`, or when a final status was first read    |
+| `deadline_missed_at`     | when a run first read the batch, at or after its deadline, and found it still open                           |
+| `settle_read_at`         | when the settle job last tried to read the batch                                                             |
 | `settled_at`             | when the settle job billed the batch. Null while its cost is pending                                         |
 | `billed_usd`             | what the settle job billed, in USD                                                                           |
 | `billed_at_estimate`     | true when `billed_usd` is the estimate because OpenRouter reported no cost                                   |
@@ -629,8 +631,9 @@ and `AI_BATCH_SETTLE_CRON_TZ` override it), at the system tier. A job that
 arrives while another is waiting joins it. Its task hands the pass to the
 realm server's `aiBatchSettlementFor`
 (`packages/realm-server/lib/ai-batch-settle.ts`), which reads OpenRouter
-with the same system key the batch path uses. For each unsettled batch,
-oldest first, a pass reads `GET /api/v1/batches/<batch id>`, records its
+with the same system key the batch path uses. For each unsettled batch, the
+ones it tried least recently first (`settle_read_at`, so a batch OpenRouter
+never answers for can't hold back the rest), a pass reads `GET /api/v1/batches/<batch id>`, records its
 status, and settles it once it has ended (`completed`, `failed`, `expired`
 or `cancelled`):
 
@@ -676,10 +679,13 @@ lists it as unbilled (below). The job logs `settled batch <id> …` on the
 `ai-batch-settle` channel for each batch, with what it billed and whether
 that was the estimate.
 
-**A late batch.** A batch whose `finalized_at` is after its `deadline` is
-late: its follow-up run has already sent the same requests at the normal
-price. It is billed like any batch, and the batch path discards its results:
-a status read answers with `results: null` (`isLateAIBatch`).
+**A late batch.** A run that reads a batch at or after its `deadline` and
+finds it still open sends the same requests at the normal price (ADR 030
+§1.3). The batch path records that read as `deadline_missed_at`, and the
+batch is late from then on. It is billed like any batch, and its results are
+discarded: a status read answers with `results: null` (`isLateAIBatch`). A
+batch that ended before any run read it past its deadline isn't late, and
+its results are used. Only a run's read counts, not the settle job's.
 
 **A batch that may exist with no row.** A batch is recorded only after
 OpenRouter answers its submit. A submit whose outcome is unknown (it timed
@@ -693,12 +699,15 @@ process that stops between the answer and the insert leaves no event.
 Each settle pass also reads OpenRouter's batch list
 (`GET /api/v1/batches`, newest first, every key in the workspace sees the
 same list) for the batches created in the last 48 hours, and records each
-one older than ten minutes that has no `ai_batches` row in
+one older than 30 minutes (three times the longest a submit waits for
+OpenRouter's answer) that has no `ai_batches` row in
 `unrecorded_ai_batches` (batch id, model, status, request count, reported
 cost, created at). Each is logged and sent to Sentry once, as `OpenRouter
 batch <id> has no ai_batches row`. Match it to a Sentry event above by its
 model, request count and time, bill it by hand from that event, and set the
-row's `resolved_at`:
+row's `resolved_at`. A row whose batch turns up in `ai_batches` after all is
+resolved by the next pass. A pass reads every page of the window, and the
+job heartbeats after each batch and page, so a long pass isn't timed out:
 
 ```sql
 -- Batches OpenRouter lists that nothing bills.

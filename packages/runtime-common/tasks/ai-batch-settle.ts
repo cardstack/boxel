@@ -1,6 +1,6 @@
 import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index.ts';
-import { jobIdentity } from '../index.ts';
+import { heartbeatJob, jobIdentity } from '../index.ts';
 import {
   registerQueueJobDefinition,
   type QueueCoalesceContext,
@@ -57,7 +57,11 @@ const aiBatchSettle: Task<AIBatchSettleArgs, AIBatchSettleResult> = ({
         );
         return { settled: 0, open: 0, failed: 0, unrecorded: 0 };
       }
-      let result = await aiBatchSettlement.settle();
+      // A pass over a large backlog reads OpenRouter once per batch and per
+      // page of its batch list, so it heartbeats after each one.
+      let result = await aiBatchSettlement.settle({
+        onProgress: () => heartbeatJob(jobInfo?.reservationId),
+      });
       let { settled, open, failed, unrecorded } = result;
       if (settled + failed + unrecorded > 0) {
         log.info(
