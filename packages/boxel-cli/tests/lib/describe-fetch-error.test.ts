@@ -53,4 +53,30 @@ describe('describeFetchError', () => {
       expect(describeFetchError(err)).toBe('outer');
     }
   });
+
+  it('names the code and per-address errors of a refused multi-address connect', () => {
+    let refused = new AggregateError(
+      [
+        new Error('connect ECONNREFUSED ::1:4201'),
+        new Error('connect ECONNREFUSED 127.0.0.1:4201'),
+      ],
+      '',
+    ) as AggregateError & { code?: string };
+    refused.code = 'ECONNREFUSED';
+    let err = new TypeError('fetch failed') as TypeError & { cause?: unknown };
+    err.cause = refused;
+    expect(describeFetchError(err)).toBe(
+      'fetch failed (caused by: ECONNREFUSED: connect ECONNREFUSED ::1:4201; connect ECONNREFUSED 127.0.0.1:4201)',
+    );
+  });
+
+  it('falls back to the code of a cause with an empty message', () => {
+    let cause = new Error('') as Error & { code?: string };
+    cause.code = 'ECONNRESET';
+    let err = new TypeError('fetch failed') as TypeError & { cause?: unknown };
+    err.cause = cause;
+    expect(describeFetchError(err)).toBe(
+      'fetch failed (caused by: ECONNRESET)',
+    );
+  });
 });
