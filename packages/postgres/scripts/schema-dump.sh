@@ -77,6 +77,8 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=password_change_device_sweeps \
   --exclude-table-and-children=proxy_endpoint_history \
   --exclude-table-and-children=platform_oauth_client_history \
+  --exclude-table-and-children=platform_secrets \
+  --exclude-table-and-children=platform_secret_history \
   --exclude-table-and-children=billable_call_reservations \
   --exclude-table-and-children=claimed_domains_for_sites \
   --exclude-table-and-children=session_rooms \

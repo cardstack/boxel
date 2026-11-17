@@ -21,7 +21,7 @@ import type { OperatorTokenClaim } from '../utils/operator-token.ts';
 
 export const MAX_SYSTEM_KEY_BODY_BYTES = 64 * 1024;
 
-async function respond(
+export async function respond(
   ctxt: Koa.Context,
   status: number,
   body: unknown,
@@ -35,12 +35,14 @@ async function respond(
   );
 }
 
-class BodyTooLarge extends Error {}
+export class BodyTooLarge extends Error {}
 
 // Reads the JSON body, refusing it as soon as its declared length or the bytes
 // received so far exceed the limit, so an oversized body is never buffered
-// whole.
-async function readJSONBody(ctxt: Koa.Context): Promise<Record<string, any>> {
+// whole. The platform secrets routes read their bodies the same way.
+export async function readJSONBody(
+  ctxt: Koa.Context,
+): Promise<Record<string, any>> {
   let declared = Number(ctxt.req.headers['content-length']);
   if (Number.isFinite(declared) && declared > MAX_SYSTEM_KEY_BODY_BYTES) {
     throw new BodyTooLarge();
