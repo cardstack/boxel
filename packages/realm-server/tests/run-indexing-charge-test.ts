@@ -36,7 +36,9 @@ import {
   exactMeteredCredits,
   meteredChargesFor,
 } from '../lib/metered-charge.ts';
+import { RUN_COMMIT_PATH } from '@cardstack/runtime-common/run-overlay';
 import {
+  createAutomationRunToken,
   insertUser,
   setupPermissionedRealmCached,
   testPricing,
@@ -95,6 +97,7 @@ module(basename(import.meta.filename), function (hooks) {
     realmURL: testRealm,
     permissions: {
       '*': ['read', 'write'],
+      [PAYER]: ['read', 'write'],
       '@node-test_realm:localhost': ['read', 'write', 'realm-owner'],
     },
     fileSystem: {
@@ -130,6 +133,11 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  // How the commit of `run`'s batch names the run to the write.
+  function runWrite() {
+    return { runId: run.id, automationId: run.automationId };
+  }
+
   // Every job that carried the run's indexing, oldest first.
   async function runJobs(runId: string): Promise<RunJobRow[]> {
     return (await dbAdapter.execute(
@@ -155,7 +163,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a run’s commit is charged its index and render time once, by the render job that ends it', async function (assert) {
     await realm.writeMany(new Map([['ada.json', person('Ada Lovelace')]]), {
-      runId: run.id,
+      automationRun: runWrite(),
     });
     await settled();
 
@@ -229,6 +237,58 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a run that commits through the run-commit route is charged its indexing', async function (assert) {
+    let { token, run: committing } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      PAYER,
+    );
+    let staged = await realm.handle(
+      new Request(`${testRealm.href}ada.json`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+source',
+          Authorization: `Bearer ${token}`,
+        },
+        body: person('Ada Lovelace'),
+      }),
+    );
+    assert.strictEqual(staged!.status, 204, 'the run staged its write');
+    let committed = await realm.handle(
+      new Request(`${testRealm.href}${RUN_COMMIT_PATH.slice(1)}`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.api+json',
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+    );
+    assert.strictEqual(committed!.status, 200, 'the run committed');
+    await settled();
+
+    let jobs = await runJobs(committing.id);
+    assert.strictEqual(
+      jobs[0]?.job_type,
+      'incremental-index',
+      'the commit’s index pass carries the run',
+    );
+    let charges = await runIndexingCharges(committing.id);
+    assert.strictEqual(
+      new Set(charges.map(({ chargeId }) => chargeId)).size,
+      1,
+      'the run’s indexing is one charge',
+    );
+    assert.strictEqual(
+      charges[0].userId,
+      payerId,
+      'charged to the run’s identity',
+    );
+    assert.true(
+      (await chargedUsage(committing.id)).worker_process_seconds > 0,
+      'the charge covers the commit’s indexing',
+    );
+  });
+
   test('a commit that indexes in two passes is still one charge, covering both', async function (assert) {
     // A module and an instance in one batch: the module is indexed first, in
     // a pass of its own, so the instance can be serialized against it.
@@ -237,7 +297,7 @@ module(basename(import.meta.filename), function (hooks) {
         ['person.gts', personModule(1)],
         ['ada.json', person('Ada Lovelace')],
       ]),
-      { runId: run.id },
+      { automationRun: runWrite() },
     );
     await settled();
 
@@ -299,7 +359,7 @@ module(basename(import.meta.filename), function (hooks) {
         ['other.gts', personModule(7).replace('Person', 'Other')],
         ['ada.json', person('Ada')],
       ]),
-      { runId: run.id },
+      { automationRun: runWrite() },
     );
     await settled();
 
@@ -428,7 +488,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a run that wrote only what was stored causes no indexing and no charge', async function (assert) {
     await realm.writeMany(new Map([['ada.json', person('Ada')]]), {
-      runId: run.id,
+      automationRun: runWrite(),
     });
     await settled();
 
