@@ -46,6 +46,10 @@ import {
   type AutomationTriggerDeclaration,
 } from './automation-declaration.ts';
 import {
+  reportRunChanges,
+  type ReportRunChange,
+} from './automation-run-events.ts';
+import {
   cancelAutomationRunIn,
   cancelUnfinishedAutomationRuns,
   getAutomationRun,
@@ -157,6 +161,8 @@ export interface AutomationActorOptions {
   // Unix seconds; the current time when absent. Where a schedule starts, its
   // `since` and the next run are computed from this.
   now?: number;
+  // Told of each run a change cancels, once the change has committed.
+  reportRunChange?: ReportRunChange;
 }
 
 // A change was refused:
@@ -277,7 +283,8 @@ export async function pauseAutomation(
   }: { automationId: RealmResourceIdentifier; user: string },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
-  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
+  let report = options.reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
     let found = await lockForDirectWriter(txQuery, automationId, user, options);
     if (!found.ok) {
       return found;
@@ -369,7 +376,8 @@ export async function removeAutomation(
   }: { automationId: RealmResourceIdentifier; user: string },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
-  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
+  let report = options.reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
     let found = await lockForDirectWriter(txQuery, automationId, user, options);
     if (!found.ok) {
       return found;
@@ -430,6 +438,7 @@ export async function cancelAutomationRunFor(
   );
   if (result.ok) {
     await logAutomationRunEnded(dbAdapter, result.run);
+    await options.reportRunChange?.(result.run.id);
     return result;
   }
   if (result.reason === 'not-a-direct-writer') {
@@ -480,8 +489,10 @@ export async function checkAutomationCaps(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
   card: Pick<AutomationDeclaration, 'caps' | 'batchedAI'>,
+  reportRunChange?: ReportRunChange,
 ): Promise<AutomationRow | undefined> {
-  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
+  let report = reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
     let row = await selectAutomation(txQuery, automationId, { lock: true });
     if (!row) {
       return undefined;
@@ -507,7 +518,8 @@ export async function checkAutomationPayer(
   automationId: RealmResourceIdentifier,
   options: Omit<AutomationActorOptions, 'now'>,
 ): Promise<AutomationRow | undefined> {
-  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
+  let report = options.reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
     let seen = await selectAutomation(txQuery, automationId);
     if (!seen) {
       return undefined;
@@ -543,8 +555,10 @@ export async function pauseForPayerLostAccess(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
   payer: string,
+  reportRunChange?: ReportRunChange,
 ): Promise<AutomationRow | undefined> {
-  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
+  let report = reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
     let row = await selectAutomation(txQuery, automationId, { lock: true });
     if (!row) {
       return undefined;
@@ -586,6 +600,8 @@ export interface AutomationSyncOptions {
   virtualNetwork: Pick<VirtualNetwork, 'toURL' | 'toURLHref'>;
   // Unix seconds; the current time when absent.
   now?: number;
+  // Told of each run the sync cancels, once it has committed.
+  reportRunChange?: ReportRunChange;
 }
 
 // Brings a switched-on automation's row in step with its card as just
@@ -611,7 +627,8 @@ export async function syncAutomationWithCard(
   options: AutomationSyncOptions,
 ): Promise<AutomationSync | undefined> {
   let now = options.now ?? currentUnixSeconds();
-  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
+  let report = options.reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
     let row = await selectAutomation(txQuery, automationId, { lock: true });
     if (!row) {
       return undefined;
@@ -716,8 +733,10 @@ export async function automationsInRealm(
 export async function pauseRealmAutomations(
   dbAdapter: DBAdapter,
   realm: RealmIdentifier,
+  reportRunChange?: ReportRunChange,
 ): Promise<AutomationRow[]> {
-  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
+  let report = reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
     let rows = await txQuery([
       'SELECT automation_id FROM automations WHERE realm =',
       param(realm),
@@ -857,11 +876,13 @@ async function pause(
 // Runs a change to automations in one transaction, collecting the runs it
 // cancels in `canceled`, and writes each canceled run's last log line once
 // the transaction has committed: a log line locks its run's row, which the
-// transaction holds until then. A transaction the database rolls back and
+// transaction holds until then. Each canceled run is then reported to
+// `reportRunChange`. A transaction the database rolls back and
 // retries starts its collection afresh, so only the attempt that committed
 // is logged.
 async function withRunCancels<T>(
   dbAdapter: DBAdapter,
+  reportRunChange: ReportRunChange | undefined,
   change: (txQuery: Querier, canceled: AutomationRun[]) => Promise<T>,
 ): Promise<T> {
   let canceled: AutomationRun[] = [];
@@ -872,6 +893,7 @@ async function withRunCancels<T>(
   for (let run of canceled) {
     await logAutomationRunEnded(dbAdapter, run);
   }
+  await reportRunChanges(reportRunChange, canceled);
   return result;
 }
 

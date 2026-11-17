@@ -156,6 +156,7 @@ async function startManualRun(
       triggerKind: 'manual',
     },
   });
+  await options.reportRunChange?.(run.id);
   return { ok: true, run, job };
 }
 

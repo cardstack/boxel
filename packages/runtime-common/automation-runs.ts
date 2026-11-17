@@ -101,7 +101,8 @@ export interface AutomationRun extends AutomationRunCounts {
   startedAt: string | null;
   // When the attempt that owns the run admitted it (see
   // `automation-admission.ts`). Each attempt admits the run again before it
-  // runs the script, so this is the latest admission.
+  // runs the script, so this is the latest admission; an attempt that takes
+  // the run over from another clears it until that attempt admits the run.
   admittedAt: string | null;
   commitStartedAt: string | null;
   committedAt: string | null;
@@ -270,9 +271,10 @@ export async function startAutomationRunAttempt(
   // run's row, since the takeover waited on that lock. A run whose commit was
   // already claimed keeps its files: the claiming attempt may still be
   // reading them to send its batch. An attempt that takes the run from
-  // another also clears the run's milestones, since the script runs again
-  // from its start and reports them afresh. The run's row is locked first,
-  // the order `appendRunLog` takes the locks in.
+  // another also clears the run's admission and milestones, since it admits
+  // the run again and the script runs again from its start and reports them
+  // afresh. The run's row is locked first, the order `appendRunLog` takes the
+  // locks in.
   let row = await dbAdapter.withTransaction(async (txQuery) => {
     let [owner] = await txQuery([
       'SELECT attempt FROM automation_runs WHERE id =',
@@ -297,6 +299,14 @@ export async function startAutomationRunAttempt(
       ]);
       if (owner?.attempt != null && Number(owner.attempt) !== attempt) {
         await clearRunMilestones(txQuery, id);
+        if (started.admitted_at != null) {
+          let [readmitting] = await txQuery([
+            'UPDATE automation_runs SET admitted_at = NULL WHERE id =',
+            param(id),
+            'RETURNING *',
+          ]);
+          return readmitting;
+        }
       }
     }
     return started;
