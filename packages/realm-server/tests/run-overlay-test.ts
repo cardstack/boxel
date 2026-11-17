@@ -1528,8 +1528,12 @@ export class Mine extends Automation {}`;
     });
     assert.strictEqual(posted.status, 409, `the card create: ${posted.text}`);
     // The card routes answer a refusal in the shape they always have, with
-    // the commit's status and reason.
-    assert.strictEqual(posted.json.errors[0].message, reason);
+    // the commit's status and reason. The realm names the new card's file, so
+    // the reason names that file where the others name `grace.json`.
+    let [before, after] = reason.split('Person/grace.json');
+    let postMessage = String(posted.json.errors[0].message);
+    assert.ok(postMessage.startsWith(`${before}Person/`), postMessage);
+    assert.ok(postMessage.endsWith(`.json${after}`), postMessage);
 
     let created = await operations(token, [
       {
