@@ -2,8 +2,13 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { md5 } from 'super-fast-md5';
+import type { PgAdapter } from '@cardstack/postgres';
 import { encodeHashedScopedCSSRequest } from '@cardstack/runtime-common/scoped-css';
-import { resolveScopedCSSFromDeps } from '../lib/retrieve-scoped-css.ts';
+import {
+  lookupScopedCSSByHash,
+  resolveScopedCSSFromDeps,
+} from '../lib/retrieve-scoped-css.ts';
+import { setupDB } from './helpers/index.ts';
 
 function scopedCSSDep(moduleId: string, css: string): string {
   let encoded = Buffer.from(css, 'utf8').toString('base64');
@@ -151,6 +156,75 @@ module(basename(import.meta.filename), function () {
         hashedScopedCSSDep('@cardstack/base/a.gts', '.x { top: 0; }'),
       ];
       assert.strictEqual(await resolveScopedCSSFromDeps(deps, noLookup), null);
+    });
+  });
+
+  module('lookupScopedCSSByHash', function (hooks) {
+    let dbAdapter: PgAdapter;
+
+    setupDB(hooks, {
+      beforeEach: async (adapter) => {
+        dbAdapter = adapter;
+      },
+    });
+
+    async function intern(realmURL: string, css: string) {
+      await dbAdapter.execute(
+        `INSERT INTO scoped_css (realm_url, hash, css, last_interned_at) VALUES ($1, $2, $3, $4)`,
+        { bind: [realmURL, md5(css), css, Date.now()] },
+      );
+    }
+
+    test('returns one stylesheet per hash when several realms hold a copy', async function (assert) {
+      let shared = '.shared { color: red; }';
+      let own = '.own { color: blue; }';
+      for (let realm of [
+        'http://localhost:4201/a/',
+        'http://localhost:4201/b/',
+        'http://localhost:4201/c/',
+      ]) {
+        await intern(realm, shared);
+      }
+      await intern('http://localhost:4201/a/', own);
+
+      let result = await lookupScopedCSSByHash(dbAdapter, [
+        md5(shared),
+        md5(own),
+      ]);
+
+      assert.deepEqual(
+        [...result.entries()].sort(([a], [b]) => a.localeCompare(b)),
+        [
+          [md5(shared), shared],
+          [md5(own), own],
+        ].sort(([a], [b]) => a.localeCompare(b)),
+      );
+    });
+
+    test('leaves out hashes no realm holds', async function (assert) {
+      let held = '.held { top: 0; }';
+      await intern('http://localhost:4201/a/', held);
+
+      let result = await lookupScopedCSSByHash(dbAdapter, [
+        md5(held),
+        md5('.gone { top: 0; }'),
+      ]);
+
+      assert.deepEqual([...result.entries()], [[md5(held), held]]);
+    });
+
+    test('accepts the same hash more than once', async function (assert) {
+      let css = '.twice { top: 0; }';
+      await intern('http://localhost:4201/a/', css);
+
+      let result = await lookupScopedCSSByHash(dbAdapter, [md5(css), md5(css)]);
+
+      assert.deepEqual([...result.entries()], [[md5(css), css]]);
+    });
+
+    test('returns an empty map for no hashes', async function (assert) {
+      let result = await lookupScopedCSSByHash(dbAdapter, []);
+      assert.strictEqual(result.size, 0);
     });
   });
 });
