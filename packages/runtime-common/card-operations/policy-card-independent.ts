@@ -26,8 +26,11 @@
 //   `IN`, `INDEX` and `JOIN` read theirs;
 // - testing it for truth, comparing it, or doing arithmetic with it;
 // - indexing, slicing or iterating it, and a computed object key;
-// - binding it to a variable, since a destructuring pattern reads what it
-//   binds and the parsed tree does not mark one;
+// - any binding (`… as $x`), whatever it binds. The parsed tree keeps the
+//   names a destructuring pattern binds and drops the keys it computes, so a
+//   pattern such as `{(instance().status): $v}` can hold a read the walk would
+//   never see, and `?//` can turn an error that read raises into a different
+//   answer;
 // - `instance()`, which reads the card whatever its input;
 // - a context path (`Record`, `$new`, `@User`), which the gate does not bind,
 //   and a construct the policy profile refuses (`def`, `reduce`, `foreach`).
@@ -110,8 +113,7 @@ function walk(node: unknown, input: boolean): boolean {
       return false;
     }
     case 'variable':
-      // Only a value already used can be bound, so no variable holds
-      // anything of the card.
+      // No binding is walked past, so a variable holds nothing of the card.
       return false;
     case 'format':
     case 'recursiveDescent':
@@ -153,7 +155,10 @@ function walk(node: unknown, input: boolean): boolean {
         let { key, value } = entry as { key?: unknown; value?: unknown };
         if (value === undefined) {
           // `{name}` is `{name: .name}`, and `{$name}` is `{name: $name}`.
-          if (!String(key).startsWith('$')) {
+          if (typeof key !== 'string') {
+            throw new ReadsTheCard();
+          }
+          if (!key.startsWith('$')) {
             use(input);
           }
           continue;
@@ -183,8 +188,8 @@ function walk(node: unknown, input: boolean): boolean {
       use(walk(node.expr, input));
       return false;
     case 'binding':
-      use(walk(node.expr, input));
-      return walk(node.next, input);
+      // A destructuring pattern's computed keys aren't in the parsed tree.
+      throw new ReadsTheCard();
     case 'label':
       return walk(node.next, input);
     case 'break':

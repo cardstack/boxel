@@ -155,7 +155,6 @@ module(basename(import.meta.filename), function () {
         'actor() == "@reviewer:localhost"',
         'actor() != "anonymous"',
         'policy().reviewers | any(. == actor())',
-        'realmConfig("reviewers") as $list | $list | any(. == actor())',
         '(realmConfig("open") == true) and (realmConfig("reviewers") | any(. == actor()))',
         'realmConfig("teams") | map(.members) | any(any(. == actor()))',
         // The card is put in an array and dropped, unread.
@@ -172,6 +171,9 @@ module(basename(import.meta.filename), function () {
         'instance().owner == actor()',
         '(realmConfig("reviewers") | any(. == actor())) and .status == "open"',
         '. as $note | true',
+        // Any binding, since the parsed tree drops a pattern's computed keys.
+        'realmConfig("reviewers") as $list | $list | any(. == actor())',
+        'realmConfig() as {(instance().status): $v} ?// $w | $w != null',
         '(., .[]) | true',
         'if . then true else false end',
         'realmConfig(.key) | any(. == actor())',
