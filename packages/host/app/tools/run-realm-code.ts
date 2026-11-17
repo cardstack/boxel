@@ -3776,8 +3776,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'refresh the index of the workspace with realm.index.*. ' +
     'realm.cards.get answers the card itself, and realm.cards.search ' +
     'answers { cards, total, truncated } with each card the same: ' +
-    `${FOUND_CARD_SHAPE}, where path is its file and ` +
-    "relationships holds each link's URL by field path. Neither has the " +
+    `${FOUND_CARD_SHAPE}, where path is its file, type is { module, ` +
+    "name } and can be missing, and relationships holds each link's URL by " +
+    'field path. Neither has the ' +
     ".data of a card's .json file. realm.cards.get throws when it cannot " +
     'read the card, with the reason, so a card it answers was found. ' +
     'A card that ' +
