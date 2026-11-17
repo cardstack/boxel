@@ -1,6 +1,6 @@
 import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index.ts';
-import { jobIdentity } from '../index.ts';
+import { heartbeatJob, jobIdentity } from '../index.ts';
 import {
   registerQueueJobDefinition,
   type QueueCoalesceContext,
@@ -17,7 +17,6 @@ export interface AutomationReconcileResult extends JSONTypes.Object {
   // Runs whose job was gone, by what reconcile did with each.
   requeued: number;
   ended: number;
-  left: number;
   failed: number;
   // Automations whose next run the tick had missed, and the runs the tick's
   // procedure started and skipped for them.
@@ -69,6 +68,9 @@ const automationReconcile: Task<
         virtualNetwork,
         meteredCharges,
         log,
+        // A pass after a long outage can outlast the job's timeout; each run,
+        // automation and step it handles is progress.
+        onProgress: () => heartbeatJob(jobInfo?.reservationId),
         readDeclaration: (automationId) =>
           readRunDeclaration({
             dbAdapter,
@@ -80,7 +82,6 @@ const automationReconcile: Task<
       let result: AutomationReconcileResult = {
         requeued: 0,
         ended: 0,
-        left: 0,
         failed: 0,
         overdue: 0,
         madeUp: 0,
@@ -98,12 +99,6 @@ const automationReconcile: Task<
             result.ended++;
             log.warn(
               `${tag}: run ${outcome.run.id} of automation ${outcome.run.automationId} (trigger ${outcome.run.trigger}, slot ${outcome.run.slot}) had no live job and ended ${outcome.run.state}: ${outcome.why}`,
-            );
-            break;
-          case 'left':
-            result.left++;
-            log.warn(
-              `${tag}: run ${outcome.runId} of automation ${outcome.automationId} has no live job, left for a later pass: ${outcome.why}`,
             );
             break;
           case 'failed':
@@ -169,7 +164,7 @@ const automationReconcile: Task<
         Object.values(reconciled.steps).some((count) => count > 0)
       ) {
         log.info(
-          `${tag}: ${result.requeued} requeued, ${result.ended} ended, ${result.left} left, ${result.overdue} overdue, ${result.madeUp} made up, ${result.skipped} skipped, ${result.failed} failed`,
+          `${tag}: ${result.requeued} requeued, ${result.ended} ended, ${result.overdue} overdue, ${result.madeUp} made up, ${result.skipped} skipped, ${result.failed} failed`,
         );
       }
       return result;

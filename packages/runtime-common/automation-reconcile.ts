@@ -8,16 +8,25 @@
 //   unfinished `run-command` job carrying its `dedupeKey`, and it was made at
 //   least `graceSeconds` ago (the grace covers the moment between writing a
 //   run's row and publishing its job). Its job ran out of reservations, or
-//   finished without ending the run, or was never published. Reconcile
-//   enqueues the same run again, once: the new job's attempt takes the run
-//   over (`startAutomationRunAttempt`), so a run whose commit never started
-//   runs its script again, one whose commit landed finishes complete, and one
-//   whose commit was claimed and never recorded ends as `commit-interrupted`.
-//   The run keeps its slot, so the make-up's slot is the missed instant and
-//   its trigger's count and cursor don't change. `reconciled_at` records the
-//   new job. A run still left with no live job after that, or one reconcile
-//   can't enqueue again, is ended with `abandonAutomationRun` (reason
-//   `job-lost`) and charged for what it used.
+//   finished without ending the run, or was never published.
+//
+//   A **pending** run never started, so reconcile enqueues the same run's
+//   job again, once, and records `reconciled_at`. The run keeps its slot, so
+//   the make-up's slot is the missed instant and its trigger's count and
+//   cursor don't change. Its card's `seconds` cap sets the job's timeout; a
+//   card that can't be read gets the longest a run may take, and the run's
+//   admission then ends it with the reason the card doesn't read.
+//
+//   A **running** run is ended: an attempt had started it, and a retry gets
+//   only what is left of the run's time limit, counted from that first start,
+//   which a job the queue gave up on has long since used. The trigger's next
+//   run catches up on everything since, because the realm is the state.
+//
+//   `abandonAutomationRun` ends a run (reason `job-lost`; `complete` when its
+//   commit landed), and the run is charged for what it used. A pending run
+//   whose extra job was lost too is ended the same way, as is a scheduled run
+//   whose automation is paused or no longer switched on, or whose trigger is
+//   gone from its card.
 // - **A due time that passed with nothing enqueued.** An automation whose
 //   next run is `graceSeconds` or more behind is one the minute tick missed
 //   (the tick was down, or its worker manager just started). Reconcile hands
@@ -38,7 +47,10 @@
 // `registerAutomationReconcileStep`; each pass runs every registered step
 // after its own.
 
-import { MANUAL_RUN_TRIGGER } from './automation-declaration.ts';
+import {
+  MANUAL_RUN_TRIGGER,
+  MAX_RUN_SECONDS,
+} from './automation-declaration.ts';
 import { chargeAutomationRun } from './automation-run-charge.ts';
 import { logRunPlatformLine } from './automation-run-log.ts';
 import {
@@ -96,15 +108,17 @@ export interface AutomationReconcileOptions {
   now?: number;
   graceSeconds?: number;
   pageSize?: number;
+  // Called after each run, automation and step a pass handles, so the job
+  // running the pass can tell the queue it is getting somewhere
+  // (`heartbeatJob`). A pass after a long outage can outlast the job's
+  // timeout.
+  onProgress?: () => void;
 }
 
 // What reconcile did with one run whose job was gone:
 //
 // - `requeued`: it enqueued the run's job again (`jobId`).
-// - `ended`: it ended the run (`run`, as ended): reconcile had enqueued it
-//   once already, or can't enqueue it again (`why`).
-// - `left`: it left the run for a later pass: the run's card can't be read,
-//   so its time limit isn't known (`why`).
+// - `ended`: it ended the run (`run`, as ended), and `why`.
 // - `failed`: handling the run threw.
 export type AutomationLostRunOutcome =
   | {
@@ -118,12 +132,6 @@ export type AutomationLostRunOutcome =
   | {
       kind: 'ended';
       run: AutomationRun;
-      why: string;
-    }
-  | {
-      kind: 'left';
-      runId: string;
-      automationId: RealmResourceIdentifier;
       why: string;
     }
   | {
@@ -161,11 +169,18 @@ export type AutomationReconcileStep = (
 
 const reconcileSteps = new Map<string, AutomationReconcileStep>();
 
+// Adds a step under `name`, replacing any step already there. Returns a
+// function that removes it again.
 export function registerAutomationReconcileStep(
   name: string,
   step: AutomationReconcileStep,
-): void {
+): () => void {
   reconcileSteps.set(name, step);
+  return () => {
+    if (reconcileSteps.get(name) === step) {
+      reconcileSteps.delete(name);
+    }
+  };
 }
 
 export async function reconcileAutomations(
@@ -182,6 +197,7 @@ export async function reconcileAutomations(
     now,
     overdueBy: graceSeconds,
     pageSize: options.pageSize,
+    onProgress: options.onProgress,
   });
   let steps: Record<string, number> = {};
   for (let [name, step] of reconcileSteps) {
@@ -198,6 +214,7 @@ export async function reconcileAutomations(
     } catch (error) {
       options.log.error(`automation-reconcile step ${name} failed:`, error);
     }
+    options.onProgress?.();
   }
   return { lostRuns, overdue, steps };
 }
@@ -239,6 +256,7 @@ async function reconcileLostRuns(
       } catch (error) {
         outcomes.push({ kind: 'failed', runId, automationId, error });
       }
+      options.onProgress?.();
     }
     if (rows.length < pageSize) {
       return outcomes;
@@ -278,6 +296,12 @@ async function reconcileLostRun(
         'its job was lost again after reconcile enqueued it once more',
       );
     }
+    if (run.state === 'running') {
+      return await end(
+        run,
+        "an attempt had started it, and a retry would get only what is left of the run's time limit",
+      );
+    }
     let scheduled = run.trigger !== MANUAL_RUN_TRIGGER;
     if (scheduled && (!automation || automation.state === 'paused')) {
       return await end(
@@ -287,18 +311,14 @@ async function reconcileLostRun(
           : 'its automation is no longer switched on',
       );
     }
+    // A card that can't be read still gets its run enqueued: the run's
+    // admission reads the card again and ends the run with the reason it
+    // doesn't read, so no run is left pending for good.
     let read = await options.readDeclaration(automationId);
-    if (!read.ok) {
-      return {
-        kind: 'left',
-        runId,
-        automationId,
-        why: `its card can't be read: ${read.message}`,
-      } as const;
-    }
-    let { declaration } = read;
+    let declaration = read.ok ? read.declaration : undefined;
     if (
       scheduled &&
+      declaration &&
       !declaration.triggers.some(
         ({ label, kind }) =>
           label === run.trigger && (kind === 'cron' || kind === 'once'),
@@ -322,7 +342,7 @@ async function reconcileLostRun(
       actsAs: run.actsAs,
       trigger: run.trigger,
       slot: run.slot,
-      secondsCap: declaration.caps.seconds,
+      secondsCap: declaration?.caps.seconds ?? MAX_RUN_SECONDS,
       input: scheduled
         ? { runId, scheduledAt: run.slot, dryRun: false }
         : {
@@ -355,7 +375,7 @@ async function reconcileLostRun(
       kind: 'trigger',
       level: 'warn',
       message:
-        'Reconcile enqueued this run again: it was unfinished and its job was gone',
+        'Reconcile enqueued this run again: it was still pending and its job was gone',
       data: { reconciled: true },
     });
   } else if (decided?.kind === 'ended') {

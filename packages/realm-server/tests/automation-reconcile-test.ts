@@ -21,16 +21,19 @@ import {
   switchOnAutomation,
   type AutomationRow,
 } from '@cardstack/runtime-common/automations';
-import type {
-  AutomationCaps,
-  AutomationDeclaration,
+import {
+  MAX_RUN_SECONDS,
+  type AutomationCaps,
+  type AutomationDeclaration,
 } from '@cardstack/runtime-common/automation-declaration';
+import { automationJobTimeoutSec } from '@cardstack/runtime-common/automation-run-command';
 import {
   tickAutomations,
   type AutomationDeclarationRead,
 } from '@cardstack/runtime-common/automation-tick';
 import {
   reconcileAutomations,
+  registerAutomationReconcileStep,
   JOB_LOST_REASON,
   type AutomationReconcileResult,
 } from '@cardstack/runtime-common/automation-reconcile';
@@ -95,6 +98,7 @@ function declaration(
 interface QueuedRun {
   id: number;
   status: string;
+  timeout: number;
   concurrencyGroup: string;
   dedupeKey: string;
   input: Record<string, unknown>;
@@ -172,7 +176,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function queuedRuns(): Promise<QueuedRun[]> {
     let rows = await query(dbAdapter, [
-      `SELECT id, status, concurrency_group, args FROM jobs WHERE job_type = 'run-command' ORDER BY id`,
+      `SELECT id, status, timeout, concurrency_group, args FROM jobs WHERE job_type = 'run-command' ORDER BY id`,
     ]);
     return rows.map((r) => {
       let args = (
@@ -181,6 +185,7 @@ module(basename(import.meta.filename), function (hooks) {
       return {
         id: Number(r.id),
         status: String(r.status),
+        timeout: Number(r.timeout),
         concurrencyGroup: String(r.concurrency_group),
         dedupeKey: args.dedupeKey,
         input: args.commandInput,
@@ -364,7 +369,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a running run whose job is gone is enqueued again, and the new attempt takes it over', async function (assert) {
+  test('a running run whose job is gone is ended, and its trigger carries on', async function (assert) {
     await switchOn();
     await tick(NOON + 30);
     let [run] = await runs();
@@ -372,26 +377,35 @@ module(basename(import.meta.filename), function (hooks) {
     await loseJobs();
     await madeAt(NOON + 30);
 
-    let result = await reconcile(NOON + 10 * 60);
-    assert.strictEqual(result.lostRuns[0]?.kind, 'requeued');
-    let start = await startAutomationRunAttempt(dbAdapter, run.id, 2);
+    let [outcome] = (await reconcile(NOON + 10 * 60)).lostRuns;
+    assert.strictEqual(outcome.kind, 'ended', 'the run is ended');
+    let after = await getAutomationRun(dbAdapter, run.id);
+    assert.strictEqual(after?.state, 'error');
+    assert.strictEqual(after?.errorReason, JOB_LOST_REASON);
     assert.strictEqual(
-      start.kind,
-      'run',
-      "the new job's attempt runs the script again",
+      (await queuedRuns()).length,
+      1,
+      'no job is enqueued for it again',
+    );
+
+    await tick(at('2026-11-10T13:00:30Z'));
+    assert.deepEqual(
+      (await runs()).map(({ slot, state }) => ({ slot, state })),
+      [
+        { slot: NOON_SLOT, state: 'error' },
+        { slot: '2026-11-10T13:00:00.000Z', state: 'pending' },
+      ],
+      "the trigger's next slot starts its own run",
     );
   });
 
-  test('a run whose commit landed and whose job was lost twice ends complete', async function (assert) {
+  test('a running run whose commit landed and whose job is gone ends complete', async function (assert) {
     await switchOn();
     await tick(NOON + 30);
     let [run] = await runs();
     await startAutomationRunAttempt(dbAdapter, run.id, 1);
     await claimAutomationRunCommit(dbAdapter, run.id, 1);
     await recordAutomationRunCommitted(dbAdapter, run.id);
-    await query(dbAdapter, [
-      `UPDATE automation_runs SET reconciled_at = now() WHERE id = '${run.id}'`,
-    ]);
     await loseJobs();
     await madeAt(NOON + 30);
 
@@ -502,7 +516,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test("a lost run whose card can't be read is left for a later pass", async function (assert) {
+  test("a lost run whose card can't be read is enqueued again with the longest time limit, for its admission to end", async function (assert) {
     await switchOn();
     await tick(NOON + 30);
     let [run] = await runs();
@@ -510,11 +524,59 @@ module(basename(import.meta.filename), function (hooks) {
     await madeAt(NOON + 30);
     card = { ok: false, message: 'the card failed to index' };
     let [outcome] = (await reconcile(NOON + 10 * 60)).lostRuns;
-    assert.strictEqual(outcome.kind, 'left');
+    assert.strictEqual(outcome.kind, 'requeued');
+    let [, job] = await queuedRuns();
     assert.strictEqual(
-      (await getAutomationRun(dbAdapter, run.id))?.state,
-      'pending',
+      job.timeout,
+      automationJobTimeoutSec(MAX_RUN_SECONDS),
+      'the job gets the longest a run may take',
     );
-    assert.strictEqual(await reconciledAt(run.id), null);
+    assert.ok(await reconciledAt(run.id));
+  });
+
+  test('a registered step runs on every pass, and its count is reported', async function (assert) {
+    let calls: number[] = [];
+    let unregister = registerAutomationReconcileStep(
+      'test-step',
+      async ({ now }) => {
+        calls.push(now);
+        return 2;
+      },
+    );
+    try {
+      let result = await reconcile(NOON);
+      assert.deepEqual(calls, [NOON], 'the step ran with the pass time');
+      assert.deepEqual(result.steps, { 'test-step': 2 });
+    } finally {
+      unregister();
+    }
+    assert.deepEqual(
+      (await reconcile(NOON)).steps,
+      {},
+      'an unregistered step no longer runs',
+    );
+  });
+
+  test('a pass reports progress for each run, automation and step it handles', async function (assert) {
+    await switchOn();
+    // One lost run, and an automation the tick missed by hours.
+    await createAutomationRun(dbAdapter, {
+      automationId: AUTOMATION,
+      realm: REALM,
+      trigger: 'manual',
+      slot: 'click-1',
+      actsAs: OWNER,
+    });
+    await madeAt(NOON);
+    let progress = 0;
+    await reconcileAutomations(dbAdapter, {
+      queue: publisher,
+      virtualNetwork,
+      readDeclaration: async () => card,
+      log: silentLog,
+      now: at('2026-11-10T15:30:00Z'),
+      onProgress: () => progress++,
+    });
+    assert.strictEqual(progress, 2, 'one lost run and one overdue automation');
   });
 });

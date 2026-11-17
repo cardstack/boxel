@@ -98,6 +98,8 @@ export interface AutomationTickOptions {
   // tick handles every due row.
   overdueBy?: number;
   pageSize?: number;
+  // Called after each automation the tick handles.
+  onProgress?: () => void;
 }
 
 // What the tick did with one due trigger slot.
@@ -199,6 +201,7 @@ export async function tickAutomations(
       } catch (error) {
         outcomes.push({ kind: 'failed', automationId, error });
       }
+      options.onProgress?.();
     }
     if (rows.length < pageSize) {
       return outcomes;
