@@ -110,18 +110,29 @@ const BOOTSTRAP = `
     // itself, with its fields at the top level, not the document of its
     // .json file. Reading .data from one throws and names the shape, where it
     // would otherwise be undefined and the card would read as missing. The
-    // property is not enumerable, so the card still serializes, spreads and
-    // goes back into a realm call without it.
-    const withoutData = (card, answers) => {
-      if (card !== null && typeof card === 'object') {
-        Object.defineProperty(card, 'data', {
-          get() {
-            throw new TypeError(
-              answers +
-                ': { id, path, type, attributes, relationships }. There is no .data; read its fields from .attributes and its links from .relationships',
-            );
+    // getter is on the card's prototype, not the card, so the card's own keys
+    // are its fields alone: it serializes, spreads, copies and goes back into
+    // a realm call without .data, and it has no own property named data.
+    const cardPrototype = (answers) =>
+      Object.freeze(
+        Object.create(Object.prototype, {
+          data: {
+            get() {
+              throw new TypeError(
+                answers +
+                  ': { id, path, type, attributes, relationships }. There is no .data; read its fields from .attributes and its links from .relationships',
+              );
+            },
           },
-        });
+        }),
+      );
+    const gotCard = cardPrototype('realm.cards.get returns the card itself');
+    const foundCard = cardPrototype(
+      'realm.cards.search returns each card itself',
+    );
+    const withoutData = (card, prototype) => {
+      if (card !== null && typeof card === 'object') {
+        Object.setPrototypeOf(card, prototype);
       }
       return card;
     };
@@ -205,15 +216,12 @@ const BOOTSTRAP = `
             search: async (query) => {
               const found = await call('cards.search', [query]);
               for (const card of found?.cards ?? []) {
-                withoutData(card, 'realm.cards.search returns each card itself');
+                withoutData(card, foundCard);
               }
               return found;
             },
             get: async (path) =>
-              withoutData(
-                await call('cards.get', [path]),
-                'realm.cards.get returns the card itself',
-              ),
+              withoutData(await call('cards.get', [path]), gotCard),
             update: (path, attributes) =>
               call('cards.update', [path, attributes]),
           },

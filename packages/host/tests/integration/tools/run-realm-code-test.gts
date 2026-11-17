@@ -1051,7 +1051,7 @@ return await realm.cards.get('people/hassan');`,
     );
   });
 
-  test('realm.cards.get throws on .data, naming the shape it answers, and serializes without it', async function (assert) {
+  test('realm.cards.get throws on .data, naming the shape it answers, and has no own data', async function (assert) {
     let command = new RunRealmCodeTool(getService('tool-service').toolContext);
 
     for (let read of ['card.data', 'card?.data?.attributes']) {
@@ -1071,17 +1071,31 @@ return ${read};`,
       realm: testRealmURL,
       roomId: '!room:example.com',
       code: `const card = await realm.cards.get('people/hassan');
+const hasOwnData = Object.prototype.hasOwnProperty.call(card, 'data');
 return {
   card,
   spread: Object.keys({ ...card }),
   stringified: Object.keys(JSON.parse(JSON.stringify(card))),
+  own: Object.getOwnPropertyNames(card),
+  reflected: Reflect.ownKeys(card),
+  hasOwnData,
+  path: (hasOwnData ? card.data : card).path,
 };`,
     });
-    let { card, spread, stringified } = JSON.parse(result.scriptResult!);
+    let { card, spread, stringified, own, reflected, hasOwnData, path } =
+      JSON.parse(result.scriptResult!);
     let keys = ['id', 'path', 'type', 'attributes', 'relationships'];
     assert.deepEqual(Object.keys(card), keys, 'a returned card has no data');
     assert.deepEqual(spread, keys, 'a spread card has no data');
     assert.deepEqual(stringified, keys, 'a serialized card has no data');
+    assert.deepEqual(own, keys, 'its own property names have no data');
+    assert.deepEqual(reflected, keys, 'its own keys have no data');
+    assert.false(hasOwnData, 'it has no own data');
+    assert.strictEqual(
+      path,
+      'people/hassan.json',
+      'a read that checks for its own data first reads the card',
+    );
   });
 
   test('realm.cards.get says to read a card that is not indexed again only while the workspace is indexing, and names the call that indexes it otherwise', async function (assert) {
@@ -3835,7 +3849,7 @@ return errors;`);
       );
     });
 
-    test('a found card throws on .data, naming the shape it answers, and serializes without it', async function (assert) {
+    test('a found card throws on .data, naming the shape it answers, and has no own data', async function (assert) {
       await assert.rejects(
         run(`const { cards } = await realm.cards.search({ filter: { eq: { name: 'Pancakes' }, on: ${recipeRef} } });
 return cards[0].data.attributes;`),
@@ -3848,6 +3862,8 @@ return {
   found,
   spread: Object.keys({ ...found.cards[0] }),
   stringified: Object.keys(JSON.parse(JSON.stringify(found.cards[0]))),
+  own: Object.getOwnPropertyNames(found.cards[0]),
+  hasOwnData: Object.prototype.hasOwnProperty.call(found.cards[0], 'data'),
 };`);
       let keys = ['id', 'path', 'type', 'attributes', 'relationships'];
       assert.deepEqual(
@@ -3861,6 +3877,8 @@ return {
         keys,
         'a serialized card has no data',
       );
+      assert.deepEqual(value.own, keys, 'its own property names have no data');
+      assert.false(value.hasOwnData, 'it has no own data');
     });
 
     test('a linksToMany field reports each link under its field path', async function (assert) {
