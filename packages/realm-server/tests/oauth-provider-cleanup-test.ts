@@ -401,6 +401,23 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(await clients(), [kept]);
     });
 
+    test('a client that connected recently is kept, though its remaining grant ended long ago', async function (assert) {
+      // Its newest grant was deleted with its user.
+      let kept = await insertClient({
+        registered: 90 * DAY,
+        lastConnected: DAY,
+      });
+      await insertGrant({
+        clientId: kept,
+        created: 80 * DAY,
+        expires: 50 * DAY,
+        ended: 60 * DAY,
+      });
+      let deleted = await cleanup();
+      assert.strictEqual(deleted.dynamicClients, 0);
+      assert.deepEqual(await clients(), [kept]);
+    });
+
     test('a grant whose code was never exchanged connected nothing', async function (assert) {
       // The user approved it, and the app never exchanged the code, so the
       // client is as unused as one nobody approved, live grant or not.

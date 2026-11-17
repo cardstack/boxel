@@ -117,11 +117,20 @@ async function deleteEndedGrants(dbAdapter: DBAdapter): Promise<number> {
 // have since been deleted (with their user, say).
 //
 // `markGrantExchanged` marks a client connected in the statement that marks
-// the exchange. A delete that meets that update re-checks the row's own
-// columns against the new `last_connected_at`, though not what the
-// subqueries read, and every rule requires that column to be missing or old,
-// so the client is kept. A client deleted while a flow for it is open is
-// refused when the flow finishes (`createGrant`).
+// the exchange. A delete that reaches the client's row after that update
+// re-checks the row's own columns against the new `last_connected_at`,
+// though not what the subqueries read, and every rule requires that column
+// to be missing or old, so the client is kept. Nothing else holds a client
+// against a delete already under way:
+// - A delete that reaches the row first deletes it, and the exchange that
+//   was marking it leaves an app holding tokens for a client the provider no
+//   longer knows. Its first refresh is refused with `invalid_client`.
+// - A grant not yet exchanged keeps its client under neither rule, so a
+//   delete between a flow's consent and its code exchange ends that flow.
+//   `createGrant` refuses a flow whose client is already gone, but its check
+//   is a plain read, so a delete under way can pass it.
+// Either way one flow or connection is lost, for a client unused for 7 or 30
+// days, and the app registers again.
 const EXCHANGED_GRANT = `(
   g.exchanged_at IS NOT NULL
   OR EXISTS (SELECT 1 FROM oauth_provider_tokens AS t WHERE t.grant_id = g.id)

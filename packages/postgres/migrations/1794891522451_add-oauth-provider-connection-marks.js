@@ -4,7 +4,10 @@
 // `oauth_provider_grants.exchanged_at` is when a token was first stored for
 // the grant: when its authorization code was exchanged. A grant the user
 // approved but whose code was never exchanged never connected anything.
-// Existing grants take the time of their earliest token still stored.
+// Every existing grant counts as exchanged: at its earliest token still
+// stored, or at its creation when none is (ending a grant deletes its
+// tokens). Counting one that never was keeps its client longer, never
+// deletes it early.
 //
 // `oauth_provider_dynamic_clients.last_connected_at` is when one of the
 // client's grants was last exchanged. NULL means the client has never
@@ -16,9 +19,8 @@
 // the client ever connected once they are gone: a user's grants are deleted
 // with the user, and ended grants are deleted 90 days after they end.
 //
-// The partial index finds the clients that never connected. The index on the
-// grants' `client_id` finds a client's grants, which the cleanup reads for
-// each client.
+// The index on the grants' `client_id` finds a client's grants, which the
+// cleanup reads for each client.
 
 exports.up = (pgm) => {
   pgm.sql(`
@@ -31,14 +33,12 @@ exports.up = (pgm) => {
   `);
   pgm.sql(`
     UPDATE oauth_provider_grants AS g
-       SET exchanged_at = t.first_stored_at
-      FROM (
-        SELECT grant_id, min(created_at) AS first_stored_at
-          FROM oauth_provider_tokens
-         GROUP BY grant_id
-      ) AS t
-     WHERE t.grant_id = g.id
-       AND g.exchanged_at IS NULL
+       SET exchanged_at = COALESCE(
+             (SELECT min(t.created_at) FROM oauth_provider_tokens AS t
+               WHERE t.grant_id = g.id),
+             g.created_at
+           )
+     WHERE g.exchanged_at IS NULL
   `);
   pgm.sql(`
     UPDATE oauth_provider_dynamic_clients AS c
@@ -53,11 +53,6 @@ exports.up = (pgm) => {
        AND c.last_connected_at IS NULL
   `);
   pgm.sql(`
-    CREATE INDEX IF NOT EXISTS oauth_provider_dynamic_clients_unconnected_index
-      ON oauth_provider_dynamic_clients (created_at)
-      WHERE last_connected_at IS NULL
-  `);
-  pgm.sql(`
     CREATE INDEX IF NOT EXISTS oauth_provider_grants_client_id_index
       ON oauth_provider_grants (client_id)
   `);
@@ -65,9 +60,6 @@ exports.up = (pgm) => {
 
 exports.down = (pgm) => {
   pgm.sql(`DROP INDEX IF EXISTS oauth_provider_grants_client_id_index`);
-  pgm.sql(
-    `DROP INDEX IF EXISTS oauth_provider_dynamic_clients_unconnected_index`,
-  );
   pgm.sql(
     `ALTER TABLE oauth_provider_dynamic_clients DROP COLUMN IF EXISTS last_connected_at`,
   );

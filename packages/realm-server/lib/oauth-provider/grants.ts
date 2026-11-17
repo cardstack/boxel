@@ -38,10 +38,11 @@ export interface NewGrant {
 
 // Stores a new grant and answers its ID. When the grant's client was
 // registered by dynamic client registration and the daily cleanup has since
-// deleted it (`cleanup.ts`), no grant is stored, and the answer is undefined:
-// a grant is never created for a client the provider no longer knows. The
-// client counts as connected only once the grant's code is exchanged
-// (`markGrantExchanged`).
+// deleted it (`cleanup.ts`), no grant is stored, and the answer is undefined.
+// The check is a plain read, so a cleanup deleting the client at that moment
+// can still let the grant through; the flow then fails where the library
+// next looks the client up. The client counts as connected only once the
+// grant's code is exchanged (`markGrantExchanged`).
 export async function createGrant(
   dbAdapter: DBAdapter,
   { userId, clientId, resources, renewing, consentedAt }: NewGrant,
@@ -78,9 +79,10 @@ export async function createGrant(
 // for it, which is when its code is exchanged (`exchanged_at`). A client
 // registered by dynamic client registration is marked connected then too
 // (`last_connected_at`), in the same statement, which the daily cleanup reads
-// (`cleanup.ts`). A cleanup that meets that update re-checks the client's own
-// row and keeps it. Later stores find the grant already marked and change
-// nothing.
+// (`cleanup.ts`). A cleanup that reaches the client's row after that update
+// re-checks the row and keeps it; one that reaches it first has already
+// deleted it, and the update then changes nothing. Later stores find the
+// grant already marked and change nothing.
 export async function markGrantExchanged(
   dbAdapter: DBAdapter,
   grantId: string,
