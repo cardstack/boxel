@@ -1707,7 +1707,9 @@ _Diagnosing a run_.
 ## The routes
 
 A direct writer switches an automation on, runs it by hand, pauses, resumes
-or removes it, and cancels a run through realm-server routes
+or removes it, cancels a run, and reads what the console shows (a run's
+report, a Preview's staged file, the automation's storage) through
+realm-server routes
 (`packages/realm-server/handlers/handle-automations.ts`; paths and body
 types in `packages/runtime-common/automation-routes.ts`). They are not on a
 realm: each takes the realm-server session (`Authorization: Bearer <realm-server
@@ -1740,6 +1742,9 @@ run instead, `{ "data": { "type": "automation-run", "id": "<run id>",
 | `POST /_automation-resume`                                           | `monthlyCredits` | 200 `automation`; the caller is the payer, with a new caps snapshot                                                                                                                                                                     |
 | `POST /_automation-remove`                                           | —                | 200 `automation`, the row as it was; the row is gone                                                                                                                                                                                    |
 | `POST /_automation-run-cancel`                                       | —                | 200 `automation-run`, canceled by the caller                                                                                                                                                                                            |
+| `GET /_automation-run-report?realm=&run=`                            | —                | 200 `automation-run-report` (_The console's reads_, below)                                                                                                                                                                              |
+| `GET /_automation-preview-file?realm=&run=&path=`                    | —                | 200, the staged file's bytes as `application/octet-stream`                                                                                                                                                                              |
+| `GET /_automation-storage?realm=&automation=`                        | —                | 200 `automation-storage` (_The console's reads_, below)                                                                                                                                                                                 |
 
 **The monthly cap.** Switch-on and resume make the caller the payer of the
 caps the card sets (the caps snapshot), and the monthly credit cap is what
@@ -1771,6 +1776,60 @@ other kind of run, a run that already ended or whose commit was claimed; 400
 for a malformed body, an automation outside the realm, or a missing click.
 The error body is `{ "errors": [<message>] }`.
 
+### The console's reads
+
+The three GETs take the realm and the run or card as query parameters, check
+direct write on the realm first, and answer `no-store`. A run of another
+realm, or a run id that isn't a UUID, answers 404 as no such run, so a
+writer of one realm learns nothing about another realm's runs.
+
+**Identities follow ADR 011 §1.2.** An answer names a person's Matrix id only
+to that person or to a viewer who shares a named realm grant with that
+person (`shareARealmGrant`); anyone else reads `null`. Booleans say as much as
+the viewer may know: `viewerIsActsAs`, `viewerCanceled` and
+`canceledByAPerson` on a run's report, and `viewerIsPayer` on the storage
+answer.
+
+**`/_automation-run-report`** serves `readAutomationRunSummary`, which reads
+the run as `readAutomationRunReport` does but counts the log instead of
+returning the lines. The attributes:
+
+- the run: `automation`, `trigger`, `dryRun`, `state`, `errorReason`,
+  `errorMessage`, `credentialRefusal`, `actsAs`, `canceledBy`;
+- `timings` and `cost`, as in _The run's report_ (`cost.creditsByKind` holds
+  `ai`, `run`, `run_indexing` and `batched_ai`);
+- `milestones`: the run's `RunMilestones` (_Run milestones_): the plan, each
+  milestone reached with its time and count, the current one, the ones
+  ahead, and the one a failed run was in;
+- `log`: `{ lines, dropped, byLevel, byKind }`, line counts without the
+  text. The log's own route serves the lines;
+- `callApiCalls` (`operation`, `method`, masked `destination`, `status` or
+  `code`, `ms`, `bytes`) and `resolveCalls` (`model`, `status`, `ms`,
+  `costInUsd`), one per `call-api` or `resolve` platform line, with the
+  line's `seq` and `at`. The automation surface has no `transform`, so a
+  run makes no transform calls;
+- `writes`: `count` (the row's `writes`), plus `staged` and
+  `stagedReplacedBy` for a complete Preview and `committed` for a run whose
+  commit landed, as `stagedFiles`, `stagedFilesReplacedBy` and
+  `committedPaths` in _The run's report_.
+
+**`/_automation-preview-file`** serves `readAutomationPreviewFile`: 404 when
+the Preview kept no file at `path`, 400 without a `path`. The script chose
+the bytes, so the route always answers `application/octet-stream` with
+`X-Content-Type-Options: nosniff`, and the console picks how to show the file
+from its path.
+
+**`/_automation-storage`** serves `getAutomationStorage`
+(`automation-files.ts`): `files` (`path`, `run`,
+`createdAt`, `fileBytes`, `indexBytes`) with the totals `fileBytes` and
+`indexBytes`; `switchedOn` and the `payer`, who pays the storage charge;
+`dailyCredits`, what one day of that storage costs at the server's prices
+before rounding (`exactMeteredCredits` of a day's GB-months, `null` without
+prices) with `pricingVersion`; and `charges`, the last 30 storage charges in
+`credits_ledger` as `{ day, credits }`, newest first. A charge covers the
+days since the previous one and is written once they cost a whole credit
+(_The daily storage charge_ in the `pricing` skill).
+
 ### Calling them in development
 
 Mint a realm-server session for a user who directly writes the realm, from
@@ -1794,7 +1853,7 @@ Name the realm by the URL its permission rows use
 one the caller writes, and is refused with 403. The same body with
 `monthlyCredits` (the card's) switches it on at
 `/_automation-switch-on`. A Preview or Run now answers its run's id; follow
-the run in Postgres (_Diagnosing a run_) or with `readAutomationRunReport`,
+the run in Postgres (_Diagnosing a run_) or at `/_automation-run-report`,
 and the automation's row with `GET <realm>/_automation-status`.
 
 ## Preview and Run now
