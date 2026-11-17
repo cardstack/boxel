@@ -284,6 +284,8 @@ const STORED = [
   '.status | ascii_downcase == "open"',
   'has("status")',
   '.teacherIds[0] == realmConfig("approver")',
+  '.teacherIds[0] == policy("approver")',
+  'policy().approvers | any(. == actor())',
   '.status | IN("open", "closed")',
   '.flags.note',
 ];
