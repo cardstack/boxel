@@ -349,26 +349,30 @@ A notification named `DatasourceError` with one of these rule names means
 Grafana couldn't run the query; the fault is the data source (Postgres or
 Loki), not the scheduler.
 
-| Alert                                  | Fires when                                                                                                                 | Reads                                             |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `Automation tick stopped`              | no `automation-tick` job has resolved for more than 300 s                                                                  | Postgres `jobs`                                   |
-| `Automation runs made up by reconcile` | a reconcile pass made up a run in the last 10 minutes                                                                      | Loki, worker lines tagged `automation-reconcile:` |
-| `Pricing check failed`                 | a realm-server, worker or prerender process logged `pricing check failed in` in the last 10 minutes; one alert per service | Loki                                              |
-| `Automation runs waiting for a worker` | the oldest automation run a worker could claim has waited more than 300 s, held for 5 minutes                              | Postgres `jobs`, `job_reservations`               |
+| Alert                                  | Fires when                                                                                                            | Reads                                                  |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `Automation tick stopped`              | no `automation-tick` job has resolved for more than 300 s (where none ever has, counted from the oldest tick waiting) | Postgres `jobs`                                        |
+| `Automation runs made up by reconcile` | a reconcile pass made up a run in the last 10 minutes                                                                 | Loki, worker lines tagged `automation-reconcile:`      |
+| `Pricing check failed`                 | a realm-server or worker process logged `pricing check failed in` in the last 10 minutes; one alert per service       | Loki                                                   |
+| `Automation runs waiting for a worker` | the oldest automation run a worker could claim has waited more than 60 s, held for 5 minutes                          | Postgres `jobs`, `job_reservations`, `job_claim_holds` |
 
 ### Automation tick stopped
 
 The tick resolves several times a minute (every worker manager enqueues one;
 a waiting tick absorbs the rest), so five minutes with none resolved is the
-tick down, not a slow minute. While it is down no scheduled run starts. Run
-step 2's query:
+tick down, not a slow minute. Where no tick has ever resolved (a fresh or
+restored database), the rule counts from the oldest tick waiting, so
+ticks that are enqueued but never succeed fire it too. An environment with no
+tick job at all leaves it quiet. While the tick is down no scheduled run
+starts. Run step 2's query:
 
 - **No recent `automation-tick` rows**: no worker manager's cron is
   enqueueing them. Look for `automation-tick cron failed to enqueue job` in
   the worker logs, and check the worker managers are up.
-- **Recent rows left `unfulfilled`**: no worker claims them. The tick runs on
-  the automation lane (priority 5), so check the workers serving it and the
-  Job Queue dashboard for what holds the lane.
+- **Recent rows left `unfulfilled`**: no worker claims them. The tick is
+  priority 5, claimed by the same two pools as automation runs (see _Automation
+  runs waiting for a worker_), so check what those workers are busy with on the
+  Job Queue dashboard.
 - **Recent rows `rejected`**: the tick fails as it runs. Its error is in the
   worker logs (`--filter 'automation-tick'`).
 - **A tick `unfulfilled` with a live reservation for minutes**: one tick is
@@ -412,8 +416,10 @@ variables are fixed and it restarts. The failing line names every bad
 variable and its problem. The alert resolves 10 minutes after the line while
 the process has no prices, so a resolved alert says nothing about
 recovery: confirm that each restarted process logged `pricing check passed in`
-with the expected pricing version. The `pricing` skill covers the variables
-and how to change one.
+with the expected pricing version. The prerender server checks its prices too,
+but nothing it does reads them, so its failing check reaches Sentry only; the
+rule leaves out its log stream, which is the busiest on Loki. The `pricing`
+skill covers the variables and how to change one.
 
 ### Automation runs waiting for a worker
 
@@ -421,11 +427,25 @@ The rule takes the oldest unfulfilled automation `run-command` job with no
 live reservation, and measures its wait from the job's creation or from the
 end of its last attempt. A run behind its own automation's running run (its
 concurrency group) or under a claim hold is waiting for that, not for a
-worker, and is left out. So the alert means the automation lane is falling
-behind:
+worker, and is left out while it waits. Once released it counts from its
+creation, so it reads over a minute at once, and the 5-minute hold is its
+whole bar. So the alert means claimable runs have gone unclaimed for minutes:
+the workers serving automation runs are not keeping up.
 
-- Check the Job Queue dashboard for the lane's pending jobs and in-flight
-  work, and how many workers serve the automation lane.
+Two worker pools claim automation runs (priority 5), each strictly oldest
+first:
+
+- **All-priority workers** serve every tier, so an older system backlog (a
+  deploy's reindex, a big catalog sync) holds runs behind it.
+- **Automation workers** (`WORKER_AUTOMATION_PRIORITY_COUNT`; 0 by default,
+  and then the all-priority workers are the only ones) also take
+  user-initiated jobs at priority 10, so a burst of saves fills them.
+
+First steps:
+
+- Check the Job Queue dashboard for what both pools are busy with: pending
+  jobs by priority and type, in-flight work, and how many workers each pool
+  has.
 - Long-running runs fill the lane: the `finished` events' `runMs` show which
   automations hold workers longest.
 - Once runs are claimed, the `claimed` events' `queueWaitMs` (the _Capacity_
