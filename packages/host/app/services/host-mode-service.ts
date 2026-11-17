@@ -8,6 +8,8 @@ import window from 'ember-window-mock';
 import {
   ensureTrailingSlash,
   isExternalRedirectTarget,
+  isRedirectRoutingRule,
+  hostRoutingMapFromRoutes,
   logger,
   type RealmIdentifier,
   normalizeRoutingPath,
@@ -69,6 +71,14 @@ export type DynamicRoutedPath =
   | { kind: 'error'; error: unknown }
   | { kind: 'unavailable' };
 
+function parsesAsURL(value: string): boolean {
+  try {
+    return new URL(value).href.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 interface PublishedRealmMetadata {
   urlString: string;
   publishedAt: number;
@@ -83,14 +93,21 @@ export default class HostModeService extends Service {
   @service declare session: SessionService;
   @service declare private network: NetworkService;
 
-  // The path the dynamic routes last resolved to a card, by canonical path,
-  // so a change to the stack, which refreshes the route on the same page,
-  // runs no lookup again. Only the current page is kept: a visitor who
-  // moves to another path, or comes back to this one, gets a fresh lookup,
-  // so a slug or route the author changed is never served from memory.
+  // The card the dynamic routes resolved the current page to, by canonical
+  // path, so a change to the stack, which refreshes the route on the same
+  // page, runs no lookup again. Only the current page is kept, and only the
+  // index route writes it, once its transition is known to be the current
+  // one: a visitor who moves to another path, through a dynamic or a fixed
+  // route, or comes back to this one, gets a fresh lookup, so a slug or
+  // route the author changed is never served from memory.
   private currentDynamicRoutedPath:
     | { path: string; result: DynamicRoutedPath }
     | undefined;
+
+  // How many routing decisions this app has made. The serve rule the server
+  // adds for a dynamically routed page it served counts only for the first
+  // one: the render of that page.
+  private routingDecisions = 0;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
@@ -113,6 +130,7 @@ export default class HostModeService extends Service {
     this.headTemplateContainsTitle = false;
     this.publishDialogRealm = undefined;
     this.currentDynamicRoutedPath = undefined;
+    this.routingDecisions = 0;
     // A Publish still opening its workspace doesn't carry into the next
     // session.
     this.openToPublishTask.cancelAll();
@@ -232,28 +250,110 @@ export default class HostModeService extends Service {
   // trailing slashes, preserves the root `/`) before comparing, so
   // `/realm` ↔ `/realm/` resolve and the client agrees with how the server
   // map builder and the editor normalize.
+  //
+  // A serve rule the server added for a dynamically routed page it served
+  // (`isBootstrapRoutingRule`) is not a fixed route: it is left to
+  // `resolveDynamicRoutedPath`, which uses it for that page's first render
+  // only.
   resolveRoutedPath(path: string): HostRoutingRule | null {
+    this.routingDecisions++;
+    let rule = this.findRoutingRule(path);
+    return rule && !this.isBootstrapRoutingRule(rule) ? rule : null;
+  }
+
+  private findRoutingRule(path: string): HostRoutingRule | undefined {
     let normalized = path.startsWith('/') ? path : `/${path}`;
     let canonical = normalizeRoutingPath(normalized);
-    let rule = this.hostRoutingMap.find(
+    return this.hostRoutingMap.find(
       (r) => normalizeRoutingPath(r.path) === canonical,
     );
-    return rule ?? null;
+  }
+
+  // Whether a rule in the routing map is the serve rule the server adds for
+  // the dynamically routed page it served, rather than a fixed route the
+  // realm declares. It lets the page's first render keep the card the
+  // server rendered without a lookup; after that the path resolves through
+  // the dynamic routes like any other, so the card is never one the server
+  // resolved at boot.
+  private isBootstrapRoutingRule(rule: HostRoutingRule): boolean {
+    let mount = this.dynamicRoutesMount;
+    if (!mount || isRedirectRoutingRule(rule)) {
+      return false;
+    }
+    let canonical = normalizeRoutingPath(rule.path);
+    return !hostRoutingMapFromRoutes(mount.dynamicRoutes.routes).some(
+      (fixed) =>
+        normalizeRoutingPath(
+          mount.mountPathname + fixed.path.replace(/^\//, ''),
+        ) === canonical,
+    );
+  }
+
+  // The dynamic routes as the realm server injected them on the config meta
+  // tag, unchecked.
+  get hostDynamicRoutesConfig(): unknown {
+    return (config as { hostDynamicRoutes?: unknown }).hostDynamicRoutes;
   }
 
   // The routing realm's routes, when it has dynamic routes; see
-  // `HostDynamicRoutes`.
+  // `HostDynamicRoutes`. A value that is not one, such as a realm URL that
+  // does not parse or lacks its trailing slash, is no dynamic routes, so
+  // navigation falls back to loading the path as a card URL.
   get hostDynamicRoutes(): HostDynamicRoutes | undefined {
-    let value = (config as { hostDynamicRoutes?: unknown }).hostDynamicRoutes;
+    let value = this.hostDynamicRoutesConfig;
     if (
-      value &&
-      typeof value === 'object' &&
-      typeof (value as HostDynamicRoutes).realmURL === 'string' &&
-      Array.isArray((value as HostDynamicRoutes).routes)
+      !value ||
+      typeof value !== 'object' ||
+      typeof (value as HostDynamicRoutes).realmURL !== 'string' ||
+      !Array.isArray((value as HostDynamicRoutes).routes)
     ) {
-      return value as HostDynamicRoutes;
+      return undefined;
     }
-    return undefined;
+    let { realmURL } = value as HostDynamicRoutes;
+    if (!realmURL.endsWith('/') || !parsesAsURL(realmURL)) {
+      return undefined;
+    }
+    return value as HostDynamicRoutes;
+  }
+
+  // The dynamic routes with the realm's mount pathname as the app sees it:
+  // the realm URL's pathname taken relative to `hostModeOrigin`, the base
+  // the index route resolves a card URL against. Undefined when there are
+  // no dynamic routes, or the realm is not under that origin.
+  private get dynamicRoutesMount():
+    | {
+        dynamicRoutes: HostDynamicRoutes;
+        realmURL: URL;
+        mountPathname: string;
+      }
+    | undefined {
+    let dynamicRoutes = this.hostDynamicRoutes;
+    let origin = this.hostModeOrigin;
+    if (!dynamicRoutes || !origin || !parsesAsURL(`${origin}/`)) {
+      return undefined;
+    }
+    let realmURL = new URL(dynamicRoutes.realmURL);
+    let originPathname = new URL(`${origin}/`).pathname;
+    if (!realmURL.pathname.startsWith(originPathname)) {
+      return undefined;
+    }
+    return {
+      dynamicRoutes,
+      realmURL,
+      mountPathname: `/${realmURL.pathname.slice(originPathname.length)}`,
+    };
+  }
+
+  // Keeps the card a dynamic route resolved the current page to, or forgets
+  // the page's entry when `result` is not a card. The index route calls it
+  // for every routing decision it acts on, and never for a transition that
+  // was aborted, so the entry is always the page the visitor is on.
+  rememberDynamicRoutedPath(path: string, result?: DynamicRoutedPath) {
+    let pathname = path.startsWith('/') ? path : `/${path}`;
+    this.currentDynamicRoutedPath =
+      result?.kind === 'card'
+        ? { path: normalizeRoutingPath(pathname), result }
+        : undefined;
   }
 
   // Resolves a path no fixed rule matches through the realm's dynamic
@@ -271,25 +371,31 @@ export default class HostModeService extends Service {
   async resolveDynamicRoutedPath(
     path: string,
   ): Promise<DynamicRoutedPath | undefined> {
-    let dynamicRoutes = this.hostDynamicRoutes;
+    let mount = this.dynamicRoutesMount;
     // No routes at all, even in an incomplete set (`complete: false` with
     // every dynamic route dropped), is no dynamic routes: no route can match
     // the path, and serve-index answers 503 only for a path a route matched.
-    if (!dynamicRoutes || dynamicRoutes.routes.length === 0) {
+    if (!mount || mount.dynamicRoutes.routes.length === 0) {
       return undefined;
     }
-    let realmURL = new URL(dynamicRoutes.realmURL);
-    let originPathname = new URL(`${this.hostModeOrigin}/`).pathname;
-    if (!realmURL.pathname.startsWith(originPathname)) {
-      return undefined;
-    }
-    let mountPathname = `/${realmURL.pathname.slice(originPathname.length)}`;
+    let { dynamicRoutes, realmURL, mountPathname } = mount;
     let pathname = path.startsWith('/') ? path : `/${path}`;
     let canonical = normalizeRoutingPath(pathname);
     if (this.currentDynamicRoutedPath?.path === canonical) {
       return this.currentDynamicRoutedPath.result;
     }
-    this.currentDynamicRoutedPath = undefined;
+    // The page the server served: its first render keeps the card the
+    // server resolved, so the prerendered page is not replaced.
+    if (this.routingDecisions <= 1) {
+      let rule = this.findRoutingRule(pathname);
+      if (
+        rule &&
+        !isRedirectRoutingRule(rule) &&
+        this.isBootstrapRoutingRule(rule)
+      ) {
+        return { kind: 'card', cardHref: rule.id };
+      }
+    }
     let realmRoot = mountPathname.replace(/\/$/, '');
     if (pathname !== realmRoot && !pathname.startsWith(mountPathname)) {
       return undefined;
@@ -304,16 +410,13 @@ export default class HostModeService extends Service {
         realmURL: realmURL.href,
       }),
     });
-    let result: DynamicRoutedPath;
     switch (resolution.kind) {
       // An alias serves its card for now: redirecting to the card's
       // canonical address needs the reverse lookup from a card to its
       // address.
       case 'card':
       case 'alias':
-        result = { kind: 'card', cardHref: resolution.cardHref };
-        this.currentDynamicRoutedPath = { path: canonical, result };
-        return result;
+        return { kind: 'card', cardHref: resolution.cardHref };
       case 'redirect':
         return {
           kind: 'redirect',

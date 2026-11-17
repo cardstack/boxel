@@ -102,9 +102,10 @@ class StubHijackedOriginHostModeService extends StubRoutingHostModeService {
   }
 }
 
-// Dynamic routes arrive on the same config meta tag as the routing map,
-// validated, so stub the getter that reads them, with routes validated
-// here the way the server validates them. The fixed rule stays in
+// Dynamic routes arrive on the same config meta tag as the routing map, so
+// stub the raw config read, with routes validated here the way the server
+// validates them; the service checks the value as it checks the injected
+// one. The fixed rule stays in
 // `hostRoutingMap`, where the server puts it.
 const DYNAMIC_ROUTE_RULES: RawHostRoutingRule[] = [
   { path: '/terms', instance: { id: `${testHostModeRealmURL}Pet/mango` } },
@@ -151,14 +152,32 @@ class StubDynamicRoutingHostModeService extends StubHostModeService {
     return [{ path: '/test/terms', id: `${testHostModeRealmURL}Pet/mango` }];
   }
 
-  get hostDynamicRoutes(): HostDynamicRoutes {
+  get hostDynamicRoutesConfig(): HostDynamicRoutes {
     return { realmURL: testHostModeRealmURL, routes: dynamicRoutes() };
   }
 }
 
+// The routing map of a full page load the server served through a dynamic
+// route: it carries a serve rule for that page's path next to the fixed
+// rules.
+class StubBootstrappedDynamicRoutingHostModeService extends StubDynamicRoutingHostModeService {
+  get hostRoutingMap(): HostRoutingRule[] {
+    return [
+      ...super.hostRoutingMap,
+      { path: '/test/by-name/Mango', id: `${testHostModeRealmURL}Pet/mango` },
+    ];
+  }
+}
+
+class StubMalformedDynamicRoutingHostModeService extends StubDynamicRoutingHostModeService {
+  get hostDynamicRoutesConfig(): HostDynamicRoutes {
+    return { ...super.hostDynamicRoutesConfig, realmURL: 'not a realm url' };
+  }
+}
+
 class StubIncompleteDynamicRoutingHostModeService extends StubDynamicRoutingHostModeService {
-  get hostDynamicRoutes(): HostDynamicRoutes {
-    return { ...super.hostDynamicRoutes, complete: false };
+  get hostDynamicRoutesConfig(): HostDynamicRoutes {
+    return { ...super.hostDynamicRoutesConfig, complete: false };
   }
 }
 
@@ -1738,6 +1757,118 @@ module('Acceptance | host mode tests', function (hooks) {
         .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
         .doesNotExist('the late result of the first lookup is dropped');
     });
+
+    test('a lookup that finishes after the visitor moved on is not kept for its path', async function (assert) {
+      searchGate = new Deferred<void>();
+      searchStarted = new Deferred<void>();
+      let first = visit('/test/by-name/Mango').catch(() => {
+        // Aborted by the second visit.
+      });
+      await searchStarted.promise;
+      let gate = searchGate;
+      searchGate = undefined;
+      let second = visit('/test/folders/ViewCardDemo');
+      gate.fulfill();
+      await second;
+      await first;
+      await settled();
+      lookups = [];
+
+      await visit('/test/by-name/Mango');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.ok(
+        lookups.some((l) => l.endsWith('_search')),
+        'the path the visitor never saw is resolved afresh',
+      );
+    });
+
+    test('leaving a dynamic page through a fixed route and coming back runs its lookup again', async function (assert) {
+      await visit('/test/by-name/Mango');
+      await visit('/test/terms');
+      lookups = [];
+
+      await visit('/test/by-name/Mango');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.ok(
+        lookups.some((l) => l.endsWith('_search')),
+        'the dynamic page is resolved afresh',
+      );
+    });
+
+    test('a malformed dynamic routes config falls back to loading the path as a card URL', async function (assert) {
+      let owner = getOwner(this)!;
+      let ownerWithUnregister = owner as {
+        unregister?: (fullName: string) => void;
+      };
+      ownerWithUnregister.unregister?.('service:host-mode-service');
+      owner.register(
+        'service:host-mode-service',
+        StubMalformedDynamicRoutingHostModeService,
+      );
+
+      await visit('/test/Pet/mango');
+
+      assert
+        .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+        .exists();
+      assert.dom('[data-card-error]').doesNotExist();
+    });
+
+    module(
+      'after a full page load of a dynamically routed page',
+      function (hooks) {
+        hooks.beforeEach(function (this) {
+          let owner = getOwner(this)!;
+          let ownerWithUnregister = owner as {
+            unregister?: (fullName: string) => void;
+          };
+          ownerWithUnregister.unregister?.('service:host-mode-service');
+          owner.register(
+            'service:host-mode-service',
+            StubBootstrappedDynamicRoutingHostModeService,
+          );
+        });
+
+        test('the first render keeps the served card without a lookup', async function (assert) {
+          await visit('/test/by-name/Mango');
+
+          assert
+            .dom(
+              `[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`,
+            )
+            .exists();
+          assert.dom('[data-test-host-mode-404]').doesNotExist();
+          assert.notOk(
+            lookups.some((l) => l.endsWith('_search')),
+            'the serve rule the server added is used',
+          );
+        });
+
+        test('coming back to the served page runs its lookup again', async function (assert) {
+          await visit('/test/by-name/Mango');
+          await visit('/test/folders/ViewCardDemo');
+          lookups = [];
+
+          await visit('/test/by-name/Mango');
+
+          assert
+            .dom(
+              `[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`,
+            )
+            .exists();
+          assert.ok(
+            lookups.some((l) => l.endsWith('_search')),
+            'the serve rule counts only for the first render',
+          );
+        });
+      },
+    );
 
     test('a dynamic redirect replaces the location with its filled target', async function (assert) {
       await visit('/test/old-pets/mango?utm_source=newsletter');

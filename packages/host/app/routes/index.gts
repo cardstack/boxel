@@ -127,6 +127,11 @@ export default class Card extends Route {
       let routed = this.hostModeService.resolveRoutedPath(
         normalizedPath || '/',
       );
+      if (routed) {
+        // Leaving through a fixed route leaves no dynamic page behind to
+        // keep: coming back to one runs its lookup again.
+        this.hostModeService.rememberDynamicRoutedPath(normalizedPath);
+      }
       if (routed && isRedirectRoutingRule(routed)) {
         this.hostModeService.redirectTo(
           routed.redirectTo,
@@ -149,6 +154,9 @@ export default class Card extends Route {
         if (transition.isAborted) {
           return;
         }
+        // Only now is this the page the visitor is on, so only now may the
+        // result be kept for it.
+        this.hostModeService.rememberDynamicRoutedPath(normalizedPath, dynamic);
         if (dynamic?.kind === 'redirect') {
           this.hostModeService.redirectTo(
             dynamic.redirectTo,
