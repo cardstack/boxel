@@ -140,6 +140,7 @@ import {
   type SearchEntryQuery,
 } from './search-entry.ts';
 import {
+  ri,
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -214,7 +215,9 @@ import { automationRef } from './automation-declaration.ts';
 import {
   addAutomationRunCounts,
   automationRunForCall,
+  endAutomationRunNotADirectWriter,
   getAutomationRun,
+  runActsAsDirectWriter,
   recordAutomationRunCommitted,
   recordAutomationRunCredentialRefusal,
 } from './automation-runs.ts';
@@ -1444,8 +1447,9 @@ function namesGrantableBytes(localPath: LocalPath): boolean {
 }
 // A run-token call refused because the person the run acts as is not a direct
 // writer of the run's realm. It answers 403 with the `not-a-direct-writer`
-// code the commit's own check answers, so a run whose commit is refused at
-// admission finishes with the same reason as one refused inside the commit.
+// code the commit's own check answers. The refusal also ends the run with that
+// reason (`endAutomationRunNotADirectWriter`), so the run's row says why it
+// ended whether the refused call was the commit or one the script made.
 class RunActsAsNoDirectWriter extends AuthorizationError {}
 // Whether the realm ACL's `refusal` was of a verified user's permission,
 // rather than of a request that authenticated nobody.
@@ -13420,7 +13424,10 @@ export class Realm {
   // person must be a direct writer of the run's realm (ADR 026 §1.5), in
   // whichever realm the call reaches. All of this is read on every call, so a
   // cancel, a pause that cancels the run, its finish, a newer attempt taking
-  // it over, or the person losing direct write refuses the next call.
+  // it over, or the person losing direct write refuses the next call. A call
+  // refused for direct write also ends the run, so the calls after it, and
+  // the tab's run-state check, answer that the run is not running, which
+  // stops the script.
   async #admitRunCall(
     request: Request,
     requiredPermission: RequiredPermission,
@@ -13490,23 +13497,21 @@ export class Realm {
         'An automation run may not administer a realm',
       );
     }
-    let runRealmURL = this.#sameRealmSpelling(context.realm);
-    if (runRealmURL === undefined) {
-      return refuse(
-        `run ${context.runId} names realm ${context.realm}, which resolves to no realm`,
-      );
-    }
     // Each is one indexed row read, and none depends on another's answer, so
     // they go to the database together and a call waits about as long as it
     // would for one of them.
     let [revoked, call, directWriter] = await Promise.all([
       isSessionRevoked(this.#dbAdapter, context.actsAs, context.iat),
       automationRunForCall(this.#dbAdapter, context.runId, context.attempt),
-      isDirectWriter(
-        this.#dbAdapter,
-        new URL(runRealmURL),
-        context.actsAs,
-        this.#matrixClient.serverName,
+      runActsAsDirectWriter(
+        {
+          dbAdapter: this.#dbAdapter,
+          virtualNetwork: this.#virtualNetwork,
+          matrixServerName: this.#matrixClient.serverName,
+        },
+        // The token's realm, which the run row's must match below; the
+        // answer is read only once it has.
+        { realm: ri(context.realm), actsAs: context.actsAs },
       ),
     ]);
     if (revoked) {
@@ -13537,8 +13542,17 @@ export class Realm {
     }
     if (!directWriter) {
       this.#log.warn(
-        `run-token call ${described} refused: ${context.actsAs}, whom run ${context.runId} acts as, is not a direct writer of ${call.run.realm}`,
+        `run-token call ${described} refused: ${context.actsAs}, whom run ${context.runId} acts as, is not a direct writer of ${call.run.realm}; the run ends`,
       );
+      if (
+        await endAutomationRunNotADirectWriter(
+          this.#dbAdapter,
+          context.runId,
+          context.attempt,
+        )
+      ) {
+        void this.reportRunChange(context.runId);
+      }
       throw new RunActsAsNoDirectWriter(
         "The person this run acts as is not a direct writer of the automation's workspace, so the run may not continue",
       );
@@ -22398,7 +22412,8 @@ export class Realm {
 
   // Reports that one of this realm's automation runs moved (see
   // `automation-run-events.ts`), for the changes the realm itself makes to a
-  // run: its milestones, its commit, and a call that ends it at a cap.
+  // run: its milestones, its commit, and a call that ends it at a cap or
+  // because its person is no longer a direct writer.
   async reportRunChange(runId: string): Promise<void> {
     await runChangeReporter({
       dbAdapter: this.#dbAdapter,

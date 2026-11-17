@@ -1,5 +1,7 @@
 import {
   automationRunForCall,
+  endAutomationRunNotADirectWriter,
+  runActsAsDirectWriter,
   isSessionRevoked,
   logger,
   type DBAdapter,
@@ -20,7 +22,7 @@ import {
 } from './automation-ai-spending.ts';
 import { openRouterModelsRealmURL } from './ai-batch-estimate.ts';
 import { openRouterModelPrice } from './openrouter-model-price.ts';
-import { runActsAsDirectWriter, verifyRunToken } from './run-token.ts';
+import { verifyRunToken } from './run-token.ts';
 
 const log = logger('request-forward');
 
@@ -144,10 +146,19 @@ export async function admitRunForward(
       call.run,
     ))
   ) {
+    if (
+      await endAutomationRunNotADirectWriter(
+        dbAdapter,
+        context.runId,
+        context.attempt,
+      )
+    ) {
+      await reportRunChange?.(context.runId);
+    }
     return refuse(
       403,
-      "The person this run acts as is not a direct writer of the automation's workspace, so the run may make no AI request",
-      `${context.actsAs}, whom run ${context.runId} acts as, is not a direct writer of ${call.run.realm}`,
+      "The person this run acts as is not a direct writer of the automation's workspace, so the run has ended",
+      `${context.actsAs}, whom run ${context.runId} acts as, is not a direct writer of ${call.run.realm}; the run ends`,
     );
   }
   let run = {

@@ -670,6 +670,10 @@ export function createRoutes(args: CreateRoutesArgs) {
       realmSecretSeed: args.realmSecretSeed,
       virtualNetwork: args.virtualNetwork,
       matrixServerName: args.matrixClient.serverName,
+      reportRunChange: realmServerRunChangeReporter({
+        ...args,
+        background: true,
+      }),
     }),
   );
   router.get(
@@ -679,6 +683,10 @@ export function createRoutes(args: CreateRoutesArgs) {
       realmSecretSeed: args.realmSecretSeed,
       virtualNetwork: args.virtualNetwork,
       matrixServerName: args.matrixClient.serverName,
+      reportRunChange: realmServerRunChangeReporter({
+        ...args,
+        background: true,
+      }),
     }),
   );
   // Batched client performance beacons. The host sends its server session

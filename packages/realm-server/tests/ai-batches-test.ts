@@ -770,9 +770,9 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
     });
 
-    test('a run whose person loses direct write mid-run makes no more batch calls', async function (assert) {
+    test('a run whose person loses direct write mid-run is refused its next batch call, which ends the run', async function (assert) {
       await switchOn();
-      let { token } = await runningRun();
+      let { token, run } = await runningRun();
       let submitted = await submit(token, twoRequests());
       assert.strictEqual(submitted.status, 202, submitted.text);
       let sentBefore = sent.length;
@@ -783,10 +783,20 @@ module(basename(import.meta.filename), function () {
 
       let refused = await submit(token, twoRequests());
       assert.strictEqual(refused.status, 403, refused.text);
+      let row = await getAutomationRun(dbAdapter, run.id);
+      assert.deepEqual(
+        [row?.state, row?.errorReason],
+        ['error', 'not-a-direct-writer'],
+        'the refused submit ended the run',
+      );
       let status = await request
         .get('/_ai-batches/batch_123')
         .set('Authorization', `Bearer ${token}`);
-      assert.strictEqual(status.status, 403, status.text);
+      assert.strictEqual(
+        status.status,
+        403,
+        `the ended run reads no batch: ${status.text}`,
+      );
       assert.strictEqual(
         sent.length,
         sentBefore,

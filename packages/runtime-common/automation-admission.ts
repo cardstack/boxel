@@ -60,7 +60,10 @@ import {
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
 } from './automation-admission-route.ts';
-import type { AutomationRun } from './automation-runs.ts';
+import {
+  runActsAsDirectWriter,
+  type AutomationRun,
+} from './automation-runs.ts';
 import type { AutomationCaps } from './automation-declaration.ts';
 import {
   checkAutomationPayer,
@@ -74,7 +77,6 @@ import {
 import type { ReportAutomationChange } from './automation-change-events.ts';
 import type { ReportRunChange } from './automation-run-events.ts';
 import type { DBAdapter } from './db.ts';
-import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import { isSessionRevoked } from './db-queries/user-queries.ts';
 import { param, query } from './expression.ts';
 import { logger } from './log.ts';
@@ -220,8 +222,12 @@ export async function admitRunIdentity(
       'This worker has no Matrix server name, so it cannot tell a direct writer from a bot account',
     );
   }
-  let realmURL = virtualNetwork.toURL(run.realm);
-  if (!(await isDirectWriter(dbAdapter, realmURL, actsAs, matrixServerName))) {
+  if (
+    !(await runActsAsDirectWriter(
+      { dbAdapter, virtualNetwork, matrixServerName },
+      { realm: run.realm, actsAs },
+    ))
+  ) {
     let refusal = refuse(
       'not-a-direct-writer',
       `${actsAs}, whom the run acts as, is no longer a direct writer of ${run.realm}`,

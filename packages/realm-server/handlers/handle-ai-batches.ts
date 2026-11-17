@@ -1,6 +1,8 @@
 import type Koa from 'koa';
 import {
   automationRunForCall,
+  endAutomationRunNotADirectWriter,
+  runActsAsDirectWriter,
   getAIBatch,
   reserveAutomationRunAICredits,
   isSessionRevoked,
@@ -9,6 +11,7 @@ import {
   recordAIBatchState,
   type AutomationRun,
   type DBAdapter,
+  type ReportRunChange,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -55,7 +58,7 @@ import {
   openRouterBatchURL,
   readOpenRouterBatch,
 } from '../lib/openrouter-batches.ts';
-import { runActsAsDirectWriter, verifyRunToken } from '../lib/run-token.ts';
+import { verifyRunToken } from '../lib/run-token.ts';
 import { runTokenOf } from '@cardstack/runtime-common/run-token';
 
 const log = logger('ai-batches');
@@ -98,6 +101,9 @@ export interface AIBatchHandlerArgs {
   realmSecretSeed: string;
   virtualNetwork: VirtualNetwork;
   matrixServerName: string;
+  // Told when a batch call ends its run because the run's person is no
+  // longer a direct writer of its realm.
+  reportRunChange?: ReportRunChange;
 }
 
 export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
@@ -327,6 +333,7 @@ async function batchCaller(
     realmSecretSeed,
     virtualNetwork,
     matrixServerName,
+    reportRunChange,
   }: AIBatchHandlerArgs,
 ): Promise<{ run: AutomationRun; automation: AutomationRow } | undefined> {
   let authorization = ctxt.req.headers['authorization'] ?? null;
@@ -383,9 +390,14 @@ async function batchCaller(
       run,
     ))
   ) {
+    if (
+      await endAutomationRunNotADirectWriter(dbAdapter, run.id, token.attempt)
+    ) {
+      await reportRunChange?.(run.id);
+    }
     await sendResponseForForbiddenRequest(
       ctxt,
-      "The person this run acts as is not a direct writer of the automation's workspace, so the run can't make batch calls",
+      "The person this run acts as is not a direct writer of the automation's workspace, so the run has ended",
     );
     return undefined;
   }

@@ -668,14 +668,17 @@ which refuses it unless:
   next call with `The automation run is not running`;
 - `acts_as` is a direct writer (`isDirectWriter`) of the run's own realm,
   whichever realm the call reaches. Losing direct write mid-run refuses the
-  next call with 403 `not-a-direct-writer`, and the commit checks it again
-  inside its write lock. The realm-server routes that take run tokens
-  (`/_request-forward`, `/_ai-batches`) check it too, with
-  `runActsAsDirectWriter`.
+  next call with 403 `not-a-direct-writer` and ends the run with that reason
+  (`endAutomationRunNotADirectWriter`), so the calls after it, and the tab's
+  `/_run-state` check, answer 401 and the script stops. The commit checks it
+  again inside its write lock. The realm-server routes that take run tokens
+  (`/_request-forward`, `/_ai-batches`) check and end the run the same way.
+  All three, and the worker's admission, ask `runActsAsDirectWriter`.
 
-The revoked-session, run-row and direct-writer reads go to the database
-together, one indexed row each, so the check costs a call about one round
-trip.
+In `handleAutomation` the revoked-session, run-row and direct-writer reads
+go to the database together, one indexed row each, so the check costs a call
+about one round trip. The realm-server routes read them one after another,
+so there the check adds a round trip.
 
 An admitted call takes the ACL check as `acts_as` and sets
 `requestContext.automationRun` (`{ runId, attempt, automationId, actsAs,

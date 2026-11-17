@@ -9,6 +9,7 @@ import {
   insertPermissions,
   createAutomationRun,
   finishAutomationRun,
+  getAutomationRun,
   ri,
   rri,
   startAutomationRunAttempt,
@@ -152,8 +153,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a run whose person loses direct write mid-run is refused at its next call', async function (assert) {
-    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+  test('a run whose person loses direct write mid-run is refused at its next call, which ends the run', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
     assert.strictEqual((await read(token))!.status, 200);
     // The person keeps write only through a wildcard row, which writes but
     // makes no one a direct writer.
@@ -169,18 +174,41 @@ module(basename(import.meta.filename), function (hooks) {
       JSON.parse(await refused.text()).errors[0].code,
       'not-a-direct-writer',
     );
-    assert.strictEqual(
-      (await write(token, 'after-losing-write.txt', 'nope'))!.status,
-      403,
+    let row = await getAutomationRun(dbAdapter, run.id);
+    assert.deepEqual(
+      [row?.state, row?.errorReason],
+      ['error', 'not-a-direct-writer'],
+      'the refused call ended the run',
     );
 
-    await insertPermissions(dbAdapter, realmURL, {
-      [OWNER]: ['read', 'write'],
-    });
+    // The calls after it, and the run-state check that stops the script in
+    // its tab, answer that the run is not running.
+    let after = (await write(token, 'after-losing-write.txt', 'nope'))!;
+    assert.strictEqual(after.status, 401);
+    assert.strictEqual(await after.text(), 'The automation run is not running');
+    assert.strictEqual((await runState(token))!.status, 401);
+  });
+
+  test('the tab’s run-state check ends a run whose person lost direct write, though its script makes no call', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    assert.strictEqual((await runState(token))!.status, 200);
+    await dbAdapter.execute(
+      `UPDATE realm_user_permissions SET write = false WHERE realm_url = $1 AND username = $2`,
+      { bind: [realmURL.href, OWNER] },
+    );
+    assert.strictEqual((await runState(token))!.status, 403);
     assert.strictEqual(
-      (await read(token))!.status,
-      200,
-      'the check is read on each call, so restored direct write admits the next one',
+      (await getAutomationRun(dbAdapter, run.id))?.errorReason,
+      'not-a-direct-writer',
+    );
+    assert.strictEqual(
+      (await runState(token))!.status,
+      401,
+      'the next check answers 401, which stops the script',
     );
   });
 

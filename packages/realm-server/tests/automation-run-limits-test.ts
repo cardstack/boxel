@@ -570,7 +570,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a run whose person loses direct write mid-run is refused its next resolve, and nothing is sent or billed', async function (assert) {
+    test('a run whose person loses direct write mid-run is refused its next resolve, which ends the run, and nothing is sent or billed', async function (assert) {
       let { token, run } = await runOf(ROOMY);
       assert.strictEqual((await resolve(token)).status, 200);
       await dbAdapter.execute(
@@ -582,6 +582,11 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(refused.status, 403, JSON.stringify(refused.body));
       assert.strictEqual(forwarded.length, 1, 'only the first was forwarded');
       let row = (await getAutomationRun(dbAdapter, run.id))!;
+      assert.deepEqual(
+        [row.state, row.errorReason],
+        ['error', 'not-a-direct-writer'],
+        'the refused resolve ended the run',
+      );
       assert.strictEqual(row.resolveCalls, 1);
       assert.strictEqual(row.aiCreditsReserved, 0, 'nothing is reserved');
       assert.strictEqual(
