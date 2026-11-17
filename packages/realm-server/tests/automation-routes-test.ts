@@ -723,6 +723,33 @@ module(basename(import.meta.filename), function (hooks) {
       assert.false(whole.more);
     });
 
+    test('a page ends at the lines the run’s row counts', async function (assert) {
+      let run = await runWithLog([line('one'), line('two')]);
+      // A line written but not counted on the run's row, as when an
+      // append commits while the page is read.
+      await dbAdapter.execute(
+        `INSERT INTO automation_run_log (run_id, seq, at, source, kind, level, message) VALUES ('${run.id}', 2, now(), 'script', 'console', 'log', 'three')`,
+      );
+      let page = (await readLog(run.id)).body.data.attributes;
+      assert.deepEqual(
+        page.lines.map((l: { message: string }) => l.message),
+        ['one', 'two'],
+        'the uncounted line is left for a later page',
+      );
+      assert.strictEqual(page.next, 1, 'and the cursor stops short of it');
+      assert.false(page.more);
+      await dbAdapter.execute(
+        `UPDATE automation_runs SET log_lines = 3 WHERE id = '${run.id}'`,
+      );
+      let later = (await readLog(run.id, { after: page.next })).body.data
+        .attributes;
+      assert.deepEqual(
+        later.lines.map((l: { message: string }) => l.message),
+        ['three'],
+        'the next page reads it once it is counted',
+      );
+    });
+
     test('a level filter keeps the lines at those levels, and the cursor passes the rest', async function (assert) {
       let run = await runWithLog([
         line('debugging', { level: 'log' }),
@@ -822,6 +849,17 @@ module(basename(import.meta.filename), function (hooks) {
           `${JSON.stringify(claims)}: ${response.text}`,
         );
       }
+
+      let { token } = await createAutomationRunToken(dbAdapter, realm, WRITER);
+      let runToken = await request
+        .get(AUTOMATION_RUN_LOG_PATH)
+        .query({ realm: realm.url, run: run.id })
+        .set('Authorization', `Bearer ${token}`);
+      assert.strictEqual(
+        runToken.status,
+        401,
+        `a run token is refused by the session check: ${runToken.text}`,
+      );
 
       let anonymous = await request
         .get(AUTOMATION_RUN_LOG_PATH)
@@ -961,6 +999,89 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(
         pages.flatMap((p) => p.lines.map((l) => l.message)),
         ['one', 'two', 'three'],
+      );
+    });
+
+    // A fetch that answers each read from `answers` in turn and records when
+    // each read was asked.
+    function scriptedFetch(answers: Partial<AutomationRunLogPage>[]) {
+      let asked: number[] = [];
+      let fetch = async () => {
+        asked.push(Date.now());
+        let answer = answers.shift();
+        if (answer === undefined) {
+          throw new Error('no more scripted answers');
+        }
+        let attributes = {
+          state: 'running',
+          lines: [],
+          next: -1,
+          more: false,
+          total: 0,
+          dropped: 0,
+          ...answer,
+        };
+        return new Response(
+          JSON.stringify({
+            data: { type: 'automation-run-log', id: 'run', attributes },
+          }),
+          { status: 200 },
+        );
+      };
+      return { fetch, asked };
+    }
+
+    test('a wake does not cut short the read after a run ends', async function (assert) {
+      let intervalMs = 300;
+      let { fetch, asked } = scriptedFetch([
+        { state: 'complete' },
+        { state: 'complete' },
+      ]);
+      let follower = followAutomationRunLog({
+        fetch,
+        realmServerURL: 'http://127.0.0.1:4444/',
+        realm: realm.url,
+        runId: randomUUID(),
+        intervalMs,
+        // A `job` event that arrives as the run ends.
+        onPage: () => follower.wake(),
+      });
+      follower.wake();
+      await follower.done;
+      assert.strictEqual(asked.length, 2, 'it reads once more, then stops');
+      assert.ok(
+        asked[1] - asked[0] >= intervalMs - 20,
+        `the last read waits its interval (${asked[1] - asked[0]} ms)`,
+      );
+    });
+
+    test('a follower stopped during a read that fails reports nothing and settles at once', async function (assert) {
+      let fail!: (error: Error) => void;
+      let failing = new Promise<never>((_resolve, reject) => {
+        fail = reject;
+      });
+      failing.catch(() => {});
+      let errors: Error[] = [];
+      let follower = followAutomationRunLog({
+        fetch: async () => await failing,
+        realmServerURL: 'http://127.0.0.1:4444/',
+        realm: realm.url,
+        runId: randomUUID(),
+        intervalMs: 60_000,
+        onPage: () => assert.ok(false, 'no page is read'),
+        onError: (error) => errors.push(error),
+      });
+      follower.stop();
+      fail(new Error('the network went away'));
+      let settled = await Promise.race([
+        follower.done.then(() => true),
+        new Promise((resolve) => setTimeout(() => resolve(false), 2000)),
+      ]);
+      assert.true(settled, 'done settles without waiting an interval');
+      assert.deepEqual(
+        errors,
+        [],
+        'the failure after the stop is not reported',
       );
     });
 

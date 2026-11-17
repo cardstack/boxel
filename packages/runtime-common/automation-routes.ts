@@ -9,6 +9,8 @@
 // anything else, so a caller who isn't a direct writer learns nothing about
 // the realm's automations or runs.
 
+import type { StoredRunLogLine } from './automation-run-log.ts';
+
 export const AUTOMATION_SWITCH_ON_PATH = '/_automation-switch-on';
 export const AUTOMATION_PREVIEW_PATH = '/_automation-preview';
 export const AUTOMATION_RUN_NOW_PATH = '/_automation-run-now';
@@ -99,14 +101,4 @@ export interface AutomationRunLogDocument {
   };
 }
 
-export interface AutomationRunLogLine {
-  seq: number;
-  // ms since the epoch
-  at: number;
-  source: 'script' | 'platform';
-  kind: string;
-  level?: 'log' | 'info' | 'warn' | 'error';
-  message: string;
-  scriptLine?: number;
-  data?: Record<string, unknown>;
-}
+export type AutomationRunLogLine = StoredRunLogLine;

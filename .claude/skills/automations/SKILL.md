@@ -1254,9 +1254,11 @@ and otherwise asks again every `AUTOMATION_RUN_LOG_FOLLOW_INTERVAL_MS`
 event for the run, so a milestone or the run's end is read at once. The
 realm server writes the run's `finish` line just after the row ends, so once
 a page reads the run ended with nothing more, the follower reads once more an
-interval later and then stops; `done` settles then. A refused read (a 4xx)
-stops it too, with the refusal passed to `onError`; any other failure is
-tried again at the next interval. A finished run's log is read the same way:
+interval later, which a wake doesn't shorten, and then stops; `done` settles
+then. A refused read (a 4xx) stops it too, with the refusal passed to
+`onError`; any other failure is tried again at the next interval. `stop()`
+settles `done` at once, and a read in flight then reports neither its page
+nor its failure. A finished run's log is read the same way:
 its pages in turn, then the follower stops.
 
 By hand in development, with a realm-server session token for a direct writer:

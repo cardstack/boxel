@@ -37,10 +37,12 @@ export class AutomationRunLogReadError extends Error {
 }
 
 export interface AutomationRunLogFollower {
-  // Reads at once, rather than at the next interval. Call it on each `job`
-  // realm event for the run.
+  // Reads at once, rather than at the next interval, while the run is pending
+  // or running. Call it on each `job` realm event for the run. Once a page
+  // finds the run ended, the last read waits its interval regardless.
   wake(): void;
-  // Stops following. Pages already asked for are not handed on.
+  // Stops following. A page or failure of a read already in flight is not
+  // handed on.
   stop(): void;
   // Settles once the follower stops: the run ended and its log was read to
   // the end, `stop` was called, or a read was refused (`onError` has the
@@ -111,12 +113,20 @@ export function followAutomationRunLog({
   let after = -1;
   let stopped = false;
   let endedReads = 0;
+  // Ends the wait in progress early: `wake` sets it for a wait a wake may
+  // end, `stop` for any wait.
   let wakeUp: (() => void) | undefined;
+  let cancelWait: (() => void) | undefined;
+  // A wake that came while no wait was in progress, which the next wait a
+  // wake may end takes up at once.
   let woken = false;
 
-  let wait = () =>
+  // Waits an interval. `wakeable` lets a wake end it early; the wait after
+  // the run has ended is not wakeable, so the realm server has the interval
+  // to write the run's last lines.
+  let wait = (wakeable: boolean) =>
     new Promise<void>((resolve) => {
-      if (woken) {
+      if (stopped || (wakeable && woken)) {
         woken = false;
         resolve();
         return;
@@ -125,10 +135,14 @@ export function followAutomationRunLog({
       function finish() {
         clearTimeout(timer);
         wakeUp = undefined;
-        woken = false;
+        cancelWait = undefined;
+        if (wakeable) {
+          woken = false;
+        }
         resolve();
       }
-      wakeUp = finish;
+      cancelWait = finish;
+      wakeUp = wakeable ? finish : undefined;
     });
 
   let readPage = async (): Promise<AutomationRunLogPage> => {
@@ -159,6 +173,9 @@ export function followAutomationRunLog({
       try {
         page = await readPage();
       } catch (error) {
+        if (stopped) {
+          return;
+        }
         let failure = error instanceof Error ? error : new Error(String(error));
         onError?.(failure);
         if (
@@ -168,7 +185,7 @@ export function followAutomationRunLog({
         ) {
           return;
         }
-        await wait();
+        await wait(true);
         continue;
       }
       if (stopped) {
@@ -179,13 +196,14 @@ export function followAutomationRunLog({
       if (page.more) {
         continue;
       }
-      if (page.state !== 'pending' && page.state !== 'running') {
+      let ended = page.state !== 'pending' && page.state !== 'running';
+      if (ended) {
         endedReads++;
         if (endedReads > 1) {
           return;
         }
       }
-      await wait();
+      await wait(!ended);
     }
   };
 
@@ -200,7 +218,7 @@ export function followAutomationRunLog({
     },
     stop() {
       stopped = true;
-      wakeUp?.();
+      cancelWait?.();
     },
     done,
   };
