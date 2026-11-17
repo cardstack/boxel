@@ -59,6 +59,7 @@ import {
   pauseForPayerLostAccess,
   type AutomationRow,
 } from './automations.ts';
+import type { ReportRunChange } from './automation-run-events.ts';
 import type { DBAdapter } from './db.ts';
 import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import { isSessionRevoked } from './db-queries/user-queries.ts';
@@ -98,6 +99,8 @@ export interface AdmissionContext {
   virtualNetwork: VirtualNetwork;
   matrixServerName: string | undefined;
   checks: AutomationAdmissionChecks | undefined;
+  // Told of each run a pause the admission makes cancels.
+  reportRunChange?: ReportRunChange;
 }
 
 // How a run was started: by hand (Preview, Run now), by a batch's follow-up,
@@ -117,7 +120,7 @@ export async function admitRunIdentity(
   | { ok: true; automation: AutomationRow | undefined }
   | ({ ok: false; pause?: () => Promise<unknown> } & AdmissionRefusal)
 > {
-  let { dbAdapter, virtualNetwork, matrixServerName } = ctx;
+  let { dbAdapter, virtualNetwork, matrixServerName, reportRunChange } = ctx;
   let automation = await getAutomation(dbAdapter, run.automationId);
   let actsAs = run.actsAs;
   if (kind !== 'manual') {
@@ -158,7 +161,12 @@ export async function admitRunIdentity(
       ? {
           ...refusal,
           pause: () =>
-            pauseForPayerLostAccess(dbAdapter, run.automationId, actsAs),
+            pauseForPayerLostAccess(
+              dbAdapter,
+              run.automationId,
+              actsAs,
+              reportRunChange,
+            ),
         }
       : refusal;
 
@@ -181,6 +189,7 @@ export async function admitRunIdentity(
             checkAutomationPayer(dbAdapter, run.automationId, {
               matrixServerName,
               virtualNetwork,
+              reportRunChange,
             }),
         }
       : refusal;

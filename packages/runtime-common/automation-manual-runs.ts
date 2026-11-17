@@ -164,26 +164,26 @@ async function startManualRun(
       triggerKind: 'manual',
     },
   });
-  if (!created) {
-    return { ok: true, run, job };
+  if (created) {
+    let enqueuedAt = new Date().toISOString();
+    emitAutomationRunEvent({
+      kind: 'enqueued',
+      automation: automationId,
+      run: run.id,
+      job: job.id,
+      realm,
+      trigger: run.trigger,
+      triggerKind: 'manual',
+      dryRun,
+      scheduledAt: run.createdAt,
+      enqueuedAt,
+      scheduleLagMs: Math.max(
+        0,
+        Date.parse(enqueuedAt) - Date.parse(run.createdAt),
+      ),
+    });
   }
-  let enqueuedAt = new Date().toISOString();
-  emitAutomationRunEvent({
-    kind: 'enqueued',
-    automation: automationId,
-    run: run.id,
-    job: job.id,
-    realm,
-    trigger: run.trigger,
-    triggerKind: 'manual',
-    dryRun,
-    scheduledAt: run.createdAt,
-    enqueuedAt,
-    scheduleLagMs: Math.max(
-      0,
-      Date.parse(enqueuedAt) - Date.parse(run.createdAt),
-    ),
-  });
+  await options.reportRunChange?.(run.id);
   return { ok: true, run, job };
 }
 

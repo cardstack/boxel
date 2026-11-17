@@ -19,6 +19,7 @@ import {
   automationRunDedupeKey,
   isAutomationScriptOutcome,
 } from '../automation-run-command.ts';
+import type { ReportRunChange } from '../automation-run-events.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
 import { logRunPlatformLine } from '../automation-run-log.ts';
 import {
@@ -95,6 +96,9 @@ export interface AutomationAttemptContext {
   // Writes the run's compute and network charge once the run has ended.
   // Without it, as in a harness, the run is measured and nothing is charged.
   meteredCharges?: MeteredCharges;
+  // Told each time the attempt moves the run: it starts it, admits it, or
+  // ends it, and when a pause the admission makes cancels other runs.
+  reportRunChange?: ReportRunChange;
   log: Log;
 }
 
@@ -197,6 +201,7 @@ async function attemptRun(
       ...(jobInfo.concurrencyGroup ? { lane: jobInfo.concurrencyGroup } : {}),
       priority: jobInfo.priority,
     });
+    await ctx.reportRunChange?.(runId);
   }
   switch (start.kind) {
     case 'committed':
@@ -276,6 +281,7 @@ async function attemptRun(
     virtualNetwork: ctx.virtualNetwork,
     matrixServerName: ctx.matrixServerName,
     checks: ctx.admissionChecks,
+    reportRunChange: ctx.reportRunChange,
   };
   let identity = await admitRunIdentity(admission, run, { kind });
   if (!identity.ok) {
@@ -371,6 +377,7 @@ async function attemptRun(
     return { state: 'left', reason: 'superseded' };
   }
   admitted();
+  await ctx.reportRunChange?.(runId);
   await logRunPlatformLine(dbAdapter, runId, {
     kind: 'admission',
     level: 'info',
@@ -595,6 +602,7 @@ async function finish(
     );
     return { state: 'left' };
   }
+  await ctx.reportRunChange?.(runId);
   if (outcome.state === 'error') {
     ctx.log.warn(
       `${tag} ended as an error (${outcome.reason}): ${outcome.message ?? ''}`,

@@ -430,11 +430,11 @@ module(basename(import.meta.filename), function (hooks) {
       [line('one'), line('two'), line('three')],
       { maxLines: 2 },
     );
-    assert.deepEqual(first, { stored: 2, dropped: 1 });
+    assert.deepEqual(first, { stored: 2, dropped: 1, milestones: 0 });
     let second = await appendRunLog(dbAdapter, run.id, [line('four')], {
       maxLines: 2,
     });
-    assert.deepEqual(second, { stored: 0, dropped: 1 });
+    assert.deepEqual(second, { stored: 0, dropped: 1, milestones: 0 });
 
     let { lines, dropped } = await logOf(run.id);
     assert.strictEqual(dropped, 2);
@@ -457,7 +457,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(
       capped,
-      { stored: 2, dropped: 1 },
+      { stored: 2, dropped: 1, milestones: 0 },
       'characters cap it too',
     );
   });
@@ -1016,7 +1016,11 @@ module(basename(import.meta.filename), function (hooks) {
         ],
         { maxLines: 0 },
       );
-      assert.deepEqual(result, { stored: 0, dropped: 2 }, 'the log is full');
+      assert.deepEqual(
+        result,
+        { stored: 0, dropped: 2, milestones: 1 },
+        'the log is full, and the milestone is recorded',
+      );
       let milestones = await milestonesOf(run.id);
       assert.deepEqual(milestones.plan, ['A']);
       assert.deepEqual(

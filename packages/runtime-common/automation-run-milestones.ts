@@ -84,7 +84,7 @@ export async function recordRunMilestones(
   txQuery: Querier,
   runId: string,
   lines: readonly RunLogLine[],
-): Promise<void> {
+): Promise<number> {
   let progress = lines.filter(
     (line) =>
       line.source === 'script' &&
@@ -93,7 +93,7 @@ export async function recordRunMilestones(
         line.kind === 'count'),
   );
   if (progress.length === 0) {
-    return;
+    return 0;
   }
   let [run] = (await txQuery([
     'SELECT milestones_dropped FROM automation_runs WHERE id =',
@@ -211,6 +211,7 @@ export async function recordRunMilestones(
       param(runId),
     ]);
   }
+  return reached.length;
 }
 
 // Clears a run's milestones, inside the caller's transaction, for an attempt

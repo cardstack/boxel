@@ -674,6 +674,27 @@ export class NodeAdapter implements RealmAdapter {
       return [];
     }
 
+    // An event that describes state read from the database is read again now
+    // that it is about to be sent, with its recipients (see
+    // `RealmEventDelivery.refresh`).
+    if (delivery?.refresh) {
+      let refreshed;
+      try {
+        refreshed = await delivery.refresh();
+      } catch (e) {
+        realmEventsLog.error(
+          `Error refreshing a ${event.eventName} event before sending it; skipping it`,
+          e,
+        );
+        return [];
+      }
+      if (!refreshed) {
+        return [];
+      }
+      event = { ...refreshed.event, realmURL: realmUrl };
+      delivery = { recipients: refreshed.recipients };
+    }
+
     // A private realm's event goes once into the realm's own room, whose
     // members are the users its grants name (see realm-event-rooms.ts). An
     // event meant only for some of them, a world-readable realm's event, and

@@ -90,6 +90,10 @@ export interface AutomationRun extends AutomationRunCounts {
   errorMessage: string | null;
   // Who canceled the run, when a person did.
   canceledBy: string | null;
+  // For a run that ended on a credential refused for a reason a person must
+  // fix: the reason, and the share or personal key the refused slot is filled
+  // from.
+  credentialRefusal: AutomationRunCredentialRefusal | null;
   // Credits the run's finished AI requests cost, and the most its AI requests
   // in flight can cost: the sum of the reservations it holds (see
   // `reserveAutomationRunAICredits`).
@@ -102,7 +106,8 @@ export interface AutomationRun extends AutomationRunCounts {
   startedAt: string | null;
   // When the attempt that owns the run admitted it (see
   // `automation-admission.ts`). Each attempt admits the run again before it
-  // runs the script, so this is the latest admission.
+  // runs the script, so this is the latest admission; an attempt that takes
+  // the run over from another clears it until that attempt admits the run.
   admittedAt: string | null;
   commitStartedAt: string | null;
   committedAt: string | null;
@@ -142,7 +147,27 @@ export type AutomationRunAttemptStart =
 
 export type AutomationRunOutcome =
   | { state: 'complete' }
-  | { state: 'error'; reason: string; message?: string };
+  | {
+      state: 'error';
+      reason: string;
+      message?: string;
+      credential?: AutomationRunCredentialRefusal;
+    };
+
+// The error reason of a run that ended on a refused credential: at admission,
+// or at one of its `callApi` calls.
+export const CREDENTIAL_REJECTED_REASON = 'credential-rejected';
+
+// A credential a run ended on, refused for a reason a person must fix:
+// `rejected`, the vendor no longer accepts the key or connection, or
+// `needs-admin`, the OAuth client it mints through, or the share it is
+// filled from, needs an administrator. `subject` is the share the refused
+// slot is filled from, or the personal key that fills it. A token endpoint
+// that is only failing for now (`unavailable`) is never one.
+export interface AutomationRunCredentialRefusal {
+  reason: 'rejected' | 'needs-admin';
+  subject: { kind: 'share' | 'key'; id: string };
+}
 
 const COUNT_COLUMNS: Record<keyof AutomationRunCounts, string> = {
   callApiCalls: 'call_api_calls',
@@ -260,9 +285,10 @@ export async function startAutomationRunAttempt(
   // run's row, since the takeover waited on that lock. A run whose commit was
   // already claimed keeps its files: the claiming attempt may still be
   // reading them to send its batch. An attempt that takes the run from
-  // another also clears the run's milestones, since the script runs again
-  // from its start and reports them afresh. The run's row is locked first,
-  // the order `appendRunLog` takes the locks in.
+  // another also clears the run's admission and milestones, since it admits
+  // the run again and the script runs again from its start and reports them
+  // afresh. The run's row is locked first, the order `appendRunLog` takes the
+  // locks in.
   let row = await dbAdapter.withTransaction(async (txQuery) => {
     let [owner] = await txQuery([
       'SELECT attempt FROM automation_runs WHERE id =',
@@ -287,6 +313,14 @@ export async function startAutomationRunAttempt(
       ]);
       if (owner?.attempt != null && Number(owner.attempt) !== attempt) {
         await clearRunMilestones(txQuery, id);
+        if (started.admitted_at != null) {
+          let [readmitting] = await txQuery([
+            'UPDATE automation_runs SET admitted_at = NULL WHERE id =',
+            param(id),
+            'RETURNING *',
+          ]);
+          return readmitting;
+        }
       }
     }
     return started;
@@ -420,6 +454,9 @@ export async function finishAutomationRun(
             param(outcome.reason),
             ', error_message =',
             param(outcome.message ?? null),
+            ...(outcome.credential
+              ? [',', ...credentialColumns(outcome.credential)]
+              : []),
           ],
           ['AND committed_at IS NULL'],
           { ends: true },
@@ -428,6 +465,38 @@ export async function finishAutomationRun(
     await logAutomationRunEnded(dbAdapter, run);
   }
   return run;
+}
+
+// Records on a running run the credential its admission was refused for,
+// before the attempt finishes it as an error: the share or key the refused
+// slot is filled from, which the run's notices are read against. Owner only;
+// a run that already records one keeps it.
+export async function recordAutomationRunCredentialRefusal(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+  credential: AutomationRunCredentialRefusal,
+): Promise<AutomationRun | undefined> {
+  return await updateOwned(
+    dbAdapter,
+    id,
+    attempt,
+    credentialColumns(credential),
+    ['AND credential_reason IS NULL'],
+  );
+}
+
+function credentialColumns(
+  credential: AutomationRunCredentialRefusal,
+): Expression {
+  return [
+    'credential_reason =',
+    param(credential.reason),
+    ', credential_share_id =',
+    param(credential.subject.kind === 'share' ? credential.subject.id : null),
+    ', credential_key_id =',
+    param(credential.subject.kind === 'key' ? credential.subject.id : null),
+  ];
 }
 
 // The run log's last line: how the run ended, as its row says. The realm
@@ -1010,6 +1079,7 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     errorReason: (row.error_reason as string | null) ?? null,
     errorMessage: (row.error_message as string | null) ?? null,
     canceledBy: (row.canceled_by as string | null) ?? null,
+    credentialRefusal: credentialRefusalFromRow(row),
     callApiCalls: Number(row.call_api_calls),
     callApiResponseBytes: Number(row.call_api_response_bytes),
     resolveCalls: Number(row.resolve_calls),
@@ -1024,6 +1094,28 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     committedAt: iso(row.committed_at),
     finishedAt: iso(row.finished_at),
   };
+}
+
+function credentialRefusalFromRow(
+  row: Record<string, PgPrimitive>,
+): AutomationRunCredentialRefusal | null {
+  let reason = row.credential_reason;
+  if (reason !== 'rejected' && reason !== 'needs-admin') {
+    return null;
+  }
+  if (row.credential_share_id != null) {
+    return {
+      reason,
+      subject: { kind: 'share', id: String(row.credential_share_id) },
+    };
+  }
+  if (row.credential_key_id != null) {
+    return {
+      reason,
+      subject: { kind: 'key', id: String(row.credential_key_id) },
+    };
+  }
+  return null;
 }
 
 function iso(value: PgPrimitive | undefined): string | null {

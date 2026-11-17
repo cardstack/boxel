@@ -90,6 +90,12 @@ description: >-
   refusal code and what fixes it, and the `admission` log line and
   `admitted_at`. Use when a run ended with one of those codes, or when
   changing what admission checks.
+  Also covers the `job` realm event (`automation-run-events.ts`,
+  `Realm.broadcastJobEvent`): what it carries, that it reaches only the
+  realm's direct writers' session rooms, which code reports a run's change,
+  and how to watch it from the host or a card. Use when a console or card
+  should follow a run live, when adding code that moves a run, or when a
+  direct writer isn't seeing a run's events.
 ---
 
 # Automations
@@ -408,6 +414,7 @@ cancel works by changing it. The functions that change it are in
 | `script_id`, `script_hash`                                                     | The script file the run read, as an identifier, and the hash of the text it ran                                                                                                                    |
 | `state`                                                                        | `pending`, `running`, `complete`, `error` or `canceled`                                                                                                                                            |
 | `error_reason`, `error_message`                                                | For an error: a code (such as `script-error`, `timed-out`, `commit-interrupted`) and its detail. A run canceled by a pause no person asked for carries that pause's reason (such as `caps-raised`) |
+| `credential_reason`, `credential_share_id`, `credential_key_id`                | For a run that ended `credential-rejected`: `rejected` or `needs-admin`, and the share or personal key the refused slot is filled from (the `oauth-connections` skill's _Unattended runs_)         |
 | `canceled_by`                                                                  | Who canceled the run, when a person did; null when an automatic pause canceled it                                                                                                                  |
 | `call_api_calls`, `call_api_response_bytes`, `resolve_calls`, `writes`         | The metered counts, which the realm server must add to where it does the work, never taking them from the tab                                                                                      |
 | `ai_credits_spent`, `ai_credits_reserved`, `ai_reservations`                   | Credits the run's finished AI requests cost, and the worst case of those in flight (see _The AI spending cap_)                                                                                     |
@@ -1217,6 +1224,102 @@ commit, the finish, the index pass, each charge) is also one line on the
 `boxel:automation-runs` channel, tagged with the run's ids; the
 `automation-diagnostics` skill reads them.
 
+## The `job` realm event
+
+A run that moves sends a `job` realm event. The run moves when its state, its
+step or its run milestone changes. The event is `JobEventContent` in
+`packages/base/matrix-event.gts`:
+
+```json
+{
+  "eventName": "job",
+  "runId": "<automation_runs id>",
+  "automation": "<the automation card's id, in RRI form>",
+  "state": "running",
+  "step": "script",
+  "milestone": "Write digest",
+  "realmURL": "<the realm's URL>"
+}
+```
+
+- **`step`** is `admission`, `script` or `commit`, read from the run row by
+  `automationRunStep`. `commit_started_at` set means `commit`. `admitted_at`
+  set means `script`. `started_at` set means `admission`. A run no attempt has
+  started has no step (`null`). An ended run keeps the step it got to, so a
+  run that admission refused reads `error` at `admission`. An attempt that
+  takes a run over from another clears `admitted_at`, so the retry's own
+  admission reads as `admission` again.
+- **`milestone`** is the name of the run's last `automation_run_milestones`
+  row, or `null` before its first. A `count` inside a milestone sends no
+  event.
+- **`automation`** is the card's identifier in RRI form (ADR 002 §1.3), the
+  spelling the card's own id has, so a card matches the event against its id.
+- **No person is in it.** Who the run acts as, who canceled it, and its error
+  reason and message aren't in the event. A subscriber reads them from a route
+  that checks who is asking (ADR 011).
+
+### Who receives it
+
+`Realm.broadcastJobEvent` sends the event only to the session rooms of the
+realm's direct writers (`fetchDirectWriters`). It hands the adapter a
+`RealmEventDelivery.refresh`, which the node adapter asks when the event
+reaches the head of the realm's line of events (`realm-event-dispatcher.ts`):
+the run's event and the writers are read again then, so an event that waited
+behind others goes out with the run as it is and only to the writers there
+are when it is sent. It never goes into the realm's own event room, and never to a reader, a `*` or
+`users` row, a policy grant or a bot account. A realm with no direct writer
+sends it nowhere. Every route into delivery leads there:
+`Realm.broadcastEvent` (the worker's bridge) and the realm's private
+broadcast both hand any `job` event to it. A writer without a session room
+receives nothing, as with every narrowed realm event.
+
+### Who reports a change
+
+Each process reports through a `ReportRunChange` (`runId => Promise<void>`)
+that reads the row (`readJobEvent`) and sends the event. Within one realm
+server process the events go out in order, each read as it is sent. A worker's
+reports reach whichever realm server answers its request, so events from
+different processes can still arrive out of order: a subscriber treats the
+event as a cue to read the run again. A report never rejects. A failed one is
+logged as `could not send the job event for automation run …`.
+
+| Change                                           | Reported by                                                                                                                                                                               |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A trigger's run is created (pending)             | the `automation-tick` task                                                                                                                                                                |
+| Preview or Run now creates its run               | `startAutomationPreview` / `startAutomationRunNow`, given `reportRunChange` in their options                                                                                              |
+| An attempt starts the run, admits it, or ends it | `runAutomationAttempt` (`AutomationAttemptContext.reportRunChange`, built in the `run-command` task)                                                                                      |
+| A milestone is reached                           | the realm's `/_run-log` route, when `appendRunLog` reports `milestones > 0`                                                                                                               |
+| The commit is claimed, released or lands         | the realm's `/_run-commit` route                                                                                                                                                          |
+| A call ends the run at a cap                     | `endRunAtCap` (the realm's `callApi` meter; the request forwarder for AI requests)                                                                                                        |
+| A pause, remove or cancel ends runs              | `withRunCancels` and `cancelAutomationRunFor`, given `reportRunChange` (`AutomationActorOptions`, `AutomationSyncOptions`, or a trailing argument); archiving and the index hook pass one |
+
+A worker holds no Matrix client. `taskRunChangeReporter` hands its event to
+`reportRealmEvent`, and the realm server's `/_worker-request` delivers it
+through `Realm.broadcastEvent`. A route that serves no single realm (the
+request forwarder, archiving) uses `realmServerRunChangeReporter`
+(`realm-server/lib/run-change-reporter.ts`), which finds the run's realm
+through the reconciler. **New code that moves a run** reports it the same way.
+A lifecycle function that takes `AutomationActorOptions` reports when its
+caller passes `reportRunChange`. A route that serves one of them passes the
+realm's `reportRunChange`.
+
+### Watching it
+
+In the host, subscribe to the realm's events the way other realm-event
+consumers do. Skip any event whose `eventName` isn't `'job'`, then match
+`automation` (or `runId`) and read the run again. For an automation card,
+read `GET <realm>/_automation-status`. For a run, read its report. The
+event is a cue to re-read, not the run's record. Missing one is harmless,
+because the next change sends another, and a subscriber that comes back reads
+the run afresh anyway.
+
+To see the events locally, read the direct writer's session room
+(`users.session_room_id`) in Synapse. The event type is
+`app.boxel.realm-event`, with `content.eventName = "job"`. If a writer gets
+nothing, check that they hold a `write` row of their own in
+`realm_user_permissions` and aren't a bot account (`isBotAccount`), and that
+`users.session_room_id` is set.
+
 ## The automation command
 
 One attempt of a run is a `run-command` job naming `AUTOMATION_COMMAND`
@@ -1335,10 +1438,16 @@ spending hook. A worker without them refuses every run as
 | `binding-not-approved`                                                            | A declared operation has no approval for automations by the run's identity                                                                                                                                                                                                                                                                                                                               | The person approves the operation in the secure window                                                                 |
 | `binding-needs-reapproval`                                                        | The operation's request changed since it was approved                                                                                                                                                                                                                                                                                                                                                    | The person reviews the changes and approves again in the secure window                                                 |
 | `share-suspended`                                                                 | The realm's share the operation's `{{apiKey}}` slot uses is suspended                                                                                                                                                                                                                                                                                                                                    | A direct writer resumes the share, or the key's owner swaps another key into it                                        |
-| `credential-rejected`                                                             | The vendor refused the key or connection the operation uses, or its OAuth client is broken (see the `oauth-connections` skill)                                                                                                                                                                                                                                                                           | Reconnect or replace the key                                                                                           |
+| `credential-rejected`                                                             | The vendor refused the key or connection the operation uses, or its OAuth client is broken (see the `oauth-connections` skill). The realm records the credential on the run (`credential_*`) before answering                                                                                                                                                                                            | Reconnect or replace the key                                                                                           |
 | any other `automationAdmission` code (`target-not-found`, `invalid-operation`, …) | The declared operation can't be found or lowered for the run's identity                                                                                                                                                                                                                                                                                                                                  | Fix the card's declaration or the operation's module                                                                   |
 | `run-admission-failed`, `run-admission-unavailable`                               | The worker couldn't ask the realm (the realm's answer is in `error_message`), or the realm has no `admitAutomation` (a published realm)                                                                                                                                                                                                                                                                  | Look at the realm server's log for the `_run-admission` request                                                        |
 | the spending hook's code                                                          | `AutomationAdmissionChecks.admitSpending`: the balance and the monthly cap                                                                                                                                                                                                                                                                                                                               | See the `pricing` skill                                                                                                |
+
+A credential refused during the run, at one of its `callApi` calls, ends the
+run with `credential-rejected` too, unless the token endpoint is only failing
+for now, which the call waits out. How unattended runs refresh and retry, what
+the run records, and who is told (`automationCredentialNotices`) are in the
+`oauth-connections` skill's _Unattended runs_ section.
 
 When admission pauses the automation with `payer-lost-access`, the refused
 run ends with its own code first, and the pause follows (the refusal carries

@@ -25,8 +25,15 @@ import {
   type Realm,
   type RunCommandArgs,
   type RunCommandResponse,
+  type RealmAdapter,
+  type ReportRunChange,
   type VirtualNetwork,
+  insertRealmEventRoom,
+  runChangeReporter,
+  upsertSessionRoom,
 } from '@cardstack/runtime-common';
+import type { JobEventContent } from '@cardstack/base/matrix-event';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { presentsAsRunToken } from '@cardstack/runtime-common/run-token';
 import {
   setAutomationRunTelemetrySink,
@@ -52,6 +59,7 @@ import {
   TEST_AUTOMATION_PATH,
   automationFixture,
   ensureTestUser,
+  waitUntil,
   realmSecretSeed,
   setupPermissionedRealmCached,
   testAutomationAdmissionChecks,
@@ -80,6 +88,7 @@ return 'done';
 `;
 const SCRIPT_PATH = `${TEST_AUTOMATION_PATH}-script.js`;
 const REALM_USER = '@node-test_realm:localhost';
+const READER = '@attempt-reader:localhost';
 const SOURCE = 'application/vnd.card+source';
 
 const log = logger('automation-run-attempt-test');
@@ -92,6 +101,7 @@ interface TabCall {
 
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
+  let realmAdapter: RealmAdapter;
   let dbAdapter: PgAdapter;
   let virtualNetwork: VirtualNetwork;
 
@@ -100,6 +110,7 @@ module(basename(import.meta.filename), function (hooks) {
     realmURL,
     permissions: {
       [OWNER]: ['read', 'write'],
+      [READER]: ['read'],
       // The realm's own user, which indexes it.
       [REALM_USER]: ['read', 'write', 'realm-owner'],
     },
@@ -109,6 +120,7 @@ module(basename(import.meta.filename), function (hooks) {
     },
     onRealmSetup(args) {
       realm = args.testRealm;
+      realmAdapter = args.testRealmAdapter;
       dbAdapter = args.dbAdapter;
       virtualNetwork = args.virtualNetwork;
     },
@@ -186,6 +198,7 @@ module(basename(import.meta.filename), function (hooks) {
       commit,
       meteredCharges,
       workerLog = log,
+      reportRunChange,
     }: {
       input?: Partial<AutomationJobInput>;
       dedupeKey?: string | null;
@@ -199,6 +212,7 @@ module(basename(import.meta.filename), function (hooks) {
       // `send` sends one to the realm.
       commit?: (send: () => Promise<Response>) => Promise<Response>;
       meteredCharges?: MeteredCharges;
+      reportRunChange?: ReportRunChange;
     } = {},
   ) {
     let network = commit
@@ -240,6 +254,7 @@ module(basename(import.meta.filename), function (hooks) {
         matrixServerName: 'localhost',
         admissionChecks: testAutomationAdmissionChecks,
         meteredCharges,
+        reportRunChange,
         log: workerLog,
       },
       {
@@ -1001,5 +1016,229 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(result.state, 'left');
     assert.strictEqual(calls.length, 0);
+  });
+
+  module('the job realm event', function (hooks) {
+    // Every Matrix send the realm's adapter makes for a run's job event, with
+    // the delivery the realm asked for. The adapter sends them through a
+    // client that records the room, so the test sees which rooms the event
+    // reaches: the owner, a direct writer, has a session room, the reader
+    // has one, and the realm, which is private, has an event room of its own.
+    let delivered: { event: JobEventContent; recipients?: string[] }[];
+    let rooms: string[];
+    let restore: (() => void) | undefined;
+
+    hooks.beforeEach(async function () {
+      delivered = [];
+      rooms = [];
+      await ensureTestUser(dbAdapter, OWNER);
+      await upsertSessionRoom(dbAdapter, OWNER, '!owner:localhost');
+      await ensureTestUser(dbAdapter, READER);
+      await upsertSessionRoom(dbAdapter, READER, '!reader:localhost');
+      await insertRealmEventRoom(dbAdapter, realm.url, '!events:localhost');
+      let recording = {
+        login: async () => undefined,
+        getUserId: () => '@realm_server:localhost',
+        isLoggedIn: () => true,
+        nextTxnId: () => randomUUID(),
+        sendEvent: async (roomId: string) => {
+          rooms.push(roomId);
+          return '$event';
+        },
+      } as unknown as MatrixClient;
+      let original = realmAdapter.broadcastRealmEvent.bind(realmAdapter);
+      realmAdapter.broadcastRealmEvent = (async (
+        event,
+        realmUrl,
+        matrixClient,
+        db,
+        delivery,
+      ) => {
+        if (event.eventName !== 'job') {
+          return await original(event, realmUrl, matrixClient, db, delivery);
+        }
+        delivered.push({ event, recipients: delivery?.recipients });
+        return await original(event, realmUrl, recording, db, delivery);
+      }) as RealmAdapter['broadcastRealmEvent'];
+      restore = () => {
+        realmAdapter.broadcastRealmEvent = original;
+      };
+    });
+
+    hooks.afterEach(function () {
+      restore?.();
+    });
+
+    // A worker's reporter: the worker hands the event to the realm server,
+    // which broadcasts it as the realm's own (`Realm.broadcastEvent`).
+    function workerReporter(sent: JobEventContent[]): ReportRunChange {
+      return runChangeReporter({
+        dbAdapter,
+        virtualNetwork,
+        log,
+        send: async (event) => {
+          sent.push(event);
+          await realm.broadcastEvent(event);
+        },
+      });
+    }
+
+    // A tab that reports its run milestones to the realm with the run's
+    // token, as the script's `realm.progress` does, then stages and answers
+    // as `stubTab` does.
+    function milestoneTab(milestones: string[]): Prerenderer {
+      let inner = stubTab([], {
+        writes: { 'out/result.txt': 'from the run' },
+        answer: { state: 'complete' },
+      });
+      return {
+        async runCommand(args: RunCommandArgs) {
+          let token = (JSON.parse(args.auth) as Record<string, string>)[
+            realm.url
+          ];
+          let at = Date.now();
+          let response = await virtualNetwork.fetch(
+            new URL(RUN_LOG_PATH.slice(1), realm.url).href,
+            {
+              method: 'POST',
+              headers: {
+                Accept: 'application/vnd.api+json',
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                events: [
+                  { at, kind: 'plan', milestones },
+                  ...milestones.map((name, i) => ({
+                    at: at + i + 1,
+                    kind: 'milestone',
+                    name,
+                  })),
+                ],
+              }),
+            },
+          );
+          if (!response.ok) {
+            throw new Error(`run log refused: ${response.status}`);
+          }
+          return await inner.runCommand(args);
+        },
+      } as unknown as Prerenderer;
+    }
+
+    test("a run's job events reach its realm's direct writers' session rooms, and no reader's or the realm's room", async function (assert) {
+      let run = await newRun();
+      let fromWorker: JobEventContent[] = [];
+      let result = await attempt(run, milestoneTab(['Fetch', 'Write']), {
+        reportRunChange: workerReporter(fromWorker),
+      });
+      assert.deepEqual(result, { state: 'complete' });
+
+      let automation = `${realm.url}${TEST_AUTOMATION_PATH}`;
+      assert.deepEqual(
+        fromWorker.map(({ state, step, milestone }) => [
+          state,
+          step,
+          milestone,
+        ]),
+        [
+          ['running', 'admission', null],
+          ['running', 'script', null],
+          ['complete', 'commit', 'Write'],
+        ],
+        'the attempt reports its start, its admission and its end',
+      );
+
+      // The realm's own reports (the milestones, the commit's claim and its
+      // landing) aren't awaited by the requests that make them.
+      let seen = () =>
+        delivered.map(({ event }) => [
+          event.state,
+          event.step,
+          event.milestone,
+        ]);
+      await waitUntil(
+        async () =>
+          seen().some(
+            ([state, step, milestone]) =>
+              state === 'running' && step === 'script' && milestone === 'Write',
+          ) &&
+          seen().some(
+            ([state, step]) => state === 'running' && step === 'commit',
+          ),
+        {
+          timeout: 5000,
+          interval: 50,
+          timeoutMessage: () =>
+            `the realm's own job events arrive: ${JSON.stringify(seen())}`,
+        },
+      );
+      assert.ok(
+        seen().some(
+          ([state, step, milestone]) =>
+            state === 'running' &&
+            step === 'script' &&
+            (milestone === 'Fetch' || milestone === 'Write'),
+        ),
+        'reaching a milestone sends an event naming it',
+      );
+      assert.ok(
+        seen().some(
+          ([state, step]) => state === 'running' && step === 'commit',
+        ),
+        'claiming the commit sends an event at the commit step',
+      );
+
+      for (let { event, recipients } of delivered) {
+        assert.deepEqual(
+          recipients,
+          [OWNER],
+          `the ${event.state}/${event.step} event is meant for the direct writer alone`,
+        );
+        assert.deepEqual(
+          Object.keys(event).sort(),
+          [
+            'automation',
+            'eventName',
+            'milestone',
+            'realmURL',
+            'runId',
+            'state',
+            'step',
+          ],
+          'the event carries no one but the run: not who it acts as',
+        );
+        assert.strictEqual(event.runId, run.id);
+        assert.strictEqual(event.automation, automation);
+        assert.strictEqual(event.realmURL, realm.url);
+      }
+      assert.true(rooms.length > 0, 'the events were sent');
+      assert.deepEqual(
+        [...new Set(rooms)],
+        ['!owner:localhost'],
+        "only the direct writer's session room receives them: not the reader's, not the realm's event room",
+      );
+    });
+
+    test('a realm with no direct writer sends a job event to no one', async function (assert) {
+      let run = await newRun();
+      await query(dbAdapter, [
+        'UPDATE realm_user_permissions SET write = false WHERE realm_url =',
+        param(realm.url),
+        'AND username =',
+        param(OWNER),
+      ]);
+      await realm.broadcastEvent({
+        eventName: 'job',
+        runId: run.id,
+        automation: `${realm.url}${TEST_AUTOMATION_PATH}`,
+        state: 'pending',
+        step: null,
+        milestone: null,
+        realmURL: realm.url,
+      });
+      assert.deepEqual(delivered, [], 'nothing is handed to the adapter');
+      assert.deepEqual(rooms, [], 'and no room receives it');
+    });
   });
 });

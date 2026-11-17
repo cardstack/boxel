@@ -5,6 +5,7 @@ import {
   type DBAdapter,
   type DefinitionLookup,
   type RealmIdentifier,
+  type ReportRunChange,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -68,11 +69,14 @@ export async function admitRunForward(
     definitionLookup,
     virtualNetwork,
     realmSecretSeed,
+    reportRunChange,
   }: {
     dbAdapter: DBAdapter;
     definitionLookup: DefinitionLookup;
     virtualNetwork: VirtualNetwork;
     realmSecretSeed: string;
+    // Told when the request ends the run at a cap.
+    reportRunChange?: ReportRunChange;
   },
   {
     token,
@@ -195,7 +199,7 @@ export async function admitRunForward(
   if (admission.kind === 'refused') {
     switch (admission.reason) {
       case 'over-cap':
-        await endRunAtCap(dbAdapter, run, 'aiCredits');
+        await endRunAtCap(dbAdapter, run, 'aiCredits', reportRunChange);
         return refuse(
           403,
           `The automation run hit its aiCredits cap, so the run has ended. ${admission.message}`,
@@ -228,6 +232,7 @@ export async function admitRunForward(
         run,
         'resolveCalls',
         caps.resolveCalls,
+        reportRunChange,
       );
     } catch (error) {
       await settle(0);
