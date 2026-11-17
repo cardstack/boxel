@@ -774,7 +774,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Each automation switched on in this realm, with its payer and state now, and the runs it started and the credits its charges drew in the time range. An automation charged in the time range and switched off now shows as switched off. Credits charged covers the run, run indexing, storage, AI and batched AI charges that name the automation or one of its runs, from whoever paid for them.",
+        "description": "Each automation in the realm: the automation's payer and state now, and the runs the automation started and the credits the automation's charges drew in the time range. State reads \"switched off\" when an automation charged in the time range and someone has since switched the automation off. Credits charged adds up the run, run indexing, storage, AI and batched AI charges that name the automation or one of the automation's runs, whoever paid.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1029,7 +1029,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "WITH charged AS (\n  SELECT COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n   WHERE l.realm = ${realm_url:sqlstring}\n     AND (l.run_id IS NOT NULL OR l.automation_id IS NOT NULL)\n     AND $__unixEpochFilter(l.created_at)\n   GROUP BY 1\n),\nlisted AS (\n  SELECT automation_id FROM automations WHERE realm = ${realm_url:sqlstring}\n  UNION\n  SELECT automation_id FROM charged WHERE automation_id IS NOT NULL\n),\nran AS (\n  SELECT r.automation_id,\n         COUNT(*) AS runs,\n         COUNT(*) FILTER (WHERE r.state = 'error') AS errors\n    FROM automation_runs r\n   WHERE r.realm = ${realm_url:sqlstring}\n     AND $__timeFilter(r.created_at)\n   GROUP BY 1\n)\nSELECT CASE WHEN starts_with(listed.automation_id, ${realm_url:sqlstring}) THEN substr(listed.automation_id, length(${realm_url:sqlstring}) + 1) ELSE listed.automation_id END AS automation,\n       listed.automation_id,\n       a.payer,\n       COALESCE(a.state, 'switched off') AS state,\n       COALESCE(ran.runs, 0) AS runs,\n       COALESCE(ran.errors, 0) AS errors,\n       COALESCE(c.credits, 0) AS credits,\n       a.pause_reason,\n       a.next_run,\n       a.last_finished_at,\n       a.last_result,\n       a.switched_on_at\n  FROM listed\n  LEFT JOIN automations a USING (automation_id)\n  LEFT JOIN charged c USING (automation_id)\n  LEFT JOIN ran USING (automation_id)\n ORDER BY (a.automation_id IS NOT NULL) DESC, credits DESC, automation\n LIMIT 500;",
+            "rawSql": "WITH charged AS (\n  SELECT COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         MAX(l.realm) AS realm,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n   WHERE l.realm IN (SELECT ${realm_url:sqlstring}\n                  UNION\n                  SELECT '@cardstack/' || substring(url from '([^/]+)/$') || '/' FROM realm_registry\n                   WHERE url = ${realm_url:sqlstring} AND kind = 'bootstrap')\n     AND (l.run_id IS NOT NULL OR l.automation_id IS NOT NULL)\n     AND $__unixEpochFilter(l.created_at)\n   GROUP BY 1\n),\nlisted AS (\n  SELECT automation_id FROM automations WHERE realm IN (SELECT ${realm_url:sqlstring}\n                  UNION\n                  SELECT '@cardstack/' || substring(url from '([^/]+)/$') || '/' FROM realm_registry\n                   WHERE url = ${realm_url:sqlstring} AND kind = 'bootstrap')\n  UNION\n  SELECT automation_id FROM charged WHERE automation_id IS NOT NULL\n),\nran AS (\n  SELECT r.automation_id,\n         COUNT(*) AS runs,\n         COUNT(*) FILTER (WHERE r.state = 'error') AS errors\n    FROM automation_runs r\n   WHERE r.realm IN (SELECT ${realm_url:sqlstring}\n                  UNION\n                  SELECT '@cardstack/' || substring(url from '([^/]+)/$') || '/' FROM realm_registry\n                   WHERE url = ${realm_url:sqlstring} AND kind = 'bootstrap')\n     AND $__timeFilter(r.created_at)\n   GROUP BY 1\n)\nSELECT CASE WHEN starts_with(listed.automation_id, COALESCE(a.realm, c.realm)) THEN substr(listed.automation_id, length(COALESCE(a.realm, c.realm)) + 1) ELSE listed.automation_id END AS automation,\n       listed.automation_id,\n       a.payer,\n       COALESCE(a.state, 'switched off') AS state,\n       COALESCE(ran.runs, 0) AS runs,\n       COALESCE(ran.errors, 0) AS errors,\n       COALESCE(c.credits, 0) AS credits,\n       a.pause_reason,\n       a.next_run,\n       a.last_finished_at,\n       a.last_result,\n       a.switched_on_at\n  FROM listed\n  LEFT JOIN automations a USING (automation_id)\n  LEFT JOIN charged c USING (automation_id)\n  LEFT JOIN ran USING (automation_id)\n ORDER BY (a.automation_id IS NOT NULL) DESC, credits DESC, automation\n LIMIT 500;",
             "refId": "A"
           }
         ],
@@ -1041,7 +1041,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "The credit ledger entries that name this realm in the time range, by charge kind and the user who paid. Charges counts each charge once however many credit buckets it drew on. Only consumption entries name a realm: run, run indexing, storage and batched AI always do, and an AI entry does when its caller named the realm.",
+        "description": "The credit ledger entries that name the realm in the time range, by charge kind and payer. Charges counts each charge once, however many credit buckets the charge drew on. Only consumption entries name a realm: run, run indexing, storage and batched AI entries always name the realm, and an AI entry names the realm when the AI request's caller named the realm.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1131,18 +1131,6 @@
             {
               "matcher": {
                 "id": "byName",
-                "options": "added"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "Added"
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
                 "options": "last_charged"
               },
               "properties": [
@@ -1184,7 +1172,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT l.charge_kind AS kind,\n       u.matrix_user_id AS payer,\n       COUNT(DISTINCT COALESCE(l.charge_id, l.id)) AS charges,\n       COALESCE(-SUM(l.credit_amount) FILTER (WHERE l.credit_amount < 0), 0) AS charged,\n       to_timestamp(MAX(l.created_at)) AS last_charged\n  FROM credits_ledger l\n  LEFT JOIN users u ON u.id = l.user_id\n WHERE l.realm = ${realm_url:sqlstring}\n   AND $__unixEpochFilter(l.created_at)\n GROUP BY 1, 2\n ORDER BY charged DESC, kind, payer;",
+            "rawSql": "SELECT l.charge_kind AS kind,\n       u.matrix_user_id AS payer,\n       COUNT(DISTINCT COALESCE(l.charge_id, l.id)) AS charges,\n       COALESCE(-SUM(l.credit_amount) FILTER (WHERE l.credit_amount < 0), 0) AS charged,\n       to_timestamp(MAX(l.created_at)) AS last_charged\n  FROM credits_ledger l\n  LEFT JOIN users u ON u.id = l.user_id\n WHERE l.realm IN (SELECT ${realm_url:sqlstring}\n                  UNION\n                  SELECT '@cardstack/' || substring(url from '([^/]+)/$') || '/' FROM realm_registry\n                   WHERE url = ${realm_url:sqlstring} AND kind = 'bootstrap')\n   AND $__unixEpochFilter(l.created_at)\n GROUP BY 1, 2\n ORDER BY charged DESC, kind, payer;",
             "refId": "A"
           }
         ],
@@ -1196,7 +1184,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Every charge that names this realm in the time range, newest first, with who paid and what it paid for. Charged is the credits the charge drew from the payer's balance; Credit buckets shows how it split across the payer's plan allowance, daily credit and extra credit. The reference says why: the automation and trigger of the run it charged, the run, the AI batch, or the day of storage. Usage priced is the usage the charge's pricing version priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI provider cost and tokens).",
+        "description": "Every charge that names the realm in the time range, newest first, with the payer. Charged shows the credits the charge drew from the payer's balance. Credit buckets shows how the charge split across the payer's plan allowance, daily credit and extra credit. The reference columns show what the charge paid for: the run's automation and trigger, the run, the AI batch, or the storage day. Usage priced lists the usage that the charge's pricing version priced: tab-seconds, worker-seconds, GB downloaded, GB-months, and the AI provider's cost and tokens.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1259,18 +1247,6 @@
                 {
                   "id": "displayName",
                   "value": "Charged"
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "added"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "Added"
                 }
               ]
             },
@@ -1439,7 +1415,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge,\n         MIN(l.created_at) AS created_at,\n         COALESCE(l.charge_kind, CASE l.credit_type\n           WHEN 'plan_allowance_used' THEN 'ai'\n           WHEN 'extra_credit_used' THEN 'ai'\n           WHEN 'daily_credit_used' THEN 'ai'\n           WHEN 'plan_allowance' THEN 'grant'\n           WHEN 'daily_credit' THEN 'grant'\n           WHEN 'extra_credit' THEN 'purchase'\n           WHEN 'plan_allowance_expired' THEN 'expiry'\n         END) AS kind,\n         l.user_id,\n         l.realm,\n         l.run_id,\n         l.batch_id,\n         l.automation_id,\n         l.charge_day,\n         l.pricing_version,\n         COALESCE(-SUM(l.credit_amount) FILTER (WHERE l.credit_amount < 0), 0) AS charged,\n         COALESCE(SUM(l.credit_amount) FILTER (WHERE l.credit_amount > 0), 0) AS added,\n         string_agg(l.credit_type::text || ' ' || abs(l.credit_amount), ', ' ORDER BY l.credit_type::text) AS buckets\n    FROM credits_ledger l\n   WHERE l.realm = ${realm_url:sqlstring}\n     AND $__unixEpochFilter(l.created_at)\n   GROUP BY 1, 3, 4, 5, 6, 7, 8, 9, 10\n)\nSELECT to_timestamp(c.created_at) AS time,\n       c.kind,\n       u.matrix_user_id AS payer,\n       c.charged,\n       c.buckets,\n       CASE WHEN starts_with(COALESCE(c.automation_id, r.automation_id), c.realm) THEN substr(COALESCE(c.automation_id, r.automation_id), length(c.realm) + 1) ELSE COALESCE(c.automation_id, r.automation_id) END AS automation,\n       r.trigger,\n       (SELECT string_agg(g.unit || ' ' || trim_scale(round(g.quantity, 6))::text, ', ' ORDER BY g.unit)\n          FROM credit_charge_usage g\n         WHERE g.charge_id = c.charge) AS usage,\n       c.run_id,\n       c.batch_id,\n       c.charge_day,\n       c.pricing_version\n  FROM charges c\n  LEFT JOIN automation_runs r ON r.id = c.run_id\n  LEFT JOIN users u ON u.id = c.user_id\n ORDER BY c.created_at DESC\n LIMIT 500;",
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge,\n         MIN(l.created_at) AS created_at,\n         l.charge_kind AS kind,\n         l.user_id,\n         l.realm,\n         l.run_id,\n         l.batch_id,\n         l.automation_id,\n         l.charge_day,\n         l.pricing_version,\n         COALESCE(-SUM(l.credit_amount) FILTER (WHERE l.credit_amount < 0), 0) AS charged,\n         string_agg(l.credit_type::text || ' ' || abs(l.credit_amount), ', ' ORDER BY l.credit_type::text) AS buckets\n    FROM credits_ledger l\n   WHERE l.realm IN (SELECT ${realm_url:sqlstring}\n                  UNION\n                  SELECT '@cardstack/' || substring(url from '([^/]+)/$') || '/' FROM realm_registry\n                   WHERE url = ${realm_url:sqlstring} AND kind = 'bootstrap')\n     AND $__unixEpochFilter(l.created_at)\n   GROUP BY 1, 3, 4, 5, 6, 7, 8, 9, 10\n)\nSELECT to_timestamp(c.created_at) AS time,\n       c.kind,\n       u.matrix_user_id AS payer,\n       c.charged,\n       c.buckets,\n       CASE WHEN starts_with(COALESCE(c.automation_id, r.automation_id), c.realm) THEN substr(COALESCE(c.automation_id, r.automation_id), length(c.realm) + 1) ELSE COALESCE(c.automation_id, r.automation_id) END AS automation,\n       r.trigger,\n       (SELECT string_agg(g.unit || ' ' || trim_scale(round(g.quantity, 6))::text, ', ' ORDER BY g.unit)\n          FROM credit_charge_usage g\n         WHERE g.charge_id = c.charge) AS usage,\n       c.run_id,\n       c.batch_id,\n       c.charge_day::text AS charge_day,\n       c.pricing_version\n  FROM charges c\n  LEFT JOIN automation_runs r ON r.id = c.run_id\n  LEFT JOIN users u ON u.id = c.user_id\n ORDER BY c.created_at DESC\n LIMIT 500;",
             "refId": "A"
           }
         ],

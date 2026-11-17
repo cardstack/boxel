@@ -771,7 +771,7 @@ END) AS kind
 In code, `getLedgerEntries` (`packages/billing/billing-queries.ts`) applies
 it and filters by user, kind, realm, run, batch, automation and day.
 `chargeKindForCreditType` (runtime-common) is the same mapping in
-TypeScript, and the `credit_charge_costs` view (see "The cost coverage report") repeats it in SQL; the three change together.
+TypeScript, the `credit_charge_costs` view (see "The cost coverage report") repeats it in SQL, and so do the Users dashboard's _Credits by charge kind_ and _Credit ledger_ panels (see "Where to see a user's charges"); all of them change together.
 
 A row with a `run_id`, `realm` or `automation_id` always carries its kind,
 since those columns are only written with one, so a query filtered on any of
@@ -842,32 +842,41 @@ are grants.
 ## Where to see a user's charges
 
 Grafana's Users and Realms dashboards (Boxel Status folder, operators only)
-read the ledger above for the dashboard's time range, so the quickest answer
-to "what was this user charged for, and why" needs no SQL:
+read the ledger above for the dashboard's time range. An operator answers
+"what did Boxel charge this user for, and why" there without SQL:
 
 - **Users** (`/d/boxelusers0001`, pick the user's Matrix id):
-  - _Automations paid by_ the user: each automation's state now, and the runs
-    it started and the credits its charges drew from the user in the time
-    range. An automation that charged the user and is now switched off, or
-    paid for by someone else, says so in State.
-  - _Credits by charge kind_: what the user's balance was charged and what
-    was added, by kind. An entry with no kind is read through the mapping in
-    "Rows without a kind".
+  - _Automations paid by_ the user: each automation's state now, and the
+    runs the automation started and the credits the automation's charges
+    drew from the user in the time range. State reads "switched off" when
+    someone has since switched the automation off, and "paid by" another
+    user when that user pays for the automation now.
+  - _Credits by charge kind_: the credits each kind charged to the user's
+    balance and the credits each kind added. The panel reads an entry with
+    no kind through the mapping in "Rows without a kind".
   - _Credit ledger_: every charge, newest first, one row per charge however
-    many credit buckets it drew on. Each row shows the credits charged or
-    added, the bucket split, and the reference that says why: realm,
-    automation and trigger, run, batch or storage day, pricing version. It
-    also shows the usage the charge priced, from `credit_charge_usage`.
+    many credit buckets the charge drew on. Each row shows the credits the
+    charge charged or added, the bucket split, the reference (realm,
+    automation and trigger, run, batch or storage day, pricing version),
+    and the usage the charge priced, from `credit_charge_usage`.
 - **Realms** (`/d/boxelrealms001`, pick the realm): the same three panels
-  for the charges that name the realm, with the payer of each. Only
+  for the charges that name the realm, with the payer of each charge. Only
   consumption charges name a realm, so grants, purchases, expiries and AI
-  calls made without a realm appear only on the Users dashboard.
+  calls that named no realm appear only on the Users dashboard.
 
-A realm or payer cell links to that realm's or user's dashboard with the
-same time range. The amounts shown are always positive; the ledger stores a
-charge as a negative `credit_amount`, and the panels show it as Charged.
-Widen the time range to find older charges; each table shows at most 500
-rows.
+The panels show every amount as a positive number. The ledger stores a
+charge as a negative `credit_amount`, and the panels show the amount under
+Charged; grants and purchases appear under Added. A realm or payer cell
+links to the realm's or user's dashboard with the same time range. Each
+table shows at most 500 rows, so widen or move the time range to find older
+charges.
+
+The ledger and `automations` name a prefix-mapped system realm (catalog,
+skills, openrouter) by the realm's prefix form, `@cardstack/<name>/`, while
+the Realms dashboard picks realms by served URL from `realm_registry`. The
+panels match a bootstrap realm under both spellings, taking the prefix form
+from the URL's last path segment, the same convention the dev stack's
+`--fromUrl` / `--toUrl` mappings follow.
 
 ## Auditing usage, not only cost
 
