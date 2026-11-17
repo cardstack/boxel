@@ -448,12 +448,14 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('an annotated predicate compiles and is judged against the snapshot', async function (assert) {
     let policy = await education.getCompiledPolicy();
-    // A classroom links to a teacher, which nothing here grants, and that is
-    // recorded against each read as a warning that keeps it.
+    // A classroom links to a teacher, which nothing here grants, and the realm
+    // grants no one the code that defines it. Each is recorded against each
+    // read as a warning that keeps it.
     let issues = (policy?.issues ?? []).filter(
       ({ code }) =>
         code !== 'grant-reaches-ungranted-type' &&
-        code !== 'render-reaches-ungranted-type',
+        code !== 'render-reaches-ungranted-type' &&
+        code !== 'module-not-granted',
     );
     assert.deepEqual(
       issues.map(({ code, path }) => ({ code, path })),

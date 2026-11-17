@@ -11,6 +11,7 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type {
+  CompiledRealmPolicy,
   QueuePublisher,
   QueueRunner,
   Realm,
@@ -85,6 +86,15 @@ const CLASSROOM_MODULE = `
 type Grant = { operation: string; where?: unknown };
 
 // A policy with one rule, on `Classroom`.
+// The issues a policy records that these tests are about. The types here are
+// defined in the realm the policy governs, and no policy here grants their
+// code, so compiling also records `module-not-granted` against each `read` or
+// `query` grant, after every other issue. `realm-policy-module-access-test`
+// covers that warning.
+function issuesOf(policy: CompiledRealmPolicy | undefined) {
+  return policy?.issues.filter(({ code }) => code !== 'module-not-granted');
+}
+
 function policyCard(
   grants: Grant[],
   opts: {
@@ -348,7 +358,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       let policy = await education.getCompiledPolicy();
       assert.deepEqual(
-        policy?.issues.map(({ code, path }) => ({ code, path })),
+        issuesOf(policy)?.map(({ code, path }) => ({ code, path })),
         [{ code: 'invalid-predicate', path: 'rules[0].grants[2].where' }],
         'the grant that does not compile is recorded against itself',
       );
@@ -408,13 +418,13 @@ module(basename(import.meta.filename), function (hooks) {
       );
       let policy = await education.getCompiledPolicy();
       assert.deepEqual(
-        policy?.issues.map(({ code, path }) => ({ code, path })),
+        issuesOf(policy)?.map(({ code, path }) => ({ code, path })),
         [{ code: 'partial-match', path: 'rules[0].grants[0].where' }],
         'the grant is recorded against itself',
       );
       assert.true(
-        policy?.issues[0]?.message.includes('.list | any(. == actor())'),
-        `the issue names the exact spelling: ${policy?.issues[0]?.message}`,
+        issuesOf(policy)?.[0]?.message.includes('.list | any(. == actor())'),
+        `the issue names the exact spelling: ${issuesOf(policy)?.[0]?.message}`,
       );
       assert.deepEqual(
         policy?.rules.flatMap((rule) =>
@@ -443,7 +453,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     test('the same membership test written with `any(. == actor())` admits the listed teacher alone', async function (assert) {
       let policy = await education.getCompiledPolicy();
-      assert.deepEqual(policy?.issues, [], 'the policy compiles cleanly');
+      assert.deepEqual(issuesOf(policy), [], 'the policy compiles cleanly');
       assert.strictEqual(
         (await readRoom(AUTH.teacher())).status,
         200,
@@ -524,7 +534,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
       let policy = await education.getCompiledPolicy();
       assert.deepEqual(
-        policy?.issues.map(({ code }) => code),
+        issuesOf(policy)?.map(({ code }) => code),
         ['invalid-predicate'],
         'the mistyped predicate is recorded',
       );
@@ -564,7 +574,7 @@ module(basename(import.meta.filename), function (hooks) {
       let policy = await education.getCompiledPolicy();
       assert.true(policy?.uncompilable, 'the policy does not compile');
       assert.deepEqual(
-        policy?.issues.map(({ code }) => code),
+        issuesOf(policy)?.map(({ code }) => code),
         ['policy-card-unloadable'],
       );
       assert.strictEqual(
@@ -603,7 +613,7 @@ module(basename(import.meta.filename), function (hooks) {
       let policy = await education.getCompiledPolicy();
       assert.true(policy?.uncompilable, 'the policy does not compile');
       assert.deepEqual(
-        policy?.issues.map(({ code }) => code),
+        issuesOf(policy)?.map(({ code }) => code),
         ['policy-card-unloadable'],
       );
       assert.strictEqual(
