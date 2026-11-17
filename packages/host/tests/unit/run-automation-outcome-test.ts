@@ -3,7 +3,9 @@ import { module, test } from 'qunit';
 import {
   AutomationRunStoppedError,
   AutomationTimeLimitError,
+  isPlatformFailure,
 } from '@cardstack/host/lib/realm-runner/automation';
+import { RealmCallFailure } from '@cardstack/host/lib/realm-runner/runner';
 import { scriptOutcome } from '@cardstack/host/tools/run-automation';
 
 // What the automation command answers for a run's script: its outcome, and
@@ -54,5 +56,52 @@ module('Unit | run-automation outcome', function () {
       ['timed-out', 'stopped'],
     );
     assert.ok(timedOut.timing, 'a run out of time still says when it ran');
+  });
+
+  test("a realm call's error that ends the script is the call failing, unless the platform failed a request of the run's", async function (assert) {
+    let failing = () =>
+      scriptOutcome(async () => {
+        throw new RealmCallFailure('File not found: token-123/notes.md');
+      }, ['token-123']);
+    let own = await failing();
+    assert.strictEqual(own.state, 'error');
+    if (own.state === 'error') {
+      assert.strictEqual(own.reason, 'call-failed');
+      assert.false(
+        own.message.includes('token-123'),
+        'the message is redacted',
+      );
+    }
+
+    let duringOutage = await scriptOutcome(
+      async () => {
+        throw new RealmCallFailure('Unable to list notes/: 503');
+      },
+      [],
+      () => true,
+    );
+    assert.strictEqual(
+      duringOutage.state === 'error' ? duringOutage.reason : undefined,
+      'run-failed',
+    );
+  });
+
+  test('a request fails for the platform when it gets a server error or no answer, but not when it is refused or aborted', function (assert) {
+    let answered = (status: number) =>
+      isPlatformFailure({ response: new Response(null, { status }) });
+    assert.deepEqual(
+      [200, 401, 404, 422, 429, 500, 502, 503, 504].map(answered),
+      [false, false, false, false, false, true, true, true, true],
+    );
+    assert.true(
+      isPlatformFailure({ error: new TypeError('Failed to fetch') }),
+      'a request with no answer',
+    );
+    assert.false(
+      isPlatformFailure({
+        error: new DOMException('The run stopped', 'AbortError'),
+      }),
+      'a request aborted because the run stopped',
+    );
   });
 });

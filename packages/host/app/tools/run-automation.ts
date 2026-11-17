@@ -11,6 +11,7 @@ import HostBaseTool from '../lib/host-base-tool';
 import {
   AutomationRunStoppedError,
   AutomationTimeLimitError,
+  isPlatformFailure,
   redactSecrets,
 } from '../lib/realm-runner/automation';
 import {
@@ -19,7 +20,7 @@ import {
 } from '../lib/realm-runner/research';
 import { RunLogSink } from '../lib/realm-runner/run-log-sink';
 import { RunStateWatch } from '../lib/realm-runner/run-state-watch';
-import { RealmScriptError } from '../lib/realm-runner/runner';
+import { RealmCallFailure, RealmScriptError } from '../lib/realm-runner/runner';
 import { claimsFromRawToken } from '../services/realm';
 
 import RunRealmCodeTool, {
@@ -43,7 +44,12 @@ export const FINAL_FLUSH_MARGIN_MS = 5000;
 // and every call the script makes carries it.
 //
 // It answers the run's outcome as the `json` of a `JsonCard`: `complete`, or
-// `error` with why and, for the script's own error, its line. The worker
+// `error` with why and, for the script's own error, its line. A realm call's
+// error that ends the script is `call-failed`, unless the platform failed a
+// request the run made (`isPlatformFailure`): then the call may have failed
+// for the platform's sake, and the run is `run-failed`. The tab runs one
+// automation run at a time, so every authed request it makes while the
+// script runs is the run's. The worker
 // commits the overlay or records the error. A script that throws is an
 // outcome, not a failure of the command: the command fails only when it
 // can't run the script at all.
@@ -98,7 +104,15 @@ export default class RunAutomationTool extends HostBaseTool<
         console.warn(`[automation run ${runId}] ${message}`),
     });
     let runner = new RunRealmCodeTool(this.toolContext);
-    let send = this.runTokenSend(runToken);
+    let platformFailed = false;
+    let notePlatformFailure = (
+      result: { response: Response } | { error: unknown },
+    ) => {
+      if (isPlatformFailure(result)) {
+        platformFailed = true;
+      }
+    };
+    let send = this.runTokenSend(runToken, notePlatformFailure);
     let io: AutomationRealmIO = {
       ...runner.automationRealmIO(realmURL),
       resolve: (request, signal) => resolveJSON(request, send, signal),
@@ -128,6 +142,9 @@ export default class RunAutomationTool extends HostBaseTool<
         fetch: this.network.fetch,
       });
       watch.start();
+      let unwatch = this.network.watchAuthedFetches((_request, result) =>
+        notePlatformFailure(result),
+      );
       try {
         outcome = await scriptOutcome(
           () =>
@@ -142,8 +159,10 @@ export default class RunAutomationTool extends HostBaseTool<
               signal: watch.signal,
             }),
           secrets,
+          () => platformFailed,
         );
       } finally {
+        unwatch();
         watch.stop();
       }
     }
@@ -162,8 +181,12 @@ export default class RunAutomationTool extends HostBaseTool<
   // `realm.resolve`'s model call carries the run's token to the realm
   // server's request forwarding, which counts it against the run's `resolve`
   // cap, prices it against its `aiCredits` cap and bills it to the run's
-  // identity. The token names the realm server that minted it.
-  private runTokenSend(runToken: string): ProxySend {
+  // identity. The token names the realm server that minted it. `onResult`
+  // hears what each send ended with.
+  private runTokenSend(
+    runToken: string,
+    onResult: (result: { response: Response } | { error: unknown }) => void,
+  ): ProxySend {
     let { realmServerURL } = claimsFromRawToken(runToken) as {
       realmServerURL?: string;
     };
@@ -172,24 +195,31 @@ export default class RunAutomationTool extends HostBaseTool<
     }
     let forwardURL = `${ensureTrailingSlash(realmServerURL)}_request-forward`;
     return async ({ url, requestBody, signal }) => {
-      let response = await this.network.fetch(forwardURL, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${runToken}`,
-        },
-        body: JSON.stringify({
-          url,
+      let response: Response;
+      try {
+        response = await this.network.fetch(forwardURL, {
           method: 'POST',
-          requestBody,
           headers: {
             Accept: 'application/json',
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${runToken}`,
           },
-        }),
-        signal,
-      });
+          body: JSON.stringify({
+            url,
+            method: 'POST',
+            requestBody,
+            headers: {
+              Accept: 'application/json',
+              'Content-Type': 'application/json',
+            },
+          }),
+          signal,
+        });
+      } catch (error) {
+        onResult({ error });
+        throw error;
+      }
+      onResult({ response });
       if (!response.ok) {
         let errorText = await response.text();
         throw new Error(
@@ -222,10 +252,12 @@ async function flushBefore(
 
 // Runs a script and answers its outcome: `complete`, or the error it ended
 // with (redacted with `secrets`), with when it started and ended in this tab
-// for the run's telemetry.
+// for the run's telemetry. `platformFailed` says, once the script has ended,
+// whether the platform failed any request the run made.
 export async function scriptOutcome(
   run: () => Promise<unknown>,
   secrets: string[],
+  platformFailed: () => boolean = () => false,
 ): Promise<AutomationScriptOutcome> {
   let startedAt = Date.now();
   let outcome: AutomationScriptOutcome;
@@ -233,7 +265,7 @@ export async function scriptOutcome(
     await run();
     outcome = { state: 'complete' };
   } catch (error) {
-    outcome = errorOutcome(error, secrets);
+    outcome = errorOutcome(error, secrets, platformFailed());
   }
   outcome.timing = { startedAt, endedAt: Date.now() };
   return outcome;
@@ -242,6 +274,7 @@ export async function scriptOutcome(
 function errorOutcome(
   error: unknown,
   secrets: string[],
+  platformFailed: boolean,
 ): AutomationScriptOutcome {
   let message = redactSecrets(
     error instanceof Error ? error.message : String(error),
@@ -261,6 +294,9 @@ function errorOutcome(
       message,
       ...(typeof line === 'number' ? { line } : {}),
     };
+  }
+  if (error instanceof RealmCallFailure && !platformFailed) {
+    return { state: 'error', reason: 'call-failed', message };
   }
   return { state: 'error', reason: 'run-failed', message };
 }

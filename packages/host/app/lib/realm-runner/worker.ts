@@ -297,6 +297,10 @@ const BOOTSTRAP = `
 // and its message is the call's.
 const REALM_CALL_ERROR_NAME = 'RealmCallError';
 
+// What a realm call's error that the script let through throws out of the
+// run, so the host learns the call failed the run.
+class RealmCallEscaped extends Error {}
+
 // What a script error throws out of the run, so the host learns which error
 // it was, where, and whether the script got to run at all.
 class ScriptFailure extends Error {
@@ -337,7 +341,10 @@ function scriptFailure(
   // that the script let through is the call failing the run. Neither is
   // something the script threw. Anything else, including an error the script
   // throws itself, is the script's error and keeps its line.
-  if (name === 'InternalError' || name === REALM_CALL_ERROR_NAME) {
+  if (name === REALM_CALL_ERROR_NAME) {
+    return new RealmCallEscaped(message);
+  }
+  if (name === 'InternalError') {
     return new Error(message);
   }
   let line = scriptLineOf(error, code);
@@ -613,6 +620,7 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
       error: error instanceof Error ? error.message : String(error),
       ...(error instanceof ScriptFailure ? { scriptError: error.info } : {}),
       ...(location ? { scriptLocation: location } : {}),
+      ...(error instanceof RealmCallEscaped ? { realmCallFailed: true } : {}),
     });
   }
   // The caller terminates the worker once it has an answer, which frees the

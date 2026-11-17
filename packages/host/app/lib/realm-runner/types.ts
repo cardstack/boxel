@@ -152,6 +152,8 @@ export type RealmRunnerResponse =
       // error: its line and its stack, each frame mapped to the script's
       // own lines.
       scriptLocation?: RealmScriptLocation;
+      // The error is a realm call's that the script let through.
+      realmCallFailed?: boolean;
     };
 
 // A user's Stop, as a stopped run's error begins: the transcript reads it as

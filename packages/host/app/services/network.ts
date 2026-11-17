@@ -9,6 +9,7 @@ import {
   VirtualNetwork,
   authorizationMiddleware,
   fetcher,
+  type FetcherMiddlewareHandler,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -24,12 +25,23 @@ import type LoaderService from './loader-service';
 import type RealmService from './realm';
 import type SessionService from './session';
 
+// What an authed fetch ended with: the answer it got, or the error it failed
+// with.
+export type AuthedFetchResult = { response: Response } | { error: unknown };
+
+export type AuthedFetchWatcher = (
+  request: Request,
+  result: AuthedFetchResult,
+) => void;
+
 export default class NetworkService extends Service {
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare session: SessionService;
 
   virtualNetwork = this.makeVirtualNetwork();
+
+  private watchers = new Set<AuthedFetchWatcher>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -49,9 +61,13 @@ export default class NetworkService extends Service {
     // attempt, so an auth-retry (the authorization middleware re-running the
     // chain on a 401) is observed as a separate, retried-flagged attempt. It
     // is a passive no-op whenever telemetry is disabled.
+    //
+    // The watch middleware is outermost (first), so a watcher sees what the
+    // caller gets, after every retry.
     return fetcher(
       this.fetch,
       [
+        this.watchMiddleware,
         authorizationMiddleware(this.realm),
         authErrorEventMiddleware(),
         createServerRequestTimingMiddleware(getOwner(this)!),
@@ -59,6 +75,38 @@ export default class NetworkService extends Service {
       this.virtualNetwork,
     );
   }
+
+  // Calls `watcher` with each authed fetch's request and what it ended with,
+  // until the returned function is called. A watcher that throws is ignored.
+  watchAuthedFetches(watcher: AuthedFetchWatcher): () => void {
+    this.watchers.add(watcher);
+    return () => {
+      this.watchers.delete(watcher);
+    };
+  }
+
+  private watchMiddleware: FetcherMiddlewareHandler = async (req, next) => {
+    if (this.watchers.size === 0) {
+      return next(req);
+    }
+    let result: AuthedFetchResult;
+    try {
+      result = { response: await next(req) };
+    } catch (error) {
+      result = { error };
+    }
+    for (let watcher of [...this.watchers]) {
+      try {
+        watcher(req, result);
+      } catch {
+        // A watcher only observes; the fetch's caller still gets its result.
+      }
+    }
+    if ('error' in result) {
+      throw result.error;
+    }
+    return result.response;
+  };
 
   get mount() {
     return this.virtualNetwork.mount.bind(this.virtualNetwork);

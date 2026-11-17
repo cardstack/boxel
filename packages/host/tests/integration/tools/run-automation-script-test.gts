@@ -11,6 +11,7 @@ import {
   REDACTED,
 } from '@cardstack/host/lib/realm-runner/automation';
 import runRealmCode, {
+  RealmCallFailure,
   RealmScriptError,
 } from '@cardstack/host/lib/realm-runner/runner';
 import {
@@ -476,8 +477,68 @@ return 'done';`,
 
     let uncaught = run(`await realm.cards.get('no/such-card');`);
     await assert.rejects(uncaught.done, (error: unknown) => {
-      return error instanceof Error && !(error instanceof RealmScriptError);
+      return error instanceof RealmCallFailure;
     });
+
+    let rethrown = run(`
+      try {
+        await realm.cards.get('no/such-card');
+      } catch (error) {
+        throw new Error('could not read: ' + error.message);
+      }
+    `);
+    await assert.rejects(
+      rethrown.done,
+      (error: unknown) => error instanceof RealmScriptError,
+      'an error the script throws in its place is its own',
+    );
+  });
+
+  test('a card update the realm refuses once the script ends is the call failing the run', async function (assert) {
+    let tool = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let io = tool.automationRealmIO(testRealmURL);
+    let { done } = run(
+      `await realm.cards.update('Pet/mango', { name: 'Mango II' });`,
+      {
+        io: {
+          ...io,
+          saveCards: async () => {
+            throw new Error('The realm refused the write: 422');
+          },
+        },
+      },
+    );
+    await assert.rejects(done, (error: unknown) => {
+      return (
+        error instanceof RealmCallFailure &&
+        error.message === 'The realm refused the write: 422'
+      );
+    });
+  });
+
+  test('a watcher sees what each authed fetch ended with, until it stops watching', async function (assert) {
+    let network = getService('network');
+    let seen: (number | string)[] = [];
+    let unwatch = network.watchAuthedFetches((_request, result) => {
+      seen.push('error' in result ? 'error' : result.response.status);
+      throw new Error('a watcher that throws changes nothing');
+    });
+    let found = await network.authedFetch(`${testRealmURL}notes/first.md`, {
+      headers: { Accept: 'application/vnd.card+source' },
+    });
+    let missing = await network.authedFetch(`${testRealmURL}notes/none.md`, {
+      headers: { Accept: 'application/vnd.card+source' },
+    });
+    unwatch();
+    await network.authedFetch(`${testRealmURL}notes/first.md`, {
+      headers: { Accept: 'application/vnd.card+source' },
+    });
+    assert.deepEqual([found.status, missing.status], [200, 404]);
+    assert.deepEqual(
+      seen,
+      [200, 404],
+      'the fetch after unwatching is not seen',
+    );
   });
 
   test('a bad progress argument throws in the script', async function (assert) {

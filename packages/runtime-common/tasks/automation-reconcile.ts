@@ -6,6 +6,8 @@ import {
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
 } from '../queue.ts';
+import { taskAutomationChangeReporter } from '../automation-change-events.ts';
+import { taskRunChangeReporter } from '../automation-run-events.ts';
 import { reconcileAutomations } from '../automation-reconcile.ts';
 import { readRunDeclaration } from '../automation-run-limits.ts';
 
@@ -57,6 +59,7 @@ const automationReconcile: Task<
   meteredCharges,
   log,
   reportStatus,
+  reportRealmEvent,
 }) =>
   async function (args) {
     let { jobInfo } = args;
@@ -71,6 +74,17 @@ const automationReconcile: Task<
         // A pass after a long outage can outlast the job's timeout; each run,
         // automation and step it handles is progress.
         onProgress: () => heartbeatJob(jobInfo?.reservationId),
+        reportRunChange: taskRunChangeReporter({
+          dbAdapter,
+          virtualNetwork,
+          reportRealmEvent,
+          log,
+        }),
+        reportAutomationChange: taskAutomationChangeReporter({
+          virtualNetwork,
+          reportRealmEvent,
+          log,
+        }),
         readDeclaration: (automationId) =>
           readRunDeclaration({
             dbAdapter,
