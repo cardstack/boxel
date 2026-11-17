@@ -47,6 +47,32 @@ class Site extends CardDef {
   };
 }
 
+// Shows the field as an atom inside a sentence, and fitted in a narrow box.
+class SiteSummary extends CardDef {
+  static displayName = 'Site Summary';
+  @field paths = contains(PathSpecifierField);
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <p class='sentence' data-test-sentence>
+        <span data-test-before>Limited to</span>
+        <@fields.paths @format='atom' />
+        only.
+      </p>
+      <div class='fitted' data-test-fitted>
+        <@fields.paths @format='fitted' />
+      </div>
+      <style scoped>
+        .sentence {
+          width: 16rem;
+        }
+        .fitted {
+          width: 8rem;
+        }
+      </style>
+    </template>
+  };
+}
+
 function siteDocument(paths?: unknown): LooseSingleCardDocument {
   return {
     data: {
@@ -334,6 +360,37 @@ module('Integration | PathSpecifierField', function (hooks) {
         );
       assert.dom('[data-test-path-specifier-prefix]').doesNotExist();
     }
+  });
+
+  test('as an atom the prefixes wrap with the sentence around them, and fitted a long prefix wraps inside its box', async function (assert) {
+    let paths = ['blog/', 'posts/drafts/', 'averyveryverylongdirectoryname/'];
+    await renderCard(loader, new SiteSummary({ paths }), 'isolated');
+
+    let atomPrefixes = [
+      ...document.querySelectorAll(
+        '[data-test-sentence] [data-test-path-specifier-prefix]',
+      ),
+    ];
+    assert.deepEqual(
+      atomPrefixes.map((element) => element.textContent),
+      paths,
+    );
+    let before = find('[data-test-before]')!.getBoundingClientRect();
+    let first = atomPrefixes[0].getBoundingClientRect();
+    let onFirstLine = first.top < before.bottom && first.bottom > before.top;
+    assert.true(
+      onFirstLine,
+      'the first prefix sits on the line the sentence starts on, rather than the list moving to a line of its own',
+    );
+
+    let fitted = find('[data-test-fitted]')!;
+    assert
+      .dom('[data-test-path-specifier-prefix]', fitted)
+      .exists({ count: 3 });
+    assert.true(
+      fitted.scrollWidth <= fitted.clientWidth,
+      `a long prefix wraps inside the fitted box: ${fitted.scrollWidth}px of content in ${fitted.clientWidth}px`,
+    );
   });
 
   test('the view marks an invalid prefix, and shows an empty one as empty', async function (assert) {
