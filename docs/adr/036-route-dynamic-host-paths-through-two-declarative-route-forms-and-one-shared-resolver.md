@@ -1,8 +1,8 @@
 ---
 status: proposed
-date: 2026-11-16
+date: 2026-11-11
 retroactive: true
-recorded: 2026-11-16
+recorded: 2026-11-17
 scope:
   - packages/runtime-common/route-pattern.ts
   - packages/runtime-common/host-route*.ts
@@ -50,6 +50,8 @@ MUST let the next one try. Once a level resolves, it MUST commit: when its
 child routes find nothing, the path resolves to nothing, and no earlier level
 is tried again. A card's canonical route MUST be the first route that fits it
 in depth-first list order, a route's children before its later siblings. A
+route MUST NOT fit a card when the address it fills for that card matches a
+literal or fixed route at the same level, since the path serves that route. A
 card route (card id template or field match) with `"statusCode": 301` is an
 **alias**. An alias MUST NOT be canonical. It MUST answer 301 to the card's
 canonical address when the card has one, and serve the card when it doesn't.
@@ -75,7 +77,10 @@ permissions. The resolver MUST read only the path and the cards the lookups
 return, never the query string, headers, the clock or a random source. When
 more than one card a field match serves has the same value, the path MUST
 serve the first in the search's own final order, which ends with the card
-URL. A lookup that fails or is refused MUST end resolution with an error,
+URL, and the resolver SHOULD log a warning. A link to any of the other cards
+gives the same address and opens the first, and the same holds for sibling
+routes at one level that match the same path. Keeping values unique is the
+author's job. A lookup that fails or is refused MUST end resolution with an error,
 which the server answers with 429 for a rate limit and 503 otherwise, never
 as not found. When a route matches a path but resolves to nothing, a card's
 own path and a realm file MUST still be served there.
@@ -89,8 +94,10 @@ match's type MUST be read only from definitions the index has already
 cached, so a request never waits on a render (ADR 015 §1.1). A type whose
 definition isn't cached MUST drop its routes for now, start a background
 read, and mark the validation incomplete. A path that a route dropped for
-now could answer MUST get 503, not not-found. A realm SHOULD have at most
-`MAX_DYNAMIC_HOST_ROUTES` dynamic routes.
+now could answer MUST get 503, not not-found. Validation MUST drop each
+dynamic route past `MAX_DYNAMIC_HOST_ROUTES`, with a warning. Validation
+SHOULD warn when a literal or fixed route takes a path that a dynamic sibling
+matches.
 
 ### 1.6. Every renderer gets the server's routes
 
@@ -99,8 +106,10 @@ page's host config as `hostDynamicRoutes`. For a dynamically routed page it
 MUST also add a serve rule for exactly the requested path to
 `hostRoutingMap`. A realm MUST also serve its validated route tree from a
 read-only endpoint, which the prerender and interact mode read once per
-realm and again after the realm is indexed. A reader MUST NOT validate the tree again. The tree, each `where` included, is public, so a route MUST NOT hold
-anything private.
+realm and again after the realm is indexed. The endpoint MUST answer only a
+visitor who can read the realm. A reader MUST NOT validate the tree again.
+The tree, each `where` included, is as visible as the realm, so a route MUST
+NOT hold anything a reader of the realm must not see.
 
 ### 1.7. Addresses are worked out from the routes, never on the way out
 
@@ -165,7 +174,8 @@ index's `jsonb` keeps array order but not object key order [10].
 
 Order carries meaning because siblings can share a pattern, such as a
 `Category` and a `Page` at `/:slug`, and a card can fit more than one route
-[4][5]. A resolved level commits so that the cost stays bounded, at most one
+[4][5]. A route that a literal route shadows doesn't fit, because its address
+would open the literal route's card [13]. A resolved level commits so that the cost stays bounded, at most one
 lookup per sibling at each level, and a nested URL means one thing: a wrong
 pair is not found, not a different page [10]. A card's own path and a realm
 file still win, so adding a wide route doesn't break URLs that worked before
@@ -173,6 +183,10 @@ file still win, so adding a wide route doesn't break URLs that worked before
 navigation the same answer [4][7]. Lookups run as the visitor, so the realm
 admits, limits and refuses each one as it would the visitor's own request
 [6], and a failed lookup isn't a not-found, so a crawler keeps the page [6].
+A link can't tell cards with the same value apart, because it doesn't
+search, but the resolver's search returns them all and can warn at no extra
+cost [13]. The route tree endpoint gives no more than the realm does to the
+same visitor [14].
 
 Addresses are worked out at render because the render has the loaded card,
 its fields and its `where` check. On the way out, the server would have to
@@ -222,6 +236,8 @@ A hand-written redirect is explicit [10].
   add it later [10].
 - **Rewriting links on the way out [8].** Work on every response; see
   Rationale [10].
+- **A uniqueness check on field values at indexing.** It needs a search for
+  each card that a field match serves [13].
 - **A link that searches for its card when no route fits.** It makes each
   such link slow and async [10].
 - **Card types that declare the route names they need, which each realm maps
@@ -245,6 +261,10 @@ A hand-written redirect is explicit [10].
     on the realm's URL, and that ADR 033's prefix swap supplies the host URL.
 12. Matic Jurglic, 2026-11-17: agreed that a nested link may give one card
     or one card per level.
+13. Matic Jurglic, 2026-11-17: chose that the reverse walk skips a route a
+    literal route shadows, and that duplicate values are accepted, with a
+    warning from the resolver.
+14. https://github.com/cardstack/boxel/pull/7507#discussion_r4599611687
 
 ## 5. Remediation
 
