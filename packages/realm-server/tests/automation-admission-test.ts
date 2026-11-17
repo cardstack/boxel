@@ -5,8 +5,15 @@ import { randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  addToCreditsLedger,
+  getUserByMatrixUserId,
+} from '@cardstack/billing/billing-queries';
+import {
   automationRunDedupeKey,
   createAutomationRun,
+  creditsHeldByRunsInFlight,
+  dbAdapterQuerier,
+  holdAutomationRunCredits,
   getAutomationRun,
   logger,
   param,
@@ -38,14 +45,18 @@ import {
 import { internalKeyFor } from '@cardstack/runtime-common';
 import {
   ROOMY_AUTOMATION_CAPS,
+  ensureTestUser,
   realmSecretSeed,
   createJWT,
   setupPermissionedRealmCached,
   testAccountStandings,
   testAutomationAdmissionChecks,
   testCreatePrerenderAuth,
+  testPricing,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
+import { runCostCeiling } from '../lib/automation-estimate.ts';
+import { buildAdmitSpending } from '../lib/automation-spending.ts';
 import { buildMintRunToken } from '../lib/run-token.ts';
 
 // An automation run's admission: before a run costs anything, the worker
@@ -88,9 +99,11 @@ function automationCard(
   {
     operations = [],
     script = SCRIPT,
+    caps = {},
   }: {
     operations?: { targetType: typeof INBOX; operation: string }[];
     script?: string;
+    caps?: Partial<Record<keyof typeof ROOMY_AUTOMATION_CAPS, number | null>>;
   } = {},
 ): Record<string, string> {
   let scriptName = `${path.split('/').pop()}-script.js`;
@@ -109,7 +122,7 @@ function automationCard(
             },
           ],
           operations,
-          caps: { ...ROOMY_AUTOMATION_CAPS, seconds: 300 },
+          caps: { ...ROOMY_AUTOMATION_CAPS, seconds: 300, ...caps },
           params: [],
         },
         relationships: {
@@ -125,6 +138,17 @@ function automationCard(
 const CLEAN = 'automation/clean';
 const NEEDS_APPROVAL = 'automation/needs-approval';
 const BROKEN = 'automation/broken';
+// Caps small enough that one run's cost ceiling (505 credits at the test
+// prices) is below the minimum balance floor (1,000 credits).
+const SPENDING_CAPS = {
+  seconds: 300,
+  responseBytes: 1024 * 1024,
+  aiCredits: 500,
+  dailyCredits: null,
+  monthlyCredits: 2_000,
+};
+const SPENDING = 'automation/spending';
+const DAILY = 'automation/daily';
 
 module(basename(import.meta.filename), function (hooks) {
   let realm: Realm;
@@ -148,6 +172,10 @@ module(basename(import.meta.filename), function (hooks) {
         operations: [{ targetType: INBOX, operation: 'list' }],
       }),
       ...automationCard(BROKEN, { script: 'await realm.fs.writeText(\n' }),
+      ...automationCard(SPENDING, { caps: SPENDING_CAPS }),
+      ...automationCard(DAILY, {
+        caps: { ...SPENDING_CAPS, dailyCredits: 600 },
+      }),
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -764,5 +792,296 @@ module(basename(import.meta.filename), function (hooks) {
       }),
     });
     assert.deepEqual(asked, [], 'a run refused earlier is never priced');
+  });
+  module('the spending check', function (hooks) {
+    let ceiling: number;
+
+    hooks.beforeEach(function () {
+      ceiling = Math.ceil(
+        runCostCeiling(SPENDING_CAPS, testPricing()).totalCredits,
+      );
+    });
+
+    // The real spending check, at the test prices and, when given, the
+    // clock `now` (unix seconds).
+    function spending({
+      now,
+      pricing = testPricing,
+    }: {
+      now?: number;
+      pricing?: () => ReturnType<typeof testPricing> | undefined;
+    } = {}) {
+      return (real: AutomationAdmissionChecks) => ({
+        ...real,
+        admitSpending: buildAdmitSpending({
+          dbAdapter,
+          pricing,
+          ...(now !== undefined ? { now: () => now } : {}),
+        }),
+      });
+    }
+
+    // Gives `user` `credits` more credits to spend.
+    async function fund(user: string, credits: number) {
+      await ensureTestUser(dbAdapter, user);
+      let { id } = (await getUserByMatrixUserId(dbAdapter, user))!;
+      await addToCreditsLedger(dbAdapter, {
+        userId: id,
+        creditAmount: credits,
+        creditType: 'extra_credit',
+        subscriptionCycleId: null,
+      });
+      return id;
+    }
+
+    // Charges `credits` to `user` for a run of the automation at `path`, at
+    // `seconds` (unix), as a finished run's compute would be.
+    async function chargeRunOf(
+      path: string,
+      user: string,
+      credits: number,
+      seconds: number,
+    ) {
+      let earlier = await newRun(path, { trigger: 'nightly', actsAs: user });
+      let { id } = (await getUserByMatrixUserId(dbAdapter, user))!;
+      await addToCreditsLedger(dbAdapter, {
+        userId: id,
+        creditAmount: -credits,
+        creditType: 'extra_credit_used',
+        subscriptionCycleId: null,
+        charge: {
+          kind: 'run',
+          realm: ri(realm.url),
+          runId: earlier.id,
+          pricingVersion: testPricing().version,
+        },
+      });
+      await query(dbAdapter, [
+        'UPDATE credits_ledger SET created_at =',
+        param(seconds),
+        'WHERE run_id =',
+        param(earlier.id),
+      ]);
+    }
+
+    test('the minimum balance is one run’s cost ceiling, never below the floor', async function (assert) {
+      assert.true(
+        ceiling < testPricing().values.minimumBalanceFloorCredits,
+        'the test card’s ceiling is below the floor',
+      );
+      await fund(OWNER, 999);
+      let calls: RunCommandArgs[] = [];
+      let short = await newRun(SPENDING);
+      let result = await attempt(short, { calls, checks: spending() });
+      await assertRefused(assert, short, result, calls, 'insufficient-credits');
+
+      await fund(OWNER, 1);
+      let run = await newRun(SPENDING);
+      result = await attempt(run, { checks: spending() });
+      assert.strictEqual(result.state, 'complete');
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, run.id))?.costCeilingCredits,
+        ceiling,
+        'the admitted run holds its cost ceiling',
+      );
+    });
+
+    test('a payer’s short balance puts the automation into waiting for credits, and it continues at its next due run once the balance recovers', async function (assert) {
+      await switchOn(SPENDING);
+      await fund(OWNER, 500);
+      let calls: RunCommandArgs[] = [];
+      let short = await newRun(SPENDING, { trigger: 'nightly' });
+      let result = await attempt(short, { calls, checks: spending() });
+      await assertRefused(assert, short, result, calls, 'insufficient-credits');
+      let automation = await getAutomation(dbAdapter, automationId(SPENDING));
+      assert.strictEqual(automation?.state, 'waiting-for-credits');
+      assert.strictEqual(automation?.pauseReason, null);
+
+      // Still short: the next due run waits too.
+      let stillShort = await newRun(SPENDING, { trigger: 'nightly' });
+      result = await attempt(stillShort, { checks: spending() });
+      assert.strictEqual(result.reason, 'insufficient-credits');
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SPENDING)))?.state,
+        'waiting-for-credits',
+      );
+
+      await fund(OWNER, 500);
+      let next = await newRun(SPENDING, { trigger: 'nightly' });
+      result = await attempt(next, { checks: spending() });
+      assert.strictEqual(result.state, 'complete');
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SPENDING)))?.state,
+        'active',
+        'the first run admitted once the balance recovers makes it active',
+      );
+    });
+
+    test('a Run now on a short balance is refused without changing the automation’s state', async function (assert) {
+      await switchOn(SPENDING);
+      await fund(WRITER, 10);
+      let run = await newRun(SPENDING, { actsAs: WRITER });
+      let result = await attempt(run, { checks: spending() });
+      assert.strictEqual(result.reason, 'insufficient-credits');
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SPENDING)))?.state,
+        'active',
+        'the clicker’s balance says nothing about the payer’s',
+      );
+    });
+
+    test('two runs at once can’t both pass on one run’s worth of balance', async function (assert) {
+      await fund(OWNER, 1_000);
+      let runs = [await newRun(SPENDING), await newRun(SPENDING)];
+      let results = await Promise.all(
+        runs.map((run) => attempt(run, { checks: spending() })),
+      );
+      assert.deepEqual(
+        results.map((r) => r.reason ?? r.state).sort(),
+        ['complete', 'insufficient-credits'],
+        'one run holds its ceiling, and the other is short by it',
+      );
+
+      // With the minimum free beside one run's hold, the next one passes.
+      await fund(OWNER, ceiling);
+      let third = await newRun(SPENDING);
+      let result = await attempt(third, { checks: spending() });
+      assert.strictEqual(result.state, 'complete');
+    });
+
+    test('the monthly cap stops the automation’s runs until the month turns, and leaves a Run now alone', async function (assert) {
+      let now = Date.UTC(2026, 10, 16, 12) / 1000;
+      await switchOn(SPENDING);
+      await fund(OWNER, 10_000);
+      await chargeRunOf(SPENDING, OWNER, 2_000, now - 60);
+
+      let calls: RunCommandArgs[] = [];
+      let capped = await newRun(SPENDING, { trigger: 'nightly' });
+      let result = await attempt(capped, {
+        calls,
+        checks: spending({ now }),
+      });
+      await assertRefused(
+        assert,
+        capped,
+        result,
+        calls,
+        'monthly-credit-cap-reached',
+      );
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(SPENDING)))?.state,
+        'active',
+        'a cap isn’t a short balance, so the automation isn’t waiting for credits',
+      );
+
+      let runNow = await newRun(SPENDING);
+      result = await attempt(runNow, { checks: spending({ now }) });
+      assert.strictEqual(
+        result.state,
+        'complete',
+        'a Run now is charged to whoever clicked, outside the payer’s cap',
+      );
+
+      let nextMonth = Date.UTC(2026, 11, 1, 0, 5) / 1000;
+      let december = await newRun(SPENDING, { trigger: 'nightly' });
+      result = await attempt(december, {
+        checks: spending({ now: nextMonth }),
+      });
+      assert.strictEqual(result.state, 'complete');
+    });
+
+    test('the daily cap stops the automation’s runs until the UTC day turns', async function (assert) {
+      let now = Date.UTC(2026, 10, 16, 12) / 1000;
+      await switchOn(DAILY);
+      await fund(OWNER, 10_000);
+      await chargeRunOf(DAILY, OWNER, 600, now - 60);
+
+      let capped = await newRun(DAILY, { trigger: 'nightly' });
+      let result = await attempt(capped, { checks: spending({ now }) });
+      assert.strictEqual(result.reason, 'daily-credit-cap-reached');
+
+      let tomorrow = Date.UTC(2026, 10, 17, 0, 5) / 1000;
+      let next = await newRun(DAILY, { trigger: 'nightly' });
+      result = await attempt(next, { checks: spending({ now: tomorrow }) });
+      assert.strictEqual(result.state, 'complete');
+    });
+
+    test('a worker without prices admits no run', async function (assert) {
+      await fund(OWNER, 10_000);
+      let calls: RunCommandArgs[] = [];
+      let run = await newRun(SPENDING);
+      let result = await attempt(run, {
+        calls,
+        checks: spending({ pricing: () => undefined }),
+      });
+      await assertRefused(assert, run, result, calls, 'pricing-unavailable');
+    });
+
+    test('a run holds its ceiling, less its charged AI, until its run charge is written', async function (assert) {
+      let querier = dbAdapterQuerier(dbAdapter);
+      let held = (excludeRunId: string = randomUUID()) =>
+        creditsHeldByRunsInFlight(querier, { actsAs: OWNER, excludeRunId });
+      let run = await newRun(SPENDING);
+      await query(dbAdapter, [
+        "UPDATE automation_runs SET state = 'running', attempt = 7 WHERE id =",
+        param(run.id),
+      ]);
+      assert.strictEqual(
+        await held(),
+        0,
+        'a run not yet admitted holds nothing',
+      );
+      await holdAutomationRunCredits(dbAdapter, run.id, 7, 505);
+      assert.strictEqual(await held(), 505);
+      assert.strictEqual(
+        await held(run.id),
+        0,
+        'a run’s own hold isn’t counted against it',
+      );
+
+      await query(dbAdapter, [
+        'UPDATE automation_runs SET ai_credits_spent = 120 WHERE id =',
+        param(run.id),
+      ]);
+      assert.strictEqual(
+        await held(),
+        385,
+        'AI already charged is in the balance, so it isn’t held twice',
+      );
+
+      await query(dbAdapter, [
+        "UPDATE automation_runs SET state = 'complete', finished_at = now(), prerender_tab_ms = 1500 WHERE id =",
+        param(run.id),
+      ]);
+      assert.strictEqual(
+        await held(),
+        385,
+        'a run that ended keeps holding until its run charge is written',
+      );
+      await addToCreditsLedger(dbAdapter, {
+        userId: await fund(OWNER, 5),
+        creditAmount: -5,
+        creditType: 'extra_credit_used',
+        subscriptionCycleId: null,
+        charge: {
+          kind: 'run',
+          realm: ri(realm.url),
+          runId: run.id,
+          pricingVersion: testPricing().version,
+        },
+      });
+      assert.strictEqual(await held(), 0, 'its charge releases the hold');
+
+      let unused = await newRun(SPENDING);
+      await query(dbAdapter, [
+        "UPDATE automation_runs SET state = 'canceled', finished_at = now(), cost_ceiling_credits = 505 WHERE id =",
+        param(unused.id),
+      ]);
+      assert.strictEqual(
+        await held(),
+        0,
+        'a run that ended without using a tab or reading a byte has nothing to charge, and holds nothing',
+      );
+    });
   });
 });

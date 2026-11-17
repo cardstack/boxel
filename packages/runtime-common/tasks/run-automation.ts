@@ -316,6 +316,8 @@ async function attemptRun(
   }
   let operationsAdmitted = await admitRunOperations(admission, run, {
     automation: identity.automation,
+    caps,
+    kind,
     realmURL,
     token,
   });

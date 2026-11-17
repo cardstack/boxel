@@ -22,6 +22,7 @@
 
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
+import { MANUAL_RUN_TRIGGER } from './automation-declaration.ts';
 import { logRunPlatformLine } from './automation-run-log.ts';
 import {
   clearRunMilestones,
@@ -93,6 +94,10 @@ export interface AutomationRun extends AutomationRunCounts {
   // Milliseconds of prerender tab time the run's script took, summed over
   // the attempts that ran it (see `addAutomationRunTabTime`).
   prerenderTabMs: number;
+  // The most the run can cost, in whole credits, which its admission held
+  // against its identity's balance (see `holdAutomationRunCredits`). Null
+  // until the spending check admits it.
+  costCeilingCredits: number | null;
   createdAt: string;
   startedAt: string | null;
   // When the attempt that owns the run admitted it (see
@@ -323,6 +328,71 @@ export async function recordAutomationRunAdmitted(
   attempt: number,
 ): Promise<AutomationRun | undefined> {
   return await updateOwned(dbAdapter, id, attempt, ['admitted_at = now()']);
+}
+
+// Holds `credits`, the most the run can cost, against its identity's balance
+// while it is in flight (see `creditsHeldByRunsInFlight`). Refused unless the
+// run is running and `attempt` owns it. A retry's admission holds again,
+// replacing what the earlier attempt held.
+export async function holdAutomationRunCredits(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+  credits: number,
+): Promise<AutomationRun | undefined> {
+  if (!Number.isInteger(credits) || credits < 0) {
+    throw new Error(
+      `a run's credit hold must be a whole number of credits, got ${credits}`,
+    );
+  }
+  return await updateOwned(dbAdapter, id, attempt, [
+    'cost_ceiling_credits =',
+    param(credits),
+  ]);
+}
+
+// How long a finished run's hold keeps counting while its `run` charge hasn't
+// been written. The attempt writes the charge just after the run ends, so this
+// only bounds a charge that never lands.
+export const UNCHARGED_RUN_HOLD_SECONDS = 60 * 60;
+
+// The credits held by admitted runs that haven't been paid for yet, other
+// than `excludeRunId`: those of `actsAs` (the balance check), or those of
+// `automationId`'s runs that aren't Previews or Run nows (the credit caps).
+//
+// A run holds its cost ceiling, less what its AI requests have already been
+// charged (each AI request is charged as it finishes, so the balance already
+// shows it). A run holds while it is pending or running, and once it has
+// ended until its `run` charge is in the ledger, so a run that ended but
+// hasn't been charged yet still counts. A run that used no tab time and read
+// no bytes has no `run` charge to wait for, and holds nothing once it ends.
+export async function creditsHeldByRunsInFlight(
+  querier: Querier,
+  filter: (
+    | { actsAs: string; automationId?: undefined }
+    | { automationId: RealmResourceIdentifier; actsAs?: undefined }
+  ) & { excludeRunId: string },
+): Promise<number> {
+  let [row] = await querier([
+    'SELECT COALESCE(SUM(GREATEST(r.cost_ceiling_credits - r.ai_credits_spent, 0)), 0) AS held',
+    'FROM automation_runs r WHERE r.cost_ceiling_credits IS NOT NULL AND r.id <>',
+    param(filter.excludeRunId),
+    ...((filter.actsAs !== undefined
+      ? ['AND r.acts_as =', param(filter.actsAs)]
+      : [
+          'AND r.automation_id =',
+          param(filter.automationId),
+          'AND r.trigger <>',
+          param(MANUAL_RUN_TRIGGER),
+        ]) as Expression),
+    "AND (r.state IN ('pending', 'running') OR (",
+    'r.finished_at > now() - make_interval(secs =>',
+    param(UNCHARGED_RUN_HOLD_SECONDS),
+    ')',
+    'AND (r.prerender_tab_ms > 0 OR r.call_api_response_bytes > 0)',
+    "AND NOT EXISTS (SELECT 1 FROM credits_ledger l WHERE l.run_id = r.id AND l.charge_kind = 'run')))",
+  ] as Expression);
+  return Number(row?.held ?? 0);
 }
 
 // Claims the run's one commit for `attempt`. The claim is refused unless the
@@ -944,6 +1014,10 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     aiCreditsSpent: Number(row.ai_credits_spent ?? 0),
     aiCreditsReserved: Number(row.ai_credits_reserved ?? 0),
     prerenderTabMs: Number(row.prerender_tab_ms ?? 0),
+    costCeilingCredits:
+      row.cost_ceiling_credits == null
+        ? null
+        : Number(row.cost_ceiling_credits),
     createdAt: iso(row.created_at)!,
     startedAt: iso(row.started_at),
     admittedAt: iso(row.admitted_at),
