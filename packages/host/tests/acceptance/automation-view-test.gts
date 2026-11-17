@@ -1,9 +1,10 @@
-import { click, waitFor, waitUntil } from '@ember/test-helpers';
+import { click, settled, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, rri } from '@cardstack/runtime-common';
+import { baseRealm, rri, testRealmInfo } from '@cardstack/runtime-common';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import {
   setupLocalIndexing,
@@ -310,6 +311,64 @@ module('Acceptance | automation view', function (hooks) {
       timeout: 10000,
     });
     assert.dom('[data-test-automation-fitted-state="On"]').exists();
+  });
+
+  test("a job event naming the automation makes the view ask its status again, and one naming another automation doesn't", async function (assert) {
+    // A run moving changes the automation's row and not its card, so the
+    // realm tells its direct writers with a `job` event, the way the realm
+    // server sends one into a writer's session room.
+    function simulateJob(automation: string) {
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(
+          testRealmURL,
+          '@testuser:localhost',
+        ),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'job',
+          runId: 'run-live',
+          automation,
+          state: 'running',
+          step: 'script',
+          milestone: null,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+    }
+
+    answer = { status: 200, attributes: ACTIVE };
+    await openIsolated();
+    await waitFor('[data-test-automation-state="On"]', { timeout: 10000 });
+    await settled();
+    let askedBefore = asked.length;
+
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    simulateJob(PLANNED);
+    await settled();
+    assert.strictEqual(
+      asked.length,
+      askedBefore,
+      'a job event naming another automation asks nothing',
+    );
+    assert.dom('[data-test-automation-state="On"]').exists();
+
+    simulateJob(AUTOMATION);
+    await waitFor('[data-test-automation-state="Paused"]', { timeout: 10000 });
+    await settled();
+    // One read per event: an ask the other automation's event had set off,
+    // however late it landed, would show here as a second.
+    assert.deepEqual(
+      asked.slice(askedBefore),
+      [AUTOMATION],
+      'a job event naming the automation asks its status route once',
+    );
+    assert
+      .dom('[data-test-automation-status]')
+      .includesText('Next run None while paused');
   });
 
   test("the card lists the milestones of the automation's last run from the run", async function (assert) {
