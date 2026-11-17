@@ -312,7 +312,9 @@ module(basename(import.meta.filename), function (hooks) {
       let run = await newRun(OUTSIDER);
       await setRun(
         run.id,
-        `state = 'canceled', canceled_by = '${OUTSIDER}', finished_at = now()`,
+        `state = 'canceled', canceled_by = '${OUTSIDER}', finished_at = now(),
+         error_reason = 'not-a-direct-writer',
+         error_message = '${OUTSIDER}, whom the run acts as, is no longer a direct writer of ${realm.url}; ${OWNER} pays for the automation'`,
       );
       let response = await get(AUTOMATION_RUN_REPORT_PATH, WRITER, {
         run: run.id,
@@ -324,6 +326,11 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(a.canceledBy, null, 'who canceled it is hidden');
       assert.true(a.canceledByAPerson, 'but a person canceled it');
       assert.false(a.viewerCanceled);
+      assert.strictEqual(
+        a.errorMessage,
+        `someone, whom the run acts as, is no longer a direct writer of ${realm.url}; ${OWNER} pays for the automation`,
+        'the error message hides the id the viewer may not see, and keeps the one the viewer may',
+      );
       assert.notOk(response.text.includes(OUTSIDER), 'the id appears nowhere');
 
       await setRun(run.id, `acts_as = '${WRITER}', canceled_by = '${WRITER}'`);
@@ -480,6 +487,16 @@ module(basename(import.meta.filename), function (hooks) {
       ]);
       let owner = await ownerUser();
       for (let day of ['2026-11-14', '2026-11-16']) {
+        if (day === '2026-11-16') {
+          // One daily credit, so this charge draws a credit from the daily
+          // bucket and a credit from the extra one: two ledger rows.
+          await addToCreditsLedger(dbAdapter, {
+            userId: owner.id,
+            creditAmount: 1,
+            creditType: 'daily_credit',
+            subscriptionCycleId: null,
+          });
+        }
         let spent = await spendCredits(dbAdapter, owner.id, 2, {
           kind: 'storage',
           realm: ri(realm.url),
@@ -493,6 +510,15 @@ module(basename(import.meta.filename), function (hooks) {
           `the storage of ${day} is charged`,
         );
       }
+
+      let [{ rows }] = (await dbAdapter.execute(
+        `SELECT COUNT(*) AS rows FROM credits_ledger WHERE charge_kind = 'storage' AND charge_day = '2026-11-16'`,
+      )) as { rows: string }[];
+      assert.strictEqual(
+        Number(rows),
+        2,
+        'the charge of 2026-11-16 is two ledger rows',
+      );
 
       let response = await get(AUTOMATION_STORAGE_PATH, WRITER, {
         automation: automationURL(),
@@ -571,6 +597,42 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(a.files, []);
       assert.strictEqual(a.fileBytes, 0);
       assert.strictEqual(a.dailyCredits, 0);
+      assert.deepEqual(a.charges, []);
+    });
+
+    test('an automation row, a file or a charge that records another realm is left out', async function (assert) {
+      let elsewhere = ri(OTHER_REALM);
+      await query(dbAdapter, [
+        'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since) VALUES (',
+        param(rri(automationURL())),
+        ',',
+        param(elsewhere),
+        ',',
+        param(OWNER),
+        ", 'active', '{}'::jsonb, '{}'::jsonb, now())",
+      ]);
+      let owner = await ownerUser();
+      let spent = await spendCredits(dbAdapter, owner.id, 2, {
+        kind: 'storage',
+        realm: elsewhere,
+        automationId: rri(automationURL()),
+        day: '2026-11-15',
+        pricingVersion: 'test',
+      });
+      assert.strictEqual(spent, 'charged');
+      await dbAdapter.execute(
+        `INSERT INTO automation_files (realm_url, file_path, automation_id, run_id) VALUES ($1, 'notes/seed.txt', $2, $3)`,
+        { bind: [OTHER_REALM, rri(automationURL()), randomUUID()] },
+      );
+
+      let response = await get(AUTOMATION_STORAGE_PATH, WRITER, {
+        automation: automationURL(),
+      });
+      assert.strictEqual(response.status, 200, response.text);
+      let a = response.body.data.attributes;
+      assert.false(a.switchedOn, 'a row of another realm reads as no row');
+      assert.strictEqual(a.payer, null);
+      assert.deepEqual(a.files, []);
       assert.deepEqual(a.charges, []);
     });
 

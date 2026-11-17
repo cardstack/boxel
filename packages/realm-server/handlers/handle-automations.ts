@@ -15,6 +15,7 @@ import {
   SupportedMimeType,
   type AutomationRun,
   type DBAdapter,
+  type RealmIdentifier,
   type RealmResourceIdentifier,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
@@ -777,6 +778,31 @@ async function shownIdentity(
   return (await shareARealmGrant(dbAdapter, viewer, person)) ? person : null;
 }
 
+// A Matrix user id, as the run's messages spell one: `@localpart:server`.
+const MATRIX_ID = /@[a-z0-9._=/+-]+:[a-z0-9.-]+(?::\d+)?/gi;
+
+// `text` with every Matrix id in it that `viewer` may not see (see
+// `shownIdentity`) replaced by "someone". A run's error message can name the
+// person the run acts as or the automation's payer, whichever wrote it.
+async function withHiddenIdentities(
+  dbAdapter: DBAdapter,
+  viewer: string,
+  text: string | null,
+): Promise<string | null> {
+  if (text === null) {
+    return null;
+  }
+  let hidden = new Set<string>();
+  for (let id of new Set(text.match(MATRIX_ID) ?? [])) {
+    if ((await shownIdentity(dbAdapter, viewer, id)) === null) {
+      hidden.add(id);
+    }
+  }
+  return hidden.size === 0
+    ? text
+    : text.replace(MATRIX_ID, (id) => (hidden.has(id) ? 'someone' : id));
+}
+
 // The run a console read names, in the realm it names, once the caller is
 // known to directly write that realm. A run of another realm answers as no
 // run, so the read learns nothing about realms the caller doesn't write.
@@ -837,9 +863,10 @@ export function handleAutomationRunReport(args: CreateRoutesArgs): Handler {
     }
     let { summary } = read;
     let { run } = summary;
-    let [actsAs, canceledBy] = await Promise.all([
+    let [actsAs, canceledBy, errorMessage] = await Promise.all([
       shownIdentity(args.dbAdapter, caller, run.actsAs),
       shownIdentity(args.dbAdapter, caller, run.canceledBy),
+      withHiddenIdentities(args.dbAdapter, caller, run.errorMessage),
     ]);
     await sendJSON(ctxt, 200, {
       data: {
@@ -851,7 +878,7 @@ export function handleAutomationRunReport(args: CreateRoutesArgs): Handler {
           dryRun: run.dryRun,
           state: run.state,
           errorReason: run.errorReason,
-          errorMessage: run.errorMessage,
+          errorMessage,
           credentialRefusal: run.credentialRefusal,
           actsAs,
           viewerIsActsAs: run.actsAs === caller,
@@ -924,20 +951,25 @@ export function handleAutomationPreviewFile(args: CreateRoutesArgs): Handler {
   });
 }
 
-// The automation's storage charges in the ledger, newest first: each covers
-// the days since the one before, and is written once those days cost a whole
-// credit (see `automation-storage-charge.ts`).
+// The automation's storage charges in its realm's ledger rows, newest first:
+// each covers the days since the one before, and is written once those days
+// cost a whole credit (see `automation-storage-charge.ts`). A charge drawn
+// from more than one of the payer's credit buckets is one ledger row per
+// bucket, all naming the same day, so a charge is the sum of its day's rows.
 async function storageCharges(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
+  realm: RealmIdentifier,
 ): Promise<{ day: string; credits: number }[]> {
   let rows = await query(dbAdapter, [
-    `SELECT to_char(charge_day, 'YYYY-MM-DD') AS day, -credit_amount AS credits
+    `SELECT to_char(charge_day, 'YYYY-MM-DD') AS day, -SUM(credit_amount) AS credits
      FROM credits_ledger
      WHERE charge_kind = 'storage' AND run_id IS NULL AND batch_id IS NULL
        AND automation_id =`,
     param(automationId),
-    'ORDER BY charge_day DESC LIMIT',
+    'AND realm =',
+    param(realm),
+    'GROUP BY charge_day ORDER BY charge_day DESC LIMIT',
     param(STORAGE_CHARGES_LISTED),
   ]);
   return rows.map((row) => ({
@@ -967,11 +999,25 @@ export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
       ctxt.URL.searchParams.get(AUTOMATION_ROUTE_AUTOMATION_PARAM),
       args.virtualNetwork,
     );
-    let [storage, row, charges] = await Promise.all([
+    // The automation's data is read by its id and kept only where it records
+    // the realm the caller writes: a card URL under this realm's URL can
+    // belong to another realm mounted beneath it.
+    let realm = ri(args.virtualNetwork.unresolveURL(realmURL.href));
+    let inRealm = (recorded: string) =>
+      args.virtualNetwork.toURLHref(recorded) === realmURL.href;
+    let [allStorage, automationRow, charges] = await Promise.all([
       getAutomationStorage(args.dbAdapter, automationId),
       getAutomation(args.dbAdapter, automationId),
-      storageCharges(args.dbAdapter, automationId),
+      storageCharges(args.dbAdapter, automationId, realm),
     ]);
+    let row =
+      automationRow && inRealm(automationRow.realm) ? automationRow : undefined;
+    let files = allStorage.files.filter((file) => inRealm(file.realmURL));
+    let storage = {
+      files,
+      fileBytes: files.reduce((sum, file) => sum + file.fileBytes, 0),
+      indexBytes: files.reduce((sum, file) => sum + file.indexBytes, 0),
+    };
     let payer = row
       ? await shownIdentity(args.dbAdapter, caller, row.payer)
       : null;
