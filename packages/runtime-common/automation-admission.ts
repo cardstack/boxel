@@ -375,9 +375,9 @@ export async function admitRunOperations(
   return { ok: true, operations: asked.answer.operations ?? 0 };
 }
 
-// Moves the run's automation into or out of *waiting for credits*. The run's
-// own outcome doesn't depend on it, so a failure is logged and the next run's
-// admission moves it.
+// Moves the run's automation into or out of *waiting for credits*, and tells
+// `reportAutomationChange` when it moved. The run's own outcome doesn't depend
+// on it, so a failure is logged and the next run's admission moves it.
 async function waitingForCredits(
   ctx: AdmissionContext,
   run: AutomationRun,
@@ -393,6 +393,10 @@ async function waitingForCredits(
       log.info(
         `run ${run.id}: automation ${run.automationId} is ${waiting ? 'waiting for credits' : 'active again'}`,
       );
+      await ctx.reportAutomationChange?.({
+        automationId: run.automationId,
+        realm: run.realm,
+      });
     }
   } catch (e: any) {
     log.error(

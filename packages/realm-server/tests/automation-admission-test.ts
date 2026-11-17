@@ -965,6 +965,72 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a move into or out of waiting for credits reports the automation once, and a run that moves nothing reports nothing', async function (assert) {
+      let id = automationId(SPENDING);
+      await switchOn(SPENDING);
+      await fund(OWNER, 500);
+      // Each report with the state the row holds when it arrives.
+      let reports: string[] = [];
+      let reportAutomationChange: ReportAutomationChange = async ({
+        automationId: reported,
+        realm,
+      }) => {
+        let automation = await getAutomation(dbAdapter, reported);
+        reports.push(`${reported} in ${realm} ${automation?.state}`);
+      };
+
+      let short = await newRun(SPENDING, { trigger: 'nightly' });
+      let result = await attempt(short, {
+        checks: spending(),
+        reportAutomationChange,
+      });
+      assert.strictEqual(result.reason, 'insufficient-credits');
+      assert.deepEqual(
+        reports,
+        [`${id} in ${short.realm} waiting-for-credits`],
+        'a short run that moves the automation to waiting reports it',
+      );
+
+      reports = [];
+      let stillShort = await newRun(SPENDING, { trigger: 'nightly' });
+      result = await attempt(stillShort, {
+        checks: spending(),
+        reportAutomationChange,
+      });
+      assert.strictEqual(result.reason, 'insufficient-credits');
+      assert.deepEqual(
+        reports,
+        [],
+        'a short run of an automation already waiting reports nothing',
+      );
+
+      await fund(OWNER, 500);
+      let funded = await newRun(SPENDING, { trigger: 'nightly' });
+      result = await attempt(funded, {
+        checks: spending(),
+        reportAutomationChange,
+      });
+      assert.strictEqual(result.state, 'complete');
+      assert.deepEqual(
+        reports,
+        [`${id} in ${funded.realm} active`],
+        'the funded run that makes it active again reports it',
+      );
+
+      reports = [];
+      let again = await newRun(SPENDING, { trigger: 'nightly' });
+      result = await attempt(again, {
+        checks: spending(),
+        reportAutomationChange,
+      });
+      assert.strictEqual(result.state, 'complete');
+      assert.deepEqual(
+        reports,
+        [],
+        'a funded run of an active automation reports nothing',
+      );
+    });
+
     test('waiting for credits never moves a paused or done automation, or one whose payer changed', async function (assert) {
       let id = automationId(SPENDING);
       await switchOn(SPENDING);
