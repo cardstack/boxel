@@ -247,6 +247,17 @@ module('Acceptance | automation view', function (hooks) {
         'This trigger stops after 30 runs or at the end of Jan 15, 2030, whichever comes first.',
         "the card's own bounds still read",
       );
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .exists(
+        { count: 1 },
+        'the webhook trigger, and no other, says deliveries start no runs',
+      );
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .hasText(
+        'Boxel doesn’t start runs from webhook deliveries yet, so this trigger never fires. A schedule or a one-time trigger still runs the automation.',
+      );
 
     await openFormat('embedded');
     assert.dom('[data-test-automation-embedded-state]').doesNotExist();
@@ -864,6 +875,11 @@ module('Acceptance | automation view', function (hooks) {
         { state: 'paused', pauseReason: 'caps-raised' },
         'Paused',
         'Someone raised a limit above what the payer agreed to pay for, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and agrees to the new limits.',
+      ],
+      [
+        { state: 'paused', pauseReason: 'webhook-changed' },
+        'Paused',
+        'Someone pointed a trigger at an incoming webhook the payer didn’t agree to, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and agrees to the new webhook.',
       ],
       [
         { state: 'paused', pauseReason: 'payer-lost-access' },

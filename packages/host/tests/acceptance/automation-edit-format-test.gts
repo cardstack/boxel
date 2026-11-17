@@ -244,6 +244,14 @@ function buttonIn(scope: ParentNode, text: string): HTMLElement {
 
 module('Acceptance | automation edit format', function (hooks) {
   let adapter: TestRealmAdapter;
+  // What the realm's `_automation-webhooks` route answers: the webhooks a
+  // trigger may name. An in-browser test realm has no server rows for the
+  // route to read, so each test that uses the picker says what it lists;
+  // undefined leaves the route to the realm, which refuses, and the trigger
+  // then takes a typed path.
+  let webhooks:
+    | { webhookPath: string; owner: string; createdAt: string }[]
+    | undefined;
 
   setupApplicationTest(hooks);
   setupCatalogTestSubset(hooks);
@@ -300,6 +308,29 @@ module('Acceptance | automation edit format', function (hooks) {
         })(),
       },
     }));
+    webhooks = undefined;
+    getService('network').virtualNetwork.mount(
+      async (request: Request) => {
+        let url = new URL(request.url);
+        if (!url.pathname.endsWith('/_automation-webhooks') || !webhooks) {
+          return null;
+        }
+        return new Response(
+          JSON.stringify({
+            data: webhooks.map((webhook) => ({
+              type: 'automation-webhook',
+              id: webhook.webhookPath,
+              attributes: {
+                ...webhook,
+                verificationType: 'HMAC_SHA256_HEADER',
+              },
+            })),
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      },
+      { prepend: true },
+    );
   });
 
   async function openEdit(name = 'nightly') {
@@ -584,6 +615,108 @@ module('Acceptance | automation edit format', function (hooks) {
       (d) => d.attributes.triggers[0].kind === 'once',
       'the kind change is saved',
     );
+  });
+
+  module('picking a webhook', function (hooks) {
+    hooks.beforeEach(function () {
+      webhooks = [
+        {
+          webhookPath: 'whk_stripe',
+          owner: '@testuser:localhost',
+          createdAt: '2026-11-01T00:00:00.000Z',
+        },
+        {
+          webhookPath: 'whk_github',
+          owner: '@colleague:localhost',
+          createdAt: '2026-11-02T00:00:00.000Z',
+        },
+      ];
+    });
+
+    // The webhook picker in `scope`: a Pret UI Select, whose trigger and
+    // options ember-power-select renders.
+    async function openPicker(scope: HTMLElement) {
+      await waitFor('[data-test-automation-webhook-picker]');
+      let picker = field('Webhook', scope);
+      await click(picker.querySelector('[data-ebd-id$="-trigger"]')!);
+      await waitFor('[role="option"]');
+      return [...document.querySelectorAll('[role="option"]')] as HTMLElement[];
+    }
+
+    test('a webhook trigger picks one of the workspace’s webhooks from a list and saves the path', async function (assert) {
+      await openEdit();
+      let item = triggerItem(0);
+      await click(item.querySelector('input[type="radio"][value="webhook"]')!);
+      assert.strictEqual(
+        messageOf('Webhook', item),
+        'Required: pick one of this workspace’s incoming webhooks',
+      );
+      assert
+        .dom('[data-test-automation-webhook-notice]', item)
+        .hasText(
+          'Boxel doesn’t start runs from webhook deliveries yet, so this trigger never fires. A schedule or a one-time trigger still runs the automation.',
+        );
+      let options = await openPicker(item);
+      assert.deepEqual(
+        options.map((option) =>
+          option.textContent?.replace(/\s+/g, ' ').trim(),
+        ),
+        [
+          'whk_stripe Made by @testuser:localhost',
+          'whk_github Made by @colleague:localhost',
+        ],
+        'every webhook the route lists is a choice, with who made it',
+      );
+      await click(options[1]);
+      await waitForSave(
+        (d) =>
+          d.attributes.triggers[0].kind === 'webhook' &&
+          d.attributes.triggers[0].webhookPath === 'whk_github',
+        'the picked webhook’s path is saved',
+      );
+      assert.strictEqual(messageOf('Webhook', item), '');
+    });
+
+    test('a path the list lacks stays a choice, with a problem under the field', async function (assert) {
+      await openEdit();
+      let item = triggerItem(0);
+      await click(item.querySelector('input[type="radio"][value="webhook"]')!);
+      let options = await openPicker(item);
+      await click(options[0]);
+      await waitForSave(
+        (d) => d.attributes.triggers[0].webhookPath === 'whk_stripe',
+        'the first webhook is saved',
+      );
+      webhooks = webhooks!.slice(1);
+      await openEdit();
+      item = triggerItem(0);
+      await waitFor('[data-test-automation-webhook-picker]');
+      assert.strictEqual(
+        messageOf('Webhook', item),
+        'Pick one of this workspace’s incoming webhooks: Boxel turns the automation on only with a webhook that someone who can edit this workspace made',
+      );
+      let shown = await openPicker(item);
+      assert.deepEqual(
+        shown.map((option) => option.textContent?.replace(/\s+/g, ' ').trim()),
+        [
+          'whk_stripe Not one of this workspace’s webhooks',
+          'whk_github Made by @colleague:localhost',
+        ],
+      );
+    });
+
+    test('a workspace with no webhooks says so', async function (assert) {
+      webhooks = [];
+      await openEdit();
+      let item = triggerItem(0);
+      await click(item.querySelector('input[type="radio"][value="webhook"]')!);
+      await waitFor('[data-test-automation-webhook-picker-empty]');
+      assert
+        .dom('[data-test-automation-webhook-picker-empty]', item)
+        .includesText(
+          'Nobody who can edit this workspace has made an incoming webhook yet.',
+        );
+    });
   });
 
   test('triggers are added and removed', async function (assert) {
