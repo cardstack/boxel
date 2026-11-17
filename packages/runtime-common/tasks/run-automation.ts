@@ -19,6 +19,7 @@ import {
   automationRunDedupeKey,
   isAutomationScriptOutcome,
 } from '../automation-run-command.ts';
+import type { ReportAutomationChange } from '../automation-change-events.ts';
 import type { ReportRunChange } from '../automation-run-events.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
 import { pauseAfterRepeatedFailures } from '../automations.ts';
@@ -96,6 +97,8 @@ export interface AutomationAttemptContext {
   // Told each time the attempt moves the run: it starts it, admits it, or
   // ends it, and when a pause the admission makes cancels other runs.
   reportRunChange?: ReportRunChange;
+  // Told when a pause the admission makes changes the automation.
+  reportAutomationChange?: ReportAutomationChange;
   log: Log;
 }
 
@@ -287,6 +290,7 @@ async function attemptRun(
     matrixServerName: ctx.matrixServerName,
     checks: ctx.admissionChecks,
     reportRunChange: ctx.reportRunChange,
+    reportAutomationChange: ctx.reportAutomationChange,
   };
   let identity = await admitRunIdentity(admission, run, { kind });
   if (!identity.ok) {

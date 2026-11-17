@@ -17,7 +17,10 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import { realmServerRunChangeReporter } from '../lib/run-change-reporter.ts';
+import {
+  realmServerAutomationChangeReporter,
+  realmServerRunChangeReporter,
+} from '../lib/run-change-reporter.ts';
 import {
   notifyRealmsListUpdated,
   resolveAndAuthorizeArchiveTarget,
@@ -55,7 +58,17 @@ export default function handleArchiveRealm({
       await pauseRealmAutomations(
         dbAdapter,
         ri(virtualNetwork.unresolveURL(realmURL)),
-        realmServerRunChangeReporter({ dbAdapter, virtualNetwork, reconciler }),
+        {
+          reportRunChange: realmServerRunChangeReporter({
+            dbAdapter,
+            virtualNetwork,
+            reconciler,
+          }),
+          reportAutomationChange: realmServerAutomationChangeReporter({
+            virtualNetwork,
+            reconciler,
+          }),
+        },
       );
       await archiveRealm(dbAdapter, new URL(realmURL));
       // Stop the realm's indexer: cancel any in-flight from-scratch /

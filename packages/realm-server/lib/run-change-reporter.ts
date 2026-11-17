@@ -1,7 +1,9 @@
 import {
+  automationChangeReporter,
   logger,
   runChangeReporter,
   type DBAdapter,
+  type ReportAutomationChange,
   type ReportRunChange,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
@@ -53,4 +55,34 @@ export function realmServerRunChangeReporter({
         void report(runId);
       }
     : report;
+}
+
+// Reports an automation's change from a route that serves no one realm, such
+// as archiving: the automation's realm is found through the reconciler, as
+// `realmServerRunChangeReporter` finds a run's, and delivers the event as
+// `Realm.broadcastAutomationEvent` does, to its direct writers alone.
+export function realmServerAutomationChangeReporter({
+  virtualNetwork,
+  reconciler,
+}: {
+  virtualNetwork: VirtualNetwork;
+  reconciler: Pick<RealmRegistryReconciler, 'lookupOrMount'>;
+}): ReportAutomationChange {
+  return automationChangeReporter({
+    virtualNetwork,
+    log,
+    send: async (event) => {
+      let realmURL = normalizeRealmURL(event.realmURL);
+      let realm = realmURL
+        ? await reconciler.lookupOrMount(realmURL.href)
+        : undefined;
+      if (!realm) {
+        log.warn(
+          `no realm at ${event.realmURL} to send ${event.automation}'s automation event from`,
+        );
+        return;
+      }
+      await realm.broadcastAutomationEvent(event);
+    },
+  });
 }

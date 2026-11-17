@@ -6,6 +6,7 @@ import {
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
 } from '../queue.ts';
+import { taskAutomationChangeReporter } from '../automation-change-events.ts';
 import { taskRunChangeReporter } from '../automation-run-events.ts';
 import { tickAutomations } from '../automation-tick.ts';
 import { readRunDeclaration } from '../automation-run-limits.ts';
@@ -68,6 +69,11 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
       let outcomes = await tickAutomations(dbAdapter, {
         queue: queuePublisher,
         virtualNetwork,
+        reportAutomationChange: taskAutomationChangeReporter({
+          virtualNetwork,
+          reportRealmEvent,
+          log,
+        }),
         readDeclaration: (automationId) =>
           readRunDeclaration({
             dbAdapter,
