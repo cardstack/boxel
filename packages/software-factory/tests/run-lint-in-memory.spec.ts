@@ -7,6 +7,7 @@ import { expect, test } from './fixtures.ts';
 import { runLintInMemory } from '../src/lint-execution.ts';
 import { BAD_LINT_GTS } from './helpers/lint-test-fixtures.ts';
 import { buildTestClient } from './helpers/test-client.ts';
+import { writeRealmFile } from './helpers/write-realm-file.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
@@ -82,12 +83,7 @@ test.describe('runLintInMemory e2e', () => {
     });
 
     try {
-      let writeResult = await client.write(
-        realmUrl,
-        'bad-lint.gts',
-        BAD_LINT_GTS,
-      );
-      expect(writeResult.ok).toBe(true);
+      await writeRealmFile(client, realmUrl, 'bad-lint.gts', BAD_LINT_GTS);
       let indexed = await client.waitForFile(realmUrl, 'bad-lint.gts', {
         pollMs: 300,
         timeoutMs: 30_000,
@@ -145,6 +141,10 @@ test.describe('runLintInMemory e2e', () => {
     try {
       // Delete all lintable files shipped with the fixture.
       let listingBefore = await client.listFiles(realmUrl);
+      expect(
+        listingBefore.error,
+        `list ${realmUrl} failed: ${listingBefore.error}`,
+      ).toBeUndefined();
       let lintablePattern = /\.(gts|gjs|ts|js)$/;
       for (let filename of listingBefore.filenames ?? []) {
         if (lintablePattern.test(filename)) {
@@ -212,12 +212,7 @@ test.describe('runLintInMemory e2e', () => {
 
     try {
       // Seed a dirty file alongside the fixture's clean hello.gts.
-      let writeResult = await client.write(
-        realmUrl,
-        'bad-lint.gts',
-        BAD_LINT_GTS,
-      );
-      expect(writeResult.ok).toBe(true);
+      await writeRealmFile(client, realmUrl, 'bad-lint.gts', BAD_LINT_GTS);
       let indexed = await client.waitForFile(realmUrl, 'bad-lint.gts', {
         pollMs: 300,
         timeoutMs: 30_000,

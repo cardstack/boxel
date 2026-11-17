@@ -2,7 +2,23 @@
 // provider may answer any time within 24 hours, at about half the per-token
 // price. A submit answers with no cost, so batches are submitted and read only
 // through the batch path (`handle-ai-batches.ts`), which records each batch
-// for billing; `_request-forward` refuses these URLs.
+// for billing, and by the settle job (`ai-batch-settle.ts`), which bills each
+// one when it ends; `_request-forward` refuses these URLs.
+
+import type { DBAdapter } from '@cardstack/runtime-common';
+import { AllowedProxyDestinations } from './allowed-proxy-destinations.ts';
+import {
+  outboundFailureResponse,
+  systemKeyCredential,
+} from './proxy-forward.ts';
+import {
+  OutboundRefusedError,
+  outboundFetch,
+  sendContext,
+  type OutboundErrorContext,
+} from './outbound/client.ts';
+import { scrubError } from './outbound/scrub-error.ts';
+import { CredentialScrubber } from './outbound/scrubber.ts';
 
 // The realm server's route for an automation run's batch calls.
 export const AI_BATCHES_PATH = '/_ai-batches';
@@ -68,13 +84,27 @@ export function openRouterBatchSubmitBody({
   });
 }
 
-// What the batch record keeps from a batch OpenRouter returns, or undefined
-// when the answer isn't a batch.
+// What the platform reads from a batch OpenRouter returns: its id and
+// status, when its provider stops working on it (`expiresAt`), how many
+// requests it accepted (`total`), when it reached a final status
+// (`finalizedAt`), and what it cost in USD (`costUsd`), which OpenRouter
+// reports once the batch ends, and says it reports for a completed one.
+export interface OpenRouterBatch {
+  id: string;
+  status: string;
+  model: string | null;
+  createdAt: Date | null;
+  expiresAt: Date | null;
+  finalizedAt: Date | null;
+  total: number | null;
+  costUsd: number | null;
+}
+
+// Reads a batch from OpenRouter's answer, or undefined when the answer isn't
+// a batch.
 export function readOpenRouterBatch(
   json: unknown,
-):
-  | { id: string; status: string; expiresAt: Date | null; total: number | null }
-  | undefined {
+): OpenRouterBatch | undefined {
   if (!json || typeof json !== 'object' || Array.isArray(json)) {
     return undefined;
   }
@@ -82,11 +112,145 @@ export function readOpenRouterBatch(
   if (typeof batch.id !== 'string' || typeof batch.status !== 'string') {
     return undefined;
   }
-  let expiresAt =
-    typeof batch.expires_at === 'number' && Number.isFinite(batch.expires_at)
-      ? new Date(batch.expires_at * 1000)
-      : null;
   let counts = batch.request_counts as Record<string, unknown> | undefined;
   let total = counts && typeof counts.total === 'number' ? counts.total : null;
-  return { id: batch.id, status: batch.status, expiresAt, total };
+  let usage = batch.usage as Record<string, unknown> | null | undefined;
+  let cost =
+    usage && typeof usage === 'object' && typeof usage.cost === 'number'
+      ? usage.cost
+      : null;
+  return {
+    id: batch.id,
+    status: batch.status,
+    model: typeof batch.model === 'string' ? batch.model : null,
+    createdAt: unixTime(batch.created_at),
+    expiresAt: unixTime(batch.expires_at),
+    finalizedAt: unixTime(batch.finalized_at),
+    total,
+    costUsd: cost !== null && Number.isFinite(cost) && cost >= 0 ? cost : null,
+  };
+}
+
+// The most batches one page of OpenRouter's batch list holds.
+export const OPENROUTER_BATCH_LIST_PAGE_SIZE = 100;
+
+// A page of OpenRouter's batch list, newest first, for the batches created
+// after `createdAfter`, continuing after the batch `after` names.
+export function openRouterBatchListURL({
+  createdAfter,
+  after,
+}: {
+  createdAfter: Date;
+  after?: string;
+}): string {
+  let url = new URL(OPENROUTER_BATCHES_URL);
+  url.searchParams.set('limit', String(OPENROUTER_BATCH_LIST_PAGE_SIZE));
+  url.searchParams.set(
+    'created_after',
+    String(Math.floor(createdAfter.getTime() / 1000)),
+  );
+  if (after) {
+    url.searchParams.set('after', after);
+  }
+  return url.href;
+}
+
+// Reads a page of OpenRouter's batch list, or undefined when the answer isn't
+// one. `lastId` is what the next page continues after, while `hasMore`.
+export function readOpenRouterBatchList(
+  json: unknown,
+):
+  | { batches: OpenRouterBatch[]; lastId: string | null; hasMore: boolean }
+  | undefined {
+  if (!json || typeof json !== 'object' || Array.isArray(json)) {
+    return undefined;
+  }
+  let list = json as Record<string, unknown>;
+  if (!Array.isArray(list.data)) {
+    return undefined;
+  }
+  let batches = list.data
+    .map((item) => readOpenRouterBatch(item))
+    .filter((batch): batch is OpenRouterBatch => batch !== undefined);
+  return {
+    batches,
+    lastId: typeof list.last_id === 'string' ? list.last_id : null,
+    hasMore: list.has_more === true,
+  };
+}
+
+function unixTime(value: unknown): Date | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? new Date(value * 1000)
+    : null;
+}
+
+// What a call to OpenRouter's Batch API with the platform's OpenRouter key
+// came to:
+// - `answered`: OpenRouter answered, with any status; its whole body is read.
+// - `no-key`: no system key covers the URL, so nothing was sent.
+// - `failed`: the call failed before its answer was read. When `sent` is
+//   false the outbound guard refused it before sending; otherwise it went
+//   out, and OpenRouter may have acted on it. `failure` is how the guard
+//   would answer a caller for it, when the guard stopped it.
+export type OpenRouterBatchCall =
+  | { kind: 'answered'; status: number; json: unknown; text: string }
+  | { kind: 'no-key' }
+  | {
+      kind: 'failed';
+      sent: boolean;
+      error: unknown;
+      failure:
+        | { status: number; statusText: string; message: string }
+        | undefined;
+      call: OutboundErrorContext;
+    };
+
+// Sends one call to OpenRouter's Batch API with the platform's OpenRouter
+// key: the system key whose destination covers the URL in `proxy_endpoints`.
+// The error a failed call carries is scrubbed of the key.
+export async function callOpenRouterBatchAPI(
+  dbAdapter: DBAdapter,
+  { url, method, body }: { url: string; method: string; body?: string },
+): Promise<OpenRouterBatchCall> {
+  let destination =
+    await AllowedProxyDestinations.getInstance(dbAdapter).getDestinationConfig(
+      url,
+    );
+  if (!destination) {
+    return { kind: 'no-key' };
+  }
+  let scrubber = new CredentialScrubber();
+  let credential = systemKeyCredential(destination);
+  let call = sendContext(credential.name, url);
+  try {
+    let response = await outboundFetch({
+      url,
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body,
+      sizePath: 'system-key',
+      responseSizeCap: destination.responseSizeCap,
+      destinationSetBy: 'platform',
+      credential,
+      scrubber,
+    });
+    let text = await response.text();
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = undefined;
+    }
+    return { kind: 'answered', status: response.status, json, text };
+  } catch (error) {
+    scrubError(error, scrubber);
+    return {
+      kind: 'failed',
+      sent: !(error instanceof OutboundRefusedError),
+      error,
+      failure: outboundFailureResponse(error),
+      call,
+    };
+  }
 }
