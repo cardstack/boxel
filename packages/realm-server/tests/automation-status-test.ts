@@ -43,6 +43,7 @@ import {
   insertUser,
   realmSecretSeed,
   setupPermissionedRealmCached,
+  setupSecretsKeyring,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -114,6 +115,8 @@ module(basename(import.meta.filename), function (hooks) {
   let dbAdapter: DBAdapter;
 
   setupCatalogTestSubset(hooks);
+  // The tests seal incoming webhooks' signing secrets.
+  setupSecretsKeyring(hooks);
 
   module('a realm with direct writers and a reader', function (hooks) {
     // The route reads the realm's clock for each trigger's next run.

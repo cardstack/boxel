@@ -29,6 +29,7 @@ import {
   realmSecretSeed,
   ROOMY_AUTOMATION_CAPS,
   setupPermissionedRealmCached,
+  setupSecretsKeyring,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
@@ -94,6 +95,8 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   setupCatalogTestSubset(hooks);
+  // The tests seal incoming webhooks' signing secrets.
+  setupSecretsKeyring(hooks);
   setupPermissionedRealmCached(hooks, {
     realmURL,
     permissions: {
