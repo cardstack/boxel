@@ -1247,6 +1247,10 @@
                 {
                   "id": "displayName",
                   "value": "Credits charged"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 140
                 }
               ]
             },

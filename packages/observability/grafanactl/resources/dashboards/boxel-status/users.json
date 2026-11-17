@@ -1107,6 +1107,10 @@
                 {
                   "id": "displayName",
                   "value": "Credits charged"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 140
                 }
               ]
             },
@@ -1119,6 +1123,10 @@
                 {
                   "id": "displayName",
                   "value": "Credits added"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 130
                 }
               ]
             },
