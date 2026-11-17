@@ -335,4 +335,31 @@ module('Integration | PathSpecifierField', function (hooks) {
       assert.dom('[data-test-path-specifier-prefix]').doesNotExist();
     }
   });
+
+  test('the view marks an invalid prefix, and shows an empty one as empty', async function (assert) {
+    await renderCard(
+      loader,
+      new Site({ paths: ['blog/', 'blog/*', ''] }),
+      'isolated',
+    );
+    let items = [
+      ...document.querySelectorAll('[data-test-path-specifier-item]'),
+    ];
+    assert.strictEqual(items.length, 3);
+    assert
+      .dom('[data-test-path-specifier-invalid]', items[0])
+      .doesNotExist('a valid prefix is not marked');
+    assert
+      .dom('[data-test-path-specifier-invalid]', items[1])
+      .hasText(
+        `Invalid. ${messageFor('blog/*')}`,
+        "an invalid prefix is marked with the validator's message",
+      );
+    assert
+      .dom('[data-test-path-specifier-empty]', items[2])
+      .hasText('empty', 'an empty prefix is labeled, not a blank chip');
+    assert
+      .dom('[data-test-path-specifier-invalid]', items[2])
+      .hasText(`Invalid. ${messageFor('')}`);
+  });
 });

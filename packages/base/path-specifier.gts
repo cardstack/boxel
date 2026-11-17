@@ -11,10 +11,14 @@ import {
 import { Button } from '@cardstack/pretui/components/button';
 import { IconButton } from '@cardstack/pretui/components/icon-button';
 import { Input } from '@cardstack/pretui/components/input';
+import { VisuallyHidden } from '@cardstack/pretui/components/visually-hidden';
 
 import FolderSearchIcon from '@cardstack/boxel-icons/folder-search';
 import PlusIcon from '@cardstack/boxel-icons/plus';
+import TriangleAlertIcon from '@cardstack/boxel-icons/triangle-alert';
 import XIcon from '@cardstack/boxel-icons/x';
+
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { Component, FieldDef } from './card-api';
 
@@ -39,22 +43,63 @@ import { Component, FieldDef } from './card-api';
 // Nothing here rejects an invalid prefix. The editor stores what the author
 // types and shows the validator's message under it, so a card holding an
 // invalid prefix still saves and can be fixed later. Whatever reads the
-// specifier decides what an invalid one means.
+// specifier decides what an invalid one means. The view marks an invalid
+// prefix, so a specifier holding one doesn't read as a working path limit.
+
+// The validator's message for an invalid prefix, or undefined for a valid one.
+function messageFor(prefix: string): string | undefined {
+  let result = parsePathPrefix(prefix);
+  return result.ok ? undefined : result.error.message;
+}
+
+interface PrefixItem {
+  prefix: string;
+  message: string | undefined;
+}
 
 class View extends Component<typeof PathSpecifierField> {
+  private get items(): PrefixItem[] {
+    return (this.args.model ?? []).map((prefix) => ({
+      prefix,
+      message: messageFor(prefix),
+    }));
+  }
+
   <template>
-    {{#if @model.length}}
+    {{#if this.items.length}}
       <ul class='path-specifier' data-test-path-specifier>
-        {{#each @model as |prefix|}}
-          <li>
-            {{! The interpolation sits flush against the tags: a prefix is
-              shown as written, whitespace included. }}
-            <code
-              class='prefix'
-              data-test-path-specifier-prefix
-            >{{prefix}}</code>
+        {{#each this.items as |item|~}}
+          <li
+            class={{cn 'item' invalid=item.message}}
+            data-test-path-specifier-item
+          >
+            {{#if item.prefix}}
+              {{! The interpolation sits flush against the tags: a prefix is
+                shown as written, whitespace included. }}
+              <code
+                class='prefix'
+                data-test-path-specifier-prefix
+              >{{item.prefix}}</code>
+            {{else}}
+              <span class='prefix empty' data-test-path-specifier-empty>
+                empty
+              </span>
+            {{/if}}
+            {{#if item.message}}
+              <span
+                class='invalid-mark'
+                title={{item.message}}
+                aria-hidden='true'
+              >
+                <TriangleAlertIcon class='invalid-icon' />
+              </span>
+              <VisuallyHidden data-test-path-specifier-invalid>
+                Invalid.
+                {{item.message}}
+              </VisuallyHidden>
+            {{/if}}
           </li>
-        {{/each}}
+        {{~/each}}
       </ul>
     {{else}}
       <span class='no-limit' data-test-path-specifier-no-limit>
@@ -62,13 +107,23 @@ class View extends Component<typeof PathSpecifierField> {
       </span>
     {{/if}}
     <style scoped>
+      /* Inline, so that as an atom in a sentence the prefixes wrap with the
+         text around them instead of moving to a line of their own. */
       .path-specifier {
-        display: inline-flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xxs);
+        display: inline;
         margin: 0;
         padding: 0;
         list-style: none;
+      }
+      .item {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        max-width: 100%;
+        margin-inline-end: var(--boxel-sp-xxs);
+      }
+      .item:last-child {
+        margin-inline-end: 0;
       }
       .prefix {
         padding: 0 var(--boxel-sp-4xs);
@@ -79,6 +134,25 @@ class View extends Component<typeof PathSpecifierField> {
         font-size: var(--boxel-font-size-sm);
         white-space: pre-wrap;
         overflow-wrap: anywhere;
+      }
+      .empty {
+        color: var(--muted-foreground);
+        font-family: inherit;
+        font-style: italic;
+        white-space: normal;
+      }
+      .invalid .prefix {
+        box-shadow: inset 0 0 0 1px var(--destructive);
+      }
+      .invalid-mark {
+        display: inline-flex;
+        flex-shrink: 0;
+        color: var(--destructive-ink);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .invalid-icon {
+        width: 1em;
+        height: 1em;
       }
       .no-limit {
         color: var(--muted-foreground);
@@ -94,12 +168,6 @@ interface PrefixRow {
   label: string;
   removeLabel: string;
   message: string | undefined;
-}
-
-// The validator's message for an invalid prefix, or undefined for a valid one.
-function messageFor(prefix: string): string | undefined {
-  let result = parsePathPrefix(prefix);
-  return result.ok ? undefined : result.error.message;
 }
 
 function prefixRow(prefix: string, index: number, draft: boolean): PrefixRow {
