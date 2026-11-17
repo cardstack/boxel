@@ -21,6 +21,7 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
 const AUTOMATION = `${testRealmURL}automations/nightly`;
+const PLANNED = `${testRealmURL}automations/planned`;
 const AUTOMATION_MODULE = rri('@cardstack/catalog/automation/automation');
 
 function trigger(kind: string, extra: Record<string, unknown> = {}) {
@@ -148,6 +149,20 @@ module('Acceptance | automation view', function (hooks) {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'scripts/nightly.js': `const { cards } = await realm.cards.search({});\n`,
         'automations/nightly.json': automationJSON,
+        'scripts/planned.js': [
+          "realm.progress.plan(['Fetch open issues', 'Group by label', 'Write digest']);",
+          "realm.progress.milestone('Fetch open issues');",
+          '',
+        ].join('\n'),
+        'automations/planned.json': {
+          ...automationJSON,
+          data: {
+            ...automationJSON.data,
+            relationships: {
+              script: { links: { self: '../scripts/planned.js' } },
+            },
+          },
+        },
       },
     });
 
@@ -184,9 +199,9 @@ module('Acceptance | automation view', function (hooks) {
     );
   });
 
-  async function openIsolated() {
+  async function openIsolated(id = AUTOMATION) {
     await visitOperatorMode({
-      stacks: [[{ id: AUTOMATION, format: 'isolated' }]],
+      stacks: [[{ id, format: 'isolated' }]],
     });
     await waitFor('[data-test-automation]', {
       timeout: 10000,
@@ -240,7 +255,10 @@ module('Acceptance | automation view', function (hooks) {
   });
 
   test('an automation nobody has switched on reads as off', async function (assert) {
-    answer = { status: 200, attributes: { switchedOn: false } };
+    answer = {
+      status: 200,
+      attributes: { switchedOn: false, lastRun: null, currentRun: null },
+    };
     await openIsolated();
     await waitForStatus();
     assert.dom('[data-test-automation-state="Off"]').exists();
@@ -292,6 +310,314 @@ module('Acceptance | automation view', function (hooks) {
       timeout: 10000,
     });
     assert.dom('[data-test-automation-fitted-state="On"]').exists();
+  });
+
+  test("the card lists the milestones of the automation's last run from the run", async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: {
+          runId: 'run-1',
+          state: 'error',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: '2030-01-01T09:00:00.000Z',
+          plan: ['Fetch issues', 'Group by label', 'Write digest'],
+          milestones: [
+            {
+              name: 'Fetch issues',
+              planned: true,
+              startedAt: '2030-01-01T08:59:00.000Z',
+              endedAt: '2030-01-01T08:59:04.000Z',
+              ms: 4_000,
+              done: 30,
+              total: 30,
+            },
+            {
+              name: 'Retry',
+              planned: false,
+              startedAt: '2030-01-01T08:59:04.000Z',
+              endedAt: '2030-01-01T08:59:05.000Z',
+              ms: 1_000,
+            },
+            {
+              name: 'Group by label',
+              planned: true,
+              startedAt: '2030-01-01T08:59:05.000Z',
+              endedAt: '2030-01-01T09:00:00.000Z',
+              ms: 55_000,
+              done: 12,
+              total: 40,
+            },
+          ],
+          ahead: ['Write digest'],
+          failedIn: 'Group by label',
+          dropped: 0,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-milestones-lead]')
+      .hasText(
+        'The milestones the script reported on the last run, which ended with an error.',
+      );
+    let milestones = text('[data-test-automation-milestones]') ?? '';
+    for (let expected of [
+      'Fetch issues',
+      'Took 4 s · 30 of 30',
+      'Retry',
+      'Took 1 s · Not in the plan',
+      'Group by label',
+      'Failed here',
+      'Ran for 55 s · 12 of 40',
+      'Write digest',
+      'Not started',
+    ]) {
+      assert.true(milestones.includes(expected), `shows "${expected}"`);
+    }
+    let order = ['Fetch issues', 'Retry', 'Group by label', 'Write digest'].map(
+      (name) => milestones.indexOf(name),
+    );
+    assert.deepEqual(
+      order,
+      [...order].sort((a, b) => a - b),
+      'in the order the run reached them, then the ones it never reached',
+    );
+    assert.deepEqual(
+      [
+        ...document.querySelectorAll(
+          '[data-test-automation-milestones] [data-test-milestone-state]',
+        ),
+      ].map((step) => step.getAttribute('data-test-milestone-state')),
+      ['reached', 'reached', 'failed', 'not-started'],
+      'done up to the failure, failed there, and not started after it',
+    );
+  });
+
+  test('a run in progress shows the milestone it is in as running, the ones before it done and the ones after it not started', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: null,
+        currentRun: {
+          runId: 'run-live',
+          state: 'running',
+          current: 'Group by label',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: null,
+          plan: ['Fetch issues', 'Group by label', 'Write digest'],
+          milestones: [
+            {
+              name: 'Fetch issues',
+              planned: true,
+              startedAt: '2030-01-01T08:59:00.000Z',
+              endedAt: '2030-01-01T08:59:04.000Z',
+              ms: 4_000,
+            },
+            {
+              name: 'Group by label',
+              planned: true,
+              startedAt: '2030-01-01T08:59:04.000Z',
+              endedAt: null,
+              ms: 90_000,
+              done: 140,
+              total: 412,
+            },
+          ],
+          ahead: ['Write digest'],
+          failedIn: null,
+          dropped: 0,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-milestones-lead]')
+      .hasText(
+        'The milestones the script has reported on the run in progress.',
+      );
+    let states = [
+      ...document.querySelectorAll(
+        '[data-test-automation-milestones] [data-test-milestone-state]',
+      ),
+    ].map((step) => step.getAttribute('data-test-milestone-state'));
+    assert.deepEqual(states, ['reached', 'running', 'not-started']);
+    let milestones = text('[data-test-automation-milestones]') ?? '';
+    for (let expected of [
+      'Running for 1 min 30 s · 140 of 412',
+      'Not started',
+    ]) {
+      assert.true(milestones.includes(expected), `shows "${expected}"`);
+    }
+  });
+
+  test('the milestone a stopped run was in reads as stopped, and the ones after it as not started', async function (assert) {
+    let milestone = (name: string, ms: number) => ({
+      name,
+      planned: true,
+      startedAt: '2030-01-01T08:59:00.000Z',
+      endedAt: '2030-01-01T09:00:00.000Z',
+      ms,
+    });
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: {
+          runId: 'run-2',
+          state: 'canceled',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: '2030-01-01T09:00:00.000Z',
+          plan: ['Fetch', 'Write'],
+          milestones: [milestone('Fetch', 3_000)],
+          ahead: ['Write'],
+          failedIn: null,
+          dropped: 0,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    let states = [
+      ...document.querySelectorAll(
+        '[data-test-automation-milestones] [data-test-milestone-state]',
+      ),
+    ].map((step) => step.getAttribute('data-test-milestone-state'));
+    assert.deepEqual(states, ['stopped', 'not-started']);
+    assert
+      .dom('[data-test-automation-milestones]')
+      .includesText('Stopped here');
+  });
+
+  test('a run that marked more milestones than a run records says so', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: {
+          runId: 'run-3',
+          state: 'complete',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: '2030-01-01T09:00:00.000Z',
+          plan: [],
+          milestones: [
+            {
+              name: 'Item 200',
+              planned: false,
+              startedAt: '2030-01-01T08:59:00.000Z',
+              endedAt: '2030-01-01T09:00:00.000Z',
+              ms: 60_000,
+            },
+          ],
+          ahead: [],
+          failedIn: null,
+          dropped: 12,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-milestones-lead]')
+      .includesText(
+        'The script marked 12 more milestones past the 200 a run records',
+      );
+  });
+
+  test('an automation with no ended run says milestones show after a run ends', async function (assert) {
+    answer = { status: 200, attributes: { ...ACTIVE, lastRun: null } };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-milestones]')
+      .includesText(
+        'The milestones the script reports show here after a run ends.',
+      );
+    assert.dom('[data-test-automation-milestones-lead]').doesNotExist();
+  });
+
+  test('before any run, the section lists the milestones the script declares, each not started', async function (assert) {
+    answer = { status: 200, attributes: { ...ACTIVE, lastRun: null } };
+    await openIsolated(PLANNED);
+    await waitFor(
+      '[data-test-automation-milestones] [data-test-milestone-state]',
+      {
+        timeout: 10000,
+      },
+    );
+    assert
+      .dom('[data-test-automation-milestones-lead]')
+      .hasText(
+        'The milestones the script plans to reach, in order. Each run reports how far the script got.',
+      );
+    let steps = [
+      ...document.querySelectorAll(
+        '[data-test-automation-milestones] [data-test-milestone-state]',
+      ),
+    ];
+    assert.deepEqual(
+      steps.map((step) => step.getAttribute('data-test-milestone-state')),
+      ['not-started', 'not-started', 'not-started'],
+    );
+    let milestones = text('[data-test-automation-milestones]') ?? '';
+    for (let name of ['Fetch open issues', 'Group by label', 'Write digest']) {
+      assert.true(milestones.includes(name), `lists "${name}"`);
+    }
+  });
+
+  test('a viewer the route refuses still sees the milestones the script declares', async function (assert) {
+    await openIsolated(PLANNED);
+    await waitFor('[data-test-automation-who-pays]', { timeout: 10000 });
+    await waitFor(
+      '[data-test-automation-milestones] [data-test-milestone-state]',
+      {
+        timeout: 10000,
+      },
+    );
+    assert
+      .dom('[data-test-automation-milestones]')
+      .includesText('Group by label');
+  });
+
+  test('a last run that reported no milestones says so', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        lastRun: {
+          runId: 'run-4',
+          state: 'complete',
+          startedAt: '2030-01-01T08:59:00.000Z',
+          finishedAt: '2030-01-01T09:00:00.000Z',
+          plan: [],
+          milestones: [],
+          ahead: [],
+          failedIn: null,
+          dropped: 0,
+        },
+      },
+    };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-milestones]')
+      .includesText(
+        'The last run reported no milestones. A script reports milestones with realm.progress.plan and realm.progress.milestone.',
+      );
+  });
+
+  test('a viewer the route refuses is told who sees the milestones', async function (assert) {
+    await openIsolated();
+    await waitFor('[data-test-automation-who-pays]', { timeout: 10000 });
+    assert
+      .dom('[data-test-automation-milestones]')
+      .includesText(
+        'Someone who can edit this workspace sees the milestones of the last run here.',
+      );
   });
 
   test('a payer who shares no workspace with the viewer is not named', async function (assert) {

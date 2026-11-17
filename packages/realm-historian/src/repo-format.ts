@@ -24,7 +24,7 @@ export function repoPath(historyRoot: string, realmId: string): string {
 
 // The largest output a git command may return: above a file's largest
 // allowed size (50 MB for video), so a blob read whole always fits.
-const GIT_MAX_BUFFER_BYTES = 256 * 1024 * 1024;
+export const GIT_MAX_BUFFER_BYTES = 256 * 1024 * 1024;
 
 // Runs a git command against the repo and returns its standard output as
 // bytes, so blob content and NUL-separated listings come back unaltered.
@@ -267,17 +267,28 @@ const KEY_BY_NAME = new Map(
   ]),
 );
 
-// The `Boxel-*` trailers of a message: the lines of its last paragraph, when
-// every line there is a trailer. Unknown trailers are left out.
-export function parseTrailers(message: string): Trailers {
+// A message's trailer block: its last paragraph, when the message has more
+// than one and every line of the last is a trailer, with the paragraphs
+// before it. Undefined for a message with no trailer block.
+function trailerBlock(
+  message: string,
+): { before: string; lines: string[] } | undefined {
   let paragraphs = message.trimEnd().split(/\n\s*\n/);
-  let last = paragraphs.length > 1 ? paragraphs[paragraphs.length - 1] : '';
-  let trailers: Trailers = {};
-  let lines = last.split('\n');
-  if (!lines.every((line) => TRAILER_LINE.test(line))) {
-    return trailers;
+  if (paragraphs.length < 2) {
+    return undefined;
   }
-  for (let line of lines) {
+  let lines = paragraphs[paragraphs.length - 1].split('\n');
+  if (!lines.every((line) => TRAILER_LINE.test(line))) {
+    return undefined;
+  }
+  return { before: paragraphs.slice(0, -1).join('\n\n'), lines };
+}
+
+// The `Boxel-*` trailers of a message's trailer block. Unknown trailers are
+// left out.
+export function parseTrailers(message: string): Trailers {
+  let trailers: Trailers = {};
+  for (let line of trailerBlock(message)?.lines ?? []) {
     let [, name, value] = TRAILER_LINE.exec(line)!;
     let key = KEY_BY_NAME.get(name);
     if (key) {
@@ -285,6 +296,12 @@ export function parseTrailers(message: string): Trailers {
     }
   }
   return trailers;
+}
+
+// The message without its trailer block, or the whole message when it has
+// none.
+export function messageWithoutTrailers(message: string): string {
+  return trailerBlock(message)?.before ?? message.trimEnd();
 }
 
 // `Boxel-Journal-Seq`: the change events a revision covers, as the `seq` of
@@ -349,12 +366,6 @@ export interface RevisionRecord {
 // The revisions `git log` lists for `revisionArgs` (such as `<old>..<new>`,
 // or `-n 100 <head>`), newest first, each with its trailers and the paths
 // it changed, from one git process.
-//
-// With `-z`, each revision is its id and its message, each ended by a NUL,
-// then, for a revision that changed anything, a newline and one raw entry per
-// path: `:<modes> <ids> <status>` and the path, each ended by a NUL. A
-// revision's id starts with a hex digit and a raw entry with `:`, which is
-// how the next revision is told from the next entry.
 export async function readRevisions(
   gitDir: string,
   revisionArgs: string[],
@@ -376,7 +387,37 @@ export async function readRevisions(
       '--',
     ])
   ).toString('utf8');
-  let revisions: RevisionRecord[] = [];
+  return parseRawLog(output, 2).map(({ fields: [id, message], entries }) => ({
+    id,
+    message,
+    trailers: parseTrailers(message),
+    changedPaths: [...new Set(entries.map((entry) => realmPathOf(entry.path)))],
+  }));
+}
+
+// One path a revision changed, as `git log --raw` prints it: the modes and
+// object ids before and after (zeros for none) and git's status letter.
+export interface RawEntry {
+  srcMode: string;
+  dstMode: string;
+  srcId: string;
+  dstId: string;
+  status: string;
+  path: string;
+}
+
+// The revisions in the output of `git log -z --raw` with a `--format` of
+// `fieldCount` fields, each ended by `%x00`. With `-z`, each revision is its
+// fields, each ended by a NUL, then, for a revision that changed anything, a
+// newline and one raw entry per path: `:<modes> <ids> <status>` and the
+// path, each ended by a NUL. The first field is the revision's id, which
+// starts with a hex digit, and a raw entry starts with `:`, which is how the
+// next revision is told from the next entry.
+export function parseRawLog(
+  output: string,
+  fieldCount: number,
+): { fields: string[]; entries: RawEntry[] }[] {
+  let revisions: { fields: string[]; entries: RawEntry[] }[] = [];
   let position = 0;
   let next = (): string => {
     let end = output.indexOf('\0', position);
@@ -388,22 +429,19 @@ export async function readRevisions(
     return token;
   };
   while (position < output.length) {
-    let id = next();
-    let message = next();
-    let changed = new Set<string>();
+    let fields: string[] = [];
+    for (let index = 0; index < fieldCount; index++) {
+      fields.push(next());
+    }
+    let entries: RawEntry[] = [];
     if (output[position] === '\n') {
       position++;
     }
     while (output[position] === ':') {
-      next();
-      changed.add(realmPathOf(next()));
+      let [srcMode, dstMode, srcId, dstId, status] = next().slice(1).split(' ');
+      entries.push({ srcMode, dstMode, srcId, dstId, status, path: next() });
     }
-    revisions.push({
-      id,
-      message,
-      trailers: parseTrailers(message),
-      changedPaths: [...changed],
-    });
+    revisions.push({ fields, entries });
   }
   return revisions;
 }

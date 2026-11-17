@@ -35,6 +35,7 @@ import {
 import {
   isKeyRoutePath,
   keepsMethodAndPathOnly,
+  withOAuthProviderSecretsLabeled,
   withCredentialHeadersMasked,
 } from '../lib/request-telemetry.ts';
 import {
@@ -76,7 +77,7 @@ const SEARCH_METHODS = new Set(['POST', 'QUERY']);
 // What a shed search tells the client to do. One second is the granularity
 // `Retry-After` allows and is long enough for the burst that filled the gate
 // to drain a slot or two.
-const SEARCH_SHED_RETRY_AFTER_SECONDS = 1;
+export const SEARCH_SHED_RETRY_AFTER_SECONDS = 1;
 
 const REQUEST_BODY_STATE = 'requestBody';
 
@@ -244,6 +245,10 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 const MASKED_QUERY_PARAMS = ['token', 'loginToken'];
 
 function loggableRequestURL(ctxt: Koa.Context): string {
+  return withOAuthProviderSecretsLabeled(unlabeledRequestURL(ctxt));
+}
+
+function unlabeledRequestURL(ctxt: Koa.Context): string {
   let url = fullRequestURL(ctxt);
   // A key route takes nothing in its query string, so whatever a client put
   // there (a misplaced ticket or value) is left out.

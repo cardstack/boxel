@@ -15,6 +15,7 @@ import {
   insertRealmEventRoom,
 } from '@cardstack/runtime-common';
 import {
+  createJWT,
   ensureMatrixAdminUser,
   grafanaSecret,
   insertUser,
@@ -1941,6 +1942,319 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           [ensureTrailingSlash(new URL(testRealmURL.href).origin)],
           'realm-server origin appears in the user account_data',
         );
+      });
+
+      test('removes a user permission via grafana remove-realm-user-permission endpoint', async function (assert) {
+        let user = '@op-test-remove:localhost';
+        await insertPermissions(context.dbAdapter, testRealmURL, {
+          [user]: ['read', 'write'],
+        });
+        let response = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.true(
+          response.body.removedPermission,
+          'response signals the row was removed',
+        );
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.strictEqual(perms[user], undefined, 'the user has no row');
+      });
+
+      test('remove-realm-user-permission normalises the realm URL to the row the grant wrote', async function (assert) {
+        let user = '@op-test-remove-norm:localhost';
+        await insertPermissions(context.dbAdapter, testRealmURL, {
+          [user]: ['read'],
+        });
+        let unnormalised = testRealmURL.href.replace(/\/$/, '') + '?x=1#y';
+        let response = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(unnormalised)}` +
+              `&user=${encodeURIComponent(user)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.strictEqual(perms[user], undefined, 'the user has no row');
+      });
+
+      test('remove-realm-user-permission is a no-op for a user with no row', async function (assert) {
+        let user = '@op-test-remove-none:localhost';
+        let response = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.false(
+          response.body.removedPermission,
+          'response signals there was nothing to remove',
+        );
+      });
+
+      test('remove-realm-user-permission refuses the realm owner', async function (assert) {
+        let owner = '@op-test-remove-owner:localhost';
+        await insertPermissions(context.dbAdapter, testRealmURL, {
+          [owner]: ['read', 'write', 'realm-owner'],
+        });
+        let response = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(owner)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms[owner].sort(),
+          ['read', 'realm-owner', 'write'],
+          'the owner row is untouched',
+        );
+      });
+
+      test('remove-realm-user-permission rejects a missing param and a bad bearer', async function (assert) {
+        let user = '@op-test-remove-params:localhost';
+        let missingUser = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(missingUser.status, 400, 'HTTP 400 without user');
+        let missingRealm = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?user=${encodeURIComponent(user)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(missingRealm.status, 400, 'HTTP 400 without realm');
+        let badBearer = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}`,
+          )
+          .set('Authorization', `Bearer not-the-secret`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(badBearer.status, 401, 'HTTP 401 with a bad bearer');
+      });
+
+      test('remove-realm-user-permission refuses the realm-wide * and users grants', async function (assert) {
+        await insertPermissions(context.dbAdapter, testRealmURL, {
+          users: ['read'],
+        });
+        for (let sentinel of ['*', 'users']) {
+          let response = await context.request
+            .post(
+              `/_grafana-remove-realm-user-permission` +
+                `?realm=${encodeURIComponent(testRealmURL.href)}` +
+                `&user=${encodeURIComponent(sentinel)}`,
+            )
+            .set('Authorization', `Bearer ${grafanaSecret}`)
+            .set('Content-Type', 'application/json');
+          assert.strictEqual(
+            response.status,
+            400,
+            `HTTP 400 for "${sentinel}"`,
+          );
+        }
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms['*'],
+          ['read', 'write'],
+          'the * row is untouched',
+        );
+        assert.deepEqual(
+          perms['users'],
+          ['read'],
+          'the users row is untouched',
+        );
+      });
+
+      // A stored event room the realm server isn't in shows that a removal
+      // retires the realm's room before answering: the room is no longer the
+      // realm's by the time the response arrives.
+      test('a removal retires the realm event room before answering', async function (assert) {
+        let user = '@op-test-remove-event-room:localhost';
+        await insertPermissions(context.dbAdapter, testRealmURL, {
+          [user]: ['read'],
+        });
+        await insertRealmEventRoom(
+          context.dbAdapter,
+          testRealmURL.href,
+          '!not-a-room:localhost',
+        );
+        let response = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let { roomId } = await fetchRealmEventRoom(
+          context.dbAdapter,
+          testRealmURL.href,
+        );
+        assert.notOk(roomId, 'the room is retired');
+      });
+
+      test('grafana remove takes the realm out of the user account_data', async function (assert) {
+        let localpart = `grafana-remove-${uuidv4().slice(0, 8)}`;
+        let userId = `@${localpart}:localhost`;
+        await registerUser({
+          matrixURL,
+          displayname: localpart,
+          username: localpart,
+          password: 'password',
+          registrationSecret: matrixRegistrationSecret,
+        });
+        let grant = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(userId)}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(grant.status, 200, 'grant HTTP 200');
+        assert.true(grant.body.appendedToAccountData, 'the grant appended');
+
+        let response = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(userId)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.notOk(
+          response.body.matrixAccountDataWarning,
+          `no matrix warning: ${response.body.matrixAccountDataWarning}`,
+        );
+        assert.true(
+          response.body.removedFromAccountData,
+          'response signals the realm left the account_data',
+        );
+
+        let adminToken = await loginAsMatrixAdmin({
+          matrixURL,
+          adminUsername: 'admin',
+          adminPassword: 'password',
+        });
+        let userToken = await adminImpersonateUser({
+          matrixURL,
+          adminAccessToken: adminToken,
+          userId,
+        });
+        let accountDataResponse = await fetch(
+          `${matrixURL.href}_matrix/client/v3/user/${encodeURIComponent(
+            userId,
+          )}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+          { headers: { Authorization: `Bearer ${userToken}` } },
+        );
+        assert.strictEqual(
+          accountDataResponse.status,
+          200,
+          'account_data row exists',
+        );
+        let body = (await accountDataResponse.json()) as { realms?: string[] };
+        assert.deepEqual(
+          body.realms,
+          [],
+          'the realm no longer appears in the user account_data',
+        );
+
+        // A second removal finds nothing on either side and still succeeds.
+        let again = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(userId)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(again.status, 200, 'second call HTTP 200');
+        assert.false(again.body.removedPermission, 'no row the second time');
+        assert.false(
+          again.body.removedFromAccountData,
+          'no account_data entry the second time',
+        );
+      });
+    },
+  );
+
+  module(
+    'Realm Server Endpoints (realm with a read-only public grant)',
+    function (hooks) {
+      let writer = '@op-test-removed-writer:localhost';
+      let context = setupServerEndpointsTest(hooks, {
+        // `'*'` is read-only so a write presents the writer's realm session
+        // rather than short-circuiting on a world-write grant.
+        permissions: {
+          '*': ['read'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+          [writer]: ['read', 'write'],
+        },
+      });
+
+      // A removed grant cuts off a session minted before the removal: the
+      // realm matches the session's permission set against the effective set
+      // on every request, so no session revocation is needed.
+      test('a session minted before the grant was removed is refused', async function (assert) {
+        let token = createJWT(context.testRealm, writer, ['read', 'write']);
+        let before = await context.request
+          .post('/test/removed-writer-before.txt')
+          .set('Accept', 'application/vnd.card+source')
+          .set('Authorization', `Bearer ${token}`)
+          .send('written while the grant stood');
+        assert.strictEqual(before.status, 204, `HTTP 204: ${before.text}`);
+
+        let removal = await context.request
+          .post(
+            `/_grafana-remove-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(writer)}`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(removal.status, 200, 'removal HTTP 200');
+
+        let after = await context.request
+          .post('/test/removed-writer-after.txt')
+          .set('Accept', 'application/vnd.card+source')
+          .set('Authorization', `Bearer ${token}`)
+          .send('written after the grant was removed');
+        assert.strictEqual(after.status, 401, 'HTTP 401 with the old session');
       });
     },
   );

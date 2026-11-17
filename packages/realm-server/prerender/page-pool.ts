@@ -6,7 +6,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { CDPSession, ConsoleMessage, HTTPRequest, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
-import { realmAffinityKeyOf } from './affinity.ts';
+import { isRunAffinityKey, realmAffinityKeyOf } from './affinity.ts';
 import { raceNodeTimeout } from './node-race.ts';
 import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
@@ -3082,11 +3082,17 @@ export class PagePool {
     //    for the queued sub-render. File renders still respect the
     //    per-affinity cap (via the admission semaphore upstream) so
     //    cross-realm fairness for the file workload is preserved.
+    //
+    // An automation run's affinity is held to one tab, with no escape hatch:
+    // see `isRunAffinityKey`. Its runs queue on that tab, and a run never
+    // waits on a sub-render of its own, so it can't deadlock there.
+    let tabCap = this.#tabCapFor(affinityKey);
     let canExpandPastAffinityCap =
       this.#highPriorityMaxPages > this.#minPages &&
       this.#maxPages < this.#highPriorityMaxPages &&
-      queue !== 'file';
-    if (entryList.length < this.#affinityTabMax || canExpandPastAffinityCap) {
+      queue !== 'file' &&
+      !isRunAffinityKey(affinityKey);
+    if (entryList.length < tabCap || canExpandPastAffinityCap) {
       // Prefer spawning into the affinity's shared context over
       // adopting a fresh standby — whether that context is orphan
       // (carries the realm's warm HTTP cache from before eviction)
@@ -3160,7 +3166,7 @@ export class PagePool {
         }
         this.#kickStandbyRefill('selection needs a fresh tab');
         let beforeDeadline = Date.now() < stealAt;
-        if (entryList.length < this.#affinityTabMax) {
+        if (entryList.length < tabCap) {
           // False only when the refill is disabled; the kick above has
           // otherwise just started or joined one.
           if (this.#shouldAwaitFreedTab()) {
@@ -3299,6 +3305,11 @@ export class PagePool {
       }
     }
     throw new Error('No standby page available for prerender');
+  }
+
+  // The most tabs `affinityKey` may hold at once.
+  #tabCapFor(affinityKey: string): number {
+    return isRunAffinityKey(affinityKey) ? 1 : this.#affinityTabMax;
   }
 
   // Takes a tab another affinity holds, leaving it tagged with the donor's

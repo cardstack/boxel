@@ -24,6 +24,7 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common/error';
+import { inMemorySessionsGlobal } from '@cardstack/runtime-common/in-memory-sessions';
 import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
 import { renderSessionOf, toAffinityKey } from './affinity.ts';
 import { batchStaleAfterMs } from './prerender-constants.ts';
@@ -140,15 +141,18 @@ const CAPTURE_FETCH_FAILURE_RE =
 
 // Who a render runs as, read from the auth this server hands its tab: the
 // user every session names, when they all name one user and none carries
-// the `realmAuthority` claim. A realm rendering its own cards, an anonymous
-// render, and anything that cannot be read run as nobody.
+// the `realmAuthority` claim, or the identity an automation run's token acts
+// as. A realm rendering its own cards, an anonymous render, and anything that
+// cannot be read run as nobody.
 //
 // It is answered here and pinned on the tab, rather than read back in the tab
 // from the sessions it holds, because those sessions live in localStorage,
 // which the tab shares with every other tab of its BrowserContext.
 export function renderActorFor(auth: string): string | null {
   let session = renderSessionOf(auth);
-  return session.kind === 'user' ? session.user : null;
+  return session.kind === 'user' || session.kind === 'run'
+    ? session.user
+    : null;
 }
 
 // A render timeout's diagnostics say whether the tab was still answering when
@@ -507,11 +511,20 @@ export class RenderRunner {
       timedOut: false,
     };
     this.#pagePool.resetConsoleErrors(pageId);
+    // An automation run's token goes to the tab in memory only, never into
+    // anything the tab keeps (ADR 026 §1.2). The host drops it as the run
+    // answers, and a run that doesn't answer loses its tab. The run's tab
+    // holds no other session, so its storage is cleared of any. Every other
+    // command takes its sessions from storage.
+    let sessionsInMemory = renderSessionOf(auth).kind === 'run';
     const markTimeout = (status?: RunCommandResponse['status']) => {
       if (!poolInfo.timedOut && status === 'unusable') {
         poolInfo.timedOut = true;
       }
     };
+    // When the command started in the tab, so a command that fails partway
+    // still reports the tab time it held.
+    let renderStart: number | undefined;
     try {
       // Page acquired but untouched — a cancel in this window doesn't
       // need eviction (the tab is still clean), so tag it `'queued'`.
@@ -520,7 +533,7 @@ export class RenderRunner {
       // check lives inside the try so `finally { release() }` frees the
       // tab slot if the caller aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
-      let renderStart = Date.now();
+      renderStart = Date.now();
       let requestId = randomUUID();
       let nonce = String(this.#nonce);
       let storageKey = `${commandRequestStorageKeyPrefix}${requestId}`;
@@ -528,6 +541,8 @@ export class RenderRunner {
         page.evaluate(
           (
             sessionAuth,
+            inMemory,
+            sessionsGlobal,
             actor,
             key,
             commandToRun,
@@ -535,7 +550,13 @@ export class RenderRunner {
             requestNonce,
             createdAt,
           ) => {
-            localStorage.setItem('boxel-session', sessionAuth);
+            if (inMemory) {
+              localStorage.removeItem('boxel-session');
+              (globalThis as any)[sessionsGlobal] = JSON.parse(sessionAuth);
+            } else {
+              localStorage.setItem('boxel-session', sessionAuth);
+              delete (globalThis as any)[sessionsGlobal];
+            }
             (globalThis as any).__boxelRenderActor = actor;
             localStorage.setItem(
               key,
@@ -548,6 +569,8 @@ export class RenderRunner {
             );
           },
           auth,
+          sessionsInMemory,
+          inMemorySessionsGlobal,
           renderActorFor(auth),
           storageKey,
           command,
@@ -634,6 +657,12 @@ export class RenderRunner {
           error: waitResult.error.message,
         };
         markTimeout(response.status);
+        await this.#closeUnansweredRunTab(
+          sessionsInMemory,
+          affinityKey,
+          poolInfo,
+          'timeout',
+        );
         return {
           response,
           timings: { launchMs, renderMs: Date.now() - renderStart, waits },
@@ -681,13 +710,23 @@ export class RenderRunner {
         throw e;
       }
       log.error('Error running command in headless chrome:', e);
+      await this.#closeUnansweredRunTab(
+        sessionsInMemory,
+        affinityKey,
+        poolInfo,
+        'unusable',
+      );
       let response: RunCommandResponse = {
         status: 'error',
         error: e instanceof Error ? `${e.name}: ${e.message}` : `${e}`,
       };
       return {
         response,
-        timings: { launchMs, renderMs: 0, waits },
+        timings: {
+          launchMs,
+          renderMs: renderStart === undefined ? 0 : Date.now() - renderStart,
+          waits,
+        },
         pool: poolInfo,
       };
     } finally {
@@ -760,8 +799,9 @@ export class RenderRunner {
       throwIfAborted(signal, 'queued');
       await abortable(signal, () =>
         page.evaluate(
-          (sessionAuth, actor) => {
+          (sessionAuth, actor, sessionsGlobal) => {
             localStorage.setItem('boxel-session', sessionAuth);
+            delete (globalThis as any)[sessionsGlobal];
             (globalThis as any).__boxelRenderActor = actor;
             // A capture renders through the same card branch as a visit, on a
             // tab drawn from the same affinity queue — and it names the card a
@@ -775,6 +815,7 @@ export class RenderRunner {
           },
           auth,
           renderActorFor(auth),
+          inMemorySessionsGlobal,
         ),
       );
 
@@ -1107,12 +1148,14 @@ export class RenderRunner {
       throwIfAborted(signal, 'queued');
       await abortable(signal, () =>
         page.evaluate(
-          (sessionAuth, actor) => {
+          (sessionAuth, actor, sessionsGlobal) => {
             localStorage.setItem('boxel-session', sessionAuth);
+            delete (globalThis as any)[sessionsGlobal];
             (globalThis as any).__boxelRenderActor = actor;
           },
           auth,
           renderActorFor(auth),
+          inMemorySessionsGlobal,
         ),
       );
 
@@ -1433,8 +1476,10 @@ export class RenderRunner {
             id: string | undefined,
             jobPriority: number | undefined,
             scope: string | undefined,
+            sessionsGlobal: string,
           ) => {
             localStorage.setItem('boxel-session', sessionAuth);
+            delete (globalThis as any)[sessionsGlobal];
             (
               globalThis as unknown as { __boxelRenderActor?: string | null }
             ).__boxelRenderActor = actor;
@@ -1463,6 +1508,7 @@ export class RenderRunner {
           jobId,
           priority,
           renderScope,
+          inMemorySessionsGlobal,
         ),
       );
       // A card-instance index visit fuses the file extract into the
@@ -3150,6 +3196,22 @@ export class RenderRunner {
       this.#onUnresponsiveTab?.({ affinityKey, browserUnresponsive });
     } catch (e) {
       log.warn(`onUnresponsiveTab subscriber threw for ${affinityKey}:`, e);
+    }
+  }
+
+  // A run that didn't answer may still be running its script in the tab,
+  // holding its token in the page's memory: the host drops a run's sessions
+  // only as the run answers. Closing the tab ends both, so the pool never
+  // hands that page to another visit.
+  async #closeUnansweredRunTab(
+    sessionsInMemory: boolean,
+    affinityKey: string,
+    poolInfo: PoolInfo,
+    reason: 'timeout' | 'unusable',
+  ) {
+    if (sessionsInMemory) {
+      await this.#evictAffinity(affinityKey, 'command-runner', reason);
+      poolInfo.evicted = true;
     }
   }
 

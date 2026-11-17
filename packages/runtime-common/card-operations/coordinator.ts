@@ -133,6 +133,10 @@ export interface BatchCore {
   // coordinator carries through to the caller. Described content is held to
   // the same ceiling by its byte length, which it reports without being read.
   assertWriteSize(localPath: LocalPath, content: StagedContent): void;
+  // The refusal of a staged write to a reserved path, in this core's own
+  // terms. Absent, the batch refuses it as a reserved path (422
+  // `invalid-params`). `reason` says which reservation the path falls under.
+  reservedWriteRefusal?(localPath: LocalPath, reason: string): OperationFailure;
   // Waits for the indexing already in flight that can move what this batch
   // resolves. A card's serialization resolves the definitions its type is
   // built from, and a module written moments earlier may still be indexing,
@@ -563,7 +567,7 @@ export async function commitBatch(
         // takes its write out of the batch, and the checks after it have to
         // see the batch that will commit.
         await settleDestinations(core, paths, staged, positions);
-        assertWritesAllowed(staged, positions);
+        assertWritesAllowed(core, staged, positions);
         assertLinkedCardsSurvive(staged, paths, positions);
         assertWritesFit(core, staged, positions);
         await assertRemovalsAllowed(core, paths, staged, positions);
@@ -1852,8 +1856,10 @@ function cardSourcePathOf(
 // — read from `isCaptureServingPath` and `isPartialWritePath`, which state
 // them once for all three. Removals are not covered, deliberately: they are
 // the recovery path for anything already stored under either name, which is
-// why the other two admit them as well.
+// why the other two admit them as well. A core that answers reserved writes
+// in its own terms (`BatchCore.reservedWriteRefusal`) gives the refusal.
 function assertWritesAllowed(
+  core: BatchCore,
   staged: StagedChange[],
   positions: readonly EntryPosition[],
 ): void {
@@ -1867,12 +1873,13 @@ function assertWritesAllowed(
           : undefined;
       if (reserved) {
         throw atEntry(
-          new OperationFailure({
-            status: 422,
-            code: 'invalid-params',
-            title: 'Reserved path',
-            detail: `cannot write "${write.path}": ${reserved}`,
-          }),
+          core.reservedWriteRefusal?.(write.path, reserved) ??
+            new OperationFailure({
+              status: 422,
+              code: 'invalid-params',
+              title: 'Reserved path',
+              detail: `cannot write "${write.path}": ${reserved}`,
+            }),
           positions[index],
         );
       }

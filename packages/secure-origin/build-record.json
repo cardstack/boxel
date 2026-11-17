@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 134662,
+      "bytes": 136131,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -1734,6 +1734,10 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
+          "module": "components/0059e1acee.css"
+        },
+        {
+          "package": "@cardstack/pretui@0.0.0",
           "module": "components/0d951727a7.css"
         },
         {
@@ -1751,10 +1755,6 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/43ec649b08.css"
-        },
-        {
-          "package": "@cardstack/pretui@0.0.0",
-          "module": "components/5d128e5049.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -1802,11 +1802,11 @@
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "internal/9af661bf35.css"
+          "module": "internal/4c6211e961.css"
         },
         {
           "package": "@cardstack/pretui@0.0.0",
-          "module": "internal/a06279a4f5.css"
+          "module": "internal/567e7f44ec.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2071,7 +2071,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 574496,
+      "bytes": 574671,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2093,9 +2093,9 @@
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
-          "module": "dist/@cardstack/boxel-icons/v1/icons/info-small.js",
-          "sha256": "379a5a5d7e50d54af94e098bf5ad2c1fe43139d53c7aceed4b36e820a585fddb",
-          "size": 924
+          "module": "dist/@cardstack/boxel-icons/v1/icons/info-circle.js",
+          "sha256": "8ce595f477b3e34a8f36df39e2e418ae581b9cf55b420f87fe4041de52862e4c",
+          "size": 1003
         },
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2171,6 +2171,12 @@
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
+          "module": "src/components/dropdown/wormhole-knobs.ts",
+          "sha256": "593ee70172e406278c18c398e1f8eac27b382393b0dc602e313bc8435dc8e27b",
+          "size": 590
+        },
+        {
+          "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/components/icon-button/index.gts",
           "sha256": "ac6918137e14d08516bdd40f3c51d41e2fd2fda1d490616b70e4fde1184c74bd",
           "size": 1549
@@ -2202,8 +2208,8 @@
         {
           "package": "@cardstack/boxel-ui@0.0.0",
           "module": "src/components/select/index.gts",
-          "sha256": "4824d7ca0ef7c5d6b7fa383925ad8f9a3d8085fd10b41a66cf6783b0228304a8",
-          "size": 8422
+          "sha256": "d5107073de9a6f187f0b30e4af063e7451ebc521bc52818d70e3b1a6a730fb16",
+          "size": 7864
         },
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -2232,7 +2238,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/alert.gts",
-          "sha256": "57d59371aab2dc67af51ea7ce5e5f5ab3a7ad99fd766b16d8778ca52f1b23ebb",
+          "sha256": "c13a5dcec38b734c776a11c58f5f50ce09dd86510e7ad5118ffd0d7669595d08",
           "size": 2964
         },
         {
@@ -2244,7 +2250,7 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/button.gts",
-          "sha256": "15ab5720a5e0cc1ab4100a93f98407b618bd7e059ee44bc814db1bec8a43caa7",
+          "sha256": "5e86d373d88cbb0f6cfbb9c812aa7221e3e55155aa167c3b395d4fdc1bb15502",
           "size": 7011
         },
         {
@@ -2304,8 +2310,8 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "components/radio-card.gts",
-          "sha256": "8ea03d7a18c8fe7e03c99b4ad37b60946d6d34d1f37b6a597065c876b14d9665",
-          "size": 2329
+          "sha256": "610dcdb44afcd67811168034c0c5a3831fd9d6e129a15567b879d23ad67db860",
+          "size": 2393
         },
         {
           "package": "@cardstack/pretui@0.0.0",
@@ -2358,8 +2364,8 @@
         {
           "package": "@cardstack/pretui@0.0.0",
           "module": "internal/choice-cards.gts",
-          "sha256": "9d95ff8b8b95fd4c4a31c2ff96b28ad62d17d599f40df3779ccb38310a358f79",
-          "size": 2473
+          "sha256": "3fa95424f4600b1c35852517da42f09fe70b107f0db57483c2987c4f10a36658",
+          "size": 2516
         },
         {
           "package": "@cardstack/pretui@0.0.0",

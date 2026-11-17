@@ -29,8 +29,9 @@ export type GateTraceRefusal =
   | 'authorization-infrastructure'
   // The target is nothing a rule can be matched against for this operation:
   // a card whose index row records an error, so its type is unknown; a file,
-  // for anything but a read of its stored bytes; or stored bytes with no type
-  // to match, which is what an empty path is.
+  // for anything but a read of its stored bytes or an update a grant with no
+  // `where` admits; or stored bytes with no type to match, which is what an
+  // empty path is.
   | 'unmatchable-target'
   // No rule governing the target's type has a grant for the operation.
   | 'no-grant'

@@ -20,6 +20,9 @@ export interface ChoiceCardOption {
 
 export type ChoiceCardOrientation = 'vertical' | 'horizontal';
 
+/** `cards` (default) draws each option as its own card; `list` draws them as rows in one bordered group */
+export type ChoiceCardVariant = 'cards' | 'list';
+
 interface OptionCardSignature {
   Args: {
     kind: 'radio' | 'checkbox';
@@ -33,6 +36,7 @@ interface OptionCardSignature {
     custom: boolean;
     /** the owner has a media block */
     hasMedia: boolean;
+    variant?: ChoiceCardVariant;
   };
   Blocks: {
     default: [option: ChoiceCardOption, selected: boolean];
@@ -46,6 +50,7 @@ export const OptionCard: TemplateOnlyComponent<OptionCardSignature> = <template>
   <label
     class='pretui-optioncard'
     data-kind={{@kind}}
+    data-variant={{@variant}}
     data-selected={{if @selected 'true' 'false'}}
     data-disabled={{if @disabled 'true' 'false'}}
     data-test-pretui-choice-card={{@option.value}}
@@ -183,6 +188,34 @@ export const OptionCard: TemplateOnlyComponent<OptionCardSignature> = <template>
           background-color var(--oc-snap),
           box-shadow var(--oc-snap);
       }
+      /* list: rows inside the group's one border, split by hairlines;
+         the selected row is tinted instead of ringed */
+      .pretui-optioncard[data-variant='list'] {
+        padding-block: var(--oc-gap);
+        border-radius: 0;
+        box-shadow: none;
+        align-items: center;
+      }
+      .pretui-optioncard[data-variant='list'] + .pretui-optioncard[data-variant='list'] {
+        border-block-start: 1px solid var(--border);
+      }
+      .pretui-optioncard[data-variant='list']:first-child {
+        border-start-start-radius: var(--oc-radius);
+        border-start-end-radius: var(--oc-radius);
+      }
+      .pretui-optioncard[data-variant='list']:last-child {
+        border-end-start-radius: var(--oc-radius);
+        border-end-end-radius: var(--oc-radius);
+      }
+      .pretui-optioncard[data-variant='list'][data-selected='true'] {
+        background-color: color-mix(in oklch, var(--oc-tone) 8%, var(--card));
+      }
+      .pretui-optioncard[data-variant='list']:has(.pretui-optioncard-input:focus-visible) {
+        outline-offset: -2px;
+      }
+      .pretui-optioncard[data-variant='list'] .pretui-optioncard-mark {
+        inset-block-start: calc(50% - var(--oc-mark) / 2);
+      }
       .pretui-optioncard[data-kind='checkbox'] .pretui-optioncard-mark {
         border-radius: 0.3125rem;
       }
@@ -242,6 +275,18 @@ export const ChoiceGrid: TemplateOnlyComponent<ChoiceGridSignature> = <template>
       }
       .pretui-choicecards[data-orientation='horizontal'][data-columns='4'] {
         grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      /* list stacks its rows in one bordered group, whatever the orientation */
+      /* [data-orientation] lifts it over the horizontal column rules */
+      .pretui-choicecards[data-variant='list'][data-orientation] {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0;
+        border-radius: var(--radius-surface, 0.625rem);
+        box-shadow:
+          0 0 0 1px var(--border),
+          var(--pretui-shadow-control, 0 1px 2px rgb(0 0 0 / 0.04));
+        /* forced colors drop the shadow ring; this outline is repainted there */
+        outline: 1px solid transparent;
       }
     }
   </style>

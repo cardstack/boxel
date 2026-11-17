@@ -32,6 +32,12 @@ import {
   AUTOMATION_STORAGE_CHARGE_CRON_TZ,
   createAutomationStorageChargeCronJob,
 } from './automation-storage-charge-config.ts';
+import { enqueueAutomationTick } from '../scripts/automation-tick.ts';
+import {
+  AUTOMATION_TICK_CRON_SCHEDULE,
+  AUTOMATION_TICK_CRON_TZ,
+  createAutomationTickCronJob,
+} from './automation-tick-config.ts';
 import {
   SCOPED_CSS_GC_CRON_SCHEDULE,
   SCOPED_CSS_GC_CRON_TZ,
@@ -69,6 +75,8 @@ export function startCronJobs(): void {
   }
 
   jobs.push(startAutomationStorageChargeCron());
+
+  jobs.push(startAutomationTickCron());
 }
 
 export function stopCronJobs(): void {
@@ -208,6 +216,26 @@ function startAutomationStorageChargeCron(): CronJob {
   job.start();
   log.info(
     `automation-storage-charge cron scheduled for ${AUTOMATION_STORAGE_CHARGE_CRON_SCHEDULE} ${AUTOMATION_STORAGE_CHARGE_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startAutomationTickCron(): CronJob {
+  let job = createAutomationTickCronJob(
+    async () => {
+      try {
+        await enqueueAutomationTick();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('automation-tick cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `automation-tick cron scheduled for ${AUTOMATION_TICK_CRON_SCHEDULE} ${AUTOMATION_TICK_CRON_TZ}`,
   );
   return job;
 }

@@ -159,7 +159,11 @@ the same day, the same models. There are two ways to get them.
   feature on for every room. Shipping a change for the assistant takes two
   PRs, in this order: the boxel-skills PR removes the markers, then a boxel
   PR drops the name from `SKILL_FEATURES` and from every evaluation's
-  `skillFeatures`, which would otherwise fail to switch it on. A change meant
+  `skillFeatures`, which would otherwise fail to switch it on. A feature
+  that also gates realms (`SKILL_FEATURE_REALMS`) takes a boxel PR first,
+  removing its entry there, and the boxel-skills release that removes the
+  markers waits until boxel production runs it: otherwise the section tells
+  every room to search a realm the host keeps out of its searches. A change meant
   only for Claude Code keeps the markers, which is how it ships without
   touching the assistant.
 - **Two branches,** for a change anywhere but `index.md`. Make the "without"

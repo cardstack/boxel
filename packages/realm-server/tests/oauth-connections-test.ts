@@ -9,7 +9,10 @@ import {
   createAutomationRunToken,
   createJWT,
   setupPermissionedRealmCached,
+  automationFixture,
+  TEST_AUTOMATION_PATH,
 } from './helpers/index.ts';
+import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import {
   startStubOAuthProvider,
@@ -103,6 +106,8 @@ const service: LooseSingleCardDocument = {
 };
 
 module(basename(import.meta.filename), function (hooks) {
+  setupCatalogTestSubset(hooks);
+
   let realm: Realm;
   let request: SuperTest<Test>;
   let dbAdapter: PgAdapter;
@@ -157,6 +162,9 @@ module(basename(import.meta.filename), function (hooks) {
     },
     fileSystem: {
       'service.gts': serviceModule,
+      ...automationFixture({
+        operations: [{ type: SERVICE, names: ['me', 'elsewhere', 'probe'] }],
+      }),
       'the-service.json': service,
     },
     onRealmSetup(args) {
@@ -328,7 +336,13 @@ module(basename(import.meta.filename), function (hooks) {
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${(await createAutomationRunToken(dbAdapter, realm, user)).token}`,
+          Authorization: `Bearer ${
+            (
+              await createAutomationRunToken(dbAdapter, realm, user, {
+                automation: TEST_AUTOMATION_PATH,
+              })
+            ).token
+          }`,
         },
         body: JSON.stringify({
           'boxel:operations': [

@@ -59,6 +59,10 @@ type MenuContext =
 
 export type GetMenuItemParams = {
   canEdit: boolean;
+  // Whether to offer Delete. Absent, Delete is offered exactly where editing
+  // is. A host sets it where a delete can be admitted without write access,
+  // such as on a grant in the realm's policy.
+  canDelete?: boolean;
   cardCrudFunctions: Partial<CardCrudFunctions>;
   toolContext: ToolContext;
   format?: Format;
@@ -164,37 +168,35 @@ export function getDefaultCardMenuItems(
         ),
       );
     }
-    if (
-      !isWorkspaceIndexCard(card) && // workspace index card cannot be deleted
-      cardId &&
-      params.canEdit
-    ) {
-      menuItems.push(
-        {
-          label: 'New Card of This Type',
-          action: () => {
-            if (!card) {
-              return;
-            }
-            let ref = identifyCard(card.constructor);
-            if (!ref) {
-              return;
-            }
-            params.cardCrudFunctions.createCard?.(ref, undefined, {
-              realmURL: card[realmURL],
-            });
-          },
-          icon: cardTypeIcon(card as BaseDef),
-          disabled: !card,
+    // The workspace index card is neither deleted nor used as a template.
+    let isIndexCard = isWorkspaceIndexCard(card);
+    if (!isIndexCard && cardId && params.canEdit) {
+      menuItems.push({
+        label: 'New Card of This Type',
+        action: () => {
+          if (!card) {
+            return;
+          }
+          let ref = identifyCard(card.constructor);
+          if (!ref) {
+            return;
+          }
+          params.cardCrudFunctions.createCard?.(ref, undefined, {
+            realmURL: card[realmURL],
+          });
         },
-        {
-          label: 'Delete',
-          action: () => params.cardCrudFunctions.deleteCard?.(card),
-          icon: Trash2Icon,
-          dangerous: true,
-          disabled: !card.id,
-        },
-      );
+        icon: cardTypeIcon(card as BaseDef),
+        disabled: !card,
+      });
+    }
+    if (!isIndexCard && cardId && (params.canDelete ?? params.canEdit)) {
+      menuItems.push({
+        label: 'Delete',
+        action: () => params.cardCrudFunctions.deleteCard?.(card),
+        icon: Trash2Icon,
+        dangerous: true,
+        disabled: !card.id,
+      });
     }
   }
   if (

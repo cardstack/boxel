@@ -406,9 +406,14 @@ module('Acceptance | automation edit format', function (hooks) {
       'unscripted',
     );
     let file = await adapter.openFile('scripts/unscripted.js');
+    let source = String(file?.content);
     assert.ok(
-      String(file?.content).includes('await realm.activity('),
-      'the new script starts from the outline',
+      source.includes('realm.progress.plan('),
+      'the new script starts by declaring its milestones',
+    );
+    assert.ok(
+      source.includes('realm.progress.milestone('),
+      'the new script marks a milestone',
     );
     await waitForCodeEditor(SCRIPT_EDITOR);
     assert.ok(
