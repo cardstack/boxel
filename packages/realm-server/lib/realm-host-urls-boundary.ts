@@ -1,7 +1,11 @@
 import { createHash } from 'crypto';
 import type Koa from 'koa';
 import type { Readable } from 'stream';
-import { readRequestText, setRequestText } from '../middleware/index.ts';
+import {
+  readRequestText,
+  servesStoredBytes,
+  setRequestText,
+} from '../middleware/index.ts';
 import { nodeStreamToText } from '../stream.ts';
 import { requestHostURL, type HostURLMatch } from './realm-host-urls.ts';
 
@@ -20,9 +24,11 @@ import { requestHostURL, type HostURLMatch } from './realm-host-urls.ts';
 // two its stored markup names. A page's canonical link and `og:url` name the
 // canonical host URL instead (ADR 033 §1.4).
 //
-// Nothing translated is stored. A file's stored bytes, as a card-source read
-// serves them, are answered untranslated, so that a client which writes the
-// file back writes what the realm holds.
+// Nothing translated is stored. A response that serves a file's stored bytes
+// (a plain file read, a card-source read, or a range of either) is answered
+// untranslated, so that a client which writes the file back writes what the
+// realm holds. The realm marks such a response itself, whatever the request
+// asked for.
 //
 // A translated response is a different representation from the realm's, and
 // it changes when the canonical host URL changes, which the realm's ETag does
@@ -35,8 +41,6 @@ function isJSONType(contentType: string): boolean {
   let type = contentType.split(';')[0].trim().toLowerCase();
   return type === 'application/json' || type.endsWith('+json');
 }
-
-const CARD_SOURCE = 'application/vnd.card+source';
 
 // The card+html and file-meta+html reads: JSON documents that carry markup,
 // a `head` rendering's canonical link and `og:url` among it.
@@ -67,24 +71,46 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// What may follow a URL that names a realm or host root without its trailing
+// slash: the end of the text, a query, a fragment, or the end of a quoted or
+// delimited value. Anything else, such as `realm-two/`, is another URL.
+const AFTER_BARE_ROOT = `(?=$|[?#"'\\s<>),])`;
+
 // Replaces each key of `pairs` with its value in one pass, longest key first,
-// so that no replacement is translated again.
+// so that no replacement is translated again. Each key is a URL that ends with
+// a slash. The same URL without its slash is replaced too, where it ends a
+// URL.
 class Replacer {
   #pairs: Map<string, string>;
   #pattern: RegExp | undefined;
 
   constructor(pairs: [string, string][]) {
     this.#pairs = new Map();
+    let bareRoots = new Set<string>();
     for (let [from, to] of pairs) {
       if (from !== to && !this.#pairs.has(from)) {
         this.#pairs.set(from, to);
         // The same URL inside a query string or the encoded config.
         this.#pairs.set(encodeURIComponent(from), encodeURIComponent(to));
+        let bareFrom = from.replace(/\/$/, '');
+        if (bareFrom !== from && !this.#pairs.has(bareFrom)) {
+          this.#pairs.set(bareFrom, to.replace(/\/$/, ''));
+          bareRoots.add(bareFrom);
+        }
       }
     }
     let keys = [...this.#pairs.keys()].sort((a, b) => b.length - a.length);
     this.#pattern = keys.length
-      ? new RegExp(keys.map(escapeRegExp).join('|'), 'g')
+      ? new RegExp(
+          keys
+            .map((key) =>
+              bareRoots.has(key)
+                ? `${escapeRegExp(key)}${AFTER_BARE_ROOT}`
+                : escapeRegExp(key),
+            )
+            .join('|'),
+          'g',
+        )
       : undefined;
   }
 
@@ -244,7 +270,16 @@ export class HostURLTranslator {
     let config = CONFIG_META.exec(tag);
     if (config) {
       let [, open, content, close] = config;
-      return `${open}${encodeURIComponent(this.#outboundConfig(content))}${close}`;
+      try {
+        return `${open}${encodeURIComponent(this.#outboundConfig(content))}${close}`;
+      } catch (e) {
+        if (!(e instanceof URIError)) {
+          throw e;
+        }
+        // Not encoded as the host writes it. Its URLs are still translated,
+        // in whatever form they are in.
+        return this.outbound(tag);
+      }
     }
     if (CANONICAL_TAG.test(tag)) {
       return this.#canonical.replace(tag);
@@ -253,11 +288,12 @@ export class HostURLTranslator {
   }
 
   #outboundConfig(encoded: string): string {
+    let decoded = decodeURIComponent(encoded);
     let config: Record<string, unknown>;
     try {
-      config = JSON.parse(this.outbound(decodeURIComponent(encoded)));
+      config = JSON.parse(this.outbound(decoded));
     } catch {
-      return this.outbound(decodeURIComponent(encoded));
+      return this.outbound(decoded);
     }
     // The routing map names each route by its path below the server's root,
     // which is the realm's path on the realm's URL.
@@ -278,6 +314,27 @@ export class HostURLTranslator {
     }
     return JSON.stringify(config);
   }
+}
+
+// A translator depends only on the three URLs, so one is kept for each set of
+// them that requests come in on, up to a bound.
+const TRANSLATOR_CACHE_SIZE = 500;
+const translators = new Map<string, HostURLTranslator>();
+
+function translatorFor(match: HostURLMatch): HostURLTranslator {
+  let key = `${match.hostURL}\n${match.realmURL}\n${match.canonicalHostURL ?? ''}`;
+  let translator = translators.get(key);
+  if (translator) {
+    // Most recently used last, so the oldest is the first one evicted.
+    translators.delete(key);
+  } else {
+    translator = new HostURLTranslator(match);
+    if (translators.size >= TRANSLATOR_CACHE_SIZE) {
+      translators.delete(translators.keys().next().value!);
+    }
+  }
+  translators.set(key, translator);
+  return translator;
 }
 
 async function responseText(body: unknown): Promise<string | undefined> {
@@ -309,7 +366,7 @@ export function translateAtHostURLs(): (
       await next();
       return;
     }
-    let translator = new HostURLTranslator(match);
+    let translator = translatorFor(match);
 
     // Inbound.
     let headers = ctxt.req.headers as Record<string, string | undefined>;
@@ -351,19 +408,26 @@ export function translateAtHostURLs(): (
     }
     let type = ctxt.response.type;
     if (
-      ctxt.method === 'HEAD' ||
+      // A file's stored bytes, and every range of them, are passed on as they
+      // are. Only the realm serves ranges, and only of stored bytes, so a
+      // range and the full response it is part of are never translated
+      // differently.
+      servesStoredBytes(ctxt) ||
       ctxt.status === 206 ||
-      ctxt.body == null ||
       !isTranslatedResponseType(type) ||
-      // A card-source read answers with the file's own content type, so it
-      // is known by what the request asked for. Its errors are translated.
-      (ctxt.get('accept').toLowerCase().includes(CARD_SOURCE) &&
-        ctxt.status >= 200 &&
-        ctxt.status < 300) ||
       // Koa reads an absent header as ''. A compressed body can't be read as
       // text here.
       !['', 'identity'].includes(ctxt.response.get('content-encoding'))
     ) {
+      return;
+    }
+    if (ctxt.body == null) {
+      // A HEAD answered without its body gives the length of the untranslated
+      // body, which is not the length a GET of it returns. Koa sets the
+      // length when there is a body to translate below, HEAD or not.
+      if (ctxt.method === 'HEAD') {
+        ctxt.remove('Content-Length');
+      }
       return;
     }
     let text = await responseText(ctxt.body);

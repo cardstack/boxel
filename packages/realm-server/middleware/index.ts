@@ -953,6 +953,14 @@ export function isVanishedFileBody(error: unknown): boolean {
   );
 }
 
+const STORED_BYTES_STATE = 'boxelServesStoredBytes';
+
+// Whether the realm answered with a file's stored bytes (see
+// `ResponseWithNodeStream.servesStoredBytes`).
+export function servesStoredBytes(ctxt: Koa.Context): boolean {
+  return (ctxt.state as Record<string, unknown>)[STORED_BYTES_STATE] === true;
+}
+
 export async function setContextResponse(
   ctxt: Koa.Context,
   response: ResponseWithNodeStream,
@@ -960,6 +968,9 @@ export async function setContextResponse(
   let url = fullRequestURL(ctxt).href;
 
   let { status, statusText, headers, body, nodeStream } = response;
+  if (response.servesStoredBytes) {
+    (ctxt.state as Record<string, unknown>)[STORED_BYTES_STATE] = true;
+  }
   ctxt.status = status;
   ctxt.message = statusText;
   for (let [header, value] of headers.entries()) {

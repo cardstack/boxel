@@ -129,6 +129,44 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('translates the realm URL without its trailing slash where it ends a URL', function (assert) {
+      assert.strictEqual(
+        translator.outboundHeader(
+          'Location',
+          'https://realms.example.test/owner/store',
+        ),
+        'https://site.example.test/shop',
+        'an absolute Location naming the realm root',
+      );
+      assert.strictEqual(
+        translator.outbound(
+          '"https://realms.example.test/owner/store" https://realms.example.test/owner/store?x=1 https://store.example.test#top',
+        ),
+        '"https://site.example.test/shop" https://site.example.test/shop?x=1 https://site.example.test/shop#top',
+      );
+      assert.strictEqual(
+        translator.outbound(
+          'https://realms.example.test/owner/store-two/a https://realms.example.test/owner/storefront',
+        ),
+        'https://realms.example.test/owner/store-two/a https://realms.example.test/owner/storefront',
+        'a URL the realm URL without its slash only begins is left as it is',
+      );
+      assert.strictEqual(
+        translator.inbound('{"href":"https://site.example.test/shop"}'),
+        '{"href":"https://realms.example.test/owner/store"}',
+      );
+    });
+
+    test("a host config that can't be decoded is translated as text", function (assert) {
+      let html = translator.outboundHTML(
+        '<meta name="@cardstack/host/config/environment" content="%E0%A4%A https://realms.example.test/owner/store/a">',
+      );
+      assert.strictEqual(
+        html,
+        '<meta name="@cardstack/host/config/environment" content="%E0%A4%A https://site.example.test/shop/a">',
+      );
+    });
+
     test('a translated ETag is the realm ETag again in a conditional request', function (assert) {
       let etag = translator.outboundHeader('ETag', 'W/"abc"');
       assert.notStrictEqual(etag, 'W/"abc"', 'the ETag names the translation');
@@ -193,6 +231,7 @@ module(basename(import.meta.filename), function () {
       permissions: { '*': ['read'], writer: ['read', 'write'] },
       fileSystem: {
         'person.gts': personSource,
+        'docs/page.html': `<a href="${realmURL.href}person-1">Ada</a> <a href="${CANONICAL_HOST_URL}about">About</a>\n`,
         'person-1.json': {
           data: {
             type: 'card',
@@ -372,6 +411,55 @@ module(basename(import.meta.filename), function () {
         response.text,
         readFileSync(join(testRealmPath, 'person-1.json'), 'utf8'),
       );
+    });
+
+    test("a plain read of a file serves the file's stored bytes", async function (assert) {
+      for (let path of ['docs/page.html', 'person-1.json']) {
+        let response = await get(`${SPACE_PREFIX}${path}`, '*/*');
+
+        assert.strictEqual(response.status, 200, `${path}: ${response.text}`);
+        assert.strictEqual(
+          response.text,
+          readFileSync(join(testRealmPath, path), 'utf8'),
+          `${path} is served as the realm stores it`,
+        );
+      }
+    });
+
+    test('a range of a file is a range of the same bytes the full read serves', async function (assert) {
+      let full = await get(`${SPACE_PREFIX}docs/page.html`, '*/*');
+      assert.strictEqual(full.status, 200, full.text);
+      assert.ok(full.headers.etag, 'the full read has an ETag');
+
+      let range = await get(`${SPACE_PREFIX}docs/page.html`, '*/*')
+        .set('Range', 'bytes=10-29')
+        .set('If-Range', full.headers.etag);
+      assert.strictEqual(range.status, 206, range.text);
+      assert.strictEqual(range.text, full.text.slice(10, 30));
+    });
+
+    test('a HEAD gives no length other than the one its GET returns', async function (assert) {
+      let getResponse = await get(
+        `${SPACE_PREFIX}person-1`,
+        SupportedMimeType.CardJson,
+      );
+      let headResponse = await request
+        .head(`${SPACE_PREFIX}person-1`)
+        .set('Host', SPACE_HOST)
+        .set('Accept', SupportedMimeType.CardJson);
+
+      assert.strictEqual(getResponse.status, 200, getResponse.text);
+      assert.strictEqual(headResponse.status, 200);
+      let length = headResponse.headers['content-length'];
+      if (length !== undefined) {
+        assert.strictEqual(
+          Number(length),
+          Buffer.byteLength(getResponse.text),
+          'the HEAD gives the length of the translated body',
+        );
+      } else {
+        assert.ok(true, 'the HEAD gives no length');
+      }
     });
 
     test('an error answering a card-source request names the host URL', async function (assert) {
