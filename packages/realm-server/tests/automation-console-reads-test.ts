@@ -4,7 +4,11 @@ import { basename } from 'path';
 import { randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
-import { spendCredits } from '@cardstack/billing/billing-queries';
+import {
+  addToCreditsLedger,
+  getUserByMatrixUserId,
+  spendCredits,
+} from '@cardstack/billing/billing-queries';
 import {
   createAutomationRun,
   DAYS_PER_AVERAGE_MONTH,
@@ -27,7 +31,6 @@ import {
   AUTOMATION_STORAGE_PATH,
 } from '@cardstack/runtime-common/automation-routes';
 import {
-  insertUser,
   realmSecretSeed,
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
@@ -131,6 +134,22 @@ module(basename(import.meta.filename), function (hooks) {
     )}`;
   }
 
+  // OWNER, with credits to spend. The realm's fixture gives each user it
+  // grants a `users` row.
+  async function ownerUser() {
+    let user = await getUserByMatrixUserId(dbAdapter, OWNER);
+    if (!user) {
+      throw new Error(`expected a users row for ${OWNER}`);
+    }
+    await addToCreditsLedger(dbAdapter, {
+      userId: user.id,
+      creditAmount: 1_000,
+      creditType: 'extra_credit',
+      subscriptionCycleId: null,
+    });
+    return user;
+  }
+
   function automationURL(): string {
     return `${realm.url}${AUTOMATION}`;
   }
@@ -223,13 +242,14 @@ module(basename(import.meta.filename), function (hooks) {
           ms: 40,
         },
       });
-      let owner = await insertUser(dbAdapter, OWNER, 'cus_console_owner', null);
-      await spendCredits(dbAdapter, owner.id, 3, {
+      let owner = await ownerUser();
+      let spent = await spendCredits(dbAdapter, owner.id, 3, {
         kind: 'run',
         runId: run.id,
         realm: ri(realm.url),
         pricingVersion: 'test',
       });
+      assert.strictEqual(spent, 'charged', 'the run is charged');
 
       let response = await get(AUTOMATION_RUN_REPORT_PATH, WRITER, {
         run: run.id,
@@ -458,20 +478,20 @@ module(basename(import.meta.filename), function (hooks) {
         param(OWNER),
         ", 'active', '{}'::jsonb, '{}'::jsonb, now())",
       ]);
-      let owner = await insertUser(
-        dbAdapter,
-        OWNER,
-        'cus_console_storage',
-        null,
-      );
+      let owner = await ownerUser();
       for (let day of ['2026-11-14', '2026-11-16']) {
-        await spendCredits(dbAdapter, owner.id, 2, {
+        let spent = await spendCredits(dbAdapter, owner.id, 2, {
           kind: 'storage',
           realm: ri(realm.url),
           automationId: rri(automationURL()),
           day,
           pricingVersion: 'test',
         });
+        assert.strictEqual(
+          spent,
+          'charged',
+          `the storage of ${day} is charged`,
+        );
       }
 
       let response = await get(AUTOMATION_STORAGE_PATH, WRITER, {
