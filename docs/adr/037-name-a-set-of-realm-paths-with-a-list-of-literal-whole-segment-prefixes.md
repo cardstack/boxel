@@ -4,6 +4,8 @@ date: 2026-11-17
 scope:
   - packages/runtime-common/path-specifier.ts
   - packages/runtime-common/serializers/path-specifier.ts
+  - packages/runtime-common/realm-history.ts
+  - packages/realm-historian/src/reader.ts
 ---
 
 # 037. Name a set of realm paths with a list of literal, whole-segment prefixes
@@ -24,7 +26,9 @@ Code that names a set of paths in a realm MUST parse, validate and match it
 with `packages/runtime-common/path-specifier.ts`. It MUST NOT add another
 syntax or matcher for the same job. Code that lowers a specifier, such as to
 an SQL prefix test or a `git log` path filter, SHOULD lower the parsed prefixes
-the module exposes rather than parse the strings again.
+the module exposes rather than parse the strings again. A `.gitignore` file
+keeps git's own pattern syntax: it says which files a realm leaves out, not
+which paths a grant, a search or a read covers.
 
 ### 1.2. Syntax
 
