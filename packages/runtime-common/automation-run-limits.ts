@@ -27,14 +27,18 @@ import { getAutomation, type AutomationCapsSnapshot } from './automations.ts';
 import {
   addAutomationRunCounts,
   countAutomationRunCall,
+  CREDENTIAL_REJECTED_REASON,
   endAutomationRunAtCap,
+  finishAutomationRun,
   getAutomationRun,
   type AutomationRunCallCounter,
+  type AutomationRunCredentialRefusal,
 } from './automation-runs.ts';
 import type {
   CallApiRunMeter,
   CallApiRunAdmission,
   CallApiRunLogEntry,
+  CallApiUseSubject,
 } from './card-operations/call-api.ts';
 import type { OperationError } from './card-operations/types.ts';
 import { OperationFailure } from './card-operations/types.ts';
@@ -265,6 +269,32 @@ function runNotRunning(): OperationError {
   };
 }
 
+// The pauses before a run's call fills its slots again after a key's token
+// endpoint failed for now (`credential-rejected`, `unavailable`). Each fill
+// already retried the token request itself (0.5 s, then 2 s), so these are
+// for an outage that outlasts a call: about a minute in all, bounded by the
+// run's time limit, since a run that stops running is not retried.
+export const DEFAULT_CREDENTIAL_RETRY_DELAYS_MS = [5_000, 15_000, 45_000];
+
+let credentialRetryDelaysMs = DEFAULT_CREDENTIAL_RETRY_DELAYS_MS;
+
+// Sets the pauses, for tests; with none, restores the defaults.
+export function configureCredentialRetryDelays(delaysMs?: number[]): void {
+  credentialRetryDelaysMs = delaysMs ?? DEFAULT_CREDENTIAL_RETRY_DELAYS_MS;
+}
+
+// The credential a refusal that ends a run names: a client or share that
+// needs an administrator, or a key or connection the vendor refused.
+export function credentialRefusalOf(
+  refusal: OperationError,
+  subject: CallApiUseSubject,
+): AutomationRunCredentialRefusal {
+  return {
+    reason: refusal.meta?.reason === 'needs-admin' ? 'needs-admin' : 'rejected',
+    subject: { kind: subject.kind, id: subject.id },
+  };
+}
+
 // Holds one run-token request's `callApi` calls to the automation's
 // declaration and the run's caps. The declaration is read once per request,
 // the first time a call needs it.
@@ -360,6 +390,31 @@ export function automationRunCallApiMeter({
     },
     async logCall(call) {
       await logRunPlatformLine(dbAdapter, run.runId, callApiLogLine(call));
+    },
+    async credentialRetryDelay(retry) {
+      let delay = credentialRetryDelaysMs[retry - 1];
+      return delay !== undefined && (await this.isRunning())
+        ? delay
+        : undefined;
+    },
+    async isRunning() {
+      let current = await getAutomationRun(dbAdapter, run.runId);
+      return current?.state === 'running' && current.attempt === run.attempt;
+    },
+    async endOnCredential(refusal, subject) {
+      let ended = await finishAutomationRun(dbAdapter, run.runId, run.attempt, {
+        state: 'error',
+        reason: CREDENTIAL_REJECTED_REASON,
+        message: refusal.detail,
+        ...(subject
+          ? { credential: credentialRefusalOf(refusal, subject) }
+          : {}),
+      });
+      log.info(
+        ended
+          ? `run ${run.runId} attempt ${run.attempt} of ${run.automationId} ended on a refused credential (${refusal.meta?.reason ?? 'rejected'})`
+          : `run ${run.runId} attempt ${run.attempt} of ${run.automationId} was refused a credential after it stopped running`,
+      );
     },
   };
 }

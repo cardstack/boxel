@@ -22,8 +22,7 @@ const EmptyUsage: TemplateOnlyComponent = <template>
       <Args.String @name='title' @value='No lots match' @description='Required. shadcn’s EmptyTitle.' />
       <Args.String @name='message' @value='Try clearing the origin and harvest filters.' @description='shadcn’s EmptyDescription, Ant’s description.' />
       <Args.Bool @name='texture' @defaultValue={{true}} />
-      <Args.Yield @name='action' @description='shadcn’s EmptyContent.' />
-      <Args.Yield @name='altAction' @description='The second way in, given equal billing.' />
+      <Args.Yield @name='action' @description='shadcn’s EmptyContent: any content, placed under the message as given.' />
     </:api>
   </FreestyleUsage>
 </template>;

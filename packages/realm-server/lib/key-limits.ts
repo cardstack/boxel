@@ -16,6 +16,7 @@ import {
 import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
 import {
   OperationFailure,
+  refusedFrom,
   type AnonymousCallApiCaller,
 } from '@cardstack/runtime-common/card-operations';
 import {
@@ -29,7 +30,6 @@ import {
 } from './key-limit-settings.ts';
 import { KEY_NOTICES_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { SendEvent } from '@cardstack/runtime-common/send-event';
-import { refusedFrom } from './key-use-subject.ts';
 import { UserKeyError } from './user-keys.ts';
 
 // Limits: how much of a key anyone spends, set by the key's owner. No credits

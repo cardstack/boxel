@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, and auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens). Use when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens), the record of each pricing version's values and unit rates (`pricing_versions`), and the cost coverage report that compares, for a period, the credits each charge kind drew with the hosting cost of the usage it priced, by pricing version (`getCostCoverage` and the `credit_charge_costs` view). Use when asking whether the margin covers our cost, which charge kind under-charges, or what prices a pricing version stands for, when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -113,6 +113,28 @@ example:
 ```sh
 packages/observability/scripts/tail-logs.sh --env staging --service worker \
   --regex 'pricing check' --since 1h --no-follow
+```
+
+**The record of a version.** Every worker process also records its version
+in the database at startup (`recordCurrentPricing` in
+`packages/realm-server/lib/metered-charge.ts`), once per version, since
+workers write the metered charges. `pricing_versions` holds the
+version and its margin, `pricing_version_values` every value by its variable
+name, and `pricing_version_rates` the USD one unit of each metered usage
+costs at those values, keyed by the `credit_charge_usage` unit. A version is a
+hash of its values, so a row is never changed. Nothing reads these rows to
+price a charge (ADR 029 §1.2): they let a charge's usage be priced again at
+its version after the startup log is gone. A failure to record logs `could
+not record pricing version` on the `pricing` channel and doesn't stop the
+process; its charges read as unpriced in the cost coverage report until a
+process with the same prices records the version.
+
+```sql
+-- What a pricing version stands for.
+SELECT variable, value FROM pricing_version_values
+WHERE pricing_version = '<version>' ORDER BY variable;
+SELECT unit, usd_per_unit FROM pricing_version_rates
+WHERE pricing_version = '<version>' ORDER BY unit;
 ```
 
 **Different versions across processes** mean the processes started with
@@ -315,11 +337,9 @@ can go partly unpaid. The pass completes after its run ends, so it can also
 draw down the balance a later run was admitted against.
 
 A partial charge records all the usage it priced, so its unpaid part is that
-usage at its pricing version less the credits it drew. The prices for a
-pricing version are only in the `pricing check passed … pricing version
-<hash>` line each process logs at startup (see the `tail-logs` skill), so
-this works only as far back as those logs are kept. Credits are whole
-numbers, so allow for the charge's rounding to a whole credit.
+usage at its pricing version less the credits it drew. The cost coverage
+report below sums that as its shortfall, by kind and pricing version. Credits
+are whole numbers, so allow for the charge's rounding to a whole credit.
 
 ```sql
 -- A run's indexing: credits drawn beside the usage they priced.
@@ -650,7 +670,7 @@ END) AS kind
 In code, `getLedgerEntries` (`packages/billing/billing-queries.ts`) applies
 it and filters by user, kind, realm, run, batch, automation and day.
 `chargeKindForCreditType` (runtime-common) is the same mapping in
-TypeScript, and the two change together.
+TypeScript, and the `credit_charge_costs` view (see "The cost coverage report") repeats it in SQL; the three change together.
 
 A row with a `run_id`, `realm` or `automation_id` always carries its kind,
 since those columns are only written with one, so a query filtered on any of
@@ -764,9 +784,92 @@ FROM credits_ledger l WHERE l.run_id = '<run id>'
 GROUP BY l.charge_id, l.charge_kind, l.pricing_version;
 ```
 
-To check a metered charge, find the process that logged its pricing version
-(`pricing check passed … pricing version <hash>` on the `pricing` channel),
-take the rate for each unit and the margin from that line, and compare
-Σ quantity × rate × margin × 1000 with its credits. A spend written without
-usage (any written before `credit_charge_usage` was added), and every grant,
-purchase and expiry, has no usage rows.
+To check a metered charge, take the rate for each unit and the margin from
+its pricing version's record (`pricing_version_rates`, `pricing_versions`), or
+from the `pricing check passed … pricing version <hash>` line on the `pricing`
+channel for a version no process recorded, and compare
+Σ quantity × rate × margin × 1000 with its credits. `credit_charge_costs`
+(below) does that for every charge. A spend written without usage (any written
+before `credit_charge_usage` was added), and every grant, purchase and expiry,
+has no usage rows.
+
+## The cost coverage report
+
+The report answers, for a period, whether what we charge covers what the
+usage costs us: for each charge kind (run, run indexing, storage, AI, batched
+AI) and pricing version, the credits the charges drew beside the hosting cost
+of the usage they priced. It checks our formulas, not the AWS bill: the cost
+is each charge's recorded usage at the unit rates of its own pricing version,
+the same rates that priced it, and an AI charge's cost is the provider's
+reported cost.
+
+**Where it runs.** `credit_charge_costs` is a view with one row per
+consumption charge: `charge_id`, `charge_kind`, `pricing_version`, `user_id`,
+`realm`, `created_at`, `credits` (what it drew, across every credit bucket),
+`cost_usd`, `margin`, `full_credits` and `unpaid_credits`. `full_credits` is
+what the charge draws when the balance covers it: its cost at the margin
+rounded up to a whole credit, or for AI its cost rounded to the nearest
+credit. `unpaid_credits` is how far short of that the charge fell, never
+below 0. The view is plain SQL over the ledger, so a Grafana panel on the
+Postgres data source can group it the same way. In code,
+`getCostCoverage(dbAdapter, { from, to })` (`packages/billing/billing-queries.ts`)
+groups it for charges written from `from` (inclusive) to `to` (exclusive).
+Against the read-only database:
+
+```sql
+-- Cost coverage for November 2026, by kind and pricing version.
+SELECT charge_kind, pricing_version,
+       COUNT(*) AS charges,
+       SUM(credits) AS credits,
+       COUNT(*) FILTER (WHERE cost_usd IS NOT NULL) AS priced_charges,
+       SUM(credits) FILTER (WHERE cost_usd IS NOT NULL) AS priced_credits,
+       SUM(cost_usd) * 1000 AS cost_credits,
+       SUM(cost_usd * margin) * 1000 AS cost_at_margin_credits,
+       SUM(full_credits) AS full_credits,
+       SUM(credits) FILTER (WHERE cost_usd IS NOT NULL)
+         / NULLIF(SUM(cost_usd) * 1000, 0) AS coverage,
+       SUM(unpaid_credits) AS shortfall_credits,
+       COUNT(*) FILTER (WHERE unpaid_credits > 0) AS short_charged_charges
+FROM credit_charge_costs
+WHERE created_at >= EXTRACT(EPOCH FROM timestamptz '2026-11-01 00:00Z')
+  AND created_at <  EXTRACT(EPOCH FROM timestamptz '2026-12-01 00:00Z')
+GROUP BY 1, 2 ORDER BY 1, 2 NULLS FIRST;
+```
+
+**How to read a line.**
+
+- `coverage` is how many times its cost a kind recovered. A fully paid
+  metered kind (run, run indexing, storage) reads at least its pricing
+  version's margin. How far above depends on charge size: every metered
+  charge rounds up to a whole credit, and run and run-indexing charges are
+  often well under one, so rounding alone can put coverage at twice the
+  margin or more. Storage reads close to its margin, since its charge waits
+  until its days cost a whole credit. An AI kind carries no margin and reads
+  about 1; each AI charge rounds to the nearest credit, so a kind of many
+  tiny calls can read a little either side.
+- To tell rounding from a wrong rate, compare `full_credits` with
+  `cost_at_margin_credits`: the difference is what rounding adds. A fully
+  paid line's `priced_credits` equals its `full_credits`. A coverage above
+  the margin that rounding doesn't explain means the formula over-charges for
+  what was used, often a unit priced at the wrong rate for its task shape.
+- `shortfall_credits` is credits the priced charges should have drawn and
+  didn't, summed per charge, so a charge that rounded up never hides one that
+  went unpaid; `short_charged_charges` counts the charges behind it. A charge
+  falls short when the balance it draws on can't cover it. That's expected
+  of `run_indexing`, charged against whatever the balance holds when the
+  index pass completes (see "The indexing a run's writes cause"). It also
+  happens to `run`, when an earlier run's index pass drew down the balance
+  the run was admitted against (ADR 029 §2), and to `storage`, which the
+  minimum balance doesn't cover. Find the charges with `unpaid_credits > 0`
+  in the view to see which runs or automations they were.
+- `charges` above `priced_charges` means some charges couldn't be priced and
+  are left out of the cost, coverage and shortfall: a charge with no usage
+  rows, one at a pricing version no process recorded, or one using a unit
+  that has no rate at its version. Read their versions from the line and look
+  for the `pricing check passed` line that named them.
+- A null `pricing_version` is an AI line: the ledger requires a version on
+  every run, run-indexing and storage charge.
+
+The usage a charge records is the usage it priced, so a charge that the
+balance couldn't cover at all wrote nothing and appears nowhere: the report
+can't see indexing that went entirely unpaid.
