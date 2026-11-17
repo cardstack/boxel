@@ -28,11 +28,12 @@
 //      superseded: the revision leaves it out and lists it in
 //      `Boxel-Superseded`. The next revision to record the path names, in
 //      `Boxel-Includes-Superseded`, every revision that superseded it since
-//      it was last recorded, newest first. A mismatched path with no
-//      newer event holds the group, and every group after it, until one
-//      appears or the maximum age has passed since the write; then the
-//      revision lists it as superseded, and an `Unattributed changes`
-//      revision by `boxel-system` records the bytes found on disk.
+//      the last write to it that wasn't superseded, newest first. A
+//      mismatched path with no newer event holds the group, and every group
+//      after it, until one appears or the maximum age has passed since the
+//      write; then the revision lists it as superseded, and an
+//      `Unattributed changes` revision by `boxel-system` records the bytes
+//      found on disk.
 //    * The HEAD check: when `refs/heads/main` is no longer the HEAD this
 //      recorder committed or read, another writer has recorded some of the
 //      realm's events. Their revisions' `Boxel-Journal-Seq` trailers say
@@ -1151,8 +1152,8 @@ export class Recorder implements ManagedRecorder {
     }
   }
 
-  // Every revision that superseded `path` since it was last recorded, newest
-  // first.
+  // Every revision that superseded `path` since the last write to it that
+  // wasn't superseded, newest first.
   #supersedingRevisions(path: string): string[] {
     return (this.#superseded.get(path) ?? [])
       .map(({ revision }) => revision)
@@ -1218,10 +1219,10 @@ export class Recorder implements ManagedRecorder {
 
   // Records the bytes found on disk for paths whose write was replaced by
   // something no event explains, as `Unattributed changes` by
-  // `boxel-system`, naming every revision that left them out since they were
-  // last recorded: the one just committed, then any earlier ones. They are
-  // read before the HEAD check, which can change what the recorder
-  // remembers.
+  // `boxel-system`, naming every revision that left each one out since the
+  // last write to it that wasn't superseded: the one just committed, then
+  // any earlier ones. The names are read before the HEAD check, which can
+  // change what the recorder remembers.
   async #recordUnattributed(finals: Final[]): Promise<void> {
     let { realm } = this.#options;
     let named = new Map(
