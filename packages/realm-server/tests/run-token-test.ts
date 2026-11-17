@@ -141,15 +141,23 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a run acting as someone who is not a direct writer is refused, even a read', async function (assert) {
     let { token } = await createAutomationRunToken(dbAdapter, realm, READER);
-    let refused = (await read(token))!;
+    let refused = (await write(token, 'from-reader.txt', 'nope'))!;
     assert.strictEqual(refused.status, 403);
     assert.strictEqual(
       JSON.parse(await refused.text()).errors[0].code,
       'not-a-direct-writer',
     );
+
+    let { token: another } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      READER,
+    );
+    let read403 = (await read(another))!;
+    assert.strictEqual(read403.status, 403, 'a read is refused too');
     assert.strictEqual(
-      (await write(token, 'from-reader.txt', 'nope'))!.status,
-      403,
+      JSON.parse(await read403.text()).errors[0].code,
+      'not-a-direct-writer',
     );
   });
 
