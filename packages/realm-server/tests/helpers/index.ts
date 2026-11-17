@@ -1841,6 +1841,7 @@ export async function runTestRealmServer({
   oauthTestDocumentOrigins,
   oauthNewClientLimit,
   oauthAuthorizationLimit,
+  oauthTokenLimit,
   secureOriginAppOrigins,
   clientAddress,
   cardDocumentCache,
@@ -1895,6 +1896,11 @@ export async function runTestRealmServer({
   oauthAuthorizationLimit?: ConstructorParameters<
     typeof RealmServer
   >[0]['oauthAuthorizationLimit'];
+  // The provider's limits on its token endpoint; omit for the production
+  // default.
+  oauthTokenLimit?: ConstructorParameters<
+    typeof RealmServer
+  >[0]['oauthTokenLimit'];
   // App origins listed for the secure origin, as `--secureOriginAppOrigin`.
   secureOriginAppOrigins?: string[];
   // How the server works out a caller's address. Omit for none in front of
@@ -2013,6 +2019,7 @@ export async function runTestRealmServer({
       : {}),
     ...(oauthNewClientLimit ? { oauthNewClientLimit } : {}),
     ...(oauthAuthorizationLimit ? { oauthAuthorizationLimit } : {}),
+    ...(oauthTokenLimit ? { oauthTokenLimit } : {}),
     ...(secureOriginAppOrigins ? { secureOriginAppOrigins } : {}),
     ...(clientAddress ? { clientAddress } : {}),
   });

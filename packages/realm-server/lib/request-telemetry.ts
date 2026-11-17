@@ -318,9 +318,11 @@ interface Breadcrumb {
 
 // The query parameters that carry a bearer credential on ordinary routes: a
 // `token` (a capture-URL token, or a session JWT on a `_download-realm` link)
-// and a `loginToken` (the single-use Matrix login token handed to the app
-// page). Masked the same way the request log masks them.
-const TOKEN_PARAMS = ['token', 'loginToken'];
+// a `loginToken` (the single-use Matrix login token handed to the app
+// page), and an `access_token` (an OAuth access token a client put in the
+// query string, which a resource refuses unread). Masked the same way the
+// request log masks them.
+const TOKEN_PARAMS = ['token', 'loginToken', 'access_token'];
 const MASKED = 'REDACTED';
 
 function withTokenMasked(url: string | undefined): string | undefined {
@@ -336,13 +338,18 @@ function withTokenMasked(url: string | undefined): string | undefined {
   return parsed.href;
 }
 
-function queryWithTokenMasked(query: unknown): unknown {
+// Masks `names` in a query string or a form-encoded body, whichever shape
+// Sentry recorded it in: a string, a list of pairs, or an object.
+function queryWithTokenMasked(
+  query: unknown,
+  names: readonly string[] = TOKEN_PARAMS,
+): unknown {
   if (typeof query === 'string') {
     let params = new URLSearchParams(query);
-    if (!TOKEN_PARAMS.some((name) => params.has(name))) {
+    if (!names.some((name) => params.has(name))) {
       return query;
     }
-    for (let name of TOKEN_PARAMS) {
+    for (let name of names) {
       if (params.has(name)) {
         params.set(name, MASKED);
       }
@@ -351,13 +358,11 @@ function queryWithTokenMasked(query: unknown): unknown {
   }
   if (Array.isArray(query)) {
     return query.map((pair) =>
-      Array.isArray(pair) && TOKEN_PARAMS.includes(pair[0])
-        ? [pair[0], MASKED]
-        : pair,
+      Array.isArray(pair) && names.includes(pair[0]) ? [pair[0], MASKED] : pair,
     );
   }
   if (query && typeof query === 'object') {
-    let present = TOKEN_PARAMS.filter((name) => name in query);
+    let present = names.filter((name) => name in query);
     if (present.length > 0) {
       return {
         ...query,
@@ -368,6 +373,34 @@ function queryWithTokenMasked(query: unknown): unknown {
   return query;
 }
 
+// The body fields that carry a bearer credential: an OAuth access token a
+// client put in a form-encoded body, which a resource refuses unread. Sentry
+// records a request body only from `data` listeners, and a resource's
+// controller reads the body without one, so this masks the token for any
+// other reader of such a body.
+//
+// Only a form-encoded body is masked, and the rest of it is kept: RFC 6750
+// defines a token in a body only in that form, and no resource reads one
+// from any other, so a JSON or text body is left exactly as recorded.
+const BODY_TOKEN_PARAMS = ['access_token'];
+
+function bodyWithTokenMasked(request: SentryRequestData): unknown {
+  let { data, headers } = request;
+  if (typeof data !== 'string') {
+    return queryWithTokenMasked(data, BODY_TOKEN_PARAMS);
+  }
+  let contentType = Object.entries(headers ?? {}).find(
+    ([name]) => name.toLowerCase() === 'content-type',
+  )?.[1];
+  let type = String(contentType ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  return type === 'application/x-www-form-urlencoded'
+    ? queryWithTokenMasked(data, BODY_TOKEN_PARAMS)
+    : data;
+}
+
 function withoutCredentials(request: SentryRequestData): SentryRequestData {
   let { cookies: _cookies, headers, ...rest } = request;
   let kept: SentryRequestData = {
@@ -376,6 +409,7 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
     ...(rest.query_string !== undefined
       ? { query_string: queryWithTokenMasked(rest.query_string) }
       : {}),
+    ...(rest.data !== undefined ? { data: bodyWithTokenMasked(request) } : {}),
   };
   if (!headers) {
     return kept;

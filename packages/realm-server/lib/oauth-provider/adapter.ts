@@ -4,11 +4,19 @@
 // own. A kind with no table yet is refused, never kept in memory, which
 // would lose it on restart and differ between the realm server's processes.
 // Short-lived objects (interactions, sessions and authorization codes) share
-// `oauth_provider_objects` (`objects.ts`).
+// `oauth_provider_objects` (`objects.ts`); access and refresh tokens are in
+// `oauth_provider_tokens` (`tokens.ts`).
 
 import { randomBytes } from 'crypto';
-import type { Adapter, AdapterPayload } from 'oidc-provider';
+import Provider, { type Adapter, type AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
+import {
+  endGrant,
+  GRANT_STATE_COLUMNS,
+  grantUsable,
+  type GrantEndReason,
+  type GrantState,
+} from './grants.ts';
 import {
   asRecord,
   AuthorizationCodeAdapter,
@@ -16,6 +24,7 @@ import {
   OAuthProviderAdapter,
   SessionAdapter,
 } from './objects.ts';
+import { TokenAdapter } from './tokens.ts';
 
 // The ID dynamic client registration gives a client: 24 random bytes in
 // base64url, so always 32 characters of that alphabet. A client ID metadata
@@ -56,6 +65,9 @@ export function oauthProviderAdapter(
         return new SessionAdapter(dbAdapter);
       case 'AuthorizationCode':
         return new AuthorizationCodeAdapter(dbAdapter);
+      case 'AccessToken':
+      case 'RefreshToken':
+        return new TokenAdapter(dbAdapter, name);
       case 'Grant':
         return new GrantAdapter(dbAdapter);
     }
@@ -112,7 +124,7 @@ class DynamicClientAdapter extends OAuthProviderAdapter {
   }
 }
 
-interface GrantRow {
+interface GrantRow extends GrantState {
   user_id: string;
   client_id: string;
   // The approved scopes by resource, as JSON or already parsed.
@@ -121,12 +133,33 @@ interface GrantRow {
   expires: number | string;
 }
 
+// Why the library revokes a grant, by the route it revokes it on: the token
+// endpoint revokes one when a code or refresh token is used again, and the
+// revocation endpoint when its client revokes one of its tokens. The
+// revocation endpoint is off for now (`provider.ts`), so only the token
+// endpoint revokes one yet.
+const REVOKED_ON: Record<string, GrantEndReason> = {
+  token: 'reuse',
+  revocation: 'client',
+};
+
 // The OAuth grants, in `oauth_provider_grants` (`grants.ts`). Boxel creates
 // every grant itself when a flow finishes. The library saves one only in its
 // development pages, which are off, so a grant the library tries to save is
 // refused. It finds a grant that has neither ended nor expired, as the
 // library's own payload: the user as `accountId`, and each resource's scopes
 // as one space-separated string.
+//
+// Every code and refresh exchange reads its grant here, so this is where the
+// token endpoint applies the grant checks (ADR 021 §1.5): a grant that has
+// ended or expired is missing, and so is one created at or before the user's
+// OAuth grants were last revoked, which is ended then (`sessions-revoked`).
+// The revocation itself ends every grant it covers, so that last case is
+// only a grant whose consent came before the revocation and whose flow
+// finished after it.
+//
+// When the library revokes a grant, after a code or refresh token is used
+// again, it is ended, not deleted: its row stays, with why it ended.
 
 class GrantAdapter extends OAuthProviderAdapter {
   #dbAdapter: DBAdapter;
@@ -138,14 +171,16 @@ class GrantAdapter extends OAuthProviderAdapter {
 
   async find(id: string): Promise<AdapterPayload | undefined> {
     let [row] = (await this.#dbAdapter.execute(
-      `SELECT user_id, client_id, resources,
-              floor(extract(epoch FROM created_at)) AS created,
-              floor(extract(epoch FROM expires_at)) AS expires
-         FROM oauth_provider_grants
-         WHERE id = $1 AND ended_at IS NULL AND expires_at > now()`,
+      `SELECT g.user_id, g.client_id, g.resources,
+              floor(extract(epoch FROM g.created_at)) AS created,
+              floor(extract(epoch FROM g.expires_at)) AS expires,
+              ${GRANT_STATE_COLUMNS}
+         FROM oauth_provider_grants AS g
+         JOIN users AS u ON u.id = g.user_id
+         WHERE g.id = $1`,
       { bind: [id] },
     )) as unknown as GrantRow[];
-    if (!row) {
+    if (!row || !(await grantUsable(this.#dbAdapter, id, row))) {
       return undefined;
     }
     let resources = asRecord(row.resources) as Record<string, string[]>;
@@ -171,7 +206,14 @@ class GrantAdapter extends OAuthProviderAdapter {
     );
   }
 
-  async destroy(): Promise<never> {
-    throw this.unused('destroy');
+  async destroy(id: string): Promise<void> {
+    let route = Provider.ctx?.oidc?.route;
+    let reason = route ? REVOKED_ON[route] : undefined;
+    if (!reason) {
+      throw new OAuthProviderStorageError(
+        `the OAuth provider ends a grant only on a reuse or a client's revocation`,
+      );
+    }
+    await endGrant(this.#dbAdapter, id, reason);
   }
 }

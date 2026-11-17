@@ -173,6 +173,11 @@ until then (`revokeUserSessions`; the kept device mints a new one), and sets
 margin). A swept device's OpenID token belongs to no device and outlives it,
 and buys a realm-server session, so at `revoke_at` the account's realm-server
 sessions are revoked once more, signing nothing out, and the row is deleted.
+The sweep also ends the account's OAuth connections, before it signs any
+device out (`revokeUserOAuthGrants`, ADR 021 §1.9), with `sweep_at` as the
+cutoff, so a sweep tried again later leaves the grants made since with the
+new password. The revocation at `revoke_at` leaves OAuth grants alone: an
+OpenID token can't create one, since consent needs a secure session.
 The sweep doesn't stop a device that hands itself on: signed in with an old
 token, it can mint a login token just before the sweep and redeem it after,
 again and again. Requiring the password to mint one

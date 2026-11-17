@@ -47,52 +47,19 @@ module('Pretui | components/empty-state', function (hooks) {
     assert.notOk(q('.pretui-empty-texture'));
   });
 
-  test('EmptyState gives both ways in equal billing with a separator between', async function (assert) {
+  test('EmptyState places its <:action> block under the message as given', async function (assert) {
     await render(
       <template>
         <EmptyState @title='No batches' @message='Start one, or bring one in.'>
-          <:action><button type='button' data-test-new>Start blank</button></:action>
-          <:altAction><button type='button' data-test-import>Import CSV</button></:altAction>
+          <:action><div data-test-caller-row><button type='button'>Start blank</button><button type='button'>Import CSV</button></div></:action>
         </EmptyState>
       </template>,
     );
-    assert.strictEqual(q('.pretui-empty-msg').textContent?.trim(), 'Start one, or bring one in.');
-    assert.deepEqual(texts('.pretui-empty-paths > *'), ['Start blank', 'or', 'Import CSV']);
-    let sep = q('.pretui-empty-sep');
-    assert.strictEqual(sep.getAttribute('aria-hidden'), 'true', 'the "or" is visual punctuation');
-  });
-
-  test('EmptyState takes @separator and defaults the wording to "or"', async function (assert) {
-    await render(
-      <template>
-        <EmptyState @title='Connect' @separator='alternatively'>
-          <:action>Sign in</:action>
-          <:altAction>Paste a token</:altAction>
-        </EmptyState>
-      </template>,
-    );
-    assert.strictEqual(q('.pretui-empty-sep').textContent?.trim(), 'alternatively', 'the caller wording');
-    await render(
-      <template>
-        <EmptyState @title='Connect'>
-          <:action>Sign in</:action>
-          <:altAction>Paste a token</:altAction>
-        </EmptyState>
-      </template>,
-    );
-    assert.strictEqual(q('.pretui-empty-sep').textContent?.trim(), 'or', 'the default wording');
-  });
-
-  test('EmptyState with only one action skips the paths row', async function (assert) {
-    await render(
-      <template>
-        <EmptyState @title='No rows'>
-          <:action><button type='button' data-test-new>Add</button></:action>
-        </EmptyState>
-      </template>,
-    );
-    assert.notOk(q('.pretui-empty-paths'), 'no separator with nothing to separate');
-    assert.ok(q('.pretui-empty-action [data-test-new]'));
+    assert.strictEqual(q('.pretui-empty-msg')?.textContent?.trim(), 'Start one, or bring one in.', 'the message still renders');
+    let action = q('.pretui-empty-action');
+    assert.strictEqual(action?.children.length, 1, "only the caller's own layout, nothing added around it");
+    assert.ok(action?.firstElementChild?.matches('[data-test-caller-row]'));
+    assert.deepEqual(texts('.pretui-empty-action button'), ['Start blank', 'Import CSV']);
   });
 
   test('EmptyState renders its default block as the message, markup included', async function (assert) {
