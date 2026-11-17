@@ -217,7 +217,7 @@ import {
   getAutomationRun,
   recordAutomationRunCommitted,
 } from './automation-runs.ts';
-import { runChangeReporter } from './automation-run-events.ts';
+import { readJobEvent, runChangeReporter } from './automation-run-events.ts';
 import {
   fetchDirectWriters,
   isDirectWriter,
@@ -2730,8 +2730,18 @@ export interface WriteOptions {
 // subscribed to the realm (see `fetchRealmSessionRooms`). `recipients` narrows
 // that to the named matrix users' session rooms, for an event that concerns
 // only them; a recipient with no subscribed session room receives nothing.
+//
+// `refresh`, when given, is asked again just before the event is sent, once it
+// reaches the head of its realm's line of events: an adapter that queues
+// events sends the content and recipients it answers then, in place of the
+// ones given, and sends nothing when it answers undefined. An event that
+// describes state read from the database uses it, so a queued event goes out
+// with that state, and to those recipients, as they are when it is sent.
 export interface RealmEventDelivery {
   recipients?: string[];
+  refresh?: () => Promise<
+    { event: RealmEventContent; recipients: string[] } | undefined
+  >;
 }
 
 export interface RealmAdapter {
@@ -22253,12 +22263,20 @@ export class Realm {
   // never to a reader, a `*` or `users` grant, or a policy grant. The writers
   // are read as the event goes out, so a writer whose row was removed stops
   // receiving them at once. A realm with no direct writer sends nothing.
+  //
+  // The event names a run; its content and its recipients are read again when
+  // it reaches the head of the realm's line of events and is sent (see
+  // `RealmEventDelivery.refresh`). So a queued event carries the run as it is
+  // when it goes out, events go out in the order the line holds them, and a
+  // writer who lost the row while the event waited doesn't receive it.
   async broadcastJobEvent(event: JobEventContent): Promise<void> {
-    let recipients = await fetchDirectWriters(
-      this.#dbAdapter,
-      new URL(this.url),
-      this.#matrixClient.serverName,
-    );
+    let directWriters = () =>
+      fetchDirectWriters(
+        this.#dbAdapter,
+        new URL(this.url),
+        this.#matrixClient.serverName,
+      );
+    let recipients = await directWriters();
     if (recipients.length === 0) {
       return;
     }
@@ -22267,7 +22285,23 @@ export class Realm {
       this.url,
       this.#matrixClient,
       this.#dbAdapter,
-      { recipients },
+      {
+        recipients,
+        refresh: async () => {
+          let current = await readJobEvent(
+            this.#dbAdapter,
+            event.runId,
+            this.#virtualNetwork,
+          );
+          if (!current) {
+            return undefined;
+          }
+          return {
+            event: { ...current, realmURL: this.url },
+            recipients: await directWriters(),
+          };
+        },
+      },
     );
   }
 

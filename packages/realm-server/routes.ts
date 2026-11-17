@@ -653,7 +653,10 @@ export function createRoutes(args: CreateRoutesArgs) {
       definitionLookup: args.definitionLookup,
       virtualNetwork: args.virtualNetwork,
       realmSecretSeed: args.realmSecretSeed,
-      reportRunChange: realmServerRunChangeReporter(args),
+      reportRunChange: realmServerRunChangeReporter({
+        ...args,
+        background: true,
+      }),
     }),
   );
   // An automation run's calls to OpenRouter's Batch API. They carry a run

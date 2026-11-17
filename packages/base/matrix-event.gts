@@ -674,7 +674,8 @@ export interface JobEventContent {
   eventName: 'job';
   // The run's `automation_runs` id.
   runId: string;
-  // The URL of the automation card the run belongs to.
+  // The automation card the run belongs to, as its identifier in RRI form
+  // (ADR 002): the spelling the card's own id has.
   automation: string;
   state: 'pending' | 'running' | 'complete' | 'error' | 'canceled';
   // Where the run is, or for an ended run where it got to: `admission`

@@ -1191,7 +1191,7 @@ step or its run milestone changes. The event is `JobEventContent` in
 {
   "eventName": "job",
   "runId": "<automation_runs id>",
-  "automation": "<the automation card's URL>",
+  "automation": "<the automation card's id, in RRI form>",
   "state": "running",
   "step": "script",
   "milestone": "Write digest",
@@ -1209,6 +1209,8 @@ step or its run milestone changes. The event is `JobEventContent` in
 - **`milestone`** is the name of the run's last `automation_run_milestones`
   row, or `null` before its first. A `count` inside a milestone sends no
   event.
+- **`automation`** is the card's identifier in RRI form (ADR 002 §1.3), the
+  spelling the card's own id has, so a card matches the event against its id.
 - **No person is in it.** Who the run acts as, who canceled it, and its error
   reason and message aren't in the event. A subscriber reads them from a route
   that checks who is asking (ADR 011).
@@ -1216,8 +1218,12 @@ step or its run milestone changes. The event is `JobEventContent` in
 ### Who receives it
 
 `Realm.broadcastJobEvent` sends the event only to the session rooms of the
-realm's direct writers (`fetchDirectWriters`), read as the event goes out. It
-never goes into the realm's own event room, and never to a reader, a `*` or
+realm's direct writers (`fetchDirectWriters`). It hands the adapter a
+`RealmEventDelivery.refresh`, which the node adapter asks when the event
+reaches the head of the realm's line of events (`realm-event-dispatcher.ts`):
+the run's event and the writers are read again then, so an event that waited
+behind others goes out with the run as it is and only to the writers there
+are when it is sent. It never goes into the realm's own event room, and never to a reader, a `*` or
 `users` row, a policy grant or a bot account. A realm with no direct writer
 sends it nowhere. Every route into delivery leads there:
 `Realm.broadcastEvent` (the worker's bridge) and the realm's private
@@ -1227,10 +1233,12 @@ receives nothing, as with every narrowed realm event.
 ### Who reports a change
 
 Each process reports through a `ReportRunChange` (`runId => Promise<void>`)
-that reads the row as it stands (`readJobEvent`) and sends the event. Reading
-the row means that when two reports arrive out of order, the subscriber still
-ends up with the run as it is. A report never rejects. A failed one is logged
-as `could not send the job event for automation run …`.
+that reads the row (`readJobEvent`) and sends the event. Within one realm
+server process the events go out in order, each read as it is sent. A worker's
+reports reach whichever realm server answers its request, so events from
+different processes can still arrive out of order: a subscriber treats the
+event as a cue to read the run again. A report never rejects. A failed one is
+logged as `could not send the job event for automation run …`.
 
 | Change                                           | Reported by                                                                                                                                                                               |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -2,14 +2,18 @@
 // automation runs moved. A run moves through its states (`automation-runs.ts`),
 // through three steps within an attempt (admission, the script, the commit),
 // and through the run milestones its script reports. Each process that moves a
-// run reports it with a `ReportRunChange`, which reads the run's row as it
-// stands and sends the event. Reading the row, rather than describing the
-// change, means two changes reported in the wrong order still leave a
-// subscriber with the run as it is.
+// run reports it with a `ReportRunChange`, which reads the run's row and
+// sends the event.
 //
 // The event is delivered by `Realm.broadcastJobEvent`, which sends it only to
 // the realm's direct writers' session rooms: the run's progress is theirs to
-// watch, as the console that shows it is theirs.
+// watch, as the console that shows it is theirs. The realm reads the row and
+// the writers again as the event leaves its line of realm events, so within
+// one realm server process the events go out in order and each carries the
+// run as it was when sent. Reports from different processes (a worker's go
+// through whichever realm server answers its request) can still arrive out of
+// order, so a subscriber treats the event as a cue to read the run again, not
+// as the run's record.
 
 import type { JobEventContent } from '@cardstack/base/matrix-event';
 
@@ -63,7 +67,7 @@ export async function readJobEvent(
   return {
     eventName: 'job',
     runId: run.id,
-    automation: virtualNetwork.toURLHref(run.automationId),
+    automation: run.automationId,
     state: run.state,
     step: automationRunStep(run),
     milestone: last ? String(last.name) : null,
