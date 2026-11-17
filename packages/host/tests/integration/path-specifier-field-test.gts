@@ -194,6 +194,11 @@ module('Integration | PathSpecifierField', function (hooks) {
       ['blog/*'],
       'an invalid prefix is stored as typed',
     );
+    assert
+      .dom(input(0))
+      .isFocused(
+        'the row keeps its input, and the cursor, as its prefix changes',
+      );
     assert.dom(input(0)).hasAttribute('aria-invalid', 'true');
     assert.strictEqual(
       errorMessageOf(0),
