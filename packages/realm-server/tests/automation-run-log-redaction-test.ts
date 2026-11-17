@@ -2,9 +2,19 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Readable } from 'stream';
+import sinon from 'sinon';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
-import { rri, SupportedMimeType, type Realm } from '@cardstack/runtime-common';
+import {
+  rri,
+  SupportedMimeType,
+  type Realm,
+  type VirtualNetwork,
+} from '@cardstack/runtime-common';
+import {
+  addToCreditsLedger,
+  getUserByMatrixUserId,
+} from '@cardstack/billing/billing-queries';
 import {
   RUN_LOG_PATH,
   readRunLog,
@@ -14,6 +24,9 @@ import {
   automationFixture,
   createAutomationRunToken,
   createJWT,
+  insertPlan,
+  insertProxyEndpoints,
+  insertUser,
   setupPermissionedRealmCached,
   TEST_AUTOMATION_PATH,
 } from './helpers/index.ts';
@@ -21,6 +34,9 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
+import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
+import { OPENROUTER_MODELS_REALM } from '../lib/ai-batch-estimate.ts';
+import { OPENROUTER_CHAT_COMPLETIONS_URL } from '../lib/run-token-forward.ts';
 import {
   installSecretsKeyring,
   LocalKeyProvider,
@@ -31,12 +47,14 @@ import { addUserKey, mintKeyWriteTicket } from '../lib/user-keys.ts';
 import { nodeStreamToBuffer } from '../stream.ts';
 
 // A credential a vendor echoes back never reaches an automation run's
-// script, its log or a card it writes. The stub vendor plants the key the
-// run's call carried in a response body, in an error answer, and in the
-// address of a redirect to another origin. For each, the test reads what the
-// script is handed, sends that to the run's log as a script would print it,
-// writes it into a card through the run's overlay and commits it, and looks
-// for the key everywhere it went.
+// script, a `resolve` prompt, its log or a card it writes. The stub vendor
+// plants the key the run's call carried in a response body, in an error
+// answer, and in the address of a redirect to another origin. For each, the
+// test reads what the script is handed, asks the model about it through
+// `_request-forward` as `realm.resolve` does, sends it to the run's log as a
+// script would print it, writes it into a card through the run's overlay and
+// commits it, and looks for the key everywhere it went, the request the model
+// received included.
 
 const realmURL = new URL(
   'http://127.0.0.1:4444/automation-run-log-redaction-test/',
@@ -53,6 +71,8 @@ const REALM_USER = '@node-test_realm:localhost';
 // value it sent, can find it.
 const VALUE = 'plain-vendor-credential-5be0a91f7d';
 const VAULT = { module: rri(`${realmURL.href}vault`), name: 'Vault' };
+const MODELS_REALM_URL = 'http://127.0.0.1:4444/openrouter/';
+const MODEL = 'openai/gpt-4.1-mini';
 
 const vaultModule = `
   import { CardDef } from "@cardstack/base/card-api";
@@ -88,7 +108,11 @@ module(basename(import.meta.filename), function (hooks) {
   let request: SuperTest<Test>;
   let dbAdapter: PgAdapter;
   let keyring: SecretsKeyring;
+  let virtualNetwork: VirtualNetwork;
   let vendor: StubVendor;
+  let fetchStub: sinon.SinonStub;
+  // Each request the stubbed OpenRouter received: its headers and body.
+  let modelRequests: { headers: string; body: string }[];
 
   hooks.before(async function () {
     vendor = await startStubVendor({ port: VENDOR_PORT });
@@ -101,10 +125,37 @@ module(basename(import.meta.filename), function (hooks) {
       await new LocalKeyProvider().loadDataKeys(),
     );
     configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+    modelRequests = [];
+    let realFetch = global.fetch;
+    fetchStub = sinon
+      .stub(global, 'fetch')
+      .callsFake(async (input: string | URL | Request, init?: RequestInit) => {
+        let url = input instanceof Request ? input.url : input.toString();
+        if (url !== OPENROUTER_CHAT_COMPLETIONS_URL) {
+          return await realFetch(input, init);
+        }
+        modelRequests.push({
+          headers: JSON.stringify([...new Headers(init?.headers).entries()]),
+          body: String(init?.body ?? ''),
+        });
+        return new Response(
+          JSON.stringify({
+            id: 'gen-redaction-1',
+            model: MODEL,
+            choices: [
+              { finish_reason: 'stop', message: { content: '{"ok":true}' } },
+            ],
+            usage: { total_tokens: 20, cost: 0.003 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      });
   });
   hooks.afterEach(function () {
+    fetchStub.restore();
     resetOutbound();
     resetSecretsAtRest();
+    AllowedProxyDestinations.reset();
   });
 
   setupPermissionedRealmCached(hooks, {
@@ -124,6 +175,7 @@ module(basename(import.meta.filename), function (hooks) {
       realm = args.testRealm;
       request = args.request;
       dbAdapter = args.dbAdapter as PgAdapter;
+      virtualNetwork = args.virtualNetwork;
       vendor.requests.length = 0;
     },
   });
@@ -183,6 +235,51 @@ module(basename(import.meta.filename), function (hooks) {
     }
   }
 
+  // OpenRouter as a run's `resolve` reaches it: an allowed destination with a
+  // system key, a priced model, and an owner with credits to bill.
+  async function setUpModel() {
+    if (!virtualNetwork.isRegisteredPrefix(OPENROUTER_MODELS_REALM)) {
+      virtualNetwork.addRealmMapping(OPENROUTER_MODELS_REALM, MODELS_REALM_URL);
+    }
+    await insertProxyEndpoints(dbAdapter, [
+      {
+        url: OPENROUTER_CHAT_COMPLETIONS_URL,
+        apiKey: 'sk-or-v1-redaction-4d8e2a6c0b1f3957',
+        creditStrategy: 'openrouter',
+        supportsStreaming: true,
+      },
+    ]);
+    await dbAdapter.execute(
+      `INSERT INTO boxel_index (url, file_alias, type, generation, realm_url, pristine_doc)
+       VALUES ($1, $2, 'instance', 1, $3, $4)`,
+      {
+        bind: [
+          `${MODELS_REALM_URL}OpenRouterModel/redaction-test.json`,
+          `${MODELS_REALM_URL}OpenRouterModel/redaction-test`,
+          MODELS_REALM_URL,
+          JSON.stringify({
+            attributes: {
+              modelId: MODEL,
+              contextLength: 8000,
+              pricing: { prompt: '0.000002', completion: '0.00001' },
+            },
+          }),
+        ],
+      },
+    );
+    if (!(await getUserByMatrixUserId(dbAdapter, OWNER))) {
+      await insertUser(dbAdapter, OWNER, 'cus_redaction', null);
+    }
+    await insertPlan(dbAdapter, 'Test Plan', 1000, 100, 'price_redaction');
+    let user = await getUserByMatrixUserId(dbAdapter, OWNER);
+    await addToCreditsLedger(dbAdapter, {
+      userId: user!.id,
+      creditAmount: 1000,
+      creditType: 'extra_credit',
+      subscriptionCycleId: null,
+    });
+  }
+
   async function asRun(token: string, path: string, init: RequestInit) {
     let response = (await realm.handle(
       new Request(`${realmURL.href}${path}`, {
@@ -202,8 +299,9 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   for (let leak of LEAKS) {
-    test(`a key the vendor echoes in ${leak === 'body' ? 'a response body' : leak === 'failure' ? 'an error' : 'a redirect'} reaches neither the script, the log nor a written card`, async function (assert) {
+    test(`a key the vendor echoes in ${leak === 'body' ? 'a response body' : leak === 'failure' ? 'an error' : 'a redirect'} reaches neither the script, the model, the log nor a written card`, async function (assert) {
       await approveAll();
+      await setUpModel();
       let { token, run } = await createAutomationRunToken(
         dbAdapter,
         realm,
@@ -239,6 +337,52 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(
         answer.text.includes('[REDACTED]'),
         `the vendor's echo reached the answer, scrubbed: ${answer.text}`,
+      );
+
+      // The script asks the model about what it was handed, in the request
+      // `realm.resolve` builds: the instruction, input and error as the user
+      // message of a chat completion.
+      let resolved = await request
+        .post('/_request-forward')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          url: OPENROUTER_CHAT_COMPLETIONS_URL,
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          requestBody: JSON.stringify({
+            model: MODEL,
+            stream: false,
+            temperature: 0,
+            max_tokens: 100,
+            messages: [
+              { role: 'system', content: 'Answer with JSON.' },
+              {
+                role: 'user',
+                content: JSON.stringify({
+                  instruction: 'Summarize what the vault answered',
+                  input: JSON.parse(answer.text),
+                  error: leak === 'failure' ? answer.text : null,
+                }),
+              },
+            ],
+          }),
+        });
+      assert.strictEqual(resolved.status, 200, JSON.stringify(resolved.body));
+      assert.strictEqual(modelRequests.length, 1, 'the model was asked');
+      let [asked] = modelRequests;
+      assert.true(
+        asked.body.includes('[REDACTED]'),
+        `the vendor's echo reached the prompt, scrubbed: ${asked.body}`,
+      );
+      assert.false(asked.body.includes(VALUE), `the model sees: ${asked.body}`);
+      assert.false(
+        asked.headers.includes(VALUE),
+        `the model's request headers: ${asked.headers}`,
       );
 
       // The script prints what it was handed.
@@ -284,6 +428,10 @@ module(basename(import.meta.filename), function (hooks) {
 
       let log = JSON.stringify(await readRunLog(dbAdapter, run.id));
       assert.true(log.includes('callApi'), 'the call is in the log');
+      assert.true(
+        log.includes(`resolve ${MODEL}`),
+        'the resolve is in the log',
+      );
       assert.false(log.includes(VALUE), `the log holds: ${log}`);
 
       let written = await asRun(
