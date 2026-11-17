@@ -69,6 +69,43 @@ ruleTester.run('missing-card-api-import', rule, {
         },
       ],
     },
+    // A TypeScript interface or type-literal key named after a mapped
+    // export is not a reference either.
+    {
+      code: `
+        export interface Art {
+          field?: number;
+          contains(other: Art): boolean;
+        }
+        export type Placed = { field: number } | null;
+      `,
+      options: [
+        {
+          importMappings: {
+            contains: ['contains', '@cardstack/base/card-api'],
+            field: ['field', '@cardstack/base/card-api'],
+          },
+        },
+      ],
+    },
+    // Nor is an enum member, the right side of a qualified type name,
+    // or the outside name of an export alias.
+    {
+      code: `
+        import * as NS from './ns';
+        export enum Kind { field, other }
+        export type T = NS.field;
+        const x = 1;
+        export { x as field };
+      `,
+      options: [
+        {
+          importMappings: {
+            field: ['field', '@cardstack/base/card-api'],
+          },
+        },
+      ],
+    },
   ],
 
   invalid: [
