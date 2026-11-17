@@ -22,6 +22,11 @@ import { mintingFix } from './oauth.ts';
 // - `reconnect`: the vendor no longer accepts the payer's OAuth connection
 //   (or its access-only token expired). The payer signs in again from the
 //   secure window, opened with `#reconnect=<keyId>` (`reconnectFragment`).
+// - `connect-again`: the client the payer's connection signed in through
+//   was deleted, so the connection can never mint again, and a reconnect,
+//   which signs in through the same client, can't help. The payer connects
+//   through a client that exists, from the secure window's connect page, and
+//   approves the operation for the new connection.
 // - `fix-client`: the OAuth client the credential mints through is broken.
 //   Its owner replaces the client's secret.
 // - `fix-share`: the realm's share is broken: suspended, unshared, holding no
@@ -36,6 +41,7 @@ import { mintingFix } from './oauth.ts';
 
 export type AutomationCredentialNotice =
   | { kind: 'reconnect'; recipients: string[]; keyId: string }
+  | { kind: 'connect-again'; recipients: string[]; keyId: string }
   | { kind: 'fix-client'; recipients: string[]; clientKeyId: string }
   | {
       kind: 'fix-share';
@@ -87,6 +93,8 @@ async function noticesForKey(
       ];
     case 'share':
       return [await shareNotice(dbAdapter, fix.shareId, fix.realmURL)];
+    case 'gone':
+      return [{ kind: 'connect-again', recipients: [run.actsAs], keyId }];
     default:
       return [];
   }

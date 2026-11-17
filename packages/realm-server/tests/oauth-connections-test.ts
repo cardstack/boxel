@@ -1680,6 +1680,25 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a deleted client ends the run, and tells the payer to connect again through another', async function (assert) {
+      let { client, keyId } = await connectAndApprove();
+      await deleteUserKey(dbAdapter, {
+        owner: OWNER,
+        id: client.id,
+        ticket: await ticket(OWNER, 'delete', { keyId: client.id }),
+      });
+      let refused = await call(OWNER);
+      assert.strictEqual(refused.body.errors[0].meta.reason, 'needs-admin');
+      assert.strictEqual(refused.run.state, 'error', 'the run ended');
+      assert.deepEqual(refused.run.credentialRefusal, {
+        reason: 'needs-admin',
+        subject: { kind: 'key', id: keyId },
+      });
+      assert.deepEqual(await notices(refused.run), [
+        { kind: 'connect-again', recipients: [OWNER], keyId },
+      ]);
+    });
+
     test("a broken client ends the run needing an administrator, and tells the client's owner until they replace its secret", async function (assert) {
       let { shared, keyId } = await teammateThroughSharedClient();
       assert.strictEqual((await call(TEAMMATE)).status, 200);
