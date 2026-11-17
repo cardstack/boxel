@@ -23,6 +23,10 @@
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import { logRunPlatformLine } from './automation-run-log.ts';
+import {
+  clearRunMilestones,
+  closeRunMilestones,
+} from './automation-run-milestones.ts';
 import type { DBAdapter } from './db.ts';
 import {
   dbAdapterQuerier,
@@ -237,8 +241,16 @@ export async function startAutomationRunAttempt(
   // statement, which sees a file a replaced attempt staged while it held the
   // run's row, since the takeover waited on that lock. A run whose commit was
   // already claimed keeps its files: the claiming attempt may still be
-  // reading them to send its batch.
+  // reading them to send its batch. An attempt that takes the run from
+  // another also clears the run's milestones, since the script runs again
+  // from its start and reports them afresh. The run's row is locked first,
+  // the order `appendRunLog` takes the locks in.
   let row = await dbAdapter.withTransaction(async (txQuery) => {
+    let [owner] = await txQuery([
+      'SELECT attempt FROM automation_runs WHERE id =',
+      param(id),
+      'FOR UPDATE',
+    ]);
     let [started] = await txQuery([
       "UPDATE automation_runs SET state = 'running', attempt =",
       param(attempt),
@@ -255,6 +267,9 @@ export async function startAutomationRunAttempt(
         'AND attempt <>',
         param(attempt),
       ]);
+      if (owner?.attempt != null && Number(owner.attempt) !== attempt) {
+        await clearRunMilestones(txQuery, id);
+      }
     }
     return started;
   });
@@ -382,6 +397,7 @@ async function logRunEnded(
   dbAdapter: DBAdapter,
   run: AutomationRun,
 ): Promise<void> {
+  await closeRunMilestones(dbAdapter, run);
   await logRunPlatformLine(
     dbAdapter,
     run.id,
