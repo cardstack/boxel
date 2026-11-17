@@ -48,8 +48,9 @@
 //    of `SPENDING_REFUSAL_REASONS`. When a run that acts as the automation's
 //    payer is refused for its balance (`insufficient-credits`), the
 //    automation moves to *waiting for credits*; the tick still enqueues its
-//    due runs, and the first one admitted moves it back to active, so it
-//    continues at its next due time once the balance recovers.
+//    due runs, and the first one whose balance passes (admitted, or refused
+//    only for a credit cap) moves it back to active, so it continues at its
+//    next due time once the balance recovers.
 //
 // A refused run finishes as an error whose `error_reason` is the refusal's
 // code. An admitted run records `admitted_at`. Either way the run's log gets
@@ -126,6 +127,11 @@ export const SPENDING_REFUSAL_REASONS = [
   'pricing-unavailable',
 ] as const;
 export type SpendingRefusalReason = (typeof SPENDING_REFUSAL_REASONS)[number];
+
+const CREDIT_CAP_REASONS: ReadonlySet<string> = new Set<SpendingRefusalReason>([
+  'daily-credit-cap-reached',
+  'monthly-credit-cap-reached',
+]);
 
 export interface AdmissionContext {
   dbAdapter: DBAdapter;
@@ -333,14 +339,21 @@ export async function admitRunOperations(
     kind !== 'manual' &&
     automation !== undefined &&
     automation.payer === run.actsAs;
-  if (spending) {
-    if (payersRun && spending.reason === 'insufficient-credits') {
+  if (payersRun) {
+    // The spending check reads the balance before the caps, so a run it
+    // admits, or refuses for a cap, had balance enough: the automation is no
+    // longer waiting for credits.
+    if (spending?.reason === 'insufficient-credits') {
       await waitingForCredits(ctx, run, true);
+    } else if (
+      automation!.state === 'waiting-for-credits' &&
+      (!spending || CREDIT_CAP_REASONS.has(spending.reason))
+    ) {
+      await waitingForCredits(ctx, run, false);
     }
-    return { ok: false, ...spending };
   }
-  if (payersRun && automation!.state === 'waiting-for-credits') {
-    await waitingForCredits(ctx, run, false);
+  if (spending) {
+    return { ok: false, ...spending };
   }
   return { ok: true, operations: asked.answer.operations ?? 0 };
 }

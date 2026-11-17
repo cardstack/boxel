@@ -27,7 +27,15 @@ import { currentPricing, type Pricing } from './pricing.ts';
 // An automation run's spending check, the last step of its admission (ADR 029
 // §1.5). Under the cost lock of the person the run acts as, in order:
 //
-// 1. The automation's credit caps. For a run of the automation's own (a
+// 1. The run's identity's balance. Their balance, less what their other runs
+//    in flight hold, must be at least the run's minimum balance: the most one
+//    run can cost under its caps (`runCostCeiling`, the same per-run cost the
+//    switch-on estimate shows), never below the configured floor. The
+//    minimum covers the whole run because `spendCredits` charges only what
+//    the balance holds. It comes first, so a refusal for a cap means the
+//    balance was enough, and admission can tell the automation is no longer
+//    waiting for credits.
+// 2. The automation's credit caps. For a run of the automation's own (a
 //    trigger's or a batch's follow-up, not a Preview or a Run now, which are
 //    charged to whoever clicked), what the automation was charged this UTC
 //    day and this UTC month, plus what its other runs in flight hold, must be
@@ -36,12 +44,6 @@ import { currentPricing, type Pricing } from './pricing.ts';
 //    its runs' compute, network, indexing and AI, its batches and its
 //    storage. A run admitted under a cap can take the automation past it by
 //    at most what that run costs.
-// 2. The run's identity's balance. Their balance, less what their other runs
-//    in flight hold, must be at least the run's minimum balance: the most one
-//    run can cost under its caps (`runCostCeiling`, the same per-run cost the
-//    switch-on estimate shows), never below the configured floor. The
-//    minimum covers the whole run because `spendCredits` charges only what
-//    the balance holds.
 // 3. The hold. The run's cost ceiling is recorded on its row
 //    (`holdAutomationRunCredits`), so the next run's check, under the same
 //    lock, counts it. Two runs can't both pass on one run's worth of balance.
@@ -83,12 +85,6 @@ export function buildAdmitSpending({
     let querier = dbAdapterQuerier(dbAdapter);
 
     return await dbAdapter.withUserCostLock(run.actsAs, async () => {
-      if (kind !== 'manual' && automation) {
-        let capRefusal = await checkCreditCaps(querier, run, automation, now());
-        if (capRefusal) {
-          return capRefusal;
-        }
-      }
       let balance = user ? await sumUpAvailableCredits(dbAdapter, user.id) : 0;
       let held = await creditsHeldByRunsInFlight(querier, {
         actsAs: run.actsAs,
@@ -101,6 +97,12 @@ export function buildAdmitSpending({
           'insufficient-credits',
           `The credits available to ${run.actsAs}, after their other automation runs in flight, are below this run's minimum balance of ${minimum} credits`,
         );
+      }
+      if (kind !== 'manual' && automation) {
+        let capRefusal = await checkCreditCaps(querier, run, automation, now());
+        if (capRefusal) {
+          return capRefusal;
+        }
       }
       if (run.attempt !== null) {
         await holdAutomationRunCredits(dbAdapter, run.id, run.attempt, ceiling);
@@ -173,9 +175,18 @@ async function checkCreditCaps(
   return undefined;
 }
 
+// How long before a charge its run can have started. A run's own charges land
+// within its time limit and its index pass of its end; a batch is billed when
+// it ends, at most `batchDeadlineMinutes` (1,440) after its run submitted it.
+// Two days covers both, so the charges since a day or month began come from
+// runs created at most this long before it.
+const RUN_CHARGE_LAG_SECONDS = 2 * 24 * 60 * 60;
+
 // What the automation was charged since `since` (unix seconds), across every
 // charge kind that names it: its storage by the automation, and everything
-// else by its runs, leaving out Previews and Run nows.
+// else by its runs, leaving out Previews and Run nows. Only runs created within
+// `RUN_CHARGE_LAG_SECONDS` of `since` are read, so the check doesn't grow with
+// the automation's history.
 async function automationCreditsSince(
   querier: Querier,
   automationId: string,
@@ -191,7 +202,9 @@ async function automationCreditsSince(
     param(automationId),
     'AND r.trigger <>',
     param(MANUAL_RUN_TRIGGER),
-    '))',
+    'AND r.created_at >= to_timestamp(',
+    param(since - RUN_CHARGE_LAG_SECONDS),
+    ')))',
   ]);
   return Number(row?.spent ?? 0);
 }

@@ -98,6 +98,8 @@ export interface AutomationRun extends AutomationRunCounts {
   // against its identity's balance (see `holdAutomationRunCredits`). Null
   // until the spending check admits it.
   costCeilingCredits: number | null;
+  // When that hold stopped counting (`releaseAutomationRunCreditHold`).
+  creditHoldReleasedAt: string | null;
   createdAt: string;
   startedAt: string | null;
   // When the attempt that owns the run admitted it (see
@@ -331,9 +333,10 @@ export async function recordAutomationRunAdmitted(
 }
 
 // Holds `credits`, the most the run can cost, against its identity's balance
-// while it is in flight (see `creditsHeldByRunsInFlight`). Refused unless the
-// run is running and `attempt` owns it. A retry's admission holds again,
-// replacing what the earlier attempt held.
+// and its automation's credit caps while it is in flight (see
+// `creditsHeldByRunsInFlight`). Refused unless the run is running and
+// `attempt` owns it. A retry's admission holds again, replacing what the
+// earlier attempt held.
 export async function holdAutomationRunCredits(
   dbAdapter: DBAdapter,
   id: string,
@@ -348,24 +351,46 @@ export async function holdAutomationRunCredits(
   return await updateOwned(dbAdapter, id, attempt, [
     'cost_ceiling_credits =',
     param(credits),
+    ', credit_hold_released_at = NULL',
   ]);
 }
 
-// How long a finished run's hold keeps counting while its `run` charge hasn't
-// been written. The attempt writes the charge just after the run ends, so this
-// only bounds a charge that never lands.
-export const UNCHARGED_RUN_HOLD_SECONDS = 60 * 60;
+// Stops the run's hold counting, once the run has ended and its `run` charge
+// is written or it had nothing to charge (`chargeAutomationRun`). A run that
+// is still pending or running keeps its hold, so a run canceled while its tab
+// still runs holds until the attempt has charged what the tab used. Returns
+// whether a hold was released.
+export async function releaseAutomationRunCreditHold(
+  dbAdapter: DBAdapter,
+  id: string,
+): Promise<boolean> {
+  let rows = await query(dbAdapter, [
+    'UPDATE automation_runs SET credit_hold_released_at = now() WHERE id =',
+    param(id),
+    "AND state IN ('complete', 'error', 'canceled')",
+    'AND cost_ceiling_credits IS NOT NULL AND credit_hold_released_at IS NULL',
+    'RETURNING id',
+  ]);
+  return rows.length > 0;
+}
 
-// The credits held by admitted runs that haven't been paid for yet, other
+// How long an ended run's hold keeps counting when nothing releases it: its
+// charge couldn't be written, or the run was closed without an attempt. The
+// attempt releases the hold just after the run ends, so this only bounds a
+// hold that release never reaches.
+export const UNRELEASED_RUN_HOLD_SECONDS = 60 * 60;
+
+// The credits held by admitted runs whose holds haven't been released, other
 // than `excludeRunId`: those of `actsAs` (the balance check), or those of
 // `automationId`'s runs that aren't Previews or Run nows (the credit caps).
 //
-// A run holds its cost ceiling, less what its AI requests have already been
-// charged (each AI request is charged as it finishes, so the balance already
-// shows it). A run holds while it is pending or running, and once it has
-// ended until its `run` charge is in the ledger, so a run that ended but
-// hasn't been charged yet still counts. A run that used no tab time and read
-// no bytes has no `run` charge to wait for, and holds nothing once it ends.
+// A run holds its cost ceiling, less what the ledger has charged it for AI
+// (each AI request is charged as it finishes, so the balance already shows
+// it). Only ledger charges count: a request whose cost couldn't be learned
+// adds its reservation to `ai_credits_spent` but charges nothing, so the
+// hold keeps covering it. A run holds from its admission until its hold is
+// released (`releaseAutomationRunCreditHold`), or for at most
+// `UNRELEASED_RUN_HOLD_SECONDS` after it ends.
 export async function creditsHeldByRunsInFlight(
   querier: Querier,
   filter: (
@@ -374,9 +399,11 @@ export async function creditsHeldByRunsInFlight(
   ) & { excludeRunId: string },
 ): Promise<number> {
   let [row] = await querier([
-    'SELECT COALESCE(SUM(GREATEST(r.cost_ceiling_credits - r.ai_credits_spent, 0)), 0) AS held',
-    'FROM automation_runs r WHERE r.cost_ceiling_credits IS NOT NULL AND r.id <>',
-    param(filter.excludeRunId),
+    'SELECT COALESCE(SUM(GREATEST(r.cost_ceiling_credits - COALESCE(ai.charged, 0), 0)), 0) AS held',
+    'FROM automation_runs r LEFT JOIN LATERAL (',
+    "SELECT -SUM(l.credit_amount) AS charged FROM credits_ledger l WHERE l.run_id = r.id AND l.charge_kind = 'ai'",
+    ') ai ON true',
+    'WHERE r.cost_ceiling_credits IS NOT NULL AND r.credit_hold_released_at IS NULL',
     ...((filter.actsAs !== undefined
       ? ['AND r.acts_as =', param(filter.actsAs)]
       : [
@@ -385,12 +412,10 @@ export async function creditsHeldByRunsInFlight(
           'AND r.trigger <>',
           param(MANUAL_RUN_TRIGGER),
         ]) as Expression),
-    "AND (r.state IN ('pending', 'running') OR (",
-    'r.finished_at > now() - make_interval(secs =>',
-    param(UNCHARGED_RUN_HOLD_SECONDS),
-    ')',
-    'AND (r.prerender_tab_ms > 0 OR r.call_api_response_bytes > 0)',
-    "AND NOT EXISTS (SELECT 1 FROM credits_ledger l WHERE l.run_id = r.id AND l.charge_kind = 'run')))",
+    'AND (r.finished_at IS NULL OR r.finished_at > now() - make_interval(secs =>',
+    param(UNRELEASED_RUN_HOLD_SECONDS),
+    ')) AND r.id <>',
+    param(filter.excludeRunId),
   ] as Expression);
   return Number(row?.held ?? 0);
 }
@@ -1018,6 +1043,7 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
       row.cost_ceiling_credits == null
         ? null
         : Number(row.cost_ceiling_credits),
+    creditHoldReleasedAt: iso(row.credit_hold_released_at),
     createdAt: iso(row.created_at)!,
     startedAt: iso(row.started_at),
     admittedAt: iso(row.admitted_at),

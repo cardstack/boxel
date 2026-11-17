@@ -10,6 +10,7 @@ import {
 } from '@cardstack/billing/billing-queries';
 import {
   automationRunDedupeKey,
+  chargeAutomationRun,
   createAutomationRun,
   creditsHeldByRunsInFlight,
   dbAdapterQuerier,
@@ -28,6 +29,7 @@ import {
   type Prerenderer,
   type Realm,
   type RunCommandArgs,
+  type SpendCharge,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import type { AutomationAdmissionChecks } from '@cardstack/runtime-common/automation-admission';
@@ -57,6 +59,7 @@ import {
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { runCostCeiling } from '../lib/automation-estimate.ts';
 import { buildAdmitSpending } from '../lib/automation-spending.ts';
+import { meteredChargesFor } from '../lib/metered-charge.ts';
 import { buildMintRunToken } from '../lib/run-token.ts';
 
 // An automation run's admission: before a run costs anything, the worker
@@ -262,7 +265,8 @@ module(basename(import.meta.filename), function (hooks) {
     ]);
   }
 
-  // A tab that answers `outcome`, counting how often it is asked.
+  // A tab that answers `outcome`, counting how often it is asked. It reports
+  // a fixed tab time, so a run it runs always has compute to charge.
   function stubTab(calls: RunCommandArgs[]): Prerenderer {
     let outcome: AutomationScriptOutcome = {
       state: 'complete',
@@ -276,6 +280,7 @@ module(basename(import.meta.filename), function (hooks) {
           cardResultString: JSON.stringify({
             data: { type: 'card', attributes: { json: outcome } },
           }),
+          meta: { diagnostics: { renderElapsedMs: 250 } },
         };
       },
     } as unknown as Prerenderer;
@@ -834,33 +839,29 @@ module(basename(import.meta.filename), function (hooks) {
       return id;
     }
 
-    // Charges `credits` to `user` for a run of the automation at `path`, at
-    // `seconds` (unix), as a finished run's compute would be.
-    async function chargeRunOf(
-      path: string,
+    // Charges `credits` to `user` as `what`, dated `seconds` (unix).
+    async function charge(
       user: string,
       credits: number,
       seconds: number,
+      what: SpendCharge,
     ) {
-      let earlier = await newRun(path, { trigger: 'nightly', actsAs: user });
-      let { id } = (await getUserByMatrixUserId(dbAdapter, user))!;
+      await ensureTestUser(dbAdapter, user);
+      let { id: userId } = (await getUserByMatrixUserId(dbAdapter, user))!;
+      let chargeId = randomUUID();
       await addToCreditsLedger(dbAdapter, {
-        userId: id,
+        userId,
         creditAmount: -credits,
         creditType: 'extra_credit_used',
         subscriptionCycleId: null,
-        charge: {
-          kind: 'run',
-          realm: ri(realm.url),
-          runId: earlier.id,
-          pricingVersion: testPricing().version,
-        },
+        charge: what,
+        chargeId,
       });
       await query(dbAdapter, [
         'UPDATE credits_ledger SET created_at =',
         param(seconds),
-        'WHERE run_id =',
-        param(earlier.id),
+        'WHERE charge_id =',
+        param(chargeId),
       ]);
     }
 
@@ -958,15 +959,63 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(result.state, 'complete');
     });
 
-    test('the monthly cap stops the automation’s runs until the month turns, and leaves a Run now alone', async function (assert) {
+    test('the monthly cap counts every charge kind and the automation’s runs in flight, and leaves a Run now alone', async function (assert) {
       let now = Date.UTC(2026, 10, 16, 12) / 1000;
       await switchOn(SPENDING);
       await fund(OWNER, 10_000);
-      await chargeRunOf(SPENDING, OWNER, 2_000, now - 60);
+      // 1,700 credits this month across every kind. Each is large enough that
+      // leaving any one out would let the capped run below through.
+      let earlier = await newRun(SPENDING, { trigger: 'nightly' });
+      await charge(OWNER, 500, now - 60, {
+        kind: 'run',
+        realm: ri(realm.url),
+        runId: earlier.id,
+        pricingVersion: testPricing().version,
+      });
+      await charge(OWNER, 300, now - 60, {
+        kind: 'run_indexing',
+        realm: ri(realm.url),
+        runId: earlier.id,
+        pricingVersion: testPricing().version,
+      });
+      await charge(OWNER, 400, now - 60, {
+        kind: 'ai',
+        realm: ri(realm.url),
+        runId: earlier.id,
+      });
+      await charge(OWNER, 500, now - 60, {
+        kind: 'storage',
+        realm: ri(realm.url),
+        automationId: automationId(SPENDING),
+        day: '2026-11-15',
+        pricingVersion: testPricing().version,
+      });
+      // A charge last month doesn't count.
+      await charge(OWNER, 5_000, Date.UTC(2026, 9, 31, 23) / 1000, {
+        kind: 'run',
+        realm: ri(realm.url),
+        runId: (await newRun(SPENDING, { trigger: 'nightly' })).id,
+        pricingVersion: testPricing().version,
+      });
 
+      let first = await newRun(SPENDING, { trigger: 'nightly' });
+      let result = await attempt(first, { checks: spending({ now }) });
+      assert.strictEqual(
+        result.state,
+        'complete',
+        '1,700 charged is under the 2,000 cap',
+      );
+
+      // The first run still holds its ceiling (nothing has charged it yet):
+      // 1,700 + 505 reaches the cap. The automation was waiting for credits,
+      // but its balance passes, so the cap's refusal makes it active.
+      await query(dbAdapter, [
+        "UPDATE automations SET state = 'waiting-for-credits' WHERE automation_id =",
+        param(automationId(SPENDING)),
+      ]);
       let calls: RunCommandArgs[] = [];
       let capped = await newRun(SPENDING, { trigger: 'nightly' });
-      let result = await attempt(capped, {
+      result = await attempt(capped, {
         calls,
         checks: spending({ now }),
       });
@@ -980,7 +1029,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(
         (await getAutomation(dbAdapter, automationId(SPENDING)))?.state,
         'active',
-        'a cap isn’t a short balance, so the automation isn’t waiting for credits',
+        'a run refused only for a cap had balance enough, so the automation isn’t waiting for credits',
       );
 
       let runNow = await newRun(SPENDING);
@@ -1003,7 +1052,12 @@ module(basename(import.meta.filename), function (hooks) {
       let now = Date.UTC(2026, 10, 16, 12) / 1000;
       await switchOn(DAILY);
       await fund(OWNER, 10_000);
-      await chargeRunOf(DAILY, OWNER, 600, now - 60);
+      await charge(OWNER, 600, now - 60, {
+        kind: 'run',
+        realm: ri(realm.url),
+        runId: (await newRun(DAILY, { trigger: 'nightly' })).id,
+        pricingVersion: testPricing().version,
+      });
 
       let capped = await newRun(DAILY, { trigger: 'nightly' });
       let result = await attempt(capped, { checks: spending({ now }) });
@@ -1026,15 +1080,22 @@ module(basename(import.meta.filename), function (hooks) {
       await assertRefused(assert, run, result, calls, 'pricing-unavailable');
     });
 
-    test('a run holds its ceiling, less its charged AI, until its run charge is written', async function (assert) {
+    test('a run holds its ceiling, less the AI the ledger charged it, until its charge releases the hold', async function (assert) {
       let querier = dbAdapterQuerier(dbAdapter);
       let held = (excludeRunId: string = randomUUID()) =>
         creditsHeldByRunsInFlight(querier, { actsAs: OWNER, excludeRunId });
-      let run = await newRun(SPENDING);
-      await query(dbAdapter, [
-        "UPDATE automation_runs SET state = 'running', attempt = 7 WHERE id =",
-        param(run.id),
-      ]);
+      let meteredCharges = meteredChargesFor(dbAdapter, testPricing);
+      await fund(OWNER, 10_000);
+      let running = async (path: string) => {
+        let run = await newRun(path);
+        await query(dbAdapter, [
+          "UPDATE automation_runs SET state = 'running', attempt = 7 WHERE id =",
+          param(run.id),
+        ]);
+        return run;
+      };
+
+      let run = await running(SPENDING);
       assert.strictEqual(
         await held(),
         0,
@@ -1054,42 +1115,73 @@ module(basename(import.meta.filename), function (hooks) {
       ]);
       assert.strictEqual(
         await held(),
+        505,
+        'AI the run recorded but the ledger never charged (a cost that couldn’t be learned) stays held',
+      );
+      await charge(OWNER, 120, Math.floor(Date.now() / 1000), {
+        kind: 'ai',
+        realm: ri(realm.url),
+        runId: run.id,
+      });
+      assert.strictEqual(
+        await held(),
         385,
-        'AI already charged is in the balance, so it isn’t held twice',
+        'AI the ledger charged is out of the balance already, so it isn’t held twice',
       );
 
+      // Canceled while its tab still runs: no tab time is on the row yet.
       await query(dbAdapter, [
-        "UPDATE automation_runs SET state = 'complete', finished_at = now(), prerender_tab_ms = 1500 WHERE id =",
+        "UPDATE automation_runs SET state = 'canceled', finished_at = now() WHERE id =",
         param(run.id),
       ]);
       assert.strictEqual(
         await held(),
         385,
-        'a run that ended keeps holding until its run charge is written',
+        'a run that ended keeps its hold until its charge releases it',
       );
-      await addToCreditsLedger(dbAdapter, {
-        userId: await fund(OWNER, 5),
-        creditAmount: -5,
-        creditType: 'extra_credit_used',
-        subscriptionCycleId: null,
-        charge: {
-          kind: 'run',
-          realm: ri(realm.url),
-          runId: run.id,
-          pricingVersion: testPricing().version,
-        },
-      });
-      assert.strictEqual(await held(), 0, 'its charge releases the hold');
-
-      let unused = await newRun(SPENDING);
       await query(dbAdapter, [
-        "UPDATE automation_runs SET state = 'canceled', finished_at = now(), cost_ceiling_credits = 505 WHERE id =",
+        'UPDATE automation_runs SET prerender_tab_ms = 1500 WHERE id =',
+        param(run.id),
+      ]);
+      await chargeAutomationRun({
+        dbAdapter,
+        meteredCharges,
+        runId: run.id,
+        log,
+      });
+      assert.strictEqual(await held(), 0, 'its run charge releases the hold');
+      let charged = await getAutomationRun(dbAdapter, run.id);
+      assert.ok(charged?.creditHoldReleasedAt, 'the release is on the row');
+
+      let unused = await running(SPENDING);
+      await holdAutomationRunCredits(dbAdapter, unused.id, 7, 505);
+      await query(dbAdapter, [
+        "UPDATE automation_runs SET state = 'canceled', finished_at = now() WHERE id =",
         param(unused.id),
+      ]);
+      assert.strictEqual(await held(), 505);
+      await chargeAutomationRun({
+        dbAdapter,
+        meteredCharges,
+        runId: unused.id,
+        log,
+      });
+      assert.strictEqual(
+        await held(),
+        0,
+        'a run with nothing to charge releases its hold once it is charged nothing',
+      );
+
+      let stale = await running(SPENDING);
+      await holdAutomationRunCredits(dbAdapter, stale.id, 7, 505);
+      await query(dbAdapter, [
+        "UPDATE automation_runs SET state = 'error', finished_at = now() - interval '2 hours' WHERE id =",
+        param(stale.id),
       ]);
       assert.strictEqual(
         await held(),
         0,
-        'a run that ended without using a tab or reading a byte has nothing to charge, and holds nothing',
+        'a hold nothing released lapses an hour after its run ended',
       );
     });
   });

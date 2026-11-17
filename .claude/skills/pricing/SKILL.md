@@ -369,17 +369,7 @@ refuses it (ADR 029 §1.5). It holds the cost lock of the person the run acts
 as (`withUserCostLock`), so it serializes with that person's charges and
 their other runs' checks, and in order:
 
-1. **The automation's credit caps**, for a run of the automation's own (a
-   trigger's run or a batch's follow-up; a Preview or Run now is charged to
-   whoever clicked and isn't held to the payer's caps). What the ledger
-   charged the automation since the start of this UTC day, and of this UTC
-   month, plus what its other runs in flight hold, must be under
-   `dailyCredits` and `monthlyCredits` from the caps snapshot. A cap the
-   snapshot leaves unset doesn't limit. The caps cover every charge kind that
-   names the automation: rows whose `run_id` is one of its runs (run, run
-   indexing, AI, batched AI) and its `storage` rows. A run admitted under a
-   cap can take the automation past it by at most what that run costs.
-2. **The minimum balance.** The person's balance (every bucket's grants and
+1. **The minimum balance.** The person's balance (every bucket's grants and
    purchases less what was used and expired, `sumUpAvailableCredits`), less
    what their other runs in flight hold, must be at least the run's minimum
    balance:
@@ -394,15 +384,39 @@ their other runs' checks, and in order:
    `spendCredits` charges only what the balance holds. Like the estimate, it
    leaves out the run's indexing.
 
+2. **The automation's credit caps**, for a run of the automation's own (a
+   trigger's run or a batch's follow-up; a Preview or Run now is charged to
+   whoever clicked and isn't held to the payer's caps). What the ledger
+   charged the automation since the start of this UTC day, and of this UTC
+   month, plus what its other runs in flight hold, must be under
+   `dailyCredits` and `monthlyCredits` from the caps snapshot. A cap the
+   snapshot leaves unset doesn't limit. The caps cover every charge kind that
+   names the automation: rows whose `run_id` is one of its runs (run, run
+   indexing, AI, batched AI) and its `storage` rows. Only runs created up to
+   two days before the day or month began are read, which covers a batch
+   billed up to its 24-hour deadline after its run. A run admitted under a
+   cap can take the automation past it by at most what that run costs. The
+   balance comes first, so a run refused for a cap had balance enough.
 3. **The hold.** An admitted run records `ceiling` as
    `automation_runs.cost_ceiling_credits` (`holdAutomationRunCredits`), so the
-   next check counts it. A run holds its ceiling less the AI it has already
-   been charged for (`ai_credits_spent`, which is already out of the
-   balance) while it is pending or running, and after it ends until its `run`
-   charge is in the ledger (for at most an hour; a run with no tab time and
-   no bytes has no charge to wait for and holds nothing once it ends).
-   `creditsHeldByRunsInFlight` sums the holds. Two runs admitted at once
-   can't both pass on one run's worth of balance.
+   next check counts it. `creditsHeldByRunsInFlight` sums the holds:
+   - a run holds its ceiling less the AI the ledger has charged it (its `ai`
+     rows), since each AI request is charged as it finishes and is already
+     out of the balance. `ai_credits_spent` isn't used: a request whose cost
+     couldn't be learned adds its reservation there but charges nothing;
+   - a hold counts from admission until `chargeAutomationRun` releases it
+     (`credit_hold_released_at`, `releaseAutomationRunCreditHold`) once the
+     run has ended and its `run` charge is written, or it had nothing to
+     charge. A run canceled while its tab still runs keeps its hold until the
+     attempt has charged what the tab used;
+   - a hold nothing releases (the charge couldn't be written, or the run was
+     closed without an attempt) lapses an hour after the run ended.
+
+   Two runs admitted at once can't both pass on one run's worth of balance.
+
+The hold binds automation runs only: an interactive AI request is admitted on
+the plain balance (`validateAICredits`), so it can spend credits a run holds,
+and the run's charge then draws what is left.
 
 A worker whose pricing check failed refuses every run. The refusal codes,
 each the run's `error_reason`:
@@ -416,15 +430,25 @@ each the run's `error_reason`:
 
 `SPENDING_REFUSAL_REASONS` in `automation-admission.ts` lists them. A payer's
 run refused with `insufficient-credits` moves the automation to _waiting for
-credits_ (the `automations` skill); a cap leaves it active, and its runs start
-again once the day or month turns.
+credits_ (the `automations` skill); a payer's run admitted, or refused only
+for a cap, moves it back to active. A cap leaves the automation's runs
+refused until the day or month turns.
 
 ```sql
--- What a person's runs in flight hold against their balance.
-SELECT id, automation_id, state, cost_ceiling_credits, ai_credits_spent
-FROM automation_runs
-WHERE acts_as = '<matrix user id>' AND cost_ceiling_credits IS NOT NULL
-  AND (state IN ('pending', 'running') OR finished_at > now() - interval '1 hour');
+-- What a person's runs in flight hold against their balance, as admission
+-- counts it.
+SELECT r.id, r.automation_id, r.state, r.cost_ceiling_credits,
+       COALESCE(ai.charged, 0) AS ai_charged,
+       GREATEST(r.cost_ceiling_credits - COALESCE(ai.charged, 0), 0) AS held
+FROM automation_runs r
+LEFT JOIN LATERAL (
+  SELECT -SUM(l.credit_amount) AS charged FROM credits_ledger l
+  WHERE l.run_id = r.id AND l.charge_kind = 'ai'
+) ai ON true
+WHERE r.acts_as = '<matrix user id>'
+  AND r.cost_ceiling_credits IS NOT NULL
+  AND r.credit_hold_released_at IS NULL
+  AND (r.finished_at IS NULL OR r.finished_at > now() - interval '1 hour');
 
 -- What an automation was charged this UTC month, by kind.
 SELECT l.charge_kind, -SUM(l.credit_amount) AS credits
