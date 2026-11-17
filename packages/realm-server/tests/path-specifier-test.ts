@@ -45,6 +45,14 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(pathSpecifierTests, assert, {});
   });
 
+  test('pathSpecifierMatches: kind decides, and a trailing slash does not', async function (assert) {
+    await runSharedTest(pathSpecifierTests, assert, {});
+  });
+
+  test('pathSpecifierMatches: matches paths as RealmPaths.local resolves them', async function (assert) {
+    await runSharedTest(pathSpecifierTests, assert, {});
+  });
+
   test('pathSpecifierMatches: / covers the whole realm', async function (assert) {
     await runSharedTest(pathSpecifierTests, assert, {});
   });

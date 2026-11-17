@@ -7,6 +7,7 @@ import {
   type PathPrefixErrorCode,
   type PathSpecifier,
 } from '../path-specifier.ts';
+import { RealmPaths } from '../paths.ts';
 import * as PathSpecifierSerializer from '../serializers/path-specifier.ts';
 import { getSerializer } from '../serializers/index.ts';
 import type { SharedTests } from '../helpers/index.ts';
@@ -29,6 +30,16 @@ function specifier(...sources: string[]): PathSpecifier {
     );
   }
   return result.specifier;
+}
+
+const REALM = 'https://example.test/realm/';
+
+function isFile(specifier: PathSpecifier, path: string): boolean {
+  return pathSpecifierMatches(specifier, path, 'file');
+}
+
+function isDirectory(specifier: PathSpecifier, path: string): boolean {
+  return pathSpecifierMatches(specifier, path, 'directory');
 }
 
 function errorCode(source: string): PathPrefixErrorCode | undefined {
@@ -164,10 +175,8 @@ const tests: SharedTests<unknown> = Object.freeze({
     assert.true(result.ok);
     if (result.ok) {
       assert.deepEqual(result.specifier.prefixes, []);
-      assert.true(
-        pathSpecifierMatches(result.specifier, 'anything/at/all.json'),
-      );
-      assert.true(pathSpecifierMatches(result.specifier, ''));
+      assert.true(isFile(result.specifier, 'anything/at/all.json'));
+      assert.true(isDirectory(result.specifier, ''));
     }
   },
 
@@ -192,100 +201,129 @@ const tests: SharedTests<unknown> = Object.freeze({
   'pathSpecifierMatches: a directory covers itself and everything in it':
     async (assert) => {
       let blog = specifier('blog/');
-      assert.true(pathSpecifierMatches(blog, 'blog/'));
-      assert.true(pathSpecifierMatches(blog, 'blog/BlogPost/1.json'));
-      assert.true(pathSpecifierMatches(blog, 'blog/drafts/'));
-      assert.true(pathSpecifierMatches(blog, '/blog/BlogPost/1.json'));
-      assert.false(pathSpecifierMatches(blog, ''), 'not the realm root');
-      assert.false(pathSpecifierMatches(blog, 'BlogPost/1.json'));
-      assert.false(pathSpecifierMatches(blog, 'drafts/blog/1.json'));
+      assert.true(isDirectory(blog, 'blog'));
+      assert.true(isFile(blog, 'blog/BlogPost/1.json'));
+      assert.true(isDirectory(blog, 'blog/drafts'));
+      assert.true(isFile(blog, '/blog/BlogPost/1.json'));
+      assert.false(isDirectory(blog, ''), 'not the realm root');
+      assert.false(isFile(blog, 'BlogPost/1.json'));
+      assert.false(isFile(blog, 'drafts/blog/1.json'));
     },
 
   'pathSpecifierMatches: blog/ never matches blog-old/ or blog.json': async (
     assert,
   ) => {
     let blog = specifier('blog/');
-    assert.false(pathSpecifierMatches(blog, 'blog-old/'));
-    assert.false(pathSpecifierMatches(blog, 'blog-old/BlogPost/1.json'));
-    assert.false(pathSpecifierMatches(blog, 'blog.json'));
-    assert.false(pathSpecifierMatches(blog, 'blog'), 'a file named blog');
+    assert.false(isDirectory(blog, 'blog-old'));
+    assert.false(isFile(blog, 'blog-old/BlogPost/1.json'));
+    assert.false(isFile(blog, 'blog.json'));
+    assert.false(isFile(blog, 'blog'), 'a file named blog');
   },
 
   'pathSpecifierMatches: a file prefix covers exactly that file': async (
     assert,
   ) => {
     let post = specifier('blog/post-1.json');
-    assert.true(pathSpecifierMatches(post, 'blog/post-1.json'));
+    assert.true(isFile(post, 'blog/post-1.json'));
     assert.false(
-      pathSpecifierMatches(post, 'blog/post-1.json/'),
-      'not a directory',
+      isDirectory(post, 'blog/post-1.json'),
+      'not a directory of that name',
     );
-    assert.false(pathSpecifierMatches(post, 'blog/post-1.json/x.json'));
-    assert.false(pathSpecifierMatches(post, 'blog/post-1'));
-    assert.false(pathSpecifierMatches(post, 'blog/post-10.json'));
-    assert.false(pathSpecifierMatches(post, 'blog/'));
+    assert.false(isFile(post, 'blog/post-1.json/x.json'));
+    assert.false(isFile(post, 'blog/post-1'));
+    assert.false(isFile(post, 'blog/post-10.json'));
+    assert.false(isDirectory(post, 'blog'));
   },
+
+  'pathSpecifierMatches: kind decides, and a trailing slash does not': async (
+    assert,
+  ) => {
+    let blog = specifier('blog/');
+    let file = specifier('blog');
+    assert.true(isDirectory(blog, 'blog/'));
+    assert.false(isFile(blog, 'blog/'), 'a file named blog');
+    assert.true(isFile(file, 'blog/'));
+    assert.false(isDirectory(file, 'blog'), 'a directory named blog');
+  },
+
+  'pathSpecifierMatches: matches paths as RealmPaths.local resolves them':
+    async (assert) => {
+      let realm = new RealmPaths(new URL(REALM));
+      let local = (path: string) => realm.local(new URL(path, REALM));
+      let blog = specifier('blog/');
+      let file = specifier('blog');
+      // `local` strips a directory's trailing slash, so the caller says
+      // which it is.
+      assert.strictEqual(local('blog/'), 'blog');
+      assert.true(isDirectory(blog, local('blog/')));
+      assert.false(isDirectory(file, local('blog/')));
+      assert.true(isFile(blog, local('blog/BlogPost/1.json')));
+      assert.true(
+        isFile(specifier('My Posts/'), local('My%20Posts/Post/1.json')),
+      );
+      assert.true(
+        isFile(specifier('a%3Ab/'), local('a%3Ab/x.json')),
+        'a delimiter escape stays encoded on both sides',
+      );
+    },
 
   'pathSpecifierMatches: / covers the whole realm': async (assert) => {
     let realm = specifier('/');
-    assert.true(pathSpecifierMatches(realm, ''));
-    assert.true(pathSpecifierMatches(realm, '/'));
-    assert.true(pathSpecifierMatches(realm, 'index.json'));
-    assert.true(pathSpecifierMatches(realm, 'a/b/c/d.gts'));
+    assert.true(isDirectory(realm, ''));
+    assert.true(isDirectory(realm, '/'));
+    assert.true(isFile(realm, 'index.json'));
+    assert.true(isFile(realm, 'a/b/c/d.gts'));
+    assert.false(isFile(realm, ''), 'the root is not a file');
   },
 
   'pathSpecifierMatches: a list matches a path under any of its prefixes':
     async (assert) => {
       let both = specifier('blog/', 'posts/');
-      assert.true(pathSpecifierMatches(both, 'blog/BlogPost/1.json'));
-      assert.true(pathSpecifierMatches(both, 'posts/Post/2.json'));
-      assert.false(pathSpecifierMatches(both, 'news/Article/3.json'));
-      assert.false(pathSpecifierMatches(both, 'blogposts/1.json'));
+      assert.true(isFile(both, 'blog/BlogPost/1.json'));
+      assert.true(isFile(both, 'posts/Post/2.json'));
+      assert.false(isFile(both, 'news/Article/3.json'));
+      assert.false(isFile(both, 'blogposts/1.json'));
     },
 
   'pathSpecifierMatches: compares segments case-sensitively, with no Unicode normalization':
     async (assert) => {
       let blog = specifier('blog/');
-      assert.false(pathSpecifierMatches(blog, 'Blog/BlogPost/1.json'));
-      assert.false(pathSpecifierMatches(blog, 'BLOG/'));
-      assert.false(pathSpecifierMatches(specifier('Blog/'), 'blog/1.json'));
+      assert.false(isFile(blog, 'Blog/BlogPost/1.json'));
+      assert.false(isDirectory(blog, 'BLOG'));
+      assert.false(isFile(specifier('Blog/'), 'blog/1.json'));
       let composed = specifier('café/');
-      assert.true(pathSpecifierMatches(composed, 'café/menu.json'));
+      assert.true(isFile(composed, 'café/menu.json'));
       assert.false(
-        pathSpecifierMatches(composed, 'café/menu.json'),
+        isFile(composed, 'café/menu.json'),
         'a decomposed é is a different segment',
       );
     },
 
   'pathSpecifierMatches: compares decoded segments': async (assert) => {
-    assert.true(
-      pathSpecifierMatches(specifier('My%20Posts/'), 'My Posts/Post/1.json'),
-    );
-    assert.true(
-      pathSpecifierMatches(specifier('My Posts/'), 'My Posts/Post/1.json'),
-    );
-    assert.true(pathSpecifierMatches(specifier('caf%C3%A9/'), 'café/1.json'));
-    assert.true(pathSpecifierMatches(specifier('100%25.json'), '100%.json'));
+    assert.true(isFile(specifier('My%20Posts/'), 'My Posts/Post/1.json'));
+    assert.true(isFile(specifier('My Posts/'), 'My Posts/Post/1.json'));
+    assert.true(isFile(specifier('caf%C3%A9/'), 'café/1.json'));
+    assert.true(isFile(specifier('100%25.json'), '100%.json'));
     assert.false(
-      pathSpecifierMatches(specifier('My%20Posts/'), 'My%20Posts/Post/1.json'),
+      isFile(specifier('My%20Posts/'), 'My%20Posts/Post/1.json'),
       'the path is matched as the realm resolved it, never as spelled in a URL',
     );
   },
 
   'pathSpecifierMatches: a malformed path matches nothing': async (assert) => {
     let realm = specifier('/');
-    assert.false(pathSpecifierMatches(realm, 'blog//1.json'));
-    assert.false(pathSpecifierMatches(realm, 'blog/../secret.json'));
-    assert.false(pathSpecifierMatches(realm, './blog/1.json'));
-    assert.false(
-      pathSpecifierMatches(specifier('blog/'), 'blog/../secret.json'),
-    );
+    assert.false(isFile(realm, 'blog//1.json'));
+    assert.false(isFile(realm, 'blog/../secret.json'));
+    assert.false(isFile(realm, './blog/1.json'));
+    assert.false(isFile(specifier('blog/'), 'blog/../secret.json'));
   },
 
   'pathPrefixMatches: matches one prefix': async (assert) => {
-    assert.true(pathPrefixMatches(prefix('blog/'), 'blog/1.json'));
-    assert.false(pathPrefixMatches(prefix('blog/'), 'news/1.json'));
-    assert.false(pathPrefixMatches(prefix('blog/'), 'blog//1.json'));
+    assert.true(pathPrefixMatches(prefix('blog/'), 'blog/1.json', 'file'));
+    assert.true(pathPrefixMatches(prefix('blog/'), 'blog', 'directory'));
+    assert.false(pathPrefixMatches(prefix('blog/'), 'blog', 'file'));
+    assert.false(pathPrefixMatches(prefix('blog/'), 'news/1.json', 'file'));
+    assert.false(pathPrefixMatches(prefix('blog/'), 'blog//1.json', 'file'));
   },
 
   'path-specifier serializer: reads back a list exactly as written': async (

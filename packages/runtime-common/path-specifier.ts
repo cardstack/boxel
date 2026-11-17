@@ -166,23 +166,33 @@ export function parsePathSpecifier(
     : { ok: true, specifier: { prefixes } };
 }
 
+// Whether a path names a file or a directory. A resolved path can't say:
+// `RealmPaths.local` strips a directory's trailing slash, so `blog/` and a
+// file named `blog` resolve alike.
+export type PathKind = 'file' | 'directory';
+
 /**
- * Whether `path` falls under any prefix of `specifier`. A specifier with no
- * prefixes has no path limit, so it matches every path.
+ * Whether the file or directory at `path` falls under any prefix of
+ * `specifier`. A specifier with no prefixes has no path limit, so it matches
+ * every path.
  *
- * `path` is a path in the realm as `RealmPaths.local` resolves it: relative
- * to the realm's root, with its segments decoded the way the realm decodes
- * them. A trailing `/` marks a directory, and `''` (or `/`) is the realm's
- * root. A path with an empty, `.` or `..` segment matches nothing.
+ * `path` is a path in the realm as `RealmPaths.local` resolves it, relative
+ * to the realm's root. A leading or trailing `/` is ignored, and `''` is the
+ * realm's root, which is a directory. `kind` says what `path` names: a
+ * directory prefix covers that directory and everything in it, but not a
+ * file of the same name, and a file prefix covers only that file. A path
+ * with an empty, `.` or `..` segment matches nothing, and so does the root
+ * named as a file.
  */
 export function pathSpecifierMatches(
   specifier: PathSpecifier,
   path: string,
+  kind: PathKind,
 ): boolean {
   if (specifier.prefixes.length === 0) {
     return true;
   }
-  let target = splitPath(path);
+  let target = splitPath(path, kind);
   if (!target) {
     return false;
   }
@@ -190,11 +200,15 @@ export function pathSpecifierMatches(
 }
 
 /**
- * Whether `path` falls under `prefix`. `path` is read as
- * `pathSpecifierMatches` reads it.
+ * Whether the file or directory at `path` falls under `prefix`. `path` and
+ * `kind` are read as `pathSpecifierMatches` reads them.
  */
-export function pathPrefixMatches(prefix: PathPrefix, path: string): boolean {
-  let target = splitPath(path);
+export function pathPrefixMatches(
+  prefix: PathPrefix,
+  path: string,
+  kind: PathKind,
+): boolean {
+  let target = splitPath(path, kind);
   return target ? prefixCovers(prefix, target) : false;
 }
 
@@ -225,14 +239,14 @@ function prefixCovers(prefix: PathPrefix, target: SplitPath): boolean {
   return true;
 }
 
-function splitPath(path: string): SplitPath | undefined {
+function splitPath(path: string, kind: PathKind): SplitPath | undefined {
   let rest = path.startsWith('/') ? path.slice(1) : path;
-  if (rest === '') {
-    return { segments: [], directory: true };
-  }
-  let directory = rest.endsWith('/');
-  if (directory) {
+  if (rest.endsWith('/')) {
     rest = rest.slice(0, -1);
+  }
+  let directory = kind === 'directory';
+  if (rest === '') {
+    return directory ? { segments: [], directory } : undefined;
   }
   let segments = rest.split('/');
   if (segments.some((s) => s === '' || s === '.' || s === '..')) {
