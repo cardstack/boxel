@@ -1132,6 +1132,10 @@ packages/observability/scripts/tail-logs.sh --env staging --service realm-server
   --regex '\[automation-run-log\] automation=\S+ run=\S+ job=42 ' --since 1h --no-follow
 ```
 
+Each `realm.transform` call runs in the tab, so the tab reports it as a
+script line of kind `transform` with its time (`ms=…`) and whether it
+answered (`ok=…`).
+
 A log that reaches its cap logs one `warn` line saying later lines are
 dropped. Lines come from whichever realm-server task took the request, so
 query by the run, not by one task.
@@ -1168,12 +1172,17 @@ SELECT r.state, r.milestone_plan, m.position, m.name, m.started_at, m.count_done
  WHERE r.id = '<run id>' ORDER BY m.position;
 ```
 
-**Telemetry.** As a run ends (`finishAutomationRun`, `abandonAutomationRun`, `cancelAutomationRun`), `closeRunMilestones` writes each of its milestones once to the `boxel:automation-milestones` channel: one JSON line with `automation`, `realm`, `run`, `outcome`, `errorReason`, `milestone`, `position`, `planned`, `ms`, `done`, `total` and `failedHere`, the numbers flat so LogQL can `unwrap` them. `outcome` is the run's state as it ended, so a `commit-interrupted` run whose batch landed afterwards reads `error` there and `complete` on its row:
+**Telemetry.** As a run ends (`finishAutomationRun`, `abandonAutomationRun`, `cancelAutomationRun`), `closeRunMilestones` writes each of its milestones once to the `boxel:automation-milestones` channel: one JSON line with `automation`, `realm`, `run`, `job` (the run's queue job, when it had one), `outcome`, `errorReason`, `milestone`, `position`, `planned`, `ms`, `done`, `total` and `failedHere`, the numbers flat so LogQL can `unwrap` them. `outcome` is the run's state as it ended, so a `commit-interrupted` run whose batch landed afterwards reads `error` there and `complete` on its row:
 
 ```bash
 packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
   --regex '"channel":"boxel:automation-milestones"' --since 1d --no-follow
 ```
+
+Every boundary a run crosses (enqueue, claim, admission, the tab, the
+commit, the finish, the index pass, each charge) is also one line on the
+`boxel:automation-runs` channel, tagged with the run's ids; the
+`automation-diagnostics` skill reads them.
 
 ## The automation command
 

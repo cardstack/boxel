@@ -629,6 +629,16 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
     // isn't read as warm-tab serialization.
     tabProbeMs?: number;
   };
+  // The tab's own memory as an automation run's command ended in it, read
+  // over CDP (`readTabHeapUsage`). Only a run's command reports it, since a
+  // run holds its tab alone for the whole script; absent when the tab didn't
+  // answer.
+  tabMemory?: {
+    jsUsedMB: number;
+    jsTotalMB: number;
+    domMB: number;
+    buffersMB: number;
+  };
   // Elapsed between render start and the timeout. If ~= timeoutMs the
   // render itself stalled; if << timeoutMs the launch dominated.
   renderElapsedMs?: number;
@@ -2599,6 +2609,7 @@ export * from './realm-history.ts';
 export * from './automation-runs.ts';
 export * from './automation-run-charge.ts';
 export * from './automation-run-command.ts';
+export * from './automation-run-telemetry.ts';
 export * from './ai-batches.ts';
 export * from './automation-files.ts';
 export * from './automation-storage-charge.ts';

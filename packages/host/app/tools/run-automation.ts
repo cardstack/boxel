@@ -128,6 +128,7 @@ export default class RunAutomationTool extends HostBaseTool<
         fetch: this.network.fetch,
       });
       watch.start();
+      let startedAt = Date.now();
       try {
         await runAutomationScript({
           code: scriptInput.code,
@@ -145,6 +146,9 @@ export default class RunAutomationTool extends HostBaseTool<
       } finally {
         watch.stop();
       }
+      // When the script started and ended in this tab, for the run's
+      // telemetry.
+      outcome.timing = { startedAt, endedAt: Date.now() };
     }
     // The run's progress is sent before the run answers, while the run is
     // still running: the run log takes lines only from a running run, and

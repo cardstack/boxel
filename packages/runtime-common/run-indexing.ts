@@ -1,6 +1,11 @@
 import type * as JSONTypes from 'json-typescript';
 
 import { getAutomationRun } from './automation-runs.ts';
+import {
+  emitAutomationRunEvent,
+  jobOfAttempt,
+  type AutomationRunIds,
+} from './automation-run-telemetry.ts';
 import type { DBAdapter } from './db.ts';
 import type { Prerenderer, PrerenderResponseMeta } from './index.ts';
 import type { MeteredCharges } from './metered-charges.ts';
@@ -220,12 +225,16 @@ export async function chargeRunIndexing({
   dbAdapter,
   meteredCharges,
   runIndexing,
+  indexJob,
   log,
   attemptDelaysMs,
 }: {
   dbAdapter: DBAdapter;
   meteredCharges: MeteredCharges | undefined;
   runIndexing: RunIndexing;
+  // The index or render job that finished the run's indexing, for the run's
+  // telemetry.
+  indexJob?: number;
   log: {
     info(message: string): void;
     warn(message: string): void;
@@ -235,6 +244,18 @@ export async function chargeRunIndexing({
 }): Promise<void> {
   let { runId, workerProcessSeconds, prerenderTabSeconds } = runIndexing;
   let measured = `${workerProcessSeconds.toFixed(3)} worker-process seconds and ${prerenderTabSeconds.toFixed(3)} prerender-tab seconds`;
+  let telemetry = await runTelemetryIds(dbAdapter, runId);
+  if (telemetry) {
+    emitAutomationRunEvent({
+      kind: 'index-pass',
+      ...telemetry.ids,
+      realm: telemetry.realm,
+      ...(indexJob !== undefined ? { indexJob } : {}),
+      completedAt: new Date().toISOString(),
+      workerProcessSeconds,
+      prerenderTabSeconds,
+    });
+  }
   if (!meteredCharges) {
     log.warn(
       `not charging the indexing of run ${runId} (${measured}): this worker writes no metered charges`,
@@ -253,13 +274,29 @@ export async function chargeRunIndexing({
         );
         return;
       }
+      let usage = {
+        worker_process_seconds: workerProcessSeconds,
+        prerender_tab_seconds: prerenderTabSeconds,
+      };
       let result = await meteredCharges.charge({
         payer: run.actsAs,
         charge: { kind: 'run_indexing', realm: run.realm, runId },
-        usage: {
-          worker_process_seconds: workerProcessSeconds,
-          prerender_tab_seconds: prerenderTabSeconds,
-        },
+        usage,
+      });
+      let credits = meteredCharges.exactCredits(usage);
+      emitAutomationRunEvent({
+        kind: 'charged',
+        automation: run.automationId,
+        run: runId,
+        ...(telemetry?.ids.job !== undefined ? { job: telemetry.ids.job } : {}),
+        ...(run.attempt != null ? { attempt: run.attempt } : {}),
+        realm: run.realm,
+        chargeKind: 'run_indexing',
+        result,
+        at: new Date().toISOString(),
+        ...(credits !== undefined ? { credits: Math.ceil(credits) } : {}),
+        workerProcessSeconds,
+        prerenderTabSeconds,
       });
       let message = `indexing of run ${runId} in ${run.realm} for ${run.actsAs} (${measured}): ${result}`;
       if (result === 'no-prices' || result === 'no-payer') {
@@ -270,5 +307,31 @@ export async function chargeRunIndexing({
     }, attemptDelaysMs);
   } catch (e) {
     log.error(`failed to charge the indexing of run ${runId} (${measured})`, e);
+  }
+}
+
+// A run's ids and realm for its telemetry, or undefined when the run is gone
+// or can't be read: telemetry never fails the charge it describes.
+async function runTelemetryIds(
+  dbAdapter: DBAdapter,
+  runId: string,
+): Promise<{ ids: AutomationRunIds; realm: string } | undefined> {
+  try {
+    let run = await getAutomationRun(dbAdapter, runId);
+    if (!run) {
+      return undefined;
+    }
+    let job = await jobOfAttempt(dbAdapter, run.attempt);
+    return {
+      ids: {
+        automation: run.automationId,
+        run: runId,
+        ...(job !== undefined ? { job } : {}),
+        ...(run.attempt != null ? { attempt: run.attempt } : {}),
+      },
+      realm: run.realm,
+    };
+  } catch {
+    return undefined;
   }
 }

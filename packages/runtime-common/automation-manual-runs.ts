@@ -31,6 +31,7 @@ import type { DBAdapter } from './db.ts';
 import { dbAdapterQuerier, param, query } from './expression.ts';
 import { ensureTrailingSlash } from './index.ts';
 import { enqueueAutomationRunJob } from './jobs/run-command.ts';
+import { emitAutomationRunEvent } from './automation-run-telemetry.ts';
 import { RealmPaths } from './paths.ts';
 import type { Job, QueuePublisher } from './queue.ts';
 import { fromBase64 } from './run-overlay.ts';
@@ -155,6 +156,23 @@ async function startManualRun(
       dryRun,
       triggerKind: 'manual',
     },
+  });
+  let enqueuedAt = new Date().toISOString();
+  emitAutomationRunEvent({
+    kind: 'enqueued',
+    automation: automationId,
+    run: run.id,
+    job: job.id,
+    realm,
+    trigger: run.trigger,
+    triggerKind: 'manual',
+    dryRun,
+    scheduledAt: run.createdAt,
+    enqueuedAt,
+    scheduleLagMs: Math.max(
+      0,
+      Date.parse(enqueuedAt) - Date.parse(run.createdAt),
+    ),
   });
   return { ok: true, run, job };
 }

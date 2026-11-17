@@ -435,6 +435,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         dbAdapter,
         meteredCharges,
         runIndexing: chargedRunIndexing,
+        indexJob: jobInfo?.jobId,
         log,
       });
       return {
@@ -539,6 +540,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
         dbAdapter,
         meteredCharges,
         runIndexing: chargedRunIndexing,
+        indexJob: jobInfo?.jobId,
         log,
       });
     }

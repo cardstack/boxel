@@ -72,6 +72,10 @@ import {
 import type { DBAdapter } from './db.ts';
 import { param, query, type Querier } from './expression.ts';
 import { enqueueAutomationRunJob } from './jobs/run-command.ts';
+import {
+  emitAutomationRunEvent,
+  type AutomationRunEnqueuedEvent,
+} from './automation-run-telemetry.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 
 // How many due rows the tick reads per page. The tick reads pages until none
@@ -209,8 +213,20 @@ async function tickAutomation(
   now: number,
   options: AutomationTickOptions,
 ): Promise<AutomationTickOutcome | undefined> {
-  let outcome = await claimAndEnqueue(dbAdapter, automationId, now, options);
+  // The runs' `enqueued` telemetry, written once the transaction that
+  // enqueued them has committed.
+  let enqueued: AutomationRunEnqueuedEvent[] = [];
+  let outcome = await claimAndEnqueue(
+    dbAdapter,
+    automationId,
+    now,
+    options,
+    enqueued,
+  );
   if (outcome?.kind === 'enqueued') {
+    for (let event of enqueued) {
+      emitAutomationRunEvent(event);
+    }
     await logTriggers(dbAdapter, outcome.triggers);
   }
   return outcome;
@@ -221,6 +237,7 @@ async function claimAndEnqueue(
   automationId: RealmResourceIdentifier,
   now: number,
   options: AutomationTickOptions,
+  enqueued: AutomationRunEnqueuedEvent[],
 ): Promise<AutomationTickOutcome | undefined> {
   return await dbAdapter.withTransaction(async (txQuery) => {
     let [row] = await txQuery([
@@ -270,6 +287,21 @@ async function claimAndEnqueue(
         slot,
         secondsCap: declaration.caps.seconds,
         input: { runId: run.id, scheduledAt: slot, dryRun: false },
+      });
+      let enqueuedAt = Date.now();
+      enqueued.push({
+        kind: 'enqueued',
+        automation: automationId,
+        run: run.id,
+        job: job.id,
+        realm: automation.realm,
+        trigger: label,
+        triggerKind:
+          declaration.triggers.find((t) => t.label === label)?.kind ?? 'cron',
+        dryRun: false,
+        scheduledAt: slot,
+        enqueuedAt: new Date(enqueuedAt).toISOString(),
+        scheduleLagMs: Math.max(0, enqueuedAt - at * 1000),
       });
       let state = runState[label] ?? { runs: 0 };
       runState[label] = { ...state, runs: state.runs + 1, lastSlot: at };
@@ -407,6 +439,7 @@ async function logTriggers(
               skipped: true,
             },
           },
+      trigger.kind === 'started' ? trigger.jobId : undefined,
     );
   }
 }

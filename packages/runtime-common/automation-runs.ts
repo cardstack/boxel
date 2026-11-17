@@ -27,6 +27,11 @@ import {
   clearRunMilestones,
   closeRunMilestones,
 } from './automation-run-milestones.ts';
+import {
+  emitAutomationRunEvent,
+  jobOfAttempt,
+  msBetween,
+} from './automation-run-telemetry.ts';
 import type { DBAdapter } from './db.ts';
 import {
   dbAdapterQuerier,
@@ -413,7 +418,9 @@ export async function logAutomationRunEnded(
   dbAdapter: DBAdapter,
   run: AutomationRun,
 ): Promise<void> {
-  await closeRunMilestones(dbAdapter, run);
+  let job = await jobOfAttempt(dbAdapter, run.attempt);
+  emitRunFinished(run, job);
+  await closeRunMilestones(dbAdapter, run, job);
   await logRunPlatformLine(
     dbAdapter,
     run.id,
@@ -435,6 +442,45 @@ export async function logAutomationRunEnded(
             ...(run.errorReason ? { data: { reason: run.errorReason } } : {}),
           },
   );
+}
+
+// The run's `finished` telemetry event: every timestamp and count its row
+// holds as it ends, whichever path ended it.
+function emitRunFinished(run: AutomationRun, job: number | undefined): void {
+  emitAutomationRunEvent({
+    kind: 'finished',
+    automation: run.automationId,
+    run: run.id,
+    ...(job !== undefined ? { job } : {}),
+    ...(run.attempt != null ? { attempt: run.attempt } : {}),
+    realm: run.realm,
+    trigger: run.trigger,
+    dryRun: run.dryRun,
+    state: run.state,
+    ...(run.errorReason ? { errorReason: run.errorReason } : {}),
+    ...(run.canceledBy ? { canceledBy: run.canceledBy } : {}),
+    createdAt: run.createdAt,
+    ...(run.startedAt ? { startedAt: run.startedAt } : {}),
+    ...(run.admittedAt ? { admittedAt: run.admittedAt } : {}),
+    ...(run.commitStartedAt ? { commitStartedAt: run.commitStartedAt } : {}),
+    ...(run.committedAt ? { committedAt: run.committedAt } : {}),
+    ...(run.finishedAt ? { finishedAt: run.finishedAt } : {}),
+    ...optionalMs('totalMs', msBetween(run.createdAt, run.finishedAt)),
+    ...optionalMs('runMs', msBetween(run.startedAt, run.finishedAt)),
+    prerenderTabMs: run.prerenderTabMs,
+    callApiCalls: run.callApiCalls,
+    callApiResponseBytes: run.callApiResponseBytes,
+    resolveCalls: run.resolveCalls,
+    writes: run.writes,
+    aiCreditsSpent: run.aiCreditsSpent,
+  });
+}
+
+function optionalMs<K extends string>(
+  name: K,
+  ms: number | undefined,
+): Partial<Record<K, number>> {
+  return ms === undefined ? {} : ({ [name]: ms } as Record<K, number>);
 }
 
 // Closes a pending or running run whose job is gone, such as one whose job ran

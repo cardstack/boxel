@@ -42,6 +42,9 @@ export type RunProgressEvent =
   | { kind: 'milestone'; at: number; name: string }
   // how far through the current milestone: `done` of `total`
   | { kind: 'count'; at: number; done: number; total?: number }
+  // a `realm.transform` call, which runs in the tab: how long it took and
+  // whether it answered a value
+  | { kind: 'transform'; at: number; ms: number; ok: boolean }
   // `line` is the script's own line number, when QuickJS reports one
   | {
       kind: 'console';

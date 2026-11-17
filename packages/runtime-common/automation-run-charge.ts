@@ -1,4 +1,8 @@
 import { getAutomationRun, type AutomationRun } from './automation-runs.ts';
+import {
+  emitAutomationRunEvent,
+  jobOfAttempt,
+} from './automation-run-telemetry.ts';
 import type { DBAdapter } from './db.ts';
 import {
   BYTES_PER_GB,
@@ -103,6 +107,22 @@ export async function chargeAutomationRun({
         payer: run.actsAs,
         charge: { kind: 'run', realm: run.realm, runId },
         usage,
+      });
+      let credits = meteredCharges.exactCredits(usage);
+      let job = await jobOfAttempt(dbAdapter, run.attempt);
+      emitAutomationRunEvent({
+        kind: 'charged',
+        automation: run.automationId,
+        run: runId,
+        ...(job !== undefined ? { job } : {}),
+        ...(run.attempt != null ? { attempt: run.attempt } : {}),
+        realm: run.realm,
+        chargeKind: 'run',
+        result,
+        at: new Date().toISOString(),
+        ...(credits !== undefined ? { credits: Math.ceil(credits) } : {}),
+        prerenderTabSeconds: usage.prerender_tab_seconds,
+        downloadedGB: usage.downloaded_gb,
       });
       let message = `run ${runId} in ${run.realm} for ${run.actsAs} (${measured}): ${result}`;
       if (result === 'no-prices' || result === 'no-payer') {

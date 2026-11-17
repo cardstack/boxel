@@ -6,6 +6,7 @@ import {
   type PrerenderVisitArgs,
   type ReleaseBatchArgs,
   type RenderVisitResponse,
+  emitAutomationRunEvent,
   logger,
   type RunCommandResponse,
   type CaptureRequestSpec,
@@ -23,6 +24,7 @@ import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry.ts';
 import {
   isAffinityOfRealm,
   isRealmAuthorityAffinityKey,
+  isRunAffinityKey,
   realmAffinityKeyOf,
   renderSessionOf,
   toAffinityKey,
@@ -1251,6 +1253,38 @@ export class Prerenderer {
     this.#cleanupInterval.unref?.();
   }
 
+  // This server's automation run capacity, on the `boxel:automation-runs`
+  // channel, while it holds any run tab. A run holds one tab of its run
+  // affinity for its whole script, so the run affinities' busy tabs are the
+  // runs running here at once, and their tabs' other waiters are runs queued
+  // behind them.
+  #emitRunCapacity(snap: ReturnType<PagePool['getQueueDepthSnapshot']>): void {
+    let runTabs = 0;
+    let runningRuns = 0;
+    let queuedRuns = 0;
+    for (let affinity of snap.affinities) {
+      if (!isRunAffinityKey(affinity.affinityKey)) {
+        continue;
+      }
+      runTabs += affinity.tabCount;
+      let busy = affinity.byQueue.command;
+      runningRuns += busy;
+      queuedRuns += Math.max(0, affinity.pendingTotal - busy);
+    }
+    if (runTabs === 0) {
+      return;
+    }
+    emitAutomationRunEvent({
+      kind: 'capacity',
+      at: new Date().toISOString(),
+      runTabs,
+      runningRuns,
+      queuedRuns,
+      totalTabs: snap.totalTabs,
+      maxTabs: this.#pagePool.currentMaxPages,
+    });
+  }
+
   #startQueueSnapshotLoop(): void {
     // Default to 30 s — slow enough not to spam logs during idle, fast
     // enough that a saturation-triggered 150 s abort (CS-10820) lands at
@@ -1305,6 +1339,11 @@ export class Prerenderer {
           }
         })
         .catch((e) => log.warn('chrome memory telemetry log failed:', e));
+      try {
+        this.#emitRunCapacity(snap);
+      } catch (e) {
+        log.warn('automation run capacity telemetry failed:', e);
+      }
       try {
         if (snap.affinities.length === 0 && snap.totalPending === 0) {
           // Quiet path: no active affinities and no pending work. Skip the

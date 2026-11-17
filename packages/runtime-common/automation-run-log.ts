@@ -1,6 +1,7 @@
 // An automation run's log (ADR 025 §1.1): the script's console lines,
-// activity lines, run milestones and uncaught error, beside the platform's
-// own lines for what the realm server did on the run's behalf. Each line is
+// activity lines, run milestones, `realm.transform` timings and uncaught
+// error, beside the platform's own lines for what the realm server did on the
+// run's behalf. Each line is
 // stored in `automation_run_log` for the console, and written once to the
 // realm server's own log as an `[automation-run-log]` line, which reaches
 // Loki tagged with the automation, the run and the run's queue job.
@@ -22,6 +23,16 @@ import { redactSecrets } from './redact-secrets.ts';
 import { recordRunMilestones } from './automation-run-milestones.ts';
 
 const log = logger('automation-run-log');
+
+// Test seam: when set, each stored line's Loki form goes to the sink instead
+// of the logger.
+let runLogLokiSink: ((line: string) => void) | undefined;
+
+export function setRunLogLokiSink(
+  sink: ((line: string) => void) | undefined,
+): void {
+  runLogLokiSink = sink;
+}
 
 // Where a run's tab sends the script's lines, with the run's token.
 export const RUN_LOG_PATH = '/_run-log';
@@ -45,6 +56,7 @@ export const RUN_LOG_SCRIPT_KINDS = [
   'plan',
   'milestone',
   'count',
+  'transform',
   'error',
 ] as const;
 
@@ -108,10 +120,15 @@ export async function appendRunLog(
   {
     secrets = [],
     attempt,
+    jobId,
     maxLines = RUN_LOG_MAX_LINES,
     maxChars = RUN_LOG_MAX_CHARS,
   }: {
     secrets?: readonly string[];
+    // The run's queue job, for lines written before an attempt owns the run
+    // (the trigger's line, written as the job is enqueued). Once an attempt
+    // owns it, the lines carry that attempt's job.
+    jobId?: number;
     // The attempt that sent the lines. Their milestones are recorded only
     // while the run is running under it, so a send that lands after the run
     // ended, or after another attempt took it, adds to the log alone.
@@ -210,7 +227,7 @@ export async function appendRunLog(
     ]);
     return {
       automationId: run.automation_id,
-      jobId: run.job_id == null ? undefined : Number(run.job_id),
+      jobId: run.job_id == null ? jobId : Number(run.job_id),
       stored,
       dropped,
       firstDrop: dropped > 0 && Number(run.log_dropped) === 0,
@@ -226,7 +243,12 @@ export async function appendRunLog(
     jobId: result.jobId,
   });
   for (let line of result.stored) {
-    log.info(runLogLokiLine(tags, line));
+    let lokiLine = runLogLokiLine(tags, line);
+    if (runLogLokiSink) {
+      runLogLokiSink(lokiLine);
+    } else {
+      log.info(lokiLine);
+    }
   }
   if (result.firstDrop) {
     log.warn(
@@ -310,11 +332,17 @@ export async function logRunPlatformLine(
   dbAdapter: DBAdapter,
   runId: string,
   line: Omit<RunLogLine, 'source' | 'at'> & { at?: number },
+  // The run's queue job, when the caller knows it before an attempt owns
+  // the run (see `appendRunLog`).
+  jobId?: number,
 ): Promise<void> {
   try {
-    await appendRunLog(dbAdapter, runId, [
-      { at: Date.now(), ...line, source: 'platform' },
-    ]);
+    await appendRunLog(
+      dbAdapter,
+      runId,
+      [{ at: Date.now(), ...line, source: 'platform' }],
+      { jobId },
+    );
   } catch (error) {
     log.error(
       `could not write run ${runId}'s ${line.kind} log line: ${error instanceof Error ? error.message : String(error)}`,
@@ -531,6 +559,25 @@ function scriptLine(event: unknown): RunLogLine | undefined {
         kind: 'count',
         message: total === undefined ? `${done}` : `${done} of ${total}`,
         data: { done, ...(total !== undefined ? { total } : {}) },
+      };
+    }
+    case 'transform': {
+      let ms = e.ms;
+      if (
+        typeof ms !== 'number' ||
+        !Number.isFinite(ms) ||
+        ms < 0 ||
+        typeof e.ok !== 'boolean'
+      ) {
+        return undefined;
+      }
+      return {
+        at,
+        source: 'script',
+        kind: 'transform',
+        level: e.ok ? 'info' : 'warn',
+        message: `realm.transform ${e.ok ? 'answered' : 'failed'} in ${Math.round(ms)} ms`,
+        data: { ms: Math.round(ms), ok: e.ok },
       };
     }
     case 'console': {

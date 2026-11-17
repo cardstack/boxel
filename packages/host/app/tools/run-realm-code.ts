@@ -953,9 +953,7 @@ class RealmFsSession {
       // behind file calls nor hold file calls up.
       let result =
         method === 'transform'
-          ? Promise.resolve().then(() =>
-              this.transformer.run(transformRequest(args[0], args[1], args[2])),
-            )
+          ? this.timedTransform(args)
           : this.researchCall(method, args);
       let tracked = result.catch(() => undefined);
       this.unqueuedInFlight.add(tracked);
@@ -974,6 +972,27 @@ class RealmFsSession {
       return this.dispatch(method, args);
     });
     this.queue = result.catch(() => undefined);
+    return result;
+  }
+
+  // A `realm.transform` call. It runs in this tab, so no realm server sees
+  // it: an automation run reports its time to the run's log here.
+  private timedTransform(args: unknown[]): Promise<unknown> {
+    let startedAt = Date.now();
+    let result = Promise.resolve().then(() =>
+      this.transformer.run(transformRequest(args[0], args[1], args[2])),
+    );
+    let report = (ok: boolean) =>
+      this.onProgress?.({
+        kind: 'transform',
+        at: startedAt,
+        ms: Date.now() - startedAt,
+        ok,
+      });
+    result.then(
+      () => report(true),
+      () => report(false),
+    );
     return result;
   }
 
@@ -1031,7 +1050,8 @@ class RealmFsSession {
   }
 
   // Called with each milestone, count and console line an automation run
-  // reports, in the order the script made them.
+  // reports, in the order the script made them, and with each
+  // `realm.transform` call's time.
   onProgress?: (event: RunProgressEvent) => void;
 
   // A one-way call: a run milestone, a count within one, or a console line.
@@ -3124,6 +3144,7 @@ function redactEvent(
     case 'console':
       return { ...event, message: redactSecrets(event.message, secrets) };
     case 'count':
+    case 'transform':
       return event;
     case 'error':
       return {

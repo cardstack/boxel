@@ -62,8 +62,16 @@ import {
 } from './utils.ts';
 import { randomUUID } from 'crypto';
 import type { Page } from 'puppeteer';
-import { readVisitMemory, type VisitMemory } from './chrome-memory.ts';
+import {
+  readTabHeapUsage,
+  readVisitMemory,
+  type VisitMemory,
+} from './chrome-memory.ts';
 
+// Budget for reading an automation run's tab heap as its command ends. A tab
+// that has just answered reads in milliseconds; this only caps one that
+// hasn't.
+const RUN_TAB_HEAP_BUDGET_MS = 1000;
 const log = logger('prerenderer');
 const reproduceLog = logger('prerenderer-reproduce');
 const commandRequestStorageKeyPrefix = 'boxel-command-request:';
@@ -695,10 +703,24 @@ export class RenderRunner {
       }
 
       markTimeout(response.status);
+      // Taken before the memory reading, which is not part of the command.
+      let renderMs = Date.now() - renderStart;
+      if (sessionsInMemory) {
+        // An automation run holds its tab alone for the whole script, so the
+        // tab's heap as the command ends is the run's. The run's telemetry
+        // reads it from the response's diagnostics.
+        let tabMemory = await readTabHeapUsage(page, RUN_TAB_HEAP_BUDGET_MS);
+        if (tabMemory) {
+          response.meta = {
+            ...response.meta,
+            diagnostics: { ...response.meta?.diagnostics, tabMemory },
+          };
+        }
+      }
 
       return {
         response,
-        timings: { launchMs, renderMs: Date.now() - renderStart, waits },
+        timings: { launchMs, renderMs, waits },
         pool: poolInfo,
       };
     } catch (e) {

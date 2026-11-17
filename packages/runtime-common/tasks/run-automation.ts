@@ -21,6 +21,12 @@ import {
 } from '../automation-run-command.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
 import { logRunPlatformLine } from '../automation-run-log.ts';
+import {
+  automationRunLogTag,
+  emitAutomationRunEvent,
+  type AutomationRunIds,
+  type AutomationRunScriptEvent,
+} from '../automation-run-telemetry.ts';
 import { chargeAutomationRun } from '../automation-run-charge.ts';
 import {
   addAutomationRunTabTime,
@@ -40,6 +46,7 @@ import {
   ensureTrailingSlash,
   uint8ArrayToHex,
   type Prerenderer,
+  type PrerenderResponseMeta,
   type RunCommandResponse,
 } from '../index.ts';
 import { renderTabMs } from '../run-indexing.ts';
@@ -150,12 +157,19 @@ async function attemptRun(
     throw new Error(`run ${runId} needs a queue attempt to own it`);
   }
   let attempt = jobInfo.reservationId;
-  let tag = `automation run ${runId} attempt ${attempt}`;
-
   // Only the run's own job runs it: one whose key names the run's
   // automation, trigger and slot. Any other job naming the run touches
   // nothing.
   let named = await getAutomationRun(dbAdapter, runId);
+  // Every line this attempt logs, and every telemetry event it writes,
+  // carries the run's automation, the run, its queue job and the attempt.
+  let ids: AutomationRunIds = {
+    automation: named?.automationId ?? 'unknown',
+    run: runId,
+    job: jobInfo.jobId,
+    attempt,
+  };
+  let tag = automationRunLogTag(ids);
   if (!named || dedupeKey !== automationRunDedupeKey(named)) {
     log.warn(
       `${tag} refused: the job's key ${JSON.stringify(dedupeKey)} isn't the run's`,
@@ -164,6 +178,19 @@ async function attemptRun(
   }
 
   let start = await startAutomationRunAttempt(dbAdapter, runId, attempt);
+  let claimedAt = Date.now();
+  if (start.kind !== 'missing' && start.kind !== 'superseded') {
+    emitAutomationRunEvent({
+      kind: 'claimed',
+      ...ids,
+      claimedAt: new Date(claimedAt).toISOString(),
+      ...(jobInfo.queueWaitMs != null
+        ? { queueWaitMs: jobInfo.queueWaitMs }
+        : {}),
+      ...(jobInfo.concurrencyGroup ? { lane: jobInfo.concurrencyGroup } : {}),
+      priority: jobInfo.priority,
+    });
+  }
   switch (start.kind) {
     case 'committed':
       return await finish(ctx, tag, runId, attempt, { state: 'complete' });
@@ -183,9 +210,19 @@ async function attemptRun(
   let run = start.run;
   let fail = (reason: string, message: string) =>
     finish(ctx, tag, runId, attempt, { state: 'error', reason, message });
+  let admitted = (reason?: string) =>
+    emitAutomationRunEvent({
+      kind: 'admitted',
+      ...ids,
+      admitted: reason === undefined,
+      ...(reason !== undefined ? { reason } : {}),
+      at: new Date().toISOString(),
+      admissionMs: Date.now() - claimedAt,
+    });
   // A refusal at admission: the run ends with the refusal's code, and its
   // log says admission refused it.
   let refuse = async (reason: string, message: string) => {
+    admitted(reason);
     await logRunPlatformLine(dbAdapter, runId, {
       kind: 'admission',
       level: 'error',
@@ -326,6 +363,7 @@ async function attemptRun(
     log.info(`${tag} left alone: another attempt owns the run, or it ended`);
     return { state: 'left', reason: 'superseded' };
   }
+  admitted();
   await logRunPlatformLine(dbAdapter, runId, {
     kind: 'admission',
     level: 'info',
@@ -378,13 +416,15 @@ async function attemptRun(
       priority: jobInfo.priority,
       timeoutMs: remainingMs + AUTOMATION_TAB_GRACE_MS,
     });
-    await addTabTime(
-      ctx,
-      runId,
-      renderTabMs(result?.meta, tabStartedAt),
-      remainingMs,
+    let tabMs = Math.max(
+      0,
+      Math.min(renderTabMs(result?.meta, tabStartedAt), remainingMs),
     );
+    await addTabTime(ctx, runId, tabMs);
     outcome = outcomeOf(result, redact);
+    emitAutomationRunEvent(
+      scriptEvent(ids, tabStartedAt, tabMs, outcome, result),
+    );
   } catch (e: any) {
     // A call that throws carries no measure from a prerender server, and
     // may never have reached a tab (the request found no server, or every
@@ -394,6 +434,7 @@ async function attemptRun(
       reason: 'run-failed',
       message: redact(`The run's tab failed: ${e?.message ?? e}`),
     };
+    emitAutomationRunEvent(scriptEvent(ids, tabStartedAt, 0, outcome));
   }
   if (outcome.state === 'error') {
     // The finish discards the overlay, so nothing the script staged lands.
@@ -409,23 +450,21 @@ async function attemptRun(
     // reaches the realm.
     return await finish(ctx, tag, runId, attempt, { state: 'complete' });
   }
-  return await commit(ctx, tag, run, attempt, realmURL, token);
+  return await commit(ctx, tag, ids, run, attempt, realmURL, token);
 }
 
 // Records the tab time the script took on the run's row, where the run's
-// charge reads it. The time is held to `remainingMs`, what was left of the
-// run's time limit when the script started: the tab call's grace past the
-// limit (`AUTOMATION_TAB_GRACE_MS`) lets the tab answer, and isn't charged,
-// so a run's compute never costs more than its seconds cap prices it at in
-// the minimum balance and the switch-on estimate. A failure to record it is
+// charge reads it. The caller holds the time to what was left of the run's
+// time limit when the script started: the tab call's grace past the limit
+// (`AUTOMATION_TAB_GRACE_MS`) lets the tab answer, and isn't charged, so a
+// run's compute never costs more than its seconds cap prices it at in the
+// minimum balance and the switch-on estimate. A failure to record it is
 // logged rather than failing the run, whose script has already run.
 async function addTabTime(
   ctx: AutomationAttemptContext,
   runId: string,
-  measuredMs: number,
-  remainingMs: number,
+  ms: number,
 ): Promise<void> {
-  let ms = Math.max(0, Math.min(measuredMs, remainingMs));
   try {
     await addAutomationRunTabTime(ctx.dbAdapter, runId, ms);
   } catch (e) {
@@ -436,12 +475,32 @@ async function addTabTime(
 async function commit(
   ctx: AutomationAttemptContext,
   tag: string,
+  ids: AutomationRunIds,
   run: AutomationRun,
   attempt: number,
   realmURL: string,
   token: string,
 ): Promise<AutomationAttemptResult> {
   let commitURL = new URL(RUN_COMMIT_PATH.replace(/^\//, ''), realmURL).href;
+  let sentAt = Date.now();
+  let answered = (
+    tries: number,
+    outcome: 'committed' | 'refused' | 'failed',
+    details: { code?: string; status?: number } = {},
+  ) => {
+    let answeredAt = Date.now();
+    emitAutomationRunEvent({
+      kind: 'commit',
+      ...ids,
+      outcome,
+      ...(details.code ? { code: details.code } : {}),
+      ...(details.status !== undefined ? { status: details.status } : {}),
+      commitSentAt: new Date(sentAt).toISOString(),
+      answeredAt: new Date(answeredAt).toISOString(),
+      ms: answeredAt - sentAt,
+      tries,
+    });
+  };
   for (let tries = 1; ; tries++) {
     let response: Response;
     try {
@@ -460,6 +519,7 @@ async function commit(
       if (tries < MAX_COMMIT_ATTEMPTS) {
         continue;
       }
+      answered(tries, 'failed');
       return await finishAfterCommit(ctx, tag, run.id, attempt, {
         state: 'error',
         reason: 'commit-failed',
@@ -467,12 +527,14 @@ async function commit(
       });
     }
     if (response.ok) {
+      answered(tries, 'committed', { status: response.status });
       return await finish(ctx, tag, run.id, attempt, { state: 'complete' });
     }
     let { code, detail } = await refusalOf(response);
     if (code === 'overlay-changed' && tries < MAX_COMMIT_ATTEMPTS) {
       continue;
     }
+    answered(tries, 'refused', { code, status: response.status });
     // A 401 means the run stopped running (a cancel, a cap, a newer
     // attempt) or its time ran out; the finish below is refused unless this
     // attempt still owns a running run.
@@ -535,6 +597,94 @@ async function finish(
   }
   ctx.log.info(`${tag} complete`);
   return { state: 'complete' };
+}
+
+// The run's `script` telemetry event: when the tab was asked for, assigned
+// and answered, by the prerender server's measures, and when the script
+// started and ended, by the tab's (`AutomationScriptOutcome.timing`).
+function scriptEvent(
+  ids: AutomationRunIds,
+  requestedAt: number,
+  tabMs: number,
+  outcome: AutomationScriptOutcome,
+  result?: RunCommandResponse,
+): AutomationRunScriptEvent {
+  let answeredAt = Date.now();
+  let diagnostics = (result?.meta as PrerenderResponseMeta | undefined)
+    ?.diagnostics;
+  let launchMs =
+    typeof diagnostics?.launchMs === 'number'
+      ? diagnostics.launchMs
+      : undefined;
+  let timing = scriptTimingOf(result);
+  let tab = diagnostics?.tabMemory;
+  let iso = (ms: number) => new Date(ms).toISOString();
+  return {
+    kind: 'script',
+    ...ids,
+    outcome: outcome.state,
+    ...(outcome.state === 'error' ? { reason: outcome.reason } : {}),
+    tabRequestedAt: iso(requestedAt),
+    ...(launchMs !== undefined
+      ? { tabAssignedAt: iso(requestedAt + launchMs), tabWaitMs: launchMs }
+      : {}),
+    tabAnsweredAt: iso(answeredAt),
+    ...(timing
+      ? {
+          scriptStartedAt: iso(timing.startedAt),
+          scriptEndedAt: iso(timing.endedAt),
+          scriptMs: Math.max(0, timing.endedAt - timing.startedAt),
+        }
+      : {}),
+    ...(diagnostics?.waits?.tabQueueMs !== undefined
+      ? { tabQueueMs: diagnostics.waits.tabQueueMs }
+      : {}),
+    ...(diagnostics?.waits?.tabStartupMs !== undefined
+      ? { tabStartupMs: diagnostics.waits.tabStartupMs }
+      : {}),
+    ...(diagnostics?.tabReused !== undefined
+      ? { tabReused: diagnostics.tabReused }
+      : {}),
+    tabMs,
+    ...(result?.meta?.requestId
+      ? { prerenderRequestId: result.meta.requestId }
+      : diagnostics?.requestId
+        ? { prerenderRequestId: diagnostics.requestId }
+        : {}),
+    ...(tab
+      ? {
+          tabJsHeapUsedMB: tab.jsUsedMB,
+          tabJsHeapTotalMB: tab.jsTotalMB,
+          tabDomMB: tab.domMB,
+          tabBuffersMB: tab.buffersMB,
+        }
+      : {}),
+  };
+}
+
+// When the script started and ended in its tab, as the automation command
+// answered them. Absent from a tab that never answered.
+function scriptTimingOf(
+  result: RunCommandResponse | undefined,
+): { startedAt: number; endedAt: number } | undefined {
+  if (result?.status !== 'ready') {
+    return undefined;
+  }
+  try {
+    let timing = JSON.parse(result.cardResultString ?? '')?.data?.attributes
+      ?.json?.timing;
+    if (
+      typeof timing?.startedAt === 'number' &&
+      typeof timing?.endedAt === 'number' &&
+      Number.isFinite(timing.startedAt) &&
+      Number.isFinite(timing.endedAt)
+    ) {
+      return { startedAt: timing.startedAt, endedAt: timing.endedAt };
+    }
+  } catch {
+    // no outcome to read
+  }
+  return undefined;
 }
 
 // What the tab answered. The command answers a script's own failure as an
