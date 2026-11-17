@@ -85,8 +85,10 @@ import {
 } from './search-doc-keys.ts';
 import {
   isFilterRefersToNonexistentTypeError,
+  isTransientDefinitionLookupError,
   type DefinitionLookup,
 } from './definition-lookup.ts';
+import { DefinitionsUnavailableError } from './search-bounds.ts';
 import type { FileMetaResource } from './resource-types.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RequestTimings } from './request-timings.ts';
@@ -1305,6 +1307,16 @@ export class IndexQueryEngine {
         },
       };
     } catch (error) {
+      // A lookup that failed for a reason saying nothing about the type (its
+      // module's prerender timed out, its server was unavailable) is not "no
+      // cards": answering `ok, 0` there is a confident empty page for a type
+      // that may have thousands. It is refused as retryable instead.
+      if (isTransientDefinitionLookupError(error)) {
+        throw new DefinitionsUnavailableError(
+          `${error.codeRef.name} in "${error.codeRef.module}"`,
+          { cause: error },
+        );
+      }
       if (isFilterRefersToNonexistentTypeError(error)) {
         return {
           results: [],
@@ -1706,7 +1718,10 @@ export class IndexQueryEngine {
         // nonexistent type as an empty result rather than an error. Any other
         // failure is unexpected and propagates rather than silently
         // narrowing the match.
-        if (!isFilterRefersToNonexistentTypeError(error)) {
+        if (
+          !isFilterRefersToNonexistentTypeError(error) ||
+          isTransientDefinitionLookupError(error)
+        ) {
           throw error;
         }
       }
