@@ -346,6 +346,35 @@ export function refreshOAuthTokens(
   });
 }
 
+// A request to the revocation endpoint (RFC 7009), as an app sends one when
+// it gives up a token. Each param left undefined is left out.
+export function revokeOAuthToken(
+  server: Server,
+  params: { client_id?: string; token?: string; token_type_hint?: string },
+  {
+    origin,
+    path = '/_oauth-provider/token/revocation',
+  }: {
+    origin?: string;
+    path?: string;
+  } = {},
+): supertest.Test {
+  let body = new URLSearchParams();
+  for (let [name, value] of Object.entries(params)) {
+    if (value !== undefined) {
+      body.set(name, value);
+    }
+  }
+  let request = supertest(server)
+    .post(path)
+    .set('Host', OAUTH_TEST_SERVER_URL.host)
+    .set('Content-Type', 'application/x-www-form-urlencoded');
+  if (origin) {
+    request = request.set('Origin', origin);
+  }
+  return request.send(body.toString());
+}
+
 // A user with a row in `users` and a secure window session, for a flow's
 // consent.
 export interface OAuthTestUser {

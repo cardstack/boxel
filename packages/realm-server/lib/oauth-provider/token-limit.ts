@@ -21,7 +21,10 @@
 //   the one the `clientAddress` middleware works out, never the socket's.
 //
 // Ending a grant deletes its tokens, so a refresh that names a token of an
-// ended grant counts as a failure too. A hosted client whose users' grants
+// ended grant counts as a failure too. So does a revocation that names one
+// (`revocation.ts`), which counts in the same buckets: a client that ends a
+// connection by revoking its refresh token and then its access token spends
+// one failure, since the first revocation deleted the second token. A hosted client whose users' grants
 // have ended refreshes those tokens from a few server addresses until each is
 // told `invalid_grant`; where that is many, `address` and `network` in
 // `BOXEL_OAUTH_TOKEN_RATE_LIMIT` raise the limit.
@@ -62,7 +65,7 @@ export const OAUTH_TOKEN_RATE_LIMIT_VAR = 'BOXEL_OAUTH_TOKEN_RATE_LIMIT';
 
 // The largest token request read: a code or refresh token and a few short
 // parameters fit many times over.
-const MAX_BODY_BYTES = 8 * 1024;
+export const MAX_BODY_BYTES = 8 * 1024;
 
 export interface TokenLimit {
   perGrant: AnonymousRateLimit;
@@ -124,6 +127,17 @@ export function tokenLimitFormat(): string {
   );
 }
 
+// The alert for failed requests, shared by the token and revocation
+// endpoints, since their failures count in the same buckets.
+export function failureAlert(limit: TokenLimit): CallerLimitAlert {
+  return new CallerLimitAlert(
+    limit.failures,
+    ({ overall, alertAfter }) =>
+      `more than ${alertAfter} failed OAuth token or revocation requests within ${overall.windowSeconds} seconds; ` +
+      `they are refused for everyone at ${overall.requests}`,
+  );
+}
+
 // The handler for `POST` on the token endpoint. `next` hands the request to
 // the library, which reads the body Boxel left on `req.body` once the body
 // itself has been read.
@@ -141,19 +155,15 @@ export function tokenHandler({
   dbAdapter,
   rateLimitStore,
   limit,
+  alert = failureAlert(limit),
 }: {
   provider: Provider;
   dbAdapter: DBAdapter;
   rateLimitStore: RateLimitStore;
   limit: TokenLimit;
+  alert?: CallerLimitAlert;
 }): Koa.Middleware {
   let perGrant = tokenBucket(limit.perGrant);
-  let alert = new CallerLimitAlert(
-    limit.failures,
-    ({ overall, alertAfter }) =>
-      `more than ${alertAfter} failed OAuth token requests within ${overall.windowSeconds} seconds; ` +
-      `they are refused for everyone at ${overall.requests}`,
-  );
 
   return async function handleToken(ctxt, next) {
     let body: string | undefined;
@@ -200,6 +210,7 @@ export function tokenHandler({
             ? { reason: 'unavailable' }
             : { reason: 'limited', retryAfterSeconds: taken.retryAfterSeconds },
           'grant',
+          'token',
         );
       }
     } else {
@@ -219,7 +230,7 @@ export function tokenHandler({
             error_description: 'token requests are refused from this address',
           });
         }
-        return refuse(answer, ctxt, admitted, 'failures');
+        return refuse(answer, ctxt, admitted, 'failures', 'token');
       }
     }
     if (body !== undefined) {
@@ -231,11 +242,11 @@ export function tokenHandler({
   };
 }
 
-// The answers Boxel writes itself on the token route go out before the
-// library's CORS runs, so they carry the same CORS the library would give:
+// The answers Boxel writes itself on the token and revocation routes go out
+// before the library's CORS runs, so they carry the same CORS the library would give:
 // a page on an origin the client may call from can read them, `Retry-After`
 // included.
-async function allowClientOrigin(
+export async function allowClientOrigin(
   ctxt: Koa.Context,
   provider: Provider,
   clientId: string | null,
@@ -320,7 +331,8 @@ function pkceCanPass(
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
-async function refuse(
+// Refuses a request a limit didn't admit, naming the endpoint it was sent to.
+export async function refuse(
   answer: (
     status: number,
     error: { error: string; error_description: string },
@@ -330,37 +342,39 @@ async function refuse(
     | { reason: 'unavailable' }
     | { reason: 'limited'; retryAfterSeconds: number },
   limit: 'grant' | 'failures',
+  endpoint: 'token' | 'revocation',
 ) {
   if (outcome.reason === 'unavailable') {
-    log.warn(`token request refused: rate limit unavailable`);
+    log.warn(`${endpoint} request refused: rate limit unavailable`);
     return answer(503, {
       error: 'temporarily_unavailable',
-      error_description: 'the token endpoint is unavailable; try again later',
+      error_description: `the ${endpoint} endpoint is unavailable; try again later`,
     });
   }
-  log.info(`token request refused: rate limit, ${limit}`);
+  log.info(`${endpoint} request refused: rate limit, ${limit}`);
   ctxt.set('Retry-After', String(outcome.retryAfterSeconds));
   return answer(429, {
     error: 'temporarily_unavailable',
-    error_description: 'too many token requests; try again later',
+    error_description: `too many ${endpoint} requests; try again later`,
   });
 }
 
-async function readBody(req: Koa.Context['req']): Promise<string> {
+// Reads a request's body, up to `MAX_BODY_BYTES`.
+export async function readBody(req: Koa.Context['req']): Promise<string> {
   let chunks: Buffer[] = [];
   let received = 0;
   for await (let chunk of req) {
     let buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     received += buffer.length;
     if (received > MAX_BODY_BYTES) {
-      throw new Error('token request too large');
+      throw new Error('request too large');
     }
     chunks.push(buffer);
   }
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function respond(
+export function respond(
   ctxt: Koa.Context,
   status: number,
   body: { error: string; error_description: string },

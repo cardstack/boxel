@@ -135,9 +135,10 @@ interface GrantRow extends GrantState {
 
 // Why the library revokes a grant, by the route it revokes it on: the token
 // endpoint revokes one when a code or refresh token is used again, and the
-// revocation endpoint when its client revokes one of its tokens. The
-// revocation endpoint is off for now (`provider.ts`), so only the token
-// endpoint revokes one yet.
+// revocation endpoint when its client revokes one of its tokens. A client
+// that revokes a refresh token it has already used ends the grant as `client`,
+// not `reuse`: the request gives up the connection rather than trying to get
+// tokens from it.
 const REVOKED_ON: Record<string, GrantEndReason> = {
   token: 'reuse',
   revocation: 'client',

@@ -16,7 +16,7 @@
 // A token is stored only while its grant is current: a grant that has ended
 // keeps no tokens, even one issued by an exchange that raced the end.
 
-import { errors, type AdapterPayload } from 'oidc-provider';
+import Provider, { errors, type AdapterPayload } from 'oidc-provider';
 import { logger, param, type DBAdapter } from '@cardstack/runtime-common';
 import { endGrant } from './grants.ts';
 import {
@@ -290,7 +290,24 @@ export class TokenAdapter extends OAuthProviderAdapter {
     }
   }
 
+  // Deletes a token. On the revocation endpoint, which the library has
+  // delete the token and then revoke its grant as two steps, it ends the
+  // grant instead (§1.9), which deletes the token with the grant's others: a
+  // failure between the two steps would otherwise leave the grant live with
+  // the token gone, and the client's retry would find nothing to revoke. The
+  // library's own revocation of the grant that follows finds it ended.
   async destroy(id: string): Promise<void> {
+    if (Provider.ctx?.oidc?.route === 'revocation') {
+      let [row] = (await this.#dbAdapter.execute(
+        `SELECT grant_id FROM oauth_provider_tokens
+          WHERE kind = $1 AND id_hash = decode($2, 'hex')`,
+        { bind: [this.#kind, sha256Hex(id)] },
+      )) as { grant_id: string }[];
+      if (row) {
+        await endGrant(this.#dbAdapter, row.grant_id, 'client');
+        return;
+      }
+    }
     await this.#dbAdapter.execute(
       `DELETE FROM oauth_provider_tokens
          WHERE kind = $1 AND id_hash = decode($2, 'hex')`,
