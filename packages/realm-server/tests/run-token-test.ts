@@ -36,9 +36,10 @@ import { nodeStreamToBuffer } from '../stream.ts';
 // reaches the realm through `Realm.handleAutomation`, which admits it only in
 // the run's realm (or, for a read, a realm the token lets the run read), only
 // while the run's row says the run is running and owned by the token's
-// attempt, and only before the run's time limit. An admitted call is checked
-// as the person the run acts as. A request without a run token takes the
-// ordinary path.
+// attempt, only before the run's time limit, and only while the person the
+// run acts as is a direct writer of the run's realm. An admitted call is
+// checked as that person. A request without a run token takes the ordinary
+// path.
 // ============================================================================
 
 const realmURL = new URL('http://127.0.0.1:4444/run-token-test/');
@@ -93,8 +94,12 @@ module(basename(import.meta.filename), function (hooks) {
     );
   }
 
-  // A run of an automation in another realm, started by attempt 1.
+  // A run of an automation in another realm, started by attempt 1, acting as
+  // a direct writer of that realm.
   async function runElsewhere(): Promise<AutomationRun> {
+    await insertPermissions(dbAdapter, elsewhereURL, {
+      [OWNER]: ['read', 'write'],
+    });
     let run = await createAutomationRun(dbAdapter, {
       automationId: rri(`${elsewhereURL.href}Automation/a`),
       realm: ri(elsewhereURL.href),
@@ -133,13 +138,63 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(await body(back), 'written by the run');
   });
 
-  test('a run is checked as the person it acts as', async function (assert) {
+  test('a run acting as someone who is not a direct writer is refused, even a read', async function (assert) {
     let { token } = await createAutomationRunToken(dbAdapter, realm, READER);
-    assert.strictEqual((await read(token))!.status, 200);
+    let refused = (await read(token))!;
+    assert.strictEqual(refused.status, 403);
+    assert.strictEqual(
+      JSON.parse(await refused.text()).errors[0].code,
+      'not-a-direct-writer',
+    );
     assert.strictEqual(
       (await write(token, 'from-reader.txt', 'nope'))!.status,
       403,
-      'a run acting as a reader may not write',
+    );
+  });
+
+  test('a run whose person loses direct write mid-run is refused at its next call', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    assert.strictEqual((await read(token))!.status, 200);
+    // The person keeps write only through a wildcard row, which writes but
+    // makes no one a direct writer.
+    await dbAdapter.execute(
+      `DELETE FROM realm_user_permissions WHERE realm_url = $1 AND username = $2`,
+      { bind: [realmURL.href, OWNER] },
+    );
+    await insertPermissions(dbAdapter, realmURL, { '*': ['read', 'write'] });
+
+    let refused = (await read(token))!;
+    assert.strictEqual(refused.status, 403);
+    assert.strictEqual(
+      JSON.parse(await refused.text()).errors[0].code,
+      'not-a-direct-writer',
+    );
+    assert.strictEqual(
+      (await write(token, 'after-losing-write.txt', 'nope'))!.status,
+      403,
+    );
+
+    await insertPermissions(dbAdapter, realmURL, {
+      [OWNER]: ['read', 'write'],
+    });
+    assert.strictEqual(
+      (await read(token))!.status,
+      200,
+      'the check is read on each call, so restored direct write admits the next one',
+    );
+  });
+
+  test('a call to a realm the run may read is refused once its person loses direct write of the run’s realm', async function (assert) {
+    let token = tokenElsewhere(await runElsewhere(), [realmURL.href]);
+    assert.strictEqual((await read(token))!.status, 200);
+    await dbAdapter.execute(
+      `UPDATE realm_user_permissions SET write = false WHERE realm_url = $1 AND username = $2`,
+      { bind: [elsewhereURL.href, OWNER] },
+    );
+    assert.strictEqual(
+      (await read(token))!.status,
+      403,
+      'the person still reads this realm, but no longer writes the run’s own',
     );
   });
 

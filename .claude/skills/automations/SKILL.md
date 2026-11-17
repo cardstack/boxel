@@ -665,7 +665,14 @@ which refuses it unless:
 - `automationRunForCall` finds the run `running`, owned by the token's attempt,
   in the token's realm and acting as the token's user. A cancel, a pause that
   cancels the run, its finish, or a newer attempt taking it over refuses the
-  next call with `The automation run is not running`.
+  next call with `The automation run is not running`;
+- `acts_as` is a direct writer (`isDirectWriter`) of the run's own realm,
+  whichever realm the call reaches. Losing direct write mid-run refuses the
+  next call with 403, and the commit checks it again inside its write lock.
+
+The revoked-session, run-row and direct-writer reads go to the database
+together, one indexed row each, so the check costs a call about one round
+trip.
 
 An admitted call takes the ACL check as `acts_as` and sets
 `requestContext.automationRun` (`{ runId, attempt, automationId, actsAs,
