@@ -1,0 +1,145 @@
+import { logger } from '@cardstack/runtime-common';
+import type { Page } from 'puppeteer';
+
+const log = logger('prerenderer');
+
+// Post-render tab reset.
+//
+// A pooled tab outlives the render it served: the visit captures its HTML
+// and hands the tab back to the pool with the card still mounted on the
+// host's render route. Everything that card started keeps running there,
+// between visits, on the renderer's main thread: ember-concurrency loops,
+// `later` chains, live search resources re-querying the realm, a
+// `MessageChannel` or `requestAnimationFrame` loop. The render route's timer
+// stub stops a card's raw `setTimeout` / `setInterval` while it renders, but
+// nothing stops work scheduled through anything else, and nothing at all
+// stops it once the render is over. A busy card then holds the main thread
+// of its tab (and of every tab sharing its renderer process) while the pool
+// considers the tab idle, and the next render routed there stalls behind it
+// until the render timeout ends it.
+//
+// The reset moves the tab to the host's empty `standby` route — the route
+// every pooled tab boots on — before the visit releases it. Leaving the
+// render route destroys the rendered card's component tree, and with it
+// everything Ember ties to those components' lifetimes: destructors run,
+// tasks are cancelled, resources are torn down. The host app itself, its
+// loader and module cache, the store's identity map and the BrowserContext's
+// HTTP cache all stay warm, so the next visit pays one route entry it would
+// otherwise skip, not a cold start.
+//
+// The wait for the standby marker uses a MutationObserver rather than a
+// timer: the render route replaces `setTimeout` while it is active, and a
+// timer-polled wait on a page whose stub is still installed would never poll.
+//
+// A reset that does not land inside its budget means the page could not run
+// one route transition — its main thread is pinned, or the host would not
+// leave the render route. Either way the tab is not fit to be handed to the
+// next render, and the caller retires it.
+
+export const DEFAULT_POST_RENDER_RESET_MS = 3000;
+
+export type TabResetOutcome =
+  | { status: 'reset'; elapsedMs: number }
+  // The caller went away while the reset ran. Says nothing about the tab.
+  | { status: 'aborted'; elapsedMs: number }
+  // The page has no transition helper, or the transition threw. Says the host
+  // couldn't leave the render route, not that the thread is busy.
+  | { status: 'failed'; elapsedMs: number; error?: string }
+  // The page did not reach the standby route inside the budget.
+  | { status: 'timed-out'; elapsedMs: number };
+
+// `PRERENDER_POST_RENDER_RESET_MS`: the budget for the reset. `0` turns the
+// reset off (the kill switch); anything else that isn't a positive integer
+// falls back to the default.
+export function parsePostRenderResetMs(): number {
+  let raw = process.env.PRERENDER_POST_RENDER_RESET_MS;
+  if (raw === undefined || raw.trim() === '') {
+    return DEFAULT_POST_RENDER_RESET_MS;
+  }
+  let n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) {
+    log.warn(
+      `PRERENDER_POST_RENDER_RESET_MS=${raw} invalid (must be an integer >= 0; 0 disables the post-render reset); using ${DEFAULT_POST_RENDER_RESET_MS}`,
+    );
+    return DEFAULT_POST_RENDER_RESET_MS;
+  }
+  return n;
+}
+
+export async function resetTabToStandby(
+  page: Page,
+  budgetMs: number,
+  signal?: AbortSignal,
+): Promise<TabResetOutcome> {
+  let startedAt = Date.now();
+  let elapsed = () => Date.now() - startedAt;
+  if (signal?.aborted) {
+    return { status: 'aborted', elapsedMs: 0 };
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  try {
+    let reset: Promise<TabResetOutcome> = page
+      .evaluate(
+        () =>
+          new Promise<string | true>((resolve) => {
+            let ready = () => document.querySelector('#standby-ready') !== null;
+            let transition = (globalThis as any).boxelTransitionTo;
+            if (typeof transition !== 'function') {
+              resolve('no boxelTransitionTo helper on the page');
+              return;
+            }
+            try {
+              transition('standby');
+            } catch (e: any) {
+              resolve(`transition to standby threw: ${e?.message ?? e}`);
+              return;
+            }
+            if (ready()) {
+              resolve(true);
+              return;
+            }
+            let observer = new MutationObserver(() => {
+              if (ready()) {
+                observer.disconnect();
+                resolve(true);
+              }
+            });
+            observer.observe(document.documentElement, {
+              childList: true,
+              subtree: true,
+            });
+          }),
+      )
+      .then(
+        (result): TabResetOutcome =>
+          result === true
+            ? { status: 'reset', elapsedMs: elapsed() }
+            : { status: 'failed', elapsedMs: elapsed(), error: result },
+      )
+      .catch(
+        (e: unknown): TabResetOutcome => ({
+          status: 'failed',
+          elapsedMs: elapsed(),
+          error: e instanceof Error ? e.message : String(e),
+        }),
+      );
+    return await Promise.race([
+      reset,
+      new Promise<TabResetOutcome>((resolve) => {
+        timer = setTimeout(
+          () => resolve({ status: 'timed-out', elapsedMs: elapsed() }),
+          budgetMs,
+        );
+      }),
+      new Promise<TabResetOutcome>((resolve) => {
+        if (!signal) return;
+        onAbort = () => resolve({ status: 'aborted', elapsedMs: elapsed() });
+        signal.addEventListener('abort', onAbort, { once: true });
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
+  }
+}

@@ -67,6 +67,7 @@ import {
   readVisitMemory,
   type VisitMemory,
 } from './chrome-memory.ts';
+import { parsePostRenderResetMs, resetTabToStandby } from './tab-reset.ts';
 
 // Budget for reading an automation run's tab heap as its command ends. The
 // read sits between the script's answer and the worker's commit, inside the
@@ -271,14 +272,66 @@ export class RenderRunner {
   // recycling. The tab itself is retired by the eviction either way.
   #onUnresponsiveTab: ((report: UnresponsiveTabReport) => void) | undefined;
 
+  // Budget for moving a tab off its rendered card before the visit releases
+  // it; `0` turns the reset off. See `tab-reset.ts`.
+  #postRenderResetMs: number;
+
   constructor(options: {
     pagePool: PagePool;
     boxelHostURL: string;
     onUnresponsiveTab?: (report: UnresponsiveTabReport) => void;
+    postRenderResetMs?: number;
   }) {
     this.#pagePool = options.pagePool;
     this.#boxelHostURL = options.boxelHostURL;
     this.#onUnresponsiveTab = options.onUnresponsiveTab;
+    this.#postRenderResetMs =
+      options.postRenderResetMs ?? parsePostRenderResetMs();
+  }
+
+  // Runs in a card-rendering visit's `finally`, before `release()`, so no
+  // card outlives the render that mounted it on a pooled tab: the tab goes
+  // back to the host's empty standby route, which destroys the card's
+  // components and everything scheduled under their lifetimes. A tab that
+  // can't make that transition inside the budget is retired rather than
+  // handed to the next render with its card still running.
+  //
+  // Skipped for a tab the visit already evicted (it never renders again, and
+  // a timed-out tab is the one least likely to answer), and for a cancelled
+  // or thrown visit: a cancel disposes or recycles the tab on its own path,
+  // and a visit that threw is answered by a browser restart.
+  async #resetRenderedTab(
+    page: Page,
+    affinityKey: string,
+    pageId: string | undefined,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
+    if (this.#postRenderResetMs <= 0 || signal?.aborted) {
+      return;
+    }
+    let outcome = await resetTabToStandby(
+      page,
+      this.#postRenderResetMs,
+      signal,
+    );
+    if (outcome.status === 'reset' || outcome.status === 'aborted') {
+      return;
+    }
+    log.warn(
+      `post-render reset of tab ${pageId ?? 'unknown'} for ${affinityKey} ` +
+        (outcome.status === 'timed-out'
+          ? `did not reach the standby route within ${this.#postRenderResetMs}ms`
+          : `failed: ${outcome.error ?? 'unknown error'}`) +
+        `; retiring the tab so its rendered card cannot keep running into the next render`,
+    );
+    if (!pageId) {
+      return;
+    }
+    try {
+      await this.#pagePool.retireUnresettableTab(affinityKey, pageId);
+    } catch (e) {
+      log.warn(`Error retiring unresettable tab ${pageId}:`, e);
+    }
   }
 
   async #getPageForAffinity(
@@ -816,6 +869,7 @@ export class RenderRunner {
       }
     };
 
+    let captureThrew = false;
     try {
       // See runCommandAttempt: tag as 'queued' and keep the check inside the
       // try so `finally { release() }` frees the tab slot if the caller
@@ -1016,7 +1070,13 @@ export class RenderRunner {
         timings: { launchMs, renderMs: Date.now() - renderStart, waits },
         pool: poolInfo,
       };
+    } catch (e) {
+      captureThrew = true;
+      throw e;
     } finally {
+      if (!captureThrew && !poolInfo.evicted) {
+        await this.#resetRenderedTab(page, affinityKey, pageId, signal);
+      }
       release();
     }
   }
@@ -2728,6 +2788,9 @@ export class RenderRunner {
         ).catch(() => {
           /* caller gone — the page is being disposed, stash and all */
         });
+      }
+      if (!threw && !poolInfo.evicted) {
+        await this.#resetRenderedTab(page, affinityKey, pageId, signal);
       }
       release();
     }

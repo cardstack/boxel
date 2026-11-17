@@ -612,6 +612,9 @@ export class PagePool {
   // the fleet-health log line and by tests; cleared with the rest of the
   // per-affinity state in `closeAll`.
   #unresponsiveTabSwaps = new Map<string, number>();
+  // Count of tabs retired because their post-render reset did not land,
+  // keyed by affinity. See `retireUnresettableTab`.
+  #unresettableTabRetirements = new Map<string, number>();
   // When true, `#acquireFileAdmission` becomes a no-op. Used by existing
   // PagePool unit tests that predate the admission feature and exercise
   // tab-routing semantics directly — those tests assume `getPage` doesn't
@@ -1625,6 +1628,7 @@ export class PagePool {
     this.#fileAdmission.clear();
     this.#reducedFileAdmission.clear();
     this.#unresponsiveTabSwaps.clear();
+    this.#unresettableTabRetirements.clear();
     this.#ensuringStandbys = null;
     this.#creatingStandbys = 0;
     // Callers parked on the closed pool re-select against what comes next —
@@ -2796,6 +2800,38 @@ export class PagePool {
   //
   // The caller holds the tab's lease either way, so `#closeEntry` parks on
   // the queue and the close lands once the caller releases.
+  // Retire a tab its visit could not reset after capture (see
+  // `tab-reset.ts`): the page stayed on the rendered card, so whatever that
+  // card runs would carry on into the next render routed there. The visit
+  // calls this while it still holds the lease, so the close lands once it
+  // releases, as it does for the reuse probe's retirements. Returns whether
+  // a live entry was found.
+  async retireUnresettableTab(
+    affinityKey: string,
+    pageId: string,
+  ): Promise<boolean> {
+    let entry = [...(this.#affinityPages.get(affinityKey) ?? [])].find(
+      (e) => e.pageId === pageId && !e.closing,
+    );
+    if (!entry) {
+      return false;
+    }
+    this.#unresettableTabRetirements.set(
+      affinityKey,
+      (this.#unresettableTabRetirements.get(affinityKey) ?? 0) + 1,
+    );
+    await this.#retireWedgedTab(entry, affinityKey);
+    return true;
+  }
+
+  // Per-affinity count of tabs retired because the post-render reset did
+  // not land, since the pool last started (`closeAll` clears it). A rising
+  // count points at that realm's content keeping its tab's main thread busy
+  // after its render.
+  getUnresettableTabRetirements(): Record<string, number> {
+    return Object.fromEntries(this.#unresettableTabRetirements);
+  }
+
   async #retireWedgedTab(entry: PoolEntry, affinityKey: string): Promise<void> {
     let entries = this.#affinityPages.get(affinityKey);
     let otherLive = entries
