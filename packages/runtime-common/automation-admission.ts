@@ -115,7 +115,7 @@ export async function admitRunIdentity(
   { kind }: { kind: AdmittedRunKind },
 ): Promise<
   | { ok: true; automation: AutomationRow | undefined }
-  | ({ ok: false } & AdmissionRefusal)
+  | ({ ok: false; pause?: () => Promise<unknown> } & AdmissionRefusal)
 > {
   let { dbAdapter, virtualNetwork, matrixServerName } = ctx;
   let automation = await getAutomation(dbAdapter, run.automationId);
@@ -148,13 +148,19 @@ export async function admitRunIdentity(
     }
   }
   // Whether a refusal of the identity is the payer losing access, which
-  // pauses the automation too.
+  // pauses the automation too. The refusal carries the pause for the attempt
+  // to make once the run has ended: a pause cancels the automation's
+  // unfinished runs, and the refused run ends with its refusal's code, not
+  // as canceled.
   let isPayer = kind !== 'manual' && automation?.payer === actsAs;
-  let payerLostAccess = async () => {
-    if (isPayer) {
-      await pauseForPayerLostAccess(dbAdapter, run.automationId, actsAs);
-    }
-  };
+  let payerLostAccess = (refusal: { ok: false } & AdmissionRefusal) =>
+    isPayer
+      ? {
+          ...refusal,
+          pause: () =>
+            pauseForPayerLostAccess(dbAdapter, run.automationId, actsAs),
+        }
+      : refusal;
 
   if (!matrixServerName) {
     return refuse(
@@ -164,16 +170,20 @@ export async function admitRunIdentity(
   }
   let realmURL = virtualNetwork.toURL(run.realm);
   if (!(await isDirectWriter(dbAdapter, realmURL, actsAs, matrixServerName))) {
-    if (isPayer) {
-      await checkAutomationPayer(dbAdapter, run.automationId, {
-        matrixServerName,
-        virtualNetwork,
-      });
-    }
-    return refuse(
+    let refusal = refuse(
       'not-a-direct-writer',
       `${actsAs}, whom the run acts as, is no longer a direct writer of ${run.realm}`,
     );
+    return isPayer
+      ? {
+          ...refusal,
+          pause: () =>
+            checkAutomationPayer(dbAdapter, run.automationId, {
+              matrixServerName,
+              virtualNetwork,
+            }),
+        }
+      : refusal;
   }
 
   // The moment the run was given its identity's authority: the payer's
@@ -187,10 +197,11 @@ export async function admitRunIdentity(
         ? await submittingRunStart(dbAdapter, run)
         : Math.floor(Date.parse(run.createdAt) / 1000);
   if (await isSessionRevoked(dbAdapter, actsAs, authorizedAt)) {
-    await payerLostAccess();
-    return refuse(
-      'session-revoked',
-      `The sessions of ${actsAs}, whom the run acts as, were revoked after the run was given their authority`,
+    return payerLostAccess(
+      refuse(
+        'session-revoked',
+        `The sessions of ${actsAs}, whom the run acts as, were revoked after the run was given their authority`,
+      ),
     );
   }
 
@@ -215,12 +226,13 @@ export async function admitRunIdentity(
     );
   }
   if (standing !== 'usable') {
-    await payerLostAccess();
-    return refuse(
-      'account-deactivated',
-      standing === 'missing'
-        ? `${actsAs}, whom the run acts as, has no account on the Matrix server`
-        : `The account of ${actsAs}, whom the run acts as, is ${standing}`,
+    return payerLostAccess(
+      refuse(
+        'account-deactivated',
+        standing === 'missing'
+          ? `${actsAs}, whom the run acts as, has no account on the Matrix server`
+          : `The account of ${actsAs}, whom the run acts as, is ${standing}`,
+      ),
     );
   }
   return { ok: true, automation };

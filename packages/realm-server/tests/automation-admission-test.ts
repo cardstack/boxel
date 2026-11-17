@@ -464,12 +464,20 @@ module(basename(import.meta.filename), function (hooks) {
       param(WRITER),
     ]);
     let run = await newRun(CLEAN, { trigger: 'nightly', actsAs: WRITER });
+    let next = await newRun(CLEAN, { trigger: 'nightly', actsAs: WRITER });
     let calls: RunCommandArgs[] = [];
     let result = await attempt(run, { calls });
     await assertRefused(assert, run, result, calls, 'not-a-direct-writer');
     let automation = await getAutomation(dbAdapter, automationId(CLEAN));
     assert.strictEqual(automation?.state, 'paused');
     assert.strictEqual(automation?.pauseReason, 'payer-lost-access');
+    let pending = await getAutomationRun(dbAdapter, next.id);
+    assert.strictEqual(
+      pending?.state,
+      'canceled',
+      'the pause cancels the automation’s other pending runs',
+    );
+    assert.strictEqual(pending?.errorReason, 'payer-lost-access');
   });
 
   test('someone who isn’t a direct writer is refused a run they started, and no automation pauses', async function (assert) {

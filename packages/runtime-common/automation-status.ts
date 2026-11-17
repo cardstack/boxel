@@ -23,6 +23,11 @@ import {
   type AutomationRunResult,
   type AutomationState,
 } from './automations.ts';
+import {
+  readCurrentRunMilestones,
+  readLastRunMilestones,
+  type RunMilestones,
+} from './automation-run-milestones.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
 import {
@@ -59,10 +64,24 @@ export interface AutomationTriggerStatus {
   spent?: boolean;
 }
 
+// The automation's last run that started and has ended, with the milestones
+// its script reported: what the card shows under _Run milestones_.
+export type AutomationLastRun = RunMilestones;
+
+// The automation's run in progress, with the milestones its script has
+// reported so far: the card shows the one it is in as running.
+export type AutomationCurrentRun = RunMilestones;
+
 export type AutomationStatusAttributes =
-  | { switchedOn: false }
+  | {
+      switchedOn: false;
+      lastRun: AutomationLastRun | null;
+      currentRun: AutomationCurrentRun | null;
+    }
   | {
       switchedOn: true;
+      lastRun: AutomationLastRun | null;
+      currentRun: AutomationCurrentRun | null;
       state: AutomationState;
       pauseReason: AutomationPauseReason | null;
       // The payer's Matrix id, or null when the viewer may not see who pays.
@@ -141,10 +160,13 @@ export async function answerAutomationStatus({
       message: `${url.href} is not in ${realmURL.href}`,
     };
   }
-  let row = await getAutomation(
-    dbAdapter,
-    virtualNetwork.unresolveURL(url.href),
-  );
+  let automationId = virtualNetwork.unresolveURL(url.href);
+  let row = await getAutomation(dbAdapter, automationId);
+  // A run can end before the automation is switched on (a Preview, a Run
+  // now), so the last run is read either way.
+  let lastRun = (await readLastRunMilestones(dbAdapter, automationId)) ?? null;
+  let currentRun =
+    (await readCurrentRunMilestones(dbAdapter, automationId)) ?? null;
   let declaration: AutomationDeclaration | undefined;
   let payerShown = false;
   if (row) {
@@ -166,6 +188,8 @@ export async function answerAutomationStatus({
       viewer,
       payerShown,
       now,
+      lastRun,
+      currentRun,
     }),
   };
 }
@@ -174,7 +198,8 @@ export async function answerAutomationStatus({
 // automation row, absent when it isn't switched on. `declaration` is the
 // card as indexed, absent when the card doesn't read as one; then each
 // trigger reports only its run count. `payerShown` says whether the viewer
-// may see the payer's Matrix id.
+// may see the payer's Matrix id. `lastRun` is the automation's last ended
+// run, if it has one.
 export function automationStatusDocument({
   url,
   row,
@@ -182,6 +207,8 @@ export function automationStatusDocument({
   viewer,
   payerShown,
   now,
+  lastRun = null,
+  currentRun = null,
 }: {
   url: string;
   row: AutomationRow | undefined;
@@ -190,6 +217,8 @@ export function automationStatusDocument({
   payerShown: boolean;
   // Unix seconds.
   now: number;
+  lastRun?: AutomationLastRun | null;
+  currentRun?: AutomationCurrentRun | null;
 }): AutomationStatusDocument {
   return {
     data: {
@@ -206,8 +235,10 @@ export function automationStatusDocument({
             lastResult: row.lastResult,
             lastFinishedAt: row.lastFinishedAt,
             triggers: triggerStatuses(row, declaration, now),
+            lastRun,
+            currentRun,
           }
-        : { switchedOn: false },
+        : { switchedOn: false, lastRun, currentRun },
     },
   };
 }

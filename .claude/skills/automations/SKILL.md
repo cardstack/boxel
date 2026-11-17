@@ -33,7 +33,11 @@ description: >-
   `packages/runtime-common/automation-runs.ts`, writing the run-command task or
   the `Realm.handleAutomation` checks that read the run row, adding a column to
   `automation_runs`, or diagnosing a run that is stuck, errored with
-  `commit-interrupted`, or committed twice. Also covers the run token a run's
+  `commit-interrupted`, or committed twice. Also covers canceling a run
+  (`cancelAutomationRunFor`, for a direct writer) and pausing or removing an
+  automation while its run runs: what each leaves behind on the run row, the
+  overlay and the log, and how the run's tab learns of it (`/_run-state`,
+  `RunStateWatch`) and stops the QuickJS worker. Also covers the run token a run's
   calls carry (`run-token.ts`, `mintRunToken`, `verifyRunToken`), how
   `Realm.handleAutomation` admits a call against the run row, and how to trace
   a refused run-token call or a run's `key_uses`. Also covers the run
@@ -184,7 +188,7 @@ A trigger's fields by kind: `cron` reads `expression`, `timeZone`, optional `cou
 
 Every view is built from Pret UI, which subset files may import, and speaks plainly: "workspace", "outside services", "AI requests" and "saves", never realm, `callApi` or `resolve`.
 
-- **Isolated**: `PanelSection`s. The script shows read-only in a `CodeView` (from `fields/code/code.gts`, the catalog `CodeField`'s read face over Pret UI's `CodeBlock`). Each trigger is an `Item` row: an icon for its kind (a lightning bolt for a webhook), its label, its schedule in words with the raw expression as a `Token`, and the times, days or months it names as bulleted lists. Limits are two bordered `Descriptions` grids, _Each run_ and _Each month_, with a line under each value saying what it counts. Outside calls are `Item` rows, params a `KeyValue` list, and each empty group an `EmptyState`. Run milestones aren't a field: the script declares its steps as it runs with `realm.plan(steps)` and reports each with `realm.activity({...})`. The card's _Run milestones_ section is an `EmptyState` saying the steps the script reports will show there. A `Callout` says who runs it and who pays.
+- **Isolated**: `PanelSection`s. The script shows read-only in a `CodeView` (from `fields/code/code.gts`, the catalog `CodeField`'s read face over Pret UI's `CodeBlock`). Each trigger is an `Item` row: an icon for its kind (a lightning bolt for a webhook), its label, its schedule in words with the raw expression as a `Token`, and the times, days or months it names as bulleted lists. Limits are two bordered `Descriptions` grids, _Each run_ and _Each month_, with a line under each value saying what it counts. Outside calls are `Item` rows, params a `KeyValue` list, and each empty group an `EmptyState`. Run milestones aren't a field: the script declares them with `realm.progress.plan([...])` and marks each with `realm.progress.milestone(name)` as it reaches it (_Run milestones_, below). For a direct writer, the card's _Run milestones_ section lists the milestones of the run in progress (`currentRun`), or else of the last run (`lastRun`), as a Pret UI `Timeline` whose rail joins them: each one's time and last count, and a marker shaded by state, gray before a milestone runs, yellow while it runs, green once it is done, red where the run ended with an error, and a pause where Boxel stopped the run. The plan's milestones the run hasn't started stay gray after it, marked _Not started_. Without a last run to list, and for everyone else, the section lists the milestones the script declares, each _Not started_. The card reads them from the script's text: the first `realm.progress.plan([...])` whose array holds only string literals (`declaredMilestones`). A plan built at run time shows nothing until a run reports one, and the section shows an `EmptyState`. A `Callout` says who runs it and who pays.
 - **Edit**: `FormSection`s of `Field`s. The script is edited in place in a `CodeEdit` (the `CodeField`'s edit face over Pret UI's `CodeEditor`) and saved to its file with the host's `write-text-file` tool. It reloads when the file changes elsewhere, unless it holds unsaved edits. A trigger's form shows only its kind's fields: a `SegmentedControl` for the kind, a `Combobox` of IANA zones, `DatePicker`, `TimeInput` and `NumberInput` controls, and the schedule's reading under its expression.
 - **Cron in words**: `describeCron(expression)` in `automation/describe-cron.ts` returns `{ summary, groups }`. A short summary ("Weekdays at 9:00 AM", "3 times a day") plus a labelled group for every list of times, days or months, so several values are listed rather than joined into a long sentence. It returns undefined for shapes it can't put plainly, and the view falls back to the expression alone. It is display only; validity and firing times are `automation-schedule.ts`'s.
 
@@ -202,6 +206,8 @@ The views get the row from `GET <realm>/_automation-status?automation=<card URL>
 - **403** unless the caller is a direct writer of the realm (`isDirectWriter`), asked of the session the realm vouches for (`#sessionPrincipal`): a reader, a writer by the `*` or `users` row, a policy grant, a revoked session, a session delegated to another realm, and a realm-authority or diagnostic session never see the row. An anonymous caller gets 401 from the ACL on a realm only signed-in users can read, and 403 from the route on one anyone can read.
 - **400** when `automation` is missing, not a URL, or outside the realm.
 - **200** with `{ data: { type: 'automation-status', id, attributes } }`. `attributes` is `{ switchedOn: false }` when no row exists. Otherwise it holds `state`, `pauseReason`, `payer`, `viewerIsPayer`, `nextRun`, `lastResult`, `lastFinishedAt` and `triggers`, one per trigger the card declares, in the card's order: `label`, `runs`, and for a bounded trigger `runsLeft` (with `runsLeftAtLeast` past `REMAINING_RUNS_LIMIT`) and `until`, plus `nextRun` and `spent`. Times are ISO strings.
+
+Both shapes carry `lastRun`, the automation's last run that started and has ended (`readLastRunMilestones`), and `currentRun`, its run in progress (`readCurrentRunMilestones`), each with its milestones (_Run milestones_) or null. A Preview is a test of the script, so neither is ever one. A run can start and end before switch-on (a Run now), so neither depends on the row.
 
 `payer` is the payer's Matrix id only when the viewer is the payer or `shareARealmGrant` finds a realm whose permission rows name both (ADR 011 §1.2). Otherwise it is null, and the view reads "A person who shares no workspace with you". Each trigger's next run and whether the trigger is spent come from `computeAutomationSchedule` at the realm's clock (`now()` in `clock.ts`), as the tick computes them. Runs left are counted one trigger at a time over the indexed declaration, the row's `scheduled_since` and `trigger_runs`, with no `now`, so a slot that has passed but isn't enqueued yet still counts as left. Counting stops after `RUNS_LEFT_BUDGET_MS` (250 ms) per answer; a trigger past the budget reports no `runsLeft`. When the card no longer reads as a declaration, each trigger the row has counted reports `runs` alone. The response is `no-store`. The view fetches again when the card is re-indexed, not when the row changes.
 
@@ -258,7 +264,7 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 | `realm-archived`         | `pauseRealmAutomations`: the realm was archived (`handlers/handle-archive-realm.ts`)                                                                                                             |
 
 - **`switchOnAutomation`** makes the row for a direct writer, who becomes the payer, snapshots the caps the declaration sets, and starts the schedule now. A row whose triggers are all spent starts `done`. A second switch-on is refused (`already-switched-on`).
-- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it); restoring the realm leaves them paused until a direct writer resumes each one.
+- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending and running runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it); restoring the realm leaves them paused until a direct writer resumes each one.
 - **`checkAutomationCaps`** and **`checkAutomationPayer`** pause without a person. A row already paused keeps its reason, since a resume takes a new snapshot whatever paused it. A cap the snapshot doesn't limit (an unset credit cap, or a cap added to the card type after the snapshot) is never "raised"; `capsRaisedAbove` is the comparison.
 - The tick, the card's index hook and the run task own `next_run`, `trigger_runs`, `waiting-for-credits`, `done` and the `last_*` columns once the row exists. The lifecycle functions set the next run and `done` only where they start a schedule. Whatever writes `trigger_runs` keeps each entry's `timing`.
 
@@ -268,8 +274,8 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 
 | The card as indexed                                                                                                                      | The row                                                                                                                                                      |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| No live instance (deleted)                                                                                                               | Removed, pending run canceled with `error_reason` `card-deleted`                                                                                             |
-| Doesn't adopt from the catalog `Automation` type                                                                                         | Removed, pending run canceled with `not-an-automation`                                                                                                       |
+| No live instance (deleted)                                                                                                               | Removed, pending and running runs canceled with `error_reason` `card-deleted`                                                                                |
+| Doesn't adopt from the catalog `Automation` type                                                                                         | Removed, pending and running runs canceled with `not-an-automation`                                                                                          |
 | Failed to index (or carries only an earlier visit, `failureWithheld`), or doesn't read as a declaration (an invalid cron, a missing cap) | Unchanged: the next index that reads it recomputes                                                                                                           |
 | Row is paused                                                                                                                            | Unchanged, whatever paused it: a resume restarts the schedule                                                                                                |
 | Raises a cap or turns on `batchedAI` (`capsRaisedAbove`)                                                                                 | Paused with `caps-raised` or `batched-ai-enabled`                                                                                                            |
@@ -285,7 +291,7 @@ Every direct-writer check is `isDirectWriterLocked`, asked inside the change's t
 
 The row's `realm` is what every later check asks about, so switch-on refuses a realm that doesn't contain the automation (`outside-realm`, decided by `RealmPaths.inRealm`), and switch-on and resume refuse a declaration read from another card (`other-card`). Each change locks the person's permission row before the automation's row, in that order everywhere, so two changes never wait on each other; code that touches both, such as a realm's archive or delete, takes them in the same order.
 
-**Pausing and removing cancel the automation's pending run** in the same transaction, so nothing it queued starts. A running run carries on. A run that a person's pause or remove canceled names them in `canceled_by`; one that `checkAutomationCaps` or `checkAutomationPayer` canceled has no `canceled_by` and carries the pause reason in `error_reason`.
+**Every pause and every remove cancels the automation's pending and running runs** in the same transaction (`cancelUnfinishedAutomationRuns`), whatever paused or removed it: a person, a raised cap, the payer losing access, archiving, or the index hook. A pending run never starts. A running run stops as a canceled one does (see _Canceling a run_): its overlay is discarded, the realm server refuses its next call, and its tab stops the script. A running run whose commit was claimed is left to finish, since its writes may already be landing. A run that a person's pause or remove canceled names them in `canceled_by`; one any other pause or remove canceled has no `canceled_by` and carries the reason in `error_reason`. Each canceled run's log ends with a `finish` line saying so, written once the transaction commits (a log line locks the run's row, which the transaction holds).
 
 ### Inspecting an automation
 
@@ -301,7 +307,7 @@ SELECT state, pause_reason, paused_by, payer, next_run, scheduled_since,
 - `paused` with `caps-raised` or `batched-ai-enabled`: compare `caps_snapshot` with the card's `caps` and `batchedAI`. A direct writer resumes it to agree to the new caps and pay for them.
 - `paused` with `payer-lost-access`: the payer's own permission row no longer grants write. Another direct writer resumes it and becomes the payer.
 - `active` with a null `next_run`: only webhook triggers, or none left that the schedule can place.
-- A run canceled with no `canceled_by`: an automatic pause canceled it; its `error_reason` names which.
+- A run canceled with no `canceled_by`: an automatic pause, or the index hook's remove, canceled it; its `error_reason` names which.
 
 ### The tick: enqueueing due runs
 
@@ -433,11 +439,19 @@ says why) rather than throwing.
   last reservation, and no attempt is left to finish the run. This is for the
   reconcile pass (ADR 028 §1.5). A run whose commit landed finishes complete;
   any other finishes as an error with `reason`.
-- **`cancelPendingAutomationRuns(querier, automationId, by)`** cancels every pending run of an automation inside the caller's transaction, as pausing and removing it do. It leaves a running run to finish.
-- **`cancelAutomationRun`** cancels a pending or running run, and records who
-  canceled it. It is refused once the commit is claimed, since the writes may
-  already be landing. A canceled run can't be started, claim a commit or
-  finish.
+- **`cancelUnfinishedAutomationRuns(querier, automationId, by)`** cancels
+  every pending run of an automation, and its running one unless its commit
+  was claimed, inside the caller's transaction, as pausing and removing it do.
+  It discards the overlays of the runs it cancels and returns them; the caller
+  writes each one's `finish` line with `logAutomationRunEnded` once its
+  transaction commits.
+- **`cancelAutomationRun`** cancels a pending or running run, records who
+  canceled it, discards its overlay and logs its `finish` line.
+  `cancelAutomationRunIn` does the same inside the caller's transaction,
+  without the line. It is refused once the commit is claimed, since the
+  writes may already be landing. A canceled run can't be started, claim a
+  commit or finish. A person's cancel goes through `cancelAutomationRunFor`
+  (_Canceling a run_), which checks they may.
 - **`addAutomationRunCounts`** adds to the metered counts in any state, since
   the work they count was done either way. A negative or fractional amount
   throws.
@@ -471,6 +485,54 @@ if (await claimAutomationRunCommit(db, runId, attempt)) {
 
 A claim that returns `undefined` means a retry took the run over or someone
 canceled it. Discard the staged writes and stop.
+
+### Canceling a run
+
+`cancelAutomationRunFor(dbAdapter, { runId, user }, options)` in
+`automations.ts` (imported as `@cardstack/runtime-common/automations`, with
+the `AutomationActorOptions` the lifecycle functions take) cancels a pending
+or running run for a direct writer of the run's realm. It locks the person's
+permission row before the run's row, the order every change here takes them
+in, and returns `{ ok: true, run }` or a refusal: `missing`,
+`not-a-direct-writer`, or `not-cancelable` with the run as it stands (it
+already ended, or its commit was claimed). The automation's own row doesn't
+change: it stays active, and its next run comes due as scheduled. It is a
+server function, and no route serves it.
+
+What a cancel leaves behind:
+
+- **The run row**: `state` `canceled`, `canceled_by` the person,
+  `finished_at` set, `commit_started_at` null. The metered counts and AI
+  credits it spent stay, since the work they count was done.
+- **The overlay**: discarded in the cancel's transaction, so a cancel before
+  the commit writes nothing to the realm. A write staged while the cancel
+  waited on the run's row lock is discarded too; one after finds the run
+  not running and is refused (401).
+- **The log**: a `finish` line, `The run was canceled by <user>`, after
+  whatever the script and the platform logged before it. The tab's later
+  lines are refused, since `/_run-log` admits only a running run.
+- **The run's calls**: `Realm.handleAutomation` refuses the next one with
+  401 `The automation run is not running`. A commit sent after the cancel is
+  refused the same way, and the worker's finish is refused, so the attempt
+  leaves the run as the cancel left it (`could not finish the run`).
+- **The tab**: the `run-automation` tool runs a `RunStateWatch`
+  (`host/app/lib/realm-runner/run-state-watch.ts`) beside the script. Every
+  `RUN_STATE_POLL_MS` (2 s) it asks the realm's `GET /_run-state`
+  (`RUN_STATE_PATH` in `automation-run-command.ts`) with the run's token,
+  which `handleAutomation` admits only while the run is running under the
+  token's attempt; the route answers 200 with the run's id, and 403
+  `not-a-run` to anything but the run's own token in its own realm. On a
+  401 the watch aborts the signal `runAutomationScript` runs under, which
+  terminates the QuickJS web worker at once, so a script spinning in a loop
+  with no calls of its own stops too. The tool answers `error` with reason
+  `stopped`. A 401 saying `Token expired` is not a stop: the token expires
+  at the run's time limit, which the runner enforces and reports as
+  `timed-out`. A failed or slow ask is not a stop either; the time limit
+  still bounds the script.
+
+A pause or remove stops a running run the same way (_States and who changes
+them_, above), with `canceled_by` the person who paused or removed it, or
+none and the reason in `error_reason`.
 
 ### Diagnosing a run
 
@@ -1074,6 +1136,45 @@ A log that reaches its cap logs one `warn` line saying later lines are
 dropped. Lines come from whichever realm-server task took the request, so
 query by the run, not by one task.
 
+### Run milestones
+
+The script is the only source of a run's milestones; the card holds no list of them, since a list kept on the card drifts from what the code does. The script declares them all up front and marks each as it reaches it:
+
+```js
+realm.progress.plan(['Fetch issues', 'Group by label', 'Write digest']);
+realm.progress.milestone('Fetch issues');
+for (let [i, page] of pages.entries()) {
+  realm.progress.count(i + 1, pages.length); // within the milestone
+  // …
+}
+realm.progress.milestone('Group by label');
+```
+
+They reach the realm server as the run's `plan`, `milestone` and `count` log lines. `appendRunLog` hands each batch to `recordRunMilestones` (`packages/runtime-common/automation-run-milestones.ts`) under the run row's lock, before it checks the log's cap, so a run whose log is full still records where it got to:
+
+| Where                                | Holds                                                                                                                                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `automation_runs.milestone_plan`     | the plan the script declared last (a second `plan` replaces it), at most `RUN_MILESTONE_MAX_PLAN` (50) names of `RUN_MILESTONE_MAX_NAME_CHARS` (80) characters, the surface's limits |
+| `automation_run_milestones`          | one row per milestone the run reached, at `position` in the order reached, with `started_at` (the tab's time for the mark) and the last `count_done` / `count_total` inside it       |
+| `automation_runs.milestones_dropped` | marks past `RUN_MAX_MILESTONES` (200) a run records; the run's last recorded milestone then lasts until the run ends                                                                 |
+
+A milestone lasts until the next one starts, or until the run ends (`finished_at`). A milestone the plan doesn't name is recorded like any other and reads as unplanned; one marked twice is two rows. A count before the run's first milestone is ignored, as is one inside a milestone marked past the limit. An attempt that takes a run from another attempt (`startAutomationRunAttempt`, before the commit is claimed) clears the run's plan and milestones, since the script runs again from its start.
+
+**Reading them.** `readRunMilestones(dbAdapter, runId)` answers a run's `plan`, its `milestones` in order (`name`, `planned`, `startedAt`, `endedAt`, `ms`, and `done` / `total` when counted), `current` (the milestone a running run is in), `ahead` (the plan's milestones it hasn't reached), `failedIn` (for a run that ended with an error, the milestone it was in) and `dropped`. `readLastRunMilestones(dbAdapter, automationId)` answers the same for the automation's last run that started and has ended, leaving Previews out: what the card shows, through `_automation-status`'s `lastRun`.
+
+```sql
+SELECT r.state, r.milestone_plan, m.position, m.name, m.started_at, m.count_done, m.count_total
+  FROM automation_runs r LEFT JOIN automation_run_milestones m ON m.run_id = r.id
+ WHERE r.id = '<run id>' ORDER BY m.position;
+```
+
+**Telemetry.** As a run ends (`finishAutomationRun`, `abandonAutomationRun`, `cancelAutomationRun`), `closeRunMilestones` writes each of its milestones once to the `boxel:automation-milestones` channel: one JSON line with `automation`, `realm`, `run`, `outcome`, `errorReason`, `milestone`, `position`, `planned`, `ms`, `done`, `total` and `failedHere`, the numbers flat so LogQL can `unwrap` them. `outcome` is the run's state as it ended, so a `commit-interrupted` run whose batch landed afterwards reads `error` there and `complete` on its row:
+
+```bash
+packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+  --regex '"channel":"boxel:automation-milestones"' --since 1d --no-follow
+```
+
 ## The automation command
 
 One attempt of a run is a `run-command` job naming `AUTOMATION_COMMAND`
@@ -1142,7 +1243,7 @@ for a run row its trigger has already made with `createAutomationRun`:
      error named by the refusal's code (_Committing the overlay_), unless
      the row says the batch landed, which finishes it complete;
    - `error`: finishes the run as an error with the outcome's reason
-     (`script-error`, `timed-out`, `run-failed`) and its message, prefixed
+     (`script-error`, `timed-out`, `run-failed`, `stopped`) and its message, prefixed
      `line N:` for a script error that has a line. The finish discards the
      overlay, so nothing the script staged lands;
    - a tab that never answered (`unusable`) is `timed-out`; a command that
@@ -1258,6 +1359,14 @@ never reads the run's sessions in place of its own.
 
 To check a tab by hand after a run, read `localStorage` and
 `globalThis.__boxelInMemorySessions` in it: neither holds the run's token.
+
+While the script runs, the tool's `RunStateWatch` asks the realm every 2 s
+whether the run is still running, and stops the script once it isn't: a
+cancel, a pause or remove, a cap that ended the run, or a newer attempt
+taking it over (_Canceling a run_). The tool then answers `stopped`, and the
+worker's finish is refused unless the run is still running under this
+attempt (the person's sessions were revoked, say), when it records the run
+as an error with reason `stopped`.
 
 `timeoutMs` widens every layer's timeout for this one request: the worker's
 request to the manager, the manager's proxy, and the tab's wait on the

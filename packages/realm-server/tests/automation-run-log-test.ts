@@ -5,6 +5,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   cancelAutomationRun,
   finishAutomationRun,
+  startAutomationRunAttempt,
   rri,
   SupportedMimeType,
   type Realm,
@@ -21,6 +22,13 @@ import {
   scriptRunLogLines,
 } from '@cardstack/runtime-common/automation-run-log';
 import { callApiLogLine } from '@cardstack/runtime-common/automation-run-limits';
+import {
+  RUN_MAX_MILESTONES,
+  readLastRunMilestones,
+  readRunMilestones,
+  setAutomationMilestoneSink,
+  type AutomationMilestoneEvent,
+} from '@cardstack/runtime-common/automation-run-milestones';
 import {
   RUN_COMMIT_PATH,
   stageRunOverlayFile,
@@ -728,5 +736,419 @@ module(basename(import.meta.filename), function (hooks) {
     if (ok.ok) {
       assert.strictEqual(ok.lines[0].message, '2');
     }
+  });
+  module('milestones', function (hooks) {
+    let telemetry: AutomationMilestoneEvent[];
+    hooks.beforeEach(function () {
+      telemetry = [];
+      setAutomationMilestoneSink((event) => telemetry.push(event));
+    });
+    hooks.afterEach(function () {
+      setAutomationMilestoneSink(undefined);
+    });
+
+    async function milestonesOf(runId: string, now?: number) {
+      return (await readRunMilestones(dbAdapter, runId, { now }))!;
+    }
+
+    test('the run records the plan it declared, each milestone in the order reached, and the counts inside each', async function (assert) {
+      let { token, run } = await runOf();
+      let t0 = Date.parse('2026-11-16T10:00:00.000Z');
+      let sent = await sendLog(token, {
+        events: [
+          {
+            kind: 'plan',
+            at: t0,
+            milestones: ['Fetch issues', 'Group', 'Write digest'],
+          },
+          { kind: 'milestone', at: t0, name: 'Fetch issues' },
+          { kind: 'count', at: t0 + 100, done: 1, total: 3 },
+          { kind: 'count', at: t0 + 200, done: 3, total: 3 },
+          { kind: 'milestone', at: t0 + 1_000, name: 'Group' },
+          { kind: 'count', at: t0 + 1_100, done: 7 },
+        ],
+      });
+      assert.strictEqual(sent.status, 200, JSON.stringify(sent.json));
+
+      let running = await milestonesOf(run.id, t0 + 1_500);
+      assert.deepEqual(running.plan, ['Fetch issues', 'Group', 'Write digest']);
+      assert.strictEqual(running.state, 'running');
+      assert.strictEqual(running.current, 'Group', 'the milestone it is in');
+      assert.deepEqual(running.ahead, ['Write digest'], 'the ones still ahead');
+      assert.strictEqual(running.failedIn, null);
+      assert.deepEqual(running.milestones, [
+        {
+          name: 'Fetch issues',
+          planned: true,
+          startedAt: new Date(t0).toISOString(),
+          endedAt: new Date(t0 + 1_000).toISOString(),
+          ms: 1_000,
+          done: 3,
+          total: 3,
+        },
+        {
+          name: 'Group',
+          planned: true,
+          startedAt: new Date(t0 + 1_000).toISOString(),
+          endedAt: null,
+          ms: 500,
+          done: 7,
+        },
+      ]);
+
+      // A later batch's count belongs to the milestone the run is still in.
+      await sendLog(token, {
+        events: [{ kind: 'count', at: t0 + 1_200, done: 9, total: 12 }],
+      });
+      let [, group] = (await milestonesOf(run.id, t0 + 1_500)).milestones;
+      assert.strictEqual(group.done, 9);
+      assert.strictEqual(group.total, 12);
+
+      await finishAutomationRun(dbAdapter, run.id, run.attempt!, {
+        state: 'complete',
+      });
+      let finished = await milestonesOf(run.id);
+      assert.strictEqual(finished.current, null);
+      assert.strictEqual(
+        finished.milestones[1].endedAt,
+        finished.finishedAt,
+        'the last milestone lasts until the run ends',
+      );
+      assert.deepEqual(
+        telemetry.map(
+          ({ milestone, position, planned, outcome, failedHere }) => ({
+            milestone,
+            position,
+            planned,
+            outcome,
+            failedHere,
+          }),
+        ),
+        [
+          {
+            milestone: 'Fetch issues',
+            position: 0,
+            planned: true,
+            outcome: 'complete',
+            failedHere: false,
+          },
+          {
+            milestone: 'Group',
+            position: 1,
+            planned: true,
+            outcome: 'complete',
+            failedHere: false,
+          },
+        ],
+        'each milestone goes to telemetry once, as the run ends',
+      );
+      assert.strictEqual(telemetry[0].ms, 1_000);
+      assert.strictEqual(telemetry[0].run, run.id);
+    });
+
+    test('a run that fails inside a milestone names it', async function (assert) {
+      let { token, run } = await runOf();
+      let at = Date.now();
+      await sendLog(token, {
+        events: [
+          { kind: 'plan', at, milestones: ['Fetch', 'Write'] },
+          { kind: 'milestone', at, name: 'Fetch' },
+          { kind: 'count', at, done: 2, total: 5 },
+          { kind: 'error', at, message: 'Error: the vendor answered 503' },
+        ],
+      });
+      await finishAutomationRun(dbAdapter, run.id, run.attempt!, {
+        state: 'error',
+        reason: 'script-error',
+        message: 'Error: the vendor answered 503',
+      });
+      let milestones = await milestonesOf(run.id);
+      assert.strictEqual(milestones.state, 'error');
+      assert.strictEqual(milestones.failedIn, 'Fetch');
+      assert.deepEqual(milestones.ahead, ['Write']);
+      assert.strictEqual(milestones.milestones[0].done, 2);
+      assert.strictEqual(milestones.milestones[0].total, 5);
+      assert.deepEqual(
+        telemetry.map(({ milestone, outcome, errorReason, failedHere }) => ({
+          milestone,
+          outcome,
+          errorReason,
+          failedHere,
+        })),
+        [
+          {
+            milestone: 'Fetch',
+            outcome: 'error',
+            errorReason: 'script-error',
+            failedHere: true,
+          },
+        ],
+      );
+    });
+
+    test("a milestone the plan didn't declare is recorded as unplanned, and the order is the order reached", async function (assert) {
+      let { token, run } = await runOf();
+      let at = Date.now();
+      await sendLog(token, {
+        events: [
+          { kind: 'plan', at, milestones: ['A', 'B', 'C'] },
+          { kind: 'milestone', at, name: 'B' },
+          { kind: 'milestone', at: at + 1, name: 'Retry' },
+          { kind: 'milestone', at: at + 2, name: 'A' },
+        ],
+      });
+      let milestones = await milestonesOf(run.id);
+      assert.deepEqual(
+        milestones.milestones.map(({ name, planned }) => ({ name, planned })),
+        [
+          { name: 'B', planned: true },
+          { name: 'Retry', planned: false },
+          { name: 'A', planned: true },
+        ],
+      );
+      assert.deepEqual(milestones.ahead, ['C']);
+    });
+
+    test('a plan that names a milestone twice keeps the second one ahead until the run reaches it again', async function (assert) {
+      let { token, run } = await runOf();
+      let at = Date.now();
+      await sendLog(token, {
+        events: [
+          { kind: 'plan', at, milestones: ['Fetch', 'Transform', 'Fetch'] },
+          { kind: 'milestone', at, name: 'Fetch' },
+        ],
+      });
+      assert.deepEqual((await milestonesOf(run.id)).ahead, [
+        'Transform',
+        'Fetch',
+      ]);
+      await sendLog(token, {
+        events: [
+          { kind: 'milestone', at: at + 1, name: 'Transform' },
+          { kind: 'milestone', at: at + 2, name: 'Fetch' },
+        ],
+      });
+      assert.deepEqual((await milestonesOf(run.id)).ahead, []);
+    });
+
+    test('lines that land after the run ended, or from an attempt that no longer owns it, add nothing to its milestones', async function (assert) {
+      let { run } = await runOf();
+      let at = Date.now();
+      let mark = (name: string) => ({
+        at,
+        source: 'script' as const,
+        kind: 'milestone' as const,
+        message: `Milestone: ${name}`,
+        data: { name },
+      });
+      await appendRunLog(dbAdapter, run.id, [mark('Mine')], {
+        attempt: run.attempt!,
+      });
+      await appendRunLog(dbAdapter, run.id, [mark('Stale')], {
+        attempt: run.attempt! - 1,
+      });
+      await finishAutomationRun(dbAdapter, run.id, run.attempt!, {
+        state: 'complete',
+      });
+      let telemetryAtEnd = telemetry.map(({ milestone }) => milestone);
+      await appendRunLog(dbAdapter, run.id, [mark('Late')], {
+        attempt: run.attempt!,
+      });
+      assert.deepEqual(
+        (await milestonesOf(run.id)).milestones.map(({ name }) => name),
+        ['Mine'],
+      );
+      assert.deepEqual(
+        telemetryAtEnd,
+        ['Mine'],
+        'telemetry at the end holds the same milestones the run keeps',
+      );
+      let lines = (await logOf(run.id)).lines.map(({ message }) => message);
+      assert.true(
+        lines.includes('Milestone: Late'),
+        'the log still keeps the late line',
+      );
+    });
+
+    test('a run without a plan records its milestones, and a count before the first milestone is ignored', async function (assert) {
+      let { token, run } = await runOf();
+      let at = Date.now();
+      await sendLog(token, {
+        events: [
+          { kind: 'count', at, done: 1, total: 2 },
+          { kind: 'milestone', at, name: 'Only' },
+        ],
+      });
+      let milestones = await milestonesOf(run.id);
+      assert.deepEqual(milestones.plan, []);
+      assert.deepEqual(milestones.ahead, []);
+      assert.deepEqual(
+        milestones.milestones.map(({ name, planned, done }) => ({
+          name,
+          planned,
+          done,
+        })),
+        [{ name: 'Only', planned: false, done: undefined }],
+      );
+    });
+
+    test("milestones are recorded when the log is full, and past the run's limit they are counted", async function (assert) {
+      let { run } = await runOf();
+      let at = Date.now();
+      let result = await appendRunLog(
+        dbAdapter,
+        run.id,
+        [
+          {
+            at,
+            source: 'script',
+            kind: 'plan',
+            message: 'Plan: A',
+            data: { milestones: ['A'] },
+          },
+          {
+            at,
+            source: 'script',
+            kind: 'milestone',
+            message: 'Milestone: A',
+            data: { name: 'A' },
+          },
+        ],
+        { maxLines: 0 },
+      );
+      assert.deepEqual(result, { stored: 0, dropped: 2 }, 'the log is full');
+      let milestones = await milestonesOf(run.id);
+      assert.deepEqual(milestones.plan, ['A']);
+      assert.deepEqual(
+        milestones.milestones.map(({ name }) => name),
+        ['A'],
+      );
+
+      let marks = Array.from({ length: RUN_MAX_MILESTONES + 3 }, (_, i) => ({
+        at,
+        source: 'script' as const,
+        kind: 'milestone' as const,
+        message: `Milestone: m${i}`,
+        data: { name: `m${i}` },
+      }));
+      let many = await runOf();
+      await appendRunLog(dbAdapter, many.run.id, marks);
+      let capped = await milestonesOf(many.run.id);
+      assert.strictEqual(capped.milestones.length, RUN_MAX_MILESTONES);
+      assert.strictEqual(capped.dropped, 3);
+
+      await appendRunLog(dbAdapter, many.run.id, [
+        {
+          at,
+          source: 'script',
+          kind: 'count',
+          message: '5 of 9',
+          data: { done: 5, total: 9 },
+        },
+      ]);
+      let last = (await milestonesOf(many.run.id)).milestones.at(-1)!;
+      assert.strictEqual(
+        last.done,
+        undefined,
+        "a later batch's count inside an unrecorded milestone belongs to none",
+      );
+    });
+
+    test('an attempt that takes the run from another clears its milestones, since the script runs again', async function (assert) {
+      let { token, run } = await runOf();
+      let at = Date.now();
+      await sendLog(token, {
+        events: [
+          { kind: 'plan', at, milestones: ['Fetch', 'Write'] },
+          { kind: 'milestone', at, name: 'Fetch' },
+          { kind: 'count', at, done: 2, total: 4 },
+        ],
+      });
+      let retry = await startAutomationRunAttempt(
+        dbAdapter,
+        run.id,
+        run.attempt! + 1,
+      );
+      assert.strictEqual(retry.kind, 'run');
+      let cleared = await milestonesOf(run.id);
+      assert.deepEqual(cleared.plan, []);
+      assert.deepEqual(cleared.milestones, []);
+
+      await appendRunLog(dbAdapter, run.id, [
+        {
+          at: at + 10,
+          source: 'script',
+          kind: 'milestone',
+          message: 'Milestone: Fetch',
+          data: { name: 'Fetch' },
+        },
+      ]);
+      assert.deepEqual(
+        (await milestonesOf(run.id)).milestones.map(({ name }) => name),
+        ['Fetch'],
+        'only the attempt that owns the run reports its milestones',
+      );
+
+      let same = await startAutomationRunAttempt(
+        dbAdapter,
+        run.id,
+        run.attempt! + 1,
+      );
+      assert.strictEqual(same.kind, 'run');
+      assert.strictEqual(
+        (await milestonesOf(run.id)).milestones.length,
+        1,
+        'the owning attempt starting again keeps them',
+      );
+    });
+
+    test("an automation's last run is the latest one that ended, with its milestone times", async function (assert) {
+      let automation = 'automation/last-run';
+      let first = await createAutomationRunToken(dbAdapter, realm, OWNER, {
+        automation,
+      });
+      let second = await createAutomationRunToken(dbAdapter, realm, OWNER, {
+        automation,
+      });
+      let still = await createAutomationRunToken(dbAdapter, realm, OWNER, {
+        automation,
+      });
+      let at = Date.now();
+      await sendLog(first.token, {
+        events: [{ kind: 'milestone', at, name: 'First run step' }],
+      });
+      await sendLog(second.token, {
+        events: [{ kind: 'milestone', at, name: 'Second run step' }],
+      });
+      await sendLog(still.token, {
+        events: [{ kind: 'milestone', at, name: 'Running step' }],
+      });
+      await finishAutomationRun(dbAdapter, first.run.id, first.run.attempt!, {
+        state: 'complete',
+      });
+      await finishAutomationRun(dbAdapter, second.run.id, second.run.attempt!, {
+        state: 'complete',
+      });
+      let last = await readLastRunMilestones(
+        dbAdapter,
+        second.run.automationId,
+      );
+      assert.strictEqual(
+        last?.runId,
+        second.run.id,
+        'a running run is not the last run',
+      );
+      assert.deepEqual(
+        last?.milestones.map(({ name }) => name),
+        ['Second run step'],
+      );
+      assert.strictEqual(
+        await readLastRunMilestones(
+          dbAdapter,
+          rri(`${realmURL.href}automation/never-ran`),
+        ),
+        undefined,
+      );
+    });
   });
 });

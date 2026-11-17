@@ -235,7 +235,19 @@ async function attemptRun(
   };
   let identity = await admitRunIdentity(admission, run, { kind });
   if (!identity.ok) {
-    return await refuse(identity.reason, identity.message);
+    let refused = await refuse(identity.reason, identity.message);
+    // The payer lost access: the automation pauses, which cancels its other
+    // unfinished runs, once this one has ended with its refusal's code. The
+    // run's outcome is already recorded, so a pause that fails is logged and
+    // the next run's admission pauses it.
+    try {
+      await identity.pause?.();
+    } catch (e: any) {
+      log.error(
+        `${tag} couldn't pause the automation after its payer lost access: ${e?.message ?? e}`,
+      );
+    }
+    return refused;
   }
 
   let { caps } = limits;

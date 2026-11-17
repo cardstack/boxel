@@ -12,8 +12,12 @@ import {
   ri,
   rri,
   startAutomationRunAttempt,
+  VirtualNetwork,
   type AutomationRun,
 } from '@cardstack/runtime-common';
+import { RUN_STATE_PATH } from '@cardstack/runtime-common/automation-run-command';
+import { cancelAutomationRunFor } from '@cardstack/runtime-common/automations';
+import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
 import type { Realm } from '@cardstack/runtime-common';
 import { runTokenSecret } from '@cardstack/runtime-common/run-token';
 import {
@@ -179,6 +183,88 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await read(token))!.status, 200);
     await cancelAutomationRun(dbAdapter, run.id, OWNER);
     assert.strictEqual((await read(token))!.status, 401);
+  });
+
+  function runState(token: string) {
+    return realm.handle(
+      new Request(`${realmURL.href}${RUN_STATE_PATH.slice(1)}`, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+    );
+  }
+
+  test('a run’s tab learns of a cancel: the run state answers 200 while the run runs, and 401 once a direct writer cancels it', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let running = (await runState(token))!;
+    assert.strictEqual(running.status, 200);
+    assert.deepEqual((await running.json()).data, {
+      type: 'automation-run',
+      id: run.id,
+      attributes: { state: 'running' },
+    });
+    await stageRunOverlayFile(
+      dbAdapter,
+      { runId: run.id, attempt: 1 },
+      'staged.txt',
+      new TextEncoder().encode('staged by the run'),
+      100,
+    );
+
+    let canceled = await cancelAutomationRunFor(
+      dbAdapter,
+      { runId: run.id, user: OWNER },
+      { matrixServerName: 'localhost', virtualNetwork: new VirtualNetwork() },
+    );
+    assert.true(canceled.ok, JSON.stringify(canceled));
+
+    let stopped = (await runState(token))!;
+    assert.strictEqual(stopped.status, 401);
+    assert.strictEqual(
+      await stopped.text(),
+      'The automation run is not running',
+    );
+    assert.strictEqual(
+      (await write(token, 'after-cancel.txt', 'too late'))!.status,
+      401,
+      'the run’s next write is refused',
+    );
+    assert.strictEqual(
+      (await read(token, 'staged.txt'))!.status,
+      401,
+      'the run’s next read is refused',
+    );
+    let staged = (await dbAdapter.execute(
+      `SELECT path FROM run_overlay_files WHERE run_id = '${run.id}'`,
+    )) as unknown[];
+    assert.strictEqual(staged.length, 0, 'what the run staged is discarded');
+  });
+
+  test('only a run asks its own realm whether it is running', async function (assert) {
+    let session = (await realm.handle(
+      new Request(`${realmURL.href}${RUN_STATE_PATH.slice(1)}`, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+          Authorization: `Bearer ${createJWT(realm, OWNER, ['read', 'write'])}`,
+        },
+      }),
+    ))!;
+    assert.strictEqual(session.status, 403);
+    assert.strictEqual((await session.json()).errors[0].code, 'not-a-run');
+
+    let elsewhere = tokenElsewhere(await runElsewhere(), [realmURL.href]);
+    let reading = (await runState(elsewhere))!;
+    assert.strictEqual(
+      reading.status,
+      403,
+      'a run that may only read this realm is not this realm’s run',
+    );
   });
 
   test('a token is refused once a newer attempt takes the run over', async function (assert) {
