@@ -30,6 +30,8 @@ Score, declared once the room's first render has settled (`SETTLE_AFTER_MS`), so
 
 Pret UI's disclosures (a tool row's panel, a thinking block) open and close at once inside the region (`--pretui-disclosure-duration: 0s`), and the messages below take the change as one move. Their own height transition resized the content on every frame, and StickToBottom settles each resize in a render pass, so the move was recompiled from its painted position on every frame.
 
+The region clips its vertical overflow (`overflow-y: clip`). A follow moves every message up, so each one starts its move below where it now lives, and the last one's translate reaches past the end of the content. Overflow there would count toward the scroller's height, and StickToBottom follows that height. The settle would pin the reader past the real end, the next pass would launch a longer flight from there, and as the translates shrank the browser would clamp the scroll back by the same amount: one jump, then no visible glide. Clipped, the flights stay paint, and the end is where layout puts it. Only the vertical axis is clipped, so rings and insets still hang into the gutter; popups are fixed or portaled, so the clip doesn't reach them.
+
 ### One message: `MessageMotion`
 
 Mounted as each message's `.content`, nested inside the conversation.
@@ -82,6 +84,7 @@ These came up while making the panel smooth, and the ADR doesn't decide them yet
 - **Motion off in tests.** The ADR says the DOM must match with motion off, and leaves how to the host. Here the regions aren't mounted when `isTesting()`. A shared helper, or a MotionConfig that skips runs, would stop each surface choosing its own.
 - **High-frequency change inside a scene.** A streaming message is declared with a different role (`message-live`) so the score moves it but never animates its growth. It works, but the ADR could name the pattern: high-frequency change is declared, not suppressed in the engine.
 - **Nested regions and shared scrolls.** A nested region measuring in page space animates its sprites by a distance the outer region already covers. `@space='parent'` on the inner moves is the answer; it is worth stating for any nested scene inside a scroller.
+- **Transforms and the scroll extent.** A FLIP translate that reaches past the end of a scroller's content grows the scroller's height, and a scroll owner that follows the end then chases the motion. A region inside a followed scroller clips the axis it scrolls on. The ADR could make that a rule for any region inside a scroll owner.
 - **One clock per scene.** Two steps in one score that move the same kind of shift at different speeds make neighbors overlap mid-flight. Shared durations for anything a single cause moves could be a quality rule.
 - **The region's size.** The transcript mounts one region per message. That is cheap so far, but a long session could warrant measuring how many regions a pass touches.
 
