@@ -246,6 +246,25 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
+    // The generic-Accept gate serves pages only for a published realm.
+    async function markRealmPublished() {
+      await dbAdapter.execute(`DELETE FROM realm_registry WHERE url = $1`, {
+        bind: [realmURL.href],
+      });
+      await dbAdapter.execute(
+        `INSERT INTO realm_registry (url, kind, disk_id, owner_username, source_url, last_published_at) VALUES ($1, 'published', $2, $3, $4, $5)`,
+        {
+          bind: [
+            realmURL.href,
+            'dynamic-routes-published',
+            'owner',
+            'http://127.0.0.1:4444/dynamic-routes-source/',
+            Date.now(),
+          ],
+        },
+      );
+    }
+
     function page(path: string) {
       return request.get(`${realmPath}${path}`).set('Accept', 'text/html');
     }
@@ -510,6 +529,22 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.true(response.text.includes('Served Post A'), 'serves Post A');
     });
 
+    test('on a published realm, the first request after the definitions cache is cleared serves the page', async function (assert) {
+      // The prerender imports the route type's module with a generic Accept
+      // header, so the import must not wait for the validation that renders
+      // the module.
+      await markRealmPublished();
+      await definitionLookup.clearRealmDefinitions(realmURL.href);
+      testRealm.clearRealmIndexCaches();
+      let response = await page('posts/hello');
+      assert.strictEqual(
+        response.status,
+        200,
+        'the request waits for the read',
+      );
+      assert.true(response.text.includes('Served Post A'), 'serves Post A');
+    });
+
     test('a path that only a route dropped for an unreadable type matches answers 503', async function (assert) {
       let getHostRoutes = testRealm.getHostRoutes;
       testRealm.getHostRoutes = async function (this: Realm) {
@@ -578,22 +613,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('a generic-Accept request of a published realm goes through the dynamic routes', async function (assert) {
-      // The generic-Accept gate serves pages only for a published realm.
-      await dbAdapter.execute(`DELETE FROM realm_registry WHERE url = $1`, {
-        bind: [realmURL.href],
-      });
-      await dbAdapter.execute(
-        `INSERT INTO realm_registry (url, kind, disk_id, owner_username, source_url, last_published_at) VALUES ($1, 'published', $2, $3, $4, $5)`,
-        {
-          bind: [
-            realmURL.href,
-            'dynamic-routes-published',
-            'owner',
-            'http://127.0.0.1:4444/dynamic-routes-source/',
-            Date.now(),
-          ],
-        },
-      );
+      await markRealmPublished();
       let generic = (path: string) =>
         request.get(`${realmPath}${path}`).set('Accept', '*/*');
 

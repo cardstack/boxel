@@ -40,6 +40,7 @@ import {
   getPublishedRealmInfo,
   droppedRouteMayAnswer,
   hasDynamicHostRoutes,
+  hasExtensionlessSourceModule,
   hasPublicPermissions,
   isIndexedCardInstance,
   isRealmFilePath,
@@ -501,6 +502,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         let cardURL = requestURL;
         let isCardInstance = await isIndexedCardInstance(cardURL, routingDeps);
         if (!isCardInstance) {
+          // A module import is left to the realm before any host route is
+          // read: on a cold definitions cache, the validation of the routes
+          // renders a route type's module, and the prerender imports that
+          // module through this gate. Waiting here for the routes would wait
+          // for itself.
+          if (await hasExtensionlessSourceModule(requestURL, routingDeps)) {
+            return next();
+          }
           // A bare routed sub-path (e.g. /pricing) is not itself an indexed
           // card instance — its host routing rule maps it to a card that
           // lives elsewhere (e.g. /pages/pricing). Only fall through to the
