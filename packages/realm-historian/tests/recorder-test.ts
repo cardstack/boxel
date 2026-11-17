@@ -735,6 +735,36 @@ module('recorder', (hooks) => {
     );
   });
 
+  test('an unattributed revision after two supersessions names both, newest first', async (assert) => {
+    let target = recorder();
+    await recordInitial(target);
+    let edit = await event({
+      author: ALICE,
+      changes: [await put(PATH, '{"v":"alice"}')],
+      occurredAt: at(0),
+    });
+    let patch = await aiPatch('tool-call-1', '{"v":"ai-1"}', 300);
+    // Replaced on disk by something that writes no event.
+    await put(PATH, '{"v":"out of band"}');
+    await feed(target, [edit, patch], T0 + 300 + quietPeriodMs);
+    await feed(target, [], T0 + 300 + maxAgeMs);
+
+    let revisions = await history();
+    assert.strictEqual(revisions.length, 4);
+    let [, userRevision, aiRevision, unattributed] = revisions;
+    assert.deepEqual(userRevision.trailers.superseded, [PATH]);
+    assert.deepEqual(aiRevision.trailers.superseded, [PATH]);
+    assert.strictEqual(subjectOf(unattributed), 'Unattributed changes');
+    assert.deepEqual(unattributed.trailers.includesSuperseded, [
+      `${aiRevision.id} ${PATH}`,
+      `${userRevision.id} ${PATH}`,
+    ]);
+    assert.strictEqual(
+      await show(unattributed.id, PATH),
+      '{"v":"out of band"}',
+    );
+  });
+
   test('a mismatch is superseded once a newer event for the path reaches the journal during the wait', async (assert) => {
     let target = recorder();
     await recordInitial(target);
