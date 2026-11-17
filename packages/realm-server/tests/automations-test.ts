@@ -1674,7 +1674,7 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(reports, [CHANGED], 'remove');
       });
 
-      test('a pause with no run to cancel still reports the automation', async function (assert) {
+      test('a pause reports the automation even with no run to cancel', async function (assert) {
         await switchOn();
         reports = [];
         await pauseAutomation(
