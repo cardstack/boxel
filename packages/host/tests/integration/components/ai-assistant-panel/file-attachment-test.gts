@@ -160,7 +160,8 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
   // FileDefManager skips the Matrix client for content it has already
   // uploaded (its content-hash cache), so `hasStarted()` stays false when a
   // test attaches the same bytes a second time after a successful upload.
-  // Use this only for the first successful upload of given content.
+  // Use this only for the first successful upload of given content;
+  // waitForUploadingPill reports the cached case by name.
   type BlockedMatrixUploads = ReturnType<typeof blockMatrixUploads>;
   function blockMatrixUploads() {
     let release!: () => void;
@@ -209,14 +210,14 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
   // modal, loads the file and prefetches its content before the upload starts.
   // On a loaded CI runner that can take longer than waitFor's default
   // one-second window, so the first wait is on the upload itself, not a timer.
-  // By default the wait stops early if the pill shows "error", so a failed
-  // attach reports its state at once instead of after the full timeout. A
-  // retry starts from a pill that already shows "error", so it passes
-  // `stopOnError: false`.
+  // By default the wait stops early if the pill shows "error" or "complete"
+  // without the upload reaching the client, so a failed or cached upload is
+  // reported at once instead of after the full timeout. A retry starts from a
+  // pill that already shows "error", so it passes `stopEarly: false`.
   async function waitForUploadingPill(
     upload: BlockedMatrixUploads,
     sourceUrl: string,
-    { stopOnError = true }: { stopOnError?: boolean } = {},
+    { stopEarly = true }: { stopEarly?: boolean } = {},
   ) {
     let selector = `[data-test-attached-file="${sourceUrl}"][data-test-file-upload-status="uploading"]`;
     let begin = performance.now();
@@ -225,7 +226,8 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
       await waitUntil(
         () =>
           upload.hasStarted() ||
-          (stopOnError && uploadStatusOf(sourceUrl) === 'error'),
+          (stopEarly &&
+            ['error', 'complete'].includes(uploadStatusOf(sourceUrl) ?? '')),
         { timeout: 20_000 },
       );
     } catch (e: any) {
@@ -235,8 +237,12 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
     }
     let elapsed = elapsedMs();
     if (!upload.hasStarted()) {
+      let reason =
+        uploadStatusOf(sourceUrl) === 'complete'
+          ? 'completed without reaching the Matrix client (content already uploaded in this test is served from the content-hash cache)'
+          : 'failed before it reached the Matrix client';
       throw new Error(
-        `the upload of ${sourceUrl} failed before it reached the Matrix client, after ${elapsed} ms; ${describeAttachedFiles()}`,
+        `the upload of ${sourceUrl} ${reason}, after ${elapsed} ms; ${describeAttachedFiles()}`,
       );
     }
     if (elapsed > 1000) {
@@ -920,7 +926,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
 
     try {
       await waitForUploadingPill(retry, `${testRealmURL}person.gts`, {
-        stopOnError: false,
+        stopEarly: false,
       });
 
       assert
