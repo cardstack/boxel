@@ -152,7 +152,7 @@ export async function write(
 
     return { ok: true };
   } catch (err) {
-    // A request that never got a response (refused, reset, aborted) surfaces
+    // A request that never got a response (refused, reset, closed) surfaces
     // from fetch as a bare "fetch failed"; the reason is on its cause.
     return { ok: false, error: describeFetchError(err) };
   }
