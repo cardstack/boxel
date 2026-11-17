@@ -12,6 +12,7 @@ import {
 } from '@cardstack/runtime-common/realm-runner-script';
 
 import {
+  FOUND_CARD_SHAPE,
   MAX_MILESTONE_CHARS,
   MAX_MILESTONES,
   MAX_RUN_NOTIFICATION_CHARS,
@@ -120,7 +121,7 @@ const BOOTSTRAP = `
             get() {
               throw new TypeError(
                 answers +
-                  ': { id, path, type, attributes, relationships }. There is no .data; read its fields from .attributes and its links from .relationships',
+                  ': ${FOUND_CARD_SHAPE}. There is no .data; read its fields from .attributes and its links from .relationships',
               );
             },
           },

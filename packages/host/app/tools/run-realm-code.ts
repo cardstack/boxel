@@ -123,6 +123,7 @@ import runRealmCode, {
 } from '../lib/realm-runner/runner';
 import {
   AUTOMATION_METHODS,
+  FOUND_CARD_SHAPE,
   INTERACTIVE_METHODS,
   MAX_MILESTONE_CHARS,
   MAX_MILESTONES,
@@ -3774,8 +3775,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'room.credits(), and can ' +
     'refresh the index of the workspace with realm.index.*. ' +
     'realm.cards.get answers the card itself, and realm.cards.search ' +
-    'answers { cards, total, truncated } with each card the same: { id, ' +
-    'path, type, attributes, relationships }, where path is its file and ' +
+    'answers { cards, total, truncated } with each card the same: ' +
+    `${FOUND_CARD_SHAPE}, where path is its file and ` +
     "relationships holds each link's URL by field path. Neither has the " +
     ".data of a card's .json file. realm.cards.get throws when it cannot " +
     'read the card, with the reason, so a card it answers was found. ' +

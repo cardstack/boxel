@@ -23,6 +23,7 @@ import {
 
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
+import { FOUND_CARD_SHAPE } from '@cardstack/host/lib/realm-runner/surfaces';
 import type { TelemetryEventInput } from '@cardstack/host/services/client-telemetry';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
@@ -44,6 +45,16 @@ import { setupRenderingTest } from '../../helpers/setup';
 import type { CardDef } from '@cardstack/base/card-api';
 
 const otherRealmURL = 'http://test-realm/test2/';
+
+// The error a script gets for reading `.data` from a card that `answers`
+// returns, as the tool reports it.
+function readsDataError(answers: string) {
+  return (error: Error) =>
+    error.message.includes('TypeError in the script') &&
+    error.message.includes(
+      `${answers}: ${FOUND_CARD_SHAPE}. There is no .data; read its fields from .attributes and its links from .relationships`,
+    );
+}
 
 // Makes the realm service know a workspace the user can read under
 // `identifier`, without a realm behind it: the capture endpoint is stubbed,
@@ -1062,7 +1073,7 @@ return await realm.cards.get('people/hassan');`,
           code: `const card = await realm.cards.get('people/hassan');
 return ${read};`,
         }),
-        /TypeError in the script.*: realm\.cards\.get returns the card itself: \{ id, path, type, attributes, relationships \}\. There is no \.data; read its fields from \.attributes and its links from \.relationships/,
+        readsDataError('realm.cards.get returns the card itself'),
         `${read} throws`,
       );
     }
@@ -1084,7 +1095,8 @@ return {
     });
     let { card, spread, stringified, own, reflected, hasOwnData, path } =
       JSON.parse(result.scriptResult!);
-    let keys = ['id', 'path', 'type', 'attributes', 'relationships'];
+    // The keys the shape names, which checks the shape against the answer.
+    let keys = FOUND_CARD_SHAPE.match(/\w+/g);
     assert.deepEqual(Object.keys(card), keys, 'a returned card has no data');
     assert.deepEqual(spread, keys, 'a spread card has no data');
     assert.deepEqual(stringified, keys, 'a serialized card has no data');
@@ -3853,7 +3865,7 @@ return errors;`);
       await assert.rejects(
         run(`const { cards } = await realm.cards.search({ filter: { eq: { name: 'Pancakes' }, on: ${recipeRef} } });
 return cards[0].data.attributes;`),
-        /TypeError in the script.*: realm\.cards\.search returns each card itself: \{ id, path, type, attributes, relationships \}\. There is no \.data; read its fields from \.attributes and its links from \.relationships/,
+        readsDataError('realm.cards.search returns each card itself'),
       );
 
       let { value } = await run(`
@@ -3865,7 +3877,8 @@ return {
   own: Object.getOwnPropertyNames(found.cards[0]),
   hasOwnData: Object.prototype.hasOwnProperty.call(found.cards[0], 'data'),
 };`);
-      let keys = ['id', 'path', 'type', 'attributes', 'relationships'];
+      // The keys the shape names, which checks the shape against the answer.
+      let keys = FOUND_CARD_SHAPE.match(/\w+/g);
       assert.deepEqual(
         Object.keys(value.found.cards[0]),
         keys,
