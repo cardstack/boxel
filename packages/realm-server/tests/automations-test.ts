@@ -396,7 +396,9 @@ module(basename(import.meta.filename), function () {
         await switchOn();
         let pausedForPayer = await pendingRun('2026-11-12T11:30:00.000Z');
         reports.length = 0;
-        await pauseForPayerLostAccess(dbAdapter, AUTOMATION, OWNER, report);
+        await pauseForPayerLostAccess(dbAdapter, AUTOMATION, OWNER, {
+          reportRunChange: report,
+        });
         assert.deepEqual(
           reports,
           [{ runId: pausedForPayer.id, state: 'canceled' }],
@@ -414,7 +416,9 @@ module(basename(import.meta.filename), function () {
         );
         let pausedForRealm = await pendingRun('2026-11-13T11:30:00.000Z');
         reports.length = 0;
-        await pauseRealmAutomations(dbAdapter, REALM, report);
+        await pauseRealmAutomations(dbAdapter, REALM, {
+          reportRunChange: report,
+        });
         assert.deepEqual(
           reports,
           [{ runId: pausedForRealm.id, state: 'canceled' }],
