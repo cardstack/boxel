@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens), the record of each pricing version's values and unit rates (`pricing_versions`), and the cost coverage report that compares, for a period, the credits each charge kind drew with the hosting cost of the usage it priced, by pricing version (`getCostCoverage` and the `credit_charge_costs` view). Use when asking whether the margin covers our cost, which charge kind under-charges, or what prices a pricing version stands for, when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when an automation run was refused for its balance or a credit cap (`insufficient-credits`, `daily-credit-cap-reached`, `monthly-credit-cap-reached`, `pricing-unavailable`), when asking how a run's minimum balance is computed, what runs in flight hold against a balance, or which charges count toward an automation's daily and monthly caps, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/automation-spending.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens), the record of each pricing version's values and unit rates (`pricing_versions`), and the cost coverage report that compares, for a period, the credits each charge kind drew with the hosting cost of the usage it priced, by pricing version (`getCostCoverage` and the `credit_charge_costs` view). Use when asking whether the margin covers our cost, which charge kind under-charges, or what prices a pricing version stands for, when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when an automation run was refused for its balance or a credit cap (`insufficient-credits`, `daily-credit-cap-reached`, `monthly-credit-cap-reached`, `pricing-unavailable`), when asking how a run's minimum balance is computed, what runs in flight hold against a balance, or which charges count toward an automation's daily and monthly caps, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a user, run, realm or automation was charged or how much it used or why a charge didn't write twice, or where an operator sees a user's or realm's charges and automations (the Grafana Users and Realms dashboards), when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/automation-spending.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -838,6 +838,36 @@ which names the run for a run's request (see [A run's AI requests](#a-runs-ai-re
 Stripe handlers record purchases, plan allowances and expiries without naming
 a kind. An operator's top-up (`handle-add-credit`) and the daily grant task
 are grants.
+
+## Where to see a user's charges
+
+Grafana's Users and Realms dashboards (Boxel Status folder, operators only)
+read the ledger above for the dashboard's time range, so the quickest answer
+to "what was this user charged for, and why" needs no SQL:
+
+- **Users** (`/d/boxelusers0001`, pick the user's Matrix id):
+  - _Automations paid by_ the user: each automation's state now, and the runs
+    it started and the credits its charges drew from the user in the time
+    range. An automation that charged the user and is now switched off, or
+    paid for by someone else, says so in State.
+  - _Credits by charge kind_: what the user's balance was charged and what
+    was added, by kind. An entry with no kind is read through the mapping in
+    "Rows without a kind".
+  - _Credit ledger_: every charge, newest first, one row per charge however
+    many credit buckets it drew on. Each row shows the credits charged or
+    added, the bucket split, and the reference that says why: realm,
+    automation and trigger, run, batch or storage day, pricing version. It
+    also shows the usage the charge priced, from `credit_charge_usage`.
+- **Realms** (`/d/boxelrealms001`, pick the realm): the same three panels
+  for the charges that name the realm, with the payer of each. Only
+  consumption charges name a realm, so grants, purchases, expiries and AI
+  calls made without a realm appear only on the Users dashboard.
+
+A realm or payer cell links to that realm's or user's dashboard with the
+same time range. The amounts shown are always positive; the ledger stores a
+charge as a negative `credit_amount`, and the panels show it as Charged.
+Widen the time range to find older charges; each table shows at most 500
+rows.
 
 ## Auditing usage, not only cost
 

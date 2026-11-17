@@ -774,6 +774,683 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
+        "description": "Each automation switched on in this realm, with its payer and state now, and the runs it started and the credits its charges drew in the time range. An automation charged in the time range and switched off now shows as switched off. Credits charged covers the run, run indexing, storage, AI and batched AI charges that name the automation or one of its runs, from whoever paid for them.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true,
+              "minWidth": 80
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "text"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "automation"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Automation"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 190
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "automation_id"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "payer"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Payer"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 170
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open this user on the Users dashboard",
+                      "url": "/d/boxelusers0001?var-matrix_user_id=${__value.raw:percentencode}&orgId=1&${__url_time_range}"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "state"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "State"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "active": {
+                          "color": "green",
+                          "index": 0
+                        },
+                        "paused": {
+                          "color": "orange",
+                          "index": 1
+                        },
+                        "waiting-for-credits": {
+                          "color": "red",
+                          "index": 2
+                        },
+                        "done": {
+                          "color": "blue",
+                          "index": 3
+                        },
+                        "switched off": {
+                          "color": "text",
+                          "index": 4
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pause_reason"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Pause reason"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "next_run"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Next run"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "last_finished_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Last run finished"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "last_result"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Last result"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "switched_on_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Switched on"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "runs"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Runs"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "errors"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Errored runs"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "credits"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Credits charged"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 28
+        },
+        "id": 11,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH charged AS (\n  SELECT COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n   WHERE l.realm = ${realm_url:sqlstring}\n     AND (l.run_id IS NOT NULL OR l.automation_id IS NOT NULL)\n     AND $__unixEpochFilter(l.created_at)\n   GROUP BY 1\n),\nlisted AS (\n  SELECT automation_id FROM automations WHERE realm = ${realm_url:sqlstring}\n  UNION\n  SELECT automation_id FROM charged WHERE automation_id IS NOT NULL\n),\nran AS (\n  SELECT r.automation_id,\n         COUNT(*) AS runs,\n         COUNT(*) FILTER (WHERE r.state = 'error') AS errors\n    FROM automation_runs r\n   WHERE r.realm = ${realm_url:sqlstring}\n     AND $__timeFilter(r.created_at)\n   GROUP BY 1\n)\nSELECT CASE WHEN starts_with(listed.automation_id, ${realm_url:sqlstring}) THEN substr(listed.automation_id, length(${realm_url:sqlstring}) + 1) ELSE listed.automation_id END AS automation,\n       listed.automation_id,\n       a.payer,\n       COALESCE(a.state, 'switched off') AS state,\n       COALESCE(ran.runs, 0) AS runs,\n       COALESCE(ran.errors, 0) AS errors,\n       COALESCE(c.credits, 0) AS credits,\n       a.pause_reason,\n       a.next_run,\n       a.last_finished_at,\n       a.last_result,\n       a.switched_on_at\n  FROM listed\n  LEFT JOIN automations a USING (automation_id)\n  LEFT JOIN charged c USING (automation_id)\n  LEFT JOIN ran USING (automation_id)\n ORDER BY (a.automation_id IS NOT NULL) DESC, credits DESC, automation\n LIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Automations in this realm",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "The credit ledger entries that name this realm in the time range, by charge kind and the user who paid. Charges counts each charge once however many credit buckets it drew on. Only consumption entries name a realm: run, run indexing, storage and batched AI always do, and an AI entry does when its caller named the realm.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true,
+              "minWidth": 80
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "text"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "kind"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Charge kind"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "payer"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Payer"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 170
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open this user on the Users dashboard",
+                      "url": "/d/boxelusers0001?var-matrix_user_id=${__value.raw:percentencode}&orgId=1&${__url_time_range}"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "charges"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Charges"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "charged"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Charged"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "added"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Added"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "last_charged"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Last entry"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 36
+        },
+        "id": 12,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT l.charge_kind AS kind,\n       u.matrix_user_id AS payer,\n       COUNT(DISTINCT COALESCE(l.charge_id, l.id)) AS charges,\n       COALESCE(-SUM(l.credit_amount) FILTER (WHERE l.credit_amount < 0), 0) AS charged,\n       to_timestamp(MAX(l.created_at)) AS last_charged\n  FROM credits_ledger l\n  LEFT JOIN users u ON u.id = l.user_id\n WHERE l.realm = ${realm_url:sqlstring}\n   AND $__unixEpochFilter(l.created_at)\n GROUP BY 1, 2\n ORDER BY charged DESC, kind, payer;",
+            "refId": "A"
+          }
+        ],
+        "title": "Credits charged in this realm by charge kind",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Every charge that names this realm in the time range, newest first, with who paid and what it paid for. Charged is the credits the charge drew from the payer's balance; Credit buckets shows how it split across the payer's plan allowance, daily credit and extra credit. The reference says why: the automation and trigger of the run it charged, the run, the AI batch, or the day of storage. Usage priced is the usage the charge's pricing version priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI provider cost and tokens).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true,
+              "minWidth": 80
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "text"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "time"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Time"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 170
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "kind"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Charge kind"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "charged"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Charged"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "added"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Added"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "buckets"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Credit buckets"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 220
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "payer"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Payer"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 170
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open this user on the Users dashboard",
+                      "url": "/d/boxelusers0001?var-matrix_user_id=${__value.raw:percentencode}&orgId=1&${__url_time_range}"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "automation"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Automation"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 180
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "trigger"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Trigger"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "run_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Run"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "batch_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Batch"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "charge_day"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Storage day"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pricing_version"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Pricing version"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "usage"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Usage priced"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 260
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 12,
+          "w": 24,
+          "x": 0,
+          "y": 45
+        },
+        "id": 13,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge,\n         MIN(l.created_at) AS created_at,\n         COALESCE(l.charge_kind, CASE l.credit_type\n           WHEN 'plan_allowance_used' THEN 'ai'\n           WHEN 'extra_credit_used' THEN 'ai'\n           WHEN 'daily_credit_used' THEN 'ai'\n           WHEN 'plan_allowance' THEN 'grant'\n           WHEN 'daily_credit' THEN 'grant'\n           WHEN 'extra_credit' THEN 'purchase'\n           WHEN 'plan_allowance_expired' THEN 'expiry'\n         END) AS kind,\n         l.user_id,\n         l.realm,\n         l.run_id,\n         l.batch_id,\n         l.automation_id,\n         l.charge_day,\n         l.pricing_version,\n         COALESCE(-SUM(l.credit_amount) FILTER (WHERE l.credit_amount < 0), 0) AS charged,\n         COALESCE(SUM(l.credit_amount) FILTER (WHERE l.credit_amount > 0), 0) AS added,\n         string_agg(l.credit_type::text || ' ' || abs(l.credit_amount), ', ' ORDER BY l.credit_type::text) AS buckets\n    FROM credits_ledger l\n   WHERE l.realm = ${realm_url:sqlstring}\n     AND $__unixEpochFilter(l.created_at)\n   GROUP BY 1, 3, 4, 5, 6, 7, 8, 9, 10\n)\nSELECT to_timestamp(c.created_at) AS time,\n       c.kind,\n       u.matrix_user_id AS payer,\n       c.charged,\n       c.buckets,\n       CASE WHEN starts_with(COALESCE(c.automation_id, r.automation_id), c.realm) THEN substr(COALESCE(c.automation_id, r.automation_id), length(c.realm) + 1) ELSE COALESCE(c.automation_id, r.automation_id) END AS automation,\n       r.trigger,\n       (SELECT string_agg(g.unit || ' ' || trim_scale(round(g.quantity, 6))::text, ', ' ORDER BY g.unit)\n          FROM credit_charge_usage g\n         WHERE g.charge_id = c.charge) AS usage,\n       c.run_id,\n       c.batch_id,\n       c.charge_day,\n       c.pricing_version\n  FROM charges c\n  LEFT JOIN automation_runs r ON r.id = c.run_id\n  LEFT JOIN users u ON u.id = c.user_id\n ORDER BY c.created_at DESC\n LIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Credit ledger for this realm",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
         "description": "Indexing job status for this realm. Pending and in-flight counts come from the jobs/job_reservations tables, scoped to from-scratch-index and incremental-index for this realm. full-reindex is system-wide and not shown here.",
         "fieldConfig": {
           "defaults": {
@@ -888,7 +1565,7 @@
           "h": 4,
           "w": 24,
           "x": 0,
-          "y": 28
+          "y": 57
         },
         "id": 7,
         "options": {
@@ -934,7 +1611,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 32
+          "y": 61
         },
         "id": 100,
         "options": {
@@ -1123,7 +1800,7 @@
           "h": 7,
           "w": 24,
           "x": 0,
-          "y": 40
+          "y": 69
         },
         "id": 101,
         "options": {
@@ -1371,7 +2048,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 47
+          "y": 76
         },
         "id": 8,
         "options": {
@@ -1677,7 +2354,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 57
+          "y": 86
         },
         "id": 9,
         "options": {
