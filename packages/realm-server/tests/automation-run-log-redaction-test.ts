@@ -341,7 +341,10 @@ module(basename(import.meta.filename), function (hooks) {
 
       // The script asks the model about what it was handed, in the request
       // `realm.resolve` builds: the instruction, input and error as the user
-      // message of a chat completion.
+      // message of a chat completion. What it was handed is already scrubbed,
+      // so the prompt can carry the key only if the forward itself adds it.
+      // The instruction names the `userKey` slot the vendor's operation fills,
+      // so a forward that filled slots in a prompt would put the key there.
       let resolved = await request
         .post('/_request-forward')
         .set('Accept', 'application/json')
@@ -364,7 +367,8 @@ module(basename(import.meta.filename), function (hooks) {
               {
                 role: 'user',
                 content: JSON.stringify({
-                  instruction: 'Summarize what the vault answered',
+                  instruction:
+                    'Summarize what the vault answered to Bearer {{userKey}}',
                   input: JSON.parse(answer.text),
                   error: leak === 'failure' ? answer.text : null,
                 }),
@@ -378,6 +382,10 @@ module(basename(import.meta.filename), function (hooks) {
       assert.true(
         asked.body.includes('[REDACTED]'),
         `the vendor's echo reached the prompt, scrubbed: ${asked.body}`,
+      );
+      assert.true(
+        asked.body.includes('Bearer {{userKey}}'),
+        `the prompt reached the model with its slot unfilled: ${asked.body}`,
       );
       assert.false(asked.body.includes(VALUE), `the model sees: ${asked.body}`);
       assert.false(
