@@ -777,8 +777,11 @@ interface Compilation {
   definitions: Map<string, DefinitionInput>;
   // URLs whose realm's index moving could change what this compiles to.
   inputs: string[];
-  // What the governed realm held under each rule type whose grants' filters
-  // read a field: the types a grant's `misreadingTypes` were chosen from.
+  // What the governed realm held under each rule type compiling read it for:
+  // a type whose grants' filters read a field, which a grant's
+  // `misreadingTypes` were chosen from, and a type the realm doesn't define
+  // whose `read` or `query` grants the code check judged by the realm's own
+  // types under it (`module-not-granted`).
   subtypes: { targetType: ResolvedCodeRef; keys: string[] }[];
   // The realm's `instanceTypeKeys`, read before `subtypes` was. A
   // revalidation that finds them unchanged skips reading `subtypes` again,
