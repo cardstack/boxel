@@ -71,7 +71,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Switched-on automations in the active state: the tick schedules the next run of each one. The realm, automation and payer filters narrow the count. The Paused and Waiting for credits stats count the other switched-on automations.",
+        "description": "Switched-on automations in the active state: the tick schedules the next run of each one. The realm, automation and payer filters narrow the count. The Paused and Waiting for credits stats count switched-on automations in those states; the Automations table also lists done automations, whose triggers are all spent.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -407,7 +407,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "How long the oldest automation run a worker could claim has waited: from the creation of the run's job, or from the end of the job's last attempt when a worker lost an attempt. The query leaves out a run waiting behind a running run of the same automation (the same concurrency group) or behind a claim hold, since no worker could claim such a run yet. The stat turns red past 5 minutes, the threshold of the \"Automation runs waiting for a worker\" alert, which runs the same query. The dashboard's filters do not narrow the oldest wait.",
+        "description": "How long the oldest automation run a worker could claim has waited: from the creation of the run's job, or from the end of the job's last attempt when a worker lost an attempt. The query leaves out a run waiting behind a running run of the same automation (the same concurrency group) or behind a claim hold, since no worker could claim such a run yet. The stat turns red past 60 seconds, the threshold of the \"Automation runs waiting for a worker\" alert, which runs the same query and fires once the oldest wait stays above 60 seconds for 5 minutes. The dashboard's filters do not narrow the oldest wait.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -423,11 +423,11 @@
                 },
                 {
                   "color": "yellow",
-                  "value": 60
+                  "value": 30
                 },
                 {
                   "color": "red",
-                  "value": 300
+                  "value": 60
                 }
               ]
             },
@@ -680,7 +680,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT COUNT(*) AS skipped\n  FROM automation_run_log g\n  JOIN automation_runs r ON r.id = g.run_id\n WHERE g.kind = 'trigger'\n   AND (g.data->>'skipped')::boolean\n   AND $__timeFilter(g.at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger));",
+            "rawSql": "SELECT COUNT(*) AS skipped\n  FROM automation_run_log g\n  JOIN automation_runs r ON r.id = g.run_id\n WHERE g.kind = 'trigger'\n   AND (g.data->>'skipped')::boolean\n   AND $__timeFilter(g.at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR COALESCE(g.data->>'trigger', r.trigger) IN ($trigger));",
             "refId": "A"
           }
         ],
@@ -1431,7 +1431,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(g.at, $__interval, 0),\n       COALESCE(g.data->>'trigger', r.trigger) AS metric,\n       COUNT(*)::int AS value\n  FROM automation_run_log g\n  JOIN automation_runs r ON r.id = g.run_id\n WHERE g.kind = 'trigger'\n   AND (g.data->>'skipped')::boolean\n   AND $__timeFilter(g.at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1, 2\n ORDER BY 1, 2;",
+            "rawSql": "SELECT $__timeGroupAlias(g.at, $__interval, 0),\n       COALESCE(g.data->>'trigger', r.trigger) AS metric,\n       COUNT(*)::int AS value\n  FROM automation_run_log g\n  JOIN automation_runs r ON r.id = g.run_id\n WHERE g.kind = 'trigger'\n   AND (g.data->>'skipped')::boolean\n   AND $__timeFilter(g.at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR COALESCE(g.data->>'trigger', r.trigger) IN ($trigger))\n GROUP BY 1, 2\n ORDER BY 1, 2;",
             "refId": "A"
           }
         ],
@@ -1443,7 +1443,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Runs a worker had claimed and not yet ended, at each instant. A prerender tab carries one run at a time, so the count equals the run tabs in use across the prerender servers; the Prerender capacity row below breaks the count down per server.",
+        "description": "Runs a worker had claimed and not yet ended, at each instant. A claimed run counts while Boxel admits the run, while the run waits on a prerender server for a tab, while the script runs and while Boxel commits the run's writes, so the count is an upper bound on the run tabs in use across the prerender servers. The Prerender capacity row below shows each server's running and queued runs.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -2046,7 +2046,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "The cost coverage report over the dashboard's time range: for each charge kind and pricing version, the credits charged beside the hosting cost of the usage the charges priced, in credits (1,000 to the dollar). Margin equals Credits charged (priced) less AWS cost; coverage says how many times the cost a kind recovered. A fully paid metered kind reads at least the version's margin, and more where rounding a small charge up to a whole credit adds credits (compare full credits with cost at margin); AI reads about 1. A negative margin or a coverage under 1 marks a kind charging less than the usage costs. Shortfall counts credits the payer's balance could not cover. The report covers every charge, not only automation charges, and the dashboard's filters do not narrow the report. The pricing skill's \"The cost coverage report\" explains each column.",
+        "description": "The cost coverage report over the dashboard's time range: for each charge kind and pricing version, the credits charged beside the hosting cost of the usage the charges priced, in credits (1,000 to the dollar). Margin equals Credits charged (priced) less AWS cost; coverage says how many times the cost a kind recovered. A fully paid metered kind reads at least the version's margin, and more where rounding a small charge up to a whole credit adds credits (compare full credits with cost at margin); AI reads about 1. A coverage under 0.95 (red) marks a kind charging less than the usage costs. An AI line between 0.95 and 1 (yellow), with a small negative margin (orange), comes from rounding each AI charge to the nearest credit. Shortfall counts credits the payer's balance could not cover. The report covers every charge, not only automation charges, and the dashboard's filters do not narrow the report. The pricing skill's \"The cost coverage report\" explains each column.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -2208,7 +2208,7 @@
                     "mode": "absolute",
                     "steps": [
                       {
-                        "color": "red",
+                        "color": "orange",
                         "value": null
                       },
                       {
@@ -2248,6 +2248,10 @@
                       {
                         "color": "red",
                         "value": null
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 0.95
                       },
                       {
                         "color": "green",
@@ -2759,7 +2763,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "WITH runs AS (\n  SELECT r.*\n    FROM automation_runs r\n   WHERE $__timeFilter(r.created_at)\n     AND ('__all' IN ($realm) OR r.realm IN ($realm))\n     AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n     AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n   ORDER BY r.created_at DESC\n   LIMIT 500\n),\ncharges AS (\n  SELECT l.run_id,\n         COALESCE(l.charge_id, l.id) AS charge_id,\n         MAX(l.pricing_version) AS pricing_version,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n   WHERE l.run_id IN (SELECT id FROM runs)\n   GROUP BY 1, 2\n),\nper_run AS (\n  SELECT charges.run_id,\n         SUM(charges.credits) AS credits,\n         SUM(c.cost_usd) AS cost_usd,\n         string_agg(DISTINCT charges.pricing_version, ', ') AS pricing_versions\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND c.created_at >= EXTRACT(EPOCH FROM (SELECT MIN(created_at) FROM runs))::integer\n   GROUP BY 1\n)\nSELECT runs.created_at AS created,\n       CASE WHEN starts_with(runs.automation_id, runs.realm) THEN substr(runs.automation_id, length(runs.realm) + 1)\n            ELSE runs.automation_id END AS automation,\n       runs.trigger,\n       REGEXP_REPLACE(runs.realm, '^https?://[^/]+/', '') AS realm,\n       runs.acts_as AS payer,\n       CASE WHEN runs.dry_run THEN runs.state || ' (preview)' ELSE runs.state END AS state,\n       runs.error_reason AS \"error reason\",\n       q.queue_wait_s AS \"queue wait\",\n       EXTRACT(EPOCH FROM runs.finished_at - runs.started_at) AS \"run time\",\n       runs.writes,\n       COALESCE(per_run.credits, 0) AS \"Credits charged\",\n       per_run.cost_usd AS \"AWS cost\",\n       per_run.pricing_versions AS \"pricing version\",\n       runs.error_message AS \"error message\",\n       runs.id AS run\n  FROM runs\n  LEFT JOIN per_run ON per_run.run_id = runs.id\n  LEFT JOIN LATERAL (\n    SELECT EXTRACT(EPOCH FROM MIN(jr.created_at) - MIN(j.created_at)) AS queue_wait_s\n      FROM jobs j\n      JOIN job_reservations jr ON jr.job_id = j.id\n     WHERE j.concurrency_group = 'automation:' || runs.automation_id\n       AND j.args->'commandInput'->>'runId' = runs.id::text\n  ) q ON true\n ORDER BY runs.created_at DESC;",
+            "rawSql": "WITH runs AS (\n  SELECT r.*\n    FROM automation_runs r\n   WHERE $__timeFilter(r.created_at)\n     AND ('__all' IN ($realm) OR r.realm IN ($realm))\n     AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n     AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n   ORDER BY r.created_at DESC\n   LIMIT 500\n),\ncharges AS (\n  SELECT l.run_id,\n         COALESCE(l.charge_id, l.id) AS charge_id,\n         MAX(l.pricing_version) AS pricing_version,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n   WHERE l.run_id IN (SELECT id FROM runs)\n   GROUP BY 1, 2\n),\nper_run AS (\n  SELECT charges.run_id,\n         SUM(charges.credits) AS credits,\n         SUM(c.cost_usd) AS cost_usd,\n         string_agg(DISTINCT charges.pricing_version, ', ') AS pricing_versions\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND c.created_at >= EXTRACT(EPOCH FROM (SELECT MIN(created_at) FROM runs))::integer\n   GROUP BY 1\n)\nSELECT runs.created_at AS created,\n       CASE WHEN starts_with(runs.automation_id, runs.realm) THEN substr(runs.automation_id, length(runs.realm) + 1)\n            ELSE runs.automation_id END AS automation,\n       runs.trigger,\n       REGEXP_REPLACE(runs.realm, '^https?://[^/]+/', '') AS realm,\n       runs.acts_as AS payer,\n       CASE WHEN runs.dry_run THEN runs.state || ' (preview)' ELSE runs.state END AS state,\n       runs.error_reason AS \"error reason\",\n       q.queue_wait_s AS \"queue wait\",\n       EXTRACT(EPOCH FROM runs.finished_at - runs.started_at) AS \"run time\",\n       runs.writes,\n       COALESCE(per_run.credits, 0) AS \"Credits charged\",\n       per_run.cost_usd AS \"AWS cost\",\n       per_run.pricing_versions AS \"pricing version\",\n       runs.error_message AS \"error message\",\n       runs.id AS run\n  FROM runs\n  LEFT JOIN per_run ON per_run.run_id = runs.id\n  LEFT JOIN LATERAL (\n    -- The run's attempt is the reservation that owns the run, so the attempt\n    -- names the run's job; each step is a key lookup.\n    SELECT EXTRACT(EPOCH FROM MIN(jr.created_at) - j.created_at) AS queue_wait_s\n      FROM job_reservations ar\n      JOIN jobs j ON j.id = ar.job_id\n      JOIN job_reservations jr ON jr.job_id = j.id\n     WHERE ar.id = runs.attempt\n     GROUP BY j.created_at\n  ) q ON true\n ORDER BY runs.created_at DESC;",
             "refId": "A"
           }
         ],
@@ -2781,7 +2785,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Each prerender server's run tabs, from the capacity line each server writes every 30 seconds while the server holds a run tab: runningRuns (runs the server runs at once, one per tab), queuedRuns (runs waiting for a tab another run of the same realm and identity holds) and runTabs. A server holding no run tab writes no line, so a gap means an idle server. Loki scans every prerender line in the window to find the capacity lines, so the panel covers the last hour; widen the window with care.",
+            "description": "Each prerender server's run tabs, from the capacity line each server writes every 30 seconds while the server holds a run tab: runningRuns (runs the server runs at once, one per tab), queuedRuns (runs waiting for a tab another run of the same realm and identity holds) and runTabs. A server holding no run tab writes no line, so a gap means an idle server. Loki scans every prerender line in the window to find the capacity lines, so the panel covers the last 15 minutes of a relative time range (30 lines per server); widen the window with care.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -2890,15 +2894,15 @@
             ],
             "title": "Prerender run capacity",
             "type": "timeseries",
-            "timeFrom": "1h",
-            "maxDataPoints": 120
+            "timeFrom": "15m",
+            "maxDataPoints": 60
           }
         ],
         "title": "Prerender capacity (Loki)",
         "type": "row"
       }
     ],
-    "refresh": "1m",
+    "refresh": "5m",
     "schemaVersion": 42,
     "tags": [
       "workflow:automations"
