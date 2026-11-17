@@ -555,7 +555,7 @@ jobs:
     # GitHub's runners cost nothing for a public repo and RunsOn's do not, so
     # only pushes to main always take RunsOn: the memory baseline and the
     # shard timings are measured on main, and one machine type keeps them
-    # comparable from run to run. Every other run takes RunsOn only while the
+    # comparable from run to run (see the on-demand note below). Every other run takes RunsOn only while the
     # repo variable RUNS_ON_SPILL is `true`. The actions-queue collector
     # (packages/observability/collectors/actions-queue.ts) sets it while
     # GitHub's pool is near full and clears it when the pool drains. GitHub
@@ -584,7 +584,19 @@ jobs:
     # build, but on main a build completed by a re-run is rejected (see the
     # finalize job), so a reclaim on main costs that commit its baseline
     # build. Pull requests stay on spot.
-    runs-on: ${{ vars.RUNS_ON_SPEC && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository))) && format('runs-on={0}-host-test-{1}/{2}{3}', github.run_id, matrix.shardIndex, vars.RUNS_ON_SPEC, (github.event_name == 'push' && github.ref == 'refs/heads/main') && '/spot=false' || '') || 'ubuntu-latest' }}
+    #
+    # For on-demand, RunsOn picks the cheapest instance type that a list of
+    # families allows, which for RUNS_ON_SPEC is always m6a.xlarge. A shard
+    # takes about 1.6 times as long on m6a.xlarge as on m7a.xlarge: an m7a
+    # vCPU is a full core, and an m6a or m7i vCPU is one of a core's two
+    # hyperthreads. So main names exact instance types instead of families. For
+    # a list of exact types, RunsOn's on-demand allocation takes them in the
+    # order given, so main gets m7a.xlarge and m7i.xlarge only when m7a has no
+    # capacity. RunsOn does not document what a key given twice in one label
+    # does, so main's label repeats the rest of RUNS_ON_SPEC instead of adding
+    # `family` to it. Keep its `image`, `volume` and `extras` in step with
+    # RUNS_ON_SPEC.
+    runs-on: ${{ vars.RUNS_ON_SPEC && github.event_name == 'push' && github.ref == 'refs/heads/main' && format('runs-on={0}-host-test-{1}/family=m7a.xlarge+m7i.xlarge/image=ubuntu24-full-x64/volume=gp3:125mbs/extras=s3-cache/spot=false', github.run_id, matrix.shardIndex) || vars.RUNS_ON_SPEC && vars.RUNS_ON_SPILL == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-host-test-{1}/{2}', github.run_id, matrix.shardIndex, vars.RUNS_ON_SPEC) || 'ubuntu-latest' }}
     # Without this a wedged shard inherits GitHub's 360-minute default and
     # holds a runner for six hours doing nothing, which starves the pool for
     # every other PR in the repo. A healthy shard has never exceeded ~19
