@@ -80,19 +80,20 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.strictEqual(prefix('/blog').path, 'blog');
     },
 
-  'parsePathPrefix: decodes percent-escapes the way the realm decodes a path':
-    async (assert) => {
-      assert.deepEqual(prefix('My%20Posts/').segments, ['My Posts']);
-      assert.deepEqual(prefix('My Posts/').segments, ['My Posts']);
-      assert.deepEqual(prefix('caf%C3%A9/').segments, ['café']);
-      assert.deepEqual(prefix('café/').segments, ['café']);
-      assert.deepEqual(prefix('100%25.json').segments, ['100%.json']);
-      // `decodeURI` leaves the escapes of URL delimiters as they are, as it
-      // does for the path of a file the realm stores.
-      assert.deepEqual(prefix('a%2Fb/').segments, ['a%2Fb']);
-      assert.deepEqual(prefix('a%3Fb/').segments, ['a%3Fb']);
-      assert.strictEqual(prefix('My%20Posts/').source, 'My%20Posts/');
-    },
+  'parsePathPrefix: decodes percent-escapes once, with decodeURI': async (
+    assert,
+  ) => {
+    assert.deepEqual(prefix('My%20Posts/').segments, ['My Posts']);
+    assert.deepEqual(prefix('My Posts/').segments, ['My Posts']);
+    assert.deepEqual(prefix('caf%C3%A9/').segments, ['café']);
+    assert.deepEqual(prefix('café/').segments, ['café']);
+    assert.deepEqual(prefix('100%25.json').segments, ['100%.json']);
+    // `decodeURI` leaves the escapes of URL delimiters as they are, as it
+    // does for the path of a file the realm stores.
+    assert.deepEqual(prefix('a%2Fb/').segments, ['a%2Fb']);
+    assert.deepEqual(prefix('a%3Fb/').segments, ['a%3Fb']);
+    assert.strictEqual(prefix('My%20Posts/').source, 'My%20Posts/');
+  },
 
   'parsePathPrefix: refuses each invalid prefix with a structured error':
     async (assert) => {

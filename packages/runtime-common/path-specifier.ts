@@ -13,10 +13,10 @@
 //
 // A prefix is relative to the root of the realm it is applied to. A leading
 // `/` is optional, and a trailing `/` makes it a directory. Its
-// percent-escapes are decoded the way the realm decodes a request path into a
-// file path (`decodeURI`, as `RealmPaths.local` does), so a prefix names the
-// same files a URL with that path would. `%2E%2E` is therefore `..`, and is
-// refused like `..`.
+// percent-escapes are decoded once, with `decodeURI`, which leaves the escapes
+// of URL delimiters such as `%3A` and `%2F` encoded, as they are in a path
+// `RealmPaths.local` resolves. `%2E%2E` is therefore `..`, and is refused like
+// `..`.
 //
 // Matching compares decoded segments one at a time, case-sensitively and with
 // no Unicode normalization, against a path as `RealmPaths.local` resolves it.

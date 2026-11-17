@@ -13,7 +13,7 @@ module(basename(import.meta.filename), function () {
     await runSharedTest(pathSpecifierTests, assert, {});
   });
 
-  test('parsePathPrefix: decodes percent-escapes the way the realm decodes a path', async function (assert) {
+  test('parsePathPrefix: decodes percent-escapes once, with decodeURI', async function (assert) {
     await runSharedTest(pathSpecifierTests, assert, {});
   });
 

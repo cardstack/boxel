@@ -47,8 +47,8 @@ values.
 
 A specifier MUST be matched against the path as the realm resolves it
 (`RealmPaths.local`), never as a caller spelled it. A prefix's percent-escapes
-MUST be decoded the way the realm decodes a request path into a file path, so
-that a prefix names the same files a URL with that path would. Matching MUST
+MUST be decoded once, with `decodeURI`, which leaves the escapes of URL
+delimiters such as `%3A` encoded, as they are in a resolved path. Matching MUST
 compare whole decoded segments, case-sensitively and with no Unicode
 normalization, so `blog/` never matches `blog-old/` or `blog.json`. It MUST
 run in time linear in the lengths of the path and the prefixes, and MUST NOT
