@@ -94,6 +94,8 @@ const ACTIVE = {
   nextRun: '2030-01-01T10:00:00.000Z',
   lastResult: 'complete',
   lastFinishedAt: '2030-01-01T09:00:00.000Z',
+  failuresInARow: 0,
+  lastFailure: null,
   triggers: [
     {
       label: 'nightly',
@@ -648,6 +650,22 @@ module('Acceptance | automation view', function (hooks) {
         { state: 'paused', pauseReason: 'payer-lost-access' },
         'Paused',
         'The payer can no longer edit this workspace, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and becomes the new payer.',
+      ],
+      [
+        {
+          state: 'paused',
+          pauseReason: 'repeated-failures',
+          lastResult: 'error',
+          failuresInARow: 5,
+          lastFailure: {
+            runId: 'run-5',
+            reason: 'script-error',
+            message: 'line 3: Error: upstream said no',
+            finishedAt: '2030-01-01T09:00:00.000Z',
+          },
+        },
+        'Paused',
+        '5 runs of this automation failed in a row, so Boxel paused the automation. The last run failed with: line 3: Error: upstream said no. Boxel runs nothing until someone who can edit this workspace fixes what the runs fail on and resumes the automation.',
       ],
       [
         { state: 'waiting-for-credits', pauseReason: null },
