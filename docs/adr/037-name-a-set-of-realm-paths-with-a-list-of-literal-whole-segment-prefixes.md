@@ -73,11 +73,14 @@ A prefix MUST be refused when it is empty or has an empty segment, a `.` or
 character, or a malformed escape. One invalid prefix MUST make the whole
 specifier invalid. A consumer MUST NOT drop only the invalid prefixes and use
 the rest, because that could leave an empty list, which means no path limit.
+A consumer MUST treat an invalid specifier as matching no path, never as
+absent or empty, so that it fails closed (ADR 024 §1.6).
 
 ### 1.6. Storage
 
 A stored specifier MUST be its list of prefixes as written, or `null` when it
-is absent. A stored value that isn't a list of strings MUST be refused, never
+is absent. An absent specifier on a limit means no path limit, as an empty list
+does. A stored value that isn't a list of strings MUST be refused, never
 read as absent. Reading a stored specifier SHOULD NOT validate its prefixes,
 so a card holding an invalid prefix still loads and can be corrected in its
 editor; validity is decided where the specifier is used.
