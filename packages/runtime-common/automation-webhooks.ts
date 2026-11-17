@@ -120,7 +120,7 @@ export async function unusableWebhookProblems(
       problems.push({
         code: 'foreign-webhook',
         path,
-        message: `The incoming webhook "${trigger.webhookPath}" belongs to someone without write access to the workspace. Pick one of the workspace’s webhooks for the "${trigger.label}" trigger`,
+        message: `The incoming webhook "${trigger.webhookPath}" belongs to someone the workspace doesn’t name as an editor. Pick one of the workspace’s webhooks for the "${trigger.label}" trigger`,
       });
     }
   }

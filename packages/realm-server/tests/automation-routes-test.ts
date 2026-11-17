@@ -342,7 +342,7 @@ module(basename(import.meta.filename), function (hooks) {
       let foreign = await switchOnHooked();
       assert.strictEqual(foreign.status, 422, foreign.text);
       assert.ok(
-        foreign.text.includes('without write access to the workspace'),
+        foreign.text.includes('the workspace doesn’t name as an editor'),
         foreign.text,
       );
       assert.strictEqual(

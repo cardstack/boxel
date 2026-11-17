@@ -662,8 +662,8 @@ module('Acceptance | automation edit format', function (hooks) {
           option.textContent?.replace(/\s+/g, ' ').trim(),
         ),
         [
-          'whk_stripe Made by @testuser:localhost',
-          'whk_github Made by @colleague:localhost',
+          'whk_stripe @testuser:localhost made this webhook',
+          'whk_github @colleague:localhost made this webhook',
         ],
         'every webhook the route lists is a choice, with who made it',
       );
@@ -693,14 +693,14 @@ module('Acceptance | automation edit format', function (hooks) {
       await waitFor('[data-test-automation-webhook-picker]');
       assert.strictEqual(
         messageOf('Webhook', item),
-        'Pick one of this workspace’s incoming webhooks: Boxel turns the automation on only with a webhook that someone who can edit this workspace made',
+        'Pick one of this workspace’s incoming webhooks: Boxel turns the automation on only with a webhook that someone the workspace names as an editor made',
       );
       let shown = await openPicker(item);
       assert.deepEqual(
         shown.map((option) => option.textContent?.replace(/\s+/g, ' ').trim()),
         [
           'whk_stripe Not one of this workspace’s webhooks',
-          'whk_github Made by @colleague:localhost',
+          'whk_github @colleague:localhost made this webhook',
         ],
       );
     });
@@ -714,7 +714,7 @@ module('Acceptance | automation edit format', function (hooks) {
       assert
         .dom('[data-test-automation-webhook-picker-empty]', item)
         .includesText(
-          'Nobody who can edit this workspace has made an incoming webhook yet.',
+          'Nobody the workspace names as an editor has made an incoming webhook yet',
         );
     });
   });

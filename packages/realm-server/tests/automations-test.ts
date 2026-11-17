@@ -2308,6 +2308,21 @@ module(basename(import.meta.filename), function () {
           assert.strictEqual(added?.automation.pauseReason, 'webhook-changed');
         });
 
+        test('checkAutomationCaps pauses for a new webhook when the card it is given carries its triggers', async function (assert) {
+          await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
+          let capsOnly = await checkAutomationCaps(dbAdapter, AUTOMATION, {
+            caps: CAPS,
+            batchedAI: false,
+          });
+          assert.strictEqual(capsOnly?.state, 'active');
+          let paused = await checkAutomationCaps(dbAdapter, AUTOMATION, {
+            caps: CAPS,
+            batchedAI: false,
+            triggers: webhookDeclaration(ADMIN_WEBHOOK).triggers,
+          });
+          assert.strictEqual(paused?.pauseReason, 'webhook-changed');
+        });
+
         test('a snapshot that predates the webhook record pauses for no webhook', async function (assert) {
           await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
           await dbAdapter.execute(

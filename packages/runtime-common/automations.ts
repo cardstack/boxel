@@ -626,7 +626,10 @@ export function capsRaisedAbove(
 // Whether the card names an incoming webhook the snapshot doesn't, and so
 // pauses with `webhook-changed`. Removing a webhook trigger asks for nothing
 // more. A snapshot without `webhookPaths` predates the record, and limits no
-// webhook.
+// webhook. Such an automation's webhooks were never checked against the
+// ownership rule at switch-on, so whatever starts a run from a delivery checks
+// the delivery's webhook against `unusableWebhookProblems` itself rather than
+// trusting the snapshot.
 export function webhooksChangedFrom(
   snapshot: AutomationCapsSnapshot,
   card: Pick<AutomationDeclaration, 'triggers'>,
@@ -643,7 +646,7 @@ export function webhooksChangedFrom(
 // undefined when the card asks for no more.
 function agreementExceededBy(
   snapshot: AutomationCapsSnapshot,
-  declaration: AutomationDeclaration,
+  declaration: Pick<AutomationDeclaration, 'caps' | 'batchedAI' | 'triggers'>,
 ):
   | Extract<
       AutomationPauseReason,
@@ -657,14 +660,16 @@ function agreementExceededBy(
 }
 
 // Checks the automation's card, as just indexed, against its caps snapshot,
-// and pauses it when the card asks for more (`capsRaisedAbove`). An
+// and pauses it when the card asks for more (`capsRaisedAbove`, and
+// `webhooksChangedFrom` when `card` carries its triggers). An
 // automation already paused keeps the reason it has: a resume takes a new
 // snapshot whatever paused it. Returns the row, or undefined when the
 // automation isn't switched on.
 export async function checkAutomationCaps(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
-  card: Pick<AutomationDeclaration, 'caps' | 'batchedAI'>,
+  card: Pick<AutomationDeclaration, 'caps' | 'batchedAI'> &
+    Partial<Pick<AutomationDeclaration, 'triggers'>>,
   reporters: AutomationReporters = {},
 ): Promise<AutomationRow | undefined> {
   return await withChanges(dbAdapter, reporters, async (txQuery, changes) => {
@@ -676,7 +681,10 @@ export async function checkAutomationCaps(
     if (automation.state === 'paused') {
       return automation;
     }
-    let reason = capsRaisedAbove(automation.capsSnapshot, card);
+    let reason = agreementExceededBy(automation.capsSnapshot, {
+      ...card,
+      triggers: card.triggers ?? [],
+    });
     if (!reason) {
       return automation;
     }
