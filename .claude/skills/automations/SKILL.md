@@ -76,6 +76,12 @@ description: >-
   batch a finished Preview keeps, `readAutomationRunReport` (a run's state,
   log, timings, cost, and the files it staged or saved), and how to compare
   a Preview with a Run now.
+  Also covers the realm-server routes a direct writer drives an automation
+  with (`handlers/handle-automations.ts`, paths in
+  `runtime-common/automation-routes.ts`): the switch-on estimate, switch-on
+  with the monthly credit cap it agrees to, Preview, Run now, pause, resume,
+  remove and cancel a run, their bodies, refusals and status codes, and how
+  to call them by hand in development.
   Also covers a run's log — `automation_run_log`, `appendRunLog` and
   `readRunLog` in `automation-run-log.ts`, the `/_run-log` route and the
   host's `RunLogSink`, the platform's `callApi`, `resolve`, commit and cap
@@ -542,8 +548,8 @@ permission row before the run's row, the order every change here takes them
 in, and returns `{ ok: true, run }` or a refusal: `missing`,
 `not-a-direct-writer`, or `not-cancelable` with the run as it stands (it
 already ended, or its commit was claimed). The automation's own row doesn't
-change: it stays active, and its next run comes due as scheduled. It is a
-server function, and no route serves it.
+change: it stays active, and its next run comes due as scheduled.
+`POST /_automation-run-cancel` serves it (_The routes_, below).
 
 What a cancel leaves behind:
 
@@ -1662,6 +1668,88 @@ error (<reason>)` or `left alone: …`;
 A run that stays `pending` was never claimed: check that a worker can claim
 priority 5 (_The lanes_). One that stays `running` lost its attempt; see
 _Diagnosing a run_.
+
+## The routes
+
+A direct writer switches an automation on, runs it by hand, pauses, resumes
+or removes it, and cancels a run through realm-server routes
+(`packages/realm-server/handlers/handle-automations.ts`; paths and body
+types in `packages/runtime-common/automation-routes.ts`). They are not on a
+realm: each takes the realm-server session (`Authorization: Bearer <realm-server
+token>`, behind `jwtMiddleware`) and acts as that session's own user, never as
+a user a header names (ADR 006). A realm-authority session is refused (403),
+and a delegated or revoked one by the session check (401).
+
+Every request names the realm, and the route asks `isDirectWriter` of that
+realm and the caller **before it reads anything else**, so a caller who isn't
+a direct writer gets the same 403 whether or not the automation or run
+exists. It then checks the automation is in the realm (400), reads the card
+from its index row with `readRunDeclaration` (422 when the card isn't
+indexed or doesn't read as an automation), and calls the lifecycle function,
+which checks direct write again under its own locks. Switch-on, resume,
+Preview and Run now refuse an archived realm (409). Each change reports its
+`automation` and `job` events through `realmServerAutomationChangeReporter`
+and `realmServerRunChangeReporter`.
+
+A request body is JSON:API: `{ "data": { "type": "automation", "id": "<card
+URL>", "attributes": { "realm": "<realm URL>", ... } } }`; a cancel names the
+run instead, `{ "data": { "type": "automation-run", "id": "<run id>",
+"attributes": { "realm": "<realm URL>" } } }`. Answers are `no-store`.
+
+| Route                                                                | Body attributes  | Answers                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /_automation-switch-on?realm=<realm URL>&automation=<card URL>` | —                | 200 `automation-estimate`: `switchedOn`, the card's `monthlyCredits`, and `estimate` (`estimateAutomationCost`, with `recentPreviewCredits`: what the caller's latest finished Preview of it cost). 503 while the process has no prices |
+| `POST /_automation-switch-on`                                        | `monthlyCredits` | 201 `automation` (state, pause reason, `viewerIsPayer`, next run, caps snapshot), with `meta.estimate`. The caller is the payer                                                                                                         |
+| `POST /_automation-preview`                                          | `click`          | 202 `automation-run`, pending, `dryRun` true, acting as and charged to the caller                                                                                                                                                       |
+| `POST /_automation-run-now`                                          | `click`          | 202 `automation-run`, pending, `dryRun` false                                                                                                                                                                                           |
+| `POST /_automation-pause`                                            | —                | 200 `automation`, paused `requested`; its pending and running runs are canceled                                                                                                                                                         |
+| `POST /_automation-resume`                                           | `monthlyCredits` | 200 `automation`; the caller is the payer, with a new caps snapshot                                                                                                                                                                     |
+| `POST /_automation-remove`                                           | —                | 200 `automation`, the row as it was; the row is gone                                                                                                                                                                                    |
+| `POST /_automation-run-cancel`                                       | —                | 200 `automation-run`, canceled by the caller                                                                                                                                                                                            |
+
+**The monthly cap.** Switch-on and resume make the caller the payer of the
+caps the card sets (the caps snapshot), and the monthly credit cap is what
+the payer confirms. `monthlyCredits` must be a whole number (400 when it is
+missing or isn't), the card must set `caps.monthlyCredits` (422 when it
+doesn't: a card capped by the day alone can't be switched on), and the two
+must be equal (409 otherwise). So the cap a person or the assistant confirmed
+is the one the snapshot holds, and a card edited between reading the
+estimate and switching on is refused rather than taken on: read the estimate
+again and confirm its cap. A screen that lets the person choose another cap
+writes it to the card first.
+
+**Refusals.** 403 not a direct writer; 404 not switched on (pause, resume,
+remove) or no such run in the realm (cancel); 409 already switched on, already
+paused, not paused, a click already used for another person's run or the
+other kind of run, a run that already ended or whose commit was claimed; 400
+for a malformed body, an automation outside the realm, or a missing click.
+The error body is `{ "errors": [<message>] }`.
+
+### Calling them in development
+
+Mint a realm-server session for a user who directly writes the realm, from
+`packages/realm-server` (the dev stack signs sessions with the dev seed):
+
+```sh
+TOKEN=$(node -e "console.log(require('jsonwebtoken').sign({ user: '@user:localhost', sessionRoom: 'dev' }, \"shhh! it's a secret\", { expiresIn: '1h' }))")
+REALM=https://localhost:4201/user/my-realm/
+CARD=${REALM}automations/nightly-sync
+
+curl -sk -H "Authorization: Bearer $TOKEN" \
+  "https://localhost:4201/_automation-switch-on?realm=$REALM&automation=$CARD"
+
+curl -sk -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"data\":{\"type\":\"automation\",\"id\":\"$CARD\",\"attributes\":{\"realm\":\"$REALM\",\"click\":\"$(uuidgen)\"}}}" \
+  https://localhost:4201/_automation-preview
+```
+
+Name the realm by the URL its permission rows use
+(`realm_user_permissions.realm_url`); a URL in another form isn't found as
+one the caller writes, and is refused with 403. The same body with
+`monthlyCredits` (the card's) switches it on at
+`/_automation-switch-on`. A Preview or Run now answers its run's id; follow
+the run in Postgres (_Diagnosing a run_) or with `readAutomationRunReport`,
+and the automation's row with `GET <realm>/_automation-status`.
 
 ## Preview and Run now
 
