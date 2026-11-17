@@ -6,6 +6,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   abandonAutomationRun,
   cancelAutomationRun,
+  computeContentHash,
   finishAutomationRun,
   rri,
   startAutomationRunAttempt,
@@ -239,6 +240,80 @@ export class Notice extends CardDef {
     };
   }
 
+  async function readFileMeta(token: string, path: string) {
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}${path}`, {
+        headers: {
+          Accept: SupportedMimeType.FileMeta,
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+    ))!;
+    let text = await response.text();
+    return {
+      status: response.status,
+      text,
+      attributes:
+        response.status === 200 ? JSON.parse(text).data.attributes : undefined,
+    };
+  }
+
+  // A read of a file's bytes through the raw file serve, which answers an
+  // `Accept` no other route claims.
+  async function readRaw(token: string, path: string, method = 'GET') {
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}${path}`, {
+        method,
+        headers: { Accept: '*/*', Authorization: `Bearer ${token}` },
+      }),
+    ))!;
+    return {
+      status: response.status,
+      headers: response.headers,
+      bytes: response.status === 200 ? await body(response) : undefined,
+    };
+  }
+
+  async function createCardJson(token: string, doc: unknown, dir = '') {
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}${dir}`, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': SupportedMimeType.CardJson,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(doc),
+      }),
+    ))!;
+    let text = await response.text();
+    return {
+      status: response.status,
+      text,
+      json: JSON.parse(text),
+    };
+  }
+
+  async function patchCardJson(token: string, path: string, doc: unknown) {
+    let response = (await realm.handle(
+      new Request(`${realmURL.href}${path}`, {
+        method: 'PATCH',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': SupportedMimeType.CardJson,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(doc),
+      }),
+    ))!;
+    let text = await response.text();
+    return {
+      status: response.status,
+      text,
+      json: JSON.parse(text),
+    };
+  }
+
   // The cards a search for every Person finds, by path, each with its name.
   async function searchPeople(token: string) {
     let response = (await realm.handle(
@@ -337,6 +412,88 @@ export class Notice extends CardDef {
     assert.deepEqual([...(await body(response))], [...bytes]);
     assert.strictEqual(
       (await readText(session(), 'images/pixel.bin')).status,
+      404,
+    );
+  });
+
+  test('a run’s file metadata read describes the file it staged, and nobody else’s does', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let realmMeta = await readFileMeta(token, 'notes.txt');
+    assert.strictEqual(realmMeta.status, 200, realmMeta.text);
+    assert.strictEqual(
+      realmMeta.attributes.contentSize,
+      'in the realm'.length,
+      'a file the run has not staged is described as the realm holds it',
+    );
+
+    let content = 'staged over the realm';
+    assert.strictEqual(
+      (await writeText(token, 'notes.txt', content)).status,
+      204,
+    );
+    let staged = await readFileMeta(token, 'notes.txt');
+    assert.strictEqual(staged.status, 200, staged.text);
+    assert.strictEqual(staged.attributes.name, 'notes.txt');
+    assert.strictEqual(staged.attributes.contentSize, content.length);
+    assert.strictEqual(
+      staged.attributes.contentHash,
+      computeContentHash(new TextEncoder().encode(content)),
+    );
+
+    let created = await writeText(token, 'drafts/plan.md', '# Plan');
+    assert.strictEqual(created.status, 204, created.text);
+    let fresh = await readFileMeta(token, 'drafts/plan.md');
+    assert.strictEqual(fresh.status, 200, fresh.text);
+    assert.strictEqual(fresh.attributes.contentSize, '# Plan'.length);
+
+    let other = await readFileMeta(session(), 'notes.txt');
+    assert.strictEqual(
+      other.attributes.contentSize,
+      'in the realm'.length,
+      'an ordinary reader is described the realm’s file',
+    );
+    assert.strictEqual(
+      (await readFileMeta(session(), 'drafts/plan.md')).status,
+      404,
+      'an ordinary reader finds no file the run created',
+    );
+  });
+
+  test('a run’s raw byte read answers the bytes it staged, and nobody else’s does', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let before = await readRaw(token, 'notes.txt');
+    assert.strictEqual(before.status, 200);
+    assert.strictEqual(new TextDecoder().decode(before.bytes), 'in the realm');
+
+    await writeText(token, 'notes.txt', 'staged over the realm');
+    let after = await readRaw(token, 'notes.txt');
+    assert.strictEqual(after.status, 200);
+    assert.strictEqual(
+      new TextDecoder().decode(after.bytes),
+      'staged over the realm',
+    );
+    assert.strictEqual(after.headers.get('cache-control'), 'no-store');
+
+    let bytes = new Uint8Array([0, 255, 128, 1, 2, 3, 0xc3, 0x28]);
+    assert.strictEqual(await writeBytes(token, 'images/pixel.bin', bytes), 204);
+    let binary = await readRaw(token, 'images/pixel.bin');
+    assert.strictEqual(binary.status, 200);
+    assert.deepEqual([...binary.bytes!], [...bytes], 'byte for byte');
+    let head = await readRaw(token, 'images/pixel.bin', 'HEAD');
+    assert.strictEqual(head.status, 200);
+    assert.strictEqual(
+      head.headers.get('content-length'),
+      String(bytes.length),
+    );
+
+    let other = await readRaw(session(), 'notes.txt');
+    assert.strictEqual(
+      new TextDecoder().decode(other.bytes),
+      'in the realm',
+      'an ordinary reader reads the realm’s bytes',
+    );
+    assert.strictEqual(
+      (await readRaw(session(), 'images/pixel.bin')).status,
       404,
     );
   });
@@ -534,7 +691,37 @@ export class Mine extends Automation {}`;
         headers: { Accept: SOURCE, Authorization: `Bearer ${token}` },
       }),
     ))!;
-    assert.strictEqual(removal.status, 403, await removal.text());
+    let removalText = await removal.text();
+    assert.strictEqual(removal.status, 403, removalText);
+
+    let removalError = JSON.parse(removalText).errors[0];
+    assert.strictEqual(removalError.code, 'run-write-not-staged');
+    assert.ok(
+      removalError.detail.startsWith(
+        'an automation run may not remove notes.txt',
+      ),
+      removalError.detail,
+    );
+
+    let cardRemoval = (await realm.handle(
+      new Request(`${realmURL.href}people/ada`, {
+        method: 'DELETE',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+    ))!;
+    let cardRemovalText = await cardRemoval.text();
+    assert.strictEqual(cardRemoval.status, 403, cardRemovalText);
+    let cardRemovalError = JSON.parse(cardRemovalText).errors[0];
+    assert.strictEqual(cardRemovalError.code, 'run-write-not-staged');
+    assert.ok(
+      cardRemovalError.detail.startsWith(
+        'an automation run may not remove people/ada',
+      ),
+      cardRemovalError.detail,
+    );
 
     let batch = await operations(token, [
       { op: 'invoke', 'boxel:name': 'delete', href: './people/ada' },
@@ -806,6 +993,120 @@ export class Mine extends Automation {}`;
       'the search runs on the index, which never sees a staged card',
     );
     assert.strictEqual((await readCard(session(), 'people/grace')).status, 404);
+  });
+
+  test('a run’s card create is staged, read back by the run, and found by nobody else', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let created = await createCardJson(token, {
+      data: {
+        type: 'card',
+        attributes: { name: 'Hopper', nicknames: ['Amazing Grace'] },
+        meta: {
+          adoptsFrom: { module: `${realmURL.href}person`, name: 'Person' },
+        },
+      },
+    });
+    assert.strictEqual(created.status, 201, created.text);
+    let id = String(created.json.data.id);
+    assert.strictEqual(created.json.data.attributes.name, 'Hopper');
+    let path = id.replace(realmURL.href, '');
+    assert.ok(path.startsWith('Person/'), `created at ${path}`);
+    assert.deepEqual(
+      (await overlayRows(run.id)).map((row) => row.path),
+      [`${path}.json`],
+      'the card is staged, not written',
+    );
+
+    let readBack = await readCard(token, path);
+    assert.strictEqual(readBack.status, 200, readBack.text);
+    assert.strictEqual(readBack.data.attributes.name, 'Hopper');
+    assert.deepEqual(readBack.data.attributes.nicknames, ['Amazing Grace']);
+    assert.strictEqual(
+      (await readCard(session(), path)).status,
+      404,
+      'an ordinary reader does not see the staged card',
+    );
+    assert.deepEqual(
+      (await searchPeople(token)).names,
+      { 'people/ada': 'Ada' },
+      'the search runs on the index, which never sees a staged card',
+    );
+  });
+
+  test('a run’s card patch is staged, and merges into the card as the run sees it', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let renamed = await patchCardJson(token, 'people/ada', {
+      data: { type: 'card', attributes: { name: 'Ada Lovelace' } },
+    });
+    assert.strictEqual(renamed.status, 200, renamed.text);
+    assert.strictEqual(renamed.json.data.attributes.name, 'Ada Lovelace');
+
+    let nicknamed = await patchCardJson(token, 'people/ada', {
+      data: { type: 'card', attributes: { nicknames: ['Enchantress'] } },
+    });
+    assert.strictEqual(nicknamed.status, 200, nicknamed.text);
+    assert.strictEqual(
+      nicknamed.json.data.attributes.name,
+      'Ada Lovelace',
+      'the second patch merges into the card the first one staged',
+    );
+    assert.deepEqual(nicknamed.json.data.attributes.nicknames, ['Enchantress']);
+
+    let unchanged = await patchCardJson(token, 'people/ada', {
+      data: { type: 'card', attributes: { nicknames: ['Enchantress'] } },
+    });
+    assert.strictEqual(unchanged.status, 200, unchanged.text);
+    assert.strictEqual(
+      unchanged.json.data.attributes.name,
+      'Ada Lovelace',
+      'a patch that changes nothing answers the staged card, not the index',
+    );
+
+    let readBack = await readCard(token, 'people/ada');
+    assert.strictEqual(readBack.data.attributes.name, 'Ada Lovelace');
+    assert.deepEqual(readBack.data.attributes.nicknames, ['Enchantress']);
+    assert.deepEqual(
+      (await overlayRows(run.id)).map((row) => row.path),
+      ['people/ada.json'],
+    );
+    let other = await readCard(session(), 'people/ada');
+    assert.strictEqual(
+      other.data.attributes.name,
+      'Ada',
+      'the realm keeps its own card',
+    );
+  });
+
+  test('a run’s card patch of a card it created merges into the staged card', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    let created = await createCardJson(token, {
+      data: {
+        type: 'card',
+        attributes: { name: 'Grace', nicknames: [] },
+        meta: {
+          adoptsFrom: { module: `${realmURL.href}person`, name: 'Person' },
+        },
+      },
+    });
+    assert.strictEqual(created.status, 201, created.text);
+    let path = String(created.json.data.id).replace(realmURL.href, '');
+    let patched = await patchCardJson(token, path, {
+      data: { type: 'card', attributes: { nicknames: ['Amazing Grace'] } },
+    });
+    assert.strictEqual(patched.status, 200, patched.text);
+    assert.strictEqual(patched.json.data.attributes.name, 'Grace');
+    assert.deepEqual(patched.json.data.attributes.nicknames, ['Amazing Grace']);
+    assert.deepEqual((await readCard(token, path)).data.attributes.nicknames, [
+      'Amazing Grace',
+    ]);
   });
 
   function notice(op: 'add' | 'update', href: string, body: string) {
@@ -1198,6 +1499,19 @@ export class Mine extends Automation {}`;
     let addError = JSON.parse(added.text).errors[0];
     assert.strictEqual(addError.code, 'path-clash');
     assert.strictEqual(addError.detail, reason);
+
+    let posted = await createCardJson(token, {
+      data: {
+        ...card.data,
+        meta: {
+          adoptsFrom: { module: `${realmURL.href}person`, name: 'Person' },
+        },
+      },
+    });
+    assert.strictEqual(posted.status, 409, `the card create: ${posted.text}`);
+    let postError = posted.json.errors[0];
+    assert.strictEqual(postError.code, 'path-clash');
+    assert.strictEqual(postError.detail, reason);
 
     let created = await operations(token, [
       {
