@@ -1448,7 +1448,10 @@ module('Integration | realm policy', function (hooks) {
       }
       assert
         .dom('[data-test-policy-rule]')
-        .exists({ count: 1 }, 'the index render lists the rules');
+        .exists(
+          { count: 2 },
+          'the index render lists the rules, the code rule among them',
+        );
       assert
         .dom('[data-test-policy-grant-status]')
         .doesNotExist('with no grant marked');
