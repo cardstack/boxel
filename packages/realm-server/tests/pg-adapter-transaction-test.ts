@@ -1,7 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import type { PgAdapter } from '@cardstack/postgres';
+import { EventEmitter } from 'events';
+import { PgAdapter } from '@cardstack/postgres';
 import { Deferred, param } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
 
@@ -93,6 +94,188 @@ module(basename(import.meta.filename), function () {
         { a: 11, b: 11 },
         'each transaction applied its writes exactly once',
       );
+    });
+  });
+
+  // The scheduler counts a turn from its grant to its release, so a checkout
+  // that never gets a working connection, or loses it, must give its turn
+  // back or every waiter queues behind a connection Postgres no longer has.
+  // These run against a stand-in pool so the failures are exact.
+  module('PgAdapter checkout when connections fail', function () {
+    class StubClient extends EventEmitter {
+      processID = 1;
+      lost = false;
+      releasedWith: unknown[] = [];
+      async query() {
+        await new Promise((r) => setTimeout(r, 1));
+        if (this.lost) {
+          throw new Error('Client has encountered a connection error');
+        }
+        return { rows: [{ answer: 42 }] };
+      }
+      release(err?: unknown) {
+        this.releasedWith.push(err);
+      }
+      lose() {
+        this.lost = true;
+        this.emit(
+          'error',
+          new Error(
+            'terminating connection due to idle-in-transaction timeout',
+          ),
+        );
+      }
+    }
+
+    function stubbedAdapter(env: Record<string, string>): {
+      adapter: PgAdapter;
+      pool: { failuresLeft: number; clients: StubClient[] };
+    } {
+      let previous = Object.fromEntries(
+        Object.keys(env).map((k) => [k, process.env[k]]),
+      );
+      Object.assign(process.env, env);
+      let adapter: PgAdapter;
+      try {
+        adapter = new PgAdapter();
+      } finally {
+        for (let [k, v] of Object.entries(previous)) {
+          if (v === undefined) {
+            delete process.env[k];
+          } else {
+            process.env[k] = v;
+          }
+        }
+      }
+      let pool = {
+        failuresLeft: 0,
+        clients: [] as StubClient[],
+        async connect() {
+          await new Promise((r) => setTimeout(r, 1));
+          if (pool.failuresLeft > 0) {
+            pool.failuresLeft--;
+            throw Object.assign(
+              new Error(
+                'remaining connection slots are reserved for roles with the SUPERUSER attribute',
+              ),
+              { code: '53300' },
+            );
+          }
+          let client = new StubClient();
+          pool.clients.push(client);
+          return client;
+        },
+        async end() {},
+      };
+      (adapter as unknown as { pool: unknown }).pool = pool;
+      return { adapter, pool };
+    }
+
+    function idle(adapter: PgAdapter) {
+      let { inUse, holds, waiting } = adapter.connectionStats;
+      return { inUse, holds, waiting };
+    }
+
+    test('a refused connect gives its turn back and the callers queued behind it proceed', async function (assert) {
+      let { adapter, pool } = stubbedAdapter({ PG_POOL_MAX: '2' });
+      try {
+        const REFUSALS = 5;
+        pool.failuresLeft = REFUSALS;
+        let calls: Promise<unknown>[] = [];
+        for (let i = 0; i < 6; i++) {
+          calls.push(adapter.execute('SELECT 1'));
+          calls.push(
+            adapter.withConnection(async (query) => {
+              await query(['SELECT 1']);
+              // nested work while holding, as a lock section does
+              return await adapter.execute('SELECT 2');
+            }),
+          );
+          calls.push(adapter.withConnection((query) => query(['SELECT 3'])));
+        }
+        let settled = await Promise.race([
+          Promise.allSettled(calls),
+          new Promise<'stuck'>((r) => setTimeout(() => r('stuck'), 5_000)),
+        ]);
+        assert.notStrictEqual(
+          settled,
+          'stuck',
+          `callers stuck: ${JSON.stringify(idle(adapter))}`,
+        );
+        let refused = (settled === 'stuck' ? [] : settled).filter(
+          (s) => s.status === 'rejected',
+        );
+        assert.strictEqual(
+          refused.length,
+          REFUSALS,
+          'each refusal fails only the caller it was for',
+        );
+        for (let s of refused) {
+          assert.strictEqual(
+            ((s as PromiseRejectedResult).reason as { code?: string }).code,
+            '53300',
+          );
+        }
+        assert.deepEqual(idle(adapter), { inUse: 0, holds: 0, waiting: 0 });
+        assert.true(
+          pool.clients.every((c) => c.releasedWith.length === 1),
+          'every client that connected went back to the pool once',
+        );
+      } finally {
+        await adapter.close();
+      }
+    });
+
+    test('a held connection that dies gives its turn back to the callers waiting for one', async function (assert) {
+      // One connection and no overflow: while the hold has it, nothing
+      // else runs until the hold's connection comes back.
+      let { adapter, pool } = stubbedAdapter({
+        PG_POOL_MAX: '1',
+        PG_POOL_OVERFLOW: '0',
+      });
+      try {
+        let resume!: () => void;
+        let gate = new Promise<void>((r) => (resume = r));
+        let opened = new Deferred<void>();
+        let hold = adapter.withConnection(async (query) => {
+          await query(['SELECT 1']);
+          opened.fulfill();
+          // a hold waiting on work outside the database, idle until Postgres
+          // ends the session
+          await gate;
+          return await query(['SELECT 2']);
+        });
+        await opened.promise;
+        let waiter = adapter.execute('SELECT 1');
+        await new Promise((r) => setTimeout(r, 20));
+        assert.deepEqual(idle(adapter), { inUse: 1, holds: 1, waiting: 1 });
+
+        pool.clients[0].lose();
+        let answered = await Promise.race([
+          waiter,
+          new Promise<'stuck'>((r) => setTimeout(() => r('stuck'), 2_000)),
+        ]);
+        assert.deepEqual(
+          answered,
+          [{ answer: 42 }],
+          'the waiter got a connection of its own',
+        );
+        assert.true(
+          pool.clients[0].releasedWith[0] instanceof Error,
+          'the dead client went back to the pool to be discarded',
+        );
+
+        resume();
+        await assert.rejects(hold, /connection error/);
+        assert.deepEqual(idle(adapter), { inUse: 0, holds: 0, waiting: 0 });
+        assert.strictEqual(
+          pool.clients[0].releasedWith.length,
+          1,
+          "the hold's own release does not release the client again",
+        );
+      } finally {
+        await adapter.close();
+      }
     });
   });
 });
