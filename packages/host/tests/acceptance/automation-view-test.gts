@@ -753,7 +753,7 @@ module('Acceptance | automation view', function (hooks) {
       'names the milestone the run failed in',
     );
     assert.true(
-      embedded.includes('2 of 4'),
+      /(^|\D)2 of 4(\D|$)/.test(embedded),
       "counts the run's milestones, the one the plan didn't list included",
     );
     assert.dom('[data-test-automation-embedded-last="error"]').exists();
@@ -767,12 +767,21 @@ module('Acceptance | automation view', function (hooks) {
       .dom('[data-test-automation-fitted-milestones]')
       .includesText('Failed in Group by label');
     assert
+      .dom('[data-test-automation-fitted-milestones]')
+      .includesText(
+        '2 of 4',
+        'the fitted lists name the milestones without their counts, so this is the run count',
+      );
+    assert
       .dom('[data-test-automation-fitted-focus]')
       .hasText(
         'Failed in Group by label',
         'the two-line sizes lead with the failure, not the schedule',
       );
     assert.dom('[data-test-automation-fitted-last="error"]').exists();
+    assert
+      .dom('[data-test-automation-fitted-next]')
+      .exists('an active automation shows its next run');
   });
 
   test('the fitted and embedded views show the milestone a run is in', async function (assert) {
@@ -786,6 +795,12 @@ module('Acceptance | automation view', function (hooks) {
           state: 'running',
           current: 'Group by label',
           finishedAt: null,
+          // The milestone the run is in hasn't ended.
+          milestones: FAILED_RUN.milestones.map((milestone, index) =>
+            index === FAILED_RUN.milestones.length - 1
+              ? { ...milestone, endedAt: null }
+              : milestone,
+          ),
           failedIn: null,
         },
       },
@@ -804,6 +819,35 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-fitted-focus]')
       .hasText('Running Group by label');
+  });
+
+  test('a run that has reached no milestone yet reads as running', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        currentRun: {
+          ...FAILED_RUN,
+          runId: 'run-3',
+          state: 'running',
+          current: null,
+          finishedAt: null,
+          milestones: [],
+          ahead: FAILED_RUN.plan,
+          failedIn: null,
+        },
+      },
+    };
+    await openFormat('embedded');
+    await waitFor('[data-test-automation-embedded-milestones="running"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-embedded-milestones]')
+      .includesText('Running, before the first milestone');
+    assert
+      .dom('[data-test-automation-embedded-milestones]')
+      .includesText('0 of 3');
   });
 
   test('before any run, the fitted and embedded views count the milestones the script declares', async function (assert) {
