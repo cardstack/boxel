@@ -315,6 +315,13 @@ class RealmResource {
       this.loggingIn = this.loginTask.perform();
     }
     await this.loggingIn;
+    // A sign-in that ended without a session leaves nothing to subscribe for.
+    // Subscribing fetches realm info, and a realm that refuses this caller
+    // answers that with a 401 too, which would start a sign-in from inside
+    // the re-authentication that is still waiting on this one.
+    if (!this.token) {
+      return;
+    }
     await this.subscribe();
   }
 
@@ -1806,6 +1813,11 @@ export default class RealmService extends Service {
   }
 
   async reauthenticate(realmURL: string): Promise<string | undefined> {
+    // With no Matrix session, signed in or persisted to sign in from, there
+    // is no realm session to mint: the caller gets its 401 at once.
+    if (!this.matrixService.isLoggedIn && !this.matrixService.persistedUserId) {
+      return undefined;
+    }
     let inProgressAuthentication = this.reauthentications.get(realmURL);
     if (inProgressAuthentication) {
       return inProgressAuthentication;
