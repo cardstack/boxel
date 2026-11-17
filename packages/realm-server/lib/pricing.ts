@@ -196,8 +196,9 @@ export function currentPricing(): Pricing | undefined {
 
 // The startup check each of the realm-server, worker and prerender processes
 // runs once. A passing check logs every value and the pricing version. A
-// failing one logs every problem at error level and sends it to Sentry, which
-// is what pricing alerts fire on, and leaves the process without prices.
+// failing one logs every problem at error level, which the Grafana "Pricing
+// check failed" alert fires on, sends the same message to Sentry, and leaves
+// the process without prices.
 export interface PricingReporter {
   info(message: string): void;
   error(message: string): void;

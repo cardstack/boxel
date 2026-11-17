@@ -11,10 +11,14 @@ description: >-
   boundary a run crosses: enqueued, claimed, admitted, script, commit,
   finished, index-pass, charged, and the prerender server's run `capacity`),
   the ids every line of a run carries (automation, run, job, attempt), and
-  queue wait and prerender capacity for automation runs. Use when an operator
+  queue wait and prerender capacity for automation runs, and the four
+  scheduler alerts (tick stopped, runs made up by reconcile, pricing check
+  failed, runs waiting for a worker): what each means and the first steps for
+  it. Use when an operator
   or a person asks why an automation didn't run, ran twice, ran late, failed,
   was slow, paused itself or charged what it did, or when automation runs'
-  queue wait or prerender capacity is in question.
+  queue wait or prerender capacity is in question, or when one of those
+  alerts fires.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -103,7 +107,8 @@ SELECT id, status, created_at, finished_at
 ```
 
 No recent tick jobs means the scheduler stopped enqueueing them (look for
-`automation-tick cron failed to enqueue job` on the realm-server). Recent tick
+`automation-tick cron failed to enqueue job` in the worker logs; the worker
+manager runs the cron). Recent tick
 jobs that are `rejected`, or never `resolved`, point at the worker. The tick
 records what it did on the row: `last_enqueued_at` moves each time it enqueues
 a run.
@@ -333,3 +338,95 @@ The same tables are in the dev database (`psql` against the local stack), and
 is up. `packages/realm-server/scripts/run-automation.ts` starts one run by
 hand; the `automations` skill's _Running one automation by hand in
 development_ covers it.
+
+## Alerts
+
+Four Grafana alert rules watch the scheduler. They live in
+`packages/observability/provisioning/alerting/automations-group.json`, carry
+the label `area=automations`, evaluate every minute, and go through Grafana's
+default notification policy. Each one's summary repeats the first steps below.
+A notification named `DatasourceError` with one of these rule names means
+Grafana couldn't run the query; the fault is the data source (Postgres or
+Loki), not the scheduler.
+
+| Alert                                  | Fires when                                                                                                                 | Reads                                             |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `Automation tick stopped`              | no `automation-tick` job has resolved for more than 300 s                                                                  | Postgres `jobs`                                   |
+| `Automation runs made up by reconcile` | a reconcile pass made up a run in the last 10 minutes                                                                      | Loki, worker lines tagged `automation-reconcile:` |
+| `Pricing check failed`                 | a realm-server, worker or prerender process logged `pricing check failed in` in the last 10 minutes; one alert per service | Loki                                              |
+| `Automation runs waiting for a worker` | the oldest automation run a worker could claim has waited more than 300 s, held for 5 minutes                              | Postgres `jobs`, `job_reservations`               |
+
+### Automation tick stopped
+
+The tick resolves several times a minute (every worker manager enqueues one;
+a waiting tick absorbs the rest), so five minutes with none resolved is the
+tick down, not a slow minute. While it is down no scheduled run starts. Run
+step 2's query:
+
+- **No recent `automation-tick` rows**: no worker manager's cron is
+  enqueueing them. Look for `automation-tick cron failed to enqueue job` in
+  the worker logs, and check the worker managers are up.
+- **Recent rows left `unfulfilled`**: no worker claims them. The tick runs on
+  the automation lane (priority 5), so check the workers serving it and the
+  Job Queue dashboard for what holds the lane.
+- **Recent rows `rejected`**: the tick fails as it runs. Its error is in the
+  worker logs (`--filter 'automation-tick'`).
+- **A tick `unfulfilled` with a live reservation for minutes**: one tick is
+  taking that long. The worker's `automation-tick:` lines name the
+  automations it handled.
+
+When the tick resumes, reconcile makes up one late run per trigger that
+missed its time, so expect the reconcile alert to follow.
+
+### Automation runs made up by reconcile
+
+Reconcile makes up a run when an outage cost one, so this alert means some
+run didn't happen when it should have. Read the make-up lines; each names the
+automation, trigger, slot and run:
+
+```bash
+packages/observability/scripts/tail-logs.sh --env staging --service worker \
+  --filter 'automation-reconcile: ' --since 30m --no-follow
+```
+
+- **`was overdue; made up run`**: a due time passed with nothing enqueued.
+  The tick was down or late: check the tick alert and step 2. A burst of these
+  right after a deploy means the tick missed minutes while the worker
+  managers restarted.
+- **`had no live job; enqueued it again`**: a pending run's queue job was
+  lost (it ran out of reservations or finished without ending the run). Read
+  the run's job and reservations (step 4); reservations closed `killed` or
+  `interrupted` mean workers died under the run.
+- **`<step> made up <n> run(s)`**: a registered reconcile step (such as a
+  batch's follow-up whose deadline passed) made up its own runs.
+
+Lines saying `had no live job and ended` are runs reconcile ended rather than
+made up; they don't fire this alert, but they come from the same lost jobs.
+
+### Pricing check failed
+
+A process whose startup pricing check fails has no prices: it admits no new
+automation run (admission `pricing-unavailable`), submits no batch, and
+writes no charge (`charged` with `result: "no-prices"`) until its `PRICING_*`
+variables are fixed and it restarts. The failing line names every bad
+variable and its problem. The alert resolves 10 minutes after the line while
+the process has no prices, so a resolved alert says nothing about
+recovery: confirm that each restarted process logged `pricing check passed in`
+with the expected pricing version. The `pricing` skill covers the variables
+and how to change one.
+
+### Automation runs waiting for a worker
+
+The rule takes the oldest unfulfilled automation `run-command` job with no
+live reservation, and measures its wait from the job's creation or from the
+end of its last attempt. A run behind its own automation's running run (its
+concurrency group) or under a claim hold is waiting for that, not for a
+worker, and is left out. So the alert means the automation lane is falling
+behind:
+
+- Check the Job Queue dashboard for the lane's pending jobs and in-flight
+  work, and how many workers serve the automation lane.
+- Long-running runs fill the lane: the `finished` events' `runMs` show which
+  automations hold workers longest.
+- Once runs are claimed, the `claimed` events' `queueWaitMs` (the _Capacity_
+  query above) show the waits they had.

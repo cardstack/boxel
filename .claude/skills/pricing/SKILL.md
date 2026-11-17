@@ -102,8 +102,10 @@ version <hash>; PRICING_…=… …`, with every value. The version is the first
   give the same version. Every metered charge records it (ADR 029 §1.4).
 - **Failing**: one error line, `pricing check failed in <process>: …`, naming
   every bad variable and what is wrong with it, and the same message sent to
-  Sentry tagged `pricingCheck: failed` and `process: <name>`. That is the
-  signal pricing alerts fire on. One bad value fails the whole set:
+  Sentry tagged `pricingCheck: failed` and `process: <name>`. The Grafana
+  alert `Pricing check failed` fires on the line, one alert per service; the
+  `automation-diagnostics` skill's _Alerts_ section covers it. One bad value
+  fails the whole set:
   `currentPricing()` then returns undefined, and the process admits no new
   run and submits no new batch until it restarts with good values (ADR 029
   §1.3). Interactive work and runs already going are unaffected.
