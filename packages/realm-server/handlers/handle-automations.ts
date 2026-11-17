@@ -41,7 +41,6 @@ import {
   AUTOMATION_RUN_RESOURCE_TYPE,
 } from '@cardstack/runtime-common/automation-routes';
 import {
-  fetchRequestFromContext,
   sendResponseForError,
   setContextResponse,
 } from '../middleware/index.ts';
@@ -68,8 +67,9 @@ type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 
 const log = logger('realm-server:automations');
 
-// The most a request body may hold. Every body is a small JSON document.
-const MAX_BODY_CHARS = 16 * 1024;
+// The most a request body may hold, in bytes. Every body is a small JSON
+// document.
+const MAX_BODY_BYTES = 16 * 1024;
 
 // A run's id, a UUID. Anything else names no run.
 const RUN_ID =
@@ -161,15 +161,33 @@ interface RequestedResource {
   attributes: Record<string, unknown>;
 }
 
+// Reads the body, refusing one larger than `MAX_BODY_BYTES` as soon as its
+// declared length or the bytes received so far pass it, so an oversized body
+// is never held whole. Any signed-in session reaches this before the
+// direct-writer check, which needs the realm the body names.
+async function readBody(ctxt: Koa.Context): Promise<string> {
+  let declared = Number(ctxt.get('Content-Length'));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+    throw new AutomationRouteError(413, 'the request body is too large');
+  }
+  let chunks: Buffer[] = [];
+  let received = 0;
+  for await (let chunk of ctxt.req) {
+    let buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    received += buffer.length;
+    if (received > MAX_BODY_BYTES) {
+      throw new AutomationRouteError(413, 'the request body is too large');
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 async function readResource(
   ctxt: Koa.Context,
   type: string,
 ): Promise<RequestedResource> {
-  let request = await fetchRequestFromContext(ctxt);
-  let text = await request.text();
-  if (text.length > MAX_BODY_CHARS) {
-    throw new AutomationRouteError(413, 'the request body is too large');
-  }
+  let text = await readBody(ctxt);
   let json: any;
   try {
     json = JSON.parse(text);
@@ -247,10 +265,15 @@ function automationIn(
 
 // The automation's card as indexed, read as a declaration. A card that isn't
 // indexed, failed to index, or doesn't read as an automation can't be
-// switched on or run.
+// switched on or run. The card's own realm, as its index row records it, must
+// be the realm the request names: `automationIn` checks only that the card's
+// URL falls under the realm's, which a realm mounted under another realm's
+// path would also satisfy, and the row's realm is what every later
+// direct-writer check asks about.
 async function declarationOf(
   { dbAdapter, definitionLookup, virtualNetwork }: CreateRoutesArgs,
   automationId: RealmResourceIdentifier,
+  realmURL: URL,
 ): Promise<AutomationDeclaration> {
   let read = await readRunDeclaration({
     dbAdapter,
@@ -261,9 +284,19 @@ async function declarationOf(
   if (!read.ok) {
     throw new AutomationRouteError(422, read.message);
   }
+  if (virtualNetwork.toURLHref(read.declaration.realmURL) !== realmURL.href) {
+    throw new AutomationRouteError(
+      400,
+      `the automation card is in ${read.declaration.realmURL}, not ${realmURL.href}`,
+    );
+  }
   return read.declaration;
 }
 
+// Preview and Run now start a run whether or not the automation is switched
+// on, so archiving a realm, which stops its switched-on automations, has no
+// row of theirs to pause. Switch-on and resume make this check themselves,
+// in the transaction that writes the row (see `switchOnAutomation`).
 async function refuseOnArchivedRealm(
   dbAdapter: DBAdapter,
   realmURL: URL,
@@ -386,6 +419,8 @@ const REFUSAL_MESSAGES: Record<string, string> = {
   'not-pausable': 'the automation is already paused',
   'click-reused':
     'this click already started a run for someone else, or a run of the other kind; send a fresh click id',
+  'realm-archived':
+    'the automation’s realm is archived, so its automations stay off until it is restored',
   'not-cancelable':
     'the run already ended, or its commit was claimed and is landing',
 };
@@ -472,7 +507,7 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
       ctxt.URL.searchParams.get(AUTOMATION_ROUTE_AUTOMATION_PARAM),
       args.virtualNetwork,
     );
-    let declaration = await declarationOf(args, automationId);
+    let declaration = await declarationOf(args, automationId, realmURL);
     let row = await getAutomation(args.dbAdapter, automationId);
     let estimate = await estimateFor(
       args,
@@ -515,8 +550,7 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
       attributes.realm,
     );
     let automationId = automationIn(realmURL, id, args.virtualNetwork);
-    await refuseOnArchivedRealm(args.dbAdapter, realmURL);
-    let declaration = await declarationOf(args, automationId);
+    let declaration = await declarationOf(args, automationId, realmURL);
     agreedMonthlyCap(attributes, declaration);
     let change = await switchOnAutomation(
       args.dbAdapter,
@@ -570,7 +604,7 @@ function manualRunHandler(
       );
     }
     await refuseOnArchivedRealm(args.dbAdapter, realmURL);
-    let declaration = await declarationOf(args, automationId);
+    let declaration = await declarationOf(args, automationId, realmURL);
     let started: ManualRunStart = await start(
       { dbAdapter: args.dbAdapter, queue: args.queue },
       {
@@ -646,8 +680,7 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let { caller, realmURL, automationId, attributes } =
       await automationRequest(ctxt, args);
-    await refuseOnArchivedRealm(args.dbAdapter, realmURL);
-    let declaration = await declarationOf(args, automationId);
+    let declaration = await declarationOf(args, automationId, realmURL);
     agreedMonthlyCap(attributes, declaration);
     let change = await resumeAutomation(
       args.dbAdapter,

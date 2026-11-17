@@ -31,9 +31,13 @@ export const AUTOMATION_ESTIMATE_RESOURCE_TYPE = 'automation-estimate';
 //
 // - switch-on and resume: `monthlyCredits` is the monthly credit cap the
 //   caller agrees to pay up to. It must be the card's own
-//   `caps.monthlyCredits`, so the cap the caller confirmed is the one the
-//   automation's caps snapshot holds; a card edited since the caller read it
-//   is refused, and the caller reads the estimate again.
+//   `caps.monthlyCredits`, so the monthly cap the caller confirmed is the one
+//   the automation's caps snapshot holds. A card whose monthly cap changed
+//   since the caller read it is refused, and the caller reads the estimate
+//   again. Only the monthly cap is compared: the rest of the snapshot (the
+//   triggers' timing, the per-run and daily caps, `batchedAI`) is taken from
+//   the card as it is when the route reads it, and spending stays within the
+//   confirmed monthly cap whatever they say.
 // - Preview and Run now: `click` is a fresh id per click. Sending the same
 //   click again answers the run it started rather than starting another.
 export interface AutomationRequestBody {

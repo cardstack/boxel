@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import type { SuperTest, Test } from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  archiveRealm,
   createAutomationRun,
   getAutomationRun,
   ri,
@@ -557,6 +558,95 @@ module(basename(import.meta.filename), function (hooks) {
           { type: 'automation-run', id },
         );
         assert.strictEqual(missing.status, 404, `${id}: ${missing.text}`);
+      }
+    });
+
+    test('a direct writer naming a run in another realm finds no run', async function (assert) {
+      let elsewhere = 'http://127.0.0.1:4444/another-realm/';
+      let run = await createAutomationRun(dbAdapter, {
+        automationId: rri(`${elsewhere}automation/daily`),
+        realm: ri(elsewhere),
+        trigger: 'manual',
+        slot: randomUUID(),
+        actsAs: OWNER,
+        dryRun: false,
+      });
+      let response = await post(
+        AUTOMATION_RUN_CANCEL_PATH,
+        OWNER,
+        {},
+        { type: 'automation-run', id: run.id },
+      );
+      assert.strictEqual(response.status, 404, response.text);
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, run.id))?.state,
+        'pending',
+        'the run is untouched',
+      );
+    });
+  });
+
+  // A caller who isn't a direct writer is refused before anything about the
+  // realm's automations or runs is read, so the refusal is the same whether
+  // or not they exist.
+  module('refusing a caller who is not a direct writer', function () {
+    test('names nothing that exists', async function (assert) {
+      let estimate = await request
+        .get(AUTOMATION_SWITCH_ON_PATH)
+        .query({ realm: realm.url, automation: cardURL('automation/nothing') })
+        .set('Authorization', auth(READER));
+      assert.strictEqual(estimate.status, 403, estimate.text);
+      for (let path of [AUTOMATION_PAUSE_PATH, AUTOMATION_REMOVE_PATH]) {
+        let response = await post(path, READER, {});
+        assert.strictEqual(
+          response.status,
+          403,
+          `${path} of an automation that isn't switched on: ${response.text}`,
+        );
+      }
+      let cancel = await post(
+        AUTOMATION_RUN_CANCEL_PATH,
+        READER,
+        {},
+        { type: 'automation-run', id: randomUUID() },
+      );
+      assert.strictEqual(cancel.status, 403, `an unknown run: ${cancel.text}`);
+    });
+  });
+
+  module('an archived realm', function () {
+    test('switch-on, resume, Preview and Run now are refused', async function (assert) {
+      await switchOn(OWNER);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {})).status,
+        200,
+      );
+      await archiveRealm(dbAdapter, new URL(realm.url));
+
+      let resumed = await post(AUTOMATION_RESUME_PATH, OWNER, {
+        monthlyCredits: ROOMY_AUTOMATION_CAPS.monthlyCredits,
+      });
+      assert.strictEqual(resumed.status, 409, resumed.text);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId()))?.state,
+        'paused',
+        'the automation stays paused',
+      );
+
+      await post(AUTOMATION_REMOVE_PATH, OWNER, {});
+      let switchedOn = await post(AUTOMATION_SWITCH_ON_PATH, OWNER, {
+        monthlyCredits: ROOMY_AUTOMATION_CAPS.monthlyCredits,
+      });
+      assert.strictEqual(switchedOn.status, 409, switchedOn.text);
+      assert.strictEqual(
+        await getAutomation(dbAdapter, automationId()),
+        undefined,
+        'nothing is switched on',
+      );
+
+      for (let path of [AUTOMATION_PREVIEW_PATH, AUTOMATION_RUN_NOW_PATH]) {
+        let response = await post(path, OWNER, { click: randomUUID() });
+        assert.strictEqual(response.status, 409, `${path}: ${response.text}`);
       }
     });
   });

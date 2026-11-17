@@ -276,7 +276,7 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 | `realm-archived`         | `pauseRealmAutomations`: the realm was archived (`handlers/handle-archive-realm.ts`)                                                                                                             |
 
 - **`switchOnAutomation`** makes the row for a direct writer, who becomes the payer, snapshots the caps the declaration sets, and starts the schedule now. A row whose triggers are all spent starts `done`. A second switch-on is refused (`already-switched-on`).
-- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending and running runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it); restoring the realm leaves them paused until a direct writer resumes each one.
+- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending and running runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it), and pauses them once more after. Switch-on and resume refuse an archived realm (`realm-archived`), asked in their own transaction under the realm's automation lock, which they take shared and `pauseRealmAutomations` takes exclusive (`lockRealmAutomations`), so one that read the realm as not yet archived commits before the second pause reads the realm's automations. Restoring the realm leaves them paused until a direct writer resumes each one.
 - **`checkAutomationCaps`** and **`checkAutomationPayer`** pause without a person. A row already paused keeps its reason, since a resume takes a new snapshot whatever paused it. A cap the snapshot doesn't limit (an unset credit cap, or a cap added to the card type after the snapshot) is never "raised"; `capsRaisedAbove` is the comparison.
 - **Waiting for credits.** A run's admission moves the row between `active` and `waiting-for-credits` (`setAutomationWaitingForCredits`). A run that acts as the payer and is refused with `insufficient-credits` moves an active row to waiting; the next such run whose balance passes (admitted, or refused only for a credit cap, which the check reads after the balance) moves it back to active. The tick keeps enqueuing a waiting row's due runs as it does an active one's, and each is admitted or refused on the balance at that moment, so the automation continues at its next due time once the balance recovers. Nothing changes the state when the payer tops up; the view says _Waiting for credits_ until the next due run. A Preview or Run now is charged to whoever clicked, so its refusal never moves the row. A paused or _done_ row, or one whose payer a resume changed, is never moved. The move is one conditional `UPDATE`, so a pause that commits first wins.
 - The tick, the card's index hook and the run task own `next_run`, `trigger_runs`, `waiting-for-credits`, `done` and the `last_*` columns once the row exists. The lifecycle functions set the next run and `done` only where they start a schedule. Whatever writes `trigger_runs` keeps each entry's `timing`.
@@ -300,7 +300,7 @@ Run counts are keyed by label, so editing the card keeps them. Each trigger's `t
 
 The hook only logs a failure; the index pass still succeeds, and the next pass over the card syncs again. Each automation syncs on its own, so one that fails (`failed to sync automation <id> with its card`) doesn't stop the rest of the realm's. A failure before any automation syncs logs `failed to sync automations with their cards in <realm>`. A row stuck on an old schedule after an edit is worth checking against that log line and the card's index row (`has_error`, `types`).
 
-Every direct-writer check is `isDirectWriterLocked`, asked inside the change's transaction against the served URL `virtualNetwork.toURL(realm)` resolves the realm to, since permission rows are keyed by served URLs. A wildcard (`*`, `users`) row, a bot account and a policy grant never make a direct writer. A refusal returns `{ ok: false, reason }` (`not-a-direct-writer`, `missing`, `outside-realm`, `other-card`, `already-switched-on`, `not-paused`, `not-pausable`) rather than throwing.
+Every direct-writer check is `isDirectWriterLocked`, asked inside the change's transaction against the served URL `virtualNetwork.toURL(realm)` resolves the realm to, since permission rows are keyed by served URLs. A wildcard (`*`, `users`) row, a bot account and a policy grant never make a direct writer. A refusal returns `{ ok: false, reason }` (`not-a-direct-writer`, `missing`, `outside-realm`, `other-card`, `realm-archived`, `already-switched-on`, `not-paused`, `not-pausable`) rather than throwing.
 
 The row's `realm` is what every later check asks about, so switch-on refuses a realm that doesn't contain the automation (`outside-realm`, decided by `RealmPaths.inRealm`), and switch-on and resume refuse a declaration read from another card (`other-card`). Each change locks the person's permission row before the automation's row, in that order everywhere, so two changes never wait on each other; code that touches both, such as a realm's archive or delete, takes them in the same order.
 
@@ -1686,8 +1686,7 @@ a direct writer gets the same 403 whether or not the automation or run
 exists. It then checks the automation is in the realm (400), reads the card
 from its index row with `readRunDeclaration` (422 when the card isn't
 indexed or doesn't read as an automation), and calls the lifecycle function,
-which checks direct write again under its own locks. Switch-on, resume,
-Preview and Run now refuse an archived realm (409). Each change reports its
+which checks direct write again under its own locks. Each change reports its
 `automation` and `job` events through `realmServerAutomationChangeReporter`
 and `realmServerRunChangeReporter`.
 
@@ -1712,11 +1711,23 @@ caps the card sets (the caps snapshot), and the monthly credit cap is what
 the payer confirms. `monthlyCredits` must be a whole number (400 when it is
 missing or isn't), the card must set `caps.monthlyCredits` (422 when it
 doesn't: a card capped by the day alone can't be switched on), and the two
-must be equal (409 otherwise). So the cap a person or the assistant confirmed
-is the one the snapshot holds, and a card edited between reading the
-estimate and switching on is refused rather than taken on: read the estimate
-again and confirm its cap. A screen that lets the person choose another cap
-writes it to the card first.
+must be equal (409 otherwise). So the monthly cap a person or the assistant
+confirmed is the one the snapshot holds, and a card whose monthly cap changed
+between reading the estimate and switching on is refused: read the estimate
+again and confirm its cap. Only the monthly cap is compared. The rest of the
+snapshot (the per-run and daily caps, `batchedAI`) and the triggers are taken
+from the card as the route reads it, so an edit to them in between is taken
+on, and spending stays within the confirmed monthly cap whatever they say. A
+screen that lets the person choose another cap writes it to the card first.
+
+**The realm.** The card's own realm, as its index row records it, must be
+the realm the request names (400 otherwise). Switch-on and resume refuse an
+archived realm (409, `realm-archived`) in the transaction that writes the
+row, holding the realm's automation lock shared (`lockRealmAutomations`);
+`pauseRealmAutomations` holds it exclusive, and archiving pauses the realm's
+automations both before and after marking it archived, so a switch-on or
+resume racing an archive ends paused or refused. Preview and Run now check
+the archive at the route.
 
 **Refusals.** 403 not a direct writer; 404 not switched on (pause, resume,
 remove) or no such run in the realm (cancel); 409 already switched on, already
