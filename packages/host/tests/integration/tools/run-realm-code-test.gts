@@ -5787,6 +5787,21 @@ return reasons;`);
     );
   });
 
+  test('realm.transform says what the input was when the program fails on it', async function (assert) {
+    // A program written for the array inside a response, run on the
+    // response itself.
+    await assert.rejects(
+      run(
+        `await realm.transform({ orders: [{ id: 1 }], page_info: {} }, 'map(.id)');`,
+      ),
+      /realm\.transform: the program failed: .*\. The input is an object with keys orders \(an array of 1 item\), page_info \(an object\)\./,
+    );
+    await assert.rejects(
+      run(`await realm.transform([{ id: 1, tags: [] }], '.id');`),
+      /The input is an array of 1 item; the first is an object with keys id, tags\./,
+    );
+  });
+
   test('realm.transform refuses input and params over its size limit', async function (assert) {
     await assert.rejects(
       run(`await realm.transform('x'.repeat(1_100_000), '.');`),
