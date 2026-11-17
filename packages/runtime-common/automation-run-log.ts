@@ -23,6 +23,16 @@ import { recordRunMilestones } from './automation-run-milestones.ts';
 
 const log = logger('automation-run-log');
 
+// Test seam: when set, each stored line's Loki form goes to the sink instead
+// of the logger.
+let runLogLokiSink: ((line: string) => void) | undefined;
+
+export function setRunLogLokiSink(
+  sink: ((line: string) => void) | undefined,
+): void {
+  runLogLokiSink = sink;
+}
+
 // Where a run's tab sends the script's lines, with the run's token.
 export const RUN_LOG_PATH = '/_run-log';
 
@@ -110,10 +120,15 @@ export async function appendRunLog(
   {
     secrets = [],
     attempt,
+    jobId,
     maxLines = RUN_LOG_MAX_LINES,
     maxChars = RUN_LOG_MAX_CHARS,
   }: {
     secrets?: readonly string[];
+    // The run's queue job, for lines written before an attempt owns the run
+    // (the trigger's line, written as the job is enqueued). Once an attempt
+    // owns it, the lines carry that attempt's job.
+    jobId?: number;
     // The attempt that sent the lines. Their milestones are recorded only
     // while the run is running under it, so a send that lands after the run
     // ended, or after another attempt took it, adds to the log alone.
@@ -214,7 +229,7 @@ export async function appendRunLog(
     ]);
     return {
       automationId: run.automation_id,
-      jobId: run.job_id == null ? undefined : Number(run.job_id),
+      jobId: run.job_id == null ? jobId : Number(run.job_id),
       stored,
       dropped,
       firstDrop: dropped > 0 && Number(run.log_dropped) === 0,
@@ -230,7 +245,12 @@ export async function appendRunLog(
     jobId: result.jobId,
   });
   for (let line of result.stored) {
-    log.info(runLogLokiLine(tags, line));
+    let lokiLine = runLogLokiLine(tags, line);
+    if (runLogLokiSink) {
+      runLogLokiSink(lokiLine);
+    } else {
+      log.info(lokiLine);
+    }
   }
   if (result.firstDrop) {
     log.warn(
@@ -314,11 +334,17 @@ export async function logRunPlatformLine(
   dbAdapter: DBAdapter,
   runId: string,
   line: Omit<RunLogLine, 'source' | 'at'> & { at?: number },
+  // The run's queue job, when the caller knows it before an attempt owns
+  // the run (see `appendRunLog`).
+  jobId?: number,
 ): Promise<void> {
   try {
-    await appendRunLog(dbAdapter, runId, [
-      { at: Date.now(), ...line, source: 'platform' },
-    ]);
+    await appendRunLog(
+      dbAdapter,
+      runId,
+      [{ at: Date.now(), ...line, source: 'platform' }],
+      { jobId },
+    );
   } catch (error) {
     log.error(
       `could not write run ${runId}'s ${line.kind} log line: ${error instanceof Error ? error.message : String(error)}`,

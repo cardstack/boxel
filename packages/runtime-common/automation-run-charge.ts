@@ -3,6 +3,11 @@ import {
   releaseAutomationRunCreditHold,
   type AutomationRun,
 } from './automation-runs.ts';
+import {
+  automationRunLogTag,
+  emitAutomationRunEvent,
+  jobOfAttempt,
+} from './automation-run-telemetry.ts';
 import type { DBAdapter } from './db.ts';
 import {
   BYTES_PER_GB,
@@ -96,16 +101,24 @@ export async function chargeAutomationRun({
       if (!ENDED_STATES.has(run.state)) {
         return;
       }
+      let job = await jobOfAttempt(dbAdapter, run.attempt);
+      let ids = {
+        automation: run.automationId,
+        run: runId,
+        ...(job !== undefined ? { job } : {}),
+        ...(run.attempt != null ? { attempt: run.attempt } : {}),
+      };
+      let tag = automationRunLogTag(ids);
       let usage = automationRunUsage(run);
       let measured = `${usage.prerender_tab_seconds.toFixed(3)} prerender-tab seconds and ${run.callApiResponseBytes} bytes downloaded`;
       if (usage.prerender_tab_seconds === 0 && usage.downloaded_gb === 0) {
-        log.info(`not charging run ${runId}: it used nothing to charge for`);
+        log.info(`${tag} not charged: it used nothing to charge for`);
         await releaseAutomationRunCreditHold(dbAdapter, runId);
         return;
       }
       if (!meteredCharges) {
         log.warn(
-          `not charging run ${runId} (${measured}): this worker writes no metered charges`,
+          `${tag} not charged (${measured}): this worker writes no metered charges`,
         );
         return;
       }
@@ -114,13 +127,25 @@ export async function chargeAutomationRun({
         charge: { kind: 'run', realm: run.realm, runId },
         usage,
       });
-      let message = `run ${runId} in ${run.realm} for ${run.actsAs} (${measured}): ${result}`;
+      let credits = meteredCharges.exactCredits(usage);
+      emitAutomationRunEvent({
+        kind: 'charged',
+        ...ids,
+        realm: run.realm,
+        chargeKind: 'run',
+        result,
+        at: new Date().toISOString(),
+        ...(credits !== undefined ? { credits: Math.ceil(credits) } : {}),
+        prerenderTabSeconds: usage.prerender_tab_seconds,
+        downloadedGB: usage.downloaded_gb,
+      });
+      let message = `in ${run.realm} for ${run.actsAs} (${measured}): ${result}`;
       if (result === 'no-prices' || result === 'no-payer') {
         // The hold keeps counting until it lapses, since nothing paid for
         // the run.
-        log.error(`could not charge ${message}`);
+        log.error(`${tag} could not be charged ${message}`);
       } else {
-        log.info(`charged ${message}`);
+        log.info(`${tag} charged ${message}`);
         await releaseAutomationRunCreditHold(dbAdapter, runId);
       }
     }, attemptDelaysMs);

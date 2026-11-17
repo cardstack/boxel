@@ -34,8 +34,19 @@ import {
 } from '@cardstack/runtime-common';
 import type { JobEventContent } from '@cardstack/base/matrix-event';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { RUN_LOG_PATH } from '@cardstack/runtime-common/automation-run-log';
 import { presentsAsRunToken } from '@cardstack/runtime-common/run-token';
+import {
+  setAutomationRunTelemetrySink,
+  type AutomationRunEvent,
+} from '@cardstack/runtime-common/automation-run-telemetry';
+import {
+  RUN_LOG_PATH,
+  setRunLogLokiSink,
+} from '@cardstack/runtime-common/automation-run-log';
+import {
+  setAutomationMilestoneSink,
+  type AutomationMilestoneEvent,
+} from '@cardstack/runtime-common/automation-run-milestones';
 import { runOverlayFiles } from '@cardstack/runtime-common/run-overlay';
 import type { MeteredCharges } from '@cardstack/runtime-common/metered-charges';
 import {
@@ -180,14 +191,23 @@ module(basename(import.meta.filename), function (hooks) {
     {
       input = {},
       dedupeKey = automationRunDedupeKey(run),
+      jobId = 1,
       reservationId = 7,
+      queueWaitMs = null,
+      concurrencyGroup = null,
       commit,
       meteredCharges,
+      workerLog = log,
       reportRunChange,
     }: {
       input?: Partial<AutomationJobInput>;
       dedupeKey?: string | null;
+      jobId?: number;
       reservationId?: number;
+      queueWaitMs?: number | null;
+      concurrencyGroup?: string | null;
+      // The worker's logger, which an attempt writes its own lines to.
+      workerLog?: Parameters<typeof runAutomationAttempt>[0]['log'];
       // Stands in for the network on the worker's commit requests only;
       // `send` sends one to the realm.
       commit?: (send: () => Promise<Response>) => Promise<Response>;
@@ -211,11 +231,11 @@ module(basename(import.meta.filename), function (hooks) {
         }) as VirtualNetwork)
       : virtualNetwork;
     let jobInfo: JobInfo = {
-      jobId: 1,
+      jobId,
       reservationId,
       priority: 5,
-      queueWaitMs: null,
-      concurrencyGroup: null,
+      queueWaitMs,
+      concurrencyGroup,
       laneFamily: null,
     };
     let definitionLookup = new CachingDefinitionLookup(
@@ -235,7 +255,7 @@ module(basename(import.meta.filename), function (hooks) {
         admissionChecks: testAutomationAdmissionChecks,
         meteredCharges,
         reportRunChange,
-        log,
+        log: workerLog,
       },
       {
         runId: run.id,
@@ -733,6 +753,240 @@ module(basename(import.meta.filename), function (hooks) {
       [],
       'and the run is not charged',
     );
+  });
+
+  test('every line and telemetry event of a run carries its automation, run and queue job', async function (assert) {
+    await fundOwner();
+    let run = await newRun();
+    let automation = run.automationId;
+    // The run's queue job, and the reservation a worker claims it with.
+    let [{ id: jobId }] = (await dbAdapter.execute(
+      `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args, status)
+         VALUES ('run-command', $1, 420, 5, $2, 'unfulfilled') RETURNING id`,
+      {
+        bind: [
+          `automation:${automation}`,
+          JSON.stringify({ dedupeKey: automationRunDedupeKey(run) }),
+        ],
+      },
+    )) as { id: number }[];
+    let [{ id: reservationId }] = (await dbAdapter.execute(
+      `INSERT INTO job_reservations (job_id, locked_until, worker_id)
+         VALUES ($1, NOW() + interval '5 minutes', 'test-worker') RETURNING id`,
+      { bind: [jobId] },
+    )) as { id: number }[];
+    jobId = Number(jobId);
+    reservationId = Number(reservationId);
+
+    let events: AutomationRunEvent[] = [];
+    let milestones: AutomationMilestoneEvent[] = [];
+    let lokiLines: string[] = [];
+    let workerLines: string[] = [];
+    let record =
+      (level: string) =>
+      (...args: unknown[]) =>
+        workerLines.push(`${level} ${args.map(String).join(' ')}`);
+    let workerLog = {
+      info: record('info'),
+      warn: record('warn'),
+      error: record('error'),
+    };
+    let scriptStartedAt = Date.now();
+    setAutomationRunTelemetrySink((event) => events.push(event));
+    setAutomationMilestoneSink((event) => milestones.push(event));
+    setRunLogLokiSink((line) => lokiLines.push(line));
+    try {
+      // A tab that reports a milestone to the run's log, as the script would, stages a write, and answers with when the script
+      // started and ended and what the prerender server measured.
+      let tab = {
+        async runCommand(args: RunCommandArgs) {
+          let token = (JSON.parse(args.auth) as Record<string, string>)[
+            realm.url
+          ];
+          let at = Date.now();
+          let logged = await virtualNetwork.fetch(
+            `${realm.url}${RUN_LOG_PATH.replace(/^\//, '')}`,
+            {
+              method: 'POST',
+              headers: {
+                Accept: 'application/vnd.api+json',
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                events: [
+                  { kind: 'plan', at, milestones: ['fetch'] },
+                  { kind: 'milestone', at, name: 'fetch' },
+                ],
+              }),
+            },
+          );
+          if (!logged.ok) {
+            throw new Error(`the run log refused: ${logged.status}`);
+          }
+          let staged = await virtualNetwork.fetch(
+            `${realm.url}out/result.txt`,
+            {
+              method: 'POST',
+              headers: { Accept: SOURCE, Authorization: `Bearer ${token}` },
+              body: 'from the run',
+            },
+          );
+          if (!staged.ok) {
+            throw new Error(`staging failed: ${staged.status}`);
+          }
+          return {
+            status: 'ready',
+            cardResultString: JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {
+                  json: {
+                    state: 'complete',
+                    timing: {
+                      startedAt: scriptStartedAt,
+                      endedAt: scriptStartedAt + 800,
+                    },
+                  },
+                },
+              },
+            }),
+            meta: {
+              requestId: 'prerender-request-1',
+              diagnostics: {
+                launchMs: 40,
+                waits: { tabQueueMs: 30, tabStartupMs: 0 },
+                tabReused: true,
+                renderElapsedMs: 900,
+                tabMemory: {
+                  jsUsedMB: 12,
+                  jsTotalMB: 20,
+                  domMB: 3,
+                  buffersMB: 1,
+                },
+              },
+            },
+          } as RunCommandResponse;
+        },
+      } as unknown as Prerenderer;
+      let result = await attempt(run, tab, {
+        jobId,
+        reservationId,
+        queueWaitMs: 250,
+        concurrencyGroup: `automation:${automation}`,
+        meteredCharges: meteredChargesFor(dbAdapter, testPricing),
+        workerLog,
+      });
+      assert.deepEqual(result, { state: 'complete' }, 'the run completes');
+    } finally {
+      setAutomationRunTelemetrySink(undefined);
+      setAutomationMilestoneSink(undefined);
+      setRunLogLokiSink(undefined);
+    }
+
+    let ids = { automation, run: run.id, job: jobId };
+    assert.deepEqual(
+      events.map((e) => e.kind),
+      ['claimed', 'admitted', 'script', 'commit', 'finished', 'charged'],
+      'the run crosses each boundary once, in order',
+    );
+    for (let event of events) {
+      assert.deepEqual(
+        {
+          automation: (event as { automation?: string }).automation,
+          run: (event as { run?: string }).run,
+          job: (event as { job?: number }).job,
+        },
+        ids,
+        `the ${event.kind} event carries the run's ids`,
+      );
+    }
+    assert.true(milestones.length > 0, 'the run reported a milestone');
+    for (let milestone of milestones) {
+      assert.deepEqual(
+        {
+          automation: milestone.automation,
+          run: milestone.run,
+          job: milestone.job,
+        },
+        ids,
+        `the ${milestone.milestone} milestone carries the run's ids`,
+      );
+    }
+    let tags = `[automation-run-log] automation=${automation} run=${run.id} job=${jobId} `;
+    assert.true(lokiLines.length > 0, "the run's log reached Loki");
+    for (let line of lokiLines) {
+      assert.true(
+        line.startsWith(tags),
+        `the log line carries the run's ids: ${line}`,
+      );
+    }
+    assert.true(workerLines.length > 0, 'the worker logged the attempt');
+    for (let line of workerLines) {
+      assert.true(
+        line.includes(
+          `automation=${automation} run=${run.id} job=${jobId} attempt=${reservationId}`,
+        ),
+        `the worker's line carries the run's ids: ${line}`,
+      );
+    }
+
+    let byKind = <K extends AutomationRunEvent['kind']>(kind: K) =>
+      events.find((e) => e.kind === kind) as Extract<
+        AutomationRunEvent,
+        { kind: K }
+      >;
+    let claimed = byKind('claimed');
+    assert.strictEqual(
+      claimed.queueWaitMs,
+      250,
+      'the claim says how long the job waited',
+    );
+    assert.strictEqual(claimed.lane, `automation:${automation}`);
+    assert.true(byKind('admitted').admitted, 'admission let the run go ahead');
+    let script = byKind('script');
+    assert.strictEqual(
+      script.tabLaunchMs,
+      40,
+      "the prerender server's own measure of giving the call a tab",
+    );
+    assert.true(
+      Date.parse(script.tabAnsweredAt) >= Date.parse(script.tabRequestedAt),
+      'the tab answered after the worker asked for it',
+    );
+    assert.strictEqual(
+      script.scriptStartedAt,
+      new Date(scriptStartedAt).toISOString(),
+    );
+    assert.strictEqual(
+      script.scriptMs,
+      800,
+      'the script ran for what the tab measured',
+    );
+    assert.strictEqual(
+      script.tabMs,
+      900,
+      'the tab time is what the run is charged',
+    );
+    assert.strictEqual(script.tabQueueMs, 30);
+    assert.true(script.tabReused);
+    assert.strictEqual(
+      script.tabJsHeapUsedMB,
+      12,
+      "the tab's memory as the script ended",
+    );
+    assert.strictEqual(script.prerenderRequestId, 'prerender-request-1');
+    let commit = byKind('commit');
+    assert.strictEqual(commit.outcome, 'committed');
+    assert.strictEqual(commit.tries, 1);
+    let finished = byKind('finished');
+    assert.strictEqual(finished.state, 'complete');
+    assert.ok(finished.committedAt, 'the summary has the commit');
+    assert.strictEqual(finished.prerenderTabMs, 900);
+    let charged = byKind('charged');
+    assert.strictEqual(charged.chargeKind, 'run');
+    assert.strictEqual(charged.result, 'charged');
+    assert.true((charged.credits ?? 0) > 0, 'the charge says what it cost');
   });
 
   test("a job whose key isn't its run's runs nothing", async function (assert) {

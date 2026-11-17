@@ -13,7 +13,8 @@
 // A milestone lasts until the next one starts, or until the run ends.
 //
 // When a run ends, each of its milestones is written once to the
-// `boxel:automation-milestones` telemetry channel with the time spent in it.
+// `boxel:automation-milestones` telemetry channel with the time spent in it,
+// tagged with the run's automation, run and queue job.
 
 import type { AutomationRun, AutomationRunState } from './automation-runs.ts';
 import type { RunLogLine } from './automation-run-log.ts';
@@ -285,6 +286,8 @@ export async function readCurrentRunMilestones(
 export async function closeRunMilestones(
   dbAdapter: DBAdapter,
   run: AutomationRun,
+  // The queue job that owned the run's last attempt, when it had one.
+  job?: number,
 ): Promise<void> {
   try {
     let milestones = await readRunMilestones(dbAdapter, run.id);
@@ -296,6 +299,7 @@ export async function closeRunMilestones(
         automation: run.automationId,
         realm: run.realm,
         run: run.id,
+        ...(job !== undefined ? { job } : {}),
         outcome: run.state,
         ...(run.errorReason ? { errorReason: run.errorReason } : {}),
         milestone: milestone.name,
@@ -322,6 +326,8 @@ export interface AutomationMilestoneEvent {
   automation: string;
   realm: string;
   run: string;
+  // The run's queue job, when it had one.
+  job?: number;
   outcome: AutomationRunState;
   errorReason?: string;
   milestone: string;
