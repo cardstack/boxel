@@ -9,6 +9,7 @@ import {
   getLedgerUsage,
 } from '@cardstack/billing/billing-queries';
 import {
+  insertPermissions,
   logger,
   ri,
   rri,
@@ -97,7 +98,6 @@ module(basename(import.meta.filename), function (hooks) {
     realmURL: testRealm,
     permissions: {
       '*': ['read', 'write'],
-      [PAYER]: ['read', 'write'],
       '@node-test_realm:localhost': ['read', 'write', 'realm-owner'],
     },
     fileSystem: {
@@ -238,6 +238,11 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('a run that commits through the run-commit route is charged its indexing', async function (assert) {
+    // A run commits only as a direct writer of its realm, which the wildcard
+    // grant makes no one.
+    await insertPermissions(dbAdapter, testRealm, {
+      [PAYER]: ['read', 'write'],
+    });
     let { token, run: committing } = await createAutomationRunToken(
       dbAdapter,
       realm,
