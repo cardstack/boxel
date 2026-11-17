@@ -34,7 +34,10 @@ export interface PathPrefix {
   directory: boolean;
   // The decoded realm-relative path: `blog/drafts/` for a directory,
   // `blog/post-1.json` for a file, and `''` for the whole realm. Search and
-  // history lower a prefix from this rather than from `source`.
+  // history lower a prefix from this rather than from `source`, and must
+  // match it literally: it can hold `%`, `_`, `*`, `[` and `]`. An SQL
+  // lowering escapes `LIKE`'s `%`, `_` and `\` and compares against the form
+  // the index stores a path in; a `git` lowering passes literal pathspecs.
   path: string;
 }
 

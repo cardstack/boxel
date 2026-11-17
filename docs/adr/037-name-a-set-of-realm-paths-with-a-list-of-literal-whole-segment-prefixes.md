@@ -26,7 +26,11 @@ Code that names a set of paths in a realm MUST parse, validate and match it
 with `packages/runtime-common/path-specifier.ts`. It MUST NOT add another
 syntax or matcher for the same job. Code that lowers a specifier, such as to
 an SQL prefix test or a `git log` path filter, SHOULD lower the parsed prefixes
-the module exposes rather than parse the strings again. A `.gitignore` file
+the module exposes rather than parse the strings again. A lowering MUST match
+a prefix's `path` literally: an SQL lowering MUST escape `LIKE`'s `%`, `_` and
+`\` and compare against the form the index stores a path in, and a `git`
+lowering MUST pass literal pathspecs (`--literal-pathspecs`), since a valid
+`path` can hold `%`, `_`, `*`, `[` and `]`. A `.gitignore` file
 keeps git's own pattern syntax: it says which files a realm leaves out, not
 which paths a grant, a search or a read covers.
 
