@@ -104,6 +104,7 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
   definitionLookup,
   virtualNetwork,
   mintRunToken,
+  automationAdmissionChecks,
   meteredCharges,
 }) =>
   async function (args) {
@@ -133,6 +134,8 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
             virtualNetwork,
             prerenderer,
             mintRunToken,
+            matrixServerName,
+            admissionChecks: automationAdmissionChecks,
             meteredCharges,
             log,
           },

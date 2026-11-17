@@ -7,6 +7,7 @@ import {
   type CallApiSlotKey,
   type CallApiSlotPlacement,
   type OperationCallApi,
+  type OperationError,
   type OperationCallApiResult,
   type OperationDefinition,
   type OperationLoweringIssueCode,
@@ -19,6 +20,8 @@ import { destinationCovers } from './destination-covers.ts';
 
 export { destinationCovers };
 import type { KeyReadiness } from './capability-wire.ts';
+import type { OperationCore } from './dispatch.ts';
+import type { ResolvedCodeRef } from '../code-ref.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
@@ -1004,10 +1007,26 @@ export interface CallApiUse {
 // slots, against the shares and keys `fill` said they count against. It
 // describes what happened and never changes it, so whatever it throws is
 // logged and dropped.
+//
+// `admitAutomation` asks, before an automation run starts and without opening
+// any key, whether `payer` may invoke one operation the automation declares
+// as an automation call: the refusal the call would get, or `undefined` when
+// it would be served. A sender that can't tell leaves it out, and a run's
+// admission then refuses the run.
 export interface CallApiSender {
   fill(lookup: CallApiSlotLookup): Promise<CallApiFilledSlot[]>;
   recordUse?(use: CallApiUse): Promise<void>;
   readiness?(lookup: CallApiReadinessLookup): Promise<KeyReadiness | undefined>;
+  admitAutomation?(args: {
+    core: Pick<
+      OperationCore,
+      'resolveCodeRef' | 'definitionLookup' | 'readsRealmOf'
+    >;
+    realmURL: URL;
+    codeRef: ResolvedCodeRef;
+    operation: string;
+    payer: string;
+  }): Promise<OperationError | undefined>;
   send(
     request: CallApiRequest,
     credentials: CallApiCredential[],
