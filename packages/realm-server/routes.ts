@@ -214,6 +214,7 @@ import {
   handleStartConnect,
 } from './handlers/handle-oauth.ts';
 import type { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
+import { realmServerRunChangeReporter } from './lib/run-change-reporter.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -652,6 +653,10 @@ export function createRoutes(args: CreateRoutesArgs) {
       definitionLookup: args.definitionLookup,
       virtualNetwork: args.virtualNetwork,
       realmSecretSeed: args.realmSecretSeed,
+      reportRunChange: realmServerRunChangeReporter({
+        ...args,
+        background: true,
+      }),
     }),
   );
   // An automation run's calls to OpenRouter's Batch API. They carry a run

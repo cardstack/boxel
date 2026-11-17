@@ -90,6 +90,12 @@ description: >-
   refusal code and what fixes it, and the `admission` log line and
   `admitted_at`. Use when a run ended with one of those codes, or when
   changing what admission checks.
+  Also covers the `job` realm event (`automation-run-events.ts`,
+  `Realm.broadcastJobEvent`): what it carries, that it reaches only the
+  realm's direct writers' session rooms, which code reports a run's change,
+  and how to watch it from the host or a card. Use when a console or card
+  should follow a run live, when adding code that moves a run, or when a
+  direct writer isn't seeing a run's events.
 ---
 
 # Automations
@@ -209,7 +215,7 @@ The views get the row from `GET <realm>/_automation-status?automation=<card URL>
 
 Both shapes carry `lastRun`, the automation's last run that started and has ended (`readLastRunMilestones`), and `currentRun`, its run in progress (`readCurrentRunMilestones`), each with its milestones (_Run milestones_) or null. A Preview is a test of the script, so neither is ever one. A run can start and end before switch-on (a Run now), so neither depends on the row.
 
-`payer` is the payer's Matrix id only when the viewer is the payer or `shareARealmGrant` finds a realm whose permission rows name both (ADR 011 §1.2). Otherwise it is null, and the view reads "A person who shares no workspace with you". Each trigger's next run and whether the trigger is spent come from `computeAutomationSchedule` at the realm's clock (`now()` in `clock.ts`), as the tick computes them. Runs left are counted one trigger at a time over the indexed declaration, the row's `scheduled_since` and `trigger_runs`, with no `now`, so a slot that has passed but isn't enqueued yet still counts as left. Counting stops after `RUNS_LEFT_BUDGET_MS` (250 ms) per answer; a trigger past the budget reports no `runsLeft`. When the card no longer reads as a declaration, each trigger the row has counted reports `runs` alone. The response is `no-store`. The view fetches again when the card is re-indexed, not when the row changes.
+`payer` is the payer's Matrix id only when the viewer is the payer or `shareARealmGrant` finds a realm whose permission rows name both (ADR 011 §1.2). Otherwise it is null, and the view reads "A person who shares no workspace with you". Each trigger's next run and whether the trigger is spent come from `computeAutomationSchedule` at the realm's clock (`now()` in `clock.ts`), as the tick computes them. Runs left are counted one trigger at a time over the indexed declaration, the row's `scheduled_since` and `trigger_runs`, with no `now`, so a slot that has passed but isn't enqueued yet still counts as left. Counting stops after `RUNS_LEFT_BUDGET_MS` (250 ms) per answer; a trigger past the budget reports no `runsLeft`. When the card no longer reads as a declaration, each trigger the row has counted reports `runs` alone. The response is `no-store`. The view fetches again when the card is re-indexed, and on a `job` or `automation` realm event naming the automation (below), since a run or a change to the row changes the answer and not the card.
 
 The realm loads `automation-status.ts` with a dynamic `import()` on the route's first use, so the schedule code stays out of every bundle that imports the realm. An in-browser test realm has no `automations` table. Host tests mount a virtual-network handler that answers the route (`tests/acceptance/automation-view-test.gts`).
 
@@ -353,6 +359,39 @@ The ticks themselves are `automation-tick` rows in `jobs`; their `result` counts
 - A run made but never started: its job is waiting. `SELECT id, status, priority, concurrency_group FROM jobs WHERE job_type = 'run-command' AND args->>'dedupeKey' LIKE 'automation:<automation card id>:%'`.
 - A trigger with `runs` at its `count`, or whose next slot is past `until`, is spent and doesn't run again.
 
+### Reconcile: making up a missed run
+
+`reconcileAutomations` (`packages/runtime-common/automation-reconcile.ts`, imported as `@cardstack/runtime-common/automation-reconcile`) makes up runs an outage cost (ADR 028 §1.5). Every worker manager enqueues an `automation-reconcile` job when it starts and on a cron every five minutes (`lib/automation-reconcile-config.ts`; `AUTOMATION_RECONCILE_CRON_SCHEDULE` overrides it), at the automation tier in the `automation-reconcile` concurrency group. A pass that arrives while another waits joins it. Each pass handles two kinds of missed work, at most one run per trigger:
+
+1. **A run whose job is gone**: `pending` or `running`, made at least `AUTOMATION_RECONCILE_GRACE_SECONDS` (2 minutes) ago, with no `unfulfilled` `run-command` job carrying its `dedupeKey`. The queue gave up on its job after the last reservation, or the job finished without ending the run, or it was never published. Reconcile holds the automation's row, as the tick does while it writes runs.
+   - A **pending** run never started, so reconcile **enqueues the same run's job again** and sets `reconciled_at`. The run keeps its slot, which is the missed instant, so its trigger's count and cursor don't change, and a slot that joined the pending run is covered when it runs. The card's `seconds` cap sets the job's timeout; a card that can't be read gets `MAX_RUN_SECONDS`, and the run's admission then ends it with the reason the card doesn't read. A Run now or Preview is enqueued again whether or not the automation is switched on.
+   - Reconcile **ends** the run with `abandonAutomationRun` (`error_reason` `job-lost`, or `complete` if its commit landed) and charges it when the run is **running** (a retry gets only what is left of the run's time limit, counted from its first start, which a job the queue gave up on has long since used; the trigger's next run catches up), when `reconciled_at` is already set (its extra job was lost too), when a scheduled run's automation is paused or no longer switched on, or when no cron or one-time trigger on the card has the run's label.
+
+2. **A due time that passed with nothing enqueued**: a row whose `next_run` is the grace or more behind `now`, which the minute tick missed (the tick was down, or the worker manager just started). Reconcile runs the tick's own procedure on those rows (`tickAutomations` with `overdueBy`), so every slot that passed collapses into one make-up run at the latest of them, counted once against `count`. The tick and reconcile both claim with `FOR UPDATE SKIP LOCKED` and key each run by automation, trigger and slot, so they can't both start it.
+
+Lost runs go first, so a due slot finds a pending run that will run (and joins it) or none (and starts its own). Other missed work, such as a batch follow-up whose deadline passed with nothing enqueued, registers a step with `registerAutomationReconcileStep(name, step)`, which returns a function that removes it; each pass runs every registered step after its own and logs how many runs each made up. A pass calls its `onProgress` after each run, automation and step, and the job heartbeats there (`heartbeatJob`), so a pass after a long outage isn't timed out while it still makes progress.
+
+**What reconcile did.** The worker logs one `automation-reconcile` line per run or automation it handled, and a summary per pass that found anything:
+
+```
+automation-reconcile: run <run id> of automation <id> (trigger <label>, slot <slot>) had no live job; enqueued it again as job <job id>
+automation-reconcile: run <run id> of automation <id> (trigger <label>, slot <slot>) had no live job and ended error: <why>
+automation-reconcile: automation <id> trigger <label> was overdue; made up run <run id> (job <job id>) for <slot>
+automation-reconcile: <n> requeued, <n> ended, <n> overdue, <n> made up, <n> skipped, <n> failed
+```
+
+A run reconcile enqueued again has a `trigger` line in its log, `Reconcile enqueued this run again: it was still pending and its job was gone` (`data.reconciled` true); one it ended has a `finish` line with `job-lost`. The passes themselves are `automation-reconcile` rows in `jobs`, whose `result` counts what each did.
+
+```sql
+-- Runs reconcile has enqueued again, and how they ended.
+SELECT id, trigger, slot, state, error_reason, reconciled_at, finished_at
+  FROM automation_runs
+ WHERE reconciled_at IS NOT NULL
+ ORDER BY reconciled_at DESC LIMIT 20;
+```
+
+Make-ups that keep happening point at the queue rather than at reconcile: `requeued` lines for one automation mean its jobs keep dying (look up the rejected `run-command` job's `result` for the queue's reason, often a worker killed for memory); `overdue` lines mean the tick isn't running or isn't claiming (see _Why a due run didn't start_).
+
 ## The run row
 
 Every run has one row in `automation_runs`, and that row is the source of
@@ -375,10 +414,12 @@ cancel works by changing it. The functions that change it are in
 | `script_id`, `script_hash`                                                     | The script file the run read, as an identifier, and the hash of the text it ran                                                                                                                    |
 | `state`                                                                        | `pending`, `running`, `complete`, `error` or `canceled`                                                                                                                                            |
 | `error_reason`, `error_message`                                                | For an error: a code (such as `script-error`, `timed-out`, `commit-interrupted`) and its detail. A run canceled by a pause no person asked for carries that pause's reason (such as `caps-raised`) |
+| `credential_reason`, `credential_share_id`, `credential_key_id`                | For a run that ended `credential-rejected`: `rejected` or `needs-admin`, and the share or personal key the refused slot is filled from (the `oauth-connections` skill's _Unattended runs_)         |
 | `canceled_by`                                                                  | Who canceled the run, when a person did; null when an automatic pause canceled it                                                                                                                  |
 | `call_api_calls`, `call_api_response_bytes`, `resolve_calls`, `writes`         | The metered counts, which the realm server must add to where it does the work, never taking them from the tab                                                                                      |
 | `ai_credits_spent`, `ai_credits_reserved`, `ai_reservations`                   | Credits the run's finished AI requests cost, and the worst case of those in flight (see _The AI spending cap_)                                                                                     |
 | `created_at`, `started_at`, `commit_started_at`, `committed_at`, `finished_at` | When the run was enqueued, first started (a retry keeps it), claimed its commit, had its commit land, and ended                                                                                    |
+| `reconciled_at`                                                                | When reconcile enqueued a pending run's job again because its job was gone. Reconcile does that once; null for a run it never touched                                                              |
 
 A run is unique by `(automation_id, trigger, slot)`, the same three its
 `dedupeKey` names, so `createAutomationRun` called twice for one firing
@@ -436,9 +477,11 @@ says why) rather than throwing.
   (`automation_preview_files`) before it discards the overlay.
 - **`abandonAutomationRun(db, id, reason)`** closes a pending or running run
   whose job is gone, whoever owned it: the queue gives up on a job after its
-  last reservation, and no attempt is left to finish the run. This is for the
-  reconcile pass (ADR 028 §1.5). A run whose commit landed finishes complete;
-  any other finishes as an error with `reason`.
+  last reservation, and no attempt is left to finish the run. Reconcile calls
+  it with `job-lost` for a run it already enqueued once more (see
+  _Reconcile: making up a missed run_). A run whose commit landed finishes
+  complete; any other finishes as an error with `reason`. No attempt is left
+  to charge it, so the caller does (`chargeAutomationRun`).
 - **`cancelUnfinishedAutomationRuns(querier, automationId, by)`** cancels
   every pending run of an automation, and its running one unless its commit
   was claimed, inside the caller's transaction, as pausing and removing it do.
@@ -545,10 +588,11 @@ SELECT state, attempt, error_reason, error_message, canceled_by,
 ```
 
 - `running` with no live job: the attempt died. If the job has a reservation
-  left, its next attempt takes the run over. If not, the run stays `running`
-  until the reconcile pass closes it with `abandonAutomationRun`. `started_at`
-  is the first attempt's start, so an old one alone says only that the run was
-  retried.
+  left, its next attempt takes the run over. If not, reconcile ends the run
+  with `job-lost` within a few minutes. A `pending` run with no live job is
+  enqueued again once instead (`reconciled_at` set means it already had its
+  extra job). `started_at` is the first attempt's start, so an old one alone
+  says only that the run was retried.
 - `commit_started_at` set and `committed_at` null on a finished run: the
   claiming attempt stopped between the claim and the landing. Check the
   realm's files for the batch's writes to see whether it landed.
@@ -1175,6 +1219,170 @@ packages/observability/scripts/tail-logs.sh --env staging --service realm-server
   --regex '"channel":"boxel:automation-milestones"' --since 1d --no-follow
 ```
 
+## The `job` realm event
+
+A run that moves sends a `job` realm event. The run moves when its state, its
+step or its run milestone changes. The event is `JobEventContent` in
+`packages/base/matrix-event.gts`:
+
+```json
+{
+  "eventName": "job",
+  "runId": "<automation_runs id>",
+  "automation": "<the automation card's id, in RRI form>",
+  "state": "running",
+  "step": "script",
+  "milestone": "Write digest",
+  "realmURL": "<the realm's URL>"
+}
+```
+
+- **`step`** is `admission`, `script` or `commit`, read from the run row by
+  `automationRunStep`. `commit_started_at` set means `commit`. `admitted_at`
+  set means `script`. `started_at` set means `admission`. A run no attempt has
+  started has no step (`null`). An ended run keeps the step it got to, so a
+  run that admission refused reads `error` at `admission`. An attempt that
+  takes a run over from another clears `admitted_at`, so the retry's own
+  admission reads as `admission` again.
+- **`milestone`** is the name of the run's last `automation_run_milestones`
+  row, or `null` before its first. A `count` inside a milestone sends no
+  event.
+- **`automation`** is the card's identifier in RRI form (ADR 002 §1.3), the
+  spelling the card's own id has, so a card matches the event against its id.
+- **No person is in it.** Who the run acts as, who canceled it, and its error
+  reason and message aren't in the event. A subscriber reads them from a route
+  that checks who is asking (ADR 011).
+
+### Who receives it
+
+`Realm.broadcastJobEvent` sends the event only to the session rooms of the
+realm's direct writers (`fetchDirectWriters`). It hands the adapter a
+`RealmEventDelivery.refresh`, which the node adapter asks when the event
+reaches the head of the realm's line of events (`realm-event-dispatcher.ts`):
+the run's event and the writers are read again then, so an event that waited
+behind others goes out with the run as it is and only to the writers there
+are when it is sent. It never goes into the realm's own event room, and never to a reader, a `*` or
+`users` row, a policy grant or a bot account. A realm with no direct writer
+sends it nowhere. Every route into delivery leads there:
+`Realm.broadcastEvent` (the worker's bridge) and the realm's private
+broadcast both hand any `job` event to it. A writer without a session room
+receives nothing, as with every narrowed realm event.
+
+### Who reports a change
+
+Each process reports through a `ReportRunChange` (`runId => Promise<void>`)
+that reads the row (`readJobEvent`) and sends the event. Within one realm
+server process the events go out in order, each read as it is sent. A worker's
+reports reach whichever realm server answers its request, so events from
+different processes can still arrive out of order: a subscriber treats the
+event as a cue to read the run again. A report never rejects. A failed one is
+logged as `could not send the job event for automation run …`.
+
+| Change                                           | Reported by                                                                                                                                                                               |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A trigger's run is created (pending)             | the `automation-tick` task                                                                                                                                                                |
+| Preview or Run now creates its run               | `startAutomationPreview` / `startAutomationRunNow`, given `reportRunChange` in their options                                                                                              |
+| An attempt starts the run, admits it, or ends it | `runAutomationAttempt` (`AutomationAttemptContext.reportRunChange`, built in the `run-command` task)                                                                                      |
+| A milestone is reached                           | the realm's `/_run-log` route, when `appendRunLog` reports `milestones > 0`                                                                                                               |
+| The commit is claimed, released or lands         | the realm's `/_run-commit` route                                                                                                                                                          |
+| A call ends the run at a cap                     | `endRunAtCap` (the realm's `callApi` meter; the request forwarder for AI requests)                                                                                                        |
+| A pause, remove or cancel ends runs              | `withRunCancels` and `cancelAutomationRunFor`, given `reportRunChange` (`AutomationActorOptions`, `AutomationSyncOptions`, or a trailing argument); archiving and the index hook pass one |
+
+A worker holds no Matrix client. `taskRunChangeReporter` hands its event to
+`reportRealmEvent`, and the realm server's `/_worker-request` delivers it
+through `Realm.broadcastEvent`. A route that serves no single realm (the
+request forwarder, archiving) uses `realmServerRunChangeReporter`
+(`realm-server/lib/run-change-reporter.ts`), which finds the run's realm
+through the reconciler. **New code that moves a run** reports it the same way.
+A lifecycle function that takes `AutomationActorOptions` reports when its
+caller passes `reportRunChange`. A route that serves one of them passes the
+realm's `reportRunChange`.
+
+### Watching it
+
+In the host, subscribe to the realm's events the way other realm-event
+consumers do. Skip any event whose `eventName` isn't `'job'`, then match
+`automation` (or `runId`) and read the run again. For an automation card,
+read `GET <realm>/_automation-status`. For a run, read its report. The
+event is a cue to re-read, not the run's record. Missing one is harmless,
+because the next change sends another, and a subscriber that comes back reads
+the run afresh anyway.
+
+To see the events locally, read the direct writer's session room
+(`users.session_room_id`) in Synapse. The event type is
+`app.boxel.realm-event`, with `content.eventName = "job"`. If a writer gets
+nothing, check that they hold a `write` row of their own in
+`realm_user_permissions` and aren't a bot account (`isBotAccount`), and that
+`users.session_room_id` is set.
+
+## The `automation` realm event
+
+A change to an automation's own row sends an `automation` realm event: a
+direct writer switches it on, pauses, resumes or removes it; something pauses
+it without a person (a raised cap, the payer losing access, archiving the
+realm); its card is deleted or stops adopting from `Automation`, which removes
+the row; or its state moves between active, waiting for credits and done. The
+event is `AutomationEventContent` in `packages/base/matrix-event.gts`:
+
+```json
+{
+  "eventName": "automation",
+  "automation": "<the automation card's id, in RRI form>",
+  "realmURL": "<the realm's URL>"
+}
+```
+
+It is its own event rather than a `job` event with no run. A `job` event
+describes a run: its `runId`, its run state, its step and its milestone. None
+of those exist for a change to the row, and a subscriber that reads a run on
+every `job` event would have to learn to skip run-less ones. The `automation`
+event carries no state of its own, only the automation, so it can't go stale
+behind another event: a subscriber reads the automation again on it
+(`GET <realm>/_automation-status`). A change that cancels runs (a pause, a
+remove) sends a `job` event for each run and one `automation` event.
+
+### Who receives it, who reports it
+
+It goes where a `job` event goes: `Realm.broadcastAutomationEvent` sends it to
+the session rooms of the realm's direct writers alone, read again as it is
+sent, never into the realm's own room. `Realm.broadcastEvent` (the worker's
+bridge) and the realm's private broadcast route any `automation` event there.
+
+Every function that changes the row takes `AutomationReporters`
+(`reportRunChange`, `reportAutomationChange`) and reports once its
+transaction has committed. `withChanges` in `automations.ts` collects the
+canceled runs and the changed automations, so a transaction the database
+retries reports once. A `ReportAutomationChange` (`automation-change-events.ts`)
+takes the automation's id and realm, since a removed automation has no row to
+read them from, and never rejects; a failed report is logged as
+`could not send the automation event for …`.
+
+| Change                                                                                                     | Reported by                                                                                                                                                               |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Switch-on, pause, resume, remove                                                                           | `switchOnAutomation`, `pauseAutomation`, `resumeAutomation`, `removeAutomation`, given the reporter                                                                       |
+| The payer losing access                                                                                    | `checkAutomationPayer`, `pauseForPayerLostAccess`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                   |
+| Archiving the realm                                                                                        | `pauseRealmAutomations`, from the archive handler (`realmServerAutomationChangeReporter`)                                                                                 |
+| The card's index hook removes it, pauses it for a raised cap or batched AI, or makes it done/active        | `syncAutomationWithCard`, from `syncAutomationsAfterIndex` in the indexing tasks. `checkAutomationCaps` pauses the same way and reports to a caller that passes reporters |
+| The tick makes it done, or moves its next run without starting a run (every due slot joined a pending run) | `tickAutomations` (`AutomationTickOptions.reportAutomationChange`)                                                                                                        |
+
+A sync that leaves the state as it was reports nothing: its new next run
+follows a card edit, which the card's `index` event already announces. A tick
+that starts a run and leaves the state as it was reports nothing either, since
+the run's `job` event announces it. A worker reports through
+`taskAutomationChangeReporter`, which hands the event to `reportRealmEvent`.
+A realm route that changes a row passes `Realm.reportAutomationChange`. **New
+code that changes an automation's state** (waiting for credits, a pause of its
+own) reports the automation the same way once its change commits.
+
+### Watching it
+
+Subscribe to the realm's events, skip any event whose `eventName` isn't
+`'automation'` (or `'job'`, when runs matter too), match `automation` against
+the card's id, and read `_automation-status` again. The catalog `Automation`
+card's status does this, and so should anything that lists a realm's
+automations. To see it locally, read a direct writer's session room in
+Synapse for `app.boxel.realm-event` with `content.eventName = "automation"`.
+
 ## The automation command
 
 One attempt of a run is a `run-command` job naming `AUTOMATION_COMMAND`
@@ -1293,10 +1501,16 @@ spending hook. A worker without them refuses every run as
 | `binding-not-approved`                                                            | A declared operation has no approval for automations by the run's identity                                                                                                                                                                                                                                                                                                                               | The person approves the operation in the secure window                                                                 |
 | `binding-needs-reapproval`                                                        | The operation's request changed since it was approved                                                                                                                                                                                                                                                                                                                                                    | The person reviews the changes and approves again in the secure window                                                 |
 | `share-suspended`                                                                 | The realm's share the operation's `{{apiKey}}` slot uses is suspended                                                                                                                                                                                                                                                                                                                                    | A direct writer resumes the share, or the key's owner swaps another key into it                                        |
-| `credential-rejected`                                                             | The vendor refused the key or connection the operation uses, or its OAuth client is broken (see the `oauth-connections` skill)                                                                                                                                                                                                                                                                           | Reconnect or replace the key                                                                                           |
+| `credential-rejected`                                                             | The vendor refused the key or connection the operation uses, or its OAuth client is broken (see the `oauth-connections` skill). The realm records the credential on the run (`credential_*`) before answering                                                                                                                                                                                            | Reconnect or replace the key                                                                                           |
 | any other `automationAdmission` code (`target-not-found`, `invalid-operation`, …) | The declared operation can't be found or lowered for the run's identity                                                                                                                                                                                                                                                                                                                                  | Fix the card's declaration or the operation's module                                                                   |
 | `run-admission-failed`, `run-admission-unavailable`                               | The worker couldn't ask the realm (the realm's answer is in `error_message`), or the realm has no `admitAutomation` (a published realm)                                                                                                                                                                                                                                                                  | Look at the realm server's log for the `_run-admission` request                                                        |
 | the spending hook's code                                                          | `AutomationAdmissionChecks.admitSpending`: the balance and the monthly cap                                                                                                                                                                                                                                                                                                                               | See the `pricing` skill                                                                                                |
+
+A credential refused during the run, at one of its `callApi` calls, ends the
+run with `credential-rejected` too, unless the token endpoint is only failing
+for now, which the call waits out. How unattended runs refresh and retry, what
+the run records, and who is told (`automationCredentialNotices`) are in the
+`oauth-connections` skill's _Unattended runs_ section.
 
 When admission pauses the automation with `payer-lost-access`, the refused
 run ends with its own code first, and the pause follows (the refusal carries

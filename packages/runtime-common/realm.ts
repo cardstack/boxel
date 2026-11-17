@@ -216,8 +216,17 @@ import {
   automationRunForCall,
   getAutomationRun,
   recordAutomationRunCommitted,
+  recordAutomationRunCredentialRefusal,
 } from './automation-runs.ts';
-import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
+import { readJobEvent, runChangeReporter } from './automation-run-events.ts';
+import {
+  automationChangeReporter,
+  type ChangedAutomation,
+} from './automation-change-events.ts';
+import {
+  fetchDirectWriters,
+  isDirectWriter,
+} from './db-queries/realm-permission-queries.ts';
 import {
   RUN_COMMIT_PATH,
   claimRunOverlayCommit,
@@ -231,8 +240,13 @@ import {
 } from './run-overlay.ts';
 import {
   automationRunCallApiMeter,
+  credentialRefusalOf,
   readRunLimits,
 } from './automation-run-limits.ts';
+import {
+  endsRunOnCredential,
+  subjectOfRefusal,
+} from './card-operations/call-api.ts';
 import {
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
@@ -660,9 +674,11 @@ import {
 } from './matrix-backend-authentication.ts';
 
 import type {
+  AutomationEventContent,
   CoalescedIndexWrite,
   FileWatcherEventContent,
   IncrementalIndexEventContent,
+  JobEventContent,
   RealmEventContent,
   RealmWideIncrementalIndexEventContent,
   UpdateRealmEventContent,
@@ -2725,8 +2741,18 @@ export interface WriteOptions {
 // subscribed to the realm (see `fetchRealmSessionRooms`). `recipients` narrows
 // that to the named matrix users' session rooms, for an event that concerns
 // only them; a recipient with no subscribed session room receives nothing.
+//
+// `refresh`, when given, is asked again just before the event is sent, once it
+// reaches the head of its realm's line of events: an adapter that queues
+// events sends the content and recipients it answers then, in place of the
+// ones given, and sends nothing when it answers undefined. An event that
+// describes state read from the database uses it, so a queued event goes out
+// with that state, and to those recipients, as they are when it is sent.
 export interface RealmEventDelivery {
   recipients?: string[];
+  refresh?: () => Promise<
+    { event: RealmEventContent; recipients: string[] } | undefined
+  >;
 }
 
 export interface RealmAdapter {
@@ -13478,6 +13504,7 @@ export class Realm {
         definitionLookup: this.#definitionLookup,
         virtualNetwork: this.#virtualNetwork,
         run,
+        reportRunChange: (runId) => this.reportRunChange(runId),
       });
       this.#callApiRunMeters.set(requestContext, meter);
     }
@@ -14513,6 +14540,11 @@ export class Realm {
       secrets: token ? [token] : [],
       attempt: call.attempt,
     });
+    if (result.milestones > 0) {
+      // Not awaited: the run's tab is waiting on this answer, and the event
+      // is a report the run doesn't depend on.
+      void this.reportRunChange(call.runId);
+    }
     return answer(200, {
       data: {
         type: 'run-log',
@@ -14525,6 +14557,7 @@ export class Realm {
   // Checks each operation the run's automation declares as the run's
   // identity, without opening any key (`CallApiSender.admitAutomation`), and
   // answers the first refusal, or none (see `automation-admission-route.ts`).
+  // A refused credential that ends the run is recorded on its row.
   private async admitRunOperations(
     _request: Request,
     requestContext: RequestContext,
@@ -14585,10 +14618,22 @@ export class Realm {
         payer: call.actsAs,
       });
       if (refused) {
+        // A credential only a person can fix is recorded on the run, with
+        // the share or key the refused slot is filled from, before the
+        // worker ends it: the run's notices are read against it.
+        let subject = subjectOfRefusal(refused);
+        if (subject && endsRunOnCredential(refused.error)) {
+          await recordAutomationRunCredentialRefusal(
+            this.#dbAdapter,
+            call.runId,
+            call.attempt,
+            credentialRefusalOf(refused.error, subject),
+          );
+        }
         return answer({
           refusal: {
-            code: refused.code,
-            detail: refused.detail,
+            code: refused.error.code,
+            detail: refused.error.detail,
             operation: declared.operation,
             targetType: {
               module: String(declared.targetType.module),
@@ -14822,6 +14867,7 @@ export class Realm {
         );
       }
       claimed = true;
+      void this.reportRunChange(runId);
     };
 
     // A repeat of a commit that landed, such as one whose answer was lost,
@@ -14863,6 +14909,7 @@ export class Realm {
         // writes anything, so the claim it holds can go.
         if (claimed) {
           await releaseRunOverlayCommitClaim(this.#dbAdapter, key);
+          void this.reportRunChange(runId);
         }
         this.#log.warn(
           `run ${runId} commit refused before any file was written: ${err.error.code ?? err.message}`,
@@ -14884,7 +14931,9 @@ export class Realm {
       );
       throw err;
     }
-    await recordAutomationRunCommitted(this.#dbAdapter, runId);
+    if (await recordAutomationRunCommitted(this.#dbAdapter, runId)) {
+      void this.reportRunChange(runId);
+    }
     // The batch has landed, so the answer is a success from here on: the
     // count and the discard are bookkeeping, and the run's finish discards
     // the overlay again.
@@ -22173,6 +22222,14 @@ export class Realm {
     event: RealmEventContent,
     delivery?: RealmEventDelivery,
   ): Promise<void> {
+    if (event.eventName === 'job') {
+      await this.broadcastJobEvent(event);
+      return;
+    }
+    if (event.eventName === 'automation') {
+      await this.broadcastAutomationEvent(event);
+      return;
+    }
     this.#adapter.broadcastRealmEvent(
       event,
       this.url,
@@ -22193,12 +22250,108 @@ export class Realm {
   // The adapter stamps this realm's canonical url on the event, so it reaches
   // subscribed hosts exactly as a web-tier-originated event does.
   async broadcastEvent(event: RealmEventContent): Promise<void> {
+    if (event.eventName === 'job') {
+      await this.broadcastJobEvent(event);
+      return;
+    }
+    if (event.eventName === 'automation') {
+      await this.broadcastAutomationEvent(event);
+      return;
+    }
     await this.#adapter.broadcastRealmEvent(
       event,
       this.url,
       this.#matrixClient,
       this.#dbAdapter,
     );
+  }
+
+  // An automation run's `job` event goes to the session rooms of the realm's
+  // direct writers and nowhere else: never into the realm's own room, and
+  // never to a reader, a `*` or `users` grant, or a policy grant. The writers
+  // are read as the event goes out, so a writer whose row was removed stops
+  // receiving them at once. A realm with no direct writer sends nothing.
+  //
+  // The event names a run; its content and its recipients are read again when
+  // it reaches the head of the realm's line of events and is sent (see
+  // `RealmEventDelivery.refresh`). So a queued event carries the run as it is
+  // when it goes out, events go out in the order the line holds them, and a
+  // writer who lost the row while the event waited doesn't receive it.
+  async broadcastJobEvent(event: JobEventContent): Promise<void> {
+    await this.#broadcastToDirectWriters(event, async () => {
+      let current = await readJobEvent(
+        this.#dbAdapter,
+        event.runId,
+        this.#virtualNetwork,
+      );
+      return current ? { ...current, realmURL: this.url } : undefined;
+    });
+  }
+
+  // An automation's `automation` event goes where a `job` event goes: to the
+  // session rooms of the realm's direct writers alone, read as it is sent. It
+  // names only the automation, so its content is sent as given.
+  async broadcastAutomationEvent(event: AutomationEventContent): Promise<void> {
+    let content: AutomationEventContent = { ...event, realmURL: this.url };
+    await this.#broadcastToDirectWriters(content, async () => content);
+  }
+
+  // Sends an event to the session rooms of the realm's direct writers, with a
+  // `refresh` that reads the event (`read`) and the writers again when it is
+  // sent. A realm with no direct writer sends nothing.
+  async #broadcastToDirectWriters(
+    event: RealmEventContent,
+    read: () => Promise<RealmEventContent | undefined>,
+  ): Promise<void> {
+    let directWriters = () =>
+      fetchDirectWriters(
+        this.#dbAdapter,
+        new URL(this.url),
+        this.#matrixClient.serverName,
+      );
+    let recipients = await directWriters();
+    if (recipients.length === 0) {
+      return;
+    }
+    await this.#adapter.broadcastRealmEvent(
+      { ...event, realmURL: this.url },
+      this.url,
+      this.#matrixClient,
+      this.#dbAdapter,
+      {
+        recipients,
+        refresh: async () => {
+          let current = await read();
+          if (!current) {
+            return undefined;
+          }
+          return { event: current, recipients: await directWriters() };
+        },
+      },
+    );
+  }
+
+  // Reports that one of this realm's automation runs moved (see
+  // `automation-run-events.ts`), for the changes the realm itself makes to a
+  // run: its milestones, its commit, and a call that ends it at a cap.
+  async reportRunChange(runId: string): Promise<void> {
+    await runChangeReporter({
+      dbAdapter: this.#dbAdapter,
+      virtualNetwork: this.#virtualNetwork,
+      send: (event) => this.broadcastJobEvent(event),
+      log: this.#log,
+    })(runId);
+  }
+
+  // Reports that one of this realm's automations changed (see
+  // `automation-change-events.ts`), for the changes a route of this realm
+  // makes to an automation's row.
+  async reportAutomationChange(automation: ChangedAutomation): Promise<void> {
+    await automationChangeReporter({
+      virtualNetwork: this.#virtualNetwork,
+      send: (event) => this.broadcastAutomationEvent(event),
+      log: this.#log,
+    })(automation);
   }
 
   // CS-11126: no memoization. `realm_permissions` is indexed by

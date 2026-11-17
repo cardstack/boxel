@@ -18,6 +18,10 @@ import {
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import {
+  realmServerAutomationChangeReporter,
+  realmServerRunChangeReporter,
+} from '../lib/run-change-reporter.ts';
+import {
   notifyRealmsListUpdated,
   resolveAndAuthorizeArchiveTarget,
 } from './archive-realm-utils.ts';
@@ -30,6 +34,7 @@ export default function handleArchiveRealm({
   sendEvent,
   serverURL,
   virtualNetwork,
+  reconciler,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let target = await resolveAndAuthorizeArchiveTarget(
@@ -53,6 +58,17 @@ export default function handleArchiveRealm({
       await pauseRealmAutomations(
         dbAdapter,
         ri(virtualNetwork.unresolveURL(realmURL)),
+        {
+          reportRunChange: realmServerRunChangeReporter({
+            dbAdapter,
+            virtualNetwork,
+            reconciler,
+          }),
+          reportAutomationChange: realmServerAutomationChangeReporter({
+            virtualNetwork,
+            reconciler,
+          }),
+        },
       );
       await archiveRealm(dbAdapter, new URL(realmURL));
       // Stop the realm's indexer: cancel any in-flight from-scratch /

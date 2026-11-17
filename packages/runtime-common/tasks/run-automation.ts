@@ -19,6 +19,8 @@ import {
   automationRunDedupeKey,
   isAutomationScriptOutcome,
 } from '../automation-run-command.ts';
+import type { ReportAutomationChange } from '../automation-change-events.ts';
+import type { ReportRunChange } from '../automation-run-events.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
 import { logRunPlatformLine } from '../automation-run-log.ts';
 import { chargeAutomationRun } from '../automation-run-charge.ts';
@@ -88,6 +90,11 @@ export interface AutomationAttemptContext {
   // Writes the run's compute and network charge once the run has ended.
   // Without it, as in a harness, the run is measured and nothing is charged.
   meteredCharges?: MeteredCharges;
+  // Told each time the attempt moves the run: it starts it, admits it, or
+  // ends it, and when a pause the admission makes cancels other runs.
+  reportRunChange?: ReportRunChange;
+  // Told when a pause the admission makes changes the automation.
+  reportAutomationChange?: ReportAutomationChange;
   log: Log;
 }
 
@@ -164,6 +171,13 @@ async function attemptRun(
   }
 
   let start = await startAutomationRunAttempt(dbAdapter, runId, attempt);
+  if (
+    start.kind === 'run' ||
+    start.kind === 'committed' ||
+    start.kind === 'commit-interrupted'
+  ) {
+    await ctx.reportRunChange?.(runId);
+  }
   switch (start.kind) {
     case 'committed':
       return await finish(ctx, tag, runId, attempt, { state: 'complete' });
@@ -232,6 +246,8 @@ async function attemptRun(
     virtualNetwork: ctx.virtualNetwork,
     matrixServerName: ctx.matrixServerName,
     checks: ctx.admissionChecks,
+    reportRunChange: ctx.reportRunChange,
+    reportAutomationChange: ctx.reportAutomationChange,
   };
   let identity = await admitRunIdentity(admission, run, { kind });
   if (!identity.ok) {
@@ -326,6 +342,7 @@ async function attemptRun(
     log.info(`${tag} left alone: another attempt owns the run, or it ended`);
     return { state: 'left', reason: 'superseded' };
   }
+  await ctx.reportRunChange?.(runId);
   await logRunPlatformLine(dbAdapter, runId, {
     kind: 'admission',
     level: 'info',
@@ -523,6 +540,7 @@ async function finish(
     );
     return { state: 'left' };
   }
+  await ctx.reportRunChange?.(runId);
   if (outcome.state === 'error') {
     ctx.log.warn(
       `${tag} ended as an error (${outcome.reason}): ${outcome.message ?? ''}`,
