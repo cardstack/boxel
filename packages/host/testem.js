@@ -136,6 +136,71 @@ if (typeof module !== 'undefined') {
         }
       });
     }
+
+    // A mid-run `Browser timeout exceeded` is testem's disconnect path: the
+    // control socket closed and no reconnect arrived within
+    // browser_disconnect_timeout. socket.io hands the disconnect a reason that
+    // separates the causes — `transport close` (the page went away: renderer
+    // crash or navigation), `ping timeout` (the page stopped answering: a hung
+    // main thread), `transport error` — but testem discards it. Record it.
+    const BrowserTestRunner = require('testem/lib/runners/browser_test_runner');
+    const onDisconnect = BrowserTestRunner.prototype.onDisconnect;
+    BrowserTestRunner.prototype.onDisconnect = function (reason, ...rest) {
+      try {
+        testemInternalLog.warn(
+          `browser control socket disconnected: reason=${JSON.stringify(
+            reason,
+          )} finished=${Boolean(this.finished)} priorDisconnects=${
+            this.disconnectCount ?? 0
+          }`,
+        );
+      } catch (e) {
+        // best-effort diagnostics — never let logging break the run
+      }
+      return onDisconnect.call(this, reason, ...rest);
+    };
+
+    // The browser's lifeline (tests/helpers/lifeline.ts) reports here over
+    // plain HTTP, independent of the control socket, so its record of the
+    // running test, main-thread liveness and any cross-document navigation
+    // survives the socket dropping. A GET answers 204 so the page can tell
+    // the endpoint exists; outside CI it is absent and the lifeline stays off.
+    //
+    // Mounted by wrapping testem's own middleware injection rather than
+    // through the `middleware` option: `ember test` passes its addon
+    // middlewares as that option, which replaces any list set here.
+    const mountLifeline = (app) => {
+      app.get('/__host-test-lifeline', (req, res) => {
+        res.status(204).end();
+      });
+      app.post('/__host-test-lifeline', (req, res) => {
+        let body = '';
+        req.setEncoding('utf8');
+        req.on('data', (chunk) => {
+          if (body.length < 16384) {
+            body += chunk;
+          }
+        });
+        req.on('end', () => {
+          try {
+            debugStream.write(
+              `${new Date().toISOString()} [lifeline] ${body
+                .replace(/\s+/g, ' ')
+                .slice(0, 16384)}\n`,
+            );
+          } catch (e) {
+            // best-effort diagnostics — never let logging break the run
+          }
+          res.status(204).end();
+        });
+      });
+    };
+    const TestemServer = require('testem/lib/server');
+    const injectMiddleware = TestemServer.prototype.injectMiddleware;
+    TestemServer.prototype.injectMiddleware = function (app, ...rest) {
+      mountLifeline(app);
+      return injectMiddleware.call(this, app, ...rest);
+    };
   }
 
   module.exports = config;

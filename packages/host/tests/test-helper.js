@@ -12,6 +12,7 @@ import { setupQUnit } from './helpers/setup-qunit';
 import { setupTestIdentityTags } from './helpers/identity-tags';
 import { pinTestClock } from './helpers/test-clock';
 import { registerShardWarmup } from './helpers/shard-warmup';
+import { startLifeline } from './helpers/lifeline';
 import { selectShardModules } from './helpers/shard-modules';
 import testModuleTimings from './test-module-timings.json';
 
@@ -50,6 +51,7 @@ export async function start(examOptions) {
     if (isParallelRun) {
       QUnit.config.failOnZeroTests = false;
       registerShardWarmup();
+      await startLifeline();
     }
 
     let options = examOptions;
