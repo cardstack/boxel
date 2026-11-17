@@ -6,6 +6,10 @@ import { v4 as uuidv4 } from 'uuid';
 import type { PgAdapter } from '@cardstack/postgres';
 import { param, query } from '@cardstack/runtime-common';
 import {
+  setChangeJournalSink,
+  type ChangeJournalEvent,
+} from '@cardstack/runtime-common/card-operations/telemetry';
+import {
   realmSecretSeed,
   setupPermissionedRealmCached,
   testRealmURLFor,
@@ -17,6 +21,8 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 // so it appends one `scan` event by the realm's creator, which realm-historian
 // records as the realm's first revision. The event obeys the journal's rule
 // for which realms record, and a journal failure never fails the creation.
+// The append is reported once the creation's transaction has finished, so
+// `written` means the event committed.
 
 interface JournalRow {
   realmId: string;
@@ -40,9 +46,28 @@ module(basename(import.meta.filename), function (hooks) {
     onRealmSetup(args: { request: SuperTest<Test>; dbAdapter: PgAdapter }) {
       request = args.request;
       dbAdapter = args.dbAdapter;
-      journal.failNext = false;
+      journal.reset();
     },
   });
+
+  let reported: ChangeJournalEvent[] = [];
+  hooks.beforeEach(function () {
+    reported = [];
+    setChangeJournalSink((record) => reported.push(record));
+  });
+  hooks.afterEach(function () {
+    setChangeJournalSink(undefined);
+  });
+
+  // The `boxel:change-journal` records reported, without their timings.
+  function reports() {
+    return reported.map(({ realm, outcome, paths, partial }) => ({
+      realm,
+      outcome,
+      paths,
+      partial,
+    }));
+  }
 
   // Turns recording on for every realm registered from here on, as the
   // rollout does for new realms once it reaches an environment. Each test
@@ -127,6 +152,9 @@ module(basename(import.meta.filename), function (hooks) {
         changes: [],
       },
     ]);
+    assert.deepEqual(reports(), [
+      { realm: realmURL, outcome: 'written', paths: 0, partial: false },
+    ]);
   });
 
   test('a new realm whose recording is off leaves no event', async function (assert) {
@@ -144,5 +172,37 @@ module(basename(import.meta.filename), function (hooks) {
 
     assert.ok(await registryId(realmURL), 'the realm is registered');
     assert.deepEqual(await events(realmURL), []);
+    assert.deepEqual(reports(), [
+      { realm: realmURL, outcome: 'failed', paths: 0, partial: false },
+    ]);
+  });
+
+  test('a new realm whose registration fails to commit after the append reports no written event', async function (assert) {
+    await recordNewRealms();
+    journal.failCommitNext = true;
+
+    await assert.rejects(
+      createRealm(`@user-${uuidv4()}:localhost`),
+      /answered 500/,
+      'creating the realm fails',
+    );
+
+    let [report, ...rest] = reported;
+    assert.strictEqual(rest.length, 0, 'one record for the one append');
+    assert.strictEqual(report?.outcome, 'failed', 'reported failed');
+    assert.true(
+      report?.error?.includes('commit_refused'),
+      `with the commit's error: ${report?.error}`,
+    );
+    assert.strictEqual(
+      await registryId(report.realm),
+      undefined,
+      'the realm is not registered',
+    );
+    assert.deepEqual(
+      await events(report.realm),
+      [],
+      'the event rolled back with it',
+    );
   });
 });

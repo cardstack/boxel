@@ -18,6 +18,7 @@ scope:
   - packages/postgres/migrations/*billing*
   - packages/postgres/migrations/*credit*
   - packages/postgres/migrations/*ledger*
+  - packages/postgres/migrations/*pricing*
 ---
 
 # 029. Charge metered usage at hosting unit cost times a configured margin, with a pricing version on every charge
@@ -72,6 +73,14 @@ submit a new batch. It MUST NOT fall back to other prices.
 Each process MUST log its prices and a pricing version, a hash of them, at
 startup. Every metered charge (§1.1) MUST record the pricing version it was
 priced at.
+
+Each process that writes metered charges SHOULD also record, once per pricing
+version, its values and the USD one unit of each metered usage costs at them,
+in the database. A failure to record MUST NOT stop the process or its
+charges, since the startup log still names the version's prices. A version's
+record MUST NOT change once written, and MUST NOT be read to price a charge
+(§1.2): it exists so a charge's usage can be priced again at its version
+after the startup log is gone.
 
 ### 1.5. The minimum balance covers a run's compute, network and AI
 
@@ -139,7 +148,12 @@ of each parameter and limits edits to the IAM roles allowed to make them, and
 each process reads its environment once, at start. Prices in the database
 would be one more mutable store with its own access and audit, read on the
 hot path. The pricing version answers "what price was this charged at?" for
-every entry, across redeploys.
+every entry, across redeploys. The prices behind a version live in the
+startup log, which is kept only so long, and a report that checks charges
+against their cost has to price each charge's usage at its version. So the
+version's values are also recorded in the database. That record is written
+once and never read when charging, so it adds no store a price can be changed
+in and nothing to the hot path.
 
 `spendCredits` charges only what the balance holds, so a run that costs more
 than the balance leaves the rest unpaid. A minimum balance at least as large

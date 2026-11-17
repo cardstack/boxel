@@ -210,6 +210,15 @@ requires the openid exchange.
 Revocation is per-user and immediate; it is not a sign-out and does not touch
 the matrix session.
 
+The operator's revocation also ends the user's OAuth connections (ADR 021
+§1.9): `revokeUserOAuthGrants` (`lib/oauth-provider/grants.ts`) records
+`users.oauth_grants_revoked_at` and ends every OAuth grant of the user created
+until then, with reason `sessions-revoked`. Unlike a session, an OAuth grant
+doesn't come back by itself: the app's next refresh fails, and the user must
+consent again. Grants keep their own cutoff, not `sessions_revoked_at`,
+because the password change's later revocation for OpenID tokens moves that
+one and must leave grants alone (see the `secure-session` skill).
+
 ## Lifetimes have distant readers
 
 Changing a TTL is not a local edit. Anything that reasons about how much life a

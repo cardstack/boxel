@@ -27,13 +27,13 @@ import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { PgAdapter, PostgresChangeJournal } from '@cardstack/postgres';
 import {
+  appendStandaloneChangeEvent,
   logger,
   query,
   SYSTEM_AUTHOR,
   type Expression,
   type Querier,
 } from '@cardstack/runtime-common';
-import { emitChangeJournal } from '@cardstack/runtime-common/card-operations/telemetry';
 
 const log = logger('realm-historian:scan');
 
@@ -119,9 +119,8 @@ try {
     let author = botUsername
       ? `@${botUsername}:${matrixServerName}`
       : SYSTEM_AUTHOR;
-    let started = performance.now();
     try {
-      let written = await journal.append(querier, {
+      let written = await appendStandaloneChangeEvent(querier, journal, {
         realmURL,
         author,
         channel: 'deploy',
@@ -132,13 +131,6 @@ try {
         },
         changes: [],
       });
-      emitChangeJournal({
-        realm: realmURL,
-        outcome: written ? 'written' : 'skipped',
-        durationMs: Math.round(performance.now() - started),
-        paths: 0,
-        partial: false,
-      });
       log.info(
         written
           ? `appended a scan event for ${realmURL} by ${author}`
@@ -146,14 +138,6 @@ try {
       );
     } catch (error: unknown) {
       failed = true;
-      emitChangeJournal({
-        realm: realmURL,
-        outcome: 'failed',
-        durationMs: Math.round(performance.now() - started),
-        paths: 0,
-        partial: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
       log.error(`could not append the scan event for ${realmURL}`, error);
     }
   }

@@ -45,6 +45,7 @@ import {
   type GoogleAccountLookups,
   type GoogleIdentity,
 } from './google-account.ts';
+import { revokeUserOAuthGrants } from './oauth-provider/grants.ts';
 import { GOOGLE_CALLBACK_PATH } from './secure-origin.ts';
 import { ensureSessionRoom } from './session-room.ts';
 import type { SignInLimiter } from './sign-in-limiter.ts';
@@ -712,22 +713,40 @@ export async function runDueDeviceSweeps(
   deps: SecureSessionDeps,
 ): Promise<number | undefined> {
   let due = (await deps.dbAdapter.execute(
-    `SELECT user_id, keep_device_id, sweep_at <= NOW() AS sweep_due
+    `SELECT user_id, keep_device_id, sweep_at, sweep_at <= NOW() AS sweep_due
        FROM password_change_device_sweeps
       WHERE sweep_at <= NOW() OR revoke_at <= NOW()`,
   )) as {
     user_id: string;
     keep_device_id: string | null;
+    sweep_at: string | Date | null;
     sweep_due: boolean;
   }[];
   let failed = false;
   for (let {
     user_id: user,
     keep_device_id: keepDevice,
+    sweep_at: sweepAt,
     sweep_due: sweepDue,
   } of due) {
     try {
-      if (sweepDue) {
+      if (sweepDue && sweepAt) {
+        // The first revocation after a password change also ends the
+        // account's OAuth connections (ADR 021 §1.9), before the Matrix
+        // sign-out, so a Matrix server that is down doesn't hold it up. Its
+        // cutoff is the latest change, which the sweep is due a fixed delay
+        // after (`scheduleDeviceSweep`), not the sweep itself. A grant is
+        // consented under a secure session, which only the password or a
+        // Google sign-in buys (ADR 005 §1.3), and the change ended every
+        // secure session, so a grant consented since was made with the new
+        // password, whether before the sweep or after, or by a sweep tried
+        // again later. The later revocation, for OpenID tokens, leaves them:
+        // an OpenID token can't create a grant.
+        await revokeUserOAuthGrants(
+          deps.dbAdapter,
+          user,
+          new Date(new Date(sweepAt).getTime() - DEVICE_SWEEP_DELAY_MS),
+        );
         await signOutDevicesExcept(deps, user, keepDevice ?? undefined);
       }
       // A device the sweep signed out may have minted a realm-server session

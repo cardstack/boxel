@@ -216,8 +216,7 @@ jobs:
       repository: "boxel-prerender-server-${{ inputs.environment }}"
       environment: ${{ inputs.environment }}
       dockerfile: "packages/realm-server/prerender.Dockerfile"
-      # amd64 only: the Dockerfile installs google-chrome-stable from Google's
-      # amd64-only apt repository.
+      platforms: "linux/amd64,linux/arm64"
       build-args: |
         "prerender_script=scripts/start-prerender-${{ inputs.environment }}.sh"
 
