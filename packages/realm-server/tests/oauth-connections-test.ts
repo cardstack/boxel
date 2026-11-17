@@ -43,6 +43,12 @@ import {
   setKeyGrantSink,
   type KeyGrantEvent,
 } from '../lib/key-grant-rejection.ts';
+import { automationCredentialNotices } from '../lib/automation-credential-notices.ts';
+import { configureCredentialRetryDelays } from '@cardstack/runtime-common/automation-run-limits';
+import {
+  getAutomationRun,
+  type AutomationRun,
+} from '@cardstack/runtime-common/automation-runs';
 
 // ============================================================================
 // OAuth clients and connections end to end, against a stub OAuth vendor that
@@ -132,6 +138,9 @@ module(basename(import.meta.filename), function (hooks) {
     configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
     clock = Date.now();
     configureOAuth({ retryDelaysMs: [0, 0], now: () => clock });
+    // A run's call asks a failing token endpoint once, unless a test says
+    // otherwise.
+    configureCredentialRetryDelays([]);
     Object.assign(provider, {
       clients: [{ clientId: CLIENT_ID, clientSecret: CLIENT_SECRET }],
       tokenRequests: [],
@@ -143,10 +152,13 @@ module(basename(import.meta.filename), function (hooks) {
       rotate: true,
       fail: [],
       tokenDelayMs: 0,
+      apiUnauthorized: 0,
+      onApiUnauthorized: undefined,
       deny: false,
     });
   });
   hooks.afterEach(function () {
+    configureCredentialRetryDelays();
     resetOAuth();
     resetOutbound();
     resetSecretsAtRest();
@@ -329,20 +341,24 @@ module(basename(import.meta.filename), function (hooks) {
       });
   }
 
+  // Invokes `operation` as a run of the automation acting as `user` would,
+  // in a run of its own, and answers the run as it stands after the call.
   async function call(user: string, operation = 'me') {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      user,
+      {
+        automation: TEST_AUTOMATION_PATH,
+      },
+    );
     let response = (await realm.handleAutomation(
       new Request(`${realmURL.href}_operations`, {
         method: 'POST',
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${
-            (
-              await createAutomationRunToken(dbAdapter, realm, user, {
-                automation: TEST_AUTOMATION_PATH,
-              })
-            ).token
-          }`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           'boxel:operations': [
@@ -354,7 +370,51 @@ module(basename(import.meta.filename), function (hooks) {
     return {
       status: response.status,
       body: JSON.parse(await response.text()),
+      run: (await getAutomationRun(dbAdapter, run.id))!,
     };
+  }
+
+  // Asks the realm, as the worker does at a run's admission, whether a run
+  // acting as `user` may call what the automation declares, and answers the
+  // run as it stands afterwards.
+  async function admitRun(user: string) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      user,
+      {
+        automation: TEST_AUTOMATION_PATH,
+      },
+    );
+    let response = (await realm.handleAutomation(
+      new Request(`${realmURL.href}_run-admission`, {
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+    ))!;
+    let body = JSON.parse(await response.text());
+    return {
+      refusal: body.data?.attributes?.refusal ?? null,
+      run: (await getAutomationRun(dbAdapter, run.id))!,
+    };
+  }
+
+  // Who is told about `run`, and what each fixes, sorted for comparison.
+  async function notices(run: AutomationRun) {
+    return (await automationCredentialNotices(dbAdapter, run)).map(
+      (notice) => ({ ...notice, recipients: [...notice.recipients].sort() }),
+    );
+  }
+
+  async function runLog(runId: string) {
+    return (
+      (await dbAdapter.execute(
+        `SELECT kind, message FROM automation_run_log WHERE run_id = $1 ORDER BY seq`,
+        { bind: [runId] },
+      )) as { kind: string; message: string }[]
+    ).map(({ kind, message }) => `${kind}: ${message}`);
   }
 
   async function connectAndApprove(user = OWNER) {
@@ -1543,5 +1603,205 @@ module(basename(import.meta.filename), function (hooks) {
       0,
       'the code and verifier went nowhere',
     );
+  });
+
+  module('in an unattended run', function () {
+    // A client shared into the realm by OWNER, which TEAMMATE connects
+    // through and approves the operation for.
+    async function teammateThroughSharedClient() {
+      let shared = await addClient(OWNER, {}, 'team app');
+      let share = await shareKey(dbAdapter, {
+        owner: OWNER,
+        realm: realmURL.href,
+        keyId: shared.id,
+        label: 'Team app',
+        ticket: await ticket(OWNER, 'share', {
+          keyId: shared.id,
+          realm: realmURL,
+        }),
+      });
+      let { keyId } = await connect(TEAMMATE, {
+        kind: 'share',
+        shareId: share.id,
+      });
+      await approve(TEAMMATE, keyId!);
+      return { shared, share, keyId: keyId as string };
+    }
+
+    test('a connection its vendor refuses ends the run, and tells the payer to reconnect until they do', async function (assert) {
+      let { client, keyId } = await connectAndApprove();
+      provider.revokeRefreshTokens();
+      clock += 3600 * 1000;
+      let refused = await call(OWNER);
+      assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+      assert.strictEqual(refused.body.errors[0].meta.reason, 'rejected');
+      assert.strictEqual(refused.run.state, 'error', 'the run ended');
+      assert.strictEqual(refused.run.errorReason, 'credential-rejected');
+      assert.deepEqual(refused.run.credentialRefusal, {
+        reason: 'rejected',
+        subject: { kind: 'key', id: keyId },
+      });
+      assert.deepEqual(await notices(refused.run), [
+        { kind: 'reconnect', recipients: [OWNER], keyId },
+      ]);
+
+      await connect(
+        OWNER,
+        { kind: 'own', keyId: client.id },
+        { reconnect: keyId },
+      );
+      assert.deepEqual(
+        await notices(refused.run),
+        [],
+        'the notice ends once the payer reconnects',
+      );
+    });
+
+    test("a broken client ends the run needing an administrator, and tells the client's owner until they replace its secret", async function (assert) {
+      let { shared, keyId } = await teammateThroughSharedClient();
+      assert.strictEqual((await call(TEAMMATE)).status, 200);
+      provider.clients = [
+        { clientId: CLIENT_ID, clientSecret: ROTATED_SECRET },
+      ];
+      clock += 3600 * 1000;
+      let refused = await call(TEAMMATE);
+      assert.strictEqual(refused.body.errors[0].meta.reason, 'needs-admin');
+      assert.strictEqual(refused.run.state, 'error', 'the run ended');
+      assert.strictEqual(refused.run.errorReason, 'credential-rejected');
+      assert.deepEqual(refused.run.credentialRefusal, {
+        reason: 'needs-admin',
+        subject: { kind: 'key', id: keyId },
+      });
+      assert.deepEqual(
+        await notices(refused.run),
+        [{ kind: 'fix-client', recipients: [OWNER], clientKeyId: shared.id }],
+        "the client's owner is told, not the payer",
+      );
+
+      await replaceUserKeyValue(dbAdapter, keyring, {
+        owner: OWNER,
+        id: shared.id,
+        value: ROTATED_SECRET,
+        ticket: await ticket(OWNER, 'replace', { keyId: shared.id }),
+      });
+      assert.deepEqual(
+        await notices(refused.run),
+        [],
+        'the notice ends once the client works again',
+      );
+    });
+
+    test("a suspended share of the client is recorded at admission, and tells the realm's direct writers", async function (assert) {
+      let { share, keyId } = await teammateThroughSharedClient();
+      await suspendShare(dbAdapter, { user: OWNER, shareId: share.id });
+      let admitted = await admitRun(TEAMMATE);
+      assert.strictEqual(admitted.refusal?.code, 'credential-rejected');
+      assert.deepEqual(
+        admitted.run.credentialRefusal,
+        { reason: 'needs-admin', subject: { kind: 'key', id: keyId } },
+        'admission records the credential on the run',
+      );
+      assert.strictEqual(
+        admitted.run.state,
+        'running',
+        'the worker ends a run its admission refused',
+      );
+
+      let refused = await call(TEAMMATE);
+      assert.strictEqual(refused.run.state, 'error');
+      assert.deepEqual(await notices(refused.run), [
+        {
+          kind: 'fix-share',
+          recipients: [OWNER, TEAMMATE, REALM_USER].sort(),
+          shareId: share.id,
+          realmURL: realmURL.href,
+        },
+      ]);
+    });
+
+    test('a token endpoint failing for now is asked again after a pause, and refuses only the call once the retries run out', async function (assert) {
+      configureCredentialRetryDelays([0, 0]);
+      await connectAndApprove();
+      clock += 3600 * 1000;
+      // Each fill asks three times; the second fill's second ask succeeds.
+      provider.fail = [
+        { status: 503 },
+        { status: 503 },
+        { error: 'temporarily_unavailable' },
+        { status: 502 },
+      ];
+      let served = await call(OWNER);
+      assert.strictEqual(served.status, 200, JSON.stringify(served.body));
+      assert.strictEqual(refreshes(), 5);
+      assert.strictEqual(served.run.state, 'running');
+      assert.true(
+        (await runLog(served.run.id)).some(
+          (line) =>
+            line.startsWith(
+              'call-api: callApi me: refused (credential-rejected)',
+            ) && line.endsWith('asking again in 0 s'),
+        ),
+        'the run log says it asked again',
+      );
+
+      clock += 3600 * 1000;
+      provider.fail = Array.from({ length: 9 }, () => ({ status: 503 }));
+      let refused = await call(OWNER);
+      assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+      assert.strictEqual(refused.body.errors[0].meta.reason, 'unavailable');
+      assert.strictEqual(refreshes(), 14, 'three fills of three asks each');
+      assert.strictEqual(
+        refused.run.state,
+        'running',
+        'an unavailable token endpoint refuses the call, not the run',
+      );
+      assert.strictEqual(refused.run.credentialRefusal, null);
+    });
+
+    test("a vendor's 401 to a minted token is asked once more with the token minted then", async function (assert) {
+      let { keyId } = await connectAndApprove();
+      await allowInteractive();
+      assert.strictEqual((await call(OWNER)).status, 200);
+      let first = provider.apiCalls.length;
+      provider.apiUnauthorized = 1;
+      // Another process refreshes the connection while the call is out, and
+      // the vendor revokes the token the call carried.
+      provider.onApiUnauthorized = async () => {
+        await dbAdapter.execute(
+          `UPDATE oauth_connections SET generation = generation + 1 WHERE key_id = $1`,
+          { bind: [keyId] },
+        );
+      };
+      let served = await call(OWNER);
+      assert.strictEqual(served.status, 200, JSON.stringify(served.body));
+      let [revoked, fresh] = provider.apiCalls.slice(first);
+      assert.strictEqual(provider.apiCalls.length, first + 2);
+      assert.notStrictEqual(fresh.token, revoked.token, 'a fresh token');
+      assert.strictEqual(refreshes(), 1, 'minted after the other refresh');
+      assert.strictEqual(served.run.state, 'running');
+
+      provider.onApiUnauthorized = undefined;
+      provider.apiUnauthorized = 2;
+      let twice = await call(OWNER);
+      assert.strictEqual(
+        provider.apiCalls.length,
+        first + 4,
+        'asked once more, and only once',
+      );
+      assert.true(
+        JSON.stringify(twice.body).includes('"status":401'),
+        `the script reads the vendor's 401: ${JSON.stringify(twice.body)}`,
+      );
+      assert.strictEqual(twice.run.state, 'running', 'a 401 is the answer');
+
+      provider.apiUnauthorized = 1;
+      await callInteractive(OWNER);
+      assert.strictEqual(
+        provider.apiCalls.length,
+        first + 5,
+        'an interactive call is not asked again',
+      );
+      provider.apiUnauthorized = 0;
+    });
   });
 });

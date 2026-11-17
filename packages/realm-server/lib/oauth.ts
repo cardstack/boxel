@@ -2036,6 +2036,100 @@ export async function mintingRefusal(
   }
 }
 
+// What stops an OAuth connection or `client_credentials` client from minting,
+// and so whose action fixes it, read from the database as `mintingRefusal`
+// reads it:
+// - `connection`: the vendor refused the connection, or its access-only token
+//   expired; its owner signs in again.
+// - `client`: the client it mints through is broken, or is a share's key
+//   that no longer is an active authorization-code client; the client key's
+//   owner replaces its secret.
+// - `share`: the realm's share of the client is suspended, unshared, holds
+//   no key, or holds another app than the one the connection's tokens were
+//   issued to; a direct writer of the share's realm resumes it, or swaps the
+//   app back in.
+// - `platform`: a platform client is broken; an operator replaces its secret.
+// - `gone`: the client the connection signed in through was deleted.
+// Nothing when the key may mint, or no longer exists.
+export type MintingFix =
+  | { kind: 'connection' }
+  | { kind: 'client'; clientKeyId: string; owner: string }
+  | { kind: 'share'; shareId: string; realmURL: string }
+  | { kind: 'platform' }
+  | { kind: 'gone' };
+
+export async function mintingFix(
+  dbAdapter: DBAdapter,
+  keyId: string,
+): Promise<MintingFix | undefined> {
+  let [row] = await query(dbAdapter, [
+    `SELECT k.kind, k.owner, k.state AS key_state, n.access_expires_at,
+            c.state AS client_state, s.realm_url AS share_realm_url,
+            ${CLIENT_RESOLUTION_COLUMNS}
+       FROM user_keys k
+       LEFT JOIN oauth_connections n ON n.key_id = k.id
+       LEFT JOIN oauth_clients c ON c.key_id = k.id
+       ${CLIENT_RESOLUTION_JOINS}
+      WHERE k.id = `,
+    param(keyId),
+  ]);
+  if (!row) {
+    return undefined;
+  }
+  if (row.kind === 'oauth-client') {
+    return row.client_state === 'active'
+      ? undefined
+      : { kind: 'client', clientKeyId: keyId, owner: row.owner as string };
+  }
+  if (row.kind !== 'oauth-connection') {
+    return undefined;
+  }
+  let accessExpired =
+    row.access_expires_at != null &&
+    new Date(row.access_expires_at as string).getTime() <= oauthSettings.now();
+  if (row.key_state === 'rejected' || accessExpired) {
+    return { kind: 'connection' };
+  }
+  if (resolvedClientOf(row).usable) {
+    return undefined;
+  }
+  if (row.client_key_id) {
+    return {
+      kind: 'client',
+      clientKeyId: row.own_key_id as string,
+      owner: row.own_owner as string,
+    };
+  }
+  if (row.client_share_id) {
+    let swapped =
+      row.shared_key_id != null &&
+      (row.shared_client_id !== row.pinned_client_id ||
+        row.shared_token_url !== row.pinned_token_url ||
+        row.shared_grant_type !== 'authorization_code');
+    if (
+      row.share_state === 'active' &&
+      row.shared_key_id != null &&
+      !swapped &&
+      row.shared_state !== 'active'
+    ) {
+      return {
+        kind: 'client',
+        clientKeyId: row.shared_key_id as string,
+        owner: row.shared_owner as string,
+      };
+    }
+    return {
+      kind: 'share',
+      shareId: row.client_share_id as string,
+      realmURL: row.share_realm_url as string,
+    };
+  }
+  if (row.platform_client_id) {
+    return { kind: 'platform' };
+  }
+  return { kind: 'gone' };
+}
+
 class OAuthTokens {
   #cache = new Map<string, CachedToken>();
   #inflight = new Map<string, Promise<string>>();
