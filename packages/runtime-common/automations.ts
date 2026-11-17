@@ -7,10 +7,11 @@
 //                 (done)                            (done)
 //
 // Switch-on and resume start the automation *done* instead of active when
-// every trigger is already spent. Remove deletes the row in any state. The
-// tick moves an automation between active and *waiting for credits* on its
-// payer's balance, and the card's index hook (`syncAutomationWithCard`)
-// between active and *done* as its triggers are spent or added. The index
+// every trigger is already spent. Remove deletes the row in any state. A
+// run's admission moves an automation between active and *waiting for
+// credits* on its payer's balance (`setAutomationWaitingForCredits`), and the
+// card's index hook (`syncAutomationWithCard`) between active and *done* as
+// its triggers are spent or added. The index
 // hook also removes the row when the card is deleted or no longer adopts from
 // the catalog `Automation` type, and archiving the realm pauses it
 // (`pauseRealmAutomations`).
@@ -74,7 +75,7 @@ import {
 } from './automation-schedule.ts';
 import type { DBAdapter } from './db.ts';
 import { isDirectWriterLocked } from './db-queries/realm-permission-queries.ts';
-import { dbAdapterQuerier, param, type Querier } from './expression.ts';
+import { dbAdapterQuerier, param, query, type Querier } from './expression.ts';
 import type { PgPrimitive } from './index.ts';
 import { RealmPaths } from './paths.ts';
 import type {
@@ -587,6 +588,37 @@ export async function pauseForPayerLostAccess(
     }
     return await pause(txQuery, changes, automationId, 'payer-lost-access');
   });
+}
+
+// Moves an active automation to *waiting for credits* (`waiting: true`), or a
+// waiting one back to active (`waiting: false`), when `payer` is still its
+// payer. A run's admission makes both moves: a run of the payer's that the
+// balance check refuses, and the next one it admits. An automation that is
+// paused or *done*, or whose payer a resume changed, is left alone, so neither
+// move can undo a pause or a schedule that has ended. It is one conditional
+// UPDATE, so a pause or a *done* that commits first wins, and the move then
+// changes nothing. Returns the row as it is after the change, or undefined
+// when nothing moved.
+export async function setAutomationWaitingForCredits(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+  { payer, waiting }: { payer: string; waiting: boolean },
+): Promise<AutomationRow | undefined> {
+  let [from, to]: AutomationState[] = waiting
+    ? ['active', 'waiting-for-credits']
+    : ['waiting-for-credits', 'active'];
+  let [row] = await query(dbAdapter, [
+    'UPDATE automations SET state =',
+    param(to),
+    ', updated_at = now() WHERE automation_id =',
+    param(automationId),
+    'AND state =',
+    param(from),
+    'AND payer =',
+    param(payer),
+    'RETURNING *',
+  ]);
+  return row ? automationFromRow(row) : undefined;
 }
 
 // What the index hook did with an automation's row:

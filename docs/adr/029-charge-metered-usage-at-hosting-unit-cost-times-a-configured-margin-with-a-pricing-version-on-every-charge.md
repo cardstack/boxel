@@ -6,6 +6,7 @@ scope:
   - packages/realm-server/lib/billable-call.ts
   - packages/realm-server/**/*pricing*
   - packages/realm-server/lib/automation-estimate.ts
+  - packages/realm-server/lib/automation-spending.ts
   - packages/realm-server/lib/metered-charge.ts
   - packages/runtime-common/metered-charges.ts
   - packages/runtime-common/run-indexing.ts
