@@ -55,7 +55,7 @@ import {
   openRouterBatchURL,
   readOpenRouterBatch,
 } from '../lib/openrouter-batches.ts';
-import { verifyRunToken } from '../lib/run-token.ts';
+import { runActsAsDirectWriter, verifyRunToken } from '../lib/run-token.ts';
 import { runTokenOf } from '@cardstack/runtime-common/run-token';
 
 const log = logger('ai-batches');
@@ -97,6 +97,7 @@ export interface AIBatchHandlerArgs {
   dbAdapter: DBAdapter;
   realmSecretSeed: string;
   virtualNetwork: VirtualNetwork;
+  matrixServerName: string;
 }
 
 export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
@@ -316,12 +317,17 @@ export function handleAIBatchStatus(args: AIBatchHandlerArgs) {
 
 // The run a batch call comes from, and its automation, after checking that
 // the call carries a run token whose identity's sessions weren't revoked
-// since it was minted, and that its run is still running and owned by the
-// token's attempt. Answers the refusal itself and returns undefined
-// otherwise.
+// since it was minted, that its run is still running and owned by the
+// token's attempt, and that its identity is still a direct writer of the
+// run's realm. Answers the refusal itself and returns undefined otherwise.
 async function batchCaller(
   ctxt: Koa.Context,
-  { dbAdapter, realmSecretSeed }: AIBatchHandlerArgs,
+  {
+    dbAdapter,
+    realmSecretSeed,
+    virtualNetwork,
+    matrixServerName,
+  }: AIBatchHandlerArgs,
 ): Promise<{ run: AutomationRun; automation: AutomationRow } | undefined> {
   let authorization = ctxt.req.headers['authorization'] ?? null;
   if (!authorization) {
@@ -371,6 +377,18 @@ async function batchCaller(
     return undefined;
   }
   let { run } = call;
+  if (
+    !(await runActsAsDirectWriter(
+      { dbAdapter, virtualNetwork, matrixServerName },
+      run,
+    ))
+  ) {
+    await sendResponseForForbiddenRequest(
+      ctxt,
+      "The person this run acts as is not a direct writer of the automation's workspace, so the run can't make batch calls",
+    );
+    return undefined;
+  }
   let automation = await getAutomation(dbAdapter, run.automationId);
   if (!automation) {
     await sendResponseForForbiddenRequest(

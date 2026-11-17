@@ -20,7 +20,7 @@ import {
 } from './automation-ai-spending.ts';
 import { openRouterModelsRealmURL } from './ai-batch-estimate.ts';
 import { openRouterModelPrice } from './openrouter-model-price.ts';
-import { verifyRunToken } from './run-token.ts';
+import { runActsAsDirectWriter, verifyRunToken } from './run-token.ts';
 
 const log = logger('request-forward');
 
@@ -69,12 +69,14 @@ export async function admitRunForward(
     definitionLookup,
     virtualNetwork,
     realmSecretSeed,
+    matrixServerName,
     reportRunChange,
   }: {
     dbAdapter: DBAdapter;
     definitionLookup: DefinitionLookup;
     virtualNetwork: VirtualNetwork;
     realmSecretSeed: string;
+    matrixServerName: string;
     // Told when the request ends the run at a cap.
     reportRunChange?: ReportRunChange;
   },
@@ -134,6 +136,18 @@ export async function admitRunForward(
       401,
       'Invalid token',
       `run ${context.runId} acts as ${call.run.actsAs}, but the token names ${context.actsAs}`,
+    );
+  }
+  if (
+    !(await runActsAsDirectWriter(
+      { dbAdapter, virtualNetwork, matrixServerName },
+      call.run,
+    ))
+  ) {
+    return refuse(
+      403,
+      "The person this run acts as is not a direct writer of the automation's workspace, so the run may make no AI request",
+      `${context.actsAs}, whom run ${context.runId} acts as, is not a direct writer of ${call.run.realm}`,
     );
   }
   let run = {

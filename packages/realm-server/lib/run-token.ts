@@ -1,5 +1,12 @@
 import jwt from 'jsonwebtoken';
-import type { AutomationRun, MintRunToken } from '@cardstack/runtime-common';
+import {
+  isDirectWriter,
+  type AutomationRun,
+  type DBAdapter,
+  type MintRunToken,
+  type VirtualNetwork,
+} from '@cardstack/runtime-common';
+import type { RealmIdentifier } from '@cardstack/runtime-common/realm-identifiers';
 import {
   runTokenContext,
   runTokenSecret,
@@ -18,9 +25,10 @@ import { assertNoSecureSessionClaim } from '../utils/jwt.ts';
 // the run. A realm accepts it only
 // through `Realm.handleAutomation`, which checks the run's row on every call.
 // A realm-server route that serves run tokens verifies one with
-// `verifyRunToken` and checks the run's row itself with
-// `automationRunForCall`, since the signature says only that the realm server
-// minted it, not that the run is still going.
+// `verifyRunToken`, checks the run's row itself with `automationRunForCall`,
+// since the signature says only that the realm server minted it, not that
+// the run is still going, and checks `runActsAsDirectWriter`, as
+// `Realm.handleAutomation` does on each call.
 
 export interface MintRunTokenOptions {
   realmSecretSeed: string;
@@ -120,4 +128,34 @@ export function buildMintRunToken(realmSecretSeed: string): MintRunToken {
       timeLimitSeconds,
       realmServerURL: `${new URL(realmURL).origin}/`,
     });
+}
+
+// Whether the person a run acts as is a direct writer of the run's realm,
+// which every call of the run must find (ADR 026 §1.5). One primary-key read
+// of the person's permission row, read fresh on each call, so losing direct
+// write mid-run refuses the run's next call.
+export async function runActsAsDirectWriter(
+  {
+    dbAdapter,
+    virtualNetwork,
+    matrixServerName,
+  }: {
+    dbAdapter: DBAdapter;
+    virtualNetwork: VirtualNetwork;
+    matrixServerName: string;
+  },
+  run: { realm: RealmIdentifier; actsAs: string },
+): Promise<boolean> {
+  let realmURL: URL;
+  try {
+    realmURL = virtualNetwork.toURL(run.realm);
+  } catch {
+    return false;
+  }
+  return await isDirectWriter(
+    dbAdapter,
+    realmURL,
+    run.actsAs,
+    matrixServerName,
+  );
 }

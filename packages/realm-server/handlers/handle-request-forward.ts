@@ -161,12 +161,14 @@ export default function handleRequestForward({
   definitionLookup,
   virtualNetwork,
   realmSecretSeed,
+  matrixServerName,
   reportRunChange,
 }: {
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   realmSecretSeed: string;
+  matrixServerName: string;
   // Told when a run's request ends the run at a cap.
   reportRunChange?: ReportRunChange;
 }) {
@@ -351,6 +353,7 @@ export default function handleRequestForward({
             definitionLookup,
             virtualNetwork,
             realmSecretSeed,
+            matrixServerName,
             reportRunChange,
           },
           {

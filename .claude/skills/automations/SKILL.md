@@ -668,7 +668,10 @@ which refuses it unless:
   next call with `The automation run is not running`;
 - `acts_as` is a direct writer (`isDirectWriter`) of the run's own realm,
   whichever realm the call reaches. Losing direct write mid-run refuses the
-  next call with 403, and the commit checks it again inside its write lock.
+  next call with 403 `not-a-direct-writer`, and the commit checks it again
+  inside its write lock. The realm-server routes that take run tokens
+  (`/_request-forward`, `/_ai-batches`) check it too, with
+  `runActsAsDirectWriter`.
 
 The revoked-session, run-row and direct-writer reads go to the database
 together, one indexed row each, so the check costs a call about one round

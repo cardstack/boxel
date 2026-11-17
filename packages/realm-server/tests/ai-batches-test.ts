@@ -770,6 +770,30 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(sent.length, 0, 'nothing went to OpenRouter');
     });
 
+    test('a run whose person loses direct write mid-run makes no more batch calls', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+      let submitted = await submit(token, twoRequests());
+      assert.strictEqual(submitted.status, 202, submitted.text);
+      let sentBefore = sent.length;
+      await dbAdapter.execute(
+        `UPDATE realm_user_permissions SET write = false WHERE realm_url = $1 AND username = $2`,
+        { bind: [REALM_URL, PAYER] },
+      );
+
+      let refused = await submit(token, twoRequests());
+      assert.strictEqual(refused.status, 403, refused.text);
+      let status = await request
+        .get('/_ai-batches/batch_123')
+        .set('Authorization', `Bearer ${token}`);
+      assert.strictEqual(status.status, 403, status.text);
+      assert.strictEqual(
+        sent.length,
+        sentBefore,
+        'nothing more went to OpenRouter',
+      );
+    });
+
     test('a status read needs no batched AI opt-in, so a follow-up can read a paid batch', async function (assert) {
       await switchOn();
       let { token } = await runningRun();
