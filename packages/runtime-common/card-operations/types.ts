@@ -1302,8 +1302,10 @@ export interface ExplainedGrant {
   tier?: 'stored' | 'snapshot';
   outcome: ExplainedGrantOutcome;
   // On the search lane, whether the grant compiled to a search filter, which
-  // is what it composes into the search. One whose predicate has none admits
-  // no search (`policy-not-filterable`). Absent on the direct lane.
+  // is what it composes into the search: as it is, or, for a predicate that
+  // reads nothing of the card, only where its `outcome` is `held`. One whose
+  // predicate has none admits no search (`policy-not-filterable`). Absent on
+  // the direct lane.
   filterable?: boolean;
   // Present where the grant's `where` names the caller who isn't signed in:
   // each of its expressions as written, and what it produced.
@@ -1362,9 +1364,11 @@ export type ExplainedGrantOutcome =
   | 'did-not-hold'
   | 'threw'
   // The gate decided without evaluating it: an earlier grant admitted the
-  // invocation, or a refusal came first. On the search lane every predicate is
-  // this: a search runs a grant's filter over the index rather than evaluating
-  // its predicate per card. It is also a predicate the realm failed to
+  // invocation, or a refusal came first. On the search lane every predicate
+  // that reads the card is this: a search runs a grant's filter over the index
+  // rather than evaluating its predicate per card. One that reads nothing of
+  // the card is settled once for the actor, and answers `held`,
+  // `did-not-hold` or `threw`. It is also a predicate the realm failed to
   // evaluate, by failing to load the evaluator or to read the settings or
   // index row the predicate reads, where another grant admitted the
   // invocation. Where none did, the explain fails as the gate did.

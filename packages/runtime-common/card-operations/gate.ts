@@ -2579,6 +2579,8 @@ async function evaluate(
   where: CompiledPolicyPredicate,
   subject: PredicateSubject,
   actor: string | undefined,
+  // What a throw is logged as having been judging, where it isn't a card.
+  judging?: string,
 ): Promise<'holds' | 'fails' | 'threw'> {
   let bxl = await loadBxlTransform();
   let realmConfig = where.canonical.includes('realmConfig')
@@ -2605,12 +2607,38 @@ async function evaluate(
       core,
       matched,
       where,
-      typeof judged === 'string' ? judged : 'its target',
+      typeof judged === 'string' ? judged : (judging ?? 'its target'),
       actor,
       e,
     );
     return 'threw';
   }
+}
+
+// Whether the `where` of a query grant that carries a settled filter holds
+// for the caller of one search. Such a predicate reads nothing of the card
+// (see `readsNothingOfTheCard`), so it is run once, against no card, with the
+// caller, the realm's settings and the policy card's fields, exactly as the
+// gate runs it for any card. `actor` is the caller's user id, or
+// `ANONYMOUS_ACTOR` for a caller who isn't signed in. Only `true` holds, and a
+// throw is logged as any predicate's is.
+export async function settleForSearch(
+  core: OperationCore,
+  matched: MatchedGrant,
+  actor: string,
+): Promise<'holds' | 'fails' | 'threw'> {
+  let where = matched.grant.where;
+  if (!where) {
+    return 'fails';
+  }
+  return await evaluate(
+    core,
+    matched,
+    where,
+    { input: null },
+    actor,
+    `the cards of ${matched.rule.targetType.name} a search would find`,
+  );
 }
 
 // Each predicate's program, parsed and checked once and run for every subject

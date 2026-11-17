@@ -32,6 +32,7 @@ import {
   type GrantExpressionName,
 } from './grant-expressions.ts';
 import { profileRefusals, type RequestContextCall } from './policy-profile.ts';
+import { readsNothingOfTheCard } from './policy-card-independent.ts';
 import {
   moduleAccessIssues,
   type ModuleAccessRule,
@@ -138,7 +139,9 @@ export interface CompiledOperationGrant {
   // whose id you were given and enumerating every card of a type are
   // different powers. Absent too on a query grant whose predicate has no
   // filter, which is recorded as a `policy-not-filterable` issue. That grant
-  // admits no search, and its predicate is kept as it is.
+  // admits no search, and its predicate is kept as it is. And absent on a
+  // query grant whose predicate a search settles, which carries
+  // `settledFilter` instead.
   filter?: OperationQueryFilterTemplate;
   // For a query grant whose `where` names the caller who isn't signed in, the
   // filter it admits such a caller's search with: its predicate as it reads
@@ -148,6 +151,20 @@ export interface CompiledOperationGrant {
   // predicate can never hold for that caller, and the grant admits no search by
   // them.
   anonymousFilter?: OperationQueryFilterTemplate;
+  // For a query grant whose `where` reads nothing of the card it judges (see
+  // `readsNothingOfTheCard`), the filter it admits a search with where that
+  // `where` holds for the search's caller: every card of the rule's type. The
+  // predicate holds or fails for every card alike, so a search settles it
+  // once, for its caller, before it composes anything, and composes this only
+  // where it holds. Such a grant carries no `filter`, so nothing that composes
+  // a grant without settling it first can widen a search with this one.
+  // `anonymousSettledFilter` is the same for a caller who isn't signed in, on
+  // a grant whose `where` names them. Either is absent where the predicate as
+  // it reads for that caller is settled when the policy compiles, as
+  // `actor() != "anonymous"` is, and the grant then carries `filter` or
+  // `anonymousFilter`, or nothing, as any grant does.
+  settledFilter?: OperationQueryFilterTemplate;
+  anonymousSettledFilter?: OperationQueryFilterTemplate;
   // For a grant carrying a filter, each path it compares that some card of
   // the governed realm reads differently from the rule's type, with the types
   // of those cards: descendants of the rule's type whose own declarations
@@ -1149,7 +1166,10 @@ async function compileDocument(
     return read;
   };
   // A grant on a query carries the search filter its predicate compiles to,
-  // or has none and records why. No other grant carries one.
+  // or has none and records why. A grant whose predicate reads nothing of the
+  // card carries, for each kind of caller it can hold for, the filter a search
+  // composes once it has settled the predicate for its caller. No other grant
+  // carries one.
   let withFilter = async (
     grant: CompiledOperationGrant,
     base: BaseOperation,
@@ -1198,9 +1218,26 @@ async function compileDocument(
               : []),
           ]
         : [{ caller: 'signed-in', body: true }];
+    // A predicate that reads nothing of the card has no field to compile a
+    // filter over, and needs none: it holds or fails for every card alike. A
+    // search settles it for its caller by running the predicate as written,
+    // which for each kind of caller answers as that caller's reading does.
+    let cardIndependent =
+      predicate !== undefined && readsNothingOfTheCard(predicate.body);
     let compiled = { ...grant };
     for (let { caller, body } of readings) {
       if (body === false) {
+        continue;
+      }
+      if (cardIndependent && body !== true) {
+        let everyCard = await compileFor(true);
+        if ('filter' in everyCard) {
+          if (caller === 'anonymous') {
+            compiled.anonymousSettledFilter = everyCard.filter;
+          } else {
+            compiled.settledFilter = everyCard.filter;
+          }
+        }
         continue;
       }
       let outcome = await compileFor(body);
@@ -1896,7 +1933,8 @@ function letsCallerRead(
 
 // The base a kept grant runs on, where the grant can admit anything at all.
 // A query grant admits only through the filter it compiled to, since the gate
-// grants no query.
+// grants no query: one a search composes as it is, or one it composes where
+// the grant's predicate holds for its caller.
 function admittingBase(
   definition: Definition,
   grant: CompiledOperationGrant,
@@ -1906,7 +1944,9 @@ function admittingBase(
     return undefined;
   }
   if (granted.base === 'query') {
-    return grant.filter ? granted.base : undefined;
+    return grant.filter !== undefined || grant.settledFilter !== undefined
+      ? granted.base
+      : undefined;
   }
   return granted.base;
 }
@@ -2045,13 +2085,16 @@ function safeURL(
 }
 
 // Whether a compiled grant admits any caller who isn't signed in: its `where`
-// names them, a search grant has a filter for them, and a write grant says who
-// their writes are made as.
+// names them, a search grant has a filter for them, composed as it is or once
+// its predicate holds for them, and a write grant says who their writes are
+// made as.
 export function opensToAnonymous(grant: CompiledOperationGrant): boolean {
   let anonymous = grant.anonymous;
   return (
     anonymous !== undefined &&
-    (grant.operation !== 'query' || grant.anonymousFilter !== undefined) &&
+    (grant.operation !== 'query' ||
+      grant.anonymousFilter !== undefined ||
+      grant.anonymousSettledFilter !== undefined) &&
     (!anonymous.writes || anonymous.actingUser !== undefined)
   );
 }
