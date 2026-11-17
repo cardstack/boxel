@@ -889,6 +889,71 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a batch that ended before its deadline passes on its results', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+      await submit(token, twoRequests());
+      let finalizedAt = Math.floor(Date.now() / 1000) - 60;
+      statusAnswer = {
+        status: 200,
+        body: {
+          id: 'batch_123',
+          status: 'completed',
+          finalized_at: finalizedAt,
+          results: [{ custom_id: 'ticket-1', response: { status_code: 200 } }],
+        },
+      };
+
+      let response = await request
+        .get('/_ai-batches/batch_123')
+        .set('Authorization', `Bearer ${token}`);
+
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(response.body.results, [
+        { custom_id: 'ticket-1', response: { status_code: 200 } },
+      ]);
+      assert.strictEqual(
+        (await getAIBatch(dbAdapter, 'batch_123'))?.finalizedAt,
+        new Date(finalizedAt * 1000).toISOString(),
+        "OpenRouter's time is recorded as when the batch ended",
+      );
+    });
+
+    test('a batch that ended after its deadline has its results discarded', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+      await submit(token, twoRequests());
+      // An hour's deadline, and a batch that ended two hours after submit.
+      let finalizedAt = Math.floor(Date.now() / 1000) + 2 * 3600;
+      statusAnswer = {
+        status: 200,
+        body: {
+          id: 'batch_123',
+          status: 'completed',
+          finalized_at: finalizedAt,
+          request_counts: { total: 2, completed: 2, failed: 0 },
+          results: [{ custom_id: 'ticket-1', response: { status_code: 200 } }],
+        },
+      };
+
+      let response = await request
+        .get('/_ai-batches/batch_123')
+        .set('Authorization', `Bearer ${token}`);
+
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(response.body.status, 'completed');
+      assert.strictEqual(
+        response.body.results,
+        null,
+        'its results are withheld',
+      );
+      assert.deepEqual(
+        response.body.request_counts,
+        { total: 2, completed: 2, failed: 0 },
+        'the rest of the batch is passed on',
+      );
+    });
+
     test('a run reads only its own automation’s batches', async function (assert) {
       await switchOn();
       await switchOn(OTHER_AUTOMATION);
