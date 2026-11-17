@@ -11,6 +11,7 @@
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 import { expect } from '../fixtures.ts';
+import { writeRealmFile } from './write-realm-file.ts';
 
 export const PASSING_TEST_GTS = `import { module, test } from 'qunit';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
@@ -73,10 +74,7 @@ export async function writeAndAwaitIndex(
   content: string,
   options: WriteAndAwaitIndexOptions = {},
 ): Promise<void> {
-  let writeResult = await client.write(realmUrl, path, content);
-  expect(writeResult.ok, `write ${path} failed: ${writeResult.error}`).toBe(
-    true,
-  );
+  await writeRealmFile(client, realmUrl, path, content);
   let indexed = await client.waitForFile(realmUrl, path, {
     pollMs: options.pollMs ?? 300,
     timeoutMs: options.timeoutMs ?? 30_000,

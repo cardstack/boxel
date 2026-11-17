@@ -150,6 +150,14 @@ test.describe('runTestsInMemory e2e', () => {
       // The fixture realm ships with hello.test.gts. Delete it so the
       // realm has no *.test.gts files for this scenario.
       let listingBefore = await client.listFiles(realmUrl);
+      expect(
+        listingBefore.error,
+        `list ${realmUrl} failed: ${listingBefore.error}`,
+      ).toBeUndefined();
+      expect(
+        listingBefore.error,
+        `list ${realmUrl} failed: ${listingBefore.error}`,
+      ).toBeUndefined();
       for (let filename of listingBefore.filenames ?? []) {
         if (filename.endsWith('.test.gts')) {
           let deleteResult = await client.delete(realmUrl, filename);

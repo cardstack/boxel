@@ -38,6 +38,10 @@ async function clearParseableFixtures(
   realmUrl: string,
 ): Promise<void> {
   let listingBefore = await client.listFiles(realmUrl);
+  expect(
+    listingBefore.error,
+    `list ${realmUrl} failed: ${listingBefore.error}`,
+  ).toBeUndefined();
   let parseablePattern = /\.(gts|gjs|ts|json)$/;
   for (let filename of listingBefore.filenames ?? []) {
     if (!parseablePattern.test(filename)) continue;

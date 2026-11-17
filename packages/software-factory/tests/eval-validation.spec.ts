@@ -5,7 +5,10 @@ import { expect, test } from './fixtures.ts';
 import { EvalValidationStep } from '../src/validators/eval-step.ts';
 import type { EvalValidationDetails } from '../src/validators/eval-step.ts';
 import { buildTestClient } from './helpers/test-client.ts';
-import { writeRealmFile } from './helpers/write-realm-file.ts';
+import {
+  syncWorkspaceToRealm,
+  writeRealmFile,
+} from './helpers/write-realm-file.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
@@ -93,7 +96,7 @@ test.describe('eval-validation e2e', () => {
 
       // Push the EvalResult artifact card to the realm so the
       // client.read assertion below finds it.
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Must pass — valid modules with correct imports
@@ -173,7 +176,7 @@ test.describe('eval-validation e2e', () => {
 
       let result = await step.run(realmUrl);
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Must fail — broken-module.gts imports from a non-existent module
@@ -239,7 +242,7 @@ test.describe('eval-validation e2e', () => {
 
       let result = await step.run(realmUrl);
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // The fixture realm has hello.gts and hello.test.gts

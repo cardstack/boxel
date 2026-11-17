@@ -141,6 +141,10 @@ test.describe('runLintInMemory e2e', () => {
     try {
       // Delete all lintable files shipped with the fixture.
       let listingBefore = await client.listFiles(realmUrl);
+      expect(
+        listingBefore.error,
+        `list ${realmUrl} failed: ${listingBefore.error}`,
+      ).toBeUndefined();
       let lintablePattern = /\.(gts|gjs|ts|js)$/;
       for (let filename of listingBefore.filenames ?? []) {
         if (lintablePattern.test(filename)) {

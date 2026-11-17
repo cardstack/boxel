@@ -168,6 +168,14 @@ test.describe('runEvaluateInMemory e2e', () => {
     try {
       // Delete every ESM module shipped with the fixture realm.
       let listingBefore = await client.listFiles(realmUrl);
+      expect(
+        listingBefore.error,
+        `list ${realmUrl} failed: ${listingBefore.error}`,
+      ).toBeUndefined();
+      expect(
+        listingBefore.error,
+        `list ${realmUrl} failed: ${listingBefore.error}`,
+      ).toBeUndefined();
       let esmPattern = /\.(gts|gjs|ts|js)$/;
       for (let filename of listingBefore.filenames ?? []) {
         if (esmPattern.test(filename)) {

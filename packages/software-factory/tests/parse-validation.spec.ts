@@ -9,7 +9,10 @@ import {
   VALID_MODULE_GTS,
 } from './helpers/parse-test-fixtures.ts';
 import { buildTestClient } from './helpers/test-client.ts';
-import { writeRealmFile } from './helpers/write-realm-file.ts';
+import {
+  syncWorkspaceToRealm,
+  writeRealmFile,
+} from './helpers/write-realm-file.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
@@ -131,7 +134,7 @@ test.describe('parse-validation e2e', () => {
 
       let result = await step.run(realmUrl);
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Must pass — valid GTS + valid JSON example
@@ -208,7 +211,7 @@ test.describe('parse-validation e2e', () => {
 
       let result = await step.run(realmUrl);
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Must fail — unclosed template tag

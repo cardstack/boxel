@@ -6,7 +6,10 @@ import { LintValidationStep } from '../src/validators/lint-step.ts';
 import type { LintValidationDetails } from '../src/validators/lint-step.ts';
 import { BAD_LINT_GTS } from './helpers/lint-test-fixtures.ts';
 import { buildTestClient } from './helpers/test-client.ts';
-import { writeRealmFile } from './helpers/write-realm-file.ts';
+import {
+  syncWorkspaceToRealm,
+  writeRealmFile,
+} from './helpers/write-realm-file.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
@@ -127,7 +130,7 @@ test.describe('lint-validation e2e', () => {
 
       // Sync the LintResult artifact card to the realm so the read-back
       // assertion below sees it via HTTP.
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // The fixture realm has hello.gts and hello.test.gts — both lintable.

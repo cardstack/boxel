@@ -26,3 +26,23 @@ export async function writeRealmFile(
     `write ${path} to ${realmUrl} failed after ${elapsedMs}ms: ${result.error}`,
   ).toBe(true);
 }
+
+/**
+ * Push a local workspace to a realm (local copy wins), failing the test with
+ * the sync's error and elapsed time when the push fails. A failed push
+ * otherwise surfaces later as a missing or stale file in whatever reads the
+ * realm next, far from its cause.
+ */
+export async function syncWorkspaceToRealm(
+  client: BoxelCLIClient,
+  realmUrl: string,
+  workspaceDir: string,
+): Promise<void> {
+  let startedAt = performance.now();
+  let result = await client.sync(realmUrl, workspaceDir, { preferLocal: true });
+  let elapsedMs = Math.round(performance.now() - startedAt);
+  expect(
+    result.hasError,
+    `sync ${workspaceDir} to ${realmUrl} failed after ${elapsedMs}ms: ${result.error}`,
+  ).toBe(false);
+}
