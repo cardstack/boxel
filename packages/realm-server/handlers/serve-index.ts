@@ -16,6 +16,7 @@ import {
   SCOPED_CSS_SERVING_PREFIX,
   foreignQueryParams,
   hasExtension,
+  hostRouteCanonicalAddress,
   isCaptureServingPath,
   isHashedScopedCSSRequest,
   isRedirectRoutingRule,
@@ -738,13 +739,59 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         ctxt.status = resolution.statusCode;
         return;
       }
+      // A failed or refused lookup: the resolver's own, or the one that
+      // looks up an alias's canonical address.
+      let lookupError: { error: unknown } | undefined =
+        resolution?.kind === 'error' ? { error: resolution.error } : undefined;
+      if (resolved && resolution?.kind === 'alias') {
+        // An alias answers 301 to its card's canonical address, worked out
+        // from the index as the visitor, with the request's query string
+        // as for a redirect.
+        try {
+          let canonical = await hostRouteCanonicalAddress(resolution.cardHref, {
+            routes: hostRoutes,
+            realmURL: new URL(routedRealm.url),
+            ...visitorHostRouteLookups({
+              realm: routedRealm,
+              visitorHeaders: ctxt.req.headers,
+            }),
+          });
+          let target = canonical
+            ? new URL(
+                resolveRedirectTarget(
+                  canonical.address,
+                  new URL(routedRealm.url).pathname,
+                ),
+                requestURL,
+              )
+            : undefined;
+          // Two dynamic routes can give the same path. When the canonical
+          // address is the alias's own path, the alias serves the card
+          // there, as a route that isn't an alias would.
+          if (target && target.pathname !== resolved.canonicalPathname) {
+            if (requestURL.search) {
+              let forwarded = foreignQueryParams(requestURL.search);
+              if (forwarded) {
+                target.search = forwarded;
+              }
+            }
+            hostRoutesLog.debug(
+              `alias ${requestURL.pathname} redirects to ${target.pathname}`,
+            );
+            ctxt.redirect(target.href);
+            ctxt.status = resolution.statusCode;
+            return;
+          }
+        } catch (error) {
+          lookupError = { error };
+        }
+      }
       if (
         resolved &&
+        !lookupError &&
         (resolution?.kind === 'card' || resolution?.kind === 'alias')
       ) {
-        // An alias serves its card here, which is what it does when the
-        // card has no other address. Answering 301 to the card's canonical
-        // address needs the reverse lookup from a card to its address.
+        // An alias whose card has no other address serves its card here.
         if (requestURL.pathname !== resolved.canonicalPathname) {
           ctxt.redirect(
             new URL(resolved.canonicalPathname + requestURL.search, requestURL)
@@ -759,10 +806,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           id: resolution.cardHref,
         };
       }
-      if (resolution?.kind === 'error') {
+      if (lookupError) {
         // A failed or refused lookup is never answered as not found, so a
         // crawler keeps the page.
-        let error = resolution.error;
+        let { error } = lookupError;
         let status = error instanceof HostRouteLookupError ? error.status : 503;
         hostRoutesLog.warn(
           `host route lookup for ${requestURL.href} failed: ${

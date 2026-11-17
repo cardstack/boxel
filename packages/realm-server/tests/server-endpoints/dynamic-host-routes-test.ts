@@ -683,4 +683,273 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     });
   });
+
+  module('an alias route', function (hooks) {
+    const aliasRealmURL = new URL('http://127.0.0.1:4444/alias-routes/');
+    const aliasRealmPath = aliasRealmURL.pathname;
+    let request: SuperTest<Test>;
+    let testRealm: Realm;
+    let definitionLookup: CachingDefinitionLookup;
+
+    // Aliases (`statusCode: 301`) in front of a nested field match, a field
+    // match with a `where`, and a card id template the `where` sends drafts
+    // to. Notes fit no route but their alias. A memo's canonical address is
+    // its alias's own path, and a gadget's goes through its link to a
+    // category.
+    function makeAliasFixture(): Record<
+      string,
+      string | LooseSingleCardDocument
+    > {
+      let labelled = (name: string, extra = '') => `
+        export class ${name} extends CardDef {
+          static displayName = '${name}';
+          @field slug = contains(StringField);
+          @field label = contains(StringField);
+          ${extra}
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <p data-test-label>Served {{@model.label}}</p>
+            </template>
+          };
+        }`;
+      return {
+        'site.gts': `
+          import { CardDef, Component, field, contains, linksTo } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
+          ${labelled('Category')}
+          ${labelled('Product', '@field category = linksTo(() => Category);')}
+          ${labelled('Post', '@field status = contains(StringField);')}
+          ${labelled('Note')}
+          ${labelled('Memo')}
+          ${labelled('Gadget', '@field category = linksTo(() => Category);')}
+        `,
+        'Category/shoes.json': card('Category', {
+          slug: 'shoes',
+          label: 'Shoes',
+        }),
+        'Product/trail.json': card(
+          'Product',
+          { slug: 'trail-runner', label: 'Trail Runner' },
+          { category: { links: { self: '../Category/shoes' } } },
+        ),
+        'Post/hello.json': card('Post', {
+          slug: 'hello',
+          status: 'published',
+          label: 'Hello Post',
+        }),
+        'Post/draft.json': card('Post', {
+          slug: 'draft-one',
+          status: 'draft',
+          label: 'Draft Post',
+        }),
+        'Note/one.json': card('Note', { slug: 'one', label: 'Note One' }),
+        'Memo/x.json': card('Memo', { slug: 'x', label: 'Memo X' }),
+        'Gadget/boot.json': card(
+          'Gadget',
+          { slug: 'boot', label: 'Boot Gadget' },
+          { category: { links: { self: '../Category/shoes' } } },
+        ),
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              cardInfo: { name: 'Alias Routes Realm' },
+              hostRoutingRules: [
+                { path: '/p/:id', card: './Product/:id', statusCode: 301 },
+                { path: '/a/:id', card: './Post/:id', statusCode: 301 },
+                { path: '/n/:id', card: './Note/:id', statusCode: 301 },
+                {
+                  path: '/c/:category',
+                  type: { module: './site', name: 'Category' },
+                  match: { slug: ':category' },
+                  routes: [
+                    {
+                      path: '/:product',
+                      type: { module: './site', name: 'Product' },
+                      match: { slug: ':product' },
+                    },
+                  ],
+                },
+                {
+                  path: '/posts/:slug',
+                  type: { module: './site', name: 'Post' },
+                  where: { eq: { status: 'published' } },
+                  match: { slug: ':slug' },
+                },
+                { path: '/archive/:id', card: './Post/:id' },
+                // An alias and a later route that give the same path.
+                { path: '/m/:id', card: './Memo/:id', statusCode: 301 },
+                { path: '/m/:key', card: './Memo/:key' },
+                // A field match through a link.
+                {
+                  path: '/gadget/:id',
+                  card: './Gadget/:id',
+                  statusCode: 301,
+                },
+                {
+                  path: '/g/:cat/:slug',
+                  type: { module: './site', name: 'Gadget' },
+                  match: { 'category.slug': ':cat', slug: ':slug' },
+                },
+              ],
+            },
+            meta: {
+              adoptsFrom: {
+                module: rri('@cardstack/base/realm-config'),
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+      };
+    }
+
+    setupPermissionedRealmCached(hooks, {
+      realmURL: aliasRealmURL,
+      permissions: { '*': ['read'] },
+      fileSystem: makeAliasFixture(),
+      onRealmSetup(args) {
+        request = args.request;
+        testRealm = args.testRealm;
+        definitionLookup = serverDefinitionLookup(args.testRealmServer);
+      },
+    });
+
+    hooks.beforeEach(async function () {
+      await testRealm.indexing();
+      for (let name of ['Category', 'Product', 'Post', 'Gadget']) {
+        await definitionLookup.forRealm(testRealm).lookupDefinition({
+          module: rri(`${aliasRealmURL.href}site`),
+          name,
+        });
+      }
+    });
+
+    function page(path: string) {
+      return request.get(`${aliasRealmPath}${path}`).set('Accept', 'text/html');
+    }
+
+    test("an alias answers 301 to the card's field-match address", async function (assert) {
+      let response = await page('a/hello?utm_source=newsletter');
+      assert.strictEqual(response.status, 301);
+      assert.strictEqual(
+        response.headers.location,
+        `${aliasRealmURL.origin}${aliasRealmPath}posts/hello?utm_source=newsletter`,
+        'to the canonical address under the mount, with the query string',
+      );
+    });
+
+    test('an alias answers 301 to a nested address, its parent filled from the link', async function (assert) {
+      let response = await page('p/trail');
+      assert.strictEqual(response.status, 301);
+      assert.strictEqual(
+        new URL(response.headers.location).pathname,
+        `${aliasRealmPath}c/shoes/trail-runner`,
+      );
+      let target = await page('c/shoes/trail-runner');
+      assert.strictEqual(target.status, 200, 'the target serves the card');
+      assert.true(target.text.includes('Served Trail Runner'));
+    });
+
+    test("a card that fails the canonical route's where goes to the next route that fits", async function (assert) {
+      let response = await page('a/draft');
+      assert.strictEqual(response.status, 301);
+      assert.strictEqual(
+        new URL(response.headers.location).pathname,
+        `${aliasRealmPath}archive/draft`,
+      );
+    });
+
+    test('an alias whose canonical address is its own path serves the card', async function (assert) {
+      let response = await page('m/x');
+      assert.strictEqual(response.status, 200, 'no redirect to itself');
+      assert.true(response.text.includes('Served Memo X'));
+
+      let slashed = await page('m/x/');
+      assert.strictEqual(slashed.status, 308, 'the trailing-slash form');
+      assert.strictEqual(
+        new URL(slashed.headers.location, aliasRealmURL).pathname,
+        `${aliasRealmPath}m/x`,
+        'goes to the path without the slash',
+      );
+    });
+
+    test('an alias reads a value through a link, also when the search leaves out the linked cards', async function (assert) {
+      let response = await page('gadget/boot');
+      assert.strictEqual(response.status, 301);
+      assert.strictEqual(
+        new URL(response.headers.location).pathname,
+        `${aliasRealmPath}g/shoes/boot`,
+      );
+
+      // Under load the realm answers a search with links only: the
+      // response carries each result's own card and none it links to.
+      let handle = testRealm.handle;
+      let searches = 0;
+      testRealm.handle = async (req: Request) => {
+        let response = await handle(req);
+        if (!response || !new URL(req.url).pathname.endsWith('/_search')) {
+          return response;
+        }
+        searches++;
+        let doc = await response.json();
+        let items = new Set(
+          (doc.data ?? []).map(
+            (entry: { relationships?: { item?: { data?: { id: string } } } }) =>
+              entry.relationships?.item?.data?.id,
+          ),
+        );
+        doc.included = (doc.included ?? []).filter(
+          (resource: { type: string; id: string }) =>
+            resource.type !== 'card' || items.has(resource.id),
+        );
+        return new Response(JSON.stringify(doc), {
+          status: response.status,
+          headers: response.headers,
+        });
+      };
+      try {
+        let degraded = await page('gadget/boot');
+        assert.true(searches > 0, 'the canonical address was searched');
+        assert.strictEqual(degraded.status, 301);
+        assert.strictEqual(
+          new URL(degraded.headers.location).pathname,
+          `${aliasRealmPath}g/shoes/boot`,
+          'the same address as with the linked cards in the response',
+        );
+      } finally {
+        testRealm.handle = handle;
+      }
+    });
+
+    test('an alias whose card fits no other route serves the card', async function (assert) {
+      let response = await page('n/one');
+      assert.strictEqual(response.status, 200);
+      assert.true(response.text.includes('Served Note One'));
+    });
+
+    test('a failed lookup of the canonical address answers 503, and a rate-limited one 429', async function (assert) {
+      let handle = testRealm.handle;
+      let status = 500;
+      testRealm.handle = async (req: Request) => {
+        if (new URL(req.url).pathname.endsWith('/_search')) {
+          return new Response('', {
+            status,
+            headers: status === 429 ? { 'Retry-After': '30' } : {},
+          });
+        }
+        return handle(req);
+      };
+      try {
+        let failed = await page('a/hello');
+        assert.strictEqual(failed.status, 503, 'a failed search answers 503');
+        status = 429;
+        let limited = await page('a/hello');
+        assert.strictEqual(limited.status, 429, 'a rate limit answers 429');
+        assert.strictEqual(limited.headers['retry-after'], '30');
+      } finally {
+        testRealm.handle = handle;
+      }
+    });
+  });
 });

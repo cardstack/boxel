@@ -174,7 +174,8 @@ export function hostRouteAddress(
   }
 }
 
-type DynamicRoute = HostCardIdRoute | HostFieldMatchRoute;
+export type HostRouteDynamicRoute = HostCardIdRoute | HostFieldMatchRoute;
+type DynamicRoute = HostRouteDynamicRoute;
 
 // The reasons that mean a route can't tell yet whether the input fits it,
 // because a card or a value it needs isn't loaded.
@@ -185,8 +186,9 @@ const UNDECIDED: ReadonlySet<HostRouteNoAddressReason> = new Set([
   'where-unresolvable',
 ]);
 
-// A step of a route's chain from the top level down to the route.
-type Chain = readonly HostRoute[];
+// A route's chain from the top level down to the route.
+export type HostRouteChain = readonly HostRoute[];
+type Chain = HostRouteChain;
 
 // Why one candidate route gave no address. `fits` is false when the
 // candidate simply doesn't take the input (an id that doesn't fit its
@@ -221,24 +223,18 @@ class Lookup {
       }
     }
     let misses: Miss[] = [];
-    for (let chain of indexOf(this.options.routes).chains) {
+    for (let chain of canonicalCandidateChains(this.options.routes)) {
       let route = chain[chain.length - 1]!;
-      if (route.kind === 'redirect') {
-        continue;
-      }
       if (route.kind === 'fixed-card') {
         if (
           cards.length === 1 &&
           this.sameId(cardId(cards[0]!), route.cardHref)
         ) {
-          let address = fixedChainAddress(chain);
+          let address = fixedHostRouteChainAddress(chain);
           if (address !== undefined) {
             return { ok: true, address, route };
           }
         }
-        continue;
-      }
-      if (route.statusCode === 301) {
         continue;
       }
       let result = this.fillChain(chain, cards, 'cards');
@@ -294,7 +290,7 @@ class Lookup {
       let params: RouteParams = {};
       let valid = true;
       for (let { field, param } of route.match) {
-        let value = segmentValue(values[field]);
+        let value = hostRouteSegmentValue(values[field]);
         if (value === undefined) {
           valid = false;
           break;
@@ -305,7 +301,7 @@ class Lookup {
         invalid ??= route;
         continue;
       }
-      let address = fillChainPath(chain, params);
+      let address = fillHostRouteChainPath(chain, params);
       if (address !== undefined) {
         return { ok: true, address, route };
       }
@@ -340,13 +336,14 @@ class Lookup {
       }
       let params: RouteParams = {};
       for (let [i, arg] of args.entries()) {
-        let value = typeof arg === 'object' ? undefined : segmentValue(arg);
+        let value =
+          typeof arg === 'object' ? undefined : hostRouteSegmentValue(arg);
         if (value === undefined) {
           return { ok: false, reason: 'invalid-segment-value', route };
         }
         params[route.paramNames[i]!] = value;
       }
-      let address = fillChainPath(chain, params);
+      let address = fillHostRouteChainPath(chain, params);
       return address === undefined
         ? { ok: false, reason: 'invalid-segment-value', route }
         : { ok: true, address, route };
@@ -417,11 +414,11 @@ class Lookup {
         if (ownNames.length !== 1) {
           return miss('wrong-argument-count');
         }
-        let value = segmentValue(arg);
+        let value = hostRouteSegmentValue(arg);
         if (value === undefined) {
           return miss('invalid-segment-value');
         }
-        if (!agree(params, ownNames[0]!, value)) {
+        if (!agreeHostRouteParam(params, ownNames[0]!, value)) {
           return miss('not-member');
         }
         continue;
@@ -431,7 +428,7 @@ class Lookup {
         return miss(filled.reason, filled.fits);
       }
       for (let [n, v] of Object.entries(filled.params)) {
-        if (!agree(params, n, v)) {
+        if (!agreeHostRouteParam(params, n, v)) {
           return miss('not-member');
         }
       }
@@ -452,7 +449,7 @@ class Lookup {
       }
     }
 
-    let address = fillChainPath(chain, params);
+    let address = fillHostRouteChainPath(chain, params);
     if (address === undefined) {
       return miss('invalid-segment-value');
     }
@@ -508,7 +505,7 @@ class Lookup {
           fits: true,
         };
       }
-      let value = segmentValue(read);
+      let value = hostRouteSegmentValue(read);
       if (value === undefined) {
         return { reason: 'invalid-segment-value', fits: true };
       }
@@ -687,13 +684,37 @@ function chains(routes: readonly HostRoute[], above: Chain = []): Chain[] {
   return out;
 }
 
+// The chains of the routes that can give a card its canonical address, in
+// canonical order: depth-first authored order, a route's children before its
+// later siblings. A redirect and a dynamic route with `statusCode: 301` (an
+// alias) are never canonical, so they are left out. The caller decides
+// whether a card fits each chain, and the first that fits is canonical.
+export function canonicalCandidateChains(
+  routes: readonly HostRoute[],
+): Chain[] {
+  return indexOf(routes).chains.filter((chain) => {
+    let route = chain[chain.length - 1]!;
+    if (route.kind === 'redirect') {
+      return false;
+    }
+    return route.kind === 'fixed-card' || route.statusCode !== 301;
+  });
+}
+
+export function isDynamicHostRoute(route: HostRoute): route is DynamicRoute {
+  return isDynamic(route);
+}
+
 function isDynamic(route: HostRoute): route is DynamicRoute {
   return route.kind === 'card-id' || route.kind === 'field-match';
 }
 
 // The address of a chain, each level's own path filled from `params` and
 // joined.
-function fillChainPath(chain: Chain, params: RouteParams): string | undefined {
+export function fillHostRouteChainPath(
+  chain: Chain,
+  params: RouteParams,
+): string | undefined {
   let path = '';
   for (let route of chain) {
     if (!route.pattern) {
@@ -712,17 +733,17 @@ function fillChainPath(chain: Chain, params: RouteParams): string | undefined {
 
 // The address of a fixed card route: its chain's paths joined. A fixed route
 // under a dynamic route has no address from its card alone.
-function fixedChainAddress(chain: Chain): string | undefined {
+export function fixedHostRouteChainAddress(chain: Chain): string | undefined {
   if (chain.some(isDynamic)) {
     return undefined;
   }
-  return fillChainPath(chain, {}) ?? chain[chain.length - 1]!.fullPath;
+  return fillHostRouteChainPath(chain, {}) ?? chain[chain.length - 1]!.fullPath;
 }
 
 // A field or argument value as a segment value, or `undefined` when it
 // isn't one: a non-empty string, or a finite number written as JavaScript
 // writes it without an exponent (so it has one way of being written).
-function segmentValue(value: unknown): string | undefined {
+export function hostRouteSegmentValue(value: unknown): string | undefined {
   let text: string;
   if (typeof value === 'string') {
     text = value;
@@ -768,7 +789,11 @@ function readPath(
 
 // A param can be filled twice, from a child's card id pattern and from the
 // parent's card. Both must give the same value.
-function agree(params: RouteParams, name: string, value: string): boolean {
+export function agreeHostRouteParam(
+  params: RouteParams,
+  name: string,
+  value: string,
+): boolean {
   if (Object.prototype.hasOwnProperty.call(params, name)) {
     return params[name] === value;
   }
