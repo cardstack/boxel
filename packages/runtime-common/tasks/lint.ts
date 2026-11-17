@@ -2,13 +2,21 @@ import { resolve, sep } from 'node:path';
 import { Worker } from 'node:worker_threads';
 
 import type { Task } from './index.ts';
-import type { LintThreadRequest, LintThreadResponse } from './lint-thread.ts';
+import type { LintPass } from './lint-engines.ts';
+import type {
+  EngineStageTiming,
+  LintThreadRequest,
+  LintThreadResponse,
+} from './lint-thread.ts';
 
 import {
+  heartbeatJob,
   jobIdentity,
   LINT_NOT_RUN_RULE_IDS,
   MAX_LINT_SOURCE_BYTES,
 } from '../index.ts';
+
+import { logger } from '../log.ts';
 
 import { LINT_ANCHOR } from './lint-engines.ts';
 
@@ -76,6 +84,33 @@ export const LINT_THREAD_HEAP_LIMIT_MB = 256;
 // the worker rather than sitting in every worker that has ever linted.
 export const LINT_THREAD_IDLE_MS = 60_000;
 
+// A thread loads every engine when it starts, before it lints anything. That
+// usually takes a few seconds, but on a busy host it has taken well over a
+// minute, longer than a lint job's no-progress deadline. So a starting thread
+// counts as progress for every lint waiting on it, this often, for as long as
+// `LINT_THREAD_START_TIMEOUT_MS` allows. A thread that has not loaded by then
+// is stopped, and the lints waiting on it fail with an error.
+export const LINT_THREAD_START_HEARTBEAT_MS = 5_000;
+export const LINT_THREAD_START_TIMEOUT_MS = 300_000;
+
+// A thread start that takes at least this long is logged as a warning, with
+// the time each step took.
+export const SLOW_LINT_THREAD_START_MS = 10_000;
+
+// What a lint reports as it goes: its thread is still starting, or one of its
+// passes completed.
+export type LintProgress = 'starting' | LintPass;
+
+export class LintThreadStartTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(
+      `the lint thread did not finish loading its engines within ${
+        timeoutMs / 1000
+      } s`,
+    );
+  }
+}
+
 export class LintThreadOutOfMemoryError extends Error {
   readonly heapLimitMb: number;
   constructor(heapLimitMb: number) {
@@ -92,19 +127,40 @@ export class LintThread {
   #worker: Worker | undefined;
   #pending = new Map<
     number,
-    { resolve: (result: LintResult) => void; reject: (e: Error) => void }
+    {
+      resolve: (result: LintResult) => void;
+      reject: (e: Error) => void;
+      onProgress?: (progress: LintProgress) => void;
+    }
   >();
   #nextId = 0;
   #idleTimer: ReturnType<typeof setTimeout> | undefined;
+  #startHeartbeat: ReturnType<typeof setInterval> | undefined;
+  #startTimeout: ReturnType<typeof setTimeout> | undefined;
+  #startup: LintThreadStartup | undefined;
   readonly heapLimitMb: number;
   readonly idleMs: number;
+  readonly startHeartbeatMs: number;
+  readonly startTimeoutMs: number;
 
   constructor(
     heapLimitMb = LINT_THREAD_HEAP_LIMIT_MB,
     idleMs = LINT_THREAD_IDLE_MS,
+    {
+      startHeartbeatMs = LINT_THREAD_START_HEARTBEAT_MS,
+      startTimeoutMs = LINT_THREAD_START_TIMEOUT_MS,
+    }: { startHeartbeatMs?: number; startTimeoutMs?: number } = {},
   ) {
     this.heapLimitMb = heapLimitMb;
     this.idleMs = idleMs;
+    this.startHeartbeatMs = startHeartbeatMs;
+    this.startTimeoutMs = startTimeoutMs;
+  }
+
+  // How the running thread's start went: when it started, each engine-loading
+  // step, and when it was ready.
+  get startup(): LintThreadStartup | undefined {
+    return this.#startup;
   }
 
   // Whether a thread is running, for tests.
@@ -112,12 +168,18 @@ export class LintThread {
     return this.#worker !== undefined;
   }
 
-  lint(source: string, filename: string): Promise<LintResult> {
+  // `onProgress` hears 'starting' periodically while the thread loads its
+  // engines, then each of this lint's passes as it completes.
+  lint(
+    source: string,
+    filename: string,
+    onProgress?: (progress: LintProgress) => void,
+  ): Promise<LintResult> {
     clearTimeout(this.#idleTimer);
     let worker = this.#worker ?? this.#start();
     let id = this.#nextId++;
     return new Promise<LintResult>((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
+      this.#pending.set(id, { resolve, reject, onProgress });
       // An idle thread must not hold the process open; a busy one must, or
       // a caller awaiting its result could see the process exit under it.
       worker.ref();
@@ -127,6 +189,7 @@ export class LintThread {
 
   async terminate(): Promise<void> {
     clearTimeout(this.#idleTimer);
+    this.#stopStartTimers();
     let worker = this.#worker;
     this.#worker = undefined;
     await worker?.terminate();
@@ -137,7 +200,35 @@ export class LintThread {
       resourceLimits: { maxOldGenerationSizeMb: this.heapLimitMb },
     });
     worker.unref();
+    let startup: LintThreadStartup = { startedAt: Date.now(), stages: [] };
+    this.#startup = startup;
+    // Every lint sent to a starting thread waits for all of its engines, so
+    // the start is progress for each of them.
+    this.#startHeartbeat = setInterval(() => {
+      for (let pending of this.#pending.values()) {
+        pending.onProgress?.('starting');
+      }
+    }, this.startHeartbeatMs);
+    this.#startHeartbeat.unref();
+    this.#startTimeout = setTimeout(() => {
+      this.#fail(worker, new LintThreadStartTimeoutError(this.startTimeoutMs));
+      void worker.terminate();
+    }, this.startTimeoutMs);
+    this.#startTimeout.unref();
     worker.on('message', (response: LintThreadResponse) => {
+      if ('engineStage' in response) {
+        startup.stages.push(response.engineStage);
+        return;
+      }
+      if ('ready' in response) {
+        startup.readyAt = Date.now();
+        this.#stopStartTimers();
+        return;
+      }
+      if ('pass' in response) {
+        this.#pending.get(response.id)?.onProgress?.(response.pass);
+        return;
+      }
       let pending = this.#pending.get(response.id);
       this.#pending.delete(response.id);
       if (this.#pending.size === 0) {
@@ -170,9 +261,15 @@ export class LintThread {
     return worker;
   }
 
+  #stopStartTimers() {
+    clearInterval(this.#startHeartbeat);
+    clearTimeout(this.#startTimeout);
+  }
+
   #fail(worker: Worker, e: Error) {
     if (this.#worker === worker) {
       this.#worker = undefined;
+      this.#stopStartTimers();
     }
     let pending = [...this.#pending.values()];
     this.#pending.clear();
@@ -182,7 +279,31 @@ export class LintThread {
   }
 }
 
+export interface LintThreadStartup {
+  startedAt: number;
+  stages: EngineStageTiming[];
+  readyAt?: number;
+}
+
 let sharedLintThread: LintThread | undefined;
+
+const lintThreadLog = logger('lint-thread');
+
+// "eslint-module 1200ms (cpu 180ms), …": the wall and thread CPU time each
+// step took, measured from the previous step. The first step is measured from
+// the thread's start, and its CPU time includes starting the thread.
+function describeStartup({ startedAt, stages }: LintThreadStartup): string {
+  let previous = { at: startedAt, cpuMs: 0 };
+  return stages
+    .map((s) => {
+      let described = `${s.stage} ${s.at - previous.at}ms (cpu ${
+        s.cpuMs - previous.cpuMs
+      }ms)`;
+      previous = s;
+      return described;
+    })
+    .join(', ');
+}
 
 // ---------------------------------------------------------------------------
 // Task
@@ -198,18 +319,26 @@ export const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
     reportStatus(jobInfo as any, 'start');
 
     let thread = (sharedLintThread ??= new LintThread());
-    // A lint that starts the thread also loads the engines it uses, which is
-    // most of its time. Logging those lints, and only those, shows how often a
-    // save waits on an engine load and how long it takes on this host. A
-    // source rejected before it reaches the thread starts nothing, and a lint
-    // whose thread died is not timed.
+    // A lint that starts the thread waits for it to load the engines, which
+    // is most of its time. Logging those lints, and only those, shows how
+    // often a save waits on an engine load and how long it takes on this host.
+    // A source rejected before it reaches the thread starts nothing, and a
+    // thread that never got ready is not timed.
     let startsThread = !thread.isRunning;
-    let startedAt = Date.now();
-    const result = await lintArgs(args, thread);
-    if (startsThread && thread.isRunning) {
-      log.info(
-        `${jobIdentity(jobInfo as any)} lint-source started the lint thread: the first lint on it, of ${filename}, took ${Date.now() - startedAt} ms including loading the engines it used`,
-      );
+    // The thread's start and each completed pass are progress, so the queue's
+    // no-progress deadline doesn't count the engine load against the lint.
+    const result = await lintArgs(args, thread, () =>
+      heartbeatJob(args.jobInfo?.reservationId),
+    );
+    let startup = thread.startup;
+    if (startsThread && startup?.readyAt !== undefined) {
+      let tookMs = startup.readyAt - startup.startedAt;
+      let message = `${jobIdentity(jobInfo as any)} lint-source started the lint thread, which loaded its engines in ${tookMs} ms before linting ${filename}: ${describeStartup(startup)}`;
+      if (tookMs >= SLOW_LINT_THREAD_START_MS) {
+        lintThreadLog.warn(message);
+      } else {
+        log.info(message);
+      }
     }
 
     log.debug(
@@ -222,6 +351,7 @@ export const lintSource: Task<LintArgs, LintResult> = ({ reportStatus, log }) =>
 export async function lintArgs(
   args: LintArgs,
   thread: LintThread,
+  onProgress?: (progress: LintProgress) => void,
 ): Promise<LintResult> {
   const validated = validateArgs(args);
   if (!validated.ok) {
@@ -244,7 +374,7 @@ export async function lintArgs(
     );
   }
   try {
-    return await thread.lint(args.source, validated.filename);
+    return await thread.lint(args.source, validated.filename, onProgress);
   } catch (e) {
     if (e instanceof LintThreadOutOfMemoryError) {
       return notLinted(

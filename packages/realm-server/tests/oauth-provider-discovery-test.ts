@@ -19,6 +19,7 @@ import {
 import {
   testOAuthProviderConfig,
   testOAuthSecureOriginURL,
+  unusedDBAdapter,
 } from './helpers/oauth-provider.ts';
 import {
   OAuthProviderConfigError,
@@ -273,6 +274,9 @@ module(basename(import.meta.filename), function () {
           issuer: 'https://a.test',
           config: { ...config, jwks: { keys: [key] } },
           registry: buildRegistry('https://a.test'),
+          adapter: () => {
+            throw new Error('the provider never stored anything');
+          },
         });
       } catch (error) {
         thrown = error;
@@ -300,7 +304,8 @@ module(basename(import.meta.filename), function () {
           startOAuthProvider({
             serverURL: new URL('https://realms.example.test/'),
             config: testOAuthProviderConfig(),
-            hasSecureOrigin: false,
+            dbAdapter: unusedDBAdapter,
+            secureOriginURL: undefined,
           }),
         (error: unknown) =>
           error instanceof OAuthProviderConfigError &&
@@ -314,7 +319,8 @@ module(basename(import.meta.filename), function () {
           startOAuthProvider({
             serverURL: new URL('https://realms.example.test/boxel/'),
             config: testOAuthProviderConfig(),
-            hasSecureOrigin: true,
+            dbAdapter: unusedDBAdapter,
+            secureOriginURL: testOAuthSecureOriginURL,
           }),
         (error: unknown) =>
           error instanceof OAuthProviderConfigError &&
@@ -323,10 +329,11 @@ module(basename(import.meta.filename), function () {
     });
 
     test('takes its issuer from the server URL, with no trailing slash', function (assert) {
-      let provider = startOAuthProvider({
+      let { provider } = startOAuthProvider({
         serverURL: new URL('https://realms.example.test/'),
         config: testOAuthProviderConfig(),
-        hasSecureOrigin: true,
+        dbAdapter: unusedDBAdapter,
+        secureOriginURL: testOAuthSecureOriginURL,
       });
       assert.strictEqual(provider.issuer, 'https://realms.example.test');
     });
@@ -347,6 +354,11 @@ module(basename(import.meta.filename), function () {
           'https://realms.example.test/mcp',
           'https://realms.example.test/_test-resource',
         ],
+      );
+      assert.deepEqual(
+        registry.map(({ testOnly }) => testOnly === true),
+        [false, true],
+        'only the resource a test added is marked test-only',
       );
     });
 
@@ -465,9 +477,15 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(response.body, {
         issuer: 'http://127.0.0.1:0',
         response_types_supported: ['code'],
-        grant_types_supported: ['authorization_code'],
         code_challenge_methods_supported: ['S256'],
+        token_endpoint_auth_methods_supported: ['none'],
+        authorization_response_iss_parameter_supported: true,
+        grant_types_supported: ['authorization_code', 'refresh_token'],
         scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
+        authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
+        token_endpoint: 'http://127.0.0.1:0/_oauth-provider/token',
+        registration_endpoint: 'http://127.0.0.1:0/_oauth-provider/reg',
+        client_id_metadata_document_supported: true,
       });
       assert.strictEqual(
         response.headers['access-control-allow-origin'],
@@ -489,8 +507,8 @@ module(basename(import.meta.filename), function () {
       for (let path of [
         OPENID_DISCOVERY,
         '/_oauth-provider/jwks',
-        '/_oauth-provider/auth',
-        '/_oauth-provider/token',
+        '/_oauth-provider/token/revocation',
+        '/_oauth-provider/device/auth',
       ]) {
         let response = await request.get(path);
         assert.strictEqual(response.status, 404, `${path} is not found`);

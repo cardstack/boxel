@@ -8,6 +8,7 @@ import {
   type DBAdapter,
   type RealmPermissions,
 } from './index.ts';
+import { isAutomationCommand } from './automation-run-command.ts';
 
 // Everything a run-command invocation needs to reach the prerenderer.
 export interface PreparedRunCommand {
@@ -67,6 +68,16 @@ export async function prepareRunCommand({
 }): Promise<PrepareRunCommandResult> {
   let normalizedRealmURL = ensureTrailingSlash(realmURL);
   let context = { command, realmURL: normalizedRealmURL };
+  // The automation command runs only as an automation run, with the run's
+  // token in a tab of its own (ADR 025 §1.3), never with the user's sessions
+  // for every realm they can reach.
+  if (isAutomationCommand(command)) {
+    return {
+      ok: false,
+      error: `${command} runs only as an automation run`,
+      context,
+    };
+  }
   let runAsUserId = ensureFullMatrixUserId(runAs, matrixServerName);
   // The effective set the realm itself enforces: its `users` and `*` grants
   // unioned with the runner's own row. A session token is rejected when its

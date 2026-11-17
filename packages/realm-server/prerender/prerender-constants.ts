@@ -1,3 +1,6 @@
+import { MAX_RUN_SECONDS } from '@cardstack/runtime-common/automation-declaration';
+import { AUTOMATION_TAB_GRACE_MS } from '@cardstack/runtime-common/automation-run-command';
+
 export const PRERENDER_SERVER_STATUS_HEADER = 'X-Boxel-Prerender-Server-Status';
 export const PRERENDER_SERVER_STATUS_DRAINING = 'draining';
 export const PRERENDER_SERVER_DRAINING_STATUS_CODE = 410;
@@ -224,6 +227,35 @@ export function resolvePrerenderServerProxyTimeoutMs(): number {
     process.env.PRERENDER_SERVER_TIMEOUT_MS,
     prerenderRequestTimeoutMs,
   );
+}
+
+// The longest a command may be given to run (`RunCommandArgs.timeoutMs`): an
+// automation run's longest time limit, plus the time its tab is given past
+// it to answer.
+export const MAX_COMMAND_TIMEOUT_MS =
+  MAX_RUN_SECONDS * 1000 + AUTOMATION_TAB_GRACE_MS;
+
+// A command's own time limit, when it was given a valid one, held to
+// `MAX_COMMAND_TIMEOUT_MS`.
+export function commandTimeoutMs(raw: unknown): number | undefined {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
+    return undefined;
+  }
+  return Math.min(Math.ceil(raw), MAX_COMMAND_TIMEOUT_MS);
+}
+
+// The timeout a layer that carries a command request uses: its own, or the
+// command's time limit plus the same overhead every request timeout carries
+// past its render timeout, whichever is longer. So the tab's own timer fires
+// first, and the layers around it hand back its answer.
+export function commandRequestTimeoutMs(
+  layerTimeoutMs: number,
+  rawCommandTimeoutMs: unknown,
+): number {
+  let commandMs = commandTimeoutMs(rawCommandTimeoutMs);
+  return commandMs === undefined
+    ? layerTimeoutMs
+    : Math.max(layerTimeoutMs, commandMs + DEFAULT_RENDER_TIMEOUT_OVERHEAD_MS);
 }
 
 // Whether any prerender server received this request before the manager

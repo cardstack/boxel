@@ -644,4 +644,132 @@ module('timeline handler', () => {
       'does not handle events that are older than startTime',
     );
   });
+
+  async function runLintFailingSubmission(lintMessage: {
+    ruleId: string;
+    severity: number;
+    message: string;
+  }) {
+    senderRegistrations = [];
+    submissionBotRegistrations = [
+      {
+        id: 'bot-registration-lint',
+        created_at: new Date(0) as unknown as PgPrimitive,
+        username: '@submissionbot:localhost',
+      },
+    ];
+    commandsByRegistrationId = new Map([
+      [
+        'bot-registration-lint',
+        [
+          {
+            command_filter: {
+              type: 'matrix-event',
+              event_type: 'app.boxel.bot-trigger',
+              content_type: 'pr-listing-create',
+            },
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
+          },
+        ],
+      ],
+    ]);
+    let lintQueuePublisher: QueuePublisher = {
+      publish: async (job: any) => {
+        let done: unknown = { status: 'ready', cardResultString: null };
+        if (job.jobType === 'lint-source') {
+          done = {
+            output: job.args.source,
+            fixed: false,
+            messages: [{ line: 1, column: 1, ...lintMessage }],
+          };
+        } else if (
+          String(job.args?.command ?? '').endsWith(
+            '/collect-submission-files/default',
+          )
+        ) {
+          done = {
+            status: 'ready',
+            cardResultString: JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {
+                  allFileContents: [
+                    {
+                      filename: 'experiments/MyListing/my-card.gts',
+                      contents: 'export const x = 1;',
+                    },
+                  ],
+                },
+              },
+            }),
+          };
+        }
+        return { id: 1, done: Promise.resolve(done) } as any;
+      },
+      destroy: async () => {},
+    };
+    createdBranches = [];
+    let captured: unknown[] = [];
+    let handleTimelineEvent = onTimelineEvent({
+      authUserId: '@submissionbot:localhost',
+      dbAdapter,
+      queuePublisher: lintQueuePublisher,
+      githubClient,
+      startTime: 0,
+      captureException: (error) => captured.push(error),
+    });
+
+    await handleTimelineEvent(
+      {
+        event: {
+          origin_server_ts: 1000,
+          type: 'app.boxel.bot-trigger',
+          content: {
+            type: 'pr-listing-create',
+            input: {
+              roomId: '!abc123:localhost',
+              listingId: 'http://localhost:4201/test/Listing/1',
+              listingName: 'My Listing',
+              workflowCardUrl:
+                'http://localhost:4201/test/SubmissionWorkflowCard/1',
+            },
+            realm: 'http://localhost:4201/test/',
+            userId: '@alice:localhost',
+          },
+        },
+        getSender: () => '@alice:localhost',
+      } as unknown as MatrixEvent,
+      makeRoom('join'),
+      false,
+    );
+    return captured;
+  }
+
+  test('does not report a submission that fails lint to Sentry', async (assert) => {
+    let captured = await runLintFailingSubmission({
+      ruleId: 'no-undef',
+      severity: 2,
+      message: "'y' is not defined.",
+    });
+
+    assert.strictEqual(createdBranches.length, 0, 'opens no pull request');
+    assert.strictEqual(captured.length, 0, 'reports nothing to Sentry');
+  });
+
+  test('reports a lint thread that ran out of memory to Sentry', async (assert) => {
+    let captured = await runLintFailingSubmission({
+      ruleId: 'lint-source/out-of-memory',
+      severity: 1,
+      message: 'Lint ran out of memory.',
+    });
+
+    assert.strictEqual(createdBranches.length, 0, 'opens no pull request');
+    assert.strictEqual(captured.length, 1, 'reports the failure to Sentry');
+    assert.true(
+      captured[0] instanceof Error &&
+        /Lint failed with 1 unfixable error/.test(captured[0].message),
+      'reports the lint failure',
+    );
+  });
 });

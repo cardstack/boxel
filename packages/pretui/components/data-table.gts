@@ -1,6 +1,7 @@
 // Pretui — DataTable: the record listing: sort, filter, select, paginate and column visibility.
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
@@ -23,12 +24,13 @@ import { EmptyState } from './empty-state';
 import { Pagination } from './pagination';
 import { Menu } from './menu';
 import type { MenuEntry } from '../internal/menu';
-import { clickIsContents, rovingTabindex } from '../focus';
+import { clickIsContents, focusWhen, listen, rovingTabindex } from '../focus';
 import {
   printValue,
   readField,
   setsIndeterminate,
 } from '../internal/reading-listing';
+import { RowCursor } from '../internal/reading-listing';
 import type { ListingSizeArg } from '../internal/reading-listing';
 import { resolveSize } from '../pretui-primitives';
 
@@ -37,6 +39,16 @@ import { resolveSize } from '../pretui-primitives';
 // ═════════════════════════════════════════════════════════════════════════
 
 /** Where a column's content sits. Logical, so RTL is free. */
+// rovingTabindex, plus undefined: a row that is not activatable has no
+// tabindex at all. Set as a property for the no-positive-tabindex lint rule.
+const rowStop = modifier((el: HTMLElement, [active]: [boolean | undefined]) => {
+  if (active === undefined) {
+    el.removeAttribute('tabindex');
+  } else {
+    el.tabIndex = active ? 0 : -1;
+  }
+});
+
 export type ColumnAlign = 'start' | 'end' | 'center';
 /** Which edge a column pins to. */
 export type ColumnPin = 'start' | 'end';
@@ -877,14 +889,29 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
     }
     this.args.onActivate(row, index);
   };
+  // One Tab stop for the rows, as List has: the cursor is page-local.
+  cursor = new RowCursor(() => this.pageRows.length);
+  isRoving = (index: number): boolean | undefined =>
+    this.activatable && this.cursor.isActive(index - this.pageOffset);
+  isFocusTarget = (index: number): boolean =>
+    this.cursor.isFocusTarget(index - this.pageOffset);
+  onRowFocusIn = (index: number) => {
+    this.cursor.follow(index - this.pageOffset);
+  };
   onRowKeydown = (row: T, index: number, event: Event) => {
-    if (
-      (event as KeyboardEvent).key === 'Enter' &&
-      this.args.onActivate &&
-      event.target === event.currentTarget
-    ) {
-      event.preventDefault();
+    let ev = event as KeyboardEvent;
+    // only the row itself: a control inside keeps its own keys
+    if (!this.args.onActivate || ev.target !== ev.currentTarget) {
+      return;
+    }
+    if (this.cursor.handleKey(ev.key)) {
+      ev.preventDefault();
+    } else if (ev.key === 'Enter') {
+      ev.preventDefault();
       this.args.onActivate(row, index);
+    } else if (ev.key === ' ' && this.selectable) {
+      ev.preventDefault();
+      this.table.toggleSelected(row, index);
     }
   };
   toggleAll = (event: Event) => {
@@ -1126,16 +1153,21 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
                   {{/if}}
                 </tr>
               </thead>
-              <tbody>
+              <tbody {{listen 'focusout' this.cursor.leave}}>
                 {{#each this.lines key='key' as |line|}}
                   <tr
                     class='pretui-dt-row'
                     aria-selected={{line.ariaSelected}}
                     data-selected={{line.selectedFlag}}
                     data-activatable={{this.activatable}}
-                    tabindex={{if this.activatable '0'}}
-                    {{on 'click' (fn this.onRowClick line.row line.index)}}
-                    {{on 'keydown' (fn this.onRowKeydown line.row line.index)}}
+                    {{rowStop (this.isRoving line.index)}}
+                    {{focusWhen (this.isFocusTarget line.index)}}
+                    {{listen 'focusin' (fn this.onRowFocusIn line.index)}}
+                    {{listen 'click' (fn this.onRowClick line.row line.index)}}
+                    {{listen
+                      'keydown'
+                      (fn this.onRowKeydown line.row line.index)
+                    }}
                     data-test-pretui-dt-row
                   >
                     {{#if this.selectable}}
@@ -1267,7 +1299,10 @@ export class DataTable<T> extends Component<DataTableSignature<T>> {
           display: grid;
           gap: var(--boxel-sp-xs);
           min-width: 0;
-          font-size: var(--pretui-data-table-font-size, var(--boxel-font-size-xs));
+          font-size: var(
+            --pretui-data-table-font-size,
+            var(--boxel-font-size-xs)
+          );
           /* DataShell, which holds the table body, sets its own size; 1em
              hands it the size resolved here */
           --pretui-data-font-size: 1em;

@@ -70,6 +70,7 @@ import {
 } from '../helpers/recent-files-cards';
 import { signInThroughSecureOrigin } from '../helpers/secure-sign-in';
 import { setupApplicationTest } from '../helpers/setup';
+import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 
 const skillsRealmURL = ensureTrailingSlash(ENV.resolvedSkillsRealmURL);
 
@@ -1633,7 +1634,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     test('shows daily grant note when user is below threshold', async function (assert) {
       let originalAttributes = { ...userResponseBody.data.attributes };
-      let nowSeconds = Math.floor(Date.now() / 1000);
+      let nowSeconds = Math.floor(TEST_CLOCK_INSTANT / 1000);
       userResponseBody.data.attributes = {
         ...originalAttributes,
         creditsAvailableInPlanAllowance: 1000,
@@ -1663,7 +1664,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     test('shows last daily grant note when user is above threshold', async function (assert) {
       let originalAttributes = { ...userResponseBody.data.attributes };
-      let nowSeconds = Math.floor(Date.now() / 1000);
+      let nowSeconds = Math.floor(TEST_CLOCK_INSTANT / 1000);
       userResponseBody.data.attributes = {
         ...originalAttributes,
         creditsAvailableInPlanAllowance: 2000,
@@ -1699,7 +1700,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     test('does not show "getting low" for fresh users with only initial grant', async function (assert) {
       let originalAttributes = { ...userResponseBody.data.attributes };
-      let nowSeconds = Math.floor(Date.now() / 1000);
+      let nowSeconds = Math.floor(TEST_CLOCK_INSTANT / 1000);
       userResponseBody.data.attributes = {
         ...originalAttributes,
         creditsAvailableInPlanAllowance: 2000,

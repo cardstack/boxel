@@ -8,8 +8,19 @@ const {
   copySync,
 } = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
+import { buildMintRunToken, mintRunToken } from '../../lib/run-token.ts';
+import type {
+  AccountStanding,
+  AutomationAdmissionChecks,
+} from '@cardstack/runtime-common/automation-admission';
+import { automationRef } from '@cardstack/runtime-common/automation-declaration';
+import {
+  createAutomationRun,
+  startAutomationRunAttempt,
+  type AutomationRun,
+} from '@cardstack/runtime-common/automation-runs';
 import { dirname, join } from 'path';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import type {
   LooseSingleCardDocument,
   RealmPermissions,
@@ -30,6 +41,7 @@ import type {
 import {
   Realm,
   ri,
+  rri,
   searchEntryWireQueryFromQuery,
   parseSearchEntryQueryFromPayload,
   baseRealm,
@@ -1701,6 +1713,8 @@ export async function createRealm({
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
+      mintRunToken: buildMintRunToken(realmSecretSeed),
+      automationAdmissionChecks: testAutomationAdmissionChecks,
       mediaCacheAdapter,
       meteredCharges: meteredChargesFor(dbAdapter, testPricing),
     });
@@ -1824,6 +1838,12 @@ export async function runTestRealmServer({
   googleSignIn,
   oauthProvider,
   oauthTestResources,
+  oauthTestDocumentOrigins,
+  oauthNewClientLimit,
+  oauthAuthorizationLimit,
+  oauthTokenLimit,
+  secureOriginAppOrigins,
+  clientAddress,
   cardDocumentCache,
   published,
   history,
@@ -1865,6 +1885,27 @@ export async function runTestRealmServer({
   oauthTestResources?: ConstructorParameters<
     typeof RealmServer
   >[0]['__testOnlyOAuthResources'];
+  // Client ID metadata documents served from a stub: each `https://` origin
+  // maps to the stub's plain HTTP origin.
+  oauthTestDocumentOrigins?: ReadonlyMap<string, string>;
+  // The provider's limit on new clients; omit for the production default.
+  oauthNewClientLimit?: ConstructorParameters<
+    typeof RealmServer
+  >[0]['oauthNewClientLimit'];
+  // The provider's limit on starting a flow; omit for the production default.
+  oauthAuthorizationLimit?: ConstructorParameters<
+    typeof RealmServer
+  >[0]['oauthAuthorizationLimit'];
+  // The provider's limits on its token endpoint; omit for the production
+  // default.
+  oauthTokenLimit?: ConstructorParameters<
+    typeof RealmServer
+  >[0]['oauthTokenLimit'];
+  // App origins listed for the secure origin, as `--secureOriginAppOrigin`.
+  secureOriginAppOrigins?: string[];
+  // How the server works out a caller's address. Omit for none in front of
+  // it, which makes every supertest request the same loopback caller.
+  clientAddress?: ConstructorParameters<typeof RealmServer>[0]['clientAddress'];
   // Inject a cache configured for the test; omit for the production default.
   cardDocumentCache?: CardDocumentCache;
   // Builds the realm as a published one (see `createRealm`).
@@ -1892,6 +1933,8 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mintRunToken: buildMintRunToken(realmSecretSeed),
+    automationAdmissionChecks: testAutomationAdmissionChecks,
     // The indexing worker persists declared captures when a store is
     // configured — same wiring as the production worker child.
     mediaCacheAdapter,
@@ -1971,6 +2014,14 @@ export async function runTestRealmServer({
     ...(oauthTestResources
       ? { __testOnlyOAuthResources: oauthTestResources }
       : {}),
+    ...(oauthTestDocumentOrigins
+      ? { __testOnlyOAuthDocumentOrigins: oauthTestDocumentOrigins }
+      : {}),
+    ...(oauthNewClientLimit ? { oauthNewClientLimit } : {}),
+    ...(oauthAuthorizationLimit ? { oauthAuthorizationLimit } : {}),
+    ...(oauthTokenLimit ? { oauthTokenLimit } : {}),
+    ...(secureOriginAppOrigins ? { secureOriginAppOrigins } : {}),
+    ...(clientAddress ? { clientAddress } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(realmURL.port)),
@@ -2082,6 +2133,8 @@ export async function runTestRealmServerWithRealms({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mintRunToken: buildMintRunToken(realmSecretSeed),
+    automationAdmissionChecks: testAutomationAdmissionChecks,
     mediaCacheAdapter,
     meteredCharges: meteredChargesFor(dbAdapter, testPricing),
   });
@@ -3855,6 +3908,122 @@ export function createJWT(
   );
 }
 
+// Where `automationFixture` puts its Automation card in a realm, relative
+// to the realm's root.
+export const TEST_AUTOMATION_PATH = 'automation/test-run';
+
+// Per-run caps that no test reaches unless it means to.
+export const ROOMY_AUTOMATION_CAPS = {
+  callApiCalls: 1000,
+  responseBytes: 100 * 1024 * 1024,
+  resolveCalls: 1000,
+  aiCredits: 100000,
+  writes: 1000,
+  seconds: 600,
+  dailyCredits: null,
+  monthlyCredits: 100000,
+};
+
+// Fixture files for an Automation card at `path` (`TEST_AUTOMATION_PATH`) that
+// declares `operations` (each type's operations by name) and `caps`, with a
+// script beside it. The card adopts from the catalog's Automation card, so a
+// module using it calls `setupCatalogTestSubset(hooks)`. A run of it is made
+// with `createAutomationRunToken`'s `automation` option.
+export function automationFixture({
+  operations,
+  caps = {},
+  path = TEST_AUTOMATION_PATH,
+  triggers = [],
+}: {
+  operations: {
+    type: { module: string; name: string };
+    names: string[];
+  }[];
+  caps?: Partial<Record<keyof typeof ROOMY_AUTOMATION_CAPS, number | null>>;
+  // The card's triggers, as the card stores them (`kind`, `label`, and the
+  // fields for that kind).
+  triggers?: Record<string, unknown>[];
+  // Where the card goes, relative to the realm's root, for a realm that
+  // holds more than one.
+  path?: string;
+}): Record<string, string> {
+  let scriptName = `${path.split('/').pop()}-script.js`;
+  return {
+    [`${path}.json`]: JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Test automation' },
+          triggers,
+          operations: operations.flatMap(({ type, names }) =>
+            names.map((operation) => ({
+              targetType: { module: type.module, name: type.name },
+              operation,
+            })),
+          ),
+          caps: { ...ROOMY_AUTOMATION_CAPS, ...caps },
+          params: [],
+        },
+        relationships: {
+          script: { links: { self: `./${scriptName}` } },
+        },
+        meta: { adoptsFrom: automationRef },
+      },
+    }),
+    [`${path}-script.js`]: 'export default async function () {}\n',
+  };
+}
+
+// The run token of a new run of an automation in `realm`, acting as
+// `actsAs`: what an automation run's calls carry. The run is started by
+// `attempt` and is running, so the token is admitted until the run's row
+// changes or `timeLimitSeconds` pass. `automation` is the automation card's
+// path in the realm (`TEST_AUTOMATION_PATH` for `automationFixture`'s);
+// without it the run is of a card that doesn't exist, so it declares
+// nothing.
+export async function createAutomationRunToken(
+  dbAdapter: DBAdapter,
+  realm: Realm,
+  actsAs: string,
+  {
+    attempt = 1,
+    readRealms = [],
+    writesCap = 100,
+    timeLimitSeconds = 600,
+    automation,
+  }: {
+    attempt?: number;
+    readRealms?: string[];
+    writesCap?: number;
+    timeLimitSeconds?: number;
+    automation?: string;
+  } = {},
+): Promise<{ token: string; run: AutomationRun }> {
+  let created = await createAutomationRun(dbAdapter, {
+    automationId: rri(
+      `${realm.url}${automation ?? `Automation/test-${randomUUID()}`}`,
+    ),
+    realm: ri(realm.url),
+    trigger: 'test',
+    slot: randomUUID(),
+    actsAs,
+  });
+  let start = await startAutomationRunAttempt(dbAdapter, created.id, attempt);
+  if (start.kind !== 'run') {
+    throw new Error(`expected the test run to start, got ${start.kind}`);
+  }
+  let token = mintRunToken({
+    realmSecretSeed,
+    run: start.run,
+    realmURL: realm.url,
+    readRealms,
+    writesCap,
+    realmServerURL: realm.realmServerURL,
+    timeLimitSeconds,
+  });
+  return { token, run: start.run };
+}
+
 // Variant that builds a realm JWT from URL + seed instead of a Realm
 // instance. Useful when the realm hasn't been mounted yet (Phase 3 lazy
 // mount): the request that carries this JWT is the trigger that mounts
@@ -3969,3 +4138,15 @@ export function realmConfigCardJSON(
     },
   });
 }
+
+// What the test Matrix server says of each account an automation run's
+// admission asks about. An account not named here is usable; a test that
+// deactivates one sets it here and clears it when it's done.
+export const testAccountStandings = new Map<string, AccountStanding>();
+
+// The admission checks a test worker uses: account standings read from
+// `testAccountStandings` rather than the Matrix server, where the test users
+// have no accounts.
+export const testAutomationAdmissionChecks: AutomationAdmissionChecks = {
+  accountStanding: async (user) => testAccountStandings.get(user) ?? 'usable',
+};

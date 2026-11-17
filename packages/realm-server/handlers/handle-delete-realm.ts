@@ -51,6 +51,7 @@ export default function handleDeleteRealm({
   matrixClient,
   realmsRootPath,
   sendEvent,
+  serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -102,9 +103,9 @@ export default function handleDeleteRealm({
       // does the unmount on every instance after the registry DELETE +
       // NOTIFY.
       let sourceRow = (await query(dbAdapter, [
-        `SELECT disk_id, kind FROM realm_registry WHERE url =`,
+        `SELECT id, disk_id, kind FROM realm_registry WHERE url =`,
         param(realmURL),
-      ])) as { disk_id: string; kind: string }[];
+      ])) as { id: string; disk_id: string; kind: string }[];
       if (sourceRow.length === 0) {
         await sendResponseForNotFound(ctxt, `Realm not found: ${realmURL}`);
         return;
@@ -139,7 +140,13 @@ export default function handleDeleteRealm({
       let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
       let { user: ownerUserId } = token;
       if (
-        !isRealmAdministrator(permissions, ownerUserId, matrixClient.serverName)
+        !isRealmAdministrator(
+          permissions,
+          ownerUserId,
+          matrixClient.serverName,
+          parsedRealmURL,
+          new URL(serverURL),
+        )
       ) {
         await sendResponseForForbiddenRequest(
           ctxt,
@@ -196,9 +203,9 @@ export default function handleDeleteRealm({
           });
         }
 
-        // Source realm's registry row.
-        await deleteRegistryRowByUrl(dbAdapter, realmURL, txQuerier);
-
+        // The realm's site-name claims, found by its registry id. They are
+        // marked removed before the registry row goes, because deleting the
+        // row clears their realm id.
         let { nameExpressions, valueExpressions } = asExpressions({
           removed_at: Math.floor(Date.now() / 1000),
         });
@@ -209,10 +216,13 @@ export default function handleDeleteRealm({
             nameExpressions,
             valueExpressions,
           ),
-          ` WHERE source_realm_url = `,
-          param(realmURL),
+          ` WHERE realm_id = `,
+          param(sourceRow[0].id),
           ` AND removed_at IS NULL`,
         ]);
+
+        // Source realm's registry row.
+        await deleteRegistryRowByUrl(dbAdapter, realmURL, txQuerier);
 
         // Server-issued unlisted-link slug for this realm. Hard-delete it so a
         // realm later recreated at the same endpoint can't reuse the old

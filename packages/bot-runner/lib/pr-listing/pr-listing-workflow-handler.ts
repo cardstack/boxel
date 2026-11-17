@@ -1,5 +1,6 @@
 import {
   isPrefixForm,
+  isSubmissionBranchName,
   logger,
   resolveRRIReference,
   toBranchName,
@@ -17,6 +18,7 @@ import type {
   EnqueueRunCommandFn,
 } from '../command-runner.ts';
 import type { GitHubClient } from '../github.ts';
+import { SubmissionRejectedError } from '../submission-rejected-error.ts';
 
 export type LintSubmissionFilesFn = (
   files: SubmissionFile[],
@@ -152,9 +154,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     let workflowCardRealm = optionalString(input.workflowCardRealm) ?? realmURL;
     // Prefer the trigger's explicit branchName so PrCard, GitHub commit,
     // and the persisted card attribute all use the exact same string.
-    let branchName =
+    let branchName = requireSubmissionBranchName(
       optionalString(input.branchName) ??
-      toBranchName(listingName ?? 'UntitledListing');
+        toBranchName(listingName ?? 'UntitledListing'),
+    );
 
     return {
       runAs,
@@ -217,9 +220,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     let listingName =
       optionalString(attrs.listingName) ??
       stripSubmitPrefix(optionalString(attrs.title));
-    let branchName =
+    let branchName = requireSubmissionBranchName(
       optionalString(attrs.branchName) ??
-      toBranchName(listingName ?? 'UntitledListing');
+        toBranchName(listingName ?? 'UntitledListing'),
+    );
     let rawPrCardSelf = optionalString(rels.prCard?.links?.self);
     let existingPrCardUrl = rawPrCardSelf
       ? requireCardId(
@@ -365,17 +369,26 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     }
 
     if (!outcome.passed) {
-      log.error('pr-listing-create: lint found unfixable errors', {
-        errorCount: outcome.lintErrors.length,
-      });
+      log[outcome.lintRanOutOfMemory ? 'error' : 'warn'](
+        'pr-listing-create: lint found unfixable errors',
+        {
+          errorCount: outcome.lintErrors.length,
+          lintRanOutOfMemory: outcome.lintRanOutOfMemory,
+        },
+      );
       await this.patchWorkflowCard(ctx, {
         attributes: { lintStatus: 'failed', lintErrors: outcome.lintErrors },
       });
       // The individual errors are already persisted in lintErrors above;
       // keep the thrown message short so prCreationError doesn't repeat them.
-      throw new Error(
-        `Lint failed with ${outcome.lintErrors.length} unfixable error(s)`,
-      );
+      let message = `Lint failed with ${outcome.lintErrors.length} unfixable error(s)`;
+      // An out-of-memory lint thread is a fault in the lint worker, so it is
+      // reported. Otherwise the errors are in the user's code, and the
+      // submission is rejected.
+      if (outcome.lintRanOutOfMemory) {
+        throw new Error(message);
+      }
+      throw new SubmissionRejectedError(message);
     }
 
     log.info('pr-listing-create: lint passed', {
@@ -453,6 +466,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     );
     await this.createListingPRHandler.addContentsToCommit(
       ctx.syntheticCreateEvent,
+      ctx.runAs,
       prCardData.textFiles.map((f) => ({
         path: f.filename,
         content: f.contents,
@@ -704,6 +718,15 @@ function requireCardId(
 function sameCardId(a: string, b: string): boolean {
   let strip = (id: string) => id.replace(/\.json$/, '');
   return strip(a) === strip(b);
+}
+
+// The branch name is also the folder the submission's files land in, and the
+// caller supplies it, so it has to be one `toBranchName` could have made.
+function requireSubmissionBranchName(branchName: string): string {
+  if (!isSubmissionBranchName(branchName)) {
+    throw new Error(`'${branchName}' is not a submission branch name`);
+  }
+  return branchName;
 }
 
 function optionalString(value: unknown): string | null {

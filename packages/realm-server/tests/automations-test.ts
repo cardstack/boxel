@@ -2,23 +2,33 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
+  claimAutomationRunCommit,
   createAutomationRun,
+  dbAdapterQuerier,
+  finishAutomationRun,
   getAutomationRun,
   insertPermissions,
   internalKeyFor,
   ri,
   rri,
+  recordAutomationRunCommitted,
   startAutomationRunAttempt,
   VirtualNetwork,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import {
+  cancelAutomationRunFor,
   capsRaisedAbove,
   checkAutomationCaps,
   checkAutomationPayer,
   getAutomation,
+  pauseAfterRepeatedFailures,
   pauseAutomation,
+  pauseForPayerLostAccess,
+  PLATFORM_FAILURE_REASONS,
+  SPENDING_REFUSAL_REASONS,
   pauseRealmAutomations,
+  readAutomationFailures,
   removeAutomation,
   resumeAutomation,
   switchOnAutomation,
@@ -30,13 +40,22 @@ import {
 } from '@cardstack/runtime-common/automations';
 import {
   automationRef,
+  MANUAL_RUN_TRIGGER,
   type AutomationCaps,
   type AutomationDeclaration,
   type AutomationIndexEntry,
 } from '@cardstack/runtime-common/automation-declaration';
+import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
+import {
+  countRunCall,
+  endRunAtCap,
+} from '@cardstack/runtime-common/automation-run-limits';
+import type { ReportRunChange } from '@cardstack/runtime-common';
+import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
 import type { DefinitionLookup } from '@cardstack/runtime-common';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
+import type { ChangedAutomation } from '@cardstack/runtime-common/automation-change-events';
 import { createVirtualNetwork, setupDB } from './helpers/index.ts';
 import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
 
@@ -100,6 +119,45 @@ function runCounts(automation: AutomationRow) {
   );
 }
 
+// The adapter as `PgAdapter.withTransaction` behaves when the database
+// aborts a transaction (a deadlock or a serialization failure): its first
+// transaction runs the whole callback and is rolled back, and the callback
+// runs again in a new one.
+function rollsBackFirstTransaction(db: DBAdapter): DBAdapter {
+  class RolledBack extends Error {}
+  let rolledBack = false;
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop === 'withTransaction') {
+        return async (
+          change: Parameters<DBAdapter['withTransaction']>[0],
+          ...rest: unknown[]
+        ) => {
+          if (!rolledBack) {
+            rolledBack = true;
+            try {
+              await (target.withTransaction as any)(
+                async (txQuery: unknown) => {
+                  await (change as any)(txQuery);
+                  throw new RolledBack();
+                },
+                ...rest,
+              );
+            } catch (e) {
+              if (!(e instanceof RolledBack)) {
+                throw e;
+              }
+            }
+          }
+          return await (target.withTransaction as any)(change, ...rest);
+        };
+      }
+      let value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 module(basename(import.meta.filename), function () {
   module('the automation row', function (hooks) {
     let dbAdapter: DBAdapter;
@@ -145,6 +203,602 @@ module(basename(import.meta.filename), function () {
         actsAs: OWNER,
       });
     }
+
+    async function overlayPaths(runId: string): Promise<string[]> {
+      let rows = (await dbAdapter.execute(
+        `SELECT path FROM run_overlay_files WHERE run_id = '${runId}' ORDER BY path`,
+      )) as { path: string }[];
+      return rows.map(({ path }) => path);
+    }
+
+    module('pause after repeated failures', function () {
+      let slotCount = 0;
+
+      // A run of the automation that has ended: `error` with `reason`, or
+      // `complete`. Each ends in its own transaction, so later runs finish
+      // later.
+      async function endedRun(
+        outcome: 'complete' | 'error' | 'canceled',
+        {
+          reason = 'script-error',
+          message = 'Error: upstream said no',
+          trigger = 'daily',
+          dryRun = false,
+        }: {
+          reason?: string;
+          message?: string;
+          trigger?: string;
+          dryRun?: boolean;
+        } = {},
+      ) {
+        let run = await createAutomationRun(dbAdapter, {
+          automationId: AUTOMATION,
+          realm: REALM,
+          trigger,
+          slot: `slot-${++slotCount}`,
+          actsAs: OWNER,
+          dryRun,
+        });
+        await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        if (outcome === 'canceled') {
+          await cancelAutomationRunFor(
+            dbAdapter,
+            { runId: run.id, user: OWNER },
+            options,
+          );
+        } else {
+          await finishAutomationRun(
+            dbAdapter,
+            run.id,
+            1,
+            outcome === 'complete'
+              ? { state: 'complete' }
+              : { state: 'error', reason, message },
+          );
+        }
+        return run;
+      }
+
+      async function failures() {
+        return await readAutomationFailures(
+          dbAdapterQuerier(dbAdapter),
+          AUTOMATION,
+        );
+      }
+
+      async function failTimes(n: number) {
+        let last;
+        for (let i = 0; i < n; i++) {
+          last = await endedRun('error');
+          await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION);
+        }
+        return last!;
+      }
+
+      test('the pause reports the automation and the pending run it cancels once each, after it commits', async function (assert) {
+        await switchOn();
+        await failTimes(1);
+        let pending = await pendingRun('2026-11-12T11:30:00.000Z');
+        // Each report with what the rows hold when it arrives: a report made
+        // inside the pause's transaction would still see them as they were.
+        let reports: string[] = [];
+        let result = await pauseAfterRepeatedFailures(
+          rollsBackFirstTransaction(dbAdapter),
+          AUTOMATION,
+          { failuresBeforePause: 1 },
+          {
+            reportAutomationChange: async ({ automationId, realm }) => {
+              let automation = await getAutomation(dbAdapter, automationId);
+              reports.push(
+                `automation ${automationId} in ${realm} ${automation?.state}`,
+              );
+            },
+            reportRunChange: async (runId) => {
+              let run = await getAutomationRun(dbAdapter, runId);
+              reports.push(`run ${runId} ${run?.state}`);
+            },
+          },
+        );
+        assert.true(result?.paused);
+        assert.deepEqual(
+          [...reports].sort(),
+          [
+            `automation ${AUTOMATION} in ${REALM} paused`,
+            `run ${pending.id} canceled`,
+          ].sort(),
+          'the paused automation and the canceled run are each reported once, even when the transaction is retried',
+        );
+      });
+
+      test('five failed runs in a row pause the automation with repeated-failures, and the streak names the last error', async function (assert) {
+        await switchOn();
+        await failTimes(4);
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.state,
+          'active',
+          'four failures in a row leave the automation running',
+        );
+        let pending = await pendingRun('2026-11-12T11:30:00.000Z');
+        let fifth = await endedRun('error', {
+          reason: 'timed-out',
+          message: 'The run reached its time limit',
+        });
+        let result = await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION);
+        assert.true(result?.paused, 'this call paused it');
+        let automation = result?.automation;
+        assert.strictEqual(automation?.state, 'paused');
+        assert.strictEqual(automation?.pauseReason, 'repeated-failures');
+        assert.strictEqual(automation?.pausedBy, null);
+        let streak = await failures();
+        assert.strictEqual(streak.inARow, 5);
+        assert.strictEqual(streak.last?.runId, fifth.id);
+        assert.strictEqual(streak.last?.reason, 'timed-out');
+        assert.strictEqual(
+          streak.last?.message,
+          'The run reached its time limit',
+        );
+        let canceled = await getAutomationRun(dbAdapter, pending.id);
+        assert.strictEqual(
+          canceled?.state,
+          'canceled',
+          'the pause cancels the pending run',
+        );
+        assert.strictEqual(canceled?.errorReason, 'repeated-failures');
+      });
+
+      test('a complete run in between resets the streak', async function (assert) {
+        await switchOn();
+        await failTimes(4);
+        await endedRun('complete');
+        assert.deepEqual(await failures(), { inARow: 0, last: null });
+        await failTimes(4);
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.state,
+          'active',
+        );
+        assert.strictEqual((await failures()).inARow, 4);
+        await failTimes(1);
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.pauseReason,
+          'repeated-failures',
+        );
+      });
+
+      test('resuming clears the streak', async function (assert) {
+        await switchOn();
+        await failTimes(5);
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.pauseReason,
+          'repeated-failures',
+        );
+        let resumed = await resumeAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: ADMIN, declaration: declaration() },
+          options,
+        );
+        assert.true(resumed.ok);
+        assert.deepEqual(await failures(), { inARow: 0, last: null });
+        await failTimes(4);
+        let automation = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(automation?.state, 'active');
+        assert.strictEqual(automation?.payer, ADMIN);
+        await failTimes(1);
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.pauseReason,
+          'repeated-failures',
+          'five new failures after the resume pause it again',
+        );
+      });
+
+      test("a Preview, a Run now, a canceled run, a run refused for the payer's spending and a run the platform failed neither extend nor break the streak", async function (assert) {
+        await switchOn();
+        await failTimes(3);
+        await endedRun('error', { trigger: MANUAL_RUN_TRIGGER });
+        await endedRun('error', { trigger: MANUAL_RUN_TRIGGER, dryRun: true });
+        await endedRun('complete', { trigger: MANUAL_RUN_TRIGGER });
+        await endedRun('complete', {
+          trigger: MANUAL_RUN_TRIGGER,
+          dryRun: true,
+        });
+        await endedRun('canceled');
+        for (let reason of [
+          ...SPENDING_REFUSAL_REASONS,
+          ...PLATFORM_FAILURE_REASONS,
+        ]) {
+          await endedRun('error', { reason });
+        }
+        await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION);
+        assert.strictEqual((await failures()).inARow, 3);
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.state,
+          'active',
+        );
+      });
+
+      test('a run recorded as an error whose commit lands after all ends the streak', async function (assert) {
+        await switchOn();
+        await failTimes(3);
+        let run = await createAutomationRun(dbAdapter, {
+          automationId: AUTOMATION,
+          realm: REALM,
+          trigger: 'daily',
+          slot: 'late-commit',
+          actsAs: OWNER,
+        });
+        await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        await claimAutomationRunCommit(dbAdapter, run.id, 1);
+        // The realm refused the commit with a code of its own, which the
+        // streak counts, and then the batch landed after all.
+        await finishAutomationRun(dbAdapter, run.id, 1, {
+          state: 'error',
+          reason: 'overlay-changed',
+        });
+        assert.strictEqual((await failures()).inARow, 4);
+        await recordAutomationRunCommitted(dbAdapter, run.id);
+        assert.deepEqual(await failures(), { inARow: 0, last: null });
+      });
+
+      test('the number of failures that pause an automation is configurable', async function (assert) {
+        await switchOn();
+        await endedRun('error');
+        await endedRun('error');
+        assert.strictEqual(
+          (await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION))?.automation
+            .state,
+          'active',
+          'two failures are under the default',
+        );
+        let result = await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION, {
+          failuresBeforePause: 2,
+        });
+        assert.strictEqual(result?.automation.pauseReason, 'repeated-failures');
+      });
+
+      test('an automation already paused keeps its reason, and one not switched on is left alone', async function (assert) {
+        assert.strictEqual(
+          await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION),
+          undefined,
+        );
+        await switchOn();
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        await failTimes(5);
+        let automation = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(automation?.pauseReason, 'requested');
+        assert.strictEqual(automation?.pausedBy, OWNER);
+        assert.false(
+          (await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION))?.paused,
+        );
+      });
+
+      test('an automation that is done has no runs left to stop, and stays done', async function (assert) {
+        await switchOn();
+        await dbAdapter.execute(
+          `UPDATE automations SET state = 'done', next_run = NULL`,
+        );
+        await failTimes(5);
+        let automation = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(automation?.state, 'done');
+        assert.strictEqual(automation?.pauseReason, null);
+        assert.strictEqual((await failures()).inARow, 5);
+      });
+
+      test('an automation waiting for credits pauses after repeated failures too', async function (assert) {
+        await switchOn();
+        await dbAdapter.execute(
+          `UPDATE automations SET state = 'waiting-for-credits'`,
+        );
+        await failTimes(5);
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.pauseReason,
+          'repeated-failures',
+        );
+      });
+    });
+
+    module('cancel a run', function () {
+      test('a direct writer cancels a running run: its row records who, and what it staged is discarded', async function (assert) {
+        await switchOn();
+        let run = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        await stageRunOverlayFile(
+          dbAdapter,
+          { runId: run.id, attempt: 1 },
+          'staged.json',
+          new TextEncoder().encode('{}'),
+          10,
+        );
+
+        let result = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: ADMIN },
+          options,
+        );
+        assert.true(result.ok);
+        let canceled = (result as { run: { state: string } }).run;
+        assert.strictEqual(canceled.state, 'canceled');
+        let row = await getAutomationRun(dbAdapter, run.id);
+        assert.strictEqual(row?.state, 'canceled');
+        assert.strictEqual(row?.canceledBy, ADMIN);
+        assert.notStrictEqual(row?.finishedAt, null);
+        assert.deepEqual(await overlayPaths(run.id), []);
+        assert.deepEqual(
+          (await readRunLog(dbAdapter, run.id))?.lines.map(
+            ({ kind, message }) => ({
+              kind,
+              message,
+            }),
+          ),
+          [{ kind: 'finish', message: `The run was canceled by ${ADMIN}` }],
+        );
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.state,
+          'active',
+          'canceling a run leaves the automation as it was',
+        );
+      });
+
+      test('a direct writer cancels a pending run, which then never starts', async function (assert) {
+        await switchOn();
+        let run = await pendingRun();
+        let result = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: OWNER },
+          options,
+        );
+        assert.true(result.ok);
+        assert.strictEqual(
+          (await startAutomationRunAttempt(dbAdapter, run.id, 1)).kind,
+          'over',
+        );
+      });
+
+      test("someone who is not a direct writer of the run's realm cannot cancel it", async function (assert) {
+        await switchOn();
+        await insertPermissions(
+          dbAdapter,
+          new URL('http://127.0.0.1:4444/marketing/'),
+          { '@outsider:localhost': ['read', 'write'] },
+        );
+        let run = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        for (let user of [READER, '@outsider:localhost']) {
+          assert.deepEqual(
+            await cancelAutomationRunFor(
+              dbAdapter,
+              { runId: run.id, user },
+              options,
+            ),
+            { ok: false, reason: 'not-a-direct-writer' },
+            `${user} is refused`,
+          );
+        }
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, run.id))?.state,
+          'running',
+        );
+      });
+
+      test('a run whose commit was claimed, or that ended, cannot be canceled', async function (assert) {
+        await switchOn();
+        let committing = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, committing.id, 1);
+        await claimAutomationRunCommit(dbAdapter, committing.id, 1);
+        let result = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: committing.id, user: OWNER },
+          options,
+        );
+        assert.false(result.ok);
+        assert.strictEqual(
+          (result as { reason: string }).reason,
+          'not-cancelable',
+        );
+        assert.strictEqual(
+          (result as { run: { state: string } }).run.state,
+          'running',
+          'the refusal answers the run as it stands',
+        );
+
+        let pending = await pendingRun();
+        await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: pending.id, user: OWNER },
+          options,
+        );
+        let again = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: pending.id, user: ADMIN },
+          options,
+        );
+        assert.strictEqual(
+          (again as { reason: string }).reason,
+          'not-cancelable',
+        );
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, pending.id))?.canceledBy,
+          OWNER,
+          'the first cancel keeps who canceled it',
+        );
+      });
+
+      test('canceling a run that does not exist finds nothing', async function (assert) {
+        assert.deepEqual(
+          await cancelAutomationRunFor(
+            dbAdapter,
+            { runId: '00000000-0000-0000-0000-000000000000', user: OWNER },
+            options,
+          ),
+          { ok: false, reason: 'missing' },
+        );
+      });
+    });
+
+    module('reporting run changes', function () {
+      // A reporter that records, for each report, the run's state as its row
+      // holds it when the report arrives: a report made inside the change's
+      // transaction would still see the run as it was before.
+      function recordingReporter() {
+        let reports: { runId: string; state: string | undefined }[] = [];
+        let report: ReportRunChange = async (runId) => {
+          reports.push({
+            runId,
+            state: (await getAutomationRun(dbAdapter, runId))?.state,
+          });
+        };
+        return { reports, report };
+      }
+
+      test('a pause reports each run it cancels once, after it commits, and not a run left to finish', async function (assert) {
+        await switchOn();
+        let pending = await pendingRun();
+        let running = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, running.id, 1);
+        let committing = await pendingRun('2026-11-09T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, committing.id, 1);
+        await claimAutomationRunCommit(dbAdapter, committing.id, 1);
+
+        let { reports, report } = recordingReporter();
+        let result = await pauseAutomation(
+          rollsBackFirstTransaction(dbAdapter),
+          { automationId: AUTOMATION, user: ADMIN },
+          { ...options, reportRunChange: report },
+        );
+        assert.true(result.ok);
+        assert.deepEqual(
+          [...reports].sort((a, b) => a.runId.localeCompare(b.runId)),
+          [
+            { runId: pending.id, state: 'canceled' },
+            { runId: running.id, state: 'canceled' },
+          ].sort((a, b) => a.runId.localeCompare(b.runId)),
+          'each canceled run is reported once, as canceled, even when the transaction is retried; the run whose commit was claimed is not',
+        );
+      });
+
+      test('removing an automation and checks that pause it report the runs they cancel', async function (assert) {
+        await switchOn();
+        let removed = await pendingRun();
+        let { reports, report } = recordingReporter();
+        await removeAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: ADMIN },
+          { ...options, reportRunChange: report },
+        );
+        assert.deepEqual(reports, [{ runId: removed.id, state: 'canceled' }]);
+
+        await switchOn();
+        let pausedForPayer = await pendingRun('2026-11-12T11:30:00.000Z');
+        reports.length = 0;
+        await pauseForPayerLostAccess(dbAdapter, AUTOMATION, OWNER, {
+          reportRunChange: report,
+        });
+        assert.deepEqual(
+          reports,
+          [{ runId: pausedForPayer.id, state: 'canceled' }],
+          "a pause for the payer's lost access reports",
+        );
+
+        await resumeAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            user: OWNER,
+            declaration: declaration(),
+          },
+          options,
+        );
+        let pausedForRealm = await pendingRun('2026-11-13T11:30:00.000Z');
+        reports.length = 0;
+        await pauseRealmAutomations(dbAdapter, REALM, {
+          reportRunChange: report,
+        });
+        assert.deepEqual(
+          reports,
+          [{ runId: pausedForRealm.id, state: 'canceled' }],
+          "pausing the realm's automations reports",
+        );
+      });
+
+      test("a person's cancel reports the run once, and a refused cancel reports nothing", async function (assert) {
+        await switchOn();
+        let run = await pendingRun();
+        let { reports, report } = recordingReporter();
+        let refused = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: READER },
+          { ...options, reportRunChange: report },
+        );
+        assert.false(refused.ok);
+        assert.deepEqual(reports, [], 'a refused cancel reports nothing');
+
+        let result = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: ADMIN },
+          { ...options, reportRunChange: report },
+        );
+        assert.true(result.ok);
+        assert.deepEqual(reports, [{ runId: run.id, state: 'canceled' }]);
+
+        let again = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: ADMIN },
+          { ...options, reportRunChange: report },
+        );
+        assert.false(again.ok);
+        assert.strictEqual(
+          reports.length,
+          1,
+          'canceling a run that has ended reports nothing more',
+        );
+      });
+
+      test('a run ended at a cap is reported once, and a run that already ended is not', async function (assert) {
+        await switchOn();
+        let run = await pendingRun();
+        await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        let limited = { runId: run.id, attempt: 1, automationId: AUTOMATION };
+        let { reports, report } = recordingReporter();
+
+        await endRunAtCap(dbAdapter, limited, 'writes', report);
+        assert.deepEqual(reports, [{ runId: run.id, state: 'error' }]);
+
+        await endRunAtCap(dbAdapter, limited, 'writes', report);
+        assert.strictEqual(
+          reports.length,
+          1,
+          'ending a run that already ended reports nothing',
+        );
+
+        let counted = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, counted.id, 1);
+        reports.length = 0;
+        let within = await countRunCall(
+          dbAdapter,
+          { runId: counted.id, attempt: 1, automationId: AUTOMATION },
+          'callApiCalls',
+          1,
+          report,
+        );
+        assert.true(within.ok);
+        assert.deepEqual(reports, [], 'a call within the cap reports nothing');
+        let past = await countRunCall(
+          dbAdapter,
+          { runId: counted.id, attempt: 1, automationId: AUTOMATION },
+          'callApiCalls',
+          1,
+          report,
+        );
+        assert.false(past.ok);
+        assert.deepEqual(
+          reports,
+          [{ runId: counted.id, state: 'error' }],
+          'the call past the cap ends the run and reports it once',
+        );
+      });
+    });
 
     module('switch-on', function () {
       test('a direct writer switches an automation on and becomes its payer, with its caps snapshotted', async function (assert) {
@@ -367,11 +1021,18 @@ module(basename(import.meta.filename), function () {
     });
 
     module('pause', function () {
-      test('a direct writer pauses an automation, which cancels its pending run and leaves a running one', async function (assert) {
+      test('a direct writer pauses an automation, which cancels its pending run and its running one', async function (assert) {
         await switchOn();
         let pending = await pendingRun();
         let running = await pendingRun('2026-11-10T11:30:00.000Z');
         await startAutomationRunAttempt(dbAdapter, running.id, 1);
+        await stageRunOverlayFile(
+          dbAdapter,
+          { runId: running.id, attempt: 1 },
+          'staged.json',
+          new TextEncoder().encode('{}'),
+          10,
+        );
 
         let result = await pauseAutomation(
           dbAdapter,
@@ -388,8 +1049,55 @@ module(basename(import.meta.filename), function () {
         let canceled = await getAutomationRun(dbAdapter, pending.id);
         assert.strictEqual(canceled?.state, 'canceled');
         assert.strictEqual(canceled?.canceledBy, ADMIN);
+        let stopped = await getAutomationRun(dbAdapter, running.id);
+        assert.strictEqual(stopped?.state, 'canceled', 'the running run stops');
+        assert.strictEqual(stopped?.canceledBy, ADMIN);
+        assert.deepEqual(
+          await overlayPaths(running.id),
+          [],
+          'what the running run staged is discarded',
+        );
+        let log = await readRunLog(dbAdapter, running.id);
+        assert.deepEqual(
+          log?.lines.map(({ kind, message }) => ({ kind, message })),
+          [{ kind: 'finish', message: `The run was canceled by ${ADMIN}` }],
+          'its log ends with who canceled it',
+        );
+      });
+
+      test('a pause the database rolls back and retries logs each canceled run once', async function (assert) {
+        await switchOn();
+        let running = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, running.id, 1);
+
+        let result = await pauseAutomation(
+          rollsBackFirstTransaction(dbAdapter),
+          { automationId: AUTOMATION, user: ADMIN },
+          options,
+        );
+        assert.true(result.ok);
+        assert.deepEqual(
+          (await readRunLog(dbAdapter, running.id))?.lines.map(
+            ({ kind, message }) => ({ kind, message }),
+          ),
+          [{ kind: 'finish', message: `The run was canceled by ${ADMIN}` }],
+          'the rolled-back attempt adds no line of its own',
+        );
+      });
+
+      test('a running run whose commit was claimed is left to finish', async function (assert) {
+        await switchOn();
+        let committing = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, committing.id, 1);
+        await claimAutomationRunCommit(dbAdapter, committing.id, 1);
+
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: ADMIN },
+          options,
+        );
         assert.strictEqual(
-          (await getAutomationRun(dbAdapter, running.id))?.state,
+          (await getAutomationRun(dbAdapter, committing.id))?.state,
           'running',
         );
       });
@@ -536,9 +1244,11 @@ module(basename(import.meta.filename), function () {
     });
 
     module('remove', function () {
-      test('a direct writer removes an automation, which deletes its row and cancels its pending run', async function (assert) {
+      test('a direct writer removes an automation, which deletes its row and cancels its pending and running runs', async function (assert) {
         let automation = await switchOn();
         let pending = await pendingRun();
+        let running = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, running.id, 1);
         let result = await removeAutomation(
           dbAdapter,
           { automationId: AUTOMATION, user: ADMIN },
@@ -549,9 +1259,11 @@ module(basename(import.meta.filename), function () {
           await getAutomation(dbAdapter, AUTOMATION),
           undefined,
         );
-        let canceled = await getAutomationRun(dbAdapter, pending.id);
-        assert.strictEqual(canceled?.state, 'canceled');
-        assert.strictEqual(canceled?.canceledBy, ADMIN);
+        for (let run of [pending, running]) {
+          let canceled = await getAutomationRun(dbAdapter, run.id);
+          assert.strictEqual(canceled?.state, 'canceled');
+          assert.strictEqual(canceled?.canceledBy, ADMIN);
+        }
 
         let again = await removeAutomation(
           dbAdapter,
@@ -620,9 +1332,11 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('raising a run cap pauses the automation, cancels its pending run, and keeps the payer', async function (assert) {
+      test('raising a run cap pauses the automation, cancels its pending and running runs, and keeps the payer', async function (assert) {
         await switchOn();
         let pending = await pendingRun();
+        let running = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, running.id, 1);
         let automation = await checkAutomationCaps(dbAdapter, AUTOMATION, {
           caps: { ...CAPS, writes: CAPS.writes + 1 },
           batchedAI: false,
@@ -635,6 +1349,17 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(canceled?.state, 'canceled');
         assert.strictEqual(canceled?.canceledBy, null);
         assert.strictEqual(canceled?.errorReason, 'caps-raised');
+        let stopped = await getAutomationRun(dbAdapter, running.id);
+        assert.strictEqual(stopped?.state, 'canceled');
+        assert.strictEqual(stopped?.canceledBy, null);
+        assert.strictEqual(stopped?.errorReason, 'caps-raised');
+        assert.deepEqual(
+          (await readRunLog(dbAdapter, running.id))?.lines.map(
+            ({ kind, message }) => ({ kind, message }),
+          ),
+          [{ kind: 'finish', message: 'The run was canceled (caps-raised)' }],
+          'its log ends with the pause that canceled it',
+        );
       });
 
       test('unsetting a credit cap the snapshot set is a raise', async function (assert) {
@@ -881,6 +1606,94 @@ module(basename(import.meta.filename), function () {
           )}'::jsonb)`,
         );
       }
+
+      test('a sync reports the automation when it removes, pauses, or moves it between active and done, and nothing else', async function (assert) {
+        await switchOn(
+          OWNER,
+          declaration({
+            triggers: [
+              {
+                kind: 'cron',
+                label: 'daily',
+                expression: '30 5 * * *',
+                timeZone: 'America/Chicago',
+                count: 3,
+              },
+            ],
+          }),
+        );
+        let reported: string[] = [];
+        let syncReporting = async (
+          card: AutomationCardSource | undefined,
+          now = NOW,
+        ) => {
+          let before = reported.length;
+          let result = await syncAutomationWithCard(
+            dbAdapter,
+            AUTOMATION,
+            async () => card,
+            {
+              automationTypeKey: automationTypeKey(),
+              virtualNetwork: options.virtualNetwork,
+              now,
+              reportAutomationChange: async ({ automationId }) => {
+                reported.push(automationId);
+              },
+            },
+          );
+          return { kind: result?.kind, reports: reported.length - before };
+        };
+
+        assert.deepEqual(
+          await syncReporting(
+            indexed({ triggers: [cronTrigger({ count: 3 })] }),
+          ),
+          { kind: 'recomputed', reports: 0 },
+          'a sync that leaves the automation active reports nothing',
+        );
+        await setRuns('daily', 3, NEXT_DAILY - 86400);
+        assert.deepEqual(
+          await syncReporting(
+            indexed({ triggers: [cronTrigger({ count: 3 })] }),
+          ),
+          { kind: 'recomputed', reports: 1 },
+          'a sync that makes it done reports it',
+        );
+        assert.deepEqual(
+          await syncReporting(
+            indexed({ triggers: [cronTrigger({ count: 5 })] }),
+            NOW + 86400,
+          ),
+          { kind: 'recomputed', reports: 1 },
+          'a sync that makes it active again reports it',
+        );
+        assert.deepEqual(
+          await syncReporting(
+            indexed({
+              triggers: [cronTrigger({ count: 5 })],
+              caps: { ...CAPS, aiCredits: CAPS.aiCredits + 1 },
+            }),
+          ),
+          { kind: 'paused', reports: 1 },
+          'a sync that pauses it reports it',
+        );
+        assert.deepEqual(
+          await syncReporting(indexed()),
+          { kind: 'unchanged', reports: 0 },
+          'a sync that leaves a paused automation as it was reports nothing',
+        );
+        assert.deepEqual(
+          await syncReporting(undefined),
+          { kind: 'removed', reports: 1 },
+          'a sync that removes it reports it',
+        );
+        assert.deepEqual(reported, [
+          AUTOMATION,
+          AUTOMATION,
+          AUTOMATION,
+          AUTOMATION,
+        ]);
+      });
 
       test('a card indexed unchanged keeps its next run', async function (assert) {
         await switchOn();
@@ -1156,14 +1969,23 @@ module(basename(import.meta.filename), function () {
           undefined,
         );
 
+        let reported: string[] = [];
         let touched = await syncAutomationsAfterIndex({
           dbAdapter,
           definitionLookup,
           virtualNetwork,
           realmURL: REALM_URL,
           touched: [`${AUTOMATION}.json`],
+          reportAutomationChange: async ({ automationId }) => {
+            reported.push(automationId);
+          },
         });
         assert.strictEqual(touched.get(AUTOMATION)?.kind, 'removed');
+        assert.deepEqual(
+          reported,
+          [AUTOMATION],
+          'the hook hands its reporter to the sync, which reports the removal',
+        );
         assert.strictEqual(
           await getAutomation(dbAdapter, AUTOMATION),
           undefined,
@@ -1262,6 +2084,193 @@ module(basename(import.meta.filename), function () {
           (await getAutomation(dbAdapter, other))?.state,
           'active',
         );
+      });
+    });
+
+    module('reporting what a change did', function (hooks) {
+      // Every report, in order: `automation` for an automation's row,
+      // `run` for a run.
+      let reports: string[];
+
+      hooks.beforeEach(function () {
+        reports = [];
+        options = {
+          ...options,
+          reportAutomationChange: async ({
+            automationId,
+            realm,
+          }: ChangedAutomation) => {
+            reports.push(`automation ${automationId} in ${realm}`);
+          },
+          reportRunChange: async (runId: string) => {
+            reports.push(`run ${runId}`);
+          },
+        };
+      });
+
+      const CHANGED = `automation ${AUTOMATION} in ${REALM}`;
+
+      test('switching on, pausing, resuming and removing each report the automation once it has committed', async function (assert) {
+        await switchOn();
+        assert.deepEqual(reports, [CHANGED], 'switch-on');
+
+        reports = [];
+        let run = await pendingRun();
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        assert.deepEqual(
+          reports,
+          [`run ${run.id}`, CHANGED],
+          'a pause reports the run it canceled, then the automation',
+        );
+
+        reports = [];
+        await resumeAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            user: ADMIN,
+            declaration: declaration(),
+          },
+          options,
+        );
+        assert.deepEqual(reports, [CHANGED], 'resume');
+
+        reports = [];
+        await removeAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        assert.deepEqual(reports, [CHANGED], 'remove');
+      });
+
+      test('a pause reports the automation even with no run to cancel', async function (assert) {
+        await switchOn();
+        reports = [];
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        assert.deepEqual(reports, [CHANGED]);
+      });
+
+      test('a refused change reports nothing', async function (assert) {
+        await switchOn();
+        reports = [];
+        let refusals = [
+          await switchOnAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              realm: REALM,
+              user: OWNER,
+              declaration: declaration(),
+            },
+            options,
+          ),
+          await pauseAutomation(
+            dbAdapter,
+            { automationId: AUTOMATION, user: READER },
+            options,
+          ),
+          await resumeAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              user: OWNER,
+              declaration: declaration(),
+            },
+            options,
+          ),
+          await removeAutomation(
+            dbAdapter,
+            { automationId: AUTOMATION, user: READER },
+            options,
+          ),
+        ];
+        assert.deepEqual(
+          refusals.map((r) => (r.ok ? 'ok' : r.reason)),
+          [
+            'already-switched-on',
+            'not-a-direct-writer',
+            'not-paused',
+            'not-a-direct-writer',
+          ],
+        );
+        assert.deepEqual(reports, []);
+      });
+
+      test('a pause the database rolls back and retries reports the automation once', async function (assert) {
+        await switchOn();
+        reports = [];
+        await pauseAutomation(
+          rollsBackFirstTransaction(dbAdapter),
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        assert.deepEqual(reports, [CHANGED]);
+      });
+
+      test('a pause no person asked for reports the automation, and a check that pauses nothing reports nothing', async function (assert) {
+        await switchOn();
+        reports = [];
+        await checkAutomationCaps(
+          dbAdapter,
+          AUTOMATION,
+          declaration(),
+          options,
+        );
+        assert.deepEqual(reports, [], 'caps kept: nothing changed');
+
+        await checkAutomationCaps(
+          dbAdapter,
+          AUTOMATION,
+          declaration({ caps: { ...CAPS, writes: CAPS.writes + 1 } }),
+          options,
+        );
+        assert.deepEqual(reports, [CHANGED], 'a raised cap pauses it');
+      });
+
+      test('the payer losing direct write reports the automation', async function (assert) {
+        await switchOn();
+        reports = [];
+        await insertPermissions(dbAdapter, new URL(REALM_URL), {
+          [OWNER]: ['read'],
+        });
+        await checkAutomationPayer(dbAdapter, AUTOMATION, options);
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.state,
+          'paused',
+        );
+        assert.deepEqual(reports, [CHANGED]);
+      });
+
+      test('archiving the realm reports each automation it pauses', async function (assert) {
+        await switchOn();
+        reports = [];
+        await pauseRealmAutomations(dbAdapter, REALM, options);
+        assert.deepEqual(reports, [CHANGED]);
+
+        reports = [];
+        await pauseRealmAutomations(dbAdapter, REALM, options);
+        assert.deepEqual(reports, [], 'one paused already is not reported');
+      });
+
+      test('canceling a run reports the run and not the automation', async function (assert) {
+        await switchOn();
+        let run = await pendingRun();
+        reports = [];
+        await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: OWNER },
+          options,
+        );
+        assert.deepEqual(reports, [`run ${run.id}`]);
       });
     });
   });

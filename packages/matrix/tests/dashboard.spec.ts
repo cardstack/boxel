@@ -1,17 +1,12 @@
 import { test, expect } from './fixtures.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
-import {
-  clearLocalStorage,
-  createRealm,
-  createSubscribedUserAndLogin,
-} from '../helpers/index.ts';
+import { createRealm, createSubscribedUserAndLogin } from '../helpers/index.ts';
 
 test.describe('Dashboard', () => {
   test('back button from a workspace returns to the dashboard', async ({
     page,
   }) => {
     const serverIndexUrl = new URL(appURL).origin;
-    await clearLocalStorage(page, serverIndexUrl);
     const realm1Name = 'realm1';
     let { username } = await createSubscribedUserAndLogin(
       page,

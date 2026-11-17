@@ -1,9 +1,9 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import {
   BLOB_MODE,
@@ -188,7 +188,7 @@ module('git objects', (hooks) => {
     assert.strictEqual(await fsck(gitDir), '');
   });
 
-  test('an object that exists is not written again', async (assert) => {
+  test('an object that exists is not written again, and its time is refreshed', async (assert) => {
     let { id, written } = await store.writeBlob('same bytes');
     assert.true(written);
     let before = await stat(store.pathOf(id));
@@ -197,9 +197,38 @@ module('git objects', (hooks) => {
     assert.strictEqual(again.id, id);
     assert.false(again.written);
     let after = await stat(store.pathOf(id));
-    assert.strictEqual(after.mtimeMs, before.mtimeMs, 'the file is untouched');
+    assert.strictEqual(after.ino, before.ino, 'the file is not replaced');
+    assert.true(
+      after.mtimeMs > before.mtimeMs,
+      "its modification time is refreshed, which git prune's expiry reads",
+    );
     assert.strictEqual(after.mode & 0o777, 0o444, 'objects are read-only');
   });
+
+  // Root can set the times of any file, so the test needs another user.
+  let unlessRoot = process.getuid?.() === 0 ? QUnit.skip : test;
+
+  unlessRoot(
+    "an object whose file's times can't be set is written again",
+    async (assert) => {
+      // The object's path links to a file another user owns, whose times the
+      // store's user can't set.
+      let id = hashObject('blob', blobBody('same bytes'));
+      await mkdir(dirname(store.pathOf(id)), { recursive: true });
+      await symlink('/etc/hosts', store.pathOf(id));
+
+      let { written } = await store.writeBlob('same bytes');
+      assert.true(written, 'a fresh copy is written');
+      assert.true(
+        (await lstat(store.pathOf(id))).isFile(),
+        'the copy takes the place of the link',
+      );
+      assert.strictEqual(
+        await git(gitDir, 'cat-file', 'blob', id),
+        'same bytes',
+      );
+    },
+  );
 
   test('names git refuses are refused', async (assert) => {
     let { id: blob } = await store.writeBlob('x');

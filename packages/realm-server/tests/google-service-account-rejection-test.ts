@@ -10,7 +10,14 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
-import { createJWT, setupPermissionedRealmCached } from './helpers/index.ts';
+import {
+  createAutomationRunToken,
+  createJWT,
+  setupPermissionedRealmCached,
+  automationFixture,
+  TEST_AUTOMATION_PATH,
+} from './helpers/index.ts';
+import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 import { configureOutbound, resetOutbound } from '../lib/outbound/client.ts';
@@ -32,6 +39,7 @@ import {
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
+import { configureCredentialRetryDelays } from '@cardstack/runtime-common/automation-run-limits';
 import { automationAdmission } from '../lib/key-bindings.ts';
 import {
   markKeyRejected,
@@ -120,6 +128,8 @@ const budgetCard: LooseSingleCardDocument = {
 };
 
 module(basename(import.meta.filename), function (hooks) {
+  setupCatalogTestSubset(hooks);
+
   let realm: Realm;
   let request: SuperTest<Test>;
   let dbAdapter: PgAdapter;
@@ -143,6 +153,9 @@ module(basename(import.meta.filename), function (hooks) {
       tokenEndpoint: TOKEN_ENDPOINT,
       retryDelaysMs: [1, 1],
     });
+    // What one call does with a failing token endpoint; a run asking again
+    // after a pause is the `oauth-connections` tests'.
+    configureCredentialRetryDelays([]);
     vendor.googleTokenAnswers.length = 0;
     vendor.googleTokensMinted.length = 0;
     vendor.googleTokenLifetime = 3600;
@@ -150,6 +163,7 @@ module(basename(import.meta.filename), function (hooks) {
     setKeyGrantSink((event) => events.push(event));
   });
   hooks.afterEach(function () {
+    configureCredentialRetryDelays();
     setKeyGrantSink(undefined);
     resetGoogleTokens();
     resetOutbound();
@@ -167,6 +181,9 @@ module(basename(import.meta.filename), function (hooks) {
     },
     fileSystem: {
       'sheet.gts': sheetModule,
+      ...automationFixture({
+        operations: [{ type: SHEET, names: ['values', 'files', 'shared'] }],
+      }),
       'budget.json': budgetCard,
     },
     onRealmSetup(args) {
@@ -270,7 +287,13 @@ module(basename(import.meta.filename), function (hooks) {
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${createJWT(realm, user, ['read', 'write'])}`,
+          Authorization: `Bearer ${
+            (
+              await createAutomationRunToken(dbAdapter, realm, user, {
+                automation: TEST_AUTOMATION_PATH,
+              })
+            ).token
+          }`,
         },
         body: JSON.stringify({
           'boxel:operations': [

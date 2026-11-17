@@ -417,6 +417,75 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(sentTo, ['!alice:localhost']);
   });
 
+  test("sends the content and recipients a delivery's refresh answers when the event is sent", async function (assert) {
+    await insertSessionFor('@alice:localhost', '!alice:localhost');
+    await insertSessionFor('@bob:localhost', '!bob:localhost');
+    await insertPermissions(dbAdapter, realmURL, {
+      '@alice:localhost': ['read', 'write'],
+      '@bob:localhost': ['read', 'write'],
+    });
+    await insertRealmEventRoom(dbAdapter, realmURL.href, '!events:localhost');
+
+    let sent: { roomId: string; content: any }[] = [];
+    let matrixClient = {
+      login: async () => undefined,
+      getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => `txn-${sent.length}`,
+      sendEvent: async (roomId: string, _type: string, content: unknown) => {
+        sent.push({ roomId, content });
+        return '$event';
+      },
+    } as unknown as MatrixClient;
+    let job = (state: string) =>
+      ({
+        eventName: 'job',
+        runId: 'run-1',
+        automation: `${realmURL.href}Automation/nightly`,
+        state,
+        step: null,
+        milestone: null,
+        realmURL: realmURL.href,
+      }) as RealmEventContent;
+
+    await new NodeAdapter('/tmp').broadcastRealmEvent(
+      job('pending'),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+      {
+        recipients: ['@alice:localhost', '@bob:localhost'],
+        refresh: async () => ({
+          event: job('running'),
+          recipients: ['@bob:localhost'],
+        }),
+      },
+    );
+    assert.deepEqual(
+      sent.map(({ roomId }) => roomId),
+      ['!bob:localhost'],
+      'only the recipients the refresh names receive it, and never the event room',
+    );
+    assert.strictEqual(
+      sent[0].content.state,
+      'running',
+      'with the content the refresh answers',
+    );
+
+    sent = [];
+    await new NodeAdapter('/tmp').broadcastRealmEvent(
+      job('pending'),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+      {
+        recipients: ['@alice:localhost'],
+        refresh: async () => undefined,
+      },
+    );
+    assert.deepEqual(sent, [], 'a refresh that answers nothing sends nothing');
+  });
+
   test("forgets a private realm's event room the realm server is no longer in", async function (assert) {
     await insertPermissions(dbAdapter, realmURL, {
       '@alice:localhost': ['read'],

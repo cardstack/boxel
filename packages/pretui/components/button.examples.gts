@@ -32,6 +32,30 @@ const ButtonBusyPublish: TemplateOnlyComponent = <template>
   </Row>
 </template>;
 
+const longName = btnSupplier + ' Wholesale Provisions and Trading';
+
+const ButtonLongLabel: TemplateOnlyComponent = <template>
+  <div class='lane'>
+    <Button @tone='neutral' @appearance='outlined' title={{longName}} class='who'>
+      <span class='who-name'>{{longName}}</span>
+    </Button>
+  </div>
+  <style scoped>
+    .lane {
+      inline-size: 11rem;
+    }
+    .who {
+      max-inline-size: 100%;
+    }
+    .who-name {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  </style>
+</template>;
+
 const ButtonRowActions: TemplateOnlyComponent = <template>
   <Row>
     <Button @tone='neutral' @appearance='plain' @size='xs'>Open</Button>
@@ -62,6 +86,11 @@ export const EXAMPLES_BUTTON: Record<string, ExampleSpec[]> = {
       title: 'Row actions at xs',
       note: 'Plain xs row as worn beside ' + btnSupplier + ' in the DataGrid.',
       component: ButtonRowActions,
+    },
+    {
+      title: 'Long label in a narrow lane',
+      note: 'The label shrinks to the button, so a child that sets its own ellipsis truncates instead of spilling past both edges.',
+      component: ButtonLongLabel,
     },
   ],
 };

@@ -10,9 +10,9 @@ import type {
   LinkShapePolicy,
 } from '@cardstack/runtime-common';
 import { DBRateLimitStore } from '@cardstack/runtime-common';
+import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
-import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session.ts';
 import handleCreateRealmRequest, {
   type CreateRealmDeps,
@@ -47,8 +47,11 @@ import {
   jwtMiddleware,
   grafanaAuthorization,
   operatorAuthorization,
+  sendResponseForUnauthorizedRequest,
 } from './middleware/index.ts';
 import type Koa from 'koa';
+import { runTokenOf } from '@cardstack/runtime-common/run-token';
+import { verifyRunToken } from './lib/run-token.ts';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
 import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
 import handleQueueStatusRequest from './handlers/handle-queue-status.ts';
@@ -58,10 +61,16 @@ import handleFullReindex from './handlers/handle-full-reindex.ts';
 import handleRemoveJob from './handlers/handle-remove-job.ts';
 import handleAddCredit from './handlers/handle-add-credit.ts';
 import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
+import handleRemoveRealmUserPermission from './handlers/handle-remove-realm-user-permission.ts';
 import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
 import handleInviteCheck from './handlers/handle-invite-check.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
 import handleRequestForward from './handlers/handle-request-forward.ts';
+import {
+  handleAIBatchStatus,
+  handleSubmitAIBatch,
+} from './handlers/handle-ai-batches.ts';
+import { AI_BATCHES_PATH } from './lib/openrouter-batches.ts';
 import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough.ts';
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
@@ -127,6 +136,7 @@ import {
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
+  accountContactLookup,
   handleCheckSecureSession,
   handleEndSecureSession,
   handleEndWindowSessions,
@@ -143,7 +153,7 @@ import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
 import { PREFIX_REALMS_ENDPOINT } from '@cardstack/runtime-common/prefix-realm-network';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
-import type Provider from 'oidc-provider';
+import type { OAuthProviderService } from './lib/oauth-provider/provider.ts';
 import { registerOAuthProviderRoutes } from './lib/oauth-provider/serve.ts';
 import {
   handleAddUserKey,
@@ -177,6 +187,25 @@ import {
   handleUnshareKey,
 } from './handlers/handle-key-shares.ts';
 import {
+  handleAutomationEstimate,
+  handleAutomationPause,
+  handleAutomationPreview,
+  handleAutomationRemove,
+  handleAutomationResume,
+  handleAutomationRunCancel,
+  handleAutomationRunNow,
+  handleAutomationSwitchOn,
+} from './handlers/handle-automations.ts';
+import {
+  AUTOMATION_PAUSE_PATH,
+  AUTOMATION_PREVIEW_PATH,
+  AUTOMATION_REMOVE_PATH,
+  AUTOMATION_RESUME_PATH,
+  AUTOMATION_RUN_CANCEL_PATH,
+  AUTOMATION_RUN_NOW_PATH,
+  AUTOMATION_SWITCH_ON_PATH,
+} from '@cardstack/runtime-common/automation-routes';
+import {
   handleListKeyLimitNotices,
   handleMarkKeyLimitNoticesRead,
   handleSetKeyShareLimits,
@@ -204,6 +233,7 @@ import {
   handleStartConnect,
 } from './handlers/handle-oauth.ts';
 import type { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
+import { realmServerRunChangeReporter } from './lib/run-change-reporter.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -286,7 +316,7 @@ export type CreateRoutesArgs = {
   googleSignIn?: GoogleSignInConfig;
   // Boxel's OAuth provider (see `lib/oauth-provider/`). Unset, the provider
   // is off and none of its routes are served.
-  oauthProvider?: Provider;
+  oauthProvider?: OAuthProviderService;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -313,7 +343,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   };
 
   if (args.oauthProvider) {
-    registerOAuthProviderRoutes(router, args.oauthProvider);
+    registerOAuthProviderRoutes(router, args.oauthProvider, {
+      realmSecretSeed: args.realmSecretSeed,
+      accountContact: accountContactLookup(args),
+    });
   }
 
   router.get(
@@ -610,11 +643,58 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleSecureWindowCards(args),
   );
+  // A request carrying an automation run's token skips the session check,
+  // which refuses it on its signature. Its own signature is verified here, in
+  // the session check's place, so a bearer that only looks like a run token
+  // is refused before the handler reads anything. The handler then checks
+  // the run itself.
+  let requestForwardSession = jwtMiddleware(
+    args.realmSecretSeed,
+    args.dbAdapter,
+  );
   router.post(
     REQUEST_FORWARD_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    async (ctxt: Koa.Context, next: Koa.Next) => {
+      let runToken = runTokenOf(ctxt.req.headers['authorization'] ?? null);
+      if (!runToken) {
+        return await requestForwardSession(ctxt, next);
+      }
+      if (!verifyRunToken(runToken, args.realmSecretSeed)) {
+        return await sendResponseForUnauthorizedRequest(
+          ctxt,
+          AuthenticationErrorMessages.TokenInvalid,
+        );
+      }
+      await next();
+    },
     handleRequestForward({
       dbAdapter: args.dbAdapter,
+      definitionLookup: args.definitionLookup,
+      virtualNetwork: args.virtualNetwork,
+      realmSecretSeed: args.realmSecretSeed,
+      reportRunChange: realmServerRunChangeReporter({
+        ...args,
+        background: true,
+      }),
+    }),
+  );
+  // An automation run's calls to OpenRouter's Batch API. They carry a run
+  // token, which the handler checks itself, since an ordinary session is
+  // refused.
+  router.post(
+    AI_BATCHES_PATH,
+    handleSubmitAIBatch({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
+    }),
+  );
+  router.get(
+    `${AI_BATCHES_PATH}/:batchId`,
+    handleAIBatchStatus({
+      dbAdapter: args.dbAdapter,
+      realmSecretSeed: args.realmSecretSeed,
+      virtualNetwork: args.virtualNetwork,
     }),
   );
   // Batched client performance beacons. The host sends its server session
@@ -750,6 +830,31 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleArchivedRealms(args),
   );
 
+  // A direct writer switching an automation on, running it by hand, pausing,
+  // resuming or removing it, and canceling one of its runs. Each answers only
+  // a direct writer of the realm the request names, acting as the session's
+  // own user (see `handlers/handle-automations.ts`).
+  router.get(
+    AUTOMATION_SWITCH_ON_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleAutomationEstimate(args),
+  );
+  for (let [path, handler] of [
+    [AUTOMATION_SWITCH_ON_PATH, handleAutomationSwitchOn],
+    [AUTOMATION_PREVIEW_PATH, handleAutomationPreview],
+    [AUTOMATION_RUN_NOW_PATH, handleAutomationRunNow],
+    [AUTOMATION_PAUSE_PATH, handleAutomationPause],
+    [AUTOMATION_RESUME_PATH, handleAutomationResume],
+    [AUTOMATION_REMOVE_PATH, handleAutomationRemove],
+    [AUTOMATION_RUN_CANCEL_PATH, handleAutomationRunCancel],
+  ] as const) {
+    router.post(
+      path,
+      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+      handler(args),
+    );
+  }
+
   // Rotating the data key that seals stored secrets. Only an operator token
   // signed with the realm secret seed reaches these.
   router.get(
@@ -863,6 +968,10 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleUpsertRealmUserPermission(args),
   );
   registerGrafanaEndpoint(
+    '/_grafana-remove-realm-user-permission',
+    handleRemoveRealmUserPermission(args),
+  );
+  registerGrafanaEndpoint(
     '/_grafana-revoke-user-sessions',
     handleRevokeUserSessions(args),
   );
@@ -916,15 +1025,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleUnlistedRealmPathRequest(args),
   );
-  // Matrix tests don't need the GitHub PR integration, and skipping this route
-  // keeps the realm server from loading Octokit's ESM entrypoint during boot.
-  if (process.env.DISABLE_GITHUB_PR_ROUTE !== 'true') {
-    router.post(
-      '/_github-pr',
-      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-      handleGitHubPRRequestLazy(args),
-    );
-  }
   router.get('/_download-realm', handleDownloadRealm(args));
   router.post(
     '/_bot-registration',
@@ -994,21 +1094,4 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_webhooks/:webhookPath', handleWebhookReceiverRequest(args));
 
   return router.routes();
-}
-
-function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
-  let handler:
-    | ((ctxt: Koa.Context, next: Koa.Next) => Promise<void>)
-    | undefined;
-
-  return async function (ctxt: Koa.Context, next: Koa.Next) {
-    if (!handler) {
-      handler = (
-        createRequire(import.meta.filename)(
-          './handlers/handle-github-pr',
-        ) as typeof import('./handlers/handle-github-pr.ts')
-      ).default(args);
-    }
-    return await handler(ctxt, next);
-  };
 }

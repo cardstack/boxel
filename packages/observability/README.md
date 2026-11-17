@@ -436,6 +436,14 @@ among them, until they stopped. By those figures, a 24-panel dashboard over a da
   almost no cost, when you need to know how much is there.
 - Do not run a `[1d]` or multi-day query in a loop. For a count over days,
   Logs Insights on the service's CloudWatch group does not load Loki.
+- Do not leave a dashboard of Loki panels over hours refreshing in a tab that
+  no one watches. Each refresh sends all of its queries again: the GitHub
+  Actions Queue dashboard, 30 panels over 6 hours at a 1-minute refresh, kept
+  Loki at 100% CPU for four hours when one tab stayed open. When you stop
+  watching, close the tab or set its refresh to Off.
+- Search a busy stream such as `service="prerender"` over minutes, not hours.
+  A 6-hour line search of prerender read 13 GB in 40 s on staging, and slowed
+  the alert rules' queries to 30 s while it ran.
 
 ### LogQL cookbook
 
@@ -692,7 +700,8 @@ Grafana's own `fetch` actions. There are no plain GET links.
 rather than in one central console: per-realm reindex on `realms.json`, full
 reindex on `indexing.json`, job completion on `job-queue.json` /
 `indexing.json` / `prerender-html.json`, credit on `users.json`, permission
-grants on `realms.json` / `published-realms.json` / `users.json`. An operator
+grants on `realms.json` / `published-realms.json` / `users.json`, permission
+removal on `realms.json`, beside the table that lists who holds one. An operator
 looking at the numbers that prompted the action finds the button already in
 front of them.
 

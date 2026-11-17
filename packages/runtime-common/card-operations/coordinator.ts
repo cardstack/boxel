@@ -6,6 +6,7 @@ import {
 import { isCardError } from '../error.ts';
 import type { PolicyAuditOptions } from '../policy-share-audit.ts';
 import type { WriteContext } from '../realm-history.ts';
+import type { AutomationRunWrite } from '../automation-files.ts';
 import { isCardResource } from '../resource-types.ts';
 import {
   CAPTURE_SERVING_PREFIX,
@@ -132,6 +133,10 @@ export interface BatchCore {
   // coordinator carries through to the caller. Described content is held to
   // the same ceiling by its byte length, which it reports without being read.
   assertWriteSize(localPath: LocalPath, content: StagedContent): void;
+  // The refusal of a staged write to a reserved path, in this core's own
+  // terms. Absent, the batch refuses it as a reserved path (422
+  // `invalid-params`). `reason` says which reservation the path falls under.
+  reservedWriteRefusal?(localPath: LocalPath, reason: string): OperationFailure;
   // Waits for the indexing already in flight that can move what this batch
   // resolves. A card's serialization resolves the definitions its type is
   // built from, and a module written moments earlier may still be indexing,
@@ -189,6 +194,8 @@ export interface BatchCore {
       initiatingUser?: string | null;
       // See `CommitBatchOptions.history`.
       history?: WriteContext;
+      // See `CommitBatchOptions.automationRun`.
+      automationRun?: AutomationRunWrite;
       // See `CommitBatchOptions.policyAudit`.
       policyAudit?: PolicyAuditOptions;
       // Where the commit stamps the stages it owns. The durable write, the
@@ -275,6 +282,10 @@ export interface CommitBatchOptions {
   // say. It never decides the author, which is the actor (see
   // `WriteOptions.history`).
   history?: WriteContext;
+  // The automation run this batch commits for, set only by the commit of a
+  // run's batch: the files the batch creates are recorded as the run's
+  // automation's (see `WriteOptions.automationRun`).
+  automationRun?: AutomationRunWrite;
   // Who a batch by a caller who isn't signed in is made as, once its entries
   // are admitted: the acting user the first admitted write's grant names
   // (see `AnonymousRequest`). It is who the batch's index job is initiated
@@ -556,7 +567,7 @@ export async function commitBatch(
         // takes its write out of the batch, and the checks after it have to
         // see the batch that will commit.
         await settleDestinations(core, paths, staged, positions);
-        assertWritesAllowed(staged, positions);
+        assertWritesAllowed(core, staged, positions);
         assertLinkedCardsSurvive(staged, paths, positions);
         assertWritesFit(core, staged, positions);
         await assertRemovalsAllowed(core, paths, staged, positions);
@@ -1845,8 +1856,10 @@ function cardSourcePathOf(
 // — read from `isCaptureServingPath` and `isPartialWritePath`, which state
 // them once for all three. Removals are not covered, deliberately: they are
 // the recovery path for anything already stored under either name, which is
-// why the other two admit them as well.
+// why the other two admit them as well. A core that answers reserved writes
+// in its own terms (`BatchCore.reservedWriteRefusal`) gives the refusal.
 function assertWritesAllowed(
+  core: BatchCore,
   staged: StagedChange[],
   positions: readonly EntryPosition[],
 ): void {
@@ -1860,12 +1873,13 @@ function assertWritesAllowed(
           : undefined;
       if (reserved) {
         throw atEntry(
-          new OperationFailure({
-            status: 422,
-            code: 'invalid-params',
-            title: 'Reserved path',
-            detail: `cannot write "${write.path}": ${reserved}`,
-          }),
+          core.reservedWriteRefusal?.(write.path, reserved) ??
+            new OperationFailure({
+              status: 422,
+              code: 'invalid-params',
+              title: 'Reserved path',
+              detail: `cannot write "${write.path}": ${reserved}`,
+            }),
           positions[index],
         );
       }
@@ -2478,6 +2492,7 @@ async function commitStaged(
       // writes waits for this job rather than returning ahead of it.
       initiatingUser: opts.actor ?? opts.actingUser?.() ?? null,
       ...(opts.history ? { history: opts.history } : {}),
+      ...(opts.automationRun ? { automationRun: opts.automationRun } : {}),
       ...(opts.policyAudit ? { policyAudit: opts.policyAudit } : {}),
       ...(stageCursor ? { stageCursor } : {}),
       onDurable: releaseLocks,

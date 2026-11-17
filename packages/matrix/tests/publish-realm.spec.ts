@@ -2,7 +2,6 @@ import { test, expect } from './fixtures.ts';
 import type { Page } from '@playwright/test';
 import { appURL } from '../support/isolated-realm-server.ts';
 import {
-  clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
   enterWorkspace,
@@ -17,8 +16,6 @@ test.describe('Publish realm', () => {
   let user: { username: string; password: string; credentials: any };
 
   async function openPublishRealmModal(page: Page) {
-    await clearLocalStorage(page, serverIndexUrl);
-
     user = await createSubscribedUserAndLogin(
       page,
       'publish-realm',
@@ -188,8 +185,6 @@ test.describe('Publish realm', () => {
   test('it warns when private dependencies would cause host mode errors', async ({
     page,
   }) => {
-    await clearLocalStorage(page, serverIndexUrl);
-
     user = await createSubscribedUserAndLogin(
       page,
       'publish-realm',
@@ -324,7 +319,6 @@ test.describe('Publish realm', () => {
     // again, and require the published URL to show the new content and not
     // the old.
 
-    await clearLocalStorage(page, serverIndexUrl);
     user = await createSubscribedUserAndLogin(
       page,
       'publish-realm',

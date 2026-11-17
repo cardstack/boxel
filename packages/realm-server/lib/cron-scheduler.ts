@@ -26,6 +26,30 @@ import {
   createMediaCacheGcCronJob,
 } from './media-cache-gc-config.ts';
 import { enqueueScopedCssGc } from '../scripts/scoped-css-gc.ts';
+import { enqueueAutomationStorageCharge } from '../scripts/automation-storage-charge.ts';
+import {
+  AUTOMATION_STORAGE_CHARGE_CRON_SCHEDULE,
+  AUTOMATION_STORAGE_CHARGE_CRON_TZ,
+  createAutomationStorageChargeCronJob,
+} from './automation-storage-charge-config.ts';
+import { enqueueAutomationTick } from '../scripts/automation-tick.ts';
+import {
+  AUTOMATION_TICK_CRON_SCHEDULE,
+  AUTOMATION_TICK_CRON_TZ,
+  createAutomationTickCronJob,
+} from './automation-tick-config.ts';
+import { enqueueAutomationReconcile } from '../scripts/automation-reconcile.ts';
+import { enqueueAIBatchSettle } from '../scripts/ai-batch-settle.ts';
+import {
+  AI_BATCH_SETTLE_CRON_SCHEDULE,
+  AI_BATCH_SETTLE_CRON_TZ,
+  createAIBatchSettleCronJob,
+} from './ai-batch-settle-config.ts';
+import {
+  AUTOMATION_RECONCILE_CRON_SCHEDULE,
+  AUTOMATION_RECONCILE_CRON_TZ,
+  createAutomationReconcileCronJob,
+} from './automation-reconcile-config.ts';
 import {
   SCOPED_CSS_GC_CRON_SCHEDULE,
   SCOPED_CSS_GC_CRON_TZ,
@@ -61,6 +85,14 @@ export function startCronJobs(): void {
   if (scopedCssGcJob) {
     jobs.push(scopedCssGcJob);
   }
+
+  jobs.push(startAutomationStorageChargeCron());
+
+  jobs.push(startAutomationTickCron());
+
+  jobs.push(startAutomationReconcileCron());
+
+  jobs.push(startAIBatchSettleCron());
 }
 
 export function stopCronJobs(): void {
@@ -177,6 +209,91 @@ function startScopedCssGcCron(): CronJob | undefined {
   job.start();
   log.info(
     `scoped-css-gc cron scheduled for ${SCOPED_CSS_GC_CRON_SCHEDULE} ${SCOPED_CSS_GC_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startAutomationStorageChargeCron(): CronJob {
+  let job = createAutomationStorageChargeCronJob(
+    async () => {
+      try {
+        await enqueueAutomationStorageCharge();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error(
+          'automation-storage-charge cron failed to enqueue job',
+          error,
+        );
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `automation-storage-charge cron scheduled for ${AUTOMATION_STORAGE_CHARGE_CRON_SCHEDULE} ${AUTOMATION_STORAGE_CHARGE_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startAIBatchSettleCron(): CronJob {
+  let job = createAIBatchSettleCronJob(
+    async () => {
+      try {
+        await enqueueAIBatchSettle();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('ai-batch-settle cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `ai-batch-settle cron scheduled for ${AI_BATCH_SETTLE_CRON_SCHEDULE} ${AI_BATCH_SETTLE_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startAutomationTickCron(): CronJob {
+  let job = createAutomationTickCronJob(
+    async () => {
+      try {
+        await enqueueAutomationTick();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('automation-tick cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `automation-tick cron scheduled for ${AUTOMATION_TICK_CRON_SCHEDULE} ${AUTOMATION_TICK_CRON_TZ}`,
+  );
+  return job;
+}
+
+// Runs on init too: reconcile at startup is what makes up a run an outage
+// cost without waiting for the first scheduled pass.
+function startAutomationReconcileCron(): CronJob {
+  let job = createAutomationReconcileCronJob(
+    async () => {
+      try {
+        await enqueueAutomationReconcile();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('automation-reconcile cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: true },
+  );
+
+  job.start();
+  log.info(
+    `automation-reconcile cron scheduled for ${AUTOMATION_RECONCILE_CRON_SCHEDULE} ${AUTOMATION_RECONCILE_CRON_TZ}, and once at startup`,
   );
   return job;
 }

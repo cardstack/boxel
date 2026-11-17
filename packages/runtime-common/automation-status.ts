@@ -18,13 +18,22 @@ import {
 } from './automation-schedule.ts';
 import {
   getAutomation,
+  readAutomationFailures,
+  type AutomationFailure,
+  type AutomationFailures,
   type AutomationPauseReason,
   type AutomationRow,
   type AutomationRunResult,
   type AutomationState,
 } from './automations.ts';
+import {
+  readCurrentRunMilestones,
+  readLastRunMilestones,
+  type RunMilestones,
+} from './automation-run-milestones.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
+import { dbAdapterQuerier } from './expression.ts';
 import {
   isDirectWriter,
   shareARealmGrant,
@@ -59,10 +68,24 @@ export interface AutomationTriggerStatus {
   spent?: boolean;
 }
 
+// The automation's last run that started and has ended, with the milestones
+// its script reported: what the card shows under _Run milestones_.
+export type AutomationLastRun = RunMilestones;
+
+// The automation's run in progress, with the milestones its script has
+// reported so far: the card shows the one it is in as running.
+export type AutomationCurrentRun = RunMilestones;
+
 export type AutomationStatusAttributes =
-  | { switchedOn: false }
+  | {
+      switchedOn: false;
+      lastRun: AutomationLastRun | null;
+      currentRun: AutomationCurrentRun | null;
+    }
   | {
       switchedOn: true;
+      lastRun: AutomationLastRun | null;
+      currentRun: AutomationCurrentRun | null;
       state: AutomationState;
       pauseReason: AutomationPauseReason | null;
       // The payer's Matrix id, or null when the viewer may not see who pays.
@@ -72,6 +95,14 @@ export type AutomationStatusAttributes =
       nextRun: string | null;
       lastResult: AutomationRunResult | null;
       lastFinishedAt: string | null;
+      // How many of the automation's own runs (not a Preview or a Run now)
+      // have failed since its last complete one, counting from its
+      // switch-on or last resume, and the latest of them. An automation
+      // pauses itself with `repeated-failures` once the count reaches
+      // `AUTOMATION_FAILURES_BEFORE_PAUSE`, and `lastFailure` then says
+      // why its last run failed.
+      failuresInARow: number;
+      lastFailure: AutomationFailure | null;
       triggers: AutomationTriggerStatus[];
     };
 
@@ -141,13 +172,21 @@ export async function answerAutomationStatus({
       message: `${url.href} is not in ${realmURL.href}`,
     };
   }
-  let row = await getAutomation(
-    dbAdapter,
-    virtualNetwork.unresolveURL(url.href),
-  );
+  let automationId = virtualNetwork.unresolveURL(url.href);
+  let row = await getAutomation(dbAdapter, automationId);
+  // A run can end before the automation is switched on (a Preview, a Run
+  // now), so the last run is read either way.
+  let lastRun = (await readLastRunMilestones(dbAdapter, automationId)) ?? null;
+  let currentRun =
+    (await readCurrentRunMilestones(dbAdapter, automationId)) ?? null;
   let declaration: AutomationDeclaration | undefined;
   let payerShown = false;
+  let failures: AutomationFailures | undefined;
   if (row) {
+    failures = await readAutomationFailures(
+      dbAdapterQuerier(dbAdapter),
+      automationId,
+    );
     let entry = await readInstance(url);
     let read = entry
       ? readAutomationDeclaration(entry, { automationTypeKey, virtualNetwork })
@@ -166,6 +205,9 @@ export async function answerAutomationStatus({
       viewer,
       payerShown,
       now,
+      lastRun,
+      currentRun,
+      failures,
     }),
   };
 }
@@ -174,7 +216,8 @@ export async function answerAutomationStatus({
 // automation row, absent when it isn't switched on. `declaration` is the
 // card as indexed, absent when the card doesn't read as one; then each
 // trigger reports only its run count. `payerShown` says whether the viewer
-// may see the payer's Matrix id.
+// may see the payer's Matrix id. `lastRun` is the automation's last ended
+// run, if it has one, and `failures` its failure streak.
 export function automationStatusDocument({
   url,
   row,
@@ -182,6 +225,9 @@ export function automationStatusDocument({
   viewer,
   payerShown,
   now,
+  lastRun = null,
+  currentRun = null,
+  failures,
 }: {
   url: string;
   row: AutomationRow | undefined;
@@ -190,6 +236,10 @@ export function automationStatusDocument({
   payerShown: boolean;
   // Unix seconds.
   now: number;
+  lastRun?: AutomationLastRun | null;
+  currentRun?: AutomationCurrentRun | null;
+  // Read only for a switched-on automation, so absent when `row` is.
+  failures: AutomationFailures | undefined;
 }): AutomationStatusDocument {
   return {
     data: {
@@ -205,9 +255,13 @@ export function automationStatusDocument({
             nextRun: isoOrNull(row.nextRun),
             lastResult: row.lastResult,
             lastFinishedAt: row.lastFinishedAt,
+            failuresInARow: failures?.inARow ?? 0,
+            lastFailure: failures?.last ?? null,
             triggers: triggerStatuses(row, declaration, now),
+            lastRun,
+            currentRun,
           }
-        : { switchedOn: false },
+        : { switchedOn: false, lastRun, currentRun },
     },
   };
 }

@@ -23,6 +23,9 @@ module('github client', (hooks) => {
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       let url = typeof input === 'string' ? input : input.toString();
       let method = init?.method ?? 'GET';
+      if (url.includes('/commits?sha=')) {
+        return jsonResponse([]);
+      }
       if (url.includes('/git/ref/heads/')) {
         return jsonResponse({ object: { sha: 'commit-sha' } });
       }
@@ -92,11 +95,205 @@ module('github client', (hooks) => {
     );
   });
 
+  test('writeFilesToBranch refuses a folder the base branch already holds', async (assert) => {
+    let wrote = false;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      let url = typeof input === 'string' ? input : input.toString();
+      let method = init?.method ?? 'GET';
+      if (url.includes('/git/ref/heads/main')) {
+        return jsonResponse({ object: { sha: 'main-commit-sha' } });
+      }
+      if (url.includes('/git/ref/heads/')) {
+        return jsonResponse({ object: { sha: 'branch-commit-sha' } });
+      }
+      if (url.includes('/git/commits/main-commit-sha')) {
+        return jsonResponse({ tree: { sha: 'main-tree-sha' } });
+      }
+      if (url.includes('/git/commits/branch-commit-sha')) {
+        return jsonResponse({ tree: { sha: 'branch-tree-sha' } });
+      }
+      if (url.includes('/git/trees/main-tree-sha') && method === 'GET') {
+        return jsonResponse({
+          tree: [{ path: 'a1b2c3-listing', type: 'tree', sha: 'folder-sha' }],
+        });
+      }
+      if (url.includes('/git/trees/folder-sha?recursive=1')) {
+        return jsonResponse({
+          tree: [{ path: 'CardListing/abc.json', type: 'blob' }],
+        });
+      }
+      if (method !== 'GET') {
+        wrote = true;
+        return jsonResponse({ sha: 'x' });
+      }
+      throw new Error(`unexpected request: ${method} ${url}`);
+    };
+
+    let client = new OctokitGitHubClient('test-token');
+    await assert.rejects(
+      client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'a1b2c3-listing',
+        files: [{ path: 'a1b2c3-listing/kept.json', content: '{}' }],
+        message: 'update listing',
+        syncFolder: 'a1b2c3-listing',
+        folderMustBeNewOn: 'main',
+      }),
+      /already exists on main/,
+    );
+    assert.false(wrote, 'no blob, tree or commit is created');
+  });
+
+  test("writeFilesToBranch refuses a folder another submitter's commits fill on the branch, and takes its own", async (assert) => {
+    let wrote = false;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      let url = typeof input === 'string' ? input : input.toString();
+      let method = init?.method ?? 'GET';
+      if (url.includes('/commits?sha=a1b2c3-listing&path=a1b2c3-listing')) {
+        return jsonResponse([
+          { commit: { message: 'Merge branch main into a1b2c3-listing' } },
+          {
+            commit: {
+              message:
+                'add [boxel-submitter:ffff] changes [boxel-content-hash:abc] [boxel-submitter:1111]',
+            },
+          },
+        ]);
+      }
+      if (url.includes('/git/ref/heads/')) {
+        return jsonResponse({ object: { sha: 'commit-sha' } });
+      }
+      if (url.includes('/git/commits/commit-sha')) {
+        return jsonResponse({ tree: { sha: 'root-tree-sha' } });
+      }
+      if (url.includes('/git/trees/root-tree-sha') && method === 'GET') {
+        return jsonResponse({ tree: [] });
+      }
+      if (method !== 'GET') {
+        wrote = true;
+        return jsonResponse({ sha: 'x' });
+      }
+      throw new Error(`unexpected request: ${method} ${url}`);
+    };
+
+    let client = new OctokitGitHubClient('test-token');
+    let write = (submitterTag: string) =>
+      client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'a1b2c3-listing',
+        files: [{ path: 'a1b2c3-listing/kept.json', content: '{}' }],
+        message: `update listing [boxel-submitter:${submitterTag}]`,
+        syncFolder: 'a1b2c3-listing',
+        submitterTag,
+      });
+
+    await assert.rejects(write('2222'), /holds another submitter's files/);
+    await assert.rejects(
+      write('ffff'),
+      /holds another submitter's files/,
+      "a tag inside the listing name is not the commit's tag",
+    );
+    assert.false(wrote, 'nothing is written for another submitter');
+
+    await write('1111');
+    assert.true(wrote, 'the same submitter writes again');
+  });
+
+  test("writeFilesToBranch finds another submitter's commit past the first page of the folder's history", async (assert) => {
+    let pagesRead: string[] = [];
+    let wrote = false;
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      let url = typeof input === 'string' ? input : input.toString();
+      let method = init?.method ?? 'GET';
+      if (url.includes('/commits?sha=')) {
+        let page = new URL(url).searchParams.get('page') ?? '';
+        pagesRead.push(page);
+        return jsonResponse(
+          page === '1'
+            ? Array.from({ length: 100 }, () => ({
+                commit: { message: 'Merge branch main' },
+              }))
+            : [
+                {
+                  commit: {
+                    message: 'add listing changes [boxel-submitter:1111]',
+                  },
+                },
+              ],
+        );
+      }
+      if (url.includes('/git/ref/heads/')) {
+        return jsonResponse({ object: { sha: 'commit-sha' } });
+      }
+      if (url.includes('/git/commits/commit-sha')) {
+        return jsonResponse({ tree: { sha: 'root-tree-sha' } });
+      }
+      if (method !== 'GET') {
+        wrote = true;
+        return jsonResponse({ sha: 'x' });
+      }
+      throw new Error(`unexpected request: ${method} ${url}`);
+    };
+
+    let client = new OctokitGitHubClient('test-token');
+    await assert.rejects(
+      client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'a1b2c3-listing',
+        files: [{ path: 'a1b2c3-listing/kept.json', content: '{}' }],
+        message: 'update listing [boxel-submitter:2222]',
+        syncFolder: 'a1b2c3-listing',
+        submitterTag: '2222',
+      }),
+      /holds another submitter's files/,
+    );
+    assert.deepEqual(pagesRead, ['1', '2'], 'reads on while a page is full');
+    assert.false(wrote, 'nothing is written');
+  });
+
+  test("writeFilesToBranch refuses a file on the base branch that has the folder's name", async (assert) => {
+    globalThis.fetch = async (input: RequestInfo | URL) => {
+      let url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/git/ref/heads/')) {
+        return jsonResponse({ object: { sha: 'commit-sha' } });
+      }
+      if (url.includes('/git/commits/commit-sha')) {
+        return jsonResponse({ tree: { sha: 'root-tree-sha' } });
+      }
+      if (url.includes('/git/trees/root-tree-sha')) {
+        return jsonResponse({
+          tree: [{ path: 'a1b2c3', type: 'blob', sha: 'blob-sha' }],
+        });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    };
+
+    let client = new OctokitGitHubClient('test-token');
+    await assert.rejects(
+      client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'a1b2c3',
+        files: [{ path: 'a1b2c3/kept.json', content: '{}' }],
+        message: 'update listing',
+        syncFolder: 'a1b2c3',
+        folderMustBeNewOn: 'main',
+      }),
+      /already exists on main/,
+    );
+  });
+
   test('writeFilesToBranch with syncFolder is a no-op deletion-wise when the folder is new', async (assert) => {
     let createdTreeBodies: any[] = [];
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       let url = typeof input === 'string' ? input : input.toString();
       let method = init?.method ?? 'GET';
+      if (url.includes('/commits?sha=')) {
+        return jsonResponse([]);
+      }
       if (url.includes('/git/ref/heads/')) {
         return jsonResponse({ object: { sha: 'commit-sha' } });
       }

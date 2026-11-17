@@ -5,11 +5,14 @@ import { randomUUID } from 'crypto';
 import {
   abandonAutomationRun,
   addAutomationRunCounts,
+  automationRunStep,
   cancelAutomationRun,
   claimAutomationRunCommit,
   createAutomationRun,
   finishAutomationRun,
   getAutomationRun,
+  readJobEvent,
+  recordAutomationRunAdmitted,
   recordAutomationRunCommitted,
   recordAutomationRunScript,
   ri,
@@ -274,6 +277,78 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         (await getAutomationRun(dbAdapter, run.id))?.state,
         'error',
+      );
+    });
+
+    test("a run's step follows its row: admission, then the script, then the commit", async function (assert) {
+      let run = await newRun();
+      assert.strictEqual(
+        automationRunStep(run),
+        null,
+        'a pending run has none',
+      );
+      let started = await startedRun();
+      assert.strictEqual(automationRunStep(started), 'admission');
+      let admitted = await recordAutomationRunAdmitted(dbAdapter, run.id, 1);
+      assert.strictEqual(automationRunStep(admitted!), 'script');
+      let claimed = await claimAutomationRunCommit(dbAdapter, run.id, 1);
+      assert.strictEqual(automationRunStep(claimed!), 'commit');
+      await recordAutomationRunCommitted(dbAdapter, run.id);
+      let finished = await finishAutomationRun(dbAdapter, run.id, 1, {
+        state: 'complete',
+      });
+      assert.strictEqual(
+        automationRunStep(finished!),
+        'commit',
+        'an ended run keeps the step it got to',
+      );
+    });
+
+    test('an attempt that takes a run over admits it again', async function (assert) {
+      let run = await startedRun(1);
+      await recordAutomationRunAdmitted(dbAdapter, run.id, 1);
+      let retry = await startAutomationRunAttempt(dbAdapter, run.id, 2);
+      assert.strictEqual(retry.kind, 'run');
+      let taken = (retry as { run: AutomationRun }).run;
+      assert.strictEqual(taken.admittedAt, null, 'the admission is cleared');
+      assert.strictEqual(automationRunStep(taken), 'admission');
+      assert.strictEqual(
+        (await getAutomationRun(dbAdapter, run.id))?.admittedAt,
+        null,
+        'on the row too',
+      );
+    });
+
+    test("a run's job event names the run, its automation, state, step and last milestone, and no person", async function (assert) {
+      let virtualNetwork = { toURLHref: (id: string) => String(id) };
+      let run = await newRun();
+      assert.deepEqual(await readJobEvent(dbAdapter, run.id, virtualNetwork), {
+        eventName: 'job',
+        runId: run.id,
+        automation: AUTOMATION,
+        state: 'pending',
+        step: null,
+        milestone: null,
+        realmURL: REALM,
+      });
+      await startAutomationRunAttempt(dbAdapter, run.id, 1);
+      await recordAutomationRunAdmitted(dbAdapter, run.id, 1);
+      await dbAdapter.execute(
+        `INSERT INTO automation_run_milestones (run_id, position, name, started_at) VALUES ($1, 0, 'Fetch', now()), ($1, 1, 'Write', now())`,
+        { bind: [run.id] },
+      );
+      let event = await readJobEvent(dbAdapter, run.id, virtualNetwork);
+      assert.strictEqual(event?.state, 'running');
+      assert.strictEqual(event?.step, 'script');
+      assert.strictEqual(event?.milestone, 'Write', 'the last one reached');
+      assert.notOk(
+        JSON.stringify(event).includes(PAYER),
+        'who the run acts as is not in it',
+      );
+      assert.strictEqual(
+        await readJobEvent(dbAdapter, randomUUID(), virtualNetwork),
+        undefined,
+        'no run, no event',
       );
     });
 

@@ -1,4 +1,6 @@
 const GITHUB_API_BASE = 'https://api.github.com';
+const COMMITS_PER_PAGE = 100;
+const COMMIT_PAGES_READ = 10;
 const GITHUB_TEAM_REVIEWERS = ['ecosystem-team'];
 
 export interface OpenPullRequestParams {
@@ -51,6 +53,14 @@ export interface WriteFilesToBranchParams {
   // deleted in the same commit. Without it, a rewrite of an existing branch
   // layers onto the previous tree and stale paths survive.
   syncFolder?: string;
+  // When set with `syncFolder`, the write is refused if this branch already
+  // holds anything by the folder's name.
+  folderMustBeNewOn?: string;
+  // When set with `syncFolder`, the write is refused if a commit on the
+  // branch that touches the folder ends its message with a
+  // `[boxel-submitter:…]` tag other than this one. The caller puts the tag
+  // at the end of `message`.
+  submitterTag?: string;
 }
 
 export interface WriteFilesToBranchResult {
@@ -228,6 +238,59 @@ export class OctokitGitHubClient implements GitHubClient {
     });
     let baseTreeSha = parentCommit.tree.sha;
 
+    if (params.syncFolder && params.folderMustBeNewOn) {
+      let base = normalizeBranchName(params.folderMustBeNewOn);
+      let baseRef = await this.request<{ object: { sha: string } }>({
+        action: 'get base branch ref',
+        method: 'GET',
+        path: `/repos/${params.owner}/${params.repo}/git/ref/heads/${encodeURIComponent(base)}`,
+      });
+      let baseCommit = await this.request<{ tree: { sha: string } }>({
+        action: 'get base commit',
+        method: 'GET',
+        path: `/repos/${params.owner}/${params.repo}/git/commits/${baseRef.object.sha}`,
+      });
+      if (
+        await this.pathExists(
+          params.owner,
+          params.repo,
+          baseCommit.tree.sha,
+          params.syncFolder,
+        )
+      ) {
+        throw new Error(
+          `folder '${params.syncFolder}' already exists on ${base}`,
+        );
+      }
+    }
+
+    if (params.syncFolder && params.submitterTag) {
+      for (let page = 1; ; page++) {
+        // Far past any submission's history: refuse instead of reading on.
+        if (page > COMMIT_PAGES_READ) {
+          throw new Error(
+            `folder '${params.syncFolder}' on ${branch} has too long a history to tell whose it is`,
+          );
+        }
+        let commits = await this.request<{ commit: { message: string } }[]>({
+          action: 'list commits touching the folder',
+          method: 'GET',
+          path: `/repos/${params.owner}/${params.repo}/commits?sha=${encodeURIComponent(branch)}&path=${encodeURIComponent(params.syncFolder)}&per_page=${COMMITS_PER_PAGE}&page=${page}`,
+        });
+        for (let { commit } of commits) {
+          let tag = commit.message.match(/\[boxel-submitter:([0-9a-f]+)\]\s*$/);
+          if (tag && tag[1] !== params.submitterTag) {
+            throw new Error(
+              `folder '${params.syncFolder}' on ${branch} holds another submitter's files`,
+            );
+          }
+        }
+        if (commits.length < COMMITS_PER_PAGE) {
+          break;
+        }
+      }
+    }
+
     // One blob at a time: GitHub's secondary rate limits penalize concurrent
     // requests that create content, and a listing can have many files.
     let tree: {
@@ -312,6 +375,37 @@ export class OctokitGitHubClient implements GitHubClient {
   // recursively, so only the folder's subtree — never the whole repo — is
   // subject to the recursive listing (and its truncation limit). Returns []
   // when the folder doesn't exist on the branch yet.
+  // Whether the tree holds anything, file or folder, at `path`. A listing
+  // GitHub cut short counts as holding it.
+  private async pathExists(
+    owner: string,
+    repo: string,
+    rootTreeSha: string,
+    path: string,
+  ): Promise<boolean> {
+    let treeSha = rootTreeSha;
+    let segments = path.split('/').filter(Boolean);
+    for (let [index, segment] of segments.entries()) {
+      let { tree, truncated } = await this.request<{
+        tree: { path: string; type: string; sha: string }[];
+        truncated?: boolean;
+      }>({
+        action: 'get tree',
+        method: 'GET',
+        path: `/repos/${owner}/${repo}/git/trees/${treeSha}`,
+      });
+      let entry = tree.find((e) => e.path === segment);
+      if (!entry) {
+        return !!truncated;
+      }
+      if (index === segments.length - 1 || entry.type !== 'tree') {
+        return true;
+      }
+      treeSha = entry.sha;
+    }
+    return false;
+  }
+
   private async listBlobPathsUnder(
     owner: string,
     repo: string,

@@ -228,6 +228,18 @@ export function rateLimitKey(address: IPAddress): string {
   return `${formatIP({ family: 6, value: prefix })}/64`;
 }
 
+// The key a caller's network is counted under, wider than `rateLimitKey`:
+// the /24 an IPv4 address is in, or the /48 an IPv6 one is in. One customer
+// is routinely handed a whole /48, which holds 65,536 /64s, so a limit kept
+// only per `rateLimitKey` lets one holder through 65,536 times over.
+export function networkRateLimitKey(address: IPAddress): string {
+  let hostBits = address.family === 4 ? 8n : 80n;
+  let prefix = (address.value >> hostBits) << hostBits;
+  return `${formatIP({ family: address.family, value: prefix })}/${
+    address.family === 4 ? 24 : 48
+  }`;
+}
+
 // The canonical text of an address given as text, or undefined when it is not
 // an address.
 export function normalizeIP(text: string): string | undefined {

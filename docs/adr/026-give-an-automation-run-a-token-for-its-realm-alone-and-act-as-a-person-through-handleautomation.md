@@ -5,15 +5,26 @@ scope:
   - packages/runtime-common/realm.ts
   - packages/runtime-common/**/*run-token*
   - packages/realm-server/**/*run-token*
+  - packages/realm-server/handlers/handle-ai-batches.ts
   - packages/runtime-common/**/*run-overlay*
   - packages/realm-server/**/*run-overlay*
   - packages/realm-server/lib/key-bindings.ts
   - packages/realm-server/lib/key-uses.ts
   - packages/runtime-common/card-operations/call-api.ts
+  - packages/runtime-common/automation-run-limits.ts
+  - packages/runtime-common/tasks/run-automation.ts
+  - packages/runtime-common/automations.ts
+  - packages/realm-server/handlers/handle-request-forward.ts
   - packages/realm-server/middleware/index.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
   - packages/realm-server/prerender/render-runner.ts
   - packages/realm-server/prerender/affinity.ts
+  - packages/runtime-common/in-memory-sessions.ts
+  - packages/runtime-common/realm-auth-client.ts
+  - packages/host/app/utils/realm-sessions.ts
+  - packages/host/app/utils/auth-service-worker-registration.ts
+  - packages/host/app/routes/command-runner.ts
+  - packages/host/app/services/realm.ts
 ---
 
 # 026. Give an automation run a token for its realm alone, and act as a person through `Realm.handleAutomation`
@@ -53,20 +64,29 @@ leaked token gives away:
   identity's ordinary realm session, or the prerender auth that
   `prepareRunCommand` mints for every realm its `runAs` user can reach.
 - A run's cards MUST load modules only from the automation's realm, the base
-  realm and the catalog realm. A run MUST NOT start while a policy grant
-  gives write to a module that it loads from its own realm, directly or
-  through an import.
+  realm and the catalog realm.
 
 Switching on an automation whose cards load a module from any other realm
 MUST be refused, and the refusal MUST name that realm.
 
+A run, and switching an automation on, MUST NOT be refused because a policy
+grant gives write to a module in the automation's realm that the run loads.
+
 ### 1.3. Every call goes through `Realm.handleAutomation`
 
-The realm server MUST handle each request that carries a run token through
-`Realm.handleAutomation`, and through no other entry point.
+The realm server MUST handle each request to a realm that carries a run
+token through `Realm.handleAutomation`, and through no other entry point.
 `Realm.handleAutomation` MUST refuse a call unless the run's row says the run
 is still running, its time limit has not passed, and its caps are not spent.
 A cancel or a pause MUST stop the run's next call.
+
+A realm-server route that serves a run's requests to no realm, such as
+forwarding its AI requests or the batch path (ADR 030), MUST make the same
+checks against the run's row before it acts: the token verifies under the
+run-token key, its identity's sessions were not revoked after it was minted,
+the run is running and owned by the token's attempt, and the caps that bound
+what the route does are not spent. Every other realm-server route MUST refuse
+a run token.
 
 Only a run token MUST reach automation mode. The server MUST treat a request
 as an automation call because it carries a run token, and for no other
@@ -116,13 +136,27 @@ the identity's wider session, would hand it to any module loaded beside it.
 The prerender pool already keeps each affinity's tabs to one session for the
 same reason.
 
-Module code runs with the payer's direct write and credit. A policy grant can
-give write to module source, and the owner of a public realm needs no
-permission in this realm at all. Either could then act with more authority
-than they hold. So a run loads modules only from its own realm, which only
-direct writers can change while it runs, and from the base and catalog
-realms, which the platform deploys from reviewed source. An author who wants
-a card from another realm copies it into their own.
+Module code runs with the run identity's direct write and credit, so whoever
+can change a module a run loads can act with that authority. The owner of a
+public realm needs no permission in this realm at all. So a run loads modules
+only from its own realm and from the base and catalog realms, which the
+platform deploys from reviewed source. An author who wants a card from
+another realm copies it into their own.
+
+Who can change a realm's own modules is its administrators' decision. A
+policy grant that gives write to module source widens who can change the
+realm's code, and that code runs wherever the realm's cards are opened: in
+every visitor's browser, administrators' included, with that visitor's own
+sessions. A run gives the grantee nothing that the grant didn't already give
+them. Every run identity is a direct writer, who can read the policy and
+remove the grant, and a run's module code spends only within the caps its
+payer agreed to. So the administrators who keep the grant accept what that
+code can do, in a run as anywhere else, and a run isn't refused for it.
+
+The script file is different (ADR 028 §1.2). Only runs execute it, so
+keeping it out of every grant takes nothing from the realm's other users,
+while refusing module writes would take a choice away from the realm's
+administrators.
 
 Calls from the tab reach the server over the network, like any other
 request, so the token is the only thing that can mark one as an
@@ -168,6 +202,14 @@ every run, so it is refused once, when it is switched on.
 - **Load modules from any public realm.** Their owners need no permission in
   the automation's realm, yet their code would run with the payer's
   authority.
+- **Refuse a run, or switching an automation on, while a policy grant can
+  write a module the run loads.** Granting write to module source is the
+  realm administrators' choice, and its risk comes with it, runs included.
+  A refusal would second-guess that choice, and stop every automation whose
+  cards load such a module while the grant stands, without taking from the
+  grantee anything the grant gave them.
+- **Make module writes non-grantable.** It would take the choice from
+  administrators in every realm, including the many that run no automation.
 - **Enforcement in the tab.** The tab runs code that the realm doesn't
   trust, and its counts would be reported by the party they bound.
 - **A run with its identity's full direct write.** The run could rewrite the

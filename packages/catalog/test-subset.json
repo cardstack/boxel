@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "7769aac5bca8d47985391aa3fac7664b9ae312ba",
+  "revision": "fd1238f207e1ade0ea3bab0f4ef11e1b1ba211f3",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -34,11 +34,28 @@
       "Integration | a realm that checks permissions"
     ],
     "realmServer": [
+      "anonymous-home-page-test",
       "anonymous-key-use-test",
+      "automation-admission-test",
       "automation-card-test",
+      "automation-manual-runs-test",
+      "automation-routes-test",
+      "automation-run-attempt-test",
+      "automation-run-command-test",
+      "automation-run-limits-test",
+      "automation-run-log-redaction-test",
+      "automation-run-log-test",
       "automation-status-test",
       "catalog-test-subset-test",
       "direct-writer-queries-test",
+      "google-service-account-keys-test",
+      "google-service-account-rejection-test",
+      "interactive-bindings-test",
+      "key-bindings-test",
+      "key-grant-rejection-test",
+      "key-limits-test",
+      "key-usage-test",
+      "oauth-connections-test",
       "policy-share-audit-test",
       "published-realm-shared-key-test",
       "realm-endpoints/search-test",
@@ -53,6 +70,7 @@
       "realm-policy-capabilities-test",
       "realm-policy-capture-authority-test",
       "realm-policy-card-write-test",
+      "realm-policy-verbatim-write-test",
       "realm-policy-chain-types-test",
       "realm-policy-compile-test",
       "realm-policy-config-standing-test",
@@ -75,6 +93,7 @@
       "realm-policy-source-read-test",
       "realm-policy-validate-test",
       "realm-policy-write-lock-test",
+      "run-overlay-policy-test",
       "server-endpoints/delegated-session-federated-endpoints-test",
       "server-endpoints/policy-scoped-search-test"
     ]

@@ -629,6 +629,16 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
     // isn't read as warm-tab serialization.
     tabProbeMs?: number;
   };
+  // The whole tab's heap as an automation run's command ended in it, read
+  // over CDP (`readTabHeapUsage`): the host app's and anything earlier runs
+  // on the tab left uncollected, beside the run's own. Only a run's command
+  // reports it; absent when the tab didn't answer the read in time.
+  tabMemory?: {
+    jsUsedMB: number;
+    jsTotalMB: number;
+    domMB: number;
+    buffersMB: number;
+  };
   // Elapsed between render start and the timeout. If ~= timeoutMs the
   // render itself stalled; if << timeoutMs the launch dominated.
   renderElapsedMs?: number;
@@ -1556,6 +1566,16 @@ export type RunCommandArgs = {
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
   priority?: number;
+  // Set for an automation run: the URL of the automation's realm. `auth` is
+  // then the run's token alone, and the command runs on the realm's run
+  // affinity (`realm:<url>#run:<userId>`) rather than the user's, in a tab
+  // that serves runs of that realm and identity only (ADR 025 §1.2).
+  runRealm?: string;
+  // How long the command may run, in ms, in place of the render timeout.
+  // Every layer between the caller and the tab widens its own timeout to
+  // cover it, up to an automation run's longest time limit
+  // (`MAX_RUN_SECONDS`).
+  timeoutMs?: number;
 };
 
 export type RunCommandResponse = {
@@ -1908,6 +1928,7 @@ export * from './capture-spec.ts';
 export * from './capture-disposition.ts';
 export * from './capture-url-token.ts';
 export * from './diagnostic-session.ts';
+export * from './run-token.ts';
 export * from './expression.ts';
 export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';
@@ -2036,6 +2057,10 @@ export * from './code-ref.ts';
 export * from './command-parsing-utils.ts';
 export * from './serializers/index.ts';
 export * from './host-routing-validation.ts';
+export * from './host-routes.ts';
+export * from './host-route-resolver.ts';
+export * from './host-route-address.ts';
+export * from './host-route-lookups.ts';
 export * from './route-pattern.ts';
 
 export type {
@@ -2583,3 +2608,11 @@ export {
 export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
 export * from './automation-runs.ts';
+export * from './automation-change-events.ts';
+export * from './automation-run-events.ts';
+export * from './automation-run-charge.ts';
+export * from './automation-run-command.ts';
+export * from './automation-run-telemetry.ts';
+export * from './ai-batches.ts';
+export * from './automation-files.ts';
+export * from './automation-storage-charge.ts';
