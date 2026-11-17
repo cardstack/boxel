@@ -283,38 +283,30 @@ export async function pauseAutomation(
   }: { automationId: RealmResourceIdentifier; user: string },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
-  return await withRunCancels(
-    dbAdapter,
-    async (txQuery, canceled) => {
-      let found = await lockForDirectWriter(
-        txQuery,
-        automationId,
-        user,
-        options,
-      );
-      if (!found.ok) {
-        return found;
-      }
-      if (found.automation.state === 'paused') {
-        return {
-          ok: false,
-          reason: 'not-pausable',
-          automation: found.automation,
-        };
-      }
+  let report = options.reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
+    let found = await lockForDirectWriter(txQuery, automationId, user, options);
+    if (!found.ok) {
+      return found;
+    }
+    if (found.automation.state === 'paused') {
       return {
-        ok: true,
-        automation: await pause(
-          txQuery,
-          canceled,
-          automationId,
-          'requested',
-          user,
-        ),
+        ok: false,
+        reason: 'not-pausable',
+        automation: found.automation,
       };
-    },
-    options.reportRunChange,
-  );
+    }
+    return {
+      ok: true,
+      automation: await pause(
+        txQuery,
+        canceled,
+        automationId,
+        'requested',
+        user,
+      ),
+    };
+  });
 }
 
 // Resumes a paused automation for `user`, a direct writer of its realm, who
@@ -384,31 +376,23 @@ export async function removeAutomation(
   }: { automationId: RealmResourceIdentifier; user: string },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
-  return await withRunCancels(
-    dbAdapter,
-    async (txQuery, canceled) => {
-      let found = await lockForDirectWriter(
-        txQuery,
-        automationId,
-        user,
-        options,
-      );
-      if (!found.ok) {
-        return found;
-      }
-      canceled.push(
-        ...(await cancelUnfinishedAutomationRuns(txQuery, automationId, {
-          canceledBy: user,
-        })),
-      );
-      await txQuery([
-        'DELETE FROM automations WHERE automation_id =',
-        param(automationId),
-      ]);
-      return { ok: true, automation: found.automation };
-    },
-    options.reportRunChange,
-  );
+  let report = options.reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
+    let found = await lockForDirectWriter(txQuery, automationId, user, options);
+    if (!found.ok) {
+      return found;
+    }
+    canceled.push(
+      ...(await cancelUnfinishedAutomationRuns(txQuery, automationId, {
+        canceledBy: user,
+      })),
+    );
+    await txQuery([
+      'DELETE FROM automations WHERE automation_id =',
+      param(automationId),
+    ]);
+    return { ok: true, automation: found.automation };
+  });
 }
 
 // A person's cancel of a run was refused:
@@ -507,25 +491,22 @@ export async function checkAutomationCaps(
   card: Pick<AutomationDeclaration, 'caps' | 'batchedAI'>,
   reportRunChange?: ReportRunChange,
 ): Promise<AutomationRow | undefined> {
-  return await withRunCancels(
-    dbAdapter,
-    async (txQuery, canceled) => {
-      let row = await selectAutomation(txQuery, automationId, { lock: true });
-      if (!row) {
-        return undefined;
-      }
-      let automation = automationFromRow(row);
-      if (automation.state === 'paused') {
-        return automation;
-      }
-      let reason = capsRaisedAbove(automation.capsSnapshot, card);
-      if (!reason) {
-        return automation;
-      }
-      return await pause(txQuery, canceled, automationId, reason);
-    },
-    reportRunChange,
-  );
+  let report = reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    if (automation.state === 'paused') {
+      return automation;
+    }
+    let reason = capsRaisedAbove(automation.capsSnapshot, card);
+    if (!reason) {
+      return automation;
+    }
+    return await pause(txQuery, canceled, automationId, reason);
+  });
 }
 
 // Checks that the automation's payer is still a direct writer of its realm,
@@ -537,34 +518,31 @@ export async function checkAutomationPayer(
   automationId: RealmResourceIdentifier,
   options: Omit<AutomationActorOptions, 'now'>,
 ): Promise<AutomationRow | undefined> {
-  return await withRunCancels(
-    dbAdapter,
-    async (txQuery, canceled) => {
-      let seen = await selectAutomation(txQuery, automationId);
-      if (!seen) {
-        return undefined;
-      }
-      let { realm, payer } = automationFromRow(seen);
-      // The payer's permission row is locked before the automation's row, the
-      // order every change here takes them in.
-      let stillWriter = await isDirectWriterOf(txQuery, realm, payer, options);
-      let row = await selectAutomation(txQuery, automationId, { lock: true });
-      if (!row) {
-        return undefined;
-      }
-      let automation = automationFromRow(row);
-      // A resume meanwhile made someone else the payer, and checked them.
-      if (
-        stillWriter ||
-        automation.state === 'paused' ||
-        automation.payer !== payer
-      ) {
-        return automation;
-      }
-      return await pause(txQuery, canceled, automationId, 'payer-lost-access');
-    },
-    options.reportRunChange,
-  );
+  let report = options.reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
+    let seen = await selectAutomation(txQuery, automationId);
+    if (!seen) {
+      return undefined;
+    }
+    let { realm, payer } = automationFromRow(seen);
+    // The payer's permission row is locked before the automation's row, the
+    // order every change here takes them in.
+    let stillWriter = await isDirectWriterOf(txQuery, realm, payer, options);
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    // A resume meanwhile made someone else the payer, and checked them.
+    if (
+      stillWriter ||
+      automation.state === 'paused' ||
+      automation.payer !== payer
+    ) {
+      return automation;
+    }
+    return await pause(txQuery, canceled, automationId, 'payer-lost-access');
+  });
 }
 
 // Pauses the automation with `payer-lost-access` when `payer` is still its
@@ -579,21 +557,18 @@ export async function pauseForPayerLostAccess(
   payer: string,
   reportRunChange?: ReportRunChange,
 ): Promise<AutomationRow | undefined> {
-  return await withRunCancels(
-    dbAdapter,
-    async (txQuery, canceled) => {
-      let row = await selectAutomation(txQuery, automationId, { lock: true });
-      if (!row) {
-        return undefined;
-      }
-      let automation = automationFromRow(row);
-      if (automation.state === 'paused' || automation.payer !== payer) {
-        return automation;
-      }
-      return await pause(txQuery, canceled, automationId, 'payer-lost-access');
-    },
-    reportRunChange,
-  );
+  let report = reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    if (automation.state === 'paused' || automation.payer !== payer) {
+      return automation;
+    }
+    return await pause(txQuery, canceled, automationId, 'payer-lost-access');
+  });
 }
 
 // What the index hook did with an automation's row:
@@ -652,97 +627,89 @@ export async function syncAutomationWithCard(
   options: AutomationSyncOptions,
 ): Promise<AutomationSync | undefined> {
   let now = options.now ?? currentUnixSeconds();
-  return await withRunCancels(
-    dbAdapter,
-    async (txQuery, canceled) => {
-      let row = await selectAutomation(txQuery, automationId, { lock: true });
-      if (!row) {
-        return undefined;
-      }
-      let automation = automationFromRow(row);
-      let card = await readCard();
-      if (!card) {
+  let report = options.reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    let card = await readCard();
+    if (!card) {
+      return await removeForCard(txQuery, canceled, automation, 'card-deleted');
+    }
+    // A card that failed to index carries no document to read, or carries
+    // only what an earlier visit recorded. Its row keeps the schedule it had:
+    // an error is no reason to stop the automation, and the run reads the
+    // card again when it starts.
+    if (!card.instance || card.failureWithheld) {
+      return { kind: 'unchanged', automation };
+    }
+    let read = readAutomationDeclaration(
+      {
+        url: automationId,
+        realmURL: card.realmURL,
+        types: card.types,
+        instance: card.instance,
+      },
+      options,
+    );
+    if (!read.ok) {
+      if (read.problems.some(({ code }) => code === 'not-an-automation')) {
         return await removeForCard(
           txQuery,
           canceled,
           automation,
-          'card-deleted',
+          'not-an-automation',
         );
       }
-      // A card that failed to index carries no document to read, or carries
-      // only what an earlier visit recorded. Its row keeps the schedule it had:
-      // an error is no reason to stop the automation, and the run reads the
-      // card again when it starts.
-      if (!card.instance || card.failureWithheld) {
-        return { kind: 'unchanged', automation };
-      }
-      let read = readAutomationDeclaration(
-        {
-          url: automationId,
-          realmURL: card.realmURL,
-          types: card.types,
-          instance: card.instance,
-        },
-        options,
-      );
-      if (!read.ok) {
-        if (read.problems.some(({ code }) => code === 'not-an-automation')) {
-          return await removeForCard(
-            txQuery,
-            canceled,
-            automation,
-            'not-an-automation',
-          );
-        }
-        return { kind: 'unchanged', automation };
-      }
-      let { declaration } = read;
-      if (automation.state === 'paused') {
-        return { kind: 'unchanged', automation };
-      }
-      let reason = capsRaisedAbove(automation.capsSnapshot, declaration);
-      if (reason) {
-        return {
-          kind: 'paused',
-          automation: await pause(txQuery, canceled, automationId, reason),
-        };
-      }
-      let cursors = withEditCursors(
-        automation.triggerRuns,
-        declaration.triggers,
-        now,
-      );
-      let schedule = computeAutomationSchedule({
-        triggers: declaration.triggers,
-        since: automation.scheduledSince,
-        now,
-        runState: cursors,
-      });
-      let triggerRuns = recordTriggers(cursors, declaration.triggers, schedule);
-      let state: AutomationState = schedule.done
-        ? 'done'
-        : automation.state === 'done'
-          ? 'active'
-          : automation.state;
-      let [updated] = await txQuery([
-        'UPDATE automations SET state =',
-        param(state),
-        ', trigger_runs =',
-        param(JSON.stringify(triggerRuns)),
-        '::jsonb, next_run =',
-        param(
-          schedule.nextRun === undefined
-            ? null
-            : unixSecondsToISO(schedule.nextRun),
-        ),
-        '::timestamptz, updated_at = now() WHERE automation_id =',
-        param(automationId),
-        'RETURNING *',
-      ]);
-      return { kind: 'recomputed', automation: automationFromRow(updated) };
-    },
-    options.reportRunChange,
-  );
+      return { kind: 'unchanged', automation };
+    }
+    let { declaration } = read;
+    if (automation.state === 'paused') {
+      return { kind: 'unchanged', automation };
+    }
+    let reason = capsRaisedAbove(automation.capsSnapshot, declaration);
+    if (reason) {
+      return {
+        kind: 'paused',
+        automation: await pause(txQuery, canceled, automationId, reason),
+      };
+    }
+    let cursors = withEditCursors(
+      automation.triggerRuns,
+      declaration.triggers,
+      now,
+    );
+    let schedule = computeAutomationSchedule({
+      triggers: declaration.triggers,
+      since: automation.scheduledSince,
+      now,
+      runState: cursors,
+    });
+    let triggerRuns = recordTriggers(cursors, declaration.triggers, schedule);
+    let state: AutomationState = schedule.done
+      ? 'done'
+      : automation.state === 'done'
+        ? 'active'
+        : automation.state;
+    let [updated] = await txQuery([
+      'UPDATE automations SET state =',
+      param(state),
+      ', trigger_runs =',
+      param(JSON.stringify(triggerRuns)),
+      '::jsonb, next_run =',
+      param(
+        schedule.nextRun === undefined
+          ? null
+          : unixSecondsToISO(schedule.nextRun),
+      ),
+      '::timestamptz, updated_at = now() WHERE automation_id =',
+      param(automationId),
+      'RETURNING *',
+    ]);
+    return { kind: 'recomputed', automation: automationFromRow(updated) };
+  });
 }
 
 // Every switched-on automation in `realm`, as the index hook looks them up
@@ -768,29 +735,26 @@ export async function pauseRealmAutomations(
   realm: RealmIdentifier,
   reportRunChange?: ReportRunChange,
 ): Promise<AutomationRow[]> {
-  return await withRunCancels(
-    dbAdapter,
-    async (txQuery, canceled) => {
-      let rows = await txQuery([
-        'SELECT automation_id FROM automations WHERE realm =',
-        param(realm),
-        "AND state <> 'paused' ORDER BY automation_id FOR UPDATE",
-      ]);
-      let paused: AutomationRow[] = [];
-      for (let row of rows) {
-        paused.push(
-          await pause(
-            txQuery,
-            canceled,
-            row.automation_id as RealmResourceIdentifier,
-            'realm-archived',
-          ),
-        );
-      }
-      return paused;
-    },
-    reportRunChange,
-  );
+  let report = reportRunChange;
+  return await withRunCancels(dbAdapter, report, async (txQuery, canceled) => {
+    let rows = await txQuery([
+      'SELECT automation_id FROM automations WHERE realm =',
+      param(realm),
+      "AND state <> 'paused' ORDER BY automation_id FOR UPDATE",
+    ]);
+    let paused: AutomationRow[] = [];
+    for (let row of rows) {
+      paused.push(
+        await pause(
+          txQuery,
+          canceled,
+          row.automation_id as RealmResourceIdentifier,
+          'realm-archived',
+        ),
+      );
+    }
+    return paused;
+  });
 }
 
 // Deletes the row of an automation whose card is gone or is no longer an
@@ -918,8 +882,8 @@ async function pause(
 // is logged.
 async function withRunCancels<T>(
   dbAdapter: DBAdapter,
+  reportRunChange: ReportRunChange | undefined,
   change: (txQuery: Querier, canceled: AutomationRun[]) => Promise<T>,
-  reportRunChange?: ReportRunChange,
 ): Promise<T> {
   let canceled: AutomationRun[] = [];
   let result = await dbAdapter.withTransaction((txQuery) => {
