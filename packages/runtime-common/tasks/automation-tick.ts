@@ -6,6 +6,7 @@ import {
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
 } from '../queue.ts';
+import { taskRunChangeReporter } from '../automation-run-events.ts';
 import { tickAutomations } from '../automation-tick.ts';
 import { readRunDeclaration } from '../automation-run-limits.ts';
 
@@ -51,10 +52,17 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
   virtualNetwork,
   log,
   reportStatus,
+  reportRealmEvent,
 }) =>
   async function (args) {
     let { jobInfo } = args;
     reportStatus(jobInfo, 'start');
+    let reportRunChange = taskRunChangeReporter({
+      dbAdapter,
+      virtualNetwork,
+      reportRealmEvent,
+      log,
+    });
     try {
       let tag = `${jobIdentity(jobInfo)} automation-tick`;
       let outcomes = await tickAutomations(dbAdapter, {
@@ -82,6 +90,7 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
             for (let trigger of outcome.triggers) {
               if (trigger.kind === 'started') {
                 result.started++;
+                await reportRunChange?.(trigger.runId);
                 log.info(
                   `${tag}: automation ${outcome.automationId} trigger ${trigger.trigger} started run ${trigger.runId} (job ${trigger.jobId}) for ${trigger.slot}`,
                 );

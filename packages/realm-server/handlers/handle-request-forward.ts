@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import type {
   DBAdapter,
   DefinitionLookup,
+  ReportRunChange,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
@@ -160,11 +161,14 @@ export default function handleRequestForward({
   definitionLookup,
   virtualNetwork,
   realmSecretSeed,
+  reportRunChange,
 }: {
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   realmSecretSeed: string;
+  // Told when a run's request ends the run at a cap.
+  reportRunChange?: ReportRunChange;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     // A caller that stops waiting must take the upstream call with it. Each
@@ -342,7 +346,13 @@ export default function handleRequestForward({
       let matrixUserId: string;
       if (runToken) {
         let admission = await admitRunForward(
-          { dbAdapter, definitionLookup, virtualNetwork, realmSecretSeed },
+          {
+            dbAdapter,
+            definitionLookup,
+            virtualNetwork,
+            realmSecretSeed,
+            reportRunChange,
+          },
           {
             token: runToken,
             url: json.url,

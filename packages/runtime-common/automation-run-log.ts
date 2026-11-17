@@ -91,6 +91,8 @@ export interface RunLogAppendResult {
   stored: number;
   // The lines refused past the run's cap.
   dropped: number;
+  // The run milestones the lines marked that the run recorded.
+  milestones: number;
   // The run has no row.
   missing?: true;
 }
@@ -122,10 +124,12 @@ export async function appendRunLog(
   } = {},
 ): Promise<RunLogAppendResult> {
   if (lines.length === 0) {
-    return { stored: 0, dropped: 0 };
+    return { stored: 0, dropped: 0, milestones: 0 };
   }
   let redacted = lines.map((line) => redactLine(line, secrets));
+  let milestones = 0;
   let result = await dbAdapter.withTransaction(async (txQuery) => {
+    milestones = 0;
     let [run] = (await txQuery([
       'SELECT r.automation_id, r.state, r.attempt, r.log_lines, r.log_chars, r.log_dropped, jr.job_id',
       'FROM automation_runs r LEFT JOIN job_reservations jr ON jr.id = r.attempt',
@@ -152,7 +156,7 @@ export async function appendRunLog(
       run.state === 'running' &&
       (attempt === undefined || Number(run.attempt) === attempt)
     ) {
-      await recordRunMilestones(txQuery, runId, redacted);
+      milestones = await recordRunMilestones(txQuery, runId, redacted);
     }
     let seq = Number(run.log_lines);
     let chars = Number(run.log_chars);
@@ -218,7 +222,7 @@ export async function appendRunLog(
   });
   if (!result) {
     log.warn(`run ${runId} has no row; ${lines.length} log lines not stored`);
-    return { stored: 0, dropped: 0, missing: true };
+    return { stored: 0, dropped: 0, milestones: 0, missing: true };
   }
   let tags = runLogTags({
     automationId: result.automationId,
@@ -233,7 +237,7 @@ export async function appendRunLog(
       `[automation-run-log] ${tags} reached its cap of ${maxLines} lines or ${maxChars} characters; later lines are dropped`,
     );
   }
-  return { stored: result.stored.length, dropped: result.dropped };
+  return { stored: result.stored.length, dropped: result.dropped, milestones };
 }
 
 export interface RunLog {
