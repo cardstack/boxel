@@ -46,7 +46,7 @@ export default function handleArchiveRealm({
 
     try {
       // An archived realm's automations stop with it: each is paused, and its
-      // pending run canceled, until a direct writer resumes it. They pause
+      // pending and running runs canceled, until a direct writer resumes it. They pause
       // before the realm is marked archived, so a failure in between leaves
       // the realm visible with its automations stopped, never archived with
       // them running, and a retry archives it.

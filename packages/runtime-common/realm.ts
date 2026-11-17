@@ -230,6 +230,7 @@ import {
   type RunOverlayKey,
 } from './run-overlay.ts';
 import { automationRunCallApiMeter } from './automation-run-limits.ts';
+import { RUN_STATE_PATH } from './automation-run-command.ts';
 import {
   RUN_LOG_MAX_REQUEST_BYTES,
   RUN_LOG_PATH,
@@ -3952,6 +3953,17 @@ export class Realm {
         SupportedMimeType.JSONAPI,
         this.appendScriptRunLog.bind(this),
         { ...ACL_ONLY, takesRunWrites: true },
+      )
+      // Whether an automation run is still running, which the run's tab asks
+      // while its script runs. `Realm.handleAutomation` admits the call only
+      // while the run's row lets the run's calls through, so a run that was
+      // canceled, paused or taken over is answered 401 here as on every other
+      // call, and its tab stops the script.
+      .get(
+        RUN_STATE_PATH,
+        SupportedMimeType.JSONAPI,
+        this.runState.bind(this),
+        ACL_ONLY,
       )
       // The operations envelope, under the media type that carries its
       // extension and under the plain JSON:API one it extends. Both reach the
@@ -14514,6 +14526,43 @@ export class Realm {
         id: call.runId,
         attributes: { stored: result.stored, dropped: result.dropped },
       },
+    });
+  }
+
+  // Answers a run's own call that the run is running: the admission in
+  // `Realm.handleAutomation` has already checked its row.
+  private async runState(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let call = requestContext.automationRun;
+    let ok = Boolean(call && !call.readOnly);
+    return createResponse({
+      body: JSON.stringify(
+        ok
+          ? {
+              data: {
+                type: 'automation-run',
+                id: call!.runId,
+                attributes: { state: 'running' },
+              },
+            }
+          : {
+              errors: [
+                {
+                  status: '403',
+                  code: 'not-a-run',
+                  detail:
+                    "Only an automation run asks whether it is running, in the run's own realm",
+                },
+              ],
+            },
+      ),
+      init: {
+        status: ok ? 200 : 403,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
     });
   }
 

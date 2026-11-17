@@ -33,7 +33,11 @@ description: >-
   `packages/runtime-common/automation-runs.ts`, writing the run-command task or
   the `Realm.handleAutomation` checks that read the run row, adding a column to
   `automation_runs`, or diagnosing a run that is stuck, errored with
-  `commit-interrupted`, or committed twice. Also covers the run token a run's
+  `commit-interrupted`, or committed twice. Also covers canceling a run
+  (`cancelAutomationRunFor`, for a direct writer) and pausing or removing an
+  automation while its run runs: what each leaves behind on the run row, the
+  overlay and the log, and how the run's tab learns of it (`/_run-state`,
+  `RunStateWatch`) and stops the QuickJS worker. Also covers the run token a run's
   calls carry (`run-token.ts`, `mintRunToken`, `verifyRunToken`), how
   `Realm.handleAutomation` admits a call against the run row, and how to trace
   a refused run-token call or a run's `key_uses`. Also covers the run
@@ -252,7 +256,7 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 | `realm-archived`         | `pauseRealmAutomations`: the realm was archived (`handlers/handle-archive-realm.ts`)                                      |
 
 - **`switchOnAutomation`** makes the row for a direct writer, who becomes the payer, snapshots the caps the declaration sets, and starts the schedule now. A row whose triggers are all spent starts `done`. A second switch-on is refused (`already-switched-on`).
-- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it); restoring the realm leaves them paused until a direct writer resumes each one.
+- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending and running runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it); restoring the realm leaves them paused until a direct writer resumes each one.
 - **`checkAutomationCaps`** and **`checkAutomationPayer`** pause without a person. A row already paused keeps its reason, since a resume takes a new snapshot whatever paused it. A cap the snapshot doesn't limit (an unset credit cap, or a cap added to the card type after the snapshot) is never "raised"; `capsRaisedAbove` is the comparison.
 - The tick, the card's index hook and the run task own `next_run`, `trigger_runs`, `waiting-for-credits`, `done` and the `last_*` columns once the row exists. The lifecycle functions set the next run and `done` only where they start a schedule. Whatever writes `trigger_runs` keeps each entry's `timing`.
 
@@ -262,8 +266,8 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 
 | The card as indexed                                                                                                                      | The row                                                                                                                                                      |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| No live instance (deleted)                                                                                                               | Removed, pending run canceled with `error_reason` `card-deleted`                                                                                             |
-| Doesn't adopt from the catalog `Automation` type                                                                                         | Removed, pending run canceled with `not-an-automation`                                                                                                       |
+| No live instance (deleted)                                                                                                               | Removed, pending and running runs canceled with `error_reason` `card-deleted`                                                                                |
+| Doesn't adopt from the catalog `Automation` type                                                                                         | Removed, pending and running runs canceled with `not-an-automation`                                                                                          |
 | Failed to index (or carries only an earlier visit, `failureWithheld`), or doesn't read as a declaration (an invalid cron, a missing cap) | Unchanged: the next index that reads it recomputes                                                                                                           |
 | Row is paused                                                                                                                            | Unchanged, whatever paused it: a resume restarts the schedule                                                                                                |
 | Raises a cap or turns on `batchedAI` (`capsRaisedAbove`)                                                                                 | Paused with `caps-raised` or `batched-ai-enabled`                                                                                                            |
@@ -279,7 +283,7 @@ Every direct-writer check is `isDirectWriterLocked`, asked inside the change's t
 
 The row's `realm` is what every later check asks about, so switch-on refuses a realm that doesn't contain the automation (`outside-realm`, decided by `RealmPaths.inRealm`), and switch-on and resume refuse a declaration read from another card (`other-card`). Each change locks the person's permission row before the automation's row, in that order everywhere, so two changes never wait on each other; code that touches both, such as a realm's archive or delete, takes them in the same order.
 
-**Pausing and removing cancel the automation's pending run** in the same transaction, so nothing it queued starts. A running run carries on. A run that a person's pause or remove canceled names them in `canceled_by`; one that `checkAutomationCaps` or `checkAutomationPayer` canceled has no `canceled_by` and carries the pause reason in `error_reason`.
+**Every pause and every remove cancels the automation's pending and running runs** in the same transaction (`cancelUnfinishedAutomationRuns`), whatever paused or removed it: a person, a raised cap, the payer losing access, archiving, or the index hook. A pending run never starts. A running run stops as a canceled one does (see _Canceling a run_): its overlay is discarded, the realm server refuses its next call, and its tab stops the script. A running run whose commit was claimed is left to finish, since its writes may already be landing. A run that a person's pause or remove canceled names them in `canceled_by`; one any other pause or remove canceled has no `canceled_by` and carries the reason in `error_reason`. Each canceled run's log ends with a `finish` line saying so, written once the transaction commits (a log line locks the run's row, which the transaction holds).
 
 ### Inspecting an automation
 
@@ -295,7 +299,7 @@ SELECT state, pause_reason, paused_by, payer, next_run, scheduled_since,
 - `paused` with `caps-raised` or `batched-ai-enabled`: compare `caps_snapshot` with the card's `caps` and `batchedAI`. A direct writer resumes it to agree to the new caps and pay for them.
 - `paused` with `payer-lost-access`: the payer's own permission row no longer grants write. Another direct writer resumes it and becomes the payer.
 - `active` with a null `next_run`: only webhook triggers, or none left that the schedule can place.
-- A run canceled with no `canceled_by`: an automatic pause canceled it; its `error_reason` names which.
+- A run canceled with no `canceled_by`: an automatic pause, or the index hook's remove, canceled it; its `error_reason` names which.
 
 ### The tick: enqueueing due runs
 
@@ -427,11 +431,19 @@ says why) rather than throwing.
   last reservation, and no attempt is left to finish the run. This is for the
   reconcile pass (ADR 028 §1.5). A run whose commit landed finishes complete;
   any other finishes as an error with `reason`.
-- **`cancelPendingAutomationRuns(querier, automationId, by)`** cancels every pending run of an automation inside the caller's transaction, as pausing and removing it do. It leaves a running run to finish.
-- **`cancelAutomationRun`** cancels a pending or running run, and records who
-  canceled it. It is refused once the commit is claimed, since the writes may
-  already be landing. A canceled run can't be started, claim a commit or
-  finish.
+- **`cancelUnfinishedAutomationRuns(querier, automationId, by)`** cancels
+  every pending run of an automation, and its running one unless its commit
+  was claimed, inside the caller's transaction, as pausing and removing it do.
+  It discards the overlays of the runs it cancels and returns them; the caller
+  writes each one's `finish` line with `logAutomationRunEnded` once its
+  transaction commits.
+- **`cancelAutomationRun`** cancels a pending or running run, records who
+  canceled it, discards its overlay and logs its `finish` line.
+  `cancelAutomationRunIn` does the same inside the caller's transaction,
+  without the line. It is refused once the commit is claimed, since the
+  writes may already be landing. A canceled run can't be started, claim a
+  commit or finish. A person's cancel goes through `cancelAutomationRunFor`
+  (_Canceling a run_), which checks they may.
 - **`addAutomationRunCounts`** adds to the metered counts in any state, since
   the work they count was done either way. A negative or fractional amount
   throws.
@@ -465,6 +477,54 @@ if (await claimAutomationRunCommit(db, runId, attempt)) {
 
 A claim that returns `undefined` means a retry took the run over or someone
 canceled it. Discard the staged writes and stop.
+
+### Canceling a run
+
+`cancelAutomationRunFor(dbAdapter, { runId, user }, options)` in
+`automations.ts` (imported as `@cardstack/runtime-common/automations`, with
+the `AutomationActorOptions` the lifecycle functions take) cancels a pending
+or running run for a direct writer of the run's realm. It locks the person's
+permission row before the run's row, the order every change here takes them
+in, and returns `{ ok: true, run }` or a refusal: `missing`,
+`not-a-direct-writer`, or `not-cancelable` with the run as it stands (it
+already ended, or its commit was claimed). The automation's own row doesn't
+change: it stays active, and its next run comes due as scheduled. It is a
+server function, and no route serves it.
+
+What a cancel leaves behind:
+
+- **The run row**: `state` `canceled`, `canceled_by` the person,
+  `finished_at` set, `commit_started_at` null. The metered counts and AI
+  credits it spent stay, since the work they count was done.
+- **The overlay**: discarded in the cancel's transaction, so a cancel before
+  the commit writes nothing to the realm. A write staged while the cancel
+  waited on the run's row lock is discarded too; one after finds the run
+  not running and is refused (401).
+- **The log**: a `finish` line, `The run was canceled by <user>`, after
+  whatever the script and the platform logged before it. The tab's later
+  lines are refused, since `/_run-log` admits only a running run.
+- **The run's calls**: `Realm.handleAutomation` refuses the next one with
+  401 `The automation run is not running`. A commit sent after the cancel is
+  refused the same way, and the worker's finish is refused, so the attempt
+  leaves the run as the cancel left it (`could not finish the run`).
+- **The tab**: the `run-automation` tool runs a `RunStateWatch`
+  (`host/app/lib/realm-runner/run-state-watch.ts`) beside the script. Every
+  `RUN_STATE_POLL_MS` (2 s) it asks the realm's `GET /_run-state`
+  (`RUN_STATE_PATH` in `automation-run-command.ts`) with the run's token,
+  which `handleAutomation` admits only while the run is running under the
+  token's attempt; the route answers 200 with the run's id, and 403
+  `not-a-run` to anything but the run's own token in its own realm. On a
+  401 the watch aborts the signal `runAutomationScript` runs under, which
+  terminates the QuickJS web worker at once, so a script spinning in a loop
+  with no calls of its own stops too. The tool answers `error` with reason
+  `stopped`. A 401 saying `Token expired` is not a stop: the token expires
+  at the run's time limit, which the runner enforces and reports as
+  `timed-out`. A failed or slow ask is not a stop either; the time limit
+  still bounds the script.
+
+A pause or remove stops a running run the same way (_States and who changes
+them_, above), with `canceled_by` the person who paused or removed it, or
+none and the reason in `error_reason`.
 
 ### Diagnosing a run
 
@@ -1171,7 +1231,7 @@ for a run row its trigger has already made with `createAutomationRun`:
      error named by the refusal's code (_Committing the overlay_), unless
      the row says the batch landed, which finishes it complete;
    - `error`: finishes the run as an error with the outcome's reason
-     (`script-error`, `timed-out`, `run-failed`) and its message, prefixed
+     (`script-error`, `timed-out`, `run-failed`, `stopped`) and its message, prefixed
      `line N:` for a script error that has a line. The finish discards the
      overlay, so nothing the script staged lands;
    - a tab that never answered (`unusable`) is `timed-out`; a command that
@@ -1219,6 +1279,14 @@ never reads the run's sessions in place of its own.
 
 To check a tab by hand after a run, read `localStorage` and
 `globalThis.__boxelInMemorySessions` in it: neither holds the run's token.
+
+While the script runs, the tool's `RunStateWatch` asks the realm every 2 s
+whether the run is still running, and stops the script once it isn't: a
+cancel, a pause or remove, a cap that ended the run, or a newer attempt
+taking it over (_Canceling a run_). The tool then answers `stopped`, and the
+worker's finish is refused unless the run is still running under this
+attempt (the person's sessions were revoked, say), when it records the run
+as an error with reason `stopped`.
 
 `timeoutMs` widens every layer's timeout for this one request: the worker's
 request to the manager, the manager's proxy, and the tab's wait on the

@@ -385,15 +385,17 @@ export async function finishAutomationRun(
           { ends: true },
         );
   if (run) {
-    await logRunEnded(dbAdapter, run);
+    await logAutomationRunEnded(dbAdapter, run);
   }
   return run;
 }
 
 // The run log's last line: how the run ended, as its row says. The realm
 // server writes it, so a run whose tab can no longer send (its token expired
-// at its time limit, say) still ends its log with why.
-async function logRunEnded(
+// at its time limit, say) still ends its log with why. Writing a line locks
+// the run's row, so a caller that ended the run inside a transaction of its
+// own writes the line once that transaction has committed.
+export async function logAutomationRunEnded(
   dbAdapter: DBAdapter,
   run: AutomationRun,
 ): Promise<void> {
@@ -407,7 +409,10 @@ async function logRunEnded(
         ? {
             kind: 'finish',
             level: 'warn',
-            message: `The run was canceled${run.canceledBy ? ` by ${run.canceledBy}` : ''}`,
+            message: run.canceledBy
+              ? `The run was canceled by ${run.canceledBy}`
+              : `The run was canceled${run.errorReason ? ` (${run.errorReason})` : ''}`,
+            ...(run.errorReason ? { data: { reason: run.errorReason } } : {}),
           }
         : {
             kind: 'finish',
@@ -439,51 +444,83 @@ export async function abandonAutomationRun(
   ]);
   let run = row ? runFromRow(row) : undefined;
   if (run) {
-    await logRunEnded(dbAdapter, run);
+    await logAutomationRunEnded(dbAdapter, run);
   }
   return run;
 }
 
 // Cancels a pending or running run, for `canceledBy`. A run whose commit was
-// claimed can't be canceled, since its writes may already be landing.
+// claimed can't be canceled, since its writes may already be landing. The
+// cancel discards the run's overlay, so nothing it staged lands; the realm
+// server refuses the run's next call, and its tab stops the script once the
+// realm answers that the run is not running. A person's cancel goes through
+// `cancelAutomationRunFor` in `automations.ts`, which checks they may.
 export async function cancelAutomationRun(
   dbAdapter: DBAdapter,
   id: string,
   canceledBy: string,
 ): Promise<AutomationRun | undefined> {
-  let row = await endRun(dbAdapter, [
+  let run = await dbAdapter.withTransaction((txQuery) =>
+    cancelAutomationRunIn(txQuery, id, canceledBy),
+  );
+  if (run) {
+    await logAutomationRunEnded(dbAdapter, run);
+  }
+  return run;
+}
+
+// `cancelAutomationRun` inside the caller's transaction, which then writes
+// the run's last log line with `logAutomationRunEnded` once it commits.
+export async function cancelAutomationRunIn(
+  txQuery: Querier,
+  id: string,
+  canceledBy: string,
+): Promise<AutomationRun | undefined> {
+  let [row] = await txQuery([
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
     param(canceledBy),
     'WHERE id =',
     param(id),
     "AND state IN ('pending', 'running') AND commit_started_at IS NULL RETURNING *",
   ]);
-  let run = row ? runFromRow(row) : undefined;
-  if (run) {
-    await logRunEnded(dbAdapter, run);
+  if (!row) {
+    return undefined;
   }
-  return run;
+  await discardOverlays(txQuery, [String(row.id)]);
+  return runFromRow(row);
 }
 
-// Cancels every run of the automation that hasn't started, as pausing or
-// removing the automation does, inside the caller's transaction. A running
-// run is left to finish. A person's pause or remove names them in
+// Cancels every run of the automation that hasn't ended, as pausing or
+// removing the automation does, inside the caller's transaction, and returns
+// the runs it canceled. A pending run never starts. A running run is
+// canceled as `cancelAutomationRun` cancels it: its overlay is discarded, the
+// realm server refuses its next call and its tab stops the script. A running
+// run whose commit was claimed is left to finish, since its writes may
+// already be landing. A person's pause or remove names them in
 // `canceled_by`. A pause no person asked for names no one, and records its
-// reason (such as `caps-raised`) in `error_reason`.
-export async function cancelPendingAutomationRuns(
+// reason (such as `caps-raised`) in `error_reason`. The caller writes each
+// canceled run's last log line with `logAutomationRunEnded` once its
+// transaction commits.
+export async function cancelUnfinishedAutomationRuns(
   querier: Querier,
   automationId: RealmResourceIdentifier,
   by: { canceledBy: string } | { reason: string },
-): Promise<void> {
-  await querier([
+): Promise<AutomationRun[]> {
+  let rows = await querier([
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
     param('canceledBy' in by ? by.canceledBy : null),
     ', error_reason =',
     param('reason' in by ? by.reason : null),
     'WHERE automation_id =',
     param(automationId),
-    "AND state = 'pending'",
+    "AND (state = 'pending' OR (state = 'running' AND commit_started_at IS NULL))",
+    'RETURNING *',
   ]);
+  await discardOverlays(
+    querier,
+    rows.map((row) => String(row.id)),
+  );
+  return rows.map(runFromRow);
 }
 
 // Adds the prerender tab time one attempt's script took to the run. The tab
@@ -784,13 +821,21 @@ async function endRun(
       ) {
         await keepPreviewBatch(txQuery, row);
       }
-      await txQuery([
-        'DELETE FROM run_overlay_files WHERE run_id =',
-        param(String(row.id)),
-      ]);
+      await discardOverlays(txQuery, [String(row.id)]);
     }
     return row;
   });
+}
+
+// Deletes what the runs staged, as a statement of its own after the update
+// that ended them (see `endRun`).
+async function discardOverlays(querier: Querier, runIds: string[]) {
+  for (let runId of runIds) {
+    await querier([
+      'DELETE FROM run_overlay_files WHERE run_id =',
+      param(runId),
+    ]);
+  }
 }
 
 // Copies a complete Preview's staged files into `automation_preview_files`,

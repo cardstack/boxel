@@ -9,6 +9,7 @@ import { presentsAsRunToken } from '@cardstack/runtime-common/run-token';
 
 import HostBaseTool from '../lib/host-base-tool';
 import {
+  AutomationRunStoppedError,
   AutomationTimeLimitError,
   redactSecrets,
 } from '../lib/realm-runner/automation';
@@ -17,6 +18,7 @@ import {
   type ProxySend,
 } from '../lib/realm-runner/research';
 import { RunLogSink } from '../lib/realm-runner/run-log-sink';
+import { RunStateWatch } from '../lib/realm-runner/run-state-watch';
 import { RealmScriptError } from '../lib/realm-runner/runner';
 import { claimsFromRawToken } from '../services/realm';
 
@@ -117,6 +119,15 @@ export default class RunAutomationTool extends HostBaseTool<
           'The automation run reached its time limit before its script could start',
       };
     } else {
+      // A run canceled, paused or taken over while its script runs is
+      // refused at its next call; this stops the script in this tab too,
+      // whether or not it makes another call.
+      let watch = new RunStateWatch({
+        realmURL,
+        runToken,
+        fetch: this.network.fetch,
+      });
+      watch.start();
       try {
         await runAutomationScript({
           code: scriptInput.code,
@@ -126,10 +137,13 @@ export default class RunAutomationTool extends HostBaseTool<
           io,
           progress,
           secrets,
+          signal: watch.signal,
         });
         outcome = { state: 'complete' };
       } catch (error) {
         outcome = errorOutcome(error, secrets);
+      } finally {
+        watch.stop();
       }
     }
     // The run's progress is sent before the run answers, while the run is
@@ -215,6 +229,9 @@ function errorOutcome(
   );
   if (error instanceof AutomationTimeLimitError) {
     return { state: 'error', reason: 'timed-out', message };
+  }
+  if (error instanceof AutomationRunStoppedError) {
+    return { state: 'error', reason: 'stopped', message };
   }
   if (error instanceof RealmScriptError) {
     let { line } = error.scriptError;

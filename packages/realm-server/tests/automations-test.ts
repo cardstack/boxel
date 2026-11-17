@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
+  claimAutomationRunCommit,
   createAutomationRun,
   getAutomationRun,
   insertPermissions,
@@ -13,6 +14,7 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import {
+  cancelAutomationRunFor,
   capsRaisedAbove,
   checkAutomationCaps,
   checkAutomationPayer,
@@ -34,6 +36,8 @@ import {
   type AutomationDeclaration,
   type AutomationIndexEntry,
 } from '@cardstack/runtime-common/automation-declaration';
+import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
+import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
 import type { DefinitionLookup } from '@cardstack/runtime-common';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
@@ -100,6 +104,45 @@ function runCounts(automation: AutomationRow) {
   );
 }
 
+// The adapter as `PgAdapter.withTransaction` behaves when the database
+// aborts a transaction (a deadlock or a serialization failure): its first
+// transaction runs the whole callback and is rolled back, and the callback
+// runs again in a new one.
+function rollsBackFirstTransaction(db: DBAdapter): DBAdapter {
+  class RolledBack extends Error {}
+  let rolledBack = false;
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop === 'withTransaction') {
+        return async (
+          change: Parameters<DBAdapter['withTransaction']>[0],
+          ...rest: unknown[]
+        ) => {
+          if (!rolledBack) {
+            rolledBack = true;
+            try {
+              await (target.withTransaction as any)(
+                async (txQuery: unknown) => {
+                  await (change as any)(txQuery);
+                  throw new RolledBack();
+                },
+                ...rest,
+              );
+            } catch (e) {
+              if (!(e instanceof RolledBack)) {
+                throw e;
+              }
+            }
+          }
+          return await (target.withTransaction as any)(change, ...rest);
+        };
+      }
+      let value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 module(basename(import.meta.filename), function () {
   module('the automation row', function (hooks) {
     let dbAdapter: DBAdapter;
@@ -145,6 +188,151 @@ module(basename(import.meta.filename), function () {
         actsAs: OWNER,
       });
     }
+
+    async function overlayPaths(runId: string): Promise<string[]> {
+      let rows = (await dbAdapter.execute(
+        `SELECT path FROM run_overlay_files WHERE run_id = '${runId}' ORDER BY path`,
+      )) as { path: string }[];
+      return rows.map(({ path }) => path);
+    }
+
+    module('cancel a run', function () {
+      test('a direct writer cancels a running run: its row records who, and what it staged is discarded', async function (assert) {
+        await switchOn();
+        let run = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        await stageRunOverlayFile(
+          dbAdapter,
+          { runId: run.id, attempt: 1 },
+          'staged.json',
+          new TextEncoder().encode('{}'),
+          10,
+        );
+
+        let result = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: ADMIN },
+          options,
+        );
+        assert.true(result.ok);
+        let canceled = (result as { run: { state: string } }).run;
+        assert.strictEqual(canceled.state, 'canceled');
+        let row = await getAutomationRun(dbAdapter, run.id);
+        assert.strictEqual(row?.state, 'canceled');
+        assert.strictEqual(row?.canceledBy, ADMIN);
+        assert.notStrictEqual(row?.finishedAt, null);
+        assert.deepEqual(await overlayPaths(run.id), []);
+        assert.deepEqual(
+          (await readRunLog(dbAdapter, run.id))?.lines.map(
+            ({ kind, message }) => ({
+              kind,
+              message,
+            }),
+          ),
+          [{ kind: 'finish', message: `The run was canceled by ${ADMIN}` }],
+        );
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.state,
+          'active',
+          'canceling a run leaves the automation as it was',
+        );
+      });
+
+      test('a direct writer cancels a pending run, which then never starts', async function (assert) {
+        await switchOn();
+        let run = await pendingRun();
+        let result = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: OWNER },
+          options,
+        );
+        assert.true(result.ok);
+        assert.strictEqual(
+          (await startAutomationRunAttempt(dbAdapter, run.id, 1)).kind,
+          'over',
+        );
+      });
+
+      test("someone who is not a direct writer of the run's realm cannot cancel it", async function (assert) {
+        await switchOn();
+        await insertPermissions(
+          dbAdapter,
+          new URL('http://127.0.0.1:4444/marketing/'),
+          { '@outsider:localhost': ['read', 'write'] },
+        );
+        let run = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        for (let user of [READER, '@outsider:localhost']) {
+          assert.deepEqual(
+            await cancelAutomationRunFor(
+              dbAdapter,
+              { runId: run.id, user },
+              options,
+            ),
+            { ok: false, reason: 'not-a-direct-writer' },
+            `${user} is refused`,
+          );
+        }
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, run.id))?.state,
+          'running',
+        );
+      });
+
+      test('a run whose commit was claimed, or that ended, cannot be canceled', async function (assert) {
+        await switchOn();
+        let committing = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, committing.id, 1);
+        await claimAutomationRunCommit(dbAdapter, committing.id, 1);
+        let result = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: committing.id, user: OWNER },
+          options,
+        );
+        assert.false(result.ok);
+        assert.strictEqual(
+          (result as { reason: string }).reason,
+          'not-cancelable',
+        );
+        assert.strictEqual(
+          (result as { run: { state: string } }).run.state,
+          'running',
+          'the refusal answers the run as it stands',
+        );
+
+        let pending = await pendingRun();
+        await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: pending.id, user: OWNER },
+          options,
+        );
+        let again = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: pending.id, user: ADMIN },
+          options,
+        );
+        assert.strictEqual(
+          (again as { reason: string }).reason,
+          'not-cancelable',
+        );
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, pending.id))?.canceledBy,
+          OWNER,
+          'the first cancel keeps who canceled it',
+        );
+      });
+
+      test('canceling a run that does not exist finds nothing', async function (assert) {
+        assert.deepEqual(
+          await cancelAutomationRunFor(
+            dbAdapter,
+            { runId: '00000000-0000-0000-0000-000000000000', user: OWNER },
+            options,
+          ),
+          { ok: false, reason: 'missing' },
+        );
+      });
+    });
 
     module('switch-on', function () {
       test('a direct writer switches an automation on and becomes its payer, with its caps snapshotted', async function (assert) {
@@ -367,11 +555,18 @@ module(basename(import.meta.filename), function () {
     });
 
     module('pause', function () {
-      test('a direct writer pauses an automation, which cancels its pending run and leaves a running one', async function (assert) {
+      test('a direct writer pauses an automation, which cancels its pending run and its running one', async function (assert) {
         await switchOn();
         let pending = await pendingRun();
         let running = await pendingRun('2026-11-10T11:30:00.000Z');
         await startAutomationRunAttempt(dbAdapter, running.id, 1);
+        await stageRunOverlayFile(
+          dbAdapter,
+          { runId: running.id, attempt: 1 },
+          'staged.json',
+          new TextEncoder().encode('{}'),
+          10,
+        );
 
         let result = await pauseAutomation(
           dbAdapter,
@@ -388,8 +583,55 @@ module(basename(import.meta.filename), function () {
         let canceled = await getAutomationRun(dbAdapter, pending.id);
         assert.strictEqual(canceled?.state, 'canceled');
         assert.strictEqual(canceled?.canceledBy, ADMIN);
+        let stopped = await getAutomationRun(dbAdapter, running.id);
+        assert.strictEqual(stopped?.state, 'canceled', 'the running run stops');
+        assert.strictEqual(stopped?.canceledBy, ADMIN);
+        assert.deepEqual(
+          await overlayPaths(running.id),
+          [],
+          'what the running run staged is discarded',
+        );
+        let log = await readRunLog(dbAdapter, running.id);
+        assert.deepEqual(
+          log?.lines.map(({ kind, message }) => ({ kind, message })),
+          [{ kind: 'finish', message: `The run was canceled by ${ADMIN}` }],
+          'its log ends with who canceled it',
+        );
+      });
+
+      test('a pause the database rolls back and retries logs each canceled run once', async function (assert) {
+        await switchOn();
+        let running = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, running.id, 1);
+
+        let result = await pauseAutomation(
+          rollsBackFirstTransaction(dbAdapter),
+          { automationId: AUTOMATION, user: ADMIN },
+          options,
+        );
+        assert.true(result.ok);
+        assert.deepEqual(
+          (await readRunLog(dbAdapter, running.id))?.lines.map(
+            ({ kind, message }) => ({ kind, message }),
+          ),
+          [{ kind: 'finish', message: `The run was canceled by ${ADMIN}` }],
+          'the rolled-back attempt adds no line of its own',
+        );
+      });
+
+      test('a running run whose commit was claimed is left to finish', async function (assert) {
+        await switchOn();
+        let committing = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, committing.id, 1);
+        await claimAutomationRunCommit(dbAdapter, committing.id, 1);
+
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: ADMIN },
+          options,
+        );
         assert.strictEqual(
-          (await getAutomationRun(dbAdapter, running.id))?.state,
+          (await getAutomationRun(dbAdapter, committing.id))?.state,
           'running',
         );
       });
@@ -536,9 +778,11 @@ module(basename(import.meta.filename), function () {
     });
 
     module('remove', function () {
-      test('a direct writer removes an automation, which deletes its row and cancels its pending run', async function (assert) {
+      test('a direct writer removes an automation, which deletes its row and cancels its pending and running runs', async function (assert) {
         let automation = await switchOn();
         let pending = await pendingRun();
+        let running = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, running.id, 1);
         let result = await removeAutomation(
           dbAdapter,
           { automationId: AUTOMATION, user: ADMIN },
@@ -549,9 +793,11 @@ module(basename(import.meta.filename), function () {
           await getAutomation(dbAdapter, AUTOMATION),
           undefined,
         );
-        let canceled = await getAutomationRun(dbAdapter, pending.id);
-        assert.strictEqual(canceled?.state, 'canceled');
-        assert.strictEqual(canceled?.canceledBy, ADMIN);
+        for (let run of [pending, running]) {
+          let canceled = await getAutomationRun(dbAdapter, run.id);
+          assert.strictEqual(canceled?.state, 'canceled');
+          assert.strictEqual(canceled?.canceledBy, ADMIN);
+        }
 
         let again = await removeAutomation(
           dbAdapter,
@@ -620,9 +866,11 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('raising a run cap pauses the automation, cancels its pending run, and keeps the payer', async function (assert) {
+      test('raising a run cap pauses the automation, cancels its pending and running runs, and keeps the payer', async function (assert) {
         await switchOn();
         let pending = await pendingRun();
+        let running = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, running.id, 1);
         let automation = await checkAutomationCaps(dbAdapter, AUTOMATION, {
           caps: { ...CAPS, writes: CAPS.writes + 1 },
           batchedAI: false,
@@ -635,6 +883,17 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(canceled?.state, 'canceled');
         assert.strictEqual(canceled?.canceledBy, null);
         assert.strictEqual(canceled?.errorReason, 'caps-raised');
+        let stopped = await getAutomationRun(dbAdapter, running.id);
+        assert.strictEqual(stopped?.state, 'canceled');
+        assert.strictEqual(stopped?.canceledBy, null);
+        assert.strictEqual(stopped?.errorReason, 'caps-raised');
+        assert.deepEqual(
+          (await readRunLog(dbAdapter, running.id))?.lines.map(
+            ({ kind, message }) => ({ kind, message }),
+          ),
+          [{ kind: 'finish', message: 'The run was canceled (caps-raised)' }],
+          'its log ends with the pause that canceled it',
+        );
       });
 
       test('unsetting a credit cap the snapshot set is a raise', async function (assert) {
