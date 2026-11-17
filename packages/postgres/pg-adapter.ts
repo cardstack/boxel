@@ -818,7 +818,7 @@ export class PgAdapter implements DBAdapter {
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
     await this.started;
-    let { client, releaseTurn } = await this.#checkout();
+    let { client, release } = await this.#checkout();
     // A checked-out client's death is nobody's event: the pool removes its
     // own idle listener for the duration of the checkout, so the in-flight
     // query rejects into the caller that handles it and the socket's closing
@@ -849,26 +849,52 @@ export class PgAdapter implements DBAdapter {
       throw e;
     } finally {
       stopRecording();
-      client.release();
-      releaseTurn();
+      release();
     }
   }
 
   // Wait for the scheduler's go-ahead, then check a client out of the pool.
-  // The turn is handed back by the caller after the client is released, or
-  // here if the checkout itself fails. `hold` is for a checkout kept across
+  // `release` gives back the client and the turn together, once; a failed
+  // checkout gives the turn back here. `hold` is for a checkout kept across
   // the caller's other work rather than given back once one statement
   // returns (see `ConnectionScheduler`).
-  async #checkout(opts?: {
-    hold?: ConnectionHold;
-  }): Promise<{ client: PoolClient; releaseTurn: () => void }> {
+  //
+  // A connection that dies while checked out (Postgres ending an idle
+  // transaction, an administrator terminating the backend, a failover) is
+  // given back as soon as the client reports it, not when the caller is done.
+  // The caller may be a hold waiting on other work, and that work may be what
+  // is waiting for a turn: counting the dead connection until the hold ended
+  // kept the scheduler's count above what Postgres had, with every waiter
+  // queued behind it. The caller's own statements on the client fail, and its
+  // later `release` does nothing.
+  async #checkout(opts?: { hold?: ConnectionHold }): Promise<{
+    client: PoolClient;
+    release: (destroy?: boolean | Error) => void;
+  }> {
     let releaseTurn = await this.#scheduler.acquire(opts);
+    let client: PoolClient;
     try {
-      return { client: await this.pool.connect(), releaseTurn };
+      client = await this.pool.connect();
     } catch (e) {
       releaseTurn();
       throw e;
     }
+    let released = false;
+    let release = (destroy?: boolean | Error) => {
+      if (released) {
+        return;
+      }
+      released = true;
+      client.removeListener('error', onLost);
+      try {
+        client.release(destroy);
+      } finally {
+        releaseTurn();
+      }
+    };
+    let onLost = (e: Error) => release(e);
+    client.on('error', onLost);
+    return { client, release };
   }
 
   async notify(channel: string, payload: string): Promise<void> {
@@ -1563,7 +1589,7 @@ export class PgAdapter implements DBAdapter {
     // the adapter is one it needs before it can give this one back. The hold
     // is made before the checkout so the scheduler knows it as a hold.
     let holding = markConnectionHeld();
-    let { client, releaseTurn } = await this.#checkout({ hold: holding });
+    let { client, release } = await this.#checkout({ hold: holding });
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     let query = async (expression: Expression) => {
       let sql = expressionToSql(this.kind, expression);
@@ -1571,7 +1597,6 @@ export class PgAdapter implements DBAdapter {
       let { rows } = await client.query(sql);
       return rows;
     };
-    let released = false;
     try {
       return await holding.run(() => fn(query));
     } catch (e) {
@@ -1588,20 +1613,14 @@ export class PgAdapter implements DBAdapter {
           'ROLLBACK failed during connection cleanup, destroying client: %s',
           rollbackError,
         );
-        client.release(true);
-        released = true;
+        release(true);
         throw e;
       }
-      client.release();
-      released = true;
       throw e;
     } finally {
       holding.end();
       stopRecording();
-      if (!released) {
-        client.release();
-      }
-      releaseTurn();
+      release();
     }
   }
 
