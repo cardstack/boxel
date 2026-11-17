@@ -10,18 +10,21 @@ if (typeof module !== 'undefined') {
   const config = {
     test_page: 'tests/index.html?hidepassed',
     disable_watching: true,
-    browser_timeout: 120,
-    browser_no_activity_timeout: 120,
     browser_disconnect_timeout: 60,
     // socket.io pingTimeout. testem otherwise derives this from
     // browser_disconnect_timeout (60s), which is too tight for this suite: on
-    // a CI runner the whole service stack and Chrome contend for two vCPUs, so
-    // the browser can be too starved to answer a socket.io ping within 60s
-    // even while every test is still passing — the control socket then drops
-    // and testem reports the browser dead mid-run. browser_no_activity_timeout
-    // (120s) still bounds a genuinely stuck browser that stops producing
-    // results, so widening the ping tolerance only keeps a slow-but-
-    // progressing browser connected.
+    // a CI runner the whole service stack and Chrome contend for the runner's
+    // vCPUs, so the browser can be too starved to answer a socket.io ping
+    // within 60s even while every test is still passing — the control socket
+    // then drops and testem reports the browser dead mid-run.
+    //
+    // This is also the only bound testem puts on a browser whose main thread
+    // hangs: it has no per-test or no-activity timeout. A hung page drops the
+    // socket with `ping timeout` after up to the 25s ping interval plus this
+    // timeout, and testem then waits browser_disconnect_timeout before
+    // reporting `Browser timeout exceeded` — up to about six and a half
+    // minutes in all. The disconnect reason in the debug log below names
+    // which case a failure was.
     socket_heartbeat_timeout: 300,
     launch_in_ci: ['Chrome'],
     launch_in_dev: ['Chrome'],
@@ -142,14 +145,22 @@ if (typeof module !== 'undefined') {
     // browser_disconnect_timeout. socket.io hands the disconnect a reason that
     // separates the causes — `transport close` (the page went away: renderer
     // crash or navigation), `ping timeout` (the page stopped answering: a hung
-    // main thread), `transport error` — but testem discards it. Record it.
+    // main thread), `transport error` — but testem discards it. Record it,
+    // with socket.io's description, which for `transport error` carries the
+    // underlying error.
     const BrowserTestRunner = require('testem/lib/runners/browser_test_runner');
     const onDisconnect = BrowserTestRunner.prototype.onDisconnect;
-    BrowserTestRunner.prototype.onDisconnect = function (reason, ...rest) {
+    BrowserTestRunner.prototype.onDisconnect = function (
+      reason,
+      description,
+      ...rest
+    ) {
       try {
         testemInternalLog.warn(
           `browser control socket disconnected: reason=${JSON.stringify(
             reason,
+          )} description=${JSON.stringify(
+            String(description?.message ?? description ?? ''),
           )} finished=${Boolean(this.finished)} priorDisconnects=${
             this.disconnectCount ?? 0
           }`,
@@ -157,7 +168,7 @@ if (typeof module !== 'undefined') {
       } catch (e) {
         // best-effort diagnostics — never let logging break the run
       }
-      return onDisconnect.call(this, reason, ...rest);
+      return onDisconnect.call(this, reason, description, ...rest);
     };
 
     // The browser's lifeline (tests/helpers/lifeline.ts) reports here over
