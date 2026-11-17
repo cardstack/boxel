@@ -82,6 +82,14 @@ description: >-
   lines, redaction, the per-run size cap, and the `[automation-run-log]` lines
   in Loki. Use when reading a run's log in Postgres or Loki, adding a line the
   platform logs for a run, or diagnosing a run whose log is missing lines.
+  Also covers a run's admission (`automation-admission.ts`): the checks the
+  worker makes before a run costs anything (the automation's row, the run's
+  identity's direct write, revoked sessions and Matrix account, the script,
+  every declared operation, which the realm checks through
+  `automationAdmission` at `/_run-admission`, and the spending hook), each
+  refusal code and what fixes it, and the `admission` log line and
+  `admitted_at`. Use when a run ended with one of those codes, or when
+  changing what admission checks.
 ---
 
 # Automations
@@ -247,13 +255,13 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 
 ### States and who changes them
 
-| Reason a row is `paused` | Set by                                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `requested`              | `pauseAutomation`: a direct writer paused it                                                                              |
-| `caps-raised`            | `checkAutomationCaps`: the card, as indexed, sets a cap above the snapshot, or leaves unset a credit cap the snapshot set |
-| `batched-ai-enabled`     | `checkAutomationCaps`: the card turned on `batchedAI` and the snapshot had it off                                         |
-| `payer-lost-access`      | `checkAutomationPayer`: the payer is no longer a direct writer of the realm                                               |
-| `realm-archived`         | `pauseRealmAutomations`: the realm was archived (`handlers/handle-archive-realm.ts`)                                      |
+| Reason a row is `paused` | Set by                                                                                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `requested`              | `pauseAutomation`: a direct writer paused it                                                                                                                                                     |
+| `caps-raised`            | `checkAutomationCaps`: the card, as indexed, sets a cap above the snapshot, or leaves unset a credit cap the snapshot set                                                                        |
+| `batched-ai-enabled`     | `checkAutomationCaps`: the card turned on `batchedAI` and the snapshot had it off                                                                                                                |
+| `payer-lost-access`      | `checkAutomationPayer`: the payer is no longer a direct writer of the realm; or a run's admission (`pauseForPayerLostAccess`): the payer's sessions were revoked, or their account can't sign in |
+| `realm-archived`         | `pauseRealmAutomations`: the realm was archived (`handlers/handle-archive-realm.ts`)                                                                                                             |
 
 - **`switchOnAutomation`** makes the row for a direct writer, who becomes the payer, snapshots the caps the declaration sets, and starts the schedule now. A row whose triggers are all spent starts `done`. A second switch-on is refused (`already-switched-on`).
 - **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending and running runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it); restoring the realm leaves them paused until a direct writer resumes each one.
@@ -1203,7 +1211,8 @@ for a run row its trigger has already made with `createAutomationRun`:
    with the job's reservation id as the attempt, and does what the start says
    (_An attempt, start to finish_).
 2. Reads the card's declaration and the run's limits from the index. A card
-   that doesn't read as an automation ends the run (`not-an-automation`). A
+   that doesn't read as an automation ends the run (`not-an-automation`).
+   Then admits the run's identity and the automation's row (_Admission_). A
    retry gets what is left of the run's time, counted from its first start,
    never a fresh limit; none left ends it (`timed-out`).
 3. Mints the run's token with the worker's `mintRunToken`
@@ -1213,7 +1222,10 @@ for a run row its trigger has already made with `createAutomationRun`:
 4. Reads the script file with the run's token, so the read takes the realm's
    check as the run's identity (`missing-script` when it can't), and records
    its id and the sha256 of its text with `recordAutomationRunScript`. At
-   most `MAX_AUTOMATION_SCRIPT_CHARS` (100,000) characters.
+   most `MAX_AUTOMATION_SCRIPT_CHARS` (100,000) characters. Then finishes
+   admission: the script parses, every declared operation passes, and the
+   spending check, after which `recordAutomationRunAdmitted` sets
+   `admitted_at` and the log gets its `admission` line.
 5. Sends the script to a prerender tab with `prerenderer.runCommand`, with
    `runRealm` set to the automation's realm, the run's token as the whole of
    the tab's auth, the `AutomationScriptInput` as a `JsonCard`'s `json`, and
@@ -1238,6 +1250,80 @@ for a run row its trigger has already made with `createAutomationRun`:
      failed or a request that failed is `run-failed`.
 
 The run's token is redacted from every message the row records.
+
+### Admission
+
+Before a run costs anything, each attempt admits it
+(`packages/runtime-common/automation-admission.ts`, ADR 026 §1.5). Every
+attempt admits again, since what admitted an earlier one can have changed. A
+refused run finishes as an error whose `error_reason` is the refusal's code,
+its tab is never asked to run the script, and its log gets one `admission`
+line at level `error` with `data.reason`. An admitted run sets
+`automation_runs.admitted_at` and logs an `admission` line with
+`data.admitted = true`.
+
+The declared operations are checked by the automation's realm, not the
+worker. The worker asks `GET <realm>/_run-admission` (`RUN_ADMISSION_PATH` in
+`automation-admission-route.ts`) with the run's token, and the realm checks
+each operation the card declares as the run's identity through
+`CallApiSender.admitAutomation`, which realm-server implements with
+`automationAdmission` over the realm's own operation core. Only a realm can
+check an operation the way its call is checked: the worker mounts no realm,
+and its definition cache can't read a private realm's modules. The route
+answers the first refusal, or none. Anything but the run's own token in its
+own realm gets 403 `not-a-run`, and a realm the worker can't ask refuses the
+run (`run-admission-failed`).
+
+The worker's own checks (`AutomationAdmissionChecks`) are built in
+`realm-server/worker.ts` by `buildAutomationAdmissionChecks`
+(`lib/automation-admission-checks.ts`): the Matrix account lookup, and the
+spending hook. A worker without them refuses every run as
+`account-unverifiable`.
+
+| Code                                                                              | Why                                                                                                                                                                                                                                                                                                                                                                                                      | What fixes it                                                                                                          |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `not-switched-on`                                                                 | A run of one of the card's triggers, and the automation has no row: it was removed, or never switched on                                                                                                                                                                                                                                                                                                 | A direct writer switches it on again                                                                                   |
+| `automation-paused`                                                               | A run of one of the card's triggers, and the row is `paused` (the run was enqueued before the pause)                                                                                                                                                                                                                                                                                                     | A direct writer resumes it, which also makes them the payer                                                            |
+| `payer-changed`                                                                   | A trigger's run that acts as someone other than the automation's payer: a resume made someone else the payer after the run was enqueued                                                                                                                                                                                                                                                                  | Nothing: the automation's next run acts as the new payer                                                               |
+| `not-a-direct-writer`                                                             | The person the run acts as has no permission row of their own granting write in the realm (a `*` or `users` row, a policy grant and a bot account never count). When they are the automation's payer, the automation is paused with `payer-lost-access` too (`checkAutomationPayer`)                                                                                                                     | Another direct writer resumes the automation and becomes the payer; for a Run now, someone who writes directly runs it |
+| `session-revoked`                                                                 | `users.sessions_revoked_at` is after the run was given its identity's authority: the payer's switch-on or last resume (`automations.scheduled_since`) for a trigger's run, the submitting run's start for a batch's follow-up, the run's own start (`automation_runs.created_at`) for a manual run. A payer's revocation also pauses the automation with `payer-lost-access` (`pauseForPayerLostAccess`) | The person signs in again and a direct writer resumes the automation, which moves `scheduled_since`                    |
+| `account-deactivated`                                                             | The Matrix server's admin API says the account is deactivated or locked, or has no such user. A payer's also pauses the automation with `payer-lost-access`                                                                                                                                                                                                                                              | Another direct writer resumes the automation and becomes the payer                                                     |
+| `account-unverifiable`                                                            | The worker can't ask: it has no admission checks, no Matrix server name, no admin credentials (`MATRIX_ADMIN_USERNAME`/`MATRIX_ADMIN_PASSWORD`, set on the worker task in infra's `configs/boxel-worker`), or the Matrix server didn't answer. What the Matrix server answered goes to the worker's log (`automation-admission`), never to the run                                                       | Fix the worker's credentials or the Matrix server; the next run is admitted                                            |
+| `not-an-automation`, `missing-script`, `script-error`                             | The card doesn't read as an automation, the script can't be read with the run's token, or it is empty, too long, or doesn't parse as the Realm Runner wraps it (`scriptParseError`)                                                                                                                                                                                                                      | Fix the card or the script                                                                                             |
+| `binding-not-approved`                                                            | A declared operation has no approval for automations by the run's identity                                                                                                                                                                                                                                                                                                                               | The person approves the operation in the secure window                                                                 |
+| `binding-needs-reapproval`                                                        | The operation's request changed since it was approved                                                                                                                                                                                                                                                                                                                                                    | The person reviews the changes and approves again in the secure window                                                 |
+| `share-suspended`                                                                 | The realm's share the operation's `{{apiKey}}` slot uses is suspended                                                                                                                                                                                                                                                                                                                                    | A direct writer resumes the share, or the key's owner swaps another key into it                                        |
+| `credential-rejected`                                                             | The vendor refused the key or connection the operation uses, or its OAuth client is broken (see the `oauth-connections` skill)                                                                                                                                                                                                                                                                           | Reconnect or replace the key                                                                                           |
+| any other `automationAdmission` code (`target-not-found`, `invalid-operation`, …) | The declared operation can't be found or lowered for the run's identity                                                                                                                                                                                                                                                                                                                                  | Fix the card's declaration or the operation's module                                                                   |
+| `run-admission-failed`, `run-admission-unavailable`                               | The worker couldn't ask the realm (the realm's answer is in `error_message`), or the realm has no `admitAutomation` (a published realm)                                                                                                                                                                                                                                                                  | Look at the realm server's log for the `_run-admission` request                                                        |
+| the spending hook's code                                                          | `AutomationAdmissionChecks.admitSpending`: the balance and the monthly cap                                                                                                                                                                                                                                                                                                                               | See the `pricing` skill                                                                                                |
+
+When admission pauses the automation with `payer-lost-access`, the refused
+run ends with its own code first, and the pause follows (the refusal carries
+it, and `runAutomationAttempt` makes it). A pause cancels the automation's
+unfinished runs, so its other pending runs end `canceled` with
+`error_reason = 'payer-lost-access'`.
+
+A run's kind comes from its job: `triggerKind: 'manual'` (Preview, Run now)
+or `'batch'` (a batch's follow-up); a job without one is a trigger's, even
+when the card no longer names that trigger. Trigger and batch runs need the
+automation's row. A trigger's run is admitted for an `active`,
+`waiting-for-credits` (left to the spending check) or `done` row (the run of
+the last slot is enqueued before the row is done), and refused for a paused
+one. A batch's follow-up runs while the automation is paused: it reads
+results its submitting run already paid for, and nothing runs it again after
+a resume. Its revocation check is anchored at the submitting run's start
+(the follow-up's slot is the batch's id, and `ai_batches.run_id` names that
+run). A manual run needs no row and runs while the automation is paused.
+
+```sql
+-- why a run didn't start
+SELECT error_reason, error_message, admitted_at
+  FROM automation_runs WHERE id = '<run id>';
+-- the admission line in its log
+SELECT message, data FROM automation_run_log
+ WHERE run_id = '<run id>' AND kind = 'admission';
+```
 
 ### The tab
 

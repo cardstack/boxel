@@ -42,6 +42,7 @@ import {
   ensureTestUser,
   realmSecretSeed,
   setupPermissionedRealmCached,
+  testAutomationAdmissionChecks,
   testCreatePrerenderAuth,
   testPricing,
 } from './helpers/index.ts';
@@ -202,18 +203,21 @@ module(basename(import.meta.filename), function (hooks) {
       concurrencyGroup: null,
       laneFamily: null,
     };
+    let definitionLookup = new CachingDefinitionLookup(
+      dbAdapter,
+      prerenderer,
+      virtualNetwork,
+      testCreatePrerenderAuth,
+    );
     return await runAutomationAttempt(
       {
         dbAdapter,
-        definitionLookup: new CachingDefinitionLookup(
-          dbAdapter,
-          prerenderer,
-          virtualNetwork,
-          testCreatePrerenderAuth,
-        ),
+        definitionLookup,
         virtualNetwork: network,
         prerenderer,
         mintRunToken: buildMintRunToken(realmSecretSeed),
+        matrixServerName: 'localhost',
+        admissionChecks: testAutomationAdmissionChecks,
         meteredCharges,
         log,
       },

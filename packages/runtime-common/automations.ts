@@ -77,7 +77,8 @@ export type AutomationState =
 // Why an automation is paused:
 //
 // - `requested`: a direct writer paused it (`paused_by` names them).
-// - `payer-lost-access`: its payer is no longer a direct writer of its realm.
+// - `payer-lost-access`: its payer is no longer a direct writer of its realm,
+//   their sessions were revoked, or their account can't sign in.
 // - `caps-raised`: its card raised a cap above the snapshot.
 // - `batched-ai-enabled`: its card turned on `batchedAI`, which the snapshot
 //   had off.
@@ -526,6 +527,30 @@ export async function checkAutomationPayer(
       automation.state === 'paused' ||
       automation.payer !== payer
     ) {
+      return automation;
+    }
+    return await pause(txQuery, canceled, automationId, 'payer-lost-access');
+  });
+}
+
+// Pauses the automation with `payer-lost-access` when `payer` is still its
+// payer: the payer's sessions were revoked or their account can't sign in,
+// which a run's admission learns and this module can't see. An automation
+// already paused keeps the reason it has, and one a resume gave another payer
+// is left alone. Returns the row, or undefined when the automation isn't
+// switched on.
+export async function pauseForPayerLostAccess(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+  payer: string,
+): Promise<AutomationRow | undefined> {
+  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    if (automation.state === 'paused' || automation.payer !== payer) {
       return automation;
     }
     return await pause(txQuery, canceled, automationId, 'payer-lost-access');

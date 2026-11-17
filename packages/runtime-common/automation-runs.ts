@@ -95,6 +95,10 @@ export interface AutomationRun extends AutomationRunCounts {
   prerenderTabMs: number;
   createdAt: string;
   startedAt: string | null;
+  // When the attempt that owns the run admitted it (see
+  // `automation-admission.ts`). Each attempt admits the run again before it
+  // runs the script, so this is the latest admission.
+  admittedAt: string | null;
   commitStartedAt: string | null;
   committedAt: string | null;
   finishedAt: string | null;
@@ -309,6 +313,16 @@ export async function recordAutomationRunScript(
     ', script_hash =',
     param(script.scriptHash),
   ]);
+}
+
+// Records that `attempt` admitted the run. Refused unless the run is running
+// and `attempt` owns it.
+export async function recordAutomationRunAdmitted(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+): Promise<AutomationRun | undefined> {
+  return await updateOwned(dbAdapter, id, attempt, ['admitted_at = now()']);
 }
 
 // Claims the run's one commit for `attempt`. The claim is refused unless the
@@ -932,6 +946,7 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     prerenderTabMs: Number(row.prerender_tab_ms ?? 0),
     createdAt: iso(row.created_at)!,
     startedAt: iso(row.started_at),
+    admittedAt: iso(row.admitted_at),
     commitStartedAt: iso(row.commit_started_at),
     committedAt: iso(row.committed_at),
     finishedAt: iso(row.finished_at),
