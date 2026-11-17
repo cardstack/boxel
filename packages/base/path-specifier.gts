@@ -90,78 +90,96 @@ class View extends Component<typeof PathSpecifierField> {
 interface PrefixRow {
   prefix: string;
   index: number;
+  draft: boolean;
   label: string;
   removeLabel: string;
   message: string | undefined;
 }
 
+// The validator's message for an invalid prefix, or undefined for a valid one.
+function messageFor(prefix: string): string | undefined {
+  let result = parsePathPrefix(prefix);
+  return result.ok ? undefined : result.error.message;
+}
+
+function prefixRow(prefix: string, index: number, draft: boolean): PrefixRow {
+  return {
+    prefix,
+    index,
+    draft,
+    label: `Path prefix ${index + 1}`,
+    removeLabel: `Remove path prefix ${index + 1}`,
+    message: draft ? undefined : messageFor(prefix),
+  };
+}
+
 class Edit extends Component<typeof PathSpecifierField> {
-  // The position of a row the author has just added and not yet left. A new
-  // row starts empty, and an empty prefix is invalid, so the row holds back
-  // that message until the author moves on from it.
-  @tracked private addedRow: number | undefined;
+  // Whether the author has added a row and not typed in it yet. An empty
+  // prefix is invalid, so the new row isn't stored until it has content, and
+  // it goes away if the author leaves it empty.
+  @tracked private drafting = false;
 
   private get prefixes(): readonly string[] {
     return this.args.model ?? [];
   }
 
   private get rows(): PrefixRow[] {
-    return this.prefixes.map((prefix, index) => ({
-      prefix,
-      index,
-      label: `Path prefix ${index + 1}`,
-      removeLabel: `Remove path prefix ${index + 1}`,
-      message: this.messageFor(prefix, index),
-    }));
+    let rows = this.prefixes.map((prefix, index) =>
+      prefixRow(prefix, index, false),
+    );
+    if (this.drafting) {
+      rows.push(prefixRow('', rows.length, true));
+    }
+    return rows;
+  }
+
+  // The new row always comes after the stored prefixes.
+  private get draftIndex(): number | undefined {
+    return this.drafting ? this.prefixes.length : undefined;
   }
 
   private get readonly() {
     return !this.args.canEdit;
   }
 
-  private messageFor(prefix: string, index: number): string | undefined {
-    if (prefix === '' && index === this.addedRow) {
-      return undefined;
-    }
-    let result = parsePathPrefix(prefix);
-    return result.ok ? undefined : result.error.message;
-  }
-
   private setPrefix = (index: number, prefix: string) => {
+    if (index === this.draftIndex) {
+      if (prefix === '') {
+        return;
+      }
+      this.drafting = false;
+    }
     let next = [...this.prefixes];
     next[index] = prefix;
     this.args.set(next);
   };
 
   private addPrefix = () => {
-    this.addedRow = this.prefixes.length;
-    this.args.set([...this.prefixes, '']);
+    this.drafting = true;
   };
 
   // Removing the last prefix leaves an empty list, which means no path limit.
   private removePrefix = (index: number) => {
-    if (this.addedRow === index) {
-      this.addedRow = undefined;
-    } else if (this.addedRow !== undefined && this.addedRow > index) {
-      this.addedRow--;
-    }
     this.args.set(this.prefixes.filter((_, i) => i !== index));
   };
 
-  private leaveRow = (index: number) => {
-    if (index === this.addedRow) {
-      this.addedRow = undefined;
+  private leaveRow = (index: number, event: FocusEvent) => {
+    // An input keeps the focus while the window loses it: the author hasn't
+    // left the row.
+    if (event.target === document.activeElement) {
+      return;
+    }
+    if (index === this.draftIndex) {
+      this.drafting = false;
     }
   };
 
   // Puts the cursor in the row the author just added.
-  private focusAddedRow = modifier(
-    (element: HTMLElement, [index, addedRow]: [number, number | undefined]) => {
-      if (index === addedRow) {
-        element.focus();
-      }
-    },
-  );
+  private focusDraft = modifier((element: HTMLElement, [draft]: [boolean]) => {
+    if (draft) {
+      element.focus();
+    }
+  });
 
   <template>
     <div class='path-specifier-edit' data-test-path-specifier-edit>
@@ -180,18 +198,22 @@ class Edit extends Component<typeof PathSpecifierField> {
                 @placeholder='blog/'
                 aria-label={{row.label}}
                 {{on 'blur' (fn this.leaveRow row.index)}}
-                {{this.focusAddedRow row.index this.addedRow}}
+                {{this.focusDraft row.draft}}
                 data-test-path-specifier-input={{row.index}}
               />
+              {{! A new row has nothing stored to remove until the author
+                types in it. }}
               {{#if @canEdit}}
-                <IconButton
-                  @label={{row.removeLabel}}
-                  @icon={{XIcon}}
-                  @appearance='plain'
-                  @size='s'
-                  {{on 'click' (fn this.removePrefix row.index)}}
-                  data-test-path-specifier-remove={{row.index}}
-                />
+                {{#unless row.draft}}
+                  <IconButton
+                    @label={{row.removeLabel}}
+                    @icon={{XIcon}}
+                    @appearance='plain'
+                    @size='s'
+                    {{on 'click' (fn this.removePrefix row.index)}}
+                    data-test-path-specifier-remove={{row.index}}
+                  />
+                {{/unless}}
               {{/if}}
             </li>
           {{/each}}
@@ -221,17 +243,20 @@ class Edit extends Component<typeof PathSpecifierField> {
       }
       .rows {
         display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
         justify-self: stretch;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xs) var(--boxel-sp-xxs);
         margin: 0;
         padding: 0;
         list-style: none;
       }
+      /* The rows share the list's columns, so a new row's input, which has
+         no remove button yet, lines up with the inputs above it. */
       .row {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
         align-items: start;
-        gap: var(--boxel-sp-xxs);
       }
       .no-limit {
         margin: 0;

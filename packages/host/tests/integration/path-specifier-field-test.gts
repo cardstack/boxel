@@ -207,31 +207,53 @@ module('Integration | PathSpecifierField', function (hooks) {
       undefined,
       'the message goes away once the prefix is valid',
     );
+
+    await fillIn(input(0), '');
+    assert.deepEqual(site.paths, [''], 'a prefix cleared to empty is stored');
+    assert.strictEqual(
+      errorMessageOf(0),
+      messageFor(''),
+      'a cleared prefix shows the empty-prefix message',
+    );
   });
 
-  test('the editor adds and removes prefixes, and a new empty prefix shows its message once the author leaves it', async function (assert) {
+  test('a new row is stored once the author types in it, and goes away if they leave it empty', async function (assert) {
     allowEditing(true);
     let site = new Site({ paths: ['blog/'] });
     await renderCard(loader, site, 'edit');
 
     await click('[data-test-path-specifier-add]');
-    assert.deepEqual(site.paths, ['blog/', ''], 'a new row is an empty prefix');
     assert.dom(input(1)).isFocused('the new row has the cursor');
+    assert.dom(input(1)).hasValue('');
+    assert.deepEqual(site.paths, ['blog/'], "an empty new row isn't stored");
     assert.strictEqual(
       errorMessageOf(1),
       undefined,
-      'a row the author has just added shows no message yet',
+      'the new row shows no message',
     );
+    assert
+      .dom('[data-test-path-specifier-remove="1"]')
+      .doesNotExist('the new row has nothing stored to remove');
 
     await blur(input(1));
-    assert.strictEqual(
-      errorMessageOf(1),
-      messageFor(''),
-      'an empty row the author has left shows the message',
-    );
+    assert.dom(input(1)).doesNotExist('a new row left empty goes away');
+    assert.deepEqual(site.paths, ['blog/']);
 
+    await click('[data-test-path-specifier-add]');
     await fillIn(input(1), 'posts/');
-    assert.deepEqual(site.paths, ['blog/', 'posts/']);
+    assert.deepEqual(
+      site.paths,
+      ['blog/', 'posts/'],
+      'the new row is stored once it has content',
+    );
+    assert.dom(input(1)).isFocused('the row keeps the cursor as it is stored');
+    assert.dom('[data-test-path-specifier-remove="1"]').exists();
+  });
+
+  test('the editor removes prefixes, and removing the last one leaves an empty list', async function (assert) {
+    allowEditing(true);
+    let site = new Site({ paths: ['blog/', 'posts/'] });
+    await renderCard(loader, site, 'edit');
 
     await click('[data-test-path-specifier-remove="0"]');
     assert.deepEqual(site.paths, ['posts/']);
