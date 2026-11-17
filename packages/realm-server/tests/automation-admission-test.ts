@@ -42,6 +42,7 @@ import {
   getAutomation,
   pauseAutomation,
   removeAutomation,
+  setAutomationWaitingForCredits,
   switchOnAutomation,
 } from '@cardstack/runtime-common/automations';
 import { internalKeyFor } from '@cardstack/runtime-common';
@@ -924,6 +925,72 @@ module(basename(import.meta.filename), function (hooks) {
         (await getAutomation(dbAdapter, automationId(SPENDING)))?.state,
         'active',
         'the first run admitted once the balance recovers makes it active',
+      );
+    });
+
+    test('waiting for credits never moves a paused or done automation, or one whose payer changed', async function (assert) {
+      let id = automationId(SPENDING);
+      await switchOn(SPENDING);
+      let setState = async (state: string, pauseReason: string | null) =>
+        await query(dbAdapter, [
+          'UPDATE automations SET state =',
+          param(state),
+          ', pause_reason =',
+          param(pauseReason),
+          'WHERE automation_id =',
+          param(id),
+        ]);
+      let state = async () => (await getAutomation(dbAdapter, id))?.state;
+
+      await setState('paused', 'requested');
+      assert.strictEqual(
+        await setAutomationWaitingForCredits(dbAdapter, id, {
+          payer: OWNER,
+          waiting: true,
+        }),
+        undefined,
+      );
+      assert.strictEqual(
+        await state(),
+        'paused',
+        'a short run never resurrects a paused automation',
+      );
+
+      await setState('done', null);
+      await setAutomationWaitingForCredits(dbAdapter, id, {
+        payer: OWNER,
+        waiting: true,
+      });
+      assert.strictEqual(await state(), 'done');
+
+      await setState('active', null);
+      assert.strictEqual(
+        await setAutomationWaitingForCredits(dbAdapter, id, {
+          payer: WRITER,
+          waiting: true,
+        }),
+        undefined,
+      );
+      assert.strictEqual(
+        await state(),
+        'active',
+        'a run that acts as someone other than the payer doesn’t move it',
+      );
+
+      await setState('waiting-for-credits', null);
+      await setAutomationWaitingForCredits(dbAdapter, id, {
+        payer: WRITER,
+        waiting: false,
+      });
+      assert.strictEqual(await state(), 'waiting-for-credits');
+      await setAutomationWaitingForCredits(dbAdapter, id, {
+        payer: OWNER,
+        waiting: false,
+      });
+      assert.strictEqual(
+        await state(),
+        'active',
+        'only the payer’s run moves it',
       );
     });
 
