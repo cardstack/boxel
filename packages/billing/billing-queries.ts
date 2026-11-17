@@ -8,6 +8,7 @@ import {
   addExplicitParens,
   asExpressions,
   chargeKindForCreditType,
+  CREDITS_PER_USD,
   dbAdapterQuerier,
   every,
   insert,
@@ -495,6 +496,150 @@ export async function getLedgerUsage(
     unit: row.unit as UsageUnit,
     quantity: Number(row.quantity),
   }));
+}
+
+// The prices a pricing version stands for: every value, by the environment
+// variable it was read from, the margin, and the USD one unit of each metered
+// usage costs at those values.
+export interface PricingVersionRecord {
+  version: string;
+  margin: number;
+  values: Record<string, number>;
+  usdPerUnit: Partial<Record<UsageUnit, number>>;
+}
+
+// Records the prices `record.version` stands for, so its charges' usage can be
+// priced at them after the startup log is gone (see `getCostCoverage`). A version is a hash of its values, so
+// recording one that is already recorded writes nothing, and a record is never
+// changed. Nothing reads these rows to price a charge (ADR 029 §1.2).
+export async function recordPricingVersion(
+  dbAdapter: DBAdapter,
+  record: PricingVersionRecord,
+): Promise<void> {
+  await query(dbAdapter, [
+    `INSERT INTO pricing_versions (version, margin) VALUES (`,
+    param(record.version),
+    `,`,
+    param(record.margin),
+    `) ON CONFLICT (version) DO NOTHING`,
+  ] as Expression);
+  let values = Object.entries(record.values);
+  if (values.length > 0) {
+    await query(dbAdapter, [
+      `INSERT INTO pricing_version_values (pricing_version, variable, value) VALUES`,
+      ...separatedByCommas(
+        values.map(
+          ([variable, value]) =>
+            addExplicitParens(
+              separatedByCommas([
+                [param(record.version)],
+                [param(variable)],
+                [param(value)],
+              ]),
+            ) as Expression,
+        ),
+      ),
+      `ON CONFLICT (pricing_version, variable) DO NOTHING`,
+    ] as Expression);
+  }
+  let rates = Object.entries(record.usdPerUnit) as [UsageUnit, number][];
+  if (rates.length > 0) {
+    await query(dbAdapter, [
+      `INSERT INTO pricing_version_rates (pricing_version, unit, usd_per_unit) VALUES`,
+      ...separatedByCommas(
+        rates.map(
+          ([unit, usd]) =>
+            addExplicitParens(
+              separatedByCommas([
+                [param(record.version)],
+                [param(unit)],
+                [param(usd)],
+              ]),
+            ) as Expression,
+        ),
+      ),
+      `ON CONFLICT (pricing_version, unit) DO NOTHING`,
+    ] as Expression);
+  }
+}
+
+// One line of the cost coverage report: the consumption charges of one kind,
+// written at one pricing version, in the report's period.
+export interface CostCoverage {
+  chargeKind: Extract<
+    LedgerChargeKind,
+    'run' | 'run_indexing' | 'storage' | 'ai' | 'batched_ai'
+  >;
+  // Null for AI charges, which aren't metered.
+  pricingVersion: string | null;
+  charges: number;
+  // What every charge drew, in credits.
+  credits: number;
+  // The charges whose usage could be priced (see `credit_charge_costs`), and
+  // what they drew. The rest have no usage, a pricing version that isn't
+  // recorded, or a unit with no rate at their version.
+  pricedCharges: number;
+  pricedCredits: number;
+  // The hosting cost of the priced charges' usage, in USD and in credits (at
+  // `CREDITS_PER_USD`), and that cost times each charge's margin: what the
+  // charges would have drawn had each been paid in full, before rounding.
+  costUsd: number;
+  costCredits: number;
+  chargedAtMarginCredits: number;
+  // `pricedCredits / costCredits`: how many times their cost the priced
+  // charges recovered. A metered kind should read at least its margin and an
+  // AI kind about 1; less means it under-charges. Null when the cost is 0.
+  coverage: number | null;
+  // `chargedAtMarginCredits - pricedCredits`: credits the priced charges would
+  // have drawn at their margin and didn't, such as an indexing charge the
+  // balance couldn't cover. Rounding each charge up to a whole credit makes a
+  // fully paid metered kind read slightly below 0.
+  shortfallCredits: number;
+}
+
+// Compares, for the consumption charges written from `from` (inclusive) to
+// `to` (exclusive), the credits each kind drew with the hosting cost of the
+// usage it priced, by charge kind and pricing version, from the
+// `credit_charge_costs` view.
+export async function getCostCoverage(
+  dbAdapter: DBAdapter,
+  { from, to }: { from: Date; to: Date },
+): Promise<CostCoverage[]> {
+  let rows = await query(dbAdapter, [
+    `SELECT charge_kind, pricing_version,`,
+    `COUNT(*) AS charges,`,
+    `SUM(credits) AS credits,`,
+    `COUNT(*) FILTER (WHERE cost_usd IS NOT NULL) AS priced_charges,`,
+    `COALESCE(SUM(credits) FILTER (WHERE cost_usd IS NOT NULL), 0) AS priced_credits,`,
+    `COALESCE(SUM(cost_usd), 0) AS cost_usd,`,
+    `COALESCE(SUM(cost_usd * margin), 0) AS cost_at_margin_usd`,
+    `FROM credit_charge_costs WHERE created_at >=`,
+    param(Math.floor(from.getTime() / 1000)),
+    `AND created_at <`,
+    param(Math.floor(to.getTime() / 1000)),
+    `GROUP BY charge_kind, pricing_version`,
+    `ORDER BY charge_kind, pricing_version NULLS FIRST`,
+  ] as Expression);
+  return rows.map((row) => {
+    let pricedCredits = Number(row.priced_credits);
+    let costUsd = Number(row.cost_usd);
+    let costCredits = costUsd * CREDITS_PER_USD;
+    let chargedAtMarginCredits =
+      Number(row.cost_at_margin_usd) * CREDITS_PER_USD;
+    return {
+      chargeKind: row.charge_kind as CostCoverage['chargeKind'],
+      pricingVersion: (row.pricing_version as string | null) ?? null,
+      charges: Number(row.charges),
+      credits: Number(row.credits),
+      pricedCharges: Number(row.priced_charges),
+      pricedCredits,
+      costUsd,
+      costCredits,
+      chargedAtMarginCredits,
+      coverage: costCredits > 0 ? pricedCredits / costCredits : null,
+      shortfallCredits: chargedAtMarginCredits - pricedCredits,
+    };
+  });
 }
 
 export async function getStripeEventById(

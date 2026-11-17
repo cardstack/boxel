@@ -59,7 +59,10 @@ import { receiveSecretsKeyring } from './lib/secrets-at-rest/index.ts';
 import { getInstanceId } from './lib/instance-id.ts';
 import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
 import { checkPricingAtStartup } from './lib/pricing.ts';
-import { meteredChargesFor } from './lib/metered-charge.ts';
+import {
+  meteredChargesFor,
+  recordCurrentPricing,
+} from './lib/metered-charge.ts';
 import { buildMintRunToken } from './lib/run-token.ts';
 import { buildAutomationAdmissionChecks } from './lib/automation-admission-checks.ts';
 
@@ -296,6 +299,7 @@ let autoMigrate = migrateDB || undefined;
   });
 
   await worker.run();
+  await recordCurrentPricing(dbAdapter, 'worker');
   log.info(`worker started`);
   if (process.send) {
     process.send(`ready:${workerId}`);
