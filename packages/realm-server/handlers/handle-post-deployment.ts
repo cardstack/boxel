@@ -19,6 +19,7 @@ export default function handlePostDeployment({
   queue,
   realmServerSecretSeed,
   reportHostShell,
+  reconcileDefinitionCache,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (ctxt.request.headers.authorization !== realmServerSecretSeed) {
@@ -34,7 +35,14 @@ export default function handlePostDeployment({
     // Fire-and-forget — best-effort, must not affect the hook's response.
     void reportHostShell?.();
 
-    await definitionLookup.clearAllDefinitions();
+    // The same check a boot runs: keep the modules table when nothing that
+    // derived its rows changed (dropping its error rows), clear it otherwise.
+    // A server given no check clears, as every deploy used to.
+    if (reconcileDefinitionCache) {
+      await reconcileDefinitionCache();
+    } else {
+      await definitionLookup.clearAllDefinitions();
+    }
 
     let boxelUiChangeCheckerResult =
       await boxelUIChecker.compareCurrentBoxelUIChecksum(assetsURL);

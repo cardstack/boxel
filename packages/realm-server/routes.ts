@@ -314,6 +314,10 @@ export type CreateRoutesArgs = {
   // post-deployment hook calls it so the fleet's recycle signal is refreshed
   // once the new code is live and the service is stable.
   reportHostShell?: () => Promise<void>;
+  // Keeps or clears the modules table by the boot key, as a boot does
+  // (lib/definition-cache-key.ts). The post-deployment hook runs it in place
+  // of an unconditional clear; where it is absent the hook clears.
+  reconcileDefinitionCache?: () => Promise<unknown>;
   searchCache: JobScopedSearchCache;
   // Per-process coalescing + short-TTL cache for live `_federated-search`
   // traffic. Injectable so a test can supply one configured with `ttlMs: 0`

@@ -747,6 +747,7 @@ export class RealmServer {
     | undefined;
   private prerenderer: Prerenderer | undefined;
   private reportHostShell: (() => Promise<void>) | undefined;
+  private reconcileDefinitionCache: (() => Promise<unknown>) | undefined;
   private reconciler: RealmRegistryReconciler;
   private searchCache: JobScopedSearchCache;
   private liveSearchCache: LiveSearchCache | undefined;
@@ -785,6 +786,7 @@ export class RealmServer {
     domainsForPublishedRealms,
     prerenderer,
     reportHostShell,
+    reconcileDefinitionCache,
     searchCache,
     liveSearchCache,
     linkShapePolicy,
@@ -842,6 +844,7 @@ export class RealmServer {
     // wires this so the post-deployment hook can re-report once the service is
     // stable (the boot-time report fires as soon as this server starts serving).
     reportHostShell?: () => Promise<void>;
+    reconcileDefinitionCache?: () => Promise<unknown>;
     // Optional so test harnesses that construct a RealmServer directly get a
     // private cache for free. main.ts passes a shared instance so the
     // JobsFinishedListener can evict the same cache the handlers populate.
@@ -943,6 +946,7 @@ export class RealmServer {
     this.reconciler = reconciler;
     this.prerenderer = prerenderer;
     this.reportHostShell = reportHostShell;
+    this.reconcileDefinitionCache = reconcileDefinitionCache;
     this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
     this.liveSearchCache = liveSearchCache;
     this.linkShapePolicy = linkShapePolicy;
@@ -1165,6 +1169,7 @@ export class RealmServer {
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
           reportHostShell: this.reportHostShell,
+          reconcileDefinitionCache: this.reconcileDefinitionCache,
           reconciler: this.reconciler,
           searchCache: this.searchCache,
           liveSearchCache: this.liveSearchCache,
