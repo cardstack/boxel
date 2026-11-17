@@ -68,9 +68,10 @@ for routes.
 
 ### 1.5. Validation
 
-A prefix MUST be refused when it is empty or has an empty segment, a `.` or
-`..` segment (as written or percent-encoded), a backslash, `?`, `#`, a control
-character, or a malformed escape. One invalid prefix MUST make the whole
+A prefix MUST be refused when it is empty, starts or ends with whitespace, or
+has an empty segment, a `.` or `..` segment (as written or percent-encoded), a
+backslash (as written or percent-encoded), `?`, `#`, a control character, a
+lone UTF-16 surrogate, or a malformed escape. One invalid prefix MUST make the whole
 specifier invalid. A consumer MUST NOT drop only the invalid prefixes and use
 the rest, because that could leave an empty list, which means no path limit.
 A consumer MUST treat an invalid specifier as matching no path, never as
