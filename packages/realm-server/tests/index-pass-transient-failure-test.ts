@@ -67,7 +67,17 @@ const genuineError: SerializedError = {
 // `aborts` is a prerender request that failed transiently, as the prerender
 // client throws it (marked); `refused` is one the prerender path refused, a
 // 4xx (unmarked).
-type LogOutcome = 'good' | 'times-out' | 'aborts' | 'refused' | 'broken';
+// `page-times-out` and `page-crashes`: the visit's page died before the
+// extract ran, so the response carries no extract at all, only the page's
+// error (a render that timed out, or one that crashed the tab).
+type LogOutcome =
+  | 'good'
+  | 'times-out'
+  | 'aborts'
+  | 'refused'
+  | 'broken'
+  | 'page-times-out'
+  | 'page-crashes';
 
 const postSource = JSON.stringify({
   data: {
@@ -137,6 +147,16 @@ function prerenderer(
           throw new Error(
             'Prerender request to http://prerender.test/prerender-visit failed with status 400: URL is required',
           );
+        }
+        if (outcome === 'page-times-out' || outcome === 'page-crashes') {
+          return {
+            pageUnusableError: {
+              type: 'instance-error',
+              error:
+                outcome === 'page-times-out' ? renderTimeout : genuineError,
+              evict: true,
+            },
+          } as unknown as RenderVisitResponse;
         }
         if (outcome === 'times-out' || outcome === 'broken') {
           return {
@@ -334,8 +354,15 @@ module(basename(import.meta.filename), function (hooks) {
     );
   }
 
-  for (let outcome of ['times-out', 'aborts'] as const) {
-    test(`a linked log whose visit ${outcome === 'times-out' ? 'times out' : 'aborts'} keeps its last good row, and the linking card stays searchable`, async function (assert) {
+  let transientOutcomes = {
+    'times-out': 'times out',
+    aborts: 'aborts',
+    'page-times-out': 'times out before its extract ran',
+  } as const;
+  for (let outcome of Object.keys(transientOutcomes) as Array<
+    keyof typeof transientOutcomes
+  >) {
+    test(`a linked log whose visit ${transientOutcomes[outcome]} keeps its last good row, and the linking card stays searchable`, async function (assert) {
       await pass(logName, postName);
       assert.false(Boolean((await row(logName, 'file')).has_error));
       assert.deepEqual(await searchPosts(), [url('Post/p1')]);
@@ -544,6 +571,24 @@ module(basename(import.meta.filename), function (hooks) {
       [],
       'once: after a re-index that died, it is left as it is',
     );
+  });
+
+  test('a log whose page crashes before its extract ran errors with the crash, and the linking card inherits it', async function (assert) {
+    await pass(logName, postName);
+    logOutcome = 'page-crashes';
+    await pass(logName);
+    let log = await row(logName, 'file');
+    assert.true(Boolean(log.has_error), 'the log is in error');
+    assert.strictEqual(
+      log.error_doc?.message,
+      genuineError.message,
+      "the row records the page's error, not a missing message",
+    );
+    assert.notOk(log.diagnostics?.transientRenderFailure);
+
+    await pass(postName);
+    assert.true(Boolean((await row(postName, 'instance')).has_error));
+    assert.deepEqual(await searchPosts(), []);
   });
 
   test('a genuinely broken log still errors, and the linking card still inherits it', async function (assert) {
