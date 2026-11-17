@@ -1,6 +1,8 @@
 import type Koa from 'koa';
 import {
+  DAYS_PER_AVERAGE_MONTH,
   getAutomationRun,
+  getAutomationStorage,
   isDirectWriter,
   isRealmArchived,
   logger,
@@ -9,6 +11,7 @@ import {
   query,
   RealmPaths,
   ri,
+  shareARealmGrant,
   SupportedMimeType,
   type AutomationRun,
   type DBAdapter,
@@ -27,18 +30,25 @@ import {
   type AutomationRow,
 } from '@cardstack/runtime-common/automations';
 import {
+  readAutomationPreviewFile,
+  readAutomationRunSummary,
   startAutomationPreview,
   startAutomationRunNow,
   type ManualRunStart,
 } from '@cardstack/runtime-common/automation-manual-runs';
+import { BYTES_PER_GB } from '@cardstack/runtime-common/metered-charges';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   AUTOMATION_ESTIMATE_RESOURCE_TYPE,
   AUTOMATION_RESOURCE_TYPE,
   AUTOMATION_ROUTE_AUTOMATION_PARAM,
+  AUTOMATION_ROUTE_PATH_PARAM,
   AUTOMATION_ROUTE_REALM_PARAM,
+  AUTOMATION_ROUTE_RUN_PARAM,
+  AUTOMATION_RUN_REPORT_RESOURCE_TYPE,
   AUTOMATION_RUN_RESOURCE_TYPE,
+  AUTOMATION_STORAGE_RESOURCE_TYPE,
 } from '@cardstack/runtime-common/automation-routes';
 import {
   sendResponseForError,
@@ -50,6 +60,7 @@ import {
   estimateAutomationCost,
   type AutomationEstimate,
 } from '../lib/automation-estimate.ts';
+import { exactMeteredCredits } from '../lib/metered-charge.ts';
 import { currentPricing } from '../lib/pricing.ts';
 import {
   realmServerAutomationChangeReporter,
@@ -739,5 +750,265 @@ export function handleAutomationRunCancel(args: CreateRoutesArgs): Handler {
       refuse(canceled.reason);
     }
     await sendJSON(ctxt, 200, { data: serializeRun(args, canceled.run) });
+  });
+}
+
+// The longest realm-local path a staged-file read may name.
+const MAX_PATH_CHARS = 4096;
+
+// How many of the automation's storage charges the storage view lists, newest
+// first.
+const STORAGE_CHARGES_LISTED = 30;
+
+// A person's Matrix id as `viewer` may see it (ADR 011 §1.2): shown to the
+// person themselves and to a viewer who shares a named realm grant with them,
+// and null to anyone else.
+async function shownIdentity(
+  dbAdapter: DBAdapter,
+  viewer: string,
+  person: string | null,
+): Promise<string | null> {
+  if (person === null) {
+    return null;
+  }
+  if (person === viewer) {
+    return person;
+  }
+  return (await shareARealmGrant(dbAdapter, viewer, person)) ? person : null;
+}
+
+// The run a console read names, in the realm it names, once the caller is
+// known to directly write that realm. A run of another realm answers as no
+// run, so the read learns nothing about realms the caller doesn't write.
+async function requestedRun(
+  ctxt: Koa.Context,
+  args: CreateRoutesArgs,
+): Promise<{ caller: string; realmURL: URL; run: AutomationRun }> {
+  let caller = callerOf(ctxt);
+  let realmURL = await directlyWrittenRealm(
+    args.dbAdapter,
+    args.matrixClient.serverName,
+    caller,
+    ctxt.URL.searchParams.get(AUTOMATION_ROUTE_REALM_PARAM),
+  );
+  let runId = ctxt.URL.searchParams.get(AUTOMATION_ROUTE_RUN_PARAM) ?? '';
+  let run = RUN_ID.test(runId)
+    ? await getAutomationRun(args.dbAdapter, runId)
+    : undefined;
+  if (!run || args.virtualNetwork.toURLHref(run.realm) !== realmURL.href) {
+    throw new AutomationRouteError(404, `no run ${runId} in ${realmURL.href}`);
+  }
+  return { caller, realmURL, run };
+}
+
+// A console read the lifecycle functions refused, after `requestedRun`
+// found the run in a realm the caller directly writes: the run or the
+// caller's write went in between.
+function refuseRead(
+  reason: 'missing' | 'not-a-direct-writer',
+  message: string,
+): never {
+  throw new AutomationRouteError(
+    reason === 'missing' ? 404 : 403,
+    reason === 'missing'
+      ? message
+      : 'only a direct writer of the automation’s realm can read its runs',
+  );
+}
+
+// `GET /_automation-run-report?realm=<realm URL>&run=<run id>`: the run as
+// the console's timeline shows it. Who the run acts as and who canceled it
+// follow ADR 011 (see `shownIdentity`); `viewerIsActsAs`, `viewerCanceled`
+// and `canceledByAPerson` say as much as the viewer may know when the ids
+// are hidden.
+export function handleAutomationRunReport(args: CreateRoutesArgs): Handler {
+  return automationHandler(async (ctxt) => {
+    let { caller, realmURL, run: requested } = await requestedRun(ctxt, args);
+    let read = await readAutomationRunSummary(
+      args.dbAdapter,
+      { runId: requested.id, user: caller },
+      {
+        matrixServerName: args.matrixClient.serverName,
+        virtualNetwork: args.virtualNetwork,
+      },
+    );
+    if (!read.ok) {
+      refuseRead(read.reason, `no run ${requested.id} in ${realmURL.href}`);
+    }
+    let { summary } = read;
+    let { run } = summary;
+    let [actsAs, canceledBy] = await Promise.all([
+      shownIdentity(args.dbAdapter, caller, run.actsAs),
+      shownIdentity(args.dbAdapter, caller, run.canceledBy),
+    ]);
+    await sendJSON(ctxt, 200, {
+      data: {
+        type: AUTOMATION_RUN_REPORT_RESOURCE_TYPE,
+        id: run.id,
+        attributes: {
+          automation: args.virtualNetwork.toURLHref(run.automationId),
+          trigger: run.trigger,
+          dryRun: run.dryRun,
+          state: run.state,
+          errorReason: run.errorReason,
+          errorMessage: run.errorMessage,
+          credentialRefusal: run.credentialRefusal,
+          actsAs,
+          viewerIsActsAs: run.actsAs === caller,
+          canceledBy,
+          canceledByAPerson: run.canceledBy !== null,
+          viewerCanceled: run.canceledBy === caller,
+          timings: summary.timings,
+          milestones: summary.milestones,
+          log: summary.log,
+          callApiCalls: summary.callApiCalls,
+          resolveCalls: summary.resolveCalls,
+          writes: {
+            count: run.writes,
+            ...(summary.stagedFiles ? { staged: summary.stagedFiles } : {}),
+            ...(summary.stagedFilesReplacedBy
+              ? { stagedReplacedBy: summary.stagedFilesReplacedBy }
+              : {}),
+            ...(summary.committedPaths
+              ? { committed: summary.committedPaths }
+              : {}),
+          },
+          cost: summary.cost,
+        },
+      },
+    });
+  });
+}
+
+// `GET /_automation-preview-file?realm=<realm URL>&run=<run id>&path=<path>`:
+// the bytes of one file a complete Preview staged, at its realm-local path.
+// The script chose the bytes, so they are always served as
+// `application/octet-stream` and never sniffed: the console decides how to
+// show them from the path.
+export function handleAutomationPreviewFile(args: CreateRoutesArgs): Handler {
+  return automationHandler(async (ctxt) => {
+    let { caller, realmURL, run } = await requestedRun(ctxt, args);
+    let path = ctxt.URL.searchParams.get(AUTOMATION_ROUTE_PATH_PARAM);
+    if (!path || path.length > MAX_PATH_CHARS) {
+      throw new AutomationRouteError(
+        400,
+        `name the staged file by its realm-local path in the "${AUTOMATION_ROUTE_PATH_PARAM}" query parameter`,
+      );
+    }
+    let read = await readAutomationPreviewFile(
+      args.dbAdapter,
+      { runId: run.id, path, user: caller },
+      {
+        matrixServerName: args.matrixClient.serverName,
+        virtualNetwork: args.virtualNetwork,
+      },
+    );
+    if (!read.ok) {
+      refuseRead(
+        read.reason,
+        `run ${run.id} in ${realmURL.href} kept no staged file at ${path}`,
+      );
+    }
+    await setContextResponse(
+      ctxt,
+      new Response(Buffer.from(read.content), {
+        status: 200,
+        headers: {
+          'content-type': 'application/octet-stream',
+          'x-content-type-options': 'nosniff',
+          // A later Preview by the same person drops this one's batch.
+          'cache-control': 'no-store',
+        },
+      }),
+    );
+  });
+}
+
+// The automation's storage charges in the ledger, newest first: each covers
+// the days since the one before, and is written once those days cost a whole
+// credit (see `automation-storage-charge.ts`).
+async function storageCharges(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+): Promise<{ day: string; credits: number }[]> {
+  let rows = await query(dbAdapter, [
+    `SELECT to_char(charge_day, 'YYYY-MM-DD') AS day, -credit_amount AS credits
+     FROM credits_ledger
+     WHERE charge_kind = 'storage' AND run_id IS NULL AND batch_id IS NULL
+       AND automation_id =`,
+    param(automationId),
+    'ORDER BY charge_day DESC LIMIT',
+    param(STORAGE_CHARGES_LISTED),
+  ]);
+  return rows.map((row) => ({
+    day: String(row.day),
+    credits: Number(row.credits),
+  }));
+}
+
+// `GET /_automation-storage?realm=<realm URL>&automation=<card URL>`: every
+// file the automation's runs created that still exists, with its bytes on
+// disk and in the index, and the daily charge: what a day of that storage
+// costs at this server's prices (`dailyCredits`, before rounding, or null
+// without prices) and the storage charges written so far. A switched-on
+// automation's payer pays the charge, and is shown under ADR 011 (see
+// `shownIdentity`).
+export function handleAutomationStorage(args: CreateRoutesArgs): Handler {
+  return automationHandler(async (ctxt) => {
+    let caller = callerOf(ctxt);
+    let realmURL = await directlyWrittenRealm(
+      args.dbAdapter,
+      args.matrixClient.serverName,
+      caller,
+      ctxt.URL.searchParams.get(AUTOMATION_ROUTE_REALM_PARAM),
+    );
+    let automationId = automationIn(
+      realmURL,
+      ctxt.URL.searchParams.get(AUTOMATION_ROUTE_AUTOMATION_PARAM),
+      args.virtualNetwork,
+    );
+    let [storage, row, charges] = await Promise.all([
+      getAutomationStorage(args.dbAdapter, automationId),
+      getAutomation(args.dbAdapter, automationId),
+      storageCharges(args.dbAdapter, automationId),
+    ]);
+    let payer = row
+      ? await shownIdentity(args.dbAdapter, caller, row.payer)
+      : null;
+    let pricing = currentPricing();
+    let dailyCredits = pricing
+      ? exactMeteredCredits(
+          {
+            file_storage_gb_months:
+              storage.fileBytes / BYTES_PER_GB / DAYS_PER_AVERAGE_MONTH,
+            database_storage_gb_months:
+              storage.indexBytes / BYTES_PER_GB / DAYS_PER_AVERAGE_MONTH,
+          },
+          pricing,
+        )
+      : null;
+    await sendJSON(ctxt, 200, {
+      data: {
+        type: AUTOMATION_STORAGE_RESOURCE_TYPE,
+        id: args.virtualNetwork.toURLHref(automationId),
+        attributes: {
+          switchedOn: row !== undefined,
+          payer,
+          viewerIsPayer: row?.payer === caller,
+          files: storage.files.map((file) => ({
+            path: file.path,
+            run: file.runId,
+            createdAt: file.createdAt,
+            fileBytes: file.fileBytes,
+            indexBytes: file.indexBytes,
+          })),
+          fileBytes: storage.fileBytes,
+          indexBytes: storage.indexBytes,
+          dailyCredits,
+          pricingVersion: pricing?.version ?? null,
+          charges,
+        },
+      },
+    });
   });
 }

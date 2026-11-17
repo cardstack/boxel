@@ -16,7 +16,17 @@ import {
   MANUAL_RUN_TRIGGER,
   type AutomationDeclaration,
 } from './automation-declaration.ts';
-import { readRunLog, type RunLog } from './automation-run-log.ts';
+import {
+  readRunLog,
+  type RunLog,
+  type RunLogKind,
+  type RunLogLevel,
+  type RunLogLine,
+} from './automation-run-log.ts';
+import {
+  readRunMilestones,
+  type RunMilestones,
+} from './automation-run-milestones.ts';
 import {
   getAutomationRun,
   insertOrFindAutomationRun,
@@ -274,16 +284,7 @@ export async function readAutomationRunReport(
   let report: AutomationRunReport = {
     run,
     timings: timingsOf(run),
-    cost: {
-      credits: Object.values(creditsByKind).reduce((a, b) => a + b, 0),
-      creditsByKind,
-      callApiCalls: run.callApiCalls,
-      callApiResponseBytes: run.callApiResponseBytes,
-      resolveCalls: run.resolveCalls,
-      writes: run.writes,
-      aiCreditsSpent: run.aiCreditsSpent,
-      aiCreditsReserved: run.aiCreditsReserved,
-    },
+    cost: costOf(run, creditsByKind),
     log: runLog,
   };
   if (run.dryRun && run.state === 'complete') {
@@ -293,12 +294,236 @@ export async function readAutomationRunReport(
     }
   }
   if (run.committedAt) {
-    let paths = committedPathsOf(runLog);
+    let paths = committedPathsOf(runLog.lines);
     if (paths) {
       report.committedPaths = paths;
     }
   }
   return { ok: true, report };
+}
+
+// How many lines a run's log holds, by level and by kind, without their text.
+// Lines with no level (a milestone, a commit) count under `byKind` alone.
+export interface RunLogSummary {
+  lines: number;
+  // Lines refused past the run's cap.
+  dropped: number;
+  byLevel: Partial<Record<RunLogLevel, number>>;
+  byKind: Partial<Record<RunLogKind, number>>;
+}
+
+// A `callApi` call, from its line in the run's log.
+export interface RunCallApiCall {
+  // The line's place in the log.
+  seq: number;
+  // ISO time.
+  at: string;
+  operation: string;
+  method?: string;
+  // The request's destination, its query values masked.
+  destination?: string;
+  // The vendor's status, absent when the call was refused or failed.
+  status?: number;
+  // Why the call was refused (`failed` when it was made and failed).
+  code?: string;
+  ms?: number;
+  bytes?: number;
+}
+
+// A `resolve` call, from its line in the run's log.
+export interface RunResolveCall {
+  seq: number;
+  // ISO time.
+  at: string;
+  model?: string;
+  status?: number;
+  ms?: number;
+  costInUsd?: number;
+}
+
+// A run as the console shows it: its row, timings, cost, milestones, what its
+// log holds, its calls, and the files it staged or saved. The log's lines
+// themselves are read page by page from the log's own route.
+export interface AutomationRunSummary {
+  run: AutomationRun;
+  timings: AutomationRunTimings;
+  cost: AutomationRunCost;
+  milestones: RunMilestones;
+  log: RunLogSummary;
+  callApiCalls: RunCallApiCall[];
+  resolveCalls: RunResolveCall[];
+  // As in `AutomationRunReport`.
+  stagedFiles?: StagedRunFile[];
+  stagedFilesReplacedBy?: string;
+  committedPaths?: string[];
+}
+
+export type AutomationRunSummaryRead =
+  | { ok: true; summary: AutomationRunSummary }
+  | { ok: false; reason: 'missing' | 'not-a-direct-writer' };
+
+// `readAutomationRunReport` for the console: the same run, with the log
+// counted rather than read whole, so a run whose log reached its cap answers
+// in one small document. The calls and the commit's paths come from their own
+// lines, read by kind.
+export async function readAutomationRunSummary(
+  dbAdapter: DBAdapter,
+  { runId, user }: { runId: string; user: string },
+  options: Pick<AutomationActorOptions, 'matrixServerName' | 'virtualNetwork'>,
+): Promise<AutomationRunSummaryRead> {
+  let run = await getAutomationRun(dbAdapter, runId);
+  if (!run) {
+    return { ok: false, reason: 'missing' };
+  }
+  if (
+    !(await isDirectWriterOf(
+      dbAdapterQuerier(dbAdapter),
+      run.realm,
+      user,
+      options,
+    ))
+  ) {
+    return { ok: false, reason: 'not-a-direct-writer' };
+  }
+  let [creditsByKind, milestones, log, callLines] = await Promise.all([
+    runCreditsByKind(dbAdapter, run.id),
+    readRunMilestones(dbAdapter, run.id),
+    summarizeRunLog(dbAdapter, run.id),
+    query(dbAdapter, [
+      'SELECT seq, at, kind, data FROM automation_run_log WHERE run_id =',
+      param(run.id),
+      "AND source = 'platform' AND kind IN ('call-api', 'resolve', 'commit') ORDER BY seq",
+    ]),
+  ]);
+  if (!milestones) {
+    // The run's row went between the reads: a removed automation's runs go
+    // with it.
+    return { ok: false, reason: 'missing' };
+  }
+  let callApiCalls: RunCallApiCall[] = [];
+  let resolveCalls: RunResolveCall[] = [];
+  let commitLines: CommitLine[] = [];
+  for (let row of callLines) {
+    let seq = Number(row.seq);
+    let at = new Date(row.at as string).toISOString();
+    let data = (
+      typeof row.data === 'string' ? JSON.parse(row.data) : (row.data ?? {})
+    ) as Record<string, unknown>;
+    if (row.kind === 'call-api') {
+      callApiCalls.push({
+        seq,
+        at,
+        operation: String(data.operation ?? ''),
+        ...optionalString(data, 'method'),
+        ...optionalString(data, 'destination'),
+        ...optionalNumber(data, 'status'),
+        ...optionalString(data, 'code'),
+        ...optionalNumber(data, 'ms'),
+        ...optionalNumber(data, 'bytes'),
+      });
+    } else if (row.kind === 'resolve') {
+      resolveCalls.push({
+        seq,
+        at,
+        ...optionalString(data, 'model'),
+        ...optionalNumber(data, 'status'),
+        ...optionalNumber(data, 'ms'),
+        ...optionalNumber(data, 'costInUsd'),
+      });
+    } else {
+      commitLines.push({
+        source: 'platform',
+        kind: 'commit',
+        data: data as RunLogLine['data'],
+      });
+    }
+  }
+  let summary: AutomationRunSummary = {
+    run,
+    timings: timingsOf(run),
+    cost: costOf(run, creditsByKind),
+    milestones,
+    log,
+    callApiCalls,
+    resolveCalls,
+  };
+  if (run.dryRun && run.state === 'complete') {
+    summary.stagedFiles = await listAutomationPreviewFiles(dbAdapter, run.id);
+    if (run.previewReplacedBy) {
+      summary.stagedFilesReplacedBy = run.previewReplacedBy;
+    }
+  }
+  if (run.committedAt) {
+    let paths = committedPathsOf(commitLines);
+    if (paths) {
+      summary.committedPaths = paths;
+    }
+  }
+  return { ok: true, summary };
+}
+
+async function summarizeRunLog(
+  dbAdapter: DBAdapter,
+  runId: string,
+): Promise<RunLogSummary> {
+  let [counts, [run]] = await Promise.all([
+    query(dbAdapter, [
+      'SELECT kind, level, COUNT(*) AS lines FROM automation_run_log WHERE run_id =',
+      param(runId),
+      'GROUP BY kind, level',
+    ]),
+    query(dbAdapter, [
+      'SELECT log_dropped FROM automation_runs WHERE id =',
+      param(runId),
+    ]),
+  ]);
+  let summary: RunLogSummary = {
+    lines: 0,
+    dropped: run ? Number(run.log_dropped) : 0,
+    byLevel: {},
+    byKind: {},
+  };
+  for (let row of counts) {
+    let lines = Number(row.lines);
+    let kind = String(row.kind) as RunLogKind;
+    summary.lines += lines;
+    summary.byKind[kind] = (summary.byKind[kind] ?? 0) + lines;
+    if (row.level) {
+      let level = String(row.level) as RunLogLevel;
+      summary.byLevel[level] = (summary.byLevel[level] ?? 0) + lines;
+    }
+  }
+  return summary;
+}
+
+function optionalString(
+  data: Record<string, unknown>,
+  key: string,
+): Record<string, string> {
+  return typeof data[key] === 'string' ? { [key]: data[key] as string } : {};
+}
+
+function optionalNumber(
+  data: Record<string, unknown>,
+  key: string,
+): Record<string, number> {
+  return typeof data[key] === 'number' ? { [key]: data[key] as number } : {};
+}
+
+function costOf(
+  run: AutomationRun,
+  creditsByKind: Record<string, number>,
+): AutomationRunCost {
+  return {
+    credits: Object.values(creditsByKind).reduce((a, b) => a + b, 0),
+    creditsByKind,
+    callApiCalls: run.callApiCalls,
+    callApiResponseBytes: run.callApiResponseBytes,
+    resolveCalls: run.resolveCalls,
+    writes: run.writes,
+    aiCreditsSpent: run.aiCreditsSpent,
+    aiCreditsReserved: run.aiCreditsReserved,
+  };
 }
 
 // The batch a complete Preview kept, in path order, without the bytes.
@@ -388,10 +613,12 @@ async function runCreditsByKind(
   return byKind;
 }
 
+type CommitLine = Pick<RunLogLine, 'source' | 'kind' | 'data'>;
+
 // The paths the run's landed commit saved, from its successful commit line,
 // or undefined when the log has no such line (dropped past the log's cap).
-function committedPathsOf(log: RunLog): string[] | undefined {
-  let line = log.lines.find(
+function committedPathsOf(lines: CommitLine[]): string[] | undefined {
+  let line = lines.find(
     (l) =>
       l.source === 'platform' &&
       l.kind === 'commit' &&

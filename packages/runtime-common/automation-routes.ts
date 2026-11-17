@@ -1,6 +1,8 @@
 // The realm server's routes for a direct writer to switch an automation on,
-// start a Preview or a Run now, pause, resume or remove it, and cancel one of
-// its runs. Each is an authenticated realm-server route: it acts as the
+// start a Preview or a Run now, pause, resume or remove it, cancel one of its
+// runs, and read what the console shows: a run's report, a Preview's staged
+// file and the automation's storage. Each is an authenticated realm-server
+// route: it acts as the
 // session's own user, never as a user a header names (ADR 006), and answers
 // only a direct writer of the realm the request names.
 //
@@ -17,14 +19,37 @@ export const AUTOMATION_RESUME_PATH = '/_automation-resume';
 export const AUTOMATION_REMOVE_PATH = '/_automation-remove';
 export const AUTOMATION_RUN_CANCEL_PATH = '/_automation-run-cancel';
 
-// The query parameters of `GET /_automation-switch-on`, which answers the
-// estimate the switch-on screen shows.
+// What the console reads, each a GET a direct writer of the realm makes:
+//
+// - `/_automation-run-report?realm=&run=`: one run's timings, milestones, a
+//   count of its log's lines, its `callApi` and `resolve` calls, the files
+//   it staged or saved, and its cost by kind. The log's lines themselves are
+//   read from the log's own route.
+// - `/_automation-preview-file?realm=&run=&path=`: the bytes of one file a
+//   complete Preview staged, by its realm-local path.
+// - `/_automation-storage?realm=&automation=`: every file the automation's
+//   runs created that still exists, its size on disk and in the index, what
+//   a day of that storage costs, and the storage charges written so far.
+//
+// A person's Matrix id in an answer (who a run acts as, who canceled it, who
+// pays) is shown only to that person, or to a viewer who shares a named realm
+// grant with them (ADR 011 §1.2). Anyone else sees null.
+export const AUTOMATION_RUN_REPORT_PATH = '/_automation-run-report';
+export const AUTOMATION_PREVIEW_FILE_PATH = '/_automation-preview-file';
+export const AUTOMATION_STORAGE_PATH = '/_automation-storage';
+
+// The query parameters of the GET routes: `GET /_automation-switch-on`, which
+// answers the estimate the switch-on screen shows, and the console's reads.
 export const AUTOMATION_ROUTE_REALM_PARAM = 'realm';
 export const AUTOMATION_ROUTE_AUTOMATION_PARAM = 'automation';
+export const AUTOMATION_ROUTE_RUN_PARAM = 'run';
+export const AUTOMATION_ROUTE_PATH_PARAM = 'path';
 
 export const AUTOMATION_RESOURCE_TYPE = 'automation';
 export const AUTOMATION_RUN_RESOURCE_TYPE = 'automation-run';
 export const AUTOMATION_ESTIMATE_RESOURCE_TYPE = 'automation-estimate';
+export const AUTOMATION_RUN_REPORT_RESOURCE_TYPE = 'automation-run-report';
+export const AUTOMATION_STORAGE_RESOURCE_TYPE = 'automation-storage';
 
 // The body of a request about an automation: the card by its URL, in the
 // realm named by `attributes.realm`.
