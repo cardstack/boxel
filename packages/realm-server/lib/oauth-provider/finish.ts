@@ -12,7 +12,8 @@
 // finishes, so one copied out of a URL or a log is already useless.
 //
 // Allow creates a new OAuth grant holding exactly the scopes the flow asked
-// for (§1.3), signs the flow in as the user who decided it, and the library
+// for (§1.3), created as of the decision, so a revocation of the user's
+// grants after the decision covers it, signs the flow in as the user who decided it, and the library
 // sends the browser on to the app with a code. Deny, and a cancel from a page
 // that has no session to decide with, send the app `access_denied`. Anything
 // else ends on the error page for an expired request, which never says which
@@ -140,6 +141,7 @@ export function finishHandler({
       clientId: decision.clientId,
       resources: decision.scopes,
       renewing: decision.renew,
+      consentedAt: decision.decidedAt,
     });
     // A grant the flow didn't finish with is deleted: no code names it, so
     // it never connected the app. The interaction can expire, or another

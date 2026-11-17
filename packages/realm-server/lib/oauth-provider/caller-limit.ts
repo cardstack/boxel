@@ -212,7 +212,9 @@ function refusal(outcome: RateLimitRefusal): CallerLimitOutcome {
       };
 }
 
-function tokenBucket({
+// A limit written as `requests/windowSeconds`, as the token bucket the store
+// keeps: `requests` at once, refilled evenly over the window.
+export function tokenBucket({
   requests,
   windowSeconds,
 }: AnonymousRateLimit): TokenBucketLimit {

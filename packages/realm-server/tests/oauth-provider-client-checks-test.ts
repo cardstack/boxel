@@ -1,6 +1,9 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import Koa from 'koa';
+import cors from '@koa/cors';
+import supertest from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   DBRateLimitStore,
@@ -26,7 +29,13 @@ import {
 import {
   OAuthProviderConfigError,
   readNewClientLimit,
+  readTokenLimit,
 } from '../lib/oauth-provider/config.ts';
+import {
+  DEFAULT_TOKEN_LIMIT,
+  parseTokenLimit,
+} from '../lib/oauth-provider/token-limit.ts';
+import { leaveCORSToOAuthProvider } from '../lib/oauth-provider/serve.ts';
 
 // The hosts a production deployment lists, as its settings spell them.
 const hosts = boxelHosts({
@@ -204,6 +213,115 @@ module(basename(import.meta.filename), function () {
           hosts,
         ) ?? '(allowed)';
       assert.true(/must use https/.test(first), `each is checked: ${first}`);
+    });
+  });
+
+  module('the token limit', function () {
+    test('reads named parts, each defaulting when left out', function (assert) {
+      assert.deepEqual(
+        parseTokenLimit(
+          'grant=60/3600,address=60/600,network=300/600,all=3000/600,alert=1500',
+        ),
+        DEFAULT_TOKEN_LIMIT,
+      );
+      assert.deepEqual(parseTokenLimit(' grant = 10/60 '), {
+        ...DEFAULT_TOKEN_LIMIT,
+        perGrant: { requests: 10, windowSeconds: 60 },
+      });
+      assert.deepEqual(parseTokenLimit('network=50/60,grant=10/60'), {
+        perGrant: { requests: 10, windowSeconds: 60 },
+        failures: {
+          ...DEFAULT_TOKEN_LIMIT.failures,
+          perNetwork: { requests: 50, windowSeconds: 60 },
+        },
+      });
+      for (let spec of [
+        '60/3600,60/600',
+        'grant=60/3600,',
+        'grant=60/3600,grant=30/3600',
+        'failures=60/600',
+        'everyone=20/3600',
+        'grant=20',
+        'grant=0/60',
+        'grant=20/3600=1',
+        'all=100/600,alert=100',
+      ]) {
+        assert.strictEqual(parseTokenLimit(spec), undefined, spec);
+      }
+    });
+
+    test('defaults when unset, and stops the server when malformed', function (assert) {
+      assert.deepEqual(readTokenLimit({}), DEFAULT_TOKEN_LIMIT);
+      assert.deepEqual(
+        readTokenLimit({
+          BOXEL_OAUTH_TOKEN_RATE_LIMIT: 'grant=3/60,address=6/60',
+        }),
+        {
+          perGrant: { requests: 3, windowSeconds: 60 },
+          failures: {
+            ...DEFAULT_TOKEN_LIMIT.failures,
+            perAddress: { requests: 6, windowSeconds: 60 },
+          },
+        },
+      );
+      assert.throws(
+        () => readTokenLimit({ BOXEL_OAUTH_TOKEN_RATE_LIMIT: '60/3600' }),
+        (error: unknown) =>
+          error instanceof OAuthProviderConfigError &&
+          /BOXEL_OAUTH_TOKEN_RATE_LIMIT must be named parts/.test(
+            error.message,
+          ),
+      );
+    });
+  });
+
+  module("the realm server's CORS on the token path", function () {
+    const issuer = 'https://app.boxel.ai/';
+
+    function corsOn(
+      method: 'get' | 'post' | 'options',
+      host: string,
+      issuerOrNone: string | undefined,
+    ) {
+      let app = new Koa()
+        .use(leaveCORSToOAuthProvider(cors({ origin: '*' }), issuerOrNone))
+        .use((ctxt) => {
+          ctxt.status = 204;
+        });
+      let request = supertest(app.callback())
+        [method]('/_oauth-provider/token')
+        .set('Host', host)
+        .set('Origin', 'https://elsewhere.example.test');
+      if (method === 'options') {
+        request = request.set('Access-Control-Request-Method', 'POST');
+      }
+      return request;
+    }
+
+    test('it is left to the provider for the token POST and its preflight on the issuer host', async function (assert) {
+      for (let method of ['post', 'options'] as const) {
+        let response = await corsOn(method, 'app.boxel.ai', issuer);
+        assert.strictEqual(
+          response.headers['access-control-allow-origin'],
+          undefined,
+          method,
+        );
+      }
+    });
+
+    test('it stays on every request the provider does not serve', async function (assert) {
+      for (let [label, method, host, issuerOrNone] of [
+        ['the provider is off', 'post', 'app.boxel.ai', undefined],
+        ['another host', 'post', 'site.boxel.site', issuer],
+        ['another method', 'get', 'app.boxel.ai', issuer],
+      ] as const) {
+        let response = await corsOn(method, host, issuerOrNone);
+        assert.strictEqual(
+          response.headers['access-control-allow-origin'],
+          '*',
+          label,
+        );
+      }
     });
   });
 
