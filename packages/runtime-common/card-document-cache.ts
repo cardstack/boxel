@@ -95,6 +95,9 @@ export type CardJsonAssembly =
   // rather than a card that does not exist, and the caller says so — letting a
   // client hold a placeholder until the realm broadcasts the index event.
   | { kind: 'not-indexed' }
+  // A definition the read needed could not be produced in time. Nothing about
+  // the card follows from that, so the caller answers a retryable 503.
+  | { kind: 'definitions-unavailable'; message: string }
   // `paths.fileURL(localPath)` normalized to a different local path.
   | { kind: 'redirect'; foundPath: string }
   // The index has a row but it can't be served cleanly; the caller renders

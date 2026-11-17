@@ -1,5 +1,8 @@
 import type { ResolvedCodeRef } from '../code-ref.ts';
-import type { DefinitionLookupOptions } from '../definition-lookup.ts';
+import {
+  isTransientDefinitionLookupError,
+  type DefinitionLookupOptions,
+} from '../definition-lookup.ts';
 import type { Definition, ModuleDefinitionResult } from '../index.ts';
 import { userInitiatedPriority } from '../queue.ts';
 import type { OperationDefinitionLookup } from './dispatch.ts';
@@ -92,6 +95,21 @@ async function withinDeadline<T>(
   // settles later without surfacing as an unhandled rejection.
   try {
     return await Promise.race([pending, expired]);
+  } catch (err: unknown) {
+    // A lookup whose module render timed out or whose prerenderer was
+    // unavailable says nothing about whether the type exists. Raised as the
+    // lookup's own error, every reader that turns an unresolvable type into
+    // `undefined` would read it as a type that is not there. So it is the
+    // same retryable refusal as a lookup that missed the deadline, which
+    // those readers pass through.
+    if (isTransientDefinitionLookupError(err)) {
+      throw definitionNotReady(
+        undefined,
+        codeRef,
+        'could not be read just now (its module did not finish loading)',
+      );
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }
