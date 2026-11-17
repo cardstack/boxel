@@ -803,12 +803,14 @@ export async function pauseAfterRepeatedFailures(
 // paused or *done*, or whose payer a resume changed, is left alone, so neither
 // move can undo a pause or a schedule that has ended. It is one conditional
 // UPDATE, so a pause or a *done* that commits first wins, and the move then
-// changes nothing. Returns the row as it is after the change, or undefined
-// when nothing moved.
+// changes nothing. A move is reported to `reporters` once the UPDATE has
+// committed. Returns the row as it is after the change, or undefined when
+// nothing moved.
 export async function setAutomationWaitingForCredits(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
   { payer, waiting }: { payer: string; waiting: boolean },
+  reporters: AutomationReporters = {},
 ): Promise<AutomationRow | undefined> {
   let [from, to]: AutomationState[] = waiting
     ? ['active', 'waiting-for-credits']
@@ -824,7 +826,15 @@ export async function setAutomationWaitingForCredits(
     param(payer),
     'RETURNING *',
   ]);
-  return row ? automationFromRow(row) : undefined;
+  if (!row) {
+    return undefined;
+  }
+  let automation = automationFromRow(row);
+  await reporters.reportAutomationChange?.({
+    automationId: automation.automationId,
+    realm: automation.realm,
+  });
+  return automation;
 }
 
 // What the index hook did with an automation's row:

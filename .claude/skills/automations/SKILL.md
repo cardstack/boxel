@@ -1408,6 +1408,7 @@ read them from, and never rejects; a failed report is logged as
 | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Switch-on, pause, resume, remove                                                                           | `switchOnAutomation`, `pauseAutomation`, `resumeAutomation`, `removeAutomation`, given the reporter                                                                       |
 | The payer losing access                                                                                    | `checkAutomationPayer`, `pauseForPayerLostAccess`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                   |
+| A move into or out of waiting for credits                                                                  | `setAutomationWaitingForCredits`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                                    |
 | Archiving the realm                                                                                        | `pauseRealmAutomations`, from the archive handler (`realmServerAutomationChangeReporter`)                                                                                 |
 | Its runs failing repeatedly                                                                                | `pauseAfterRepeatedFailures`, from `runAutomationAttempt` (`AutomationAttemptContext.reportAutomationChange`)                                                             |
 | The card's index hook removes it, pauses it for a raised cap or batched AI, or makes it done/active        | `syncAutomationWithCard`, from `syncAutomationsAfterIndex` in the indexing tasks. `checkAutomationCaps` pauses the same way and reports to a caller that passes reporters |
@@ -1419,8 +1420,8 @@ that starts a run and leaves the state as it was reports nothing either, since
 the run's `job` event announces it. A worker reports through
 `taskAutomationChangeReporter`, which hands the event to `reportRealmEvent`.
 A realm route that changes a row passes `Realm.reportAutomationChange`. **New
-code that changes an automation's state** (such as waiting for credits)
-reports the automation the same way once its change commits.
+code that changes an automation's state** (a new pause reason, say) reports
+the automation the same way once its change commits.
 
 ### Watching it
 
