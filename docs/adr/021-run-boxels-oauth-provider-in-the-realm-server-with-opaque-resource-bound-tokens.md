@@ -250,6 +250,14 @@ a password change (ADR 005 §1.6), MUST also revoke the user's OAuth grants.
 The later revocation that covers Matrix OpenID tokens MUST NOT, since an
 OpenID token can't create a grant (§1.7).
 
+A user MUST be able to list their live OAuth grants and end any one of them
+from the secure origin's Connected apps page. The routes that list and end
+them MUST answer only a request whose `Origin` is the secure origin's, under
+the secure window's own session, as consent's routes do (§1.7). Ending one
+grant MUST NOT end another, including another grant of the same client. A
+grant ID that doesn't name a live grant of the signed-in user's MUST be
+answered as unknown, and MUST change nothing.
+
 ## 2. Rationale
 
 Card code can carry the app's session and Matrix token out of the browser, so

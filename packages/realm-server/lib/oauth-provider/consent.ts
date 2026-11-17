@@ -16,10 +16,8 @@
 import type Koa from 'koa';
 import type Provider from 'oidc-provider';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
-import { AuthenticationError } from '@cardstack/runtime-common/router';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
-import { secureSessionClient, type AccountContact } from '../secure-session.ts';
-import { retrieveUserSessionClaim } from '../../utils/jwt.ts';
+import type { AccountContact } from '../secure-session.ts';
 import { appName, type AppName } from './app-name.ts';
 import { clientIdForLogs } from './client-metadata-document.ts';
 import {
@@ -33,6 +31,7 @@ import {
   findConsentDecision,
 } from './objects.ts';
 import type { OAuthResource, OAuthScope } from './registry.ts';
+import { respond, secureWindowUser } from './secure-window-user.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -204,40 +203,6 @@ export function consentDecisionHandler(deps: ConsentDeps): Koa.Middleware {
   };
 }
 
-// The secure window's user, or undefined once the request has been answered.
-// Only the secure origin's pages are answered: a browser always sends
-// `Origin` on these requests, and page script can't change it. Only the
-// secure window's own session is accepted, never the app's session, and never
-// the CLI's, whose requests can claim any `Origin`.
-async function secureWindowUser(
-  ctxt: Koa.Context,
-  { dbAdapter, secureOriginURL, realmSecretSeed }: ConsentDeps,
-): Promise<string | undefined> {
-  if (ctxt.get('Origin') !== secureOriginURL.origin) {
-    respond(ctxt, 403, { error: 'forbidden' });
-    return undefined;
-  }
-  let authorization = ctxt.get('Authorization');
-  if (authorization) {
-    try {
-      let token = await retrieveUserSessionClaim(
-        authorization,
-        realmSecretSeed,
-        dbAdapter,
-      );
-      if ((await secureSessionClient(dbAdapter, token)) === 'window') {
-        return token.user;
-      }
-    } catch (error) {
-      if (!(error instanceof AuthenticationError)) {
-        throw error;
-      }
-    }
-  }
-  respond(ctxt, 401, { error: 'signed-out' });
-  return undefined;
-}
-
 // The flow an interaction ID names, while it can still be decided. Its
 // request passed Boxel's checks before the library saved it, so it names at
 // least one resource and a scope at each; a flow that doesn't is treated as
@@ -348,10 +313,4 @@ async function readDecision(
     return undefined;
   }
   return { decision, renew };
-}
-
-function respond(ctxt: Koa.Context, status: number, body: object) {
-  ctxt.status = status;
-  ctxt.set('Cache-Control', 'no-store');
-  ctxt.body = body;
 }

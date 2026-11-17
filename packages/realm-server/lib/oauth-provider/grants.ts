@@ -8,6 +8,7 @@
 
 import { randomBytes } from 'crypto';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
+import { clientIdForLogs } from './client-metadata-document.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -33,19 +34,23 @@ export interface NewGrant {
   // and what its expiry is measured from: a revocation between the consent
   // and the end of the flow covers the grant.
   consentedAt: Date;
+  // The redirect URI the flow used, which Connected apps names a client that
+  // registered itself by, as consent did (`app-name.ts`).
+  redirectUri?: string;
 }
 
 // Stores a new grant and answers its ID.
 export async function createGrant(
   dbAdapter: DBAdapter,
-  { userId, clientId, resources, renewing, consentedAt }: NewGrant,
+  { userId, clientId, resources, renewing, consentedAt, redirectUri }: NewGrant,
 ): Promise<string> {
   let id = randomBytes(32).toString('base64url');
   await dbAdapter.execute(
     `INSERT INTO oauth_provider_grants
-       (id, user_id, client_id, resources, renewing, created_at, expires_at)
+       (id, user_id, client_id, resources, renewing, created_at, expires_at,
+        redirect_uri)
        VALUES ($1, $2, $3, $4::jsonb, $5, $6::timestamptz,
-               $6::timestamptz + make_interval(secs => $7))`,
+               $6::timestamptz + make_interval(secs => $7), $8)`,
     {
       bind: [
         id,
@@ -55,6 +60,7 @@ export async function createGrant(
         renewing,
         consentedAt.toISOString(),
         renewing ? RENEWING_GRANT_TTL_SECONDS : NON_RENEWING_GRANT_TTL_SECONDS,
+        redirectUri ?? null,
       ],
     },
   );
@@ -90,29 +96,54 @@ export async function readGrantTerms(
 // its tokens. A grant ends once: a grant already ended keeps its first
 // reason. Answers whether this call ended it.
 //
+// With an `owner` (the Matrix ID of the user asking, when the grant ID came
+// from them), it ends only a grant of that user's that is still usable: not
+// ended, not expired, and not covered by a revocation of their grants, which
+// keeps its own reason. Any other grant is left exactly as it was, tokens and
+// all, so a grant ID naming someone else's connection changes nothing.
+//
 // The tokens are deleted by a second statement, after the grant's row is
 // updated, so that it sees a token whose store held the row while the update
 // waited for it; one statement would read the tokens as they were when it
-// began.
+// began. Without an owner they are deleted whether or not this call ended the
+// grant, since a grant someone else ended has none to keep.
 export async function endGrant(
   dbAdapter: DBAdapter,
   grantId: string,
   reason: GrantEndReason,
+  { owner }: { owner?: string } = {},
 ): Promise<boolean> {
-  let rows = await dbAdapter.execute(
-    `UPDATE oauth_provider_grants
-        SET ended_at = now(), ended_reason = $2
-      WHERE id = $1 AND ended_at IS NULL
-      RETURNING id`,
-    { bind: [grantId, reason] },
-  );
-  await dbAdapter.execute(
-    `DELETE FROM oauth_provider_tokens WHERE grant_id = $1`,
-    { bind: [grantId] },
-  );
+  let rows = (
+    owner === undefined
+      ? await dbAdapter.execute(
+          `UPDATE oauth_provider_grants
+              SET ended_at = now(), ended_reason = $2
+            WHERE id = $1 AND ended_at IS NULL
+            RETURNING client_id`,
+          { bind: [grantId, reason] },
+        )
+      : await dbAdapter.execute(
+          `UPDATE oauth_provider_grants AS g
+              SET ended_at = now(), ended_reason = $2
+             FROM users AS u
+            WHERE g.id = $1 AND u.id = g.user_id AND u.matrix_user_id = $3
+              AND g.ended_at IS NULL AND g.expires_at > now()
+              AND NOT COALESCE(g.created_at <= u.oauth_grants_revoked_at, false)
+            RETURNING g.client_id`,
+          { bind: [grantId, reason, owner] },
+        )
+  ) as { client_id: string }[];
   let ended = rows.length > 0;
+  if (ended || owner === undefined) {
+    await dbAdapter.execute(
+      `DELETE FROM oauth_provider_tokens WHERE grant_id = $1`,
+      { bind: [grantId] },
+    );
+  }
   if (ended) {
-    log.info(`grant ended: ${reason}`);
+    log.info(
+      `grant ended: ${reason}, client ${clientIdForLogs(rows[0].client_id)}`,
+    );
   }
   return ended;
 }

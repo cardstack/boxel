@@ -9,6 +9,7 @@ import {
   OAUTH_INTERACTION_PATH,
 } from './authorization.ts';
 import { inMetadataDocumentRequest } from './client-metadata-document.ts';
+import { OAUTH_CONNECTIONS_PATH } from './connections.ts';
 import { OAUTH_CONSENT_PATH } from './consent.ts';
 import {
   OAUTH_PROTECTED_RESOURCE_PATH,
@@ -38,8 +39,8 @@ import {
 //
 // A registration, the request that starts a flow, a token request, and the
 // request that resumes a finished one go through Boxel's own handling first, which hands them on to
-// the library only once Boxel allows them. The interaction, finish, error and
-// consent routes are Boxel's alone, though finishing hands the result to the
+// the library only once Boxel allows them. The interaction, finish, error,
+// consent and connections routes are Boxel's alone, though finishing hands the result to the
 // library, which answers the request.
 export function registerOAuthProviderRoutes(
   router: Router,
@@ -54,6 +55,7 @@ export function registerOAuthProviderRoutes(
     handleErrorDetails,
     handleErrorReturn,
     consentHandlers,
+    connectionsHandlers,
     issuer,
     registry,
     resourceController,
@@ -62,6 +64,8 @@ export function registerOAuthProviderRoutes(
 ) {
   let { handleConsentDetails, handleConsentDecision } =
     consentHandlers(consentDeps);
+  let { handleConnectionsList, handleConnectionsDisconnect } =
+    connectionsHandlers(consentDeps);
   let issuerURL = new URL(provider.issuer);
   let issuerHost = issuerURL.host;
   let callback = provider.callback();
@@ -188,6 +192,14 @@ export function registerOAuthProviderRoutes(
   router.post(
     `${OAUTH_CONSENT_PATH}/:uid`,
     onIssuerHost(boxelOnly(handleConsentDecision)),
+  );
+  router.get(
+    OAUTH_CONNECTIONS_PATH,
+    onIssuerHost(boxelOnly(handleConnectionsList)),
+  );
+  router.delete(
+    `${OAUTH_CONNECTIONS_PATH}/:grantId`,
+    onIssuerHost(boxelOnly(handleConnectionsDisconnect)),
   );
 }
 

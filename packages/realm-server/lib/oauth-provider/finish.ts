@@ -142,6 +142,10 @@ export function finishHandler({
       resources: decision.scopes,
       renewing: decision.renew,
       consentedAt: decision.decidedAt,
+      redirectUri:
+        typeof interaction.params.redirect_uri === 'string'
+          ? interaction.params.redirect_uri
+          : undefined,
     });
     // A grant the flow didn't finish with is deleted: no code names it, so
     // it never connected the app. The interaction can expire, or another
