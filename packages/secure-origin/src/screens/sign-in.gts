@@ -104,15 +104,6 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       data-test-login-btn
       data-test-secure-password-submit
     >Sign In</AuthButton>
-    {{#if @onCancel}}
-      <AuthButton
-        type='button'
-        class='cancel'
-        @variant='secondary'
-        {{on 'click' @onCancel}}
-        data-test-secure-sign-in-cancel
-      >Cancel</AuthButton>
-    {{/if}}
     {{#if @error}}
       <div
         class='error'
@@ -122,6 +113,15 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       >
         {{@error}}
       </div>
+    {{/if}}
+    {{#if @onCancel}}
+      <AuthButton
+        type='button'
+        class='cancel'
+        @variant='secondary'
+        {{on 'click' @onCancel}}
+        data-test-secure-sign-in-cancel
+      >Cancel</AuthButton>
     {{/if}}
     {{#if @onRegister}}
       <p class='register-prompt'>

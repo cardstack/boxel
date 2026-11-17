@@ -249,14 +249,15 @@ export default class AuthorizePage extends Component {
   };
 
   // "Not you?": the window's session ends, here and on the server, and the
-  // same flow asks for a sign-in again.
-  private notYou = async () => {
-    try {
-      await signOut(this.config);
-    } catch {
-      // The session is forgotten here whatever the server answers.
-    }
+  // same flow asks for a sign-in again at once. Consent goes first, so nothing
+  // can be answered as the account just disowned while the server ends its
+  // session. The session is forgotten here before the request goes, and a
+  // sign-in meanwhile is a session of its own.
+  private notYou = () => {
     this.page.state = { name: 'sign-in' };
+    signOut(this.config).catch(() => {
+      // Forgotten here whatever the server answers.
+    });
   };
 
   private cancel = () => {
@@ -296,6 +297,9 @@ export default class AuthorizePage extends Component {
         { decision, renew: decision === 'allow' && consent.renew },
       );
     } catch (e: any) {
+      if (this.consent?.session !== consent.session) {
+        return;
+      }
       if (e.status === 401) {
         this.page.state = { name: 'sign-in' };
         return;
@@ -309,6 +313,11 @@ export default class AuthorizePage extends Component {
         error:
           'Boxel couldn’t record your answer. Nothing was shared. Try again.',
       });
+      return;
+    }
+    // Signed out meanwhile: the page has moved on, and the answer goes no
+    // further. The flow is decided, so a fresh sign-in finds it ended.
+    if (this.consent?.session !== consent.session) {
       return;
     }
     this.page.state = {

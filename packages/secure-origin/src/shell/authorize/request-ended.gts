@@ -10,6 +10,7 @@ const RequestEnded: TemplateOnlyComponent<object> = <template>
     <MessagePage
       @heading='This request can’t continue'
       @info='Start connecting again from the app.'
+      @focus={{true}}
     />
   </div>
 

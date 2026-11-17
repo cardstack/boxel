@@ -36,6 +36,8 @@ const SESSION = {
   expiresAt: '2099-01-01T00:00:00.000Z',
 };
 const EMAIL = 'person@example.test';
+// Allow takes a click only once the page has been in view a moment.
+const ALLOW_READY = '[data-test-authorize-allow]:not([disabled])';
 const CLAIMED_NAME = 'Example AI app';
 
 const READ = {
@@ -62,7 +64,7 @@ const WORKSPACES = {
 };
 
 // A client identified by its metadata document, which Boxel names by its
-// domain (§10, state 2).
+// domain.
 function cimdDetails(overrides: Record<string, unknown> = {}) {
   return {
     app: { kind: 'metadata-document', shown: 'example.com', verified: true },
@@ -74,7 +76,7 @@ function cimdDetails(overrides: Record<string, unknown> = {}) {
   };
 }
 
-// A client that registered itself, with a loopback redirect (§10, state 3).
+// A client that registered itself, with a loopback redirect.
 function dcrDetails(overrides: Record<string, unknown> = {}) {
   return cimdDetails({
     app: {
@@ -121,6 +123,8 @@ module('Integration | authorize', function (hooks) {
     INTERACTION,
     TICKET,
     SESSION.token,
+    'another-window-session',
+    'renewed-window-session',
     EMAIL,
     CLAIMED_NAME,
     'a-password',
@@ -151,6 +155,11 @@ module('Integration | authorize', function (hooks) {
 
   function decisions() {
     return servers.requests('realm-server', `POST ${CONSENT}`);
+  }
+
+  async function allow() {
+    await waitFor(ALLOW_READY);
+    await click('[data-test-authorize-allow]');
   }
 
   module('sign-in', function () {
@@ -236,7 +245,7 @@ module('Integration | authorize', function (hooks) {
   });
 
   module('consent', function () {
-    test('an app with a metadata document is named by its domain (state 2)', async function (assert) {
+    test('an app with a metadata document is named by its domain', async function (assert) {
       signedIn();
       shows(cimdDetails());
       await open();
@@ -268,7 +277,7 @@ module('Integration | authorize', function (hooks) {
       assert.dom('[data-test-authorize-expiry]').doesNotExist();
     });
 
-    test('an app that registered itself is shown as unverified (state 3)', async function (assert) {
+    test('an app that registered itself is shown as unverified', async function (assert) {
       signedIn();
       shows(dcrDetails());
       await open();
@@ -307,7 +316,7 @@ module('Integration | authorize', function (hooks) {
         );
     });
 
-    test("Boxel's own app has no app icon and no line about another's terms (state 2b)", async function (assert) {
+    test("Boxel's own app has no app icon and no line about another's terms", async function (assert) {
       signedIn();
       shows(
         cimdDetails({
@@ -324,7 +333,7 @@ module('Integration | authorize', function (hooks) {
       assert.dom('[data-test-authorize-terms]').doesNotExist();
     });
 
-    test('unchecking renewal says the connection ends after 60 minutes (state 4)', async function (assert) {
+    test('unchecking renewal says the connection ends after 60 minutes', async function (assert) {
       signedIn();
       shows(cimdDetails());
       servers.realmServer(`POST ${CONSENT}`, () => ({
@@ -338,7 +347,7 @@ module('Integration | authorize', function (hooks) {
         .hasText(
           'The connection ends 60 minutes after you allow it. You’ll need to connect again after that.',
         );
-      await click('[data-test-authorize-allow]');
+      await allow();
       assert.deepEqual(decisions()[0]?.body, {
         decision: 'allow',
         renew: false,
@@ -355,7 +364,7 @@ module('Integration | authorize', function (hooks) {
         .includesText('ends 60 minutes after you allow it');
     });
 
-    test('a flow naming two resources lists each (state 4a)', async function (assert) {
+    test('a flow naming two resources lists each', async function (assert) {
       signedIn();
       shows(
         cimdDetails({
@@ -415,6 +424,27 @@ module('Integration | authorize', function (hooks) {
       assert.dom('img', page).doesNotExist('no image is loaded');
     });
 
+    test('Allow takes no click until the page has been in view a moment, and waits again when the window loses focus', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      await open();
+      assert
+        .dom('[data-test-authorize-allow]')
+        .isDisabled('Allow waits as consent appears');
+      assert
+        .dom('[data-test-authorize-deny]')
+        .isNotDisabled('Deny never waits');
+      await waitFor(ALLOW_READY);
+      window.dispatchEvent(new Event('blur'));
+      await settled();
+      assert
+        .dom('[data-test-authorize-allow]')
+        .isDisabled('Allow waits again once the window loses focus');
+      window.dispatchEvent(new Event('focus'));
+      await waitFor(ALLOW_READY);
+      assert.dom('[data-test-authorize-allow]').isNotDisabled();
+    });
+
     test('focus never starts on Allow, and Enter anywhere can submit nothing', async function (assert) {
       signedIn();
       shows(cimdDetails());
@@ -428,7 +458,7 @@ module('Integration | authorize', function (hooks) {
   });
 
   module('the answer', function () {
-    test('Allow records the answer, then finishes the flow with its ticket (state 7)', async function (assert) {
+    test('Allow records the answer, then finishes the flow with its ticket', async function (assert) {
       signedIn();
       shows(cimdDetails());
       servers.realmServer(`POST ${CONSENT}`, () => ({
@@ -436,7 +466,7 @@ module('Integration | authorize', function (hooks) {
         body: { ticket: TICKET },
       }));
       await open();
-      await click('[data-test-authorize-allow]');
+      await allow();
       let [decision] = decisions();
       assert.deepEqual(decision?.body, { decision: 'allow', renew: true });
       assert.strictEqual(decision?.authorization, `Bearer ${SESSION.token}`);
@@ -448,7 +478,7 @@ module('Integration | authorize', function (hooks) {
         .hasText('Returning you to example.com…');
     });
 
-    test('Deny records the answer, and the app is told no (state 5)', async function (assert) {
+    test('Deny records the answer, and the app is told no', async function (assert) {
       signedIn();
       shows(dcrDetails());
       servers.realmServer(`POST ${CONSENT}`, () => ({
@@ -480,8 +510,9 @@ module('Integration | authorize', function (hooks) {
         () => new Promise<Answer>((resolve) => (answer = resolve)),
       );
       await open();
+      await waitFor(ALLOW_READY);
       click('[data-test-authorize-allow]');
-      await waitFor('[data-test-authorize-allow][disabled]');
+      await waitFor('[data-test-authorize-deny][disabled]');
       assert.dom('[data-test-authorize-deny]').isDisabled();
       answer({ status: 201, body: { ticket: TICKET } });
       await settled();
@@ -496,7 +527,7 @@ module('Integration | authorize', function (hooks) {
         body: { error: 'whatever' },
       }));
       await open();
-      await click('[data-test-authorize-allow]');
+      await allow();
       assert
         .dom('[data-test-authorize-error]')
         .includesText('Boxel couldn’t record your answer.');
@@ -512,9 +543,67 @@ module('Integration | authorize', function (hooks) {
         body: { error: 'decided' },
       }));
       await open();
-      await click('[data-test-authorize-allow]');
+      await allow();
       assert.dom('[data-test-authorize-ended]').exists();
+      assert
+        .dom('[data-test-authorize-ended] [data-test-secure-title]')
+        .isFocused('what replaced consent takes focus, so it is read');
       assert.deepEqual(moves, []);
+    });
+
+    test('the answer is given under the session that loaded consent, even when another is stored since', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      servers.realmServer(`POST ${CONSENT}`, () => ({
+        status: 201,
+        body: { ticket: TICKET },
+      }));
+      await open();
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          ...SESSION,
+          token: 'another-window-session',
+          user: '@someone-else:example.test',
+        }),
+      );
+      await allow();
+      assert.strictEqual(
+        decisions()[0]?.authorization,
+        `Bearer ${SESSION.token}`,
+      );
+    });
+
+    test('an answer refused as signed out asks for a sign-in, and finishes nothing', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      servers.realmServer(`POST ${CONSENT}`, () => ({
+        status: 401,
+        body: { error: 'signed-out' },
+      }));
+      await open();
+      await allow();
+      assert
+        .dom('[data-test-secure-sign-in-title]')
+        .hasText('Sign in to Boxel to connect an app');
+      assert.deepEqual(moves, []);
+    });
+
+    test('"Not you?" waits while an answer is being recorded', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      let answer!: (value: Answer) => void;
+      servers.realmServer(
+        `POST ${CONSENT}`,
+        () => new Promise<Answer>((resolve) => (answer = resolve)),
+      );
+      await open();
+      await waitFor(ALLOW_READY);
+      click('[data-test-authorize-allow]');
+      await waitFor('[data-test-authorize-sign-out][disabled]');
+      assert.dom('[data-test-authorize-sign-out]').isDisabled();
+      answer({ status: 201, body: { ticket: TICKET } });
+      await settled();
     });
 
     test('"Not you?" signs out and asks for a sign-in in the same flow', async function (assert) {
@@ -580,6 +669,35 @@ module('Integration | authorize', function (hooks) {
       await click('[data-test-authorize-retry]');
       await waitFor('[data-test-authorize-consent]');
       assert.dom('[data-test-authorize-heading]').isFocused();
+    });
+
+    test('consent refused under a session the server ended is read again under its renewal', async function (assert) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(SESSION));
+      let checks = 0;
+      servers.realmServer('GET _secure-session', () =>
+        checks++ === 0 ? {} : { status: 401, body: {} },
+      );
+      servers.realmServer('POST _secure-session/renewal', () => ({
+        data: {
+          attributes: {
+            token: 'renewed-window-session',
+            user: SESSION.user,
+            expiresAt: SESSION.expiresAt,
+          },
+        },
+      }));
+      let reads = 0;
+      servers.realmServer(`GET ${CONSENT}`, () =>
+        reads++ === 0
+          ? { status: 401, body: { error: 'signed-out' } }
+          : cimdDetails(),
+      );
+      await open();
+      assert.dom('[data-test-authorize-consent]').exists();
+      assert.deepEqual(
+        consentRequests().map((r) => r.authorization),
+        [`Bearer ${SESSION.token}`, 'Bearer renewed-window-session'],
+      );
     });
 
     test('a session the server has ended asks for a sign-in', async function (assert) {

@@ -1,14 +1,23 @@
-// What an app connecting to Boxel asks for, and the user's answer (§10 of the
-// OAuth provider's design, states 2, 2b, 3, 4 and 4a). It draws only the
-// details the provider answered (`ConsentDetails`): the app as the provider
-// names it, and what the access means in Boxel's own words from its registry.
-// Nothing here comes from the client's request.
+// What an app connecting to Boxel asks for, and the user's answer: the app,
+// the account, what the app will be able to do at each resource, and whether
+// to keep the connection for 30 days. It draws only the details the provider
+// answered (`ConsentDetails`): the app as the provider names it, and what the
+// access means in Boxel's own words from its registry. Nothing here comes from
+// the client's request.
 //
 // Focus starts on the heading each time consent is drawn, never on Allow, so
 // a user who presses Enter or Space as the page appears agrees to nothing.
 // Allow and Deny aren't in a form, so Enter in the checkbox submits nothing.
+//
+// Anyone can start a flow and send a signed-in user's browser here, so a page
+// can open consent in a window behind its own and uncover it under the user's
+// pointer partway through a double-click. Allow takes no click until the page
+// has been in view, and the window focused, for a moment, and starts waiting
+// again whenever either is lost.
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
+import { trackedObject } from '@ember/reactive/collections';
 
 import AppWindow from '@cardstack/boxel-icons/app-window';
 import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
@@ -30,6 +39,10 @@ import type {
 } from '../../security/oauth-provider.ts';
 
 import { appNameShown, renewalLine } from './copy.ts';
+
+// How long Allow waits, once the page is in view and its window focused,
+// before it takes a click.
+export const ALLOW_DELAY_MS = 500;
 
 interface Signature {
   Args: {
@@ -119,6 +132,7 @@ export default class Consent extends Component<Signature> {
               type='button'
               class='sign-out'
               @variant='link'
+              @disabled={{this.waiting}}
               {{on 'click' @onSignOut}}
               data-test-authorize-sign-out
             >Not you? Sign out</Button>
@@ -208,7 +222,7 @@ export default class Consent extends Component<Signature> {
           <AuthButton
             type='button'
             @variant='primary'
-            @disabled={{this.waiting}}
+            @disabled={{this.allowHeld}}
             @loading={{this.allowing}}
             {{on 'click' @onAllow}}
             data-test-authorize-allow
@@ -346,6 +360,41 @@ export default class Consent extends Component<Signature> {
       }
     </style>
   </template>
+
+  private guard = trackedObject({ ready: false });
+  private readyTimer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    window.addEventListener('focus', this.wait);
+    window.addEventListener('blur', this.wait);
+    document.addEventListener('visibilitychange', this.wait);
+    this.wait();
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    clearTimeout(this.readyTimer);
+    window.removeEventListener('focus', this.wait);
+    window.removeEventListener('blur', this.wait);
+    document.removeEventListener('visibilitychange', this.wait);
+  }
+
+  // Holds Allow back, and lets it go only once the page has been in view,
+  // and its window focused, for ALLOW_DELAY_MS.
+  private wait = () => {
+    this.guard.ready = false;
+    clearTimeout(this.readyTimer);
+    if (document.visibilityState === 'visible' && document.hasFocus()) {
+      this.readyTimer = setTimeout(() => {
+        this.guard.ready = true;
+      }, ALLOW_DELAY_MS);
+    }
+  };
+
+  private get allowHeld(): boolean {
+    return this.waiting || !this.guard.ready;
+  }
 
   private get account(): string {
     let account = this.args.details.account;

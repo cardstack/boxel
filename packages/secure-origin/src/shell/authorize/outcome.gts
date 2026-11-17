@@ -1,7 +1,10 @@
 // What the authorize page shows once the user has answered, while the browser
-// goes on to finish the flow (§10, states 5 and 7). The OAuth grant doesn't
-// exist yet, so nothing here says when it ends.
+// goes on to finish the flow: that the app wasn't connected, or that the
+// browser is on its way back to it. The OAuth grant doesn't exist yet, so
+// nothing here says when it ends.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import { eq } from '@cardstack/pretui/helpers';
 
 import MessagePage from '../sign-in/message-page.gts';
 
@@ -17,13 +20,17 @@ interface Signature {
 
 const Outcome: TemplateOnlyComponent<Signature> = <template>
   <div class='outcome' data-test-authorize-outcome={{@outcome}}>
-    {{#if (isDenied @outcome)}}
+    {{#if (eq @outcome 'denied')}}
       <MessagePage
         @heading='{{@name}} was not connected'
         @info='Nothing was shared. Returning you to {{@returnsTo}}…'
+        @focus={{true}}
       />
     {{else}}
-      <MessagePage @heading='Returning you to {{@returnsTo}}…' />
+      <MessagePage
+        @heading='Returning you to {{@returnsTo}}…'
+        @focus={{true}}
+      />
     {{/if}}
   </div>
 
@@ -33,9 +40,5 @@ const Outcome: TemplateOnlyComponent<Signature> = <template>
     }
   </style>
 </template>;
-
-function isDenied(outcome: Signature['Args']['outcome']): boolean {
-  return outcome === 'denied';
-}
 
 export default Outcome;

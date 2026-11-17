@@ -777,6 +777,11 @@ module(basename(import.meta.filename), function (hooks) {
         [],
         `consent, with renewal unchecked: no violation`,
       );
+      // Allow takes a click only once the page has been in view a moment.
+      await page.waitForSelector(
+        `[data-test-authorize-${answer}]:not([disabled])`,
+        { timeout: 10000 },
+      );
       await page.click(`[data-test-authorize-${answer}]`);
       await page.waitForSelector(
         `[data-test-authorize-outcome="${answer === 'allow' ? 'allowed' : 'denied'}"]`,
