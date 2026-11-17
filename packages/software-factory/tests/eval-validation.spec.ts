@@ -5,6 +5,7 @@ import { expect, test } from './fixtures.ts';
 import { EvalValidationStep } from '../src/validators/eval-step.ts';
 import type { EvalValidationDetails } from '../src/validators/eval-step.ts';
 import { buildTestClient } from './helpers/test-client.ts';
+import { writeRealmFile } from './helpers/write-realm-file.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
@@ -64,12 +65,12 @@ test.describe('eval-validation e2e', () => {
 
     try {
       // Write a valid module
-      let writeResult = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'valid-card.gts',
         VALID_MODULE_GTS,
       );
-      expect(writeResult.ok).toBe(true);
 
       let indexed = await client.waitForFile(realmUrl, 'valid-card.gts', {
         pollMs: 300,
@@ -146,12 +147,12 @@ test.describe('eval-validation e2e', () => {
       // Write a module with a broken relative import that is consumed as a field
       // type. The import must be consumed — unused imports get tree-shaken by the
       // compiler and the Loader never sees them (lint catches unused imports).
-      let writeResult = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'broken-module.gts',
         BROKEN_MODULE_GTS,
       );
-      expect(writeResult.ok).toBe(true);
 
       let indexed = await client.waitForFile(realmUrl, 'broken-module.gts', {
         pollMs: 300,

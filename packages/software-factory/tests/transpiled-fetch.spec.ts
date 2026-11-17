@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { expect, test } from './fixtures.ts';
 
 import { buildTestClient } from './helpers/test-client.ts';
+import { writeRealmFile } from './helpers/write-realm-file.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -50,12 +51,12 @@ test.describe('transpiled module fetch', () => {
 
     try {
       // Write the source .gts to the realm.
-      let writeResult = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'transpiled-check.gts',
         SOURCE_GTS,
       );
-      expect(writeResult.ok).toBe(true);
 
       // Wait for the realm to finish indexing the module.
       let indexed = await client.waitForFile(realmUrl, 'transpiled-check.gts', {
