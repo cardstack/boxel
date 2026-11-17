@@ -326,6 +326,43 @@ absent when the tab didn't answer the read within 200 ms. The prerender server's
 own memory lines (`prerender-heap`, `prerender-chrome-memory`) cover the
 whole task.
 
+## The Automations dashboard
+
+The **Automations** dashboard in Grafana (folder Boxel Status, `/d/boxelautomations`,
+defined in `packages/observability/grafanactl/resources/dashboards/boxel-status/automations.json`)
+answers most of the questions above at a glance, across every automation or
+narrowed by its Realm, Automation, Payer and Trigger filters. Payer is who a
+run acts as and is charged to (`automation_runs.acts_as`): the automation's
+payer for a scheduled run, whoever clicked for a Preview or Run now. Every
+panel reads Postgres except _Prerender run capacity_, which reads Loki.
+
+| Question                                                           | Where on the dashboard                                                                                                                                                                                 |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Is it switched on, paused or waiting for credits? (step 1)         | _Now_: Active automations, Paused, Waiting for credits; the _Automations_ table has each one's state, pause reason, next run and last result                                                           |
+| Did its runs happen, and how did they end? (step 3)                | _Runs by state_ (by the state each run is in now); the _Runs_ table, one row per run with its run id                                                                                                   |
+| Why did runs fail? (step 3)                                        | _Errors by reason_ (`error_reason`); the _Runs_ table's error reason and error message                                                                                                                 |
+| Did a slot start nothing because a run was still pending?          | _Skipped slots_ (stat and panel, by trigger): the tick's `trigger` log lines with `skipped`                                                                                                            |
+| Is the tick running late? (step 2)                                 | _Queue wait and schedule lag_: schedule lag p95 is a scheduled run's slot to its enqueue                                                                                                               |
+| Are runs waiting for a worker? (step 4)                            | _Runs pending_, and _Oldest unclaimed automation run_, the query the "Automation runs waiting for a worker" alert runs; _Queue wait and schedule lag_ for runs already claimed (enqueue → first claim) |
+| Are runs slow? (step 6)                                            | _Run time_: started → finished p50, p95 and max, and enqueue → end p95                                                                                                                                 |
+| How many runs hold prerender tabs, and does any server queue them? | _Runs in flight_ (Postgres, every server together); the collapsed _Prerender capacity (Loki)_ row breaks it down per server from the `capacity` events, over the last hour                             |
+| What did runs write, call and download?                            | _Writes and calls_ (writes, callApi calls, resolve calls); _Downloaded and prerender time_, the two quantities a run's own charge prices                                                               |
+| What did an automation or a run cost? (step 7)                     | _Credits charged_ and _AWS cost_ stats; _Credits charged by kind_ and _AWS cost by kind_; credits and AWS cost per automation (_Automations_) and per run with its pricing version (_Runs_)            |
+| Which pricing version priced the charges?                          | _Pricing versions_ stat and table: each version's margin, when it was recorded, and its charges, credits and cost                                                                                      |
+| Does the margin cover our cost, and which kind under-charges?      | _Cost coverage_: the pricing skill's cost coverage report over the dashboard's time range, with the margin in credits beside coverage                                                                  |
+
+The cost panels read charges the way step 7 does: `run`, `run_indexing` and
+`batched_ai` by the run they name, `ai` when a run made it, and `storage` by
+the automation. A run's indexing is charged when its last index pass ends,
+so a run that just finished can still gain credits. AWS cost is each charge's
+usage at its own pricing version's unit rates (the `credit_charge_costs`
+view), so a charge with no usage rows or at an unrecorded version adds credits
+and no cost; _Cost coverage_ counts those as unpriced. _Cost coverage_ covers
+every consumption charge, not only automations', and ignores the filters.
+
+The dashboard finds a run, and the steps above take it from there: copy the
+run id from the _Runs_ table into step 4's query.
+
 ## Locally
 
 The same tables are in the dev database (`psql` against the local stack), and

@@ -1,0 +1,2942 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxelautomations"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "description": "Automation runs, their timings, writes and errors, what they charged and what the usage cost, and the cost coverage report.",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "workflow:queue"
+        ],
+        "title": "Job Queue",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "forensics"
+        ],
+        "title": "Logs",
+        "type": "dashboards"
+      }
+    ],
+    "panels": [
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 2,
+        "panels": [],
+        "title": "Now",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Switched-on automations whose tick schedules their next run (state active), filtered by realm, automation and payer. Paused and waiting-for-credits automations are counted beside it.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 0,
+          "y": 1
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS active\n  FROM automations a\n WHERE a.state = 'active'\n   AND ('__all' IN ($realm) OR a.realm IN ($realm))\n   AND ('__all' IN ($automation) OR a.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR a.payer IN ($payer));",
+            "refId": "A"
+          }
+        ],
+        "title": "Active automations",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Automations paused by a person or by the platform (pause_reason says which). The Automations table lists them with their reason.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 4,
+          "y": 1
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS paused\n  FROM automations a\n WHERE a.state = 'paused'\n   AND ('__all' IN ($realm) OR a.realm IN ($realm))\n   AND ('__all' IN ($automation) OR a.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR a.payer IN ($payer));",
+            "refId": "A"
+          }
+        ],
+        "title": "Paused",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Automations whose payer's balance was under the minimum when a run came due. Each resumes on its own once the balance covers a run.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 8,
+          "y": 1
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS waiting_for_credits\n  FROM automations a\n WHERE a.state = 'waiting-for-credits'\n   AND ('__all' IN ($realm) OR a.realm IN ($realm))\n   AND ('__all' IN ($automation) OR a.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR a.payer IN ($payer));",
+            "refId": "A"
+          }
+        ],
+        "title": "Waiting for credits",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Runs enqueued and not yet claimed by a worker. A run waiting behind its own automation's running run counts here too.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 10
+                },
+                {
+                  "color": "red",
+                  "value": 50
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 12,
+          "y": 1
+        },
+        "id": 6,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS pending\n  FROM automation_runs r\n WHERE r.state = 'pending'\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger));",
+            "refId": "A"
+          }
+        ],
+        "title": "Runs pending",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Runs a worker has claimed and not yet ended.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 16,
+          "y": 1
+        },
+        "id": 7,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS running\n  FROM automation_runs r\n WHERE r.state = 'running'\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger));",
+            "refId": "A"
+          }
+        ],
+        "title": "Runs running",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "How long the oldest automation run that a worker could claim has waited: from its job's creation, or from the end of its last attempt when an attempt was lost. A run behind its own automation's running run (the same concurrency group) or a claim hold waits for that, not for a worker, and is left out. Red past 5 minutes, the threshold of the \"Automation runs waiting for a worker\" alert, which runs the same query. Not narrowed by the dashboard's filters.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 60
+                },
+                {
+                  "color": "red",
+                  "value": 300
+                }
+              ]
+            },
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 20,
+          "y": 1
+        },
+        "id": 8,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COALESCE(EXTRACT(EPOCH FROM now() - min(waiting.since)), 0) AS oldest_wait_seconds\n  FROM (\n    SELECT GREATEST(\n             j.created_at,\n             (SELECT max(COALESCE(r.completed_at, r.locked_until))\n                FROM job_reservations r WHERE r.job_id = j.id)\n           ) AS since\n      FROM jobs j\n     WHERE j.status = 'unfulfilled'\n       AND j.job_type = 'run-command'\n       AND j.concurrency_group LIKE 'automation:%'\n       AND NOT EXISTS (\n             SELECT 1 FROM job_reservations r\n              WHERE r.job_id = j.id\n                AND r.completed_at IS NULL\n                AND r.locked_until > now())\n       AND NOT EXISTS (\n             SELECT 1 FROM jobs held\n               JOIN job_reservations hr ON hr.job_id = held.id\n                AND hr.completed_at IS NULL\n                AND hr.locked_until > now()\n              WHERE held.status = 'unfulfilled'\n                AND held.concurrency_group = j.concurrency_group)\n       AND NOT EXISTS (\n             SELECT 1 FROM job_claim_holds ch\n              WHERE ch.concurrency_group = j.concurrency_group\n                AND ch.expires_at > now())\n  ) waiting;",
+            "refId": "A"
+          }
+        ],
+        "title": "Oldest unclaimed automation run",
+        "type": "stat"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 5
+        },
+        "id": 9,
+        "panels": [],
+        "title": "In the time range",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Runs created in the time range, of every kind: scheduled, Run now and Preview.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 0,
+          "y": 6
+        },
+        "id": 10,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS runs\n  FROM automation_runs r\n WHERE $__timeFilter(r.created_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger));",
+            "refId": "A"
+          }
+        ],
+        "title": "Runs",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Runs created in the time range that ended as an error. The \"Errors by reason\" panel breaks them down, and the Runs table holds each message.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 4,
+          "y": 6
+        },
+        "id": 11,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS errors\n  FROM automation_runs r\n WHERE $__timeFilter(r.created_at)\n   AND r.state = 'error'\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger));",
+            "refId": "A"
+          }
+        ],
+        "title": "Errors",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Scheduled slots that came due while a scheduled run of the same automation was still pending, so they joined that run instead of starting one. The pending run catches up on everything since the automation's last run.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 8,
+          "y": 6
+        },
+        "id": 12,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS skipped\n  FROM automation_run_log g\n  JOIN automation_runs r ON r.id = g.run_id\n WHERE g.kind = 'trigger'\n   AND (g.data->>'skipped')::boolean\n   AND $__timeFilter(g.at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger));",
+            "refId": "A"
+          }
+        ],
+        "title": "Skipped slots",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Credits drawn by automation charges written in the time range: each run's compute and network, the indexing its writes caused, its AI requests, and daily storage.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short",
+            "decimals": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 12,
+          "y": 6
+        },
+        "id": 13,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge_id,\n         l.charge_kind,\n         l.pricing_version,\n         l.created_at,\n         l.realm,\n         l.run_id,\n         COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         r.trigger,\n         u.matrix_user_id AS payer,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n    LEFT JOIN users u ON u.id = l.user_id\n   WHERE $__unixEpochFilter(l.created_at)\n     AND (l.charge_kind IN ('run', 'run_indexing', 'storage', 'batched_ai')\n          OR (l.charge_kind = 'ai' AND l.run_id IS NOT NULL))\n   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9\n),\ncosted AS (\n  SELECT charges.*, c.cost_usd\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND $__unixEpochFilter(c.created_at)\n   WHERE ('__all' IN ($realm) OR charges.realm IN ($realm))\n     AND ('__all' IN ($automation) OR charges.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR charges.payer IN ($payer))\n     AND ('__all' IN ($trigger) OR charges.trigger IN ($trigger))\n)\nSELECT COALESCE(SUM(credits), 0) AS credits FROM costed;",
+            "refId": "A"
+          }
+        ],
+        "title": "Credits charged",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "The hosting cost of the usage those charges priced, at the unit rates of each charge's own pricing version, plus AI providers' reported cost. Charges with no usage recorded, or at a pricing version no process recorded, are left out (the Cost coverage table counts them).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "currencyUSD",
+            "decimals": 4
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 16,
+          "y": 6
+        },
+        "id": 14,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge_id,\n         l.charge_kind,\n         l.pricing_version,\n         l.created_at,\n         l.realm,\n         l.run_id,\n         COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         r.trigger,\n         u.matrix_user_id AS payer,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n    LEFT JOIN users u ON u.id = l.user_id\n   WHERE $__unixEpochFilter(l.created_at)\n     AND (l.charge_kind IN ('run', 'run_indexing', 'storage', 'batched_ai')\n          OR (l.charge_kind = 'ai' AND l.run_id IS NOT NULL))\n   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9\n),\ncosted AS (\n  SELECT charges.*, c.cost_usd\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND $__unixEpochFilter(c.created_at)\n   WHERE ('__all' IN ($realm) OR charges.realm IN ($realm))\n     AND ('__all' IN ($automation) OR charges.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR charges.payer IN ($payer))\n     AND ('__all' IN ($trigger) OR charges.trigger IN ($trigger))\n)\nSELECT COALESCE(SUM(cost_usd), 0) AS cost_usd FROM costed;",
+            "refId": "A"
+          }
+        ],
+        "title": "AWS cost",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "The pricing versions that priced automation charges in the time range. More than one means a price, the margin or a task shape changed within it; the Pricing versions table says when each one was first recorded.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "blue",
+                  "value": 2
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 20,
+          "y": 6
+        },
+        "id": 15,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge_id,\n         l.charge_kind,\n         l.pricing_version,\n         l.created_at,\n         l.realm,\n         l.run_id,\n         COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         r.trigger,\n         u.matrix_user_id AS payer,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n    LEFT JOIN users u ON u.id = l.user_id\n   WHERE $__unixEpochFilter(l.created_at)\n     AND (l.charge_kind IN ('run', 'run_indexing', 'storage', 'batched_ai')\n          OR (l.charge_kind = 'ai' AND l.run_id IS NOT NULL))\n   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9\n),\ncosted AS (\n  SELECT charges.*, c.cost_usd\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND $__unixEpochFilter(c.created_at)\n   WHERE ('__all' IN ($realm) OR charges.realm IN ($realm))\n     AND ('__all' IN ($automation) OR charges.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR charges.payer IN ($payer))\n     AND ('__all' IN ($trigger) OR charges.trigger IN ($trigger))\n)\nSELECT COUNT(DISTINCT pricing_version) AS pricing_versions FROM costed;",
+            "refId": "A"
+          }
+        ],
+        "title": "Pricing versions",
+        "type": "stat"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 10
+        },
+        "id": 16,
+        "panels": [],
+        "title": "Runs",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Runs created in each interval, by the state each is in now. A run ends as complete, error or canceled; pending and running are runs still in flight.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "complete"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "green",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "error"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "red",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "canceled"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "orange",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "running"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "blue",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pending"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "fixedColor": "purple",
+                    "mode": "fixed"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 11
+        },
+        "id": 17,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(r.created_at, $__interval, 0),\n       COUNT(*) FILTER (WHERE r.state = 'complete')::int AS \"complete\",\n       COUNT(*) FILTER (WHERE r.state = 'error')::int AS \"error\",\n       COUNT(*) FILTER (WHERE r.state = 'canceled')::int AS \"canceled\",\n       COUNT(*) FILTER (WHERE r.state = 'running')::int AS \"running\",\n       COUNT(*) FILTER (WHERE r.state = 'pending')::int AS \"pending\"\n  FROM automation_runs r\n WHERE $__timeFilter(r.created_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Runs by state",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Runs that ended as an error in each interval, by error_reason. Admission refusals (insufficient-credits, a credit cap, a credential) end before the script starts; timed-out, run-failed and script-error are the script's own. The automation-diagnostics skill walks each one.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 11
+        },
+        "id": 18,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(r.finished_at, $__interval, 0),\n       COALESCE(r.error_reason, 'unknown') AS metric,\n       COUNT(*)::int AS value\n  FROM automation_runs r\n WHERE r.state = 'error'\n   AND $__timeFilter(r.finished_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1, 2\n ORDER BY 1, 2;",
+            "refId": "A"
+          }
+        ],
+        "title": "Errors by reason",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Time from a worker claiming the run to its end (started → finished), for runs that ended in each interval, and the whole run from its enqueue (created → finished), which adds its queue wait.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "auto",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "s",
+            "decimals": 1
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 19
+        },
+        "id": 19,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(r.finished_at, $__interval, 0),\n       percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.finished_at - r.started_at)) AS \"run p50\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.finished_at - r.started_at)) AS \"run p95\",\n       MAX(EXTRACT(EPOCH FROM r.finished_at - r.started_at)) AS \"run max\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.finished_at - r.created_at)) AS \"enqueue to end p95\"\n  FROM automation_runs r\n WHERE r.finished_at IS NOT NULL\n   AND r.started_at IS NOT NULL\n   AND $__timeFilter(r.finished_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Run time",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Queue wait: from a run's job being enqueued to a worker's first claim of it, for runs whose job was enqueued in each interval and has been claimed. A long wait is a backlog on the automation lane, or the automation's previous run still holding its concurrency group. Schedule lag: from a scheduled run's slot to its enqueue, which grows when the tick runs late. The \"Oldest unclaimed automation run\" stat covers runs not claimed yet.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "auto",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "s",
+            "decimals": 1
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 19
+        },
+        "id": 20,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(j.created_at, $__interval, 0),\n       percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM fr.claimed_at - j.created_at)) AS \"queue wait p50\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM fr.claimed_at - j.created_at)) AS \"queue wait p95\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.created_at - r.slot::timestamptz))\n         FILTER (WHERE r.trigger <> 'manual' AND r.slot ~ '^\\d{4}-\\d{2}-\\d{2}T') AS \"schedule lag p95\"\n  FROM jobs j\n  JOIN automation_runs r ON r.id::text = j.args->'commandInput'->>'runId'\n  JOIN LATERAL (\n    SELECT MIN(jr.created_at) AS claimed_at\n      FROM job_reservations jr WHERE jr.job_id = j.id\n  ) fr ON fr.claimed_at IS NOT NULL\n WHERE j.job_type = 'run-command'\n   AND j.concurrency_group LIKE 'automation:%'\n   AND $__timeFilter(j.created_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Queue wait and schedule lag",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Scheduled slots that joined a still-pending run of the same automation instead of starting their own, by trigger. Steady skips mean runs wait longer than the schedule's interval: read Queue wait beside it.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 27
+        },
+        "id": 21,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(g.at, $__interval, 0),\n       COALESCE(g.data->>'trigger', r.trigger) AS metric,\n       COUNT(*)::int AS value\n  FROM automation_run_log g\n  JOIN automation_runs r ON r.id = g.run_id\n WHERE g.kind = 'trigger'\n   AND (g.data->>'skipped')::boolean\n   AND $__timeFilter(g.at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1, 2\n ORDER BY 1, 2;",
+            "refId": "A"
+          }
+        ],
+        "title": "Skipped slots",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Runs that had been claimed and not yet ended at each instant. A prerender tab carries one run at a time, so this is the run tabs in use across the prerender servers; the Prerender capacity row below breaks it down per server.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "auto",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 27
+        },
+        "id": 22,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT t AS time,\n       COUNT(r.id)::int AS \"runs in flight\"\n  FROM generate_series(\n         date_bin('$__interval'::interval, $__timeFrom()::timestamptz, 'epoch'::timestamptz),\n         $__timeTo()::timestamptz,\n         '$__interval'::interval) AS t\n  LEFT JOIN automation_runs r\n    ON r.started_at <= t\n   AND COALESCE(r.finished_at, now()) > t\n   AND r.started_at <= $__timeTo()\n   AND COALESCE(r.finished_at, now()) >= $__timeFrom()\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n      AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n      AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n      AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY t\n ORDER BY t;",
+            "refId": "A"
+          }
+        ],
+        "title": "Runs in flight",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "For runs that ended in each interval: the files their commits wrote, their callApi calls and their AI (resolve) calls. A Preview stages its writes and commits none, so it adds no writes here.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 35
+        },
+        "id": 23,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(r.finished_at, $__interval, 0),\n       SUM(CASE WHEN r.dry_run THEN 0 ELSE r.writes END)::int AS \"writes\",\n       SUM(r.call_api_calls)::int AS \"callApi calls\",\n       SUM(r.resolve_calls)::int AS \"resolve calls\"\n  FROM automation_runs r\n WHERE r.finished_at IS NOT NULL\n   AND $__timeFilter(r.finished_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Writes and calls",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "For runs that ended in each interval: what their callApi calls downloaded, and the prerender tab time their scripts held, the two quantities a run's own charge prices.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "downloaded"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "bytes"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "prerender tab time"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 35
+        },
+        "id": 24,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(r.finished_at, $__interval, 0),\n       SUM(r.call_api_response_bytes)::bigint AS \"downloaded\",\n       SUM(r.prerender_tab_ms)::bigint / 1000.0 AS \"prerender tab time\"\n  FROM automation_runs r\n WHERE r.finished_at IS NOT NULL\n   AND $__timeFilter(r.finished_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Downloaded and prerender time",
+        "type": "timeseries"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 43
+        },
+        "id": 25,
+        "panels": [],
+        "title": "Spend",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Credits drawn by automation charges written in each interval, by charge kind: run (a run's compute and network), run_indexing (the indexing its writes caused, charged when the last index pass ends), ai and batched_ai (its AI requests) and storage (daily, per automation).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short",
+            "decimals": 0
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 44
+        },
+        "id": 26,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge_id,\n         l.charge_kind,\n         l.pricing_version,\n         l.created_at,\n         l.realm,\n         l.run_id,\n         COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         r.trigger,\n         u.matrix_user_id AS payer,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n    LEFT JOIN users u ON u.id = l.user_id\n   WHERE $__unixEpochFilter(l.created_at)\n     AND (l.charge_kind IN ('run', 'run_indexing', 'storage', 'batched_ai')\n          OR (l.charge_kind = 'ai' AND l.run_id IS NOT NULL))\n   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9\n),\ncosted AS (\n  SELECT charges.*, c.cost_usd\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND $__unixEpochFilter(c.created_at)\n   WHERE ('__all' IN ($realm) OR charges.realm IN ($realm))\n     AND ('__all' IN ($automation) OR charges.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR charges.payer IN ($payer))\n     AND ('__all' IN ($trigger) OR charges.trigger IN ($trigger))\n)\nSELECT $__unixEpochGroupAlias(created_at, $__interval, 0),\n       charge_kind AS metric,\n       SUM(credits)::float AS value\n  FROM costed\n GROUP BY 1, 2\n ORDER BY 1, 2;",
+            "refId": "A"
+          }
+        ],
+        "title": "Credits charged by kind",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "The hosting cost, in USD, of the usage those charges priced, by charge kind: each charge's usage at its own pricing version's unit rates, and an AI charge's provider-reported cost.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "currencyUSD",
+            "decimals": 4
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 44
+        },
+        "id": 27,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge_id,\n         l.charge_kind,\n         l.pricing_version,\n         l.created_at,\n         l.realm,\n         l.run_id,\n         COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         r.trigger,\n         u.matrix_user_id AS payer,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n    LEFT JOIN users u ON u.id = l.user_id\n   WHERE $__unixEpochFilter(l.created_at)\n     AND (l.charge_kind IN ('run', 'run_indexing', 'storage', 'batched_ai')\n          OR (l.charge_kind = 'ai' AND l.run_id IS NOT NULL))\n   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9\n),\ncosted AS (\n  SELECT charges.*, c.cost_usd\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND $__unixEpochFilter(c.created_at)\n   WHERE ('__all' IN ($realm) OR charges.realm IN ($realm))\n     AND ('__all' IN ($automation) OR charges.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR charges.payer IN ($payer))\n     AND ('__all' IN ($trigger) OR charges.trigger IN ($trigger))\n)\nSELECT $__unixEpochGroupAlias(created_at, $__interval, 0),\n       charge_kind AS metric,\n       SUM(cost_usd)::float AS value\n  FROM costed\n GROUP BY 1, 2\n ORDER BY 1, 2;",
+            "refId": "A"
+          }
+        ],
+        "title": "AWS cost by kind",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Each pricing version that priced automation charges in the time range: its margin, when a process first recorded it, and the charges, credits and hosting cost at it. A blank version is AI, which carries none. The pricing skill explains how to read a version's values and unit rates (pricing_versions, pricing_version_rates).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "AWS cost"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "currencyUSD"
+                },
+                {
+                  "id": "decimals",
+                  "value": 4
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "margin"
+              },
+              "properties": [
+                {
+                  "id": "decimals",
+                  "value": 2
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 24,
+          "x": 0,
+          "y": 52
+        },
+        "id": 28,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge_id,\n         l.charge_kind,\n         l.pricing_version,\n         l.created_at,\n         l.realm,\n         l.run_id,\n         COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         r.trigger,\n         u.matrix_user_id AS payer,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n    LEFT JOIN users u ON u.id = l.user_id\n   WHERE $__unixEpochFilter(l.created_at)\n     AND (l.charge_kind IN ('run', 'run_indexing', 'storage', 'batched_ai')\n          OR (l.charge_kind = 'ai' AND l.run_id IS NOT NULL))\n   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9\n),\ncosted AS (\n  SELECT charges.*, c.cost_usd\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND $__unixEpochFilter(c.created_at)\n   WHERE ('__all' IN ($realm) OR charges.realm IN ($realm))\n     AND ('__all' IN ($automation) OR charges.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR charges.payer IN ($payer))\n     AND ('__all' IN ($trigger) OR charges.trigger IN ($trigger))\n)\nSELECT costed.pricing_version AS \"pricing version\",\n       v.margin,\n       to_timestamp(v.recorded_at) AS \"recorded\",\n       COUNT(*) AS charges,\n       SUM(costed.credits) AS credits,\n       SUM(costed.cost_usd) AS \"AWS cost\",\n       to_timestamp(MIN(costed.created_at)) AS \"first charge\",\n       to_timestamp(MAX(costed.created_at)) AS \"last charge\"\n  FROM costed\n  LEFT JOIN pricing_versions v ON v.version = costed.pricing_version\n GROUP BY 1, 2, 3\n ORDER BY \"last charge\" DESC;",
+            "refId": "A"
+          }
+        ],
+        "title": "Pricing versions",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "The cost coverage report for the dashboard's time range: for each charge kind and pricing version, the credits charged beside the hosting cost of the usage they priced, in credits (1,000 to the dollar). Margin is priced credits less cost; coverage is how many times its cost a kind recovered. A fully paid metered kind reads at least its version's margin, more where rounding a small charge up to a whole credit adds to it (compare full credits with cost at margin); AI reads about 1. A negative margin or a coverage under 1 is a kind that under-charges. Shortfall is credits the balance could not cover. Covers every charge, not only automations', and ignores the dashboard's filters. The pricing skill's \"The cost coverage report\" explains each column.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "charge_kind"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "kind"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pricing_version"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "pricing version"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "priced_charges"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "priced charges"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "priced_credits"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "priced credits"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "cost_credits"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "AWS cost (credits)"
+                },
+                {
+                  "id": "decimals",
+                  "value": 1
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "cost_at_margin_credits"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "cost at margin"
+                },
+                {
+                  "id": "decimals",
+                  "value": 1
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "full_credits"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "full credits"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "margin_credits"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "margin (credits)"
+                },
+                {
+                  "id": "decimals",
+                  "value": 1
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "coverage"
+              },
+              "properties": [
+                {
+                  "id": "decimals",
+                  "value": 2
+                },
+                {
+                  "id": "unit",
+                  "value": "x"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-background",
+                    "mode": "basic"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "shortfall_credits"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "shortfall"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "text",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "short_charged_charges"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "short charges"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 58
+        },
+        "id": 29,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT charge_kind, pricing_version,\n       COUNT(*) AS charges,\n       SUM(credits) AS credits,\n       COUNT(*) FILTER (WHERE cost_usd IS NOT NULL) AS priced_charges,\n       SUM(credits) FILTER (WHERE cost_usd IS NOT NULL) AS priced_credits,\n       SUM(cost_usd) * 1000 AS cost_credits,\n       SUM(cost_usd * margin) * 1000 AS cost_at_margin_credits,\n       SUM(full_credits) AS full_credits,\n       SUM(credits) FILTER (WHERE cost_usd IS NOT NULL)\n         - SUM(cost_usd) * 1000 AS margin_credits,\n       SUM(credits) FILTER (WHERE cost_usd IS NOT NULL)\n         / NULLIF(SUM(cost_usd) * 1000, 0) AS coverage,\n       SUM(unpaid_credits) AS shortfall_credits,\n       COUNT(*) FILTER (WHERE unpaid_credits > 0) AS short_charged_charges\nFROM credit_charge_costs\nWHERE $__unixEpochFilter(created_at)\nGROUP BY 1, 2 ORDER BY 1, 2 NULLS FIRST;",
+            "refId": "A"
+          }
+        ],
+        "title": "Cost coverage",
+        "type": "table"
+      },
+      {
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 67
+        },
+        "id": 30,
+        "panels": [],
+        "title": "Automations and runs",
+        "type": "row"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Each automation the filters match, with its state now and its runs, errors, credits and AWS cost in the time range. Payer is who its scheduled runs act as and are charged to.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "AWS cost"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "currencyUSD"
+                },
+                {
+                  "id": "decimals",
+                  "value": 4
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "errors"
+              },
+              "properties": [
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "text",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "state"
+              },
+              "properties": [
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "active": {
+                          "color": "green",
+                          "index": 0
+                        },
+                        "paused": {
+                          "color": "orange",
+                          "index": 1
+                        },
+                        "waiting-for-credits": {
+                          "color": "yellow",
+                          "index": 2
+                        },
+                        "done": {
+                          "color": "text",
+                          "index": 3
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 68
+        },
+        "id": 31,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge_id,\n         l.charge_kind,\n         l.pricing_version,\n         l.created_at,\n         l.realm,\n         l.run_id,\n         COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         r.trigger,\n         u.matrix_user_id AS payer,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n    LEFT JOIN users u ON u.id = l.user_id\n   WHERE $__unixEpochFilter(l.created_at)\n     AND (l.charge_kind IN ('run', 'run_indexing', 'storage', 'batched_ai')\n          OR (l.charge_kind = 'ai' AND l.run_id IS NOT NULL))\n   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9\n),\ncosted AS (\n  SELECT charges.*, c.cost_usd\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND $__unixEpochFilter(c.created_at)\n   WHERE ('__all' IN ($realm) OR charges.realm IN ($realm))\n     AND ('__all' IN ($automation) OR charges.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR charges.payer IN ($payer))\n     AND ('__all' IN ($trigger) OR charges.trigger IN ($trigger))\n),\nruns AS (\n  SELECT r.automation_id,\n         COUNT(*) AS runs,\n         COUNT(*) FILTER (WHERE r.state = 'error') AS errors,\n         MAX(r.created_at) AS last_run\n    FROM automation_runs r\n   WHERE $__timeFilter(r.created_at)\n     AND ('__all' IN ($realm) OR r.realm IN ($realm))\n     AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n     AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n   GROUP BY 1\n),\nspend AS (\n  SELECT automation_id, SUM(credits) AS credits, SUM(cost_usd) AS cost_usd\n    FROM costed GROUP BY 1\n)\nSELECT a.automation_id AS automation,\n       a.realm,\n       a.payer,\n       a.state,\n       a.pause_reason AS \"pause reason\",\n       a.next_run AS \"next run\",\n       COALESCE(runs.runs, 0) AS runs,\n       COALESCE(runs.errors, 0) AS errors,\n       COALESCE(spend.credits, 0) AS credits,\n       spend.cost_usd AS \"AWS cost\",\n       a.last_finished_at AS \"last finished\",\n       a.last_result AS \"last result\"\n  FROM automations a\n  LEFT JOIN runs ON runs.automation_id = a.automation_id\n  LEFT JOIN spend ON spend.automation_id = a.automation_id\n WHERE ('__all' IN ($realm) OR a.realm IN ($realm))\n   AND ('__all' IN ($automation) OR a.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR a.payer IN ($payer))\n ORDER BY COALESCE(runs.last_run, a.last_finished_at) DESC NULLS LAST\n LIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Automations",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "The latest runs the filters match, newest first: the automation, trigger, realm and payer (who the run acts as and is charged to), its state and error, its queue wait and run time, its writes, and the credits its charges drew with their AWS cost and pricing version. A run's indexing is charged when its last index pass ends, so a recent run's credits can still grow. The automation-diagnostics skill walks from a run id to its job, log, milestones and charges.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "AWS cost"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "currencyUSD"
+                },
+                {
+                  "id": "decimals",
+                  "value": 5
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "queue wait"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "decimals",
+                  "value": 1
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "run time"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "decimals",
+                  "value": 1
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "state"
+              },
+              "properties": [
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "type": "regex",
+                      "options": {
+                        "pattern": "^error.*",
+                        "result": {
+                          "color": "red",
+                          "index": 0
+                        }
+                      }
+                    },
+                    {
+                      "type": "regex",
+                      "options": {
+                        "pattern": "^complete.*",
+                        "result": {
+                          "color": "green",
+                          "index": 1
+                        }
+                      }
+                    },
+                    {
+                      "type": "regex",
+                      "options": {
+                        "pattern": "^canceled.*",
+                        "result": {
+                          "color": "orange",
+                          "index": 2
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 14,
+          "w": 24,
+          "x": 0,
+          "y": 77
+        },
+        "id": 32,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH runs AS (\n  SELECT r.*\n    FROM automation_runs r\n   WHERE $__timeFilter(r.created_at)\n     AND ('__all' IN ($realm) OR r.realm IN ($realm))\n     AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n     AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n   ORDER BY r.created_at DESC\n   LIMIT 500\n),\ncharges AS (\n  SELECT l.run_id,\n         COALESCE(l.charge_id, l.id) AS charge_id,\n         MAX(l.pricing_version) AS pricing_version,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n   WHERE l.run_id IN (SELECT id FROM runs)\n   GROUP BY 1, 2\n),\nper_run AS (\n  SELECT charges.run_id,\n         SUM(charges.credits) AS credits,\n         SUM(c.cost_usd) AS cost_usd,\n         string_agg(DISTINCT charges.pricing_version, ', ') AS pricing_versions\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND c.created_at >= EXTRACT(EPOCH FROM (SELECT MIN(created_at) FROM runs))::integer\n   GROUP BY 1\n)\nSELECT runs.created_at AS created,\n       runs.automation_id AS automation,\n       runs.trigger,\n       runs.realm,\n       runs.acts_as AS payer,\n       CASE WHEN runs.dry_run THEN runs.state || ' (preview)' ELSE runs.state END AS state,\n       runs.error_reason AS \"error reason\",\n       q.queue_wait_s AS \"queue wait\",\n       EXTRACT(EPOCH FROM runs.finished_at - runs.started_at) AS \"run time\",\n       runs.writes,\n       COALESCE(per_run.credits, 0) AS credits,\n       per_run.cost_usd AS \"AWS cost\",\n       per_run.pricing_versions AS \"pricing version\",\n       runs.error_message AS \"error message\",\n       runs.id AS run\n  FROM runs\n  LEFT JOIN per_run ON per_run.run_id = runs.id\n  LEFT JOIN LATERAL (\n    SELECT EXTRACT(EPOCH FROM MIN(jr.created_at) - MIN(j.created_at)) AS queue_wait_s\n      FROM jobs j\n      JOIN job_reservations jr ON jr.job_id = j.id\n     WHERE j.concurrency_group = 'automation:' || runs.automation_id\n       AND j.args->'commandInput'->>'runId' = runs.id::text\n  ) q ON true\n ORDER BY runs.created_at DESC;",
+            "refId": "A"
+          }
+        ],
+        "title": "Runs (latest 500)",
+        "type": "table"
+      },
+      {
+        "collapsed": true,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 91
+        },
+        "id": 34,
+        "panels": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "Each prerender server's run tabs, from the capacity line it writes every 30 seconds while it holds any run tab: runningRuns (runs it runs at once, one per tab), queuedRuns (runs waiting for a tab another run of the same realm and identity holds) and runTabs. A server holding no run tab writes no line, so a gap is an idle server. Loki scans every prerender line in the window to find these, so the panel covers the last hour; widen it with care.",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
+                },
+                "custom": {
+                  "axisBorderShow": false,
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 20,
+                  "gradientMode": "opacity",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 2,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    }
+                  ]
+                },
+                "unit": "short"
+              },
+              "overrides": []
+            },
+            "gridPos": {
+              "h": 9,
+              "w": 24,
+              "x": 0,
+              "y": 92
+            },
+            "id": 33,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "showLegend": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "desc"
+              }
+            },
+            "pluginVersion": "12.4.3",
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max by (instance) (max_over_time({service=\"prerender\", env=\"$env\"} |= \"boxel:automation-runs\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:automation-runs\" | kind=\"capacity\" | unwrap runningRuns [$__interval]))",
+                "legendFormat": "{{instance}} runningRuns",
+                "queryType": "range",
+                "refId": "A"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max by (instance) (max_over_time({service=\"prerender\", env=\"$env\"} |= \"boxel:automation-runs\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:automation-runs\" | kind=\"capacity\" | unwrap queuedRuns [$__interval]))",
+                "legendFormat": "{{instance}} queuedRuns",
+                "queryType": "range",
+                "refId": "B"
+              },
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "max by (instance) (max_over_time({service=\"prerender\", env=\"$env\"} |= \"boxel:automation-runs\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:automation-runs\" | kind=\"capacity\" | unwrap runTabs [$__interval]))",
+                "legendFormat": "{{instance}} runTabs",
+                "queryType": "range",
+                "refId": "C"
+              }
+            ],
+            "title": "Prerender run capacity",
+            "type": "timeseries",
+            "timeFrom": "1h",
+            "maxDataPoints": 120
+          }
+        ],
+        "title": "Prerender capacity (Loki)",
+        "type": "row"
+      }
+    ],
+    "refresh": "1m",
+    "schemaVersion": 42,
+    "tags": [
+      "workflow:automations"
+    ],
+    "templating": {
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        },
+        {
+          "allValue": "'__all'",
+          "current": {
+            "selected": true,
+            "text": [
+              "All"
+            ],
+            "value": [
+              "$__all"
+            ]
+          },
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT realm FROM automations UNION SELECT realm FROM automation_runs WHERE $__timeFilter(created_at) ORDER BY 1",
+          "description": "Realms with a switched-on automation or a run in the time range.",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Realm",
+          "multi": true,
+          "name": "realm",
+          "options": [],
+          "query": "SELECT realm FROM automations UNION SELECT realm FROM automation_runs WHERE $__timeFilter(created_at) ORDER BY 1",
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": "'__all'",
+          "current": {
+            "selected": true,
+            "text": [
+              "All"
+            ],
+            "value": [
+              "$__all"
+            ]
+          },
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT automation_id FROM automations WHERE ('__all' IN ($realm) OR realm IN ($realm)) UNION SELECT automation_id FROM automation_runs WHERE $__timeFilter(created_at) AND ('__all' IN ($realm) OR realm IN ($realm)) ORDER BY 1",
+          "description": "Automations in the selected realms that are switched on or ran in the time range.",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Automation",
+          "multi": true,
+          "name": "automation",
+          "options": [],
+          "query": "SELECT automation_id FROM automations WHERE ('__all' IN ($realm) OR realm IN ($realm)) UNION SELECT automation_id FROM automation_runs WHERE $__timeFilter(created_at) AND ('__all' IN ($realm) OR realm IN ($realm)) ORDER BY 1",
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": "'__all'",
+          "current": {
+            "selected": true,
+            "text": [
+              "All"
+            ],
+            "value": [
+              "$__all"
+            ]
+          },
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT payer FROM automations UNION SELECT acts_as FROM automation_runs WHERE $__timeFilter(created_at) ORDER BY 1",
+          "description": "Who runs act as and are charged to: an automation's payer for its scheduled runs, and whoever clicked for a Preview or Run now.",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Payer",
+          "multi": true,
+          "name": "payer",
+          "options": [],
+          "query": "SELECT payer FROM automations UNION SELECT acts_as FROM automation_runs WHERE $__timeFilter(created_at) ORDER BY 1",
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "allValue": "'__all'",
+          "current": {
+            "selected": true,
+            "text": [
+              "All"
+            ],
+            "value": [
+              "$__all"
+            ]
+          },
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT DISTINCT trigger FROM automation_runs WHERE $__timeFilter(created_at) AND ('__all' IN ($automation) OR automation_id IN ($automation)) ORDER BY 1",
+          "description": "The card's trigger label that started a run; manual is a Preview or Run now.",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Trigger",
+          "multi": true,
+          "name": "trigger",
+          "options": [],
+          "query": "SELECT DISTINCT trigger FROM automation_runs WHERE $__timeFilter(created_at) AND ('__all' IN ($automation) OR automation_id IN ($automation)) ORDER BY 1",
+          "refresh": 2,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-2d",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Automations",
+    "weekStart": ""
+  }
+}
