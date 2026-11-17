@@ -51,12 +51,15 @@ module('Pretui | components/empty-state', function (hooks) {
     await render(
       <template>
         <EmptyState @title='No batches' @message='Start one, or bring one in.'>
-          <:action><button type='button' data-test-new>Start blank</button><button type='button' data-test-import>Import CSV</button></:action>
+          <:action><div data-test-caller-row><button type='button'>Start blank</button><button type='button'>Import CSV</button></div></:action>
         </EmptyState>
       </template>,
     );
-    assert.deepEqual(texts('.pretui-empty-action > *'), ['Start blank', 'Import CSV'], 'the block, untouched');
-    assert.notOk(q('.pretui-empty-sep'), 'no built-in separator');
+    assert.strictEqual(q('.pretui-empty-msg')?.textContent?.trim(), 'Start one, or bring one in.', 'the message still renders');
+    let action = q('.pretui-empty-action');
+    assert.strictEqual(action?.children.length, 1, "only the caller's own layout, nothing added around it");
+    assert.ok(action?.firstElementChild?.matches('[data-test-caller-row]'));
+    assert.deepEqual(texts('.pretui-empty-action button'), ['Start blank', 'Import CSV']);
   });
 
   test('EmptyState renders its default block as the message, markup included', async function (assert) {

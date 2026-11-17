@@ -51,7 +51,7 @@ Gaps, and the first two are the real ones:
 
 ## Theming
 
-`--canvas` with its paired `--foreground` (the surface and the ink for the title and message — note it is **not** `--card`, so an EmptyState reads as a recess inside a Panel rather than as another card), `--primary` (the texture tint, at 8%), `--font-serif`, `--boxel-heading-font-size` and `--boxel-heading-font-weight` (title), `--boxel-font-size-xs` (message), `--radius`, and `--boxel-sp-2xs/xs/sm/lg/3xl` for the gaps and padding. At `@size='s'` the padding is `--boxel-sp` and the title reads `--boxel-font-size`, so `--boxel-sp-lg/3xl` padding and `--boxel-heading-font-size` no longer apply.
+`--canvas` with its paired `--foreground` (the surface and the ink for the title and message — note it is **not** `--card`, so an EmptyState reads as a recess inside a Panel rather than as another card), `--primary` (the texture tint, at 8%), `--font-serif`, `--boxel-heading-font-size` and `--boxel-heading-font-weight` (title), `--boxel-font-size-xs` (message), `--radius`, and `--boxel-sp-2xs/xs/lg/3xl` for the gaps and padding. At `@size='s'` the padding is `--boxel-sp` and the title reads `--boxel-font-size`, so `--boxel-sp-lg/3xl` padding and `--boxel-heading-font-size` no longer apply.
 
 The message is set in `--foreground`, at the smaller size, because the contract guarantees `--muted-foreground` only on `--background`, `--card` and `--muted`, not on the neutral `--canvas`.
 
