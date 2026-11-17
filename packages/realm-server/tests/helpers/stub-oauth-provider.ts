@@ -19,6 +19,9 @@ import type { AddressInfo } from 'node:net';
 //
 // `fail` makes the token endpoint answer the next requests with an error
 // instead: an OAuth error code (as a 400), or an HTTP status.
+// `apiUnauthorized` makes the API answer that many of the next requests 401,
+// as a vendor does to an access token it revoked, running
+// `onApiUnauthorized` first.
 
 export interface StubOAuthClient {
   clientId: string;
@@ -44,6 +47,8 @@ export interface StubOAuthProvider {
   fail: ({ error: string } | { status: number })[];
   // Milliseconds the token endpoint waits before answering.
   tokenDelayMs: number;
+  apiUnauthorized: number;
+  onApiUnauthorized?: () => Promise<void>;
   deny: boolean;
   revokeRefreshTokens(): void;
   close(): Promise<void>;
@@ -203,6 +208,12 @@ export async function startStubOAuthProvider({
         path: url.pathname,
         token,
       });
+      if (provider.apiUnauthorized > 0) {
+        provider.apiUnauthorized--;
+        await provider.onApiUnauthorized?.();
+        json(res, 401, { message: 'Bad credentials' });
+        return;
+      }
       json(res, 200, { login: 'octocat', path: url.pathname });
       return;
     }
@@ -226,6 +237,7 @@ export async function startStubOAuthProvider({
     rotate: true,
     fail: [],
     tokenDelayMs: 0,
+    apiUnauthorized: 0,
     deny: false,
     revokeRefreshTokens() {
       refreshTokens.clear();

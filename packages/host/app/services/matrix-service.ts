@@ -122,11 +122,7 @@ import {
   framing,
   secureSignOutURL,
 } from '../lib/secure-sign-in';
-import { getSkillSourceTools } from '../lib/skill-tools';
-import {
-  loadSkillWithLayoutFallback,
-  skillIdToStore,
-} from '../lib/skills-layout-fallback';
+import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
 import { skillsIndexId } from '../lib/utils';
 import { importResource } from '../resources/import';
@@ -2160,30 +2156,11 @@ export default class MatrixService extends Service {
         let skillCardsToReupload: SkillModule.Skill[] = [];
         let markdownSkillFileDefs: FileDef[] = [];
         let unchangedMarkdownSkillFileDefs: FileAPI.SerializedFile[] = [];
-        // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
-        // A skill that loaded from the other layout is re-uploaded under the
-        // URL it loaded from, so the room stores a URL that exists.
-        let resolvedSourceUrls = new Map<string, string>();
         await Promise.all(
-          enabledSkillCardFileDefs.map(async (storedFileDef) => {
-            let resolved = await loadSkillWithLayoutFallback(
-              this.store,
-              storedFileDef.sourceUrl,
-            );
-            if (!resolved) {
+          enabledSkillCardFileDefs.map(async (fileDef) => {
+            let source = await loadSkillSource(this.store, fileDef.sourceUrl);
+            if (!source) {
               return;
-            }
-            let { source } = resolved;
-            let fileDef = storedFileDef;
-            if (resolved.id !== storedFileDef.sourceUrl) {
-              resolvedSourceUrls.set(storedFileDef.sourceUrl, resolved.id);
-              // No uploaded `url`, so the unchanged check below re-uploads it.
-              fileDef = {
-                sourceUrl: resolved.id,
-                url: '',
-                name: storedFileDef.name,
-                contentType: storedFileDef.contentType,
-              };
             }
             enabledCommandDefinitions = enabledCommandDefinitions.concat(
               getSkillSourceTools(source),
@@ -2227,11 +2204,7 @@ export default class MatrixService extends Service {
           bySourceUrl.set(fileDef.sourceUrl, fileDef);
         }
         let orderedSkillFileDefs = enabledSkillCardFileDefs
-          .map((fileDef) =>
-            bySourceUrl.get(
-              resolvedSourceUrls.get(fileDef.sourceUrl) ?? fileDef.sourceUrl,
-            ),
-          )
+          .map((fileDef) => bySourceUrl.get(fileDef.sourceUrl))
           .filter((fileDef): fileDef is FileAPI.SerializedFile =>
             Boolean(fileDef),
           );
@@ -2244,18 +2217,7 @@ export default class MatrixService extends Service {
         );
         return {
           enabledSkillCards: orderedSkillFileDefs,
-          // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
-          // Disabled skills move to the URL that loads too, so enabling one
-          // later doesn't depend on the fallback.
-          disabledSkillCards: await Promise.all(
-            (
-              (currentSkillsConfig?.disabledSkillCards ??
-                []) as FileAPI.SerializedFile[]
-            ).map(async (fileDef) => ({
-              ...fileDef,
-              sourceUrl: await skillIdToStore(this.store, fileDef.sourceUrl),
-            })),
-          ),
+          disabledSkillCards: currentSkillsConfig?.disabledSkillCards ?? [],
           toolDefinitions: enabledCommandDefFileDefs.map((fileDef) =>
             fileDef.serialize(),
           ),

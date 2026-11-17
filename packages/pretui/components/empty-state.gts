@@ -1,5 +1,5 @@
-// Pretui — EmptyState: the kit's zero-data surface, with one or two honest
-// ways forward and the texture that marks it as intentional.
+// Pretui — EmptyState: the kit's zero-data surface, with its ways forward and
+// the texture that marks it as intentional.
 import Component from '@glimmer/component';
 import { resolveSize, type PretuiSizeArg } from '../pretui-primitives';
 
@@ -18,23 +18,17 @@ export interface EmptyStateSignature {
     title: string;
     message?: string;
     texture?: boolean;
-    /** wording of the separator between the two paths (default 'or') */
-    separator?: string;
     /** 's' is the compact well for an empty note inside a card section; 'm' (default) sizes for a page section */
     size?: PretuiSizeArg;
   };
   Blocks: {
     /** The message with markup in it (a Token, a link, emphasis); wins over @message when both are given. */
     default: [];
-    action: [];
     /**
-     * The SECOND way in. An empty state usually has two honest answers —
-     * "choose an existing one" / "paste a URL", "import" / "start blank",
-     * "connect an account" / "upload a CSV" — and burying one of them makes
-     * the reader guess which is the real path. Both get equal billing with a
-     * separator between, folding to a stack at narrow container widths.
+     * Any content, placed under the message as given. The caller lays out
+     * several actions.
      */
-    altAction: [];
+    action: [];
   };
   Element: HTMLDivElement;
 }
@@ -43,9 +37,6 @@ export interface EmptyStateSignature {
 export class EmptyState extends Component<EmptyStateSignature> {
   get showTexture() {
     return this.args.texture ?? true;
-  }
-  get separator() {
-    return this.args.separator ?? 'or';
   }
   // data-size is always set, 'm' included, as on every sized component in the kit.
   get size(): EmptyStateSize {
@@ -66,13 +57,7 @@ export class EmptyState extends Component<EmptyStateSignature> {
       {{else if @message}}
         <p class='pretui-empty-msg'>{{@message}}</p>
       {{/if}}
-      {{#if (has-block 'altAction')}}
-        <div class='pretui-empty-paths'>
-          <div class='pretui-empty-action'>{{yield to='action'}}</div>
-          <div class='pretui-empty-sep' aria-hidden='true'>{{this.separator}}</div>
-          <div class='pretui-empty-action'>{{yield to='altAction'}}</div>
-        </div>
-      {{else if (has-block 'action')}}
+      {{#if (has-block 'action')}}
         <div class='pretui-empty-action'>{{yield to='action'}}</div>
       {{/if}}
     </div>
@@ -122,39 +107,6 @@ export class EmptyState extends Component<EmptyStateSignature> {
         .pretui-empty-action {
           position: relative;
           margin-top: var(--boxel-sp-2xs);
-        }
-        /* Two equal paths with a rule between. The rule is drawn on the
-           separator itself so it stretches to whatever the row/column is —
-           no measurement, and it flips axis with the fold. */
-        /* flex-wrap rather than a container query: EmptyState is often an auto
-           -sized grid/flex item, and `container-type: inline-size` would apply
-           inline-size containment to it and collapse that case. Wrapping folds
-           the two paths into a stack at exactly the width where they stop
-           fitting, with no containment side effect. */
-        .pretui-empty-paths {
-          position: relative;
-          display: flex;
-          flex-wrap: wrap;
-          align-items: center;
-          justify-content: center;
-          gap: var(--boxel-sp-sm);
-        }
-        .pretui-empty-sep {
-          display: flex;
-          align-items: center;
-          flex: 1 1 6rem;
-          gap: var(--boxel-sp-xs);
-          margin-top: var(--boxel-sp-2xs);
-          font-size: var(--boxel-font-size-2xs);
-          text-transform: lowercase;
-        }
-        .pretui-empty-sep::before,
-        .pretui-empty-sep::after {
-          content: '';
-          flex: 1;
-          min-inline-size: var(--boxel-sp-sm);
-          block-size: 1px;
-          background-color: var(--border);
         }
       }
     </style>

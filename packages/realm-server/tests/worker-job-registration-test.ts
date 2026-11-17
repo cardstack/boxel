@@ -59,6 +59,7 @@ module(basename(import.meta.filename), function () {
     assert.deepEqual(
       registered.sort(),
       [
+        'automation-reconcile',
         'automation-storage-charge',
         'automation-tick',
         'capture',

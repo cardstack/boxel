@@ -6,11 +6,12 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
-import type {
-  CallApiSlotLookup,
-  CallApiUse,
-  CallApiUseSubject,
-  OperationFailure,
+import {
+  subjectOfRefusal,
+  type CallApiSlotLookup,
+  type CallApiUse,
+  type CallApiUseSubject,
+  type OperationFailure,
 } from '@cardstack/runtime-common/card-operations';
 import { ANONYMOUS_ACTOR } from '@cardstack/runtime-common/card-operations/anonymous-actor';
 import { budgetUse, type BudgetUse } from './key-limits.ts';
@@ -20,7 +21,6 @@ import {
   type KeyLimitsView,
 } from './key-limit-settings.ts';
 import { isUUID, namedToViewer } from './named-users.ts';
-import { subjectOfRefusal } from './key-use-subject.ts';
 import { UserKeyError } from './user-keys.ts';
 
 // The record of each use of a share or a personal key, and the usage view
@@ -38,7 +38,7 @@ import { UserKeyError } from './user-keys.ts';
 // caller who keeps calling past a limit adds a row a minute, not a row a
 // call. Every count below sums `count`. A refusal raised
 // while the slots were being filled is written against the one share or key
-// that refused it (`lib/key-use-subject.ts`); one that came before any
+// that refused it (`refusedFrom` in `card-operations/call-api.ts`); one that came before any
 // binding was found, such as `binding-not-approved`, names no key, and is
 // recorded nowhere but the key-use log line.
 //
