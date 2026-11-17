@@ -471,9 +471,9 @@ const tests = Object.freeze({
   'the card editor and the reader apply one rule, cronTriggerProblem': async (
     assert,
   ) => {
-    // Each of these passed a separate editor rule that compared times only
-    // within an hour and across consecutive hours of one day, on the wall
-    // clock, and the reader refused it.
+    // Each of these fires too often only across midnight or across a
+    // daylight-saving change, which a check of wall-clock times within one
+    // day misses.
     for (let [expression, timeZone, why] of [
       ['58,1 0,23 * * *', undefined, '23:58 and the next day’s 00:01'],
       ['1,58 2,4 * * *', 'America/New_York', 'the skipped 02:58 and 04:01'],

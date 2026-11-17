@@ -1911,8 +1911,8 @@ module(basename(import.meta.filename), function () {
 
       test('a card that indexed but does not read as a declaration pauses the automation with the problems', async function (assert) {
         await switchOn();
-        // The old card editor rule accepted this expression: it never
-        // compared 23:58 with the next day's 00:01.
+        // 23:58 and the next day's 00:01 are 3 minutes apart, which a check
+        // of times within one day misses.
         let result = await sync(
           indexed({
             triggers: [cronTrigger({ expression: '58,1 0,23 * * *' })],
