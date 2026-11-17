@@ -1,4 +1,8 @@
-import { getAutomationRun, type AutomationRun } from './automation-runs.ts';
+import {
+  getAutomationRun,
+  releaseAutomationRunCreditHold,
+  type AutomationRun,
+} from './automation-runs.ts';
 import {
   automationRunLogTag,
   emitAutomationRunEvent,
@@ -58,6 +62,11 @@ export function automationRunUsage(
 // no tab time and downloaded nothing, such as one canceled before it
 // started, has nothing to charge.
 //
+// Once the charge is written, or there is nothing to charge, the credits the
+// run's admission held against its identity's balance are released
+// (`releaseAutomationRunCreditHold`), so the hold covers the run until what it
+// used is paid for.
+//
 // The charge is written once per run (see `spendCredits`), so calling this
 // again, from a retry or from an attempt that ends after another attempt
 // charged the run, charges nothing more. It is priced from what the row holds
@@ -104,6 +113,7 @@ export async function chargeAutomationRun({
       let measured = `${usage.prerender_tab_seconds.toFixed(3)} prerender-tab seconds and ${run.callApiResponseBytes} bytes downloaded`;
       if (usage.prerender_tab_seconds === 0 && usage.downloaded_gb === 0) {
         log.info(`${tag} not charged: it used nothing to charge for`);
+        await releaseAutomationRunCreditHold(dbAdapter, runId);
         return;
       }
       if (!meteredCharges) {
@@ -131,9 +141,12 @@ export async function chargeAutomationRun({
       });
       let message = `in ${run.realm} for ${run.actsAs} (${measured}): ${result}`;
       if (result === 'no-prices' || result === 'no-payer') {
+        // The hold keeps counting until it lapses, since nothing paid for
+        // the run.
         log.error(`${tag} could not be charged ${message}`);
       } else {
         log.info(`${tag} charged ${message}`);
+        await releaseAutomationRunCreditHold(dbAdapter, runId);
       }
     }, attemptDelaysMs);
   } catch (e) {

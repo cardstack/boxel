@@ -2,21 +2,27 @@ import type {
   AccountStanding,
   AutomationAdmissionChecks,
 } from '@cardstack/runtime-common/automation-admission';
+import type { DBAdapter } from '@cardstack/runtime-common';
 import { getMatrixAdminToken, resolveAdminCreds } from '../synapse.ts';
+import { buildAdmitSpending } from './automation-spending.ts';
 
 // What an automation run's admission asks of the realm server's side of the
 // worker (see `automation-admission.ts` in runtime-common): the Matrix
 // server's admin API, asked about the account the run acts as with the
-// process's shared admin token. The admin credentials are
+// process's shared admin token, and the run's spending, checked against the
+// automation's credit caps and its identity's balance at this process's
+// prices (`automation-spending.ts`). The admin credentials are
 // MATRIX_ADMIN_USERNAME and MATRIX_ADMIN_PASSWORD, or the dev admin on a
 // local homeserver (`resolveAdminCreds`). Without them `accountStanding`
 // throws, and admission refuses every run as `account-unverifiable`. The
 // declared operations are the realm's to check (`RUN_ADMISSION_PATH`).
 export function buildAutomationAdmissionChecks({
+  dbAdapter,
   matrixURL,
   matrixAdminUsername,
   matrixAdminPassword,
 }: {
+  dbAdapter: DBAdapter;
   matrixURL: URL;
   matrixAdminUsername: string | undefined;
   matrixAdminPassword: string | undefined;
@@ -27,6 +33,7 @@ export function buildAutomationAdmissionChecks({
         { matrixURL, matrixAdminUsername, matrixAdminPassword },
         user,
       ),
+    admitSpending: buildAdmitSpending({ dbAdapter }),
   };
 }
 

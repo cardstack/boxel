@@ -286,8 +286,10 @@ let autoMigrate = migrateDB || undefined;
     mintRunToken: buildMintRunToken(REALM_SECRET_SEED),
     // An automation run's admission asks the Matrix server whether the
     // account the run acts as can still sign in, with the admin credentials
-    // the realm server also holds.
+    // the realm server also holds, and checks the run's spending at this
+    // process's prices.
     automationAdmissionChecks: buildAutomationAdmissionChecks({
+      dbAdapter,
       matrixURL: new URL(matrixURL),
       matrixAdminUsername: process.env.MATRIX_ADMIN_USERNAME,
       matrixAdminPassword: process.env.MATRIX_ADMIN_PASSWORD,

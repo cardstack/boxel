@@ -713,6 +713,26 @@ export async function sumUpCreditsLedger(
   return results[0].sum === null ? 0 : parseInt(results[0].sum as string);
 }
 
+// The credits `userId` (a `users` id) can spend: every credit bucket's grants
+// and purchases, less what was spent from it and what expired.
+export async function sumUpAvailableCredits(
+  db: Queryable,
+  userId: string,
+): Promise<number> {
+  return await sumUpCreditsLedger(db, {
+    userId,
+    creditType: [
+      'plan_allowance',
+      'plan_allowance_used',
+      'plan_allowance_expired',
+      'daily_credit',
+      'daily_credit_used',
+      'extra_credit',
+      'extra_credit_used',
+    ],
+  });
+}
+
 export async function getDailyCreditGrantInfo(
   dbAdapter: DBAdapter,
   userId: string,
