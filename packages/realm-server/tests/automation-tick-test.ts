@@ -667,6 +667,30 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a tick whose due slot joins a pending run reports the automation, since its next run moved with no run to announce it', async function (assert) {
+    await switchOn();
+    let reported: string[] = [];
+    let report: ReportAutomationChange = async ({ automationId }) => {
+      reported.push(automationId);
+    };
+    await tick(NOON + 30, report);
+    assert.deepEqual(
+      reported,
+      [],
+      'the tick that starts a run leaves it to the run',
+    );
+    // The noon run is still pending, so the 13:00 slot joins it.
+    let [outcome] = await tick(ONE + 30, report);
+    assert.deepEqual(
+      outcome.kind === 'enqueued'
+        ? outcome.triggers.map(({ kind }) => kind)
+        : outcome.kind,
+      ['skipped'],
+    );
+    assert.strictEqual((await row()).nextRun, at('2026-11-10T14:00:00Z'));
+    assert.deepEqual(reported, [AUTOMATION]);
+  });
+
   test('`until` stops a trigger: no slot after it runs', async function (assert) {
     await switchOn([
       { ...HOURLY, until: at('2026-11-10T13:30:00Z') },

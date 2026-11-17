@@ -53,8 +53,9 @@
 // hook to pause, and a card that doesn't read as a declaration leaves the row
 // due and unchanged until it does.
 //
-// The tick reports each run it starts (`job` events, from the task) and each
-// automation it moves to *done* (`reportAutomationChange`).
+// The tick reports each run it starts (`job` events, from the task), and each
+// automation whose state or next run it moves without starting a run
+// (`reportAutomationChange`).
 
 import type {
   ChangedAutomation,
@@ -101,8 +102,8 @@ export interface AutomationTickOptions {
   // Unix seconds; the current time when absent.
   now?: number;
   pageSize?: number;
-  // Told of each automation whose state the tick changed, once its
-  // transaction has committed.
+  // Told of each automation whose state the tick changed, or whose next run
+  // it moved without starting a run, once its transaction has committed.
   reportAutomationChange?: ReportAutomationChange;
 }
 
@@ -387,7 +388,14 @@ async function claimAndEnqueue(
       'updated_at = now() WHERE automation_id =',
       param(automationId),
     ]);
-    if (state !== automation.state) {
+    // A run the tick starts sends its own `job` event, which a subscriber
+    // reads the automation again on. A tick that starts none and still moves
+    // the state or the next run (every due slot joined a pending run, or
+    // nothing was due after all) reports the automation itself.
+    if (
+      state !== automation.state ||
+      (!started && nextRun !== automation.nextRun)
+    ) {
       changed.automation = automation;
     }
 

@@ -1504,14 +1504,23 @@ module(basename(import.meta.filename), function () {
           undefined,
         );
 
+        let reported: string[] = [];
         let touched = await syncAutomationsAfterIndex({
           dbAdapter,
           definitionLookup,
           virtualNetwork,
           realmURL: REALM_URL,
           touched: [`${AUTOMATION}.json`],
+          reportAutomationChange: async ({ automationId }) => {
+            reported.push(automationId);
+          },
         });
         assert.strictEqual(touched.get(AUTOMATION)?.kind, 'removed');
+        assert.deepEqual(
+          reported,
+          [AUTOMATION],
+          'the hook hands its reporter to the sync, which reports the removal',
+        );
         assert.strictEqual(
           await getAutomation(dbAdapter, AUTOMATION),
           undefined,

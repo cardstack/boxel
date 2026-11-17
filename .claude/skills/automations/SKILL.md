@@ -1319,17 +1319,18 @@ takes the automation's id and realm, since a removed automation has no row to
 read them from, and never rejects; a failed report is logged as
 `could not send the automation event for …`.
 
-| Change                                                         | Reported by                                                                                         |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Switch-on, pause, resume, remove                               | `switchOnAutomation`, `pauseAutomation`, `resumeAutomation`, `removeAutomation`, given the reporter |
-| A raised cap, the payer losing access                          | `checkAutomationCaps`, `checkAutomationPayer`, `pauseForPayerLostAccess` (the run's admission)      |
-| Archiving the realm                                            | `pauseRealmAutomations`, from the archive handler (`realmServerAutomationChangeReporter`)           |
-| The card's index hook removes, pauses, or makes it done/active | `syncAutomationWithCard`, from `syncAutomationsAfterIndex` in the indexing tasks                    |
-| The tick makes it done                                         | `tickAutomations` (`AutomationTickOptions.reportAutomationChange`)                                  |
+| Change                                                                                                     | Reported by                                                                                                                                                               |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Switch-on, pause, resume, remove                                                                           | `switchOnAutomation`, `pauseAutomation`, `resumeAutomation`, `removeAutomation`, given the reporter                                                                       |
+| The payer losing access                                                                                    | `checkAutomationPayer`, `pauseForPayerLostAccess`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                   |
+| Archiving the realm                                                                                        | `pauseRealmAutomations`, from the archive handler (`realmServerAutomationChangeReporter`)                                                                                 |
+| The card's index hook removes it, pauses it for a raised cap or batched AI, or makes it done/active        | `syncAutomationWithCard`, from `syncAutomationsAfterIndex` in the indexing tasks. `checkAutomationCaps` pauses the same way and reports to a caller that passes reporters |
+| The tick makes it done, or moves its next run without starting a run (every due slot joined a pending run) | `tickAutomations` (`AutomationTickOptions.reportAutomationChange`)                                                                                                        |
 
-A sync or a tick that leaves the state as it was reports nothing: a new next
-run follows a card edit, which the card's `index` event already announces, or
-a new run, which its `job` event does. A worker reports through
+A sync that leaves the state as it was reports nothing: its new next run
+follows a card edit, which the card's `index` event already announces. A tick
+that starts a run and leaves the state as it was reports nothing either, since
+the run's `job` event announces it. A worker reports through
 `taskAutomationChangeReporter`, which hands the event to `reportRealmEvent`.
 A realm route that changes a row passes `Realm.reportAutomationChange`. **New
 code that changes an automation's state** (waiting for credits, a pause of its

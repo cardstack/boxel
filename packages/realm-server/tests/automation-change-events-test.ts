@@ -30,6 +30,7 @@ import type {
   RealmEventContent,
 } from '@cardstack/base/matrix-event';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { realmServerAutomationChangeReporter } from '../lib/run-change-reporter.ts';
 import {
   ensureTestUser,
   setupPermissionedRealmCached,
@@ -277,6 +278,36 @@ module(basename(import.meta.filename), function (hooks) {
       },
     ]);
     await sentToWriters(1);
+    assert.deepEqual([...new Set(rooms)].sort(), [
+      '!admin:localhost',
+      '!owner:localhost',
+    ]);
+  });
+
+  test("a route that serves no one realm, such as archiving, finds the automation's realm and reaches its direct writers", async function (assert) {
+    let asked: string[] = [];
+    let report = realmServerAutomationChangeReporter({
+      virtualNetwork,
+      reconciler: {
+        lookupOrMount: async (url: string) => {
+          asked.push(url);
+          return url === realm.url ? realm : undefined;
+        },
+      } as any,
+    });
+    await report({ automationId: automationId(), realm: ri(realm.url) });
+    assert.deepEqual(asked, [realm.url], "the automation's realm is looked up");
+    await sentToWriters(1);
+    assert.deepEqual(
+      delivered.map(({ event }) => event),
+      [
+        {
+          eventName: 'automation',
+          automation: automationId(),
+          realmURL: realm.url,
+        },
+      ],
+    );
     assert.deepEqual([...new Set(rooms)].sort(), [
       '!admin:localhost',
       '!owner:localhost',
