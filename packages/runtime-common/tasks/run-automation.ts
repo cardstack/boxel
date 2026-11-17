@@ -179,7 +179,14 @@ async function attemptRun(
 
   let start = await startAutomationRunAttempt(dbAdapter, runId, attempt);
   let claimedAt = Date.now();
-  if (start.kind !== 'missing' && start.kind !== 'superseded') {
+  // An attempt that takes the run claims it, whether it runs the script or
+  // finishes a run an earlier attempt committed; one that leaves the run
+  // alone claims nothing.
+  if (
+    start.kind === 'run' ||
+    start.kind === 'committed' ||
+    start.kind === 'commit-interrupted'
+  ) {
     emitAutomationRunEvent({
       kind: 'claimed',
       ...ids,
