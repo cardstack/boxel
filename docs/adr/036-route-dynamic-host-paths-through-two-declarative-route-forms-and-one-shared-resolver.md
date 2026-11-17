@@ -98,8 +98,7 @@ page's host config as `hostDynamicRoutes`. For a dynamically routed page it
 MUST also add a serve rule for exactly the requested path to
 `hostRoutingMap`. A realm MUST also serve its validated route tree from a
 read-only endpoint, which the prerender and interact mode read once per
-realm and again after the realm is indexed. No reader MUST validate the tree
-again. The tree, each `where` included, is public, so a route MUST NOT hold
+realm and again after the realm is indexed. A reader MUST NOT validate the tree again. The tree, each `where` included, is public, so a route MUST NOT hold
 anything private.
 
 ### 1.7. Addresses are worked out from the routes, never on the way out
