@@ -1,7 +1,6 @@
 // An automation run's log (ADR 025 §1.1): the script's console lines,
-// activity lines, run milestones, its `realm.transform` calls (one line, as
-// the run settles) and uncaught error, beside the platform's own lines for
-// what the realm server did on the run's behalf. Each line is
+// activity lines, run milestones and uncaught error, beside the platform's
+// own lines for what the realm server did on the run's behalf. Each line is
 // stored in `automation_run_log` for the console, and written once to the
 // realm server's own log as an `[automation-run-log]` line, which reaches
 // Loki tagged with the automation, the run and the run's queue job.
@@ -56,7 +55,6 @@ export const RUN_LOG_SCRIPT_KINDS = [
   'plan',
   'milestone',
   'count',
-  'transform',
   'error',
 ] as const;
 
@@ -559,26 +557,6 @@ function scriptLine(event: unknown): RunLogLine | undefined {
         kind: 'count',
         message: total === undefined ? `${done}` : `${done} of ${total}`,
         data: { done, ...(total !== undefined ? { total } : {}) },
-      };
-    }
-    case 'transform': {
-      let count = (value: unknown) =>
-        typeof value === 'number' && Number.isFinite(value) && value >= 0
-          ? Math.round(value)
-          : undefined;
-      let calls = count(e.calls);
-      let ms = count(e.ms);
-      let failed = count(e.failed);
-      if (calls === undefined || ms === undefined || failed === undefined) {
-        return undefined;
-      }
-      return {
-        at,
-        source: 'script',
-        kind: 'transform',
-        level: failed > 0 ? 'warn' : 'info',
-        message: `realm.transform ran ${calls} ${calls === 1 ? 'time' : 'times'} in ${ms} ms${failed > 0 ? `, ${failed} failed` : ''}`,
-        data: { calls, ms, failed },
       };
     }
     case 'console': {

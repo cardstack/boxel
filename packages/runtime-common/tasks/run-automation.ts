@@ -609,9 +609,10 @@ async function finish(
   return { state: 'complete' };
 }
 
-// The run's `script` telemetry event: when the tab was asked for, assigned
-// and answered, by the prerender server's measures, and when the script
-// started and ended, by the tab's (`AutomationScriptOutcome.timing`).
+// The run's `script` telemetry event: when the tab was asked for and
+// answered, by the worker's clock; when the script started and ended, by the
+// tab's (`AutomationScriptOutcome.timing`); and how long the prerender server
+// took to give the call a tab, by its own measure.
 function scriptEvent(
   ids: AutomationRunIds,
   requestedAt: number,
@@ -635,9 +636,7 @@ function scriptEvent(
     outcome: outcome.state,
     ...(outcome.state === 'error' ? { reason: outcome.reason } : {}),
     tabRequestedAt: iso(requestedAt),
-    ...(launchMs !== undefined
-      ? { tabAssignedAt: iso(requestedAt + launchMs), tabWaitMs: launchMs }
-      : {}),
+    ...(launchMs !== undefined ? { tabLaunchMs: launchMs } : {}),
     tabAnsweredAt: iso(answeredAt),
     ...(timing
       ? {

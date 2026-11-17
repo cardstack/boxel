@@ -953,7 +953,9 @@ class RealmFsSession {
       // behind file calls nor hold file calls up.
       let result =
         method === 'transform'
-          ? this.timedTransform(args)
+          ? Promise.resolve().then(() =>
+              this.transformer.run(transformRequest(args[0], args[1], args[2])),
+            )
           : this.researchCall(method, args);
       let tracked = result.catch(() => undefined);
       this.unqueuedInFlight.add(tracked);
@@ -972,34 +974,6 @@ class RealmFsSession {
       return this.dispatch(method, args);
     });
     this.queue = result.catch(() => undefined);
-    return result;
-  }
-
-  // `realm.transform` calls this run made, their time together, and how many
-  // failed. A transform runs in this tab, so no realm server sees it; an
-  // automation run reports these as one line of its log once it settles,
-  // rather than a line per call, so a script that transforms in a loop
-  // doesn't crowd its own lines out of the log.
-  transformCalls = 0;
-  transformMs = 0;
-  transformsFailed = 0;
-
-  private timedTransform(args: unknown[]): Promise<unknown> {
-    let startedAt = Date.now();
-    let result = Promise.resolve().then(() =>
-      this.transformer.run(transformRequest(args[0], args[1], args[2])),
-    );
-    let count = (ok: boolean) => {
-      this.transformCalls++;
-      this.transformMs += Date.now() - startedAt;
-      if (!ok) {
-        this.transformsFailed++;
-      }
-    };
-    result.then(
-      () => count(true),
-      () => count(false),
-    );
     return result;
   }
 
@@ -3150,7 +3124,6 @@ function redactEvent(
     case 'console':
       return { ...event, message: redactSecrets(event.message, secrets) };
     case 'count':
-    case 'transform':
       return event;
     case 'error':
       return {
@@ -3326,15 +3299,6 @@ export async function runAutomationScript(
       session.idle(),
       new Promise((wake) => setTimeout(wake, STOP_GRACE_MS)),
     ]);
-    if (session.transformCalls > 0) {
-      record({
-        kind: 'transform',
-        at: Date.now(),
-        calls: session.transformCalls,
-        ms: session.transformMs,
-        failed: session.transformsFailed,
-      });
-    }
     let dropped = session.progressDropped;
     if (dropped > 0) {
       record({

@@ -781,8 +781,7 @@ module(basename(import.meta.filename), function (hooks) {
     setAutomationMilestoneSink((event) => milestones.push(event));
     setRunLogLokiSink((line) => lokiLines.push(line));
     try {
-      // A tab that reports a milestone and a transform to the run's log, as
-      // the script would, stages a write, and answers with when the script
+      // A tab that reports a milestone to the run's log, as the script would, stages a write, and answers with when the script
       // started and ended and what the prerender server measured.
       let tab = {
         async runCommand(args: RunCommandArgs) {
@@ -803,7 +802,6 @@ module(basename(import.meta.filename), function (hooks) {
                 events: [
                   { kind: 'plan', at, milestones: ['fetch'] },
                   { kind: 'milestone', at, name: 'fetch' },
-                  { kind: 'transform', at, calls: 3, ms: 12, failed: 0 },
                 ],
               }),
             },
@@ -908,12 +906,6 @@ module(basename(import.meta.filename), function (hooks) {
         `the log line carries the run's ids: ${line}`,
       );
     }
-    assert.true(
-      lokiLines.some((line) =>
-        / kind=transform .*calls=3 ms=12 failed=0 /.test(line),
-      ),
-      "the run's transforms are a line of its log",
-    );
     assert.true(workerLines.length > 0, 'the worker logged the attempt');
     for (let line of workerLines) {
       assert.true(
@@ -939,9 +931,13 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(byKind('admitted').admitted, 'admission let the run go ahead');
     let script = byKind('script');
     assert.strictEqual(
-      Date.parse(script.tabAssignedAt!) - Date.parse(script.tabRequestedAt),
+      script.tabLaunchMs,
       40,
-      "the tab was assigned once the prerender server's launch was done",
+      "the prerender server's own measure of giving the call a tab",
+    );
+    assert.true(
+      Date.parse(script.tabAnsweredAt) >= Date.parse(script.tabRequestedAt),
+      'the tab answered after the worker asked for it',
     );
     assert.strictEqual(
       script.scriptStartedAt,

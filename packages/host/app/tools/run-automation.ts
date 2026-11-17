@@ -128,27 +128,24 @@ export default class RunAutomationTool extends HostBaseTool<
         fetch: this.network.fetch,
       });
       watch.start();
-      let startedAt = Date.now();
       try {
-        await runAutomationScript({
-          code: scriptInput.code,
-          realmURL,
-          automation: scriptInput.automation,
-          secondsCap,
-          io,
-          progress,
+        outcome = await scriptOutcome(
+          () =>
+            runAutomationScript({
+              code: scriptInput.code,
+              realmURL,
+              automation: scriptInput.automation,
+              secondsCap,
+              io,
+              progress,
+              secrets,
+              signal: watch.signal,
+            }),
           secrets,
-          signal: watch.signal,
-        });
-        outcome = { state: 'complete' };
-      } catch (error) {
-        outcome = errorOutcome(error, secrets);
+        );
       } finally {
         watch.stop();
       }
-      // When the script started and ended in this tab, for the run's
-      // telemetry.
-      outcome.timing = { startedAt, endedAt: Date.now() };
     }
     // The run's progress is sent before the run answers, while the run is
     // still running: the run log takes lines only from a running run, and
@@ -221,6 +218,25 @@ async function flushBefore(
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Runs a script and answers its outcome: `complete`, or the error it ended
+// with (redacted with `secrets`), with when it started and ended in this tab
+// for the run's telemetry.
+export async function scriptOutcome(
+  run: () => Promise<unknown>,
+  secrets: string[],
+): Promise<AutomationScriptOutcome> {
+  let startedAt = Date.now();
+  let outcome: AutomationScriptOutcome;
+  try {
+    await run();
+    outcome = { state: 'complete' };
+  } catch (error) {
+    outcome = errorOutcome(error, secrets);
+  }
+  outcome.timing = { startedAt, endedAt: Date.now() };
+  return outcome;
 }
 
 function errorOutcome(

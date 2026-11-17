@@ -20,9 +20,10 @@
 //   lane it was claimed in, its priority).
 // - `admitted`: admission let the run go ahead or refused it, and how long the
 //   checks took.
-// - `script`: the run's tab answered. When the tab was asked for, assigned
-//   and answered, when the script started and ended in the tab, the time the
-//   tab took to assign, and the tab's memory as the script ended.
+// - `script`: the run's tab answered. When the worker asked for the tab and
+//   when the tab answered, by the worker's clock; when the script started and
+//   ended, by the tab's; how long the prerender server took to give the call
+//   a tab, by its own measure; and the tab's memory as the command ended.
 // - `commit`: the worker sent the run's batch and the realm answered.
 // - `finished`: the run ended, however it ended, with every timestamp and
 //   count its row holds; again, as `complete`, if a commit it ended without
@@ -32,10 +33,10 @@
 // - `charged`: a charge for the run was written (`run` for its compute and
 //   network, `run_indexing` for the indexing its commit caused).
 //
-// Each `callApi`, `resolve` and `transform` call and each run milestone is a
-// line of the run's log (`automation-run-log.ts`), which reaches Loki tagged
-// with the same ids, and milestones also go to `boxel:automation-milestones`
-// with their times as the run ends. The prerender server reports its run
+// Each `callApi` and `resolve` call and each run milestone is a line of the
+// run's log (`automation-run-log.ts`), which reaches Loki tagged with the same
+// ids, and milestones also go to `boxel:automation-milestones` with their
+// times as the run ends. The prerender server reports its run
 // capacity on this channel too (`capacity`), as it samples its pool.
 //
 // Telemetry never fails the work it describes: a line that can't be built is
@@ -99,18 +100,20 @@ export interface AutomationRunScriptEvent extends AutomationRunIds {
   kind: 'script';
   outcome: 'complete' | 'error';
   reason?: string;
-  // When the worker asked for a tab, when the prerender server assigned one,
-  // and when the tab answered.
+  // When the worker asked for a tab and when the tab answered, by the
+  // worker's clock.
   tabRequestedAt: string;
-  tabAssignedAt?: string;
   tabAnsweredAt: string;
   // When the script started and ended, by the tab's clock.
   scriptStartedAt?: string;
   scriptEndedAt?: string;
   scriptMs?: number;
-  // Request to assignment, and how much of it was waiting behind the run
-  // affinity's tab and starting a new one.
-  tabWaitMs?: number;
+  // How long the prerender server took to give the call a tab, from the
+  // call's arrival there (its `launchMs`), and how much of that was waiting
+  // behind the run affinity's tab and starting a new one. The call's transit
+  // between the worker and the server is left out, so the gap between
+  // `tabRequestedAt` and the script's start is longer than this.
+  tabLaunchMs?: number;
   tabQueueMs?: number;
   tabStartupMs?: number;
   tabReused?: boolean;
