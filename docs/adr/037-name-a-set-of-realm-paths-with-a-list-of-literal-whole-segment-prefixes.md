@@ -36,8 +36,11 @@ A path specifier MUST be a list of prefixes, each relative to the root of the
 realm it is applied to, never to the realm that stores the specifier. A prefix
 ending in `/` names a directory and everything in it, a prefix without one
 names a single file, and `/` names the whole realm. A leading `/` is optional.
-A path matches the specifier when it falls under any of its prefixes. An empty
-list MUST mean no path limit.
+A path matches the specifier when it falls under any of its prefixes. A
+specifier that limits something, such as a grant's paths, MUST treat an empty
+list as no path limit. A request that lists the paths it reads, such as a
+history filter, MAY give an empty list its own meaning, but MUST parse and
+match its entries with this module.
 
 ### 1.3. Literal prefixes
 
