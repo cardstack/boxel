@@ -193,6 +193,7 @@ import {
   handleAutomationRemove,
   handleAutomationResume,
   handleAutomationRunCancel,
+  handleAutomationRunLog,
   handleAutomationRunNow,
   handleAutomationSwitchOn,
 } from './handlers/handle-automations.ts';
@@ -202,6 +203,7 @@ import {
   AUTOMATION_REMOVE_PATH,
   AUTOMATION_RESUME_PATH,
   AUTOMATION_RUN_CANCEL_PATH,
+  AUTOMATION_RUN_LOG_PATH,
   AUTOMATION_RUN_NOW_PATH,
   AUTOMATION_SWITCH_ON_PATH,
 } from '@cardstack/runtime-common/automation-routes';
@@ -831,13 +833,19 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
 
   // A direct writer switching an automation on, running it by hand, pausing,
-  // resuming or removing it, and canceling one of its runs. Each answers only
+  // resuming or removing it, canceling one of its runs, and reading a run's
+  // log. Each answers only
   // a direct writer of the realm the request names, acting as the session's
   // own user (see `handlers/handle-automations.ts`).
   router.get(
     AUTOMATION_SWITCH_ON_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleAutomationEstimate(args),
+  );
+  router.get(
+    AUTOMATION_RUN_LOG_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleAutomationRunLog(args),
   );
   for (let [path, handler] of [
     [AUTOMATION_SWITCH_ON_PATH, handleAutomationSwitchOn],

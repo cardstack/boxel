@@ -283,17 +283,124 @@ export async function readRunLog(
     'SELECT seq, at, source, kind, level, message, script_line, data FROM automation_run_log WHERE run_id =',
     param(runId),
     'ORDER BY seq',
-  ])) as {
-    seq: number;
-    at: string | Date;
-    source: RunLogSource;
-    kind: RunLogKind;
-    level: RunLogLevel | null;
-    message: string;
-    script_line: number | null;
-    data: RunLogData | string | null;
-  }[];
-  let lines: StoredRunLogLine[] = rows.map((row) => ({
+  ])) as RunLogRow[];
+  let lines = rows.map(storedLine);
+  let dropped = Number(run.log_dropped);
+  if (dropped > 0) {
+    lines.push({
+      seq: lines.length,
+      at: lines.at(-1)?.at ?? Date.now(),
+      source: 'platform',
+      kind: 'console',
+      level: 'warn',
+      message: droppedLinesMessage(dropped),
+    });
+  }
+  return { lines, dropped };
+}
+
+export const RUN_LOG_LEVELS: readonly RunLogLevel[] = [
+  'log',
+  'info',
+  'warn',
+  'error',
+];
+
+// The level a line has for a level filter. A line that carries none (an
+// activity line, a milestone, a count, most platform lines) reads as `info`.
+export const RUN_LOG_UNLEVELED_AS: RunLogLevel = 'info';
+
+export interface RunLogPage {
+  // The run's state as the page was read.
+  state: string;
+  // The page's lines, in `seq` order, each past `after` and at a level the
+  // filter keeps.
+  lines: StoredRunLogLine[];
+  // The `after` that reads on from this page. It passes the lines the filter
+  // left out, so a reader never scans them again.
+  next: number;
+  // The log holds more lines past `next` already. A reader asks again at
+  // once rather than waiting for the run to log more.
+  more: boolean;
+  // Lines stored in the run's log, whatever the filter.
+  total: number;
+  // Lines refused past the run's cap.
+  dropped: number;
+}
+
+// One page of a run's log: the lines past `after` (`seq` greater than it;
+// -1 reads from the start), at most `limit` of them, and only those whose
+// level is in `levels` when it is given. The page ends at the lines stored
+// when the run's row was read, so a line an append adds while the page is
+// read is left for the next page rather than skipped by its cursor.
+export async function readRunLogPage(
+  dbAdapter: DBAdapter,
+  runId: string,
+  {
+    after = -1,
+    limit,
+    levels,
+  }: {
+    after?: number;
+    limit: number;
+    levels?: readonly RunLogLevel[];
+  },
+): Promise<RunLogPage | undefined> {
+  let [run] = (await query(dbAdapter, [
+    'SELECT state, log_lines, log_dropped FROM automation_runs WHERE id =',
+    param(runId),
+  ])) as { state: string; log_lines: number; log_dropped: number }[];
+  if (!run) {
+    return undefined;
+  }
+  let total = Number(run.log_lines);
+  let filter: Expression =
+    levels && levels.length > 0
+      ? [
+          'AND COALESCE(level,',
+          param(RUN_LOG_UNLEVELED_AS),
+          ') = ANY(',
+          param(`{${levels.join(',')}}`),
+          '::text[])',
+        ]
+      : [];
+  // One row past the page says whether the log holds more.
+  let rows = (await query(dbAdapter, [
+    'SELECT seq, at, source, kind, level, message, script_line, data FROM automation_run_log WHERE run_id =',
+    param(runId),
+    'AND seq >',
+    param(after),
+    'AND seq <',
+    param(total),
+    ...filter,
+    'ORDER BY seq LIMIT',
+    param(limit + 1),
+  ])) as RunLogRow[];
+  let more = rows.length > limit;
+  let lines = rows.slice(0, limit).map(storedLine);
+  return {
+    state: run.state,
+    lines,
+    next: more ? lines[lines.length - 1].seq : Math.max(after, total - 1),
+    more,
+    total,
+    dropped: Number(run.log_dropped),
+  };
+}
+
+type RunLogRow = {
+  seq: number;
+  at: string | Date;
+  source: RunLogSource;
+  kind: RunLogKind;
+  level: RunLogLevel | null;
+  message: string;
+  script_line: number | null;
+  data: RunLogData | string | null;
+};
+
+function storedLine(row: RunLogRow): StoredRunLogLine {
+  return {
     seq: Number(row.seq),
     at: new Date(row.at).getTime(),
     source: row.source,
@@ -309,19 +416,7 @@ export async function readRunLog(
               : row.data,
         }
       : {}),
-  }));
-  let dropped = Number(run.log_dropped);
-  if (dropped > 0) {
-    lines.push({
-      seq: lines.length,
-      at: lines.at(-1)?.at ?? Date.now(),
-      source: 'platform',
-      kind: 'console',
-      level: 'warn',
-      message: droppedLinesMessage(dropped),
-    });
-  }
-  return { lines, dropped };
+  };
 }
 
 export function droppedLinesMessage(dropped: number): string {
@@ -486,8 +581,6 @@ export function scriptRunLogLines(
 const MAX_DATE_MS = 8.64e15;
 const MAX_SCRIPT_LINE = 2 ** 31 - 1;
 
-const LEVELS: readonly RunLogLevel[] = ['log', 'info', 'warn', 'error'];
-
 function scriptLine(event: unknown): RunLogLine | undefined {
   if (!event || typeof event !== 'object') {
     return undefined;
@@ -565,7 +658,7 @@ function scriptLine(event: unknown): RunLogLine | undefined {
     }
     case 'console': {
       let message = text(e.message);
-      let level = LEVELS.find((l) => l === e.level);
+      let level = RUN_LOG_LEVELS.find((l) => l === e.level);
       return message === undefined || !level
         ? undefined
         : {

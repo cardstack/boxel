@@ -82,14 +82,17 @@ description: >-
   with (`handlers/handle-automations.ts`, paths in
   `runtime-common/automation-routes.ts`): the switch-on estimate, switch-on
   with the monthly credit cap it agrees to, Preview, Run now, pause, resume,
-  remove and cancel a run, their bodies, refusals and status codes, and how
-  to call them by hand in development.
+  remove, cancel a run and read a run's log, their bodies, refusals and
+  status codes, and how to call them by hand in development.
   Also covers a run's log — `automation_run_log`, `appendRunLog` and
   `readRunLog` in `automation-run-log.ts`, the `/_run-log` route and the
   host's `RunLogSink`, the platform's `callApi`, `resolve`, commit and cap
-  lines, redaction, the per-run size cap, and the `[automation-run-log]` lines
-  in Loki. Use when reading a run's log in Postgres or Loki, adding a line the
-  platform logs for a run, or diagnosing a run whose log is missing lines.
+  lines, redaction, the per-run size cap, the `[automation-run-log]` lines
+  in Loki, and how the console reads a log: `GET /_automation-run-log`,
+  paged and filtered by level, and `followAutomationRunLog`, which polls a
+  running run's log. Use when reading a run's log in Postgres or Loki, adding
+  a line the platform logs for a run, showing a run's log in the app, or
+  diagnosing a run whose log is missing lines.
   Also covers a run's admission (`automation-admission.ts`): the checks the
   worker makes before a run costs anything (the automation's row, the run's
   identity's direct write, revoked sessions and Matrix account, the script,
@@ -1175,6 +1178,94 @@ in a line of its own. A time no `Date` holds is stored as the time the line
 arrived, and a script line past Postgres's `integer` is left off, so one bad
 event doesn't cost its batch.
 
+### How the console reads a run's log
+
+The console reads a run's log through the realm server's
+`GET /_automation-run-log` (`handleAutomationRunLog` in
+`handlers/handle-automations.ts`; path, parameters and the answer's shape in
+`runtime-common/automation-routes.ts`), never through the realm's
+`/_run-log`, which only takes the lines a run's tab sends with its token.
+
+```
+GET /_automation-run-log?realm=<realm URL>&run=<run id>&after=<seq>&limit=<n>&level=warn,error
+```
+
+| Parameter | Means                                                                                                                               |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `realm`   | the realm the run belongs to                                                                                                        |
+| `run`     | the run's id                                                                                                                        |
+| `after`   | the `seq` the page starts past; absent or `-1` reads from the start                                                                 |
+| `limit`   | the most lines on a page: `AUTOMATION_RUN_LOG_DEFAULT_LIMIT` (500) when absent, at most `AUTOMATION_RUN_LOG_MAX_LIMIT` (1000)       |
+| `level`   | the levels to keep, comma-separated from `log`, `info`, `warn` and `error`; absent keeps every line. A line with no level is `info` |
+
+It answers only the session's own user, and only a direct writer of `realm`,
+like the other automation routes. The session check refuses a delegated
+session and a run token with 401. The route refuses a reader and a
+realm-authority session with 403 before it looks the run up, so that refusal
+is the same whether or not the run exists. A run of another realm, or an id
+that names no run, is 404. A parameter out of range is 400.
+
+The answer is one page (`readRunLogPage` in `automation-run-log.ts`):
+
+```json
+{
+  "data": {
+    "type": "automation-run-log",
+    "id": "<run id>",
+    "attributes": {
+      "state": "running",
+      "lines": [
+        {
+          "seq": 0,
+          "at": 1795424400000,
+          "source": "script",
+          "kind": "console",
+          "level": "log",
+          "message": "…",
+          "scriptLine": 3
+        }
+      ],
+      "next": 0,
+      "more": false,
+      "total": 1,
+      "dropped": 0
+    }
+  }
+}
+```
+
+- **`next`** is the `after` for the next page. With a level filter it passes
+  the lines the filter left out, so a reader never scans them again.
+- **`more`** says the log already holds lines past `next`: read again at once.
+- **`total`** is the lines stored, whatever the filter. **`dropped`** is the
+  lines the cap refused (`log_dropped`). The console shows the count beside
+  the log; no line on a page stands for them, unlike `readRunLog`'s closing
+  `warn` line.
+- A page ends at the lines stored when the run's row was read, so a line
+  appended while the page is read waits for the next page and is never
+  skipped by the cursor.
+
+**Live lines are polled.** The `job` realm event never carries log text (see
+_The `job` realm event_), so the console follows a running run with
+`followAutomationRunLog` (`runtime-common/automation-run-log-follow.ts`). It
+reads page after page with the last `next`, reads on at once while `more`,
+and otherwise asks again every `AUTOMATION_RUN_LOG_FOLLOW_INTERVAL_MS`
+(2 s) while the run is `pending` or `running`. Call its `wake()` on each `job`
+event for the run, so a milestone or the run's end is read at once. The
+realm server writes the run's `finish` line just after the row ends, so once
+a page reads the run ended with nothing more, the follower reads once more an
+interval later and then stops; `done` settles then. A refused read (a 4xx)
+stops it too, with the refusal passed to `onError`; any other failure is
+tried again at the next interval. A finished run's log is read the same way:
+its pages in turn, then the follower stops.
+
+By hand in development, with a realm-server session token for a direct writer:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:4201/_automation-run-log?realm=http://localhost:4201/example-user/example-realm/&run=<run id>&level=warn,error'
+```
+
 ### Reading a run's log in Postgres
 
 ```sql
@@ -1350,7 +1441,9 @@ realm's `reportRunChange`.
 In the host, subscribe to the realm's events the way other realm-event
 consumers do. Skip any event whose `eventName` isn't `'job'`, then match
 `automation` (or `runId`) and read the run again. For an automation card,
-read `GET <realm>/_automation-status`. For a run, read its report. The
+read `GET <realm>/_automation-status`. For a run, read its report. For a
+run's log, wake the run's `followAutomationRunLog` (see _How the console
+reads a run's log_). The
 event is a cue to re-read, not the run's record. Missing one is harmless,
 because the next change sends another, and a subscriber that comes back reads
 the run afresh anyway.
