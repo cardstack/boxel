@@ -6193,6 +6193,25 @@ return {
       );
     });
 
+    // A card a read answers holds its fields as its own keys and nothing
+    // else, so the card itself, given an operation and a payload, is a batch
+    // entry.
+    test('a card realm.cards.get answers goes into a batch as itself', async function (assert) {
+      let result = await run(`
+let patient = await realm.cards.get('Patient/dev');
+let answers = await realm.operations.invokeBatchOperation([
+  Object.assign(patient, { operation: 'recordVitals', payload: { reading: 'HR 66' } }),
+]);
+return answers.map((answer) => answer.path);`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), ['Patient/dev.json']);
+      assert.strictEqual(
+        (await attributesOf('Patient/dev.json')).lastVitals,
+        'HR 66',
+        'the operation ran on the card at the path',
+      );
+    });
+
     // The example the realm runner is for: find the patients of a ward, then
     // record their vitals in one batch that the realm carries out whole.
     test('realm.operations.invokeBatchOperation updates many patients in one batch', async function (assert) {

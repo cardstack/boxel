@@ -15,6 +15,7 @@ import runRealmCode, {
 } from '@cardstack/host/lib/realm-runner/runner';
 import {
   AUTOMATION_METHODS,
+  FOUND_CARD_SHAPE,
   INTERACTIVE_METHODS,
   MAX_RUN_NOTIFICATIONS,
   NOTIFY_METHODS,
@@ -478,6 +479,31 @@ return 'done';`,
     await assert.rejects(uncaught.done, (error: unknown) => {
       return error instanceof Error && !(error instanceof RealmScriptError);
     });
+  });
+
+  test("reading .data from a card a read answers is the script's TypeError, naming the card's shape", async function (assert) {
+    let petRef = `{ module: ${JSON.stringify(`${testRealmURL}pet`)}, name: 'Pet' }`;
+    for (let { code, answers } of [
+      {
+        code: `const card = await realm.cards.get('Pet/mango');\nreturn card.data.attributes.name;`,
+        answers: 'realm.cards.get returns the card itself',
+      },
+      {
+        code: `const { cards } = await realm.cards.search({ filter: { on: ${petRef}, eq: { name: 'Mango' } } });\nreturn cards[0].data.attributes.name;`,
+        answers: 'realm.cards.search returns each card itself',
+      },
+    ]) {
+      let { done } = run(code);
+      await assert.rejects(
+        done,
+        (error: unknown) =>
+          error instanceof RealmScriptError &&
+          error.scriptError.name === 'TypeError' &&
+          error.scriptError.message ===
+            `${answers}: ${FOUND_CARD_SHAPE}. There is no .data; read its fields from .attributes and its links from .relationships`,
+        answers,
+      );
+    }
   });
 
   test('a bad progress argument throws in the script', async function (assert) {
