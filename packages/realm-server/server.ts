@@ -747,6 +747,9 @@ export class RealmServer {
   // The domains a host URL can be on. The resolver and the code that writes
   // host URLs both read it.
   private hostURLDomains: HostURLDomains;
+  // This process's cache of host URLs. A writer drops a host from it before
+  // it answers, so its change takes effect here at once (ADR 033 §1.3).
+  private hostURLResolver: HostURLResolver;
   private prerenderer: Prerenderer | undefined;
   private reportHostShell: (() => Promise<void>) | undefined;
   private reconciler: RealmRegistryReconciler;
@@ -940,6 +943,9 @@ export class RealmServer {
     this.hostURLDomains = HostURLDomains.fromDeployment(
       domainsForPublishedRealms,
     );
+    this.hostURLResolver = new HostURLResolver(this.dbAdapter, {
+      mayHaveHostURLs: hostURLDomainFilter(this.hostURLDomains),
+    });
     // Pass-by-reference: handlers and the reconciler both mutate this
     // array. Copying it would create two divergent views of mounted
     // realms — a bug under multi-instance Phase 3 semantics. The legacy
@@ -1031,13 +1037,7 @@ export class RealmServer {
       .use(instanceIdHeader)
       // A request on a host URL is made to name its realm's URL here, ahead
       // of every route that looks a realm up (ADR 033 §1.2).
-      .use(
-        resolveHostURLs(
-          new HostURLResolver(this.dbAdapter, {
-            mayHaveHostURLs: hostURLDomainFilter(this.hostURLDomains),
-          }),
-        ),
-      )
+      .use(resolveHostURLs(this.hostURLResolver))
       // Then the rest of the request is translated to the realm's URL, and
       // its response back to the host URL it came in on (ADR 033 §1.5).
       .use(translateAtHostURLs())
@@ -1161,6 +1161,8 @@ export class RealmServer {
           matrixAdminUsername: this.matrixAdminUsername,
           matrixAdminPassword: this.matrixAdminPassword,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
+          hostURLDomains: this.hostURLDomains,
+          hostURLResolver: this.hostURLResolver,
           prerenderer: this.prerenderer,
           reportHostShell: this.reportHostShell,
           reconciler: this.reconciler,

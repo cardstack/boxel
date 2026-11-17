@@ -1,5 +1,5 @@
 import type Koa from 'koa';
-import type { DBAdapter } from '@cardstack/runtime-common';
+import type { DBAdapter, Querier } from '@cardstack/runtime-common';
 import { logger, param, query } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { fullRequestURL } from '../middleware/index.ts';
@@ -282,4 +282,33 @@ export function resolveHostURLs(
     }
     await next();
   };
+}
+
+// Drops each host from this process's cache, and announces the change to
+// every other process (ADR 033 §1.3). A writer calls it after its change is
+// stored and before it answers.
+export async function announceHostURLChanges(
+  dbAdapter: DBAdapter,
+  resolver: HostURLResolver | undefined,
+  hosts: Iterable<string>,
+): Promise<void> {
+  for (let host of new Set(hosts)) {
+    resolver?.forget(host);
+    await notifyHostURLsChanged(dbAdapter, host);
+  }
+}
+
+// Deletes every host URL of a realm, and returns their hosts so the caller
+// can announce the change once it is stored. Deleting the realm's registry
+// row deletes them too, but leaves no list of hosts to announce.
+export async function deleteRealmHostURLs(
+  querier: Querier,
+  realmId: string,
+): Promise<string[]> {
+  let rows = await querier([
+    `DELETE FROM realm_host_urls WHERE realm_id =`,
+    param(realmId),
+    `RETURNING host`,
+  ]);
+  return rows.map((row) => String(row.host));
 }
