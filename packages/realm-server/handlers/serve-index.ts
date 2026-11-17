@@ -38,6 +38,7 @@ import { fullRequestURL } from '../middleware/index.ts';
 import {
   findOrMountRealm,
   getPublishedRealmInfo,
+  droppedRouteMayAnswer,
   hasDynamicHostRoutes,
   hasPublicPermissions,
   isIndexedCardInstance,
@@ -413,12 +414,23 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       if (!realm || !(await hasPublicPermissions(realm, routingDeps))) {
         return false;
       }
-      let { routes, complete } = await realm.getHostRoutes();
+      let validation = await realm.getHostRoutes();
+      let { routes, complete } = validation;
+      // A path only a route dropped for now matches gets the 503 a browser
+      // gets.
+      let droppedMayAnswer = droppedRouteMayAnswer(
+        requestURL,
+        realm,
+        validation,
+      );
       if (
-        !hasDynamicHostRoutes(routes) ||
+        (!droppedMayAnswer && !hasDynamicHostRoutes(routes)) ||
         (await isRealmFilePath(requestURL, routingDeps))
       ) {
         return false;
+      }
+      if (droppedMayAnswer) {
+        return true;
       }
       let resolution = (await resolveDynamic(realm, routes))?.resolution;
       if (!resolution) {
@@ -696,8 +708,8 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       ? await routedRealm.getHostRoutes()
       : undefined;
     let hostRoutes: readonly HostRoute[] = hostRoutesValidation?.routes ?? [];
-    // False while a route is dropped because its type's definition can't be
-    // read yet: a path that route would have answered may resolve to nothing.
+    // False while a route is dropped because its type's definition couldn't
+    // be read: a path that route would have answered may resolve to nothing.
     let hostRoutesComplete = hostRoutesValidation?.complete ?? true;
     let dynamicRoutes = hasDynamicHostRoutes(hostRoutes);
     let notFound = false;
@@ -780,8 +792,8 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       }
       // A path some route matched that resolved to nothing answers 404,
       // unless it is a card's own path or names a file of the realm, which
-      // are still served there. While a route is dropped for a type that
-      // can't be read yet, the dropped route might have answered the path,
+      // are still served there. While a route is dropped for a type whose
+      // definition couldn't be read, the dropped route might have answered the path,
       // so it answers 503 rather than not found. A path no route matched at
       // all is served as it was before routes.
       if (
@@ -792,7 +804,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       ) {
         if (!hostRoutesComplete) {
           hostRoutesLog.warn(
-            `${requestURL.href} resolved to nothing while a host route is dropped for a type that is not available yet`,
+            `${requestURL.href} resolved to nothing while a host route is dropped for a type whose definition couldn't be read`,
           );
           ctxt.status = 503;
           ctxt.type = 'text';
@@ -801,6 +813,27 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         }
         notFound = true;
       }
+    }
+    // A path that only a route dropped for now matches: the resolver had no
+    // route to try, but the dropped route may answer the path once its type
+    // can be read, so it answers 503 rather than not found.
+    if (
+      !fixedRouteMatched &&
+      !dynamicServeRule &&
+      !notFound &&
+      routedRealm &&
+      hostRoutesValidation &&
+      droppedRouteMayAnswer(requestURL, routedRealm, hostRoutesValidation) &&
+      !(await isIndexedCardInstance(cardURL, routingDeps)) &&
+      !(await isRealmFilePath(requestURL, routingDeps))
+    ) {
+      hostRoutesLog.warn(
+        `${requestURL.href} matches only a host route dropped for a type whose definition couldn't be read`,
+      );
+      ctxt.status = 503;
+      ctxt.type = 'text';
+      ctxt.body = 'Service Unavailable';
+      return;
     }
 
     headLog.debug(`Fetching head HTML for ${cardURL.href}`);

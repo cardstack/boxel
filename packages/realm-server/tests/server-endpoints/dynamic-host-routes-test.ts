@@ -236,8 +236,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
 
     hooks.beforeEach(async function () {
       await testRealm.indexing();
-      // A host route reads only cached type definitions, so cache the
-      // field-match types first.
+      // Cache the field-match types first, so most tests don't wait for a
+      // module render.
       for (let name of TYPE_NAMES) {
         await definitionLookup.forRealm(testRealm).lookupDefinition({
           module: rri(`${realmURL.href}site`),
@@ -493,6 +493,57 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       } finally {
         restore();
+      }
+    });
+
+    test('the first request after the definitions cache is cleared serves the page', async function (assert) {
+      // What a server restart does: it clears the definitions cache, and the
+      // realm boots on its existing index.
+      await definitionLookup.clearRealmDefinitions(realmURL.href);
+      testRealm.clearRealmIndexCaches();
+      let response = await page('posts/hello');
+      assert.strictEqual(
+        response.status,
+        200,
+        'the request waits for the read',
+      );
+      assert.true(response.text.includes('Served Post A'), 'serves Post A');
+    });
+
+    test('a path that only a route dropped for an unreadable type matches answers 503', async function (assert) {
+      let getHostRoutes = testRealm.getHostRoutes;
+      testRealm.getHostRoutes = async function (this: Realm) {
+        let validation = await getHostRoutes.call(this);
+        let posts = validation.routes.find(
+          (route) => route.fullPath === '/posts/:slug',
+        )!;
+        return {
+          routes: validation.routes.filter(
+            (route) => route.kind === 'fixed-card',
+          ),
+          warnings: [
+            {
+              code: 'type-unavailable',
+              message: 'The definition of Post is not available',
+              position: posts.position,
+              path: '/posts/:slug',
+              dropped: true,
+            },
+          ],
+          complete: false,
+        };
+      };
+      try {
+        let response = await page('posts/hello');
+        assert.strictEqual(response.status, 503, 'not a 404');
+        let other = await page('no-route/here');
+        assert.notStrictEqual(
+          other.status,
+          503,
+          'a path the dropped route does not match is served as before',
+        );
+      } finally {
+        testRealm.getHostRoutes = getHostRoutes;
       }
     });
 

@@ -643,17 +643,11 @@ module(basename(import.meta.filename), function () {
           'the fixed routing map is cached with it',
         );
 
-        // Neither type can be read: one module doesn't exist and the other
-        // fails to render. A failed background read leaves the cache as it is.
-        await testRealm.__testOnlyHostRouteTypeWarmups();
-        assert.strictEqual(await testRealm.getHostRoutes(), first);
-
         // Once the retry time passes, the routes and their types are read again.
         testRealm.__testOnlyRetryHostRoutesNow();
         let retried = await testRealm.getHostRoutes();
         assert.notStrictEqual(retried, first, 'the routes are read again');
         assert.false(retried.complete);
-        await testRealm.__testOnlyHostRouteTypeWarmups();
       });
 
       test('a module whose cached render failed is not final', async function (assert) {
@@ -696,7 +690,6 @@ module(basename(import.meta.filename), function () {
           [['type-unavailable', true]],
           'the route is dropped for now, not as a missing export',
         );
-        await testRealm.__testOnlyHostRouteTypeWarmups();
       });
     },
   );
@@ -821,10 +814,9 @@ module(basename(import.meta.filename), function () {
         [['type-unavailable', '/nope/:slug', true]],
         'the missing export is dropped for now, not as final',
       );
-      await testRealm.__testOnlyHostRouteTypeWarmups();
     });
 
-    test('a type whose cached render failed is rendered again in the background', async function (assert) {
+    test('a type whose cached render failed is rendered again once its error row expires', async function (assert) {
       // A failed render of the module, as the definitions cache holds it
       // (no definitions), old enough that its error row has expired.
       let rows = (await dbAdapter.execute(
@@ -850,58 +842,31 @@ module(basename(import.meta.filename), function () {
       )) as { url: string }[];
       assert.ok(rows.length > 0, 'the definitions cache holds the module');
 
-      let first = await testRealm.getHostRoutes();
-      assert.false(first.complete, 'the failed render is not final');
-      assert.ok(
-        first.warnings.some(
-          (w) => w.code === 'type-unavailable' && w.path === '/cities/:city',
-        ),
-        'the route is dropped for now',
-      );
-
-      await testRealm.__testOnlyHostRouteTypeWarmups();
-
-      let second = await testRealm.getHostRoutes();
-      assert.true(second.complete, 'the module rendered again');
+      let { complete, routes } = await testRealm.getHostRoutes();
+      assert.true(complete, 'the module rendered again');
       assert.deepEqual(
-        second.routes.map((route) => route.fullPath),
+        routes.map((route) => route.fullPath),
         ['/cities/:city'],
       );
     });
 
-    test('reads a type that is not cached into the cache in the background', async function (assert) {
+    test('reads a type that is not cached through the cache', async function (assert) {
       // The server clears the definitions cache when it starts, and a realm
       // that boots on its existing index doesn't render its modules again.
       await definitionLookup.clearRealmDefinitions(realmURL.href);
 
-      let first = await testRealm.getHostRoutes();
-      assert.false(first.complete, 'the types are not cached yet');
-      let unavailable = first.warnings
-        .filter((w) => w.code === 'type-unavailable')
-        .map((w) => w.path);
-      assert.ok(
-        unavailable.includes('/cities/:city'),
-        'the route is dropped for now',
-      );
-      assert.ok(
-        unavailable.includes('/nope/:slug'),
-        'the route with the missing export is dropped for now',
-      );
-
-      await testRealm.__testOnlyHostRouteTypeWarmups();
-
-      let second = await testRealm.getHostRoutes();
-      assert.true(second.complete, 'the types are cached now');
+      let validation = await testRealm.getHostRoutes();
+      assert.true(validation.complete, 'the types are read on the first call');
       assert.deepEqual(
-        second.warnings.map((w) => [w.code, w.path, w.dropped]),
+        validation.warnings.map((w) => [w.code, w.path, w.dropped]),
         [['not-card-type', '/nope/:slug', true]],
       );
       assert.deepEqual(
-        second.routes.map((route) => route.fullPath),
+        validation.routes.map((route) => route.fullPath),
         ['/cities/:city'],
       );
       assert.strictEqual(
-        second.routes[0]?.routes[0]?.fullPath,
+        validation.routes[0]?.routes[0]?.fullPath,
         '/cities/:city/:venue',
       );
     });
