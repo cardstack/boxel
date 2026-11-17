@@ -16,7 +16,8 @@
 //
 // A row past its expiry reads as missing, whether or not it has been deleted.
 // Each store first deletes rows that have expired, so abandoned flows and
-// error pages nobody opened don't pile up.
+// error pages nobody opened don't pile up, and the daily cleanup deletes any
+// left while nothing is being stored (`cleanup.ts`).
 
 import { createHash, randomBytes } from 'crypto';
 import { errors, type Adapter, type AdapterPayload } from 'oidc-provider';

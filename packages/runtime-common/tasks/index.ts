@@ -15,6 +15,7 @@ import type { MeteredCharges } from '../metered-charges.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { MintRunToken } from './run-automation.ts';
 import type { AutomationAdmissionChecks } from '../automation-admission.ts';
+import type { OAuthProviderCleanup } from './oauth-provider-cleanup.ts';
 export type * from './lint.ts';
 export * from '#lint-task';
 export * from './full-reindex.ts';
@@ -23,6 +24,7 @@ export * from './automation-storage-charge.ts';
 export * from './automation-tick.ts';
 export * from './indexer.ts';
 export * from './media-cache-gc.ts';
+export * from './oauth-provider-cleanup.ts';
 export * from './scoped-css-gc.ts';
 export * from './prerender-html.ts';
 export * from './prerender-html-reconcile.ts';
@@ -83,6 +85,9 @@ export interface TaskArgs {
   // without it, such as a test harness's, measures what it would charge and
   // writes nothing.
   meteredCharges?: MeteredCharges;
+  // Deletes the OAuth provider's expired and unused rows. Optional: a worker
+  // without it, such as a test harness's, deletes nothing.
+  oauthProviderCleanup?: OAuthProviderCleanup;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
   reportProgress?(event: IndexingProgressEvent): void;
   // Request that a realm event be broadcast to subscribed hosts. A task runs

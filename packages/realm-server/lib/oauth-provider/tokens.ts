@@ -18,7 +18,7 @@
 
 import { errors, type AdapterPayload } from 'oidc-provider';
 import { logger, param, type DBAdapter } from '@cardstack/runtime-common';
-import { endGrant } from './grants.ts';
+import { endGrant, markGrantExchanged } from './grants.ts';
 import {
   OAuthProviderAdapter,
   OAuthProviderObjectError,
@@ -169,6 +169,7 @@ export class TokenAdapter extends OAuthProviderAdapter {
       log.info(`token not stored: grant ended`);
       throw new errors.InvalidGrant('grant has ended');
     }
+    await markGrantExchanged(this.#dbAdapter, payload.grantId);
     if (Math.random() * EXPIRED_SWEEP_ONE_IN < 1) {
       // Rows another request is deleting are skipped, not waited for.
       await this.#dbAdapter.execute(

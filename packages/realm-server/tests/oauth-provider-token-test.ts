@@ -37,6 +37,8 @@ import {
   telemetryDuring,
 } from './helpers/oauth-provider-secrets.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
+import { testOAuthSecureOriginURL } from './helpers/oauth-provider.ts';
+import { deleteExpiredOAuthProviderRows } from '../lib/oauth-provider/cleanup.ts';
 import {
   endGrant,
   revokeUserOAuthGrants,
@@ -997,6 +999,136 @@ module(basename(import.meta.filename), function () {
           response.headers['access-control-allow-origin'],
           'http://localhost:6274',
         );
+      });
+    });
+
+    module('the daily cleanup', function () {
+      test('exchanging the code marks the grant and its client connected, once', async function (assert) {
+        let { clientId, code } = await codeFor();
+        let marks = async () =>
+          (
+            (await db().execute(
+              `SELECT g.exchanged_at, c.last_connected_at
+                 FROM oauth_provider_grants AS g
+                 JOIN oauth_provider_dynamic_clients AS c
+                   ON c.client_id = g.client_id
+                WHERE g.client_id = $1`,
+              { bind: [clientId] },
+            )) as {
+              exchanged_at: string | Date | null;
+              last_connected_at: string | Date | null;
+            }[]
+          )[0];
+        assert.deepEqual(
+          await marks(),
+          { exchanged_at: null, last_connected_at: null },
+          'nothing is marked before the exchange',
+        );
+        let exchange = await exchangeOAuthCode(server(), clientId, code);
+        assert.strictEqual(exchange.status, 200, exchange.text);
+        let first = await marks();
+        assert.ok(first.exchanged_at, 'the exchange marks the grant');
+        assert.ok(first.last_connected_at, 'and its client');
+
+        await db().execute(
+          `UPDATE oauth_provider_grants
+              SET exchanged_at = exchanged_at - interval '1 hour'`,
+        );
+        let refresh = await refreshOAuthTokens(
+          server(),
+          clientId,
+          (exchange.body as OAuthTokenResponse).refresh_token!,
+        );
+        assert.strictEqual(refresh.status, 200, refresh.text);
+        let later = await marks();
+        assert.strictEqual(
+          new Date(later.exchanged_at!).getTime(),
+          new Date(first.exchanged_at!).getTime() - 60 * 60 * 1000,
+          'a refresh leaves the first exchange as it was',
+        );
+      });
+
+      test('a refresh token past its expiry is refused before the cleanup deletes it', async function (assert) {
+        let { clientId, tokens } = await tokensFor();
+        await db().execute(
+          `UPDATE oauth_provider_tokens SET expires_at = now() - interval '1 second'
+            WHERE kind = 'RefreshToken'`,
+        );
+        let response = await refreshOAuthTokens(
+          server(),
+          clientId,
+          tokens.refresh_token!,
+        );
+        assert.strictEqual(response.status, 400, response.text);
+        assert.strictEqual(response.body.error, 'invalid_grant');
+        assert.strictEqual(
+          (await tokenRows()).filter(({ kind }) => kind === 'RefreshToken')
+            .length,
+          1,
+          'the row is still there',
+        );
+        let [grant] = await grants();
+        assert.false(grant.ended, 'and the grant is not ended');
+      });
+
+      test('a client the cleanup deleted is unknown, and can register again', async function (assert) {
+        let { clientId, tokens } = await tokensFor();
+        // As though the user disconnected the app 31 days ago.
+        await db().execute(
+          `UPDATE oauth_provider_grants
+              SET ended_at = now() - interval '31 days', ended_reason = 'user'`,
+        );
+        await db().execute(
+          `UPDATE oauth_provider_dynamic_clients
+              SET created_at = now() - interval '62 days',
+                  last_connected_at = now() - interval '61 days'`,
+        );
+        let deleted = await deleteExpiredOAuthProviderRows(db());
+        assert.strictEqual(deleted.dynamicClients, 1, 'the client is deleted');
+
+        let refresh = await refreshOAuthTokens(
+          server(),
+          clientId,
+          tokens.refresh_token!,
+        );
+        assert.strictEqual(refresh.status, 401, refresh.text);
+        assert.strictEqual(
+          refresh.body.error,
+          'invalid_client',
+          'the token endpoint no longer knows the client',
+        );
+
+        let authorize = await supertest(server())
+          .get(
+            `/_oauth-provider/auth?${new URLSearchParams({
+              client_id: clientId,
+              response_type: 'code',
+              redirect_uri: OAUTH_TEST_WEB_REDIRECT_URI,
+              scope: 'boxel:read',
+              resource: OAUTH_TEST_MCP,
+              code_challenge: OAUTH_TEST_CODE_CHALLENGE,
+              code_challenge_method: 'S256',
+            })}`,
+          )
+          .set('Host', OAUTH_TEST_SERVER_URL.host);
+        assert.strictEqual(authorize.status, 303, authorize.text);
+        let reference = new URL(authorize.headers.location).searchParams.get(
+          'error',
+        );
+        assert.ok(reference, 'authorization ends on the error page');
+        let details = await supertest(server())
+          .get(`/_oauth-provider/error/${reference}`)
+          .set('Host', OAUTH_TEST_SERVER_URL.host)
+          .set('Origin', testOAuthSecureOriginURL.origin);
+        assert.strictEqual(
+          details.body.reason,
+          'unknown-client',
+          'which says the client is unknown',
+        );
+
+        let again = await tokensFor();
+        assert.notStrictEqual(again.clientId, clientId, 'a new client ID');
+        assert.ok(again.tokens.access_token, 'which connects as before');
       });
     });
   });

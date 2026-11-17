@@ -26,6 +26,12 @@ import {
   createMediaCacheGcCronJob,
 } from './media-cache-gc-config.ts';
 import { enqueueScopedCssGc } from '../scripts/scoped-css-gc.ts';
+import { enqueueOAuthProviderCleanup } from '../scripts/oauth-provider-cleanup.ts';
+import {
+  OAUTH_PROVIDER_CLEANUP_CRON_SCHEDULE,
+  OAUTH_PROVIDER_CLEANUP_CRON_TZ,
+  createOAuthProviderCleanupCronJob,
+} from './oauth-provider-cleanup-config.ts';
 import { enqueueAutomationStorageCharge } from '../scripts/automation-storage-charge.ts';
 import {
   AUTOMATION_STORAGE_CHARGE_CRON_SCHEDULE,
@@ -73,6 +79,8 @@ export function startCronJobs(): void {
   if (scopedCssGcJob) {
     jobs.push(scopedCssGcJob);
   }
+
+  jobs.push(startOAuthProviderCleanupCron());
 
   jobs.push(startAutomationStorageChargeCron());
 
@@ -173,6 +181,26 @@ function startMediaCacheGcCron(): CronJob | undefined {
   job.start();
   log.info(
     `media-cache-gc cron scheduled for ${MEDIA_CACHE_GC_CRON_SCHEDULE} ${MEDIA_CACHE_GC_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startOAuthProviderCleanupCron(): CronJob {
+  let job = createOAuthProviderCleanupCronJob(
+    async () => {
+      try {
+        await enqueueOAuthProviderCleanup();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('oauth-provider-cleanup cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `oauth-provider-cleanup cron scheduled for ${OAUTH_PROVIDER_CLEANUP_CRON_SCHEDULE} ${OAUTH_PROVIDER_CLEANUP_CRON_TZ}`,
   );
   return job;
 }

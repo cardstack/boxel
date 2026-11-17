@@ -13,7 +13,8 @@ import {
   type RateLimitStore,
 } from '@cardstack/runtime-common';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
-import { newDynamicClientId, oauthProviderAdapter } from './adapter.ts';
+import { oauthProviderAdapter } from './adapter.ts';
+import { newDynamicClientId } from './dynamic-client-id.ts';
 import type { CallerLimit } from './caller-limit.ts';
 import {
   authorizationHandler,

@@ -60,6 +60,7 @@ import { getInstanceId } from './lib/instance-id.ts';
 import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
 import { checkPricingAtStartup } from './lib/pricing.ts';
 import { meteredChargesFor } from './lib/metered-charge.ts';
+import { deleteExpiredOAuthProviderRows } from './lib/oauth-provider/cleanup.ts';
 import { buildMintRunToken } from './lib/run-token.ts';
 import { buildAutomationAdmissionChecks } from './lib/automation-admission-checks.ts';
 
@@ -293,6 +294,7 @@ let autoMigrate = migrateDB || undefined;
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
     meteredCharges: meteredChargesFor(dbAdapter),
+    oauthProviderCleanup: () => deleteExpiredOAuthProviderRows(dbAdapter),
   });
 
   await worker.run();
