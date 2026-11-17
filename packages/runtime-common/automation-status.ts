@@ -32,6 +32,7 @@ import {
   readLastRunMilestones,
   type RunMilestones,
 } from './automation-run-milestones.ts';
+import { WEBHOOK_DELIVERIES_START_RUNS } from './automation-webhooks.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
 import { dbAdapterQuerier } from './expression.ts';
@@ -80,11 +81,15 @@ export type AutomationCurrentRun = RunMilestones;
 export type AutomationStatusAttributes =
   | {
       switchedOn: false;
+      // Whether Boxel starts runs from webhook deliveries; the card warns
+      // under each webhook trigger while it is false.
+      webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
     }
   | {
       switchedOn: true;
+      webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
       state: AutomationState;
@@ -254,6 +259,7 @@ export function automationStatusDocument({
       attributes: row
         ? {
             switchedOn: true,
+            webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
             state: row.state,
             pauseReason: row.pauseReason,
             pauseProblems: row.pauseProblems,
@@ -268,7 +274,12 @@ export function automationStatusDocument({
             lastRun,
             currentRun,
           }
-        : { switchedOn: false, lastRun, currentRun },
+        : {
+            switchedOn: false,
+            webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
+            lastRun,
+            currentRun,
+          },
     },
   };
 }

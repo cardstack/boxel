@@ -37,12 +37,18 @@ import {
 export const AUTOMATION_WEBHOOKS_PATH = '_automation-webhooks';
 export const AUTOMATION_WEBHOOK_TYPE = 'automation-webhook';
 
-// A code for a notice the switch-on routes attach while webhook deliveries
-// start no automation runs: the receiver matches a delivery only against
-// `webhook_commands`, so a webhook trigger never fires and is never spent.
+// Whether the webhook receiver starts automation runs from deliveries. It
+// matches a delivery only against `webhook_commands`, so a webhook trigger
+// never fires and is never spent. The status route, the webhook list and the
+// switch-on routes report this, and the card warns under each webhook trigger
+// while it is false.
+export const WEBHOOK_DELIVERIES_START_RUNS = false;
+
+// A code for the notice the switch-on routes attach while webhook deliveries
+// start no automation runs.
 export const WEBHOOK_TRIGGERS_START_NO_RUNS = 'webhook-triggers-start-no-runs';
 export const WEBHOOK_TRIGGERS_START_NO_RUNS_MESSAGE =
-  'Boxel starts no automation runs from webhook deliveries yet, so the webhook triggers on this automation never fire. A schedule or a one-time trigger still runs the automation.';
+  'The webhook triggers can’t fire, Boxel doesn’t run automations from webhooks.';
 
 export interface AutomationNotice {
   code: typeof WEBHOOK_TRIGGERS_START_NO_RUNS;
@@ -54,7 +60,8 @@ export interface AutomationNotice {
 export function switchOnNotices(
   declaration: Pick<AutomationDeclaration, 'triggers'>,
 ): AutomationNotice[] {
-  return declaration.triggers.some((trigger) => trigger.kind === 'webhook')
+  return !WEBHOOK_DELIVERIES_START_RUNS &&
+    declaration.triggers.some((trigger) => trigger.kind === 'webhook')
     ? [
         {
           code: WEBHOOK_TRIGGERS_START_NO_RUNS,
@@ -120,7 +127,7 @@ export async function unusableWebhookProblems(
       problems.push({
         code: 'foreign-webhook',
         path,
-        message: `The incoming webhook "${trigger.webhookPath}" belongs to someone the workspace doesn’t name as an editor. Pick one of the workspace’s webhooks for the "${trigger.label}" trigger`,
+        message: `The incoming webhook "${trigger.webhookPath}" doesn’t belong to a workspace administrator. Pick one of the workspace’s webhooks for the "${trigger.label}" trigger`,
       });
     }
   }
@@ -143,6 +150,7 @@ export interface AutomationWebhooksDocument {
     id: string;
     attributes: AutomationWebhook;
   }[];
+  meta: { webhookDeliveriesStartRuns: boolean };
 }
 
 export type AutomationWebhooksAnswer =
@@ -203,6 +211,7 @@ export async function answerAutomationWebhooks({
           createdAt: new Date(row.created_at).toISOString(),
         },
       })),
+      meta: { webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS },
     },
   };
 }

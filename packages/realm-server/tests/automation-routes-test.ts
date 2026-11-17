@@ -345,7 +345,7 @@ module(basename(import.meta.filename), function (hooks) {
       let foreign = await switchOnHooked();
       assert.strictEqual(foreign.status, 422, foreign.text);
       assert.ok(
-        foreign.text.includes('the workspace doesn’t name as an editor'),
+        foreign.text.includes('doesn’t belong to a workspace administrator'),
         foreign.text,
       );
       assert.strictEqual(

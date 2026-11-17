@@ -249,14 +249,8 @@ module('Acceptance | automation view', function (hooks) {
       );
     assert
       .dom('[data-test-automation-webhook-notice]')
-      .exists(
-        { count: 1 },
-        'the webhook trigger, and no other, says deliveries start no runs',
-      );
-    assert
-      .dom('[data-test-automation-webhook-notice]')
-      .hasText(
-        'Boxel doesn’t start runs from webhook deliveries yet, so this trigger never fires. A schedule or a one-time trigger still runs the automation.',
+      .doesNotExist(
+        'without the server status, the card says nothing about webhook runs',
       );
 
     await openFormat('embedded');
@@ -275,6 +269,11 @@ module('Acceptance | automation view', function (hooks) {
     };
     await openIsolated();
     await waitForStatus();
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .doesNotExist(
+        'a server that starts runs from webhooks, or says nothing, gets no warning',
+      );
     assert.dom('[data-test-automation-state="Off"]').exists();
     assert.dom('[data-test-automation-header-state="Off"]').exists();
     assert
@@ -286,6 +285,27 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-trigger-progress]').doesNotExist();
   });
 
+  test('each webhook trigger warns that the trigger can’t fire while the server starts no runs from webhooks', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        switchedOn: false,
+        webhookDeliveriesStartRuns: false,
+        lastRun: null,
+        currentRun: null,
+      },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-webhook-notice]', { timeout: 10000 });
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .exists({ count: 1 }, 'the webhook trigger, and no other, warns');
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .hasText(
+        'This trigger can’t fire, Boxel doesn’t run automations from webhooks.',
+      );
+  });
   test("an active automation shows its payer, next run and each trigger's progress", async function (assert) {
     answer = { status: 200, attributes: ACTIVE };
     await openIsolated();
@@ -879,7 +899,7 @@ module('Acceptance | automation view', function (hooks) {
       [
         { state: 'paused', pauseReason: 'webhook-changed' },
         'Paused',
-        'Someone pointed a trigger at an incoming webhook the payer didn’t agree to, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and agrees to the new webhook.',
+        'A workspace administrator pointed a trigger at an incoming webhook the payer didn’t agree to, so Boxel paused the automation. Boxel runs nothing until a workspace administrator resumes the automation and agrees to the new webhook.',
       ],
       [
         { state: 'paused', pauseReason: 'payer-lost-access' },

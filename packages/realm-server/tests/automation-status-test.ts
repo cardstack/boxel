@@ -287,7 +287,12 @@ module(basename(import.meta.filename), function (hooks) {
         data: {
           type: 'automation-status',
           id: automationURL(),
-          attributes: { switchedOn: false, lastRun: null, currentRun: null },
+          attributes: {
+            switchedOn: false,
+            webhookDeliveriesStartRuns: false,
+            lastRun: null,
+            currentRun: null,
+          },
         },
       });
     });
@@ -831,6 +836,9 @@ module(basename(import.meta.filename), function (hooks) {
             owner: PAYER,
           },
         ]);
+        assert.deepEqual(response.body.meta, {
+          webhookDeliveriesStartRuns: false,
+        });
         assert.notOk(
           JSON.stringify(response.body).includes('secret'),
           'no signing secret is listed',

@@ -325,6 +325,7 @@ module('Acceptance | automation edit format', function (hooks) {
                 verificationType: 'HMAC_SHA256_HEADER',
               },
             })),
+            meta: { webhookDeliveriesStartRuns: false },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
@@ -654,7 +655,7 @@ module('Acceptance | automation edit format', function (hooks) {
       assert
         .dom('[data-test-automation-webhook-notice]', item)
         .hasText(
-          'Boxel doesn’t start runs from webhook deliveries yet, so this trigger never fires. A schedule or a one-time trigger still runs the automation.',
+          'This trigger can’t fire, Boxel doesn’t run automations from webhooks.',
         );
       let options = await openPicker(item);
       assert.deepEqual(
@@ -693,7 +694,7 @@ module('Acceptance | automation edit format', function (hooks) {
       await waitFor('[data-test-automation-webhook-picker]');
       assert.strictEqual(
         messageOf('Webhook', item),
-        'Pick one of this workspace’s incoming webhooks: Boxel turns the automation on only with a webhook that someone the workspace names as an editor made',
+        'Pick one of this workspace’s incoming webhooks: Boxel turns the automation on only with a webhook that a workspace administrator made',
       );
       let shown = await openPicker(item);
       assert.deepEqual(
@@ -714,7 +715,7 @@ module('Acceptance | automation edit format', function (hooks) {
       assert
         .dom('[data-test-automation-webhook-picker-empty]', item)
         .includesText(
-          'Nobody the workspace names as an editor has made an incoming webhook yet',
+          'No workspace administrator has made an incoming webhook.',
         );
     });
   });
