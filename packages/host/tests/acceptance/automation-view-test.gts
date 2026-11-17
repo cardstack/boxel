@@ -373,7 +373,7 @@ module('Acceptance | automation view', function (hooks) {
 
   test("an automation event naming the automation makes the view ask its status again, and one naming another automation doesn't", async function (assert) {
     // Switching an automation on, pausing, resuming or removing it changes
-    // its row and moves no run, so the realm tells its direct writers with an
+    // its row and not its card, so the realm tells its direct writers with an
     // `automation` event, the way the realm server sends one into a writer's
     // session room.
     function simulateAutomationChange(automation: string) {
@@ -423,7 +423,7 @@ module('Acceptance | automation view', function (hooks) {
     );
     assert
       .dom('[data-test-automation-status]')
-      .doesNotIncludeText('while paused');
+      .doesNotIncludeText('Next run None');
   });
 
   test("the card lists the milestones of the automation's last run from the run", async function (assert) {
