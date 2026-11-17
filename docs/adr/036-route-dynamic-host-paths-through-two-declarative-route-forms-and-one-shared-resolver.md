@@ -140,8 +140,8 @@ filled from the values alone, so the route's `where` isn't checked and the
 address MAY answer not-found. Route names SHOULD be used only by a site's own
 cards, such as its frame, home page and listings. A shared card type SHOULD
 use the card or type form. Each link that doesn't resolve MUST be recorded as
-a warning in the `diagnostics` of the index row of the card that rendered it
-(`boxel_index.diagnostics`). How the warnings are shown to the author is not
+a warning in the `diagnostics` of the prerendered HTML row of the card that
+rendered it (`prerendered_html.diagnostics`). How the warnings are shown to the author is not
 decided here.
 
 ### 1.9. No route cache, and no memory of old addresses
