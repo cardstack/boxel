@@ -92,9 +92,8 @@ The server MUST read routes only through `validateHostRoutes`
 validation MUST be dropped with a warning, with its child routes. A field
 match's type MUST be read through the definitions cache
 (`lookupDefinitionEntry`), as a search reads it, so a request that finds the
-cache empty waits for the read. On a cache miss, the read runs the type's
-module in the prerender only to learn its fields. The routes still make
-every routing decision, so this read is not one under ADR 015 §1.1. When the
+cache empty waits for the read. On a cache miss, the read is a module visit
+in the prerender server, which ADR 015 §1.1 allows while a request waits. When the
 read fails, the route MUST be dropped for now and the validation marked
 incomplete, and a path the route could answer MUST get 503, not not-found.
 Validation MUST drop each
@@ -108,7 +107,7 @@ The server MUST put the validated route tree, with `complete`, into the
 page's host config as `hostDynamicRoutes`. For a dynamically routed page it
 MUST also add a serve rule for exactly the requested path to
 `hostRoutingMap`. A realm MUST also serve its validated route tree from a
-read-only endpoint, which the prerender and interact mode read once per
+read-only endpoint, which HTML visits and interact mode read once per
 realm and again after the realm is indexed. The endpoint MUST answer only a
 visitor who can read the realm. A reader MUST NOT validate the tree again.
 The tree, each `where` included, is as visible as the realm, so a route MUST
@@ -117,25 +116,25 @@ NOT hold anything a reader of the realm must not see.
 ### 1.7. Addresses are worked out from the routes, never on the way out
 
 A link's routed address MUST be worked out when the card renders, at
-prerender and in the browser, by `hostRouteAddress`. It MUST be synchronous
+HTML visit and in the browser, by `hostRouteAddress`. It MUST be synchronous
 over cards already loaded, and MUST NOT load a card or search. It MUST stop
 at the first route in canonical order that it can't decide yet (a card,
 parent or value not loaded) and give no address, instead of trying a later
 route. When a link needs a card that isn't loaded, the link helper MUST ask
 the store for it and give the card's own URL until it arrives, then the
-address. The prerender MUST wait for those loads before it stores the HTML.
+address. The HTML visit MUST wait for those loads before it stores the HTML.
 A link to a nested route MAY give one card or id for each dynamic level
 (`{{hrefTo category product}}`). Given only the child, the parent MUST come
 from the child's link to it, and when only the parent holds the link, the
 link MUST fall back to the card's own URL. Where the server needs a card's canonical address, as for an alias's 301, it
 MUST work it out from index data, as the visitor, through the same canonical
-route walk. Both MUST give the same address for the same card, at prerender
-and in the browser alike. An address MUST be the routed path on the realm's
+route walk. Both MUST give the same address for the same card, in the HTML
+visit and in the browser alike. An address MUST be the routed path on the realm's
 URL, and the stored HTML MUST carry it. The server MUST NOT work out a
 routed address when a response leaves it. Putting the canonical host URL in
 place of the realm's URL at that boundary is ADR 033 §1.5: a prefix swap
-with no route lookup. A change to the realm's routes MUST prerender the realm
-again. A link into another realm MUST keep that card's own URL.
+with no route lookup. A change to the realm's routes MUST run the realm's HTML
+visits again. A link into another realm MUST keep that card's own URL.
 
 ### 1.8. Links are portable across realms
 
@@ -168,7 +167,7 @@ old path.
 Exact paths need one rule per card [1] (ADR 015 §3). Neither form computes,
 so routing needs no interpreter (ADR 015 §1.4). Both forms invert, so an
 address leads back to its card [1] and can be worked out from loaded cards
-in the prerender and the browser alike [5]. The two forms cover the routes
+in the HTML visit and the browser alike [5]. The two forms cover the routes
 of the earlier build's five demo sites [10]. A field match lets each route
 choose its field, and a card id template serves cards that have no such
 field, so no card type needs a routing field of its own [10]. Routes are a
@@ -198,9 +197,9 @@ its fields and its `where` check. On the way out, the server would have to
 parse the HTML and look up each link on every response. With the address in
 the stored HTML, a page is correct with no work per request [10]. The
 reverse lookup stops at a route it can't decide yet, because a later route's
-address would not be canonical, and the prerender and the browser would
+address would not be canonical, and the HTML visit and the browser would
 disagree once the card loads [5]. It doesn't search, because it must be
-synchronous and give the same answer at prerender and in the browser [10].
+synchronous and give the same answer in the HTML visit and in the browser [10].
 A nested link may give a card per level, so a template that has both cards
 loads nothing more and picks the parent when there are several. One card
 also works, because the alias 301, a card's own path, the sitemap and
@@ -208,7 +207,7 @@ also works, because the alias 301, a card's own path, the sitemap and
 [5][12]. The server never holds a loaded card (ADR 015 §1.1), so its canonical address
 comes from the index [9]. The stored HTML keeps the realm's URL, and ADR
 033's prefix swap puts in the host URL, so a change of host URL needs no new
-prerender [11]. Until host URLs serve a realm directly, a site is a published
+HTML visits [11]. Until host URLs serve a realm directly, a site is a published
 realm whose own URL is its public address, so no swap is needed [11].
 
 A link with no route renders with no `href` instead of failing, as Rails and

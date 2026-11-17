@@ -28,17 +28,23 @@ A routing decision is any choice the realm server makes about a request from
 a realm's routing configuration: which card to serve, whether to redirect, and
 where. The realm server MUST NOT run JavaScript that a realm's author wrote to
 make a routing decision. It MUST NOT `import` a realm module, or run authored
-source through `eval`, `new Function`, `node:vm`, or a worker. It MUST NOT ask
-the prerender to run card code for a routing decision while a request waits.
-A request MAY wait for a card type's definition read through the definitions
-cache, as a search does, even when the read runs the type's module in the
-prerender: the module only reports the type's fields, and the rules still
-make the decision.
+source through `eval`, `new Function`, `node:vm`, or a worker.
+
+The prerender server is the service that runs card code in a headless
+browser. It does two kinds of work. A **card visit** (`prerenderVisit`)
+renders one card: its index visit writes the card's index row, and its HTML
+visit renders the card's formats into prerendered HTML. A **module visit**
+(`prerenderModule`) loads one module and reports its definitions, such as a
+card type's fields. While a request waits, the realm server MUST NOT ask the
+prerender server to run card code whose output makes a routing decision,
+such as a routing function or a card visit. A request MAY wait on a module
+visit for a type's definition, read through the definitions cache as a search
+reads it.
 
 ### 1.2. Rules reach the server as data
 
 The realm server MUST take routing rules as JSON data, read from `realm.json`
-or its index entry. Card code MAY compute those rules when the prerender
+or its index entry. Card code MAY compute those rules in the card visit that
 indexes `realm.json`.
 
 The realm server MUST validate each rule every time it reads one, and MUST
@@ -65,7 +71,7 @@ pattern to a regular expression.
 One realm server process serves every realm on it. Code a realm's author
 writes in that process can read other realms' files, the database and the
 server's secrets, and can stall every realm the process serves. Card code
-runs in the browser and the prerender, which are built to contain it. The
+runs in the browser and the prerender server, which are built to contain it. The
 realm server is not, and routing runs on its request path.
 
 Authors still need routing that does more than map one path to one card, so
@@ -77,14 +83,17 @@ its `test`, `match` and `LIKE` compile authored patterns for JavaScript's
 `RegExp`. A routing feature that uses BXL has to run it under a profile that
 excludes them.
 
-Card code may compute the rules because the prerender runs it, once each time
-`realm.json` is indexed, and not while a request waits. A realm can make
+Card code may compute the rules because the prerender server runs it, in the
+card visit each time `realm.json` is indexed, and not while a request waits. A realm can make
 `realm.json` adopt from its own card definition, or edit the file by hand, so
 what reaches the realm server is data from an untrusted author. The server
-validates it for that reason. A definition read is different: the module runs
-in the prerender, as it does for every search on a cold cache, and what comes
-back is the type's fields, which no authored code turns into a routing
-decision.
+validates it for that reason.
+
+A module visit for a definition is different. What it reports describes a
+type, and no authored code turns that into a routing decision: the rules
+still decide. The definitions cache keeps the result, so a module is visited
+once, not once for each request, and an author can't tie up the prerender
+server with requests. A search waits on module visits for the same reason.
 
 ## 3. Considered options
 
@@ -94,16 +103,16 @@ decision.
   most expressive option. A sandbox such as `node:vm` is not a security
   boundary, and isolating each realm in its own process would cost a process
   on every routed request.
-- **Routing functions in card code, run in the prerender.** The prerender
-  contains card code, but a request would wait on a browser render. That is
-  slow, and an author could tie up the shared prerender pool with requests to
-  their own routes.
+- **Routing functions in card code, run in the prerender server.** The
+  prerender server contains card code, but each request would wait on a
+  browser render. That is slow, and an author could tie up the shared
+  prerender server with requests to their own routes.
 - **Authored regular expressions or path-to-regexp patterns.** Developers
   know these, but they compile to backtracking regular expressions, and one
   slow pattern can stall the server for every realm (ReDoS).
 - **Rules only from `realm.json`'s stored attributes.** This keeps card code
   out of the rules entirely. It isn't needed for safety: the prerender
-  already contains card code, and the server validates what it produces.
+  server already contains card code, and the server validates what it produces.
 - **Exact paths only.** This is safe, but it gives a realm no way to route a
   family of URLs, such as `/posts/:slug`, without a rule for each card.
 
