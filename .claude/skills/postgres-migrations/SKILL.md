@@ -89,3 +89,6 @@ when authoring a destructive change.
   against the newest migration across **both** directories.
 - `packages/realm-server/migrations/` is a **separate** migration system (not
   this one); don't conflate them.
+- **A migration that changes a realm's URL follows ADR 034 §1.2.** The
+  realm's `realm_registry.id` names its history repo, so the row is rewritten
+  in place, never replaced.

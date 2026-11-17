@@ -727,6 +727,114 @@ module('command runner', () => {
     assert.strictEqual(openedPRs.length, 0, 'does not open pull request');
   });
 
+  test('refuses a pr-listing-create trigger whose branch name no submission could have, before any step', async (assert) => {
+    let publishedJobs: unknown[] = [];
+    let queuePublisher: QueuePublisher = {
+      publish: async (job: unknown) => {
+        publishedJobs.push(job);
+        return {
+          id: 1,
+          done: Promise.resolve({
+            status: 'error',
+            error: 'permission denied',
+          }),
+        } as any;
+      },
+      destroy: async () => {},
+    };
+
+    let createdBranches: unknown[] = [];
+    let branchWrites: unknown[] = [];
+    let openedPRs: { params: unknown }[] = [];
+    let githubClient: GitHubClient = {
+      createBranch: async (params) => {
+        createdBranches.push(params);
+        return { ref: 'refs/heads/test', sha: 'abc123' };
+      },
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async (params) => {
+        branchWrites.push(params);
+        return { commitSha: 'def456' };
+      },
+      openPullRequest: async (params) => {
+        openedPRs.push({ params });
+        return { number: 1, html_url: 'https://example/pr/1' };
+      },
+    };
+
+    let commandsByRegistrationId = new Map<
+      string,
+      Record<string, PgPrimitive>[]
+    >([
+      [
+        'bot-registration-3',
+        [
+          {
+            command_filter: {
+              type: 'matrix-event',
+              event_type: 'app.boxel.bot-trigger',
+              content_type: 'pr-listing-create',
+            },
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
+          },
+        ],
+      ],
+    ]);
+    let dbAdapter = {
+      kind: 'pg',
+      notify: async () => {},
+      isClosed: false,
+      execute: async (sql: string, opts?: ExecuteOptions) => {
+        if (sql.includes('FROM bot_commands WHERE bot_id =')) {
+          let registrationId = opts?.bind?.[0];
+          if (typeof registrationId !== 'string') {
+            return [];
+          }
+          return commandsByRegistrationId.get(registrationId) ?? [];
+        }
+        return [];
+      },
+      close: async () => {},
+      getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
+      withFileWriteLocks: async (_url, _paths, fn) => fn(() => {}),
+      withUserCostLock: async (_userId, fn) => fn(),
+      withTransaction: async (fn) => fn(async () => []),
+    } as DBAdapter;
+
+    let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
+
+    await assert.rejects(
+      commandRunner.maybeEnqueueCommand(
+        '@alice:localhost',
+        {
+          type: 'pr-listing-create',
+          realm: 'http://localhost:4201/test/',
+          userId: '@alice:localhost',
+          input: {
+            roomId: '!abc123:localhost',
+            listingId: 'http://localhost:4201/test/Listing/1',
+            listingName: 'My Listing',
+            branchName: 'scripts',
+          },
+        },
+        'bot-registration-3',
+      ),
+      /'scripts' is not a submission branch name/,
+      'names the refused branch',
+    );
+
+    assert.strictEqual(publishedJobs.length, 0, 'runs no command');
+    assert.strictEqual(createdBranches.length, 0, 'does not create branch');
+    assert.strictEqual(
+      branchWrites.length,
+      0,
+      'does not write files to branch',
+    );
+    assert.strictEqual(openedPRs.length, 0, 'does not open pull request');
+  });
+
   test('patches prCreationError when create-pr-card fails after lint passes', async (assert) => {
     let submissionCardUrl =
       'http://localhost:4201/submissions/SubmissionWorkflowCard/abc-123';
