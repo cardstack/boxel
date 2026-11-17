@@ -10,9 +10,9 @@
 // no session to answer with, finishes the flow as denied.
 //
 // An address carrying `error` is a flow the provider refused before consent,
-// and the page shows that the request can't continue; it never starts consent
-// for it. So does an address whose interaction ID isn't one, without asking
-// the realm server anything.
+// and the page shows the error page (`error-page.gts`); it never starts
+// consent for it. An address whose interaction ID isn't one shows that the
+// request can't continue, without asking the realm server anything.
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
@@ -45,6 +45,7 @@ import { pageAwaitsData } from '../telemetry.ts';
 
 import Consent from './consent.gts';
 import { appNameShown } from './copy.ts';
+import ErrorPage from './error-page.gts';
 import Outcome from './outcome.gts';
 import RequestEnded from './request-ended.gts';
 
@@ -67,7 +68,8 @@ type State =
   | { name: 'unavailable' }
   | ConsentState
   | { name: 'leaving'; outcome: 'allowed' | 'denied'; details: ConsentDetails }
-  | { name: 'ended' };
+  | { name: 'ended' }
+  | { name: 'error' };
 
 // A refusal that means the flow can't be answered here any more: it expired,
 // was already answered, or the request was never one the provider would take.
@@ -134,6 +136,8 @@ export default class AuthorizePage extends Component {
       </MessagePage>
     {{else if (this.is 'ended')}}
       <RequestEnded />
+    {{else if (this.is 'error')}}
+      <ErrorPage @config={{this.config}} @visit={{this.visit}} />
     {{else}}
       <AuthContainer>
         <BusyMessage @title='Loading…' data-test-authorize-loading />
@@ -167,6 +171,9 @@ export default class AuthorizePage extends Component {
     window.addEventListener('pageshow', this.shown);
     if (this.request.kind === 'consent') {
       this.start();
+    } else if (this.request.kind === 'error') {
+      // The error page reports how its load ended.
+      this.page.state = { name: 'error' };
     } else {
       this.page.state = { name: 'ended' };
       this.visit.loaded();

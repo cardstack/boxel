@@ -24,9 +24,14 @@ import {
   telemetryDuring,
 } from './helpers/oauth-provider-secrets.ts';
 import {
+  AUTHORIZATION_REFUSAL_REASONS,
   InteractionAdapter,
   sha256Hex,
 } from '../lib/oauth-provider/objects.ts';
+import {
+  ERROR_REFERENCE,
+  ERROR_STATE_BY_REASON,
+} from '@cardstack/secure-origin/security/oauth-error-states.js';
 import { asTheIssuerServes } from '../lib/oauth-provider/serve.ts';
 import { appName } from '../lib/oauth-provider/app-name.ts';
 import {
@@ -182,6 +187,9 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
 
   return {
     get,
+    options(path: string) {
+      return supertest(server!).options(path).set('Host', serverURL.host);
+    },
     db: () => db!,
     async register(redirectUris: string[] = [REDIRECT_URI]): Promise<string> {
       let response = await supertest(server!)
@@ -344,6 +352,15 @@ module(basename(import.meta.filename), function () {
           preRegistered: new Set(['boxel-cli']),
         }),
         { kind: 'pre-registered', shown: 'Boxel CLI', verified: true },
+      );
+    });
+  });
+
+  module("the error page's states", function () {
+    test('every reason a refusal can give has a state on the error page, and the page knows no other', function (assert) {
+      assert.deepEqual(
+        Object.keys(ERROR_STATE_BY_REASON).sort(),
+        [...AUTHORIZATION_REFUSAL_REASONS].sort(),
       );
     });
   });
@@ -621,6 +638,10 @@ module(basename(import.meta.filename), function () {
         validParams(clientId, { scope: 'boxel:read openid' }),
       );
       let reference = errorReference(assert, refused.headers.location);
+      assert.ok(
+        ERROR_REFERENCE.test(reference),
+        'the error page accepts the reference as one',
+      );
 
       let found = await details(reference);
       assert.deepEqual(found.body, {
@@ -680,6 +701,33 @@ module(basename(import.meta.filename), function () {
         back.headers.location,
         `${AUTHORIZE_PAGE}?error=expired`,
       );
+    });
+
+    test("the secure origin's page can read an error's details across origins", async function (assert) {
+      let clientId = await server.register();
+      let refused = await server.authorize(
+        validParams(clientId, { prompt: 'none' }),
+      );
+      let reference = errorReference(assert, refused.headers.location);
+      let preflight = await server
+        .options(`/_oauth-provider/error/${reference}`)
+        .set('Origin', testOAuthSecureOriginURL.origin)
+        .set('Access-Control-Request-Method', 'GET')
+        .set(
+          'Access-Control-Request-Headers',
+          'x-boxel-logging-correlation-id',
+        );
+      assert.ok(preflight.ok, `preflight answered ${preflight.status}`);
+      assert.ok(preflight.headers['access-control-allow-origin']);
+      assert.ok(
+        /x-boxel-logging-correlation-id/i.test(
+          preflight.headers['access-control-allow-headers'] ?? '',
+        ),
+        'the telemetry header is allowed',
+      );
+      let found = await details(reference);
+      assert.strictEqual(found.status, 200);
+      assert.ok(found.headers['access-control-allow-origin']);
     });
 
     test("an error's details answer only the secure origin", async function (assert) {

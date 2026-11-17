@@ -30,6 +30,7 @@ const REALM_SERVER_ENDPOINTS = [
   '_oauth/connections',
   '_oauth/connections/complete',
   '_oauth-provider/consent/:id',
+  '_oauth-provider/error/:id',
   '_secure-window/context',
   '_secure-window/realms',
   '_secure-window/cards',

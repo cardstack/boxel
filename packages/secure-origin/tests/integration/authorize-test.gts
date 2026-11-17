@@ -706,7 +706,7 @@ module('Integration | authorize', function (hooks) {
     test('an error from the provider shows no consent, and asks nothing', async function (assert) {
       signedIn();
       await open(`?interaction=${INTERACTION}&error=expired`);
-      assert.dom('[data-test-authorize-ended]').exists();
+      assert.dom('[data-test-oauth-error="expired"]').exists();
       assert.dom('[data-test-authorize-consent]').doesNotExist();
       assert.strictEqual(servers.requests('realm-server').length, 0);
     });

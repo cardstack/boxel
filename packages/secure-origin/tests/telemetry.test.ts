@@ -46,6 +46,10 @@ describe('endpoint labels', () => {
         '_oauth-provider/consent/an-interaction-id',
         '_oauth-provider/consent/:id',
       ],
+      [
+        '_oauth-provider/error/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        '_oauth-provider/error/:id',
+      ],
       ['_secure-window/context', '_secure-window/context'],
       ['_secure-window/realms', '_secure-window/realms'],
       ['_secure-origin', '_secure-origin'],
