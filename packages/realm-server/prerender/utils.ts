@@ -438,16 +438,20 @@ async function waitForRoutePathSuffix(
         // index visit still carries `.json`. Normalize both ends or every
         // visit would wait out its timeout here.
         let withoutJson = (value: string) => value.replace(/\.json$/i, '');
-        if (
-          expectedId &&
-          withoutJson(decodeSegment(idSegment)) !== withoutJson(expectedId)
-        ) {
-          return false;
+        let pathIsThisRender =
+          (!expectedId ||
+            withoutJson(decodeSegment(idSegment)) ===
+              withoutJson(expectedId)) &&
+          (!expectedNonce || decodeSegment(nonceSegment) === expectedNonce);
+        if (pathIsThisRender) {
+          return true;
         }
-        if (expectedNonce && decodeSegment(nonceSegment) !== expectedNonce) {
-          return false;
-        }
-        return true;
+        // The path is the previous render's. Don't stop here: when this
+        // render's transition fails in the render route's model hook (for
+        // example, the card's module doesn't compile), the router aborts it
+        // and shows the error route without changing the URL. The path then
+        // never carries this render's id and nonce, and only the terminal
+        // check below can see the error.
       }
 
       // If the render has already entered a terminal state (error/unusable),
