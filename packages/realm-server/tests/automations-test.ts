@@ -64,6 +64,7 @@ import {
   createVirtualNetwork,
   insertIncomingWebhookRow,
   setupDB,
+  setupSecretsKeyring,
 } from './helpers/index.ts';
 import type { PgAdapter } from '@cardstack/postgres';
 import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
@@ -196,6 +197,7 @@ function rollsBackFirstTransaction(db: DBAdapter): DBAdapter {
 
 module(basename(import.meta.filename), function () {
   module('the automation row', function (hooks) {
+    setupSecretsKeyring(hooks);
     let dbAdapter: DBAdapter;
     let options: AutomationActorOptions;
 
