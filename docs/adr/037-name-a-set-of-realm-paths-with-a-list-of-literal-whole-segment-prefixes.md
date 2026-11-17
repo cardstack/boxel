@@ -52,7 +52,9 @@ A prefix MUST be literal: matching it MUST NOT read the caller, a target or the
 realm's settings, or evaluate anything. `*` and `:` MUST be refused as written,
 so that a pattern form can be added later without changing what any existing
 specifier means. A later pattern form MAY match path shapes, but MUST NOT bind
-values.
+values. `%2A` names a literal `*`, but `:` has no escape: `%3A` stays encoded,
+as it does in a resolved path. So a file whose name holds `:` can be covered
+only by a prefix for a directory above it.
 
 ### 1.4. Matching
 
