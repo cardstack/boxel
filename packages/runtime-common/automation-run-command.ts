@@ -141,7 +141,7 @@ export function isAutomationScriptInput(
 // What the tab answers, as the `json` of the `JsonCard` the command returns.
 // A run whose script throws or runs out of time answers `error`; the command
 // itself fails only when it couldn't run the script at all.
-export type AutomationScriptOutcome =
+export type AutomationScriptOutcome = (
   | { state: 'complete' }
   | {
       state: 'error';
@@ -150,7 +150,18 @@ export type AutomationScriptOutcome =
       message: string;
       // The script's own line, when the error came from the script.
       line?: number;
-    };
+    }
+) & {
+  // When the script started and ended in the tab, in ms since the epoch by
+  // the tab's clock, for the run's telemetry. Absent when the script never
+  // started.
+  timing?: AutomationScriptTiming;
+};
+
+export interface AutomationScriptTiming extends JSONTypes.Object {
+  startedAt: number;
+  endedAt: number;
+}
 
 // `script-error`: the script threw an error of its own or didn't compile.
 // `timed-out`: the run reached its time limit.
