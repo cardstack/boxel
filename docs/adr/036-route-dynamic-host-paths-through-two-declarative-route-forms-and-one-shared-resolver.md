@@ -114,11 +114,13 @@ address. The prerender MUST wait for those loads before it stores the HTML.
 Where the server needs a card's canonical address, as for an alias's 301, it
 MUST work it out from index data, as the visitor, through the same canonical
 route walk. Both MUST give the same address for the same card, at prerender
-and in the browser alike. An address is a path on the realm's URL. The
-server MUST NOT work out a routed address when a response leaves it.
-Translating the realm's URL to a host URL at that boundary is ADR 033 §1.4
-and §1.5, not this ADR. A link into another realm MUST keep that card's own
-URL.
+and in the browser alike. An address MUST be the realm's canonical host URL
+(ADR 033 §1.4) followed by the routed path, and the stored HTML MUST carry
+it. The server MUST NOT rewrite a link in a response when it leaves the
+server. A change to the realm's routes or to its canonical host URL MUST
+prerender the realm again. A realm with no host URL has no routed addresses,
+so its links keep card URLs. A link into another realm MUST keep that card's
+own URL.
 
 ### 1.8. Links are portable across realms
 
@@ -178,8 +180,9 @@ address would not be canonical, and the prerender and the browser would
 disagree once the card loads [5]. It doesn't search, because it must be
 synchronous and give the same answer at prerender and in the browser [10].
 The server never holds a loaded card (ADR 015 §1.1), so its canonical address
-comes from the index [9]. Addresses are paths on the realm's URL because ADR
-033 §1.5 keeps that URL in prerendered HTML.
+comes from the index [9]. URLs are not rewritten on the fly: the canonical
+host URL is stored in the rendered HTML [11], at the cost of a new prerender
+when it changes.
 
 A link with no route renders with no `href` instead of failing, as Rails and
 Ember do, because there one team owns the templates and the routes. A shared
@@ -230,6 +233,8 @@ A hand-written redirect is explicit [10].
 8. https://github.com/cardstack/boxel/pull/7118 (draft, not for merge)
 9. https://github.com/cardstack/boxel/pull/7506 (open)
 10. Matic Jurglic, 2026-11-17: answers to this ADR's open questions.
+11. Matic Jurglic, 2026-11-17: "we dont rewrite the urls on the fly, and the
+    canonical host url is stored in the rendered html".
 
 ## 5. Remediation
 
