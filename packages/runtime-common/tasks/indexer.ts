@@ -1140,6 +1140,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
             dbAdapter,
             meteredCharges,
             runIndexing: measured,
+            indexJob: jobInfo?.jobId,
             log,
           });
         }

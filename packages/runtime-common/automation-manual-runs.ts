@@ -19,7 +19,7 @@ import {
 import { readRunLog, type RunLog } from './automation-run-log.ts';
 import {
   getAutomationRun,
-  insertAutomationRun,
+  insertOrFindAutomationRun,
   type AutomationRun,
 } from './automation-runs.ts';
 import {
@@ -31,6 +31,7 @@ import type { DBAdapter } from './db.ts';
 import { dbAdapterQuerier, param, query } from './expression.ts';
 import { ensureTrailingSlash } from './index.ts';
 import { enqueueAutomationRunJob } from './jobs/run-command.ts';
+import { emitAutomationRunEvent } from './automation-run-telemetry.ts';
 import { RealmPaths } from './paths.ts';
 import type { Job, QueuePublisher } from './queue.ts';
 import { fromBase64 } from './run-overlay.ts';
@@ -117,12 +118,17 @@ async function startManualRun(
   if (!isDeclarationOf(declaration, automationId, options)) {
     return { ok: false, reason: 'other-card' };
   }
+  // Whether this click created the run, rather than a resent click finding
+  // the run the first send created. Only the first send's enqueue is the
+  // run's `enqueued` telemetry.
+  let created = false;
   let started = await dbAdapter.withTransaction(
     async (txQuery): Promise<ManualRunStart> => {
+      created = false;
       if (!(await isDirectWriterOf(txQuery, realm, user, options))) {
         return { ok: false, reason: 'not-a-direct-writer' };
       }
-      let run = await insertAutomationRun(txQuery, {
+      let inserted = await insertOrFindAutomationRun(txQuery, {
         automationId,
         realm,
         trigger: MANUAL_RUN_TRIGGER,
@@ -130,6 +136,8 @@ async function startManualRun(
         actsAs: user,
         dryRun,
       });
+      let { run } = inserted;
+      created = inserted.created;
       if (run.actsAs !== user || run.dryRun !== dryRun) {
         return { ok: false, reason: 'click-reused' };
       }
@@ -156,6 +164,25 @@ async function startManualRun(
       triggerKind: 'manual',
     },
   });
+  if (created) {
+    let enqueuedAt = new Date().toISOString();
+    emitAutomationRunEvent({
+      kind: 'enqueued',
+      automation: automationId,
+      run: run.id,
+      job: job.id,
+      realm,
+      trigger: run.trigger,
+      triggerKind: 'manual',
+      dryRun,
+      scheduledAt: run.createdAt,
+      enqueuedAt,
+      scheduleLagMs: Math.max(
+        0,
+        Date.parse(enqueuedAt) - Date.parse(run.createdAt),
+      ),
+    });
+  }
   await options.reportRunChange?.(run.id);
   return { ok: true, run, job };
 }

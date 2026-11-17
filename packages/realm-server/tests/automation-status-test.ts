@@ -551,6 +551,52 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
+    test("a switched-on automation reads with its failure streak and the streak's last error", async function (assert) {
+      await writeAutomation();
+      await switchOn();
+      let fresh = attributesOf((await statusOf(ADMIN, ['read', 'write'])).body);
+      assert.deepEqual(
+        fresh.switchedOn ? [fresh.failuresInARow, fresh.lastFailure] : [],
+        [0, null],
+        'no runs, no streak',
+      );
+
+      await ranThrough(['Import'], ['Import', 'Index'], {
+        state: 'error',
+        reason: 'script-error',
+        message: 'Error: the feed was empty',
+      });
+      let lastId = await ranThrough(['Index'], ['Import', 'Index'], {
+        state: 'error',
+        reason: 'timed-out',
+        message: 'The run reached its time limit',
+      });
+      let status = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      if (!status.switchedOn) {
+        throw new Error('expected a switched-on automation');
+      }
+      assert.strictEqual(status.failuresInARow, 2);
+      assert.strictEqual(status.lastFailure?.runId, lastId);
+      assert.strictEqual(status.lastFailure?.reason, 'timed-out');
+      assert.strictEqual(
+        status.lastFailure?.message,
+        'The run reached its time limit',
+      );
+      assert.strictEqual(typeof status.lastFailure?.finishedAt, 'string');
+
+      await ranThrough(['Import', 'Index'], ['Import', 'Index'], {
+        state: 'complete',
+      });
+      let reset = attributesOf((await statusOf(ADMIN, ['read', 'write'])).body);
+      assert.deepEqual(
+        reset.switchedOn ? [reset.failuresInARow, reset.lastFailure] : [],
+        [0, null],
+        'a complete run ends the streak',
+      );
+    });
+
     test('another direct writer who shares a realm with the payer sees who pays', async function (assert) {
       await writeAutomation();
       await switchOn();
