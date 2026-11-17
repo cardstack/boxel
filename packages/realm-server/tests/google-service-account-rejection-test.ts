@@ -39,6 +39,7 @@ import {
   type KeyWriteAction,
 } from '../lib/user-keys.ts';
 import { shareKey } from '../lib/key-shares.ts';
+import { configureCredentialRetryDelays } from '@cardstack/runtime-common/automation-run-limits';
 import { automationAdmission } from '../lib/key-bindings.ts';
 import {
   markKeyRejected,
@@ -152,6 +153,9 @@ module(basename(import.meta.filename), function (hooks) {
       tokenEndpoint: TOKEN_ENDPOINT,
       retryDelaysMs: [1, 1],
     });
+    // What one call does with a failing token endpoint; a run asking again
+    // after a pause is the `oauth-connections` tests'.
+    configureCredentialRetryDelays([]);
     vendor.googleTokenAnswers.length = 0;
     vendor.googleTokensMinted.length = 0;
     vendor.googleTokenLifetime = 3600;
@@ -159,6 +163,7 @@ module(basename(import.meta.filename), function (hooks) {
     setKeyGrantSink((event) => events.push(event));
   });
   hooks.afterEach(function () {
+    configureCredentialRetryDelays();
     setKeyGrantSink(undefined);
     resetGoogleTokens();
     resetOutbound();

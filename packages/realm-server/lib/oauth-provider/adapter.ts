@@ -9,7 +9,13 @@
 
 import Provider, { type Adapter, type AdapterPayload } from 'oidc-provider';
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { endGrant, type GrantEndReason } from './grants.ts';
+import {
+  endGrant,
+  GRANT_STATE_COLUMNS,
+  grantUsable,
+  type GrantEndReason,
+  type GrantState,
+} from './grants.ts';
 import {
   asRecord,
   AuthorizationCodeAdapter,
@@ -107,17 +113,13 @@ class DynamicClientAdapter extends OAuthProviderAdapter {
   }
 }
 
-interface GrantRow {
+interface GrantRow extends GrantState {
   user_id: string;
   client_id: string;
   // The approved scopes by resource, as JSON or already parsed.
   resources: string | Record<string, string[]>;
   created: number | string;
   expires: number | string;
-  ended: boolean;
-  expired: boolean;
-  // Created at or before the user's OAuth grants were last revoked.
-  revoked: boolean;
 }
 
 // Why the library revokes a grant, by the route it revokes it on: the token
@@ -161,20 +163,13 @@ class GrantAdapter extends OAuthProviderAdapter {
       `SELECT g.user_id, g.client_id, g.resources,
               floor(extract(epoch FROM g.created_at)) AS created,
               floor(extract(epoch FROM g.expires_at)) AS expires,
-              g.ended_at IS NOT NULL AS ended,
-              g.expires_at <= now() AS expired,
-              COALESCE(g.created_at <= u.oauth_grants_revoked_at, false)
-                AS revoked
+              ${GRANT_STATE_COLUMNS}
          FROM oauth_provider_grants AS g
          JOIN users AS u ON u.id = g.user_id
          WHERE g.id = $1`,
       { bind: [id] },
     )) as unknown as GrantRow[];
-    if (!row || row.ended || row.expired) {
-      return undefined;
-    }
-    if (row.revoked) {
-      await endGrant(this.#dbAdapter, id, 'sessions-revoked');
+    if (!row || !(await grantUsable(this.#dbAdapter, id, row))) {
       return undefined;
     }
     let resources = asRecord(row.resources) as Record<string, string[]>;

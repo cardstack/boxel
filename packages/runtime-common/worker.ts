@@ -395,6 +395,11 @@ export class Worker {
           `automation-tick`,
           Tasks['automationTick'](taskArgs),
         ),
+      'automation-reconcile': () =>
+        this.#queue.register(
+          `automation-reconcile`,
+          Tasks['automationReconcile'](taskArgs),
+        ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
       capture: () =>

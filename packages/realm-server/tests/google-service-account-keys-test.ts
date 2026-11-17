@@ -422,9 +422,11 @@ module(basename(import.meta.filename), function (hooks) {
         `call ${attempt}: the card reads the API's 401`,
       );
     }
+    // A run's call asks once more with the token minted then, so each call
+    // reaches the API twice.
     assert.strictEqual(
       sentTo('/status/401').length,
-      2,
+      4,
       "a 401 doesn't reject the grant, so the next call reaches the API too",
     );
   });

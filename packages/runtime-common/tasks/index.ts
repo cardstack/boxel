@@ -22,6 +22,7 @@ export * from './full-reindex.ts';
 export * from './daily-credit-grant.ts';
 export * from './automation-storage-charge.ts';
 export * from './automation-tick.ts';
+export * from './automation-reconcile.ts';
 export * from './indexer.ts';
 export * from './media-cache-gc.ts';
 export * from './oauth-provider-cleanup.ts';

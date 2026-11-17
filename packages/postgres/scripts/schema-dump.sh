@@ -37,6 +37,10 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=plans \
   --exclude-table-and-children=credits_ledger \
   --exclude-table-and-children=credit_charge_usage \
+  --exclude-table-and-children=credit_charge_costs \
+  --exclude-table-and-children=pricing_versions \
+  --exclude-table-and-children=pricing_version_values \
+  --exclude-table-and-children=pricing_version_rates \
   --exclude-table-and-children=stripe_events \
   --exclude-table-and-children=ai_bot_event_processing \
   --exclude-table-and-children=proxy_endpoints \

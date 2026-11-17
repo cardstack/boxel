@@ -59,7 +59,10 @@ import { receiveSecretsKeyring } from './lib/secrets-at-rest/index.ts';
 import { getInstanceId } from './lib/instance-id.ts';
 import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
 import { checkPricingAtStartup } from './lib/pricing.ts';
-import { meteredChargesFor } from './lib/metered-charge.ts';
+import {
+  meteredChargesFor,
+  recordCurrentPricing,
+} from './lib/metered-charge.ts';
 import { deleteExpiredOAuthProviderRows } from './lib/oauth-provider/cleanup.ts';
 import { buildMintRunToken } from './lib/run-token.ts';
 import { buildAutomationAdmissionChecks } from './lib/automation-admission-checks.ts';
@@ -302,6 +305,9 @@ let autoMigrate = migrateDB || undefined;
   if (process.send) {
     process.send(`ready:${workerId}`);
   }
+  // Recorded after the worker reports ready, so a slow or failing insert
+  // never holds up its start; `recordCurrentPricing` logs any failure.
+  void recordCurrentPricing(dbAdapter, 'worker');
 
   // Handle graceful shutdown. Registered against four triggers
   // (SIGINT/SIGTERM, parent IPC disconnect, and a `'stop'` message from the

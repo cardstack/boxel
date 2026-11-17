@@ -355,6 +355,11 @@ module(basename(import.meta.filename), function () {
           'https://realms.example.test/_test-resource',
         ],
       );
+      assert.deepEqual(
+        registry.map(({ testOnly }) => testOnly === true),
+        [false, true],
+        'only the resource a test added is marked test-only',
+      );
     });
 
     test("lists each resource's scopes once, in order", function (assert) {

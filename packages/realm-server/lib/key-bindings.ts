@@ -16,6 +16,8 @@ import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import {
   notApproved,
   OperationFailure,
+  refusedFrom,
+  subjectOfRefusal,
   type CallApiFilledSlot,
   type CallApiSlot,
   type CallApiSlotLookup,
@@ -69,7 +71,6 @@ import {
   validateLimitChanges,
   type LimitSubject,
 } from './key-limits.ts';
-import { refusedFrom, subjectOfRefusal } from './key-use-subject.ts';
 import { recordFillRefusal } from './key-uses.ts';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
@@ -1860,9 +1861,10 @@ async function fillCheckedSlot(
     countsAgainst: limitSubjectOf(binding),
     // A vendor's 401 to a stored key rejects the grant it was sent under. A
     // minted token's refusal is its connection's to judge when it next
-    // refreshes, so a 401 to one is only the vendor's answer.
+    // refreshes, so a 401 to one is only the vendor's answer, which an
+    // automation run's call asks once more with the token minted then.
     ...(mints
-      ? {}
+      ? { mints: true }
       : {
           grant: {
             id: binding.grant_id!,

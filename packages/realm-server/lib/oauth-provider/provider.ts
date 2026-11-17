@@ -53,6 +53,7 @@ import {
 import { boxelHosts } from './redirect-uris.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { registrationHandler } from './registration.ts';
+import { oauthResourceController } from './resource.ts';
 import {
   DEFAULT_TOKEN_LIMIT,
   tokenHandler,
@@ -152,6 +153,11 @@ export interface OAuthProviderService {
     handleConsentDetails: Koa.Middleware;
     handleConsentDecision: Koa.Middleware;
   };
+  // The issuer, and the resources it issues tokens for (`registry.ts`).
+  issuer: string;
+  registry: readonly OAuthResource[];
+  // A resource's controller, for a route its scopes map (`resource.ts`).
+  resourceController(resource: OAuthResource): Koa.Middleware;
 }
 
 export interface ConsentRouteDeps {
@@ -238,6 +244,10 @@ export function startOAuthProvider({
   let preRegistered: ReadonlySet<string> = new Set();
   return {
     provider,
+    issuer,
+    registry,
+    resourceController: (resource) =>
+      oauthResourceController({ dbAdapter, issuer, resource }),
     handleAuthorization: authorizationHandler({
       provider,
       registry,
