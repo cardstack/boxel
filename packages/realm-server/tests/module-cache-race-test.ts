@@ -33,6 +33,10 @@ import {
   withRealmPath,
   type RealmRequest,
 } from './helpers/index.ts';
+import {
+  maxPrerenderHtmlJobId,
+  settlePrerenderHtmlJobs,
+} from './helpers/indexing.ts';
 
 // CS-11028: regression coverage for the persist-after-invalidate race in
 // Realm.#transpiledModuleCache. The scenario: reader A enters fallbackHandle for
@@ -313,14 +317,33 @@ module(basename(import.meta.filename), function () {
       let realmURL = new URL('http://127.0.0.1:4444/test/');
       let testRealm: Realm;
       let request: RealmRequest;
+      let dbAdapter: PgAdapter;
 
       function onRealmSetup(args: {
         testRealm: Realm;
         testRealmHttpServer: Server;
         request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
       }) {
         testRealm = args.testRealm;
         request = withRealmPath(args.request, realmURL);
+        dbAdapter = args.dbAdapter;
+      }
+
+      // Writes each module, then waits for the render work those writes
+      // started. `write()` waits for the index pass but not for the
+      // `prerender_html` job the pass starts, and that job reads each written
+      // file through the `card+source` route and can load the module. Those
+      // are reads and compiles these tests did not make, so a job still
+      // running when a test starts counting adds to its counts.
+      async function writeModules(files: [string, string][]): Promise<void> {
+        let baseline = await maxPrerenderHtmlJobId(dbAdapter, testRealm.url);
+        for (let [path, source] of files) {
+          await testRealm.write(path, source);
+        }
+        await settlePrerenderHtmlJobs(dbAdapter, testRealm.url, {
+          afterJobId: baseline,
+        });
       }
 
       setupPermissionedRealmCached(hooks, {
@@ -418,10 +441,27 @@ module(basename(import.meta.filename), function () {
       // does NOT work here: this repo's QUnit JUnit reporter only
       // serializes `data.errors` for failed tests, so passing diagnostic
       // rows are silently dropped from the CI report.
+      //
+      // A failed assertion does not throw, so a test that reaches its last
+      // line has not necessarily passed. `watch` records every failed
+      // assertion, and `shouldDump` is true when one failed or the test threw.
       function createDiagLog(testLabel: string) {
         let started = Date.now();
         let events: string[] = [];
+        let sawFailedAssertion = false;
         return {
+          watch(assert: Assert) {
+            let pushResult = assert.pushResult.bind(assert);
+            assert.pushResult = (result) => {
+              if (!result.result) {
+                sawFailedAssertion = true;
+              }
+              pushResult(result);
+            };
+          },
+          shouldDump(reachedEnd: boolean) {
+            return !reachedEnd || sawFailedAssertion;
+          },
           note(label: string, extra: Record<string, unknown> = {}) {
             let snapshot = {
               t: Date.now() - started,
@@ -443,7 +483,7 @@ module(basename(import.meta.filename), function () {
 
       test('N concurrent same-path readers trigger exactly one transpile call', async function (assert) {
         let modulePath = 'dedup-same-path.gts';
-        await testRealm.write(modulePath, transpilerHeavySource);
+        await writeModules([[modulePath, transpilerHeavySource]]);
         testRealm.__testOnlyClearCaches();
 
         // Park A at the gate so the in-flight window is held open until
@@ -481,6 +521,7 @@ module(basename(import.meta.filename), function () {
         let pendingB: ReturnType<typeof fireRequest> | undefined;
         let pendingC: ReturnType<typeof fireRequest> | undefined;
         let diag = createDiagLog('N concurrent same-path readers');
+        diag.watch(assert);
         let passed = false;
         // The compile reads the module's stored bytes through the operation
         // core, and that read sits inside the region this dedup shares — so
@@ -493,6 +534,12 @@ module(basename(import.meta.filename), function () {
         core.openStoredFile = (localPath) => {
           if (localPath === modulePath) {
             sourceReads += 1;
+            // The stack names the route that read the file, so a failed
+            // read count says which reader was the extra one.
+            diag.note('source-read', {
+              sourceReads,
+              stack: new Error().stack?.split('\n').slice(2, 14).join(' <- '),
+            });
           }
           return openStoredFile(localPath);
         };
@@ -547,7 +594,7 @@ module(basename(import.meta.filename), function () {
               (p): p is ReturnType<typeof fireRequest> => p !== undefined,
             ),
           );
-          if (!passed) {
+          if (diag.shouldDump(passed)) {
             diag.dump();
           }
         }
@@ -556,8 +603,10 @@ module(basename(import.meta.filename), function () {
       test('concurrent different-path readers each trigger their own transpile (no false coalesce)', async function (assert) {
         let pathA = 'dedup-a.gts';
         let pathB = 'dedup-b.gts';
-        await testRealm.write(pathA, transpilerHeavySource);
-        await testRealm.write(pathB, transpilerHeavySource);
+        await writeModules([
+          [pathA, transpilerHeavySource],
+          [pathB, transpilerHeavySource],
+        ]);
         testRealm.__testOnlyClearCaches();
 
         let before = testRealm.__testOnlyGetTranspileCallCount();
@@ -582,8 +631,10 @@ module(basename(import.meta.filename), function () {
       test('in-flight entry survives an unrelated path’s invalidate', async function (assert) {
         let primaryPath = 'dedup-primary.gts';
         let unrelatedPath = 'dedup-unrelated.gts';
-        await testRealm.write(primaryPath, transpilerHeavySource);
-        await testRealm.write(unrelatedPath, transpilerHeavySource);
+        await writeModules([
+          [primaryPath, transpilerHeavySource],
+          [unrelatedPath, transpilerHeavySource],
+        ]);
         testRealm.__testOnlyClearCaches();
 
         // Park transpile at a gate so the inflight state is deterministic.
@@ -631,7 +682,7 @@ module(basename(import.meta.filename), function () {
 
       test('in-flight entry is dropped when its own path is invalidated; later caller starts a fresh transpile', async function (assert) {
         let modulePath = 'dedup-self-invalidate.gts';
-        await testRealm.write(modulePath, transpilerHeavySource);
+        await writeModules([[modulePath, transpilerHeavySource]]);
         testRealm.__testOnlyClearCaches();
 
         // Both transpiles will await the same gate — releasing it lets
@@ -685,7 +736,7 @@ module(basename(import.meta.filename), function () {
 
       test('identity-checked cleanup: A in-flight + invalidate + B in-flight + A settles → B survives', async function (assert) {
         let modulePath = 'dedup-identity.gts';
-        await testRealm.write(modulePath, transpilerHeavySource);
+        await writeModules([[modulePath, transpilerHeavySource]]);
         testRealm.__testOnlyClearCaches();
 
         // Independent gates per call so A and B can be released
@@ -777,10 +828,12 @@ module(basename(import.meta.filename), function () {
       test('errored transpile is shared with concurrent waiters and the in-flight slot releases on rejection', async function (assert) {
         let modulePath = 'dedup-error.gts';
         // Syntactically invalid .gts source — transpileJS will throw.
-        await testRealm.write(
-          modulePath,
-          'this is not a valid gts file <template>oops</template>',
-        );
+        await writeModules([
+          [
+            modulePath,
+            'this is not a valid gts file <template>oops</template>',
+          ],
+        ]);
         testRealm.__testOnlyClearCaches();
 
         // Without a gate, transpileJS throws fast on invalid source — A
@@ -824,6 +877,7 @@ module(basename(import.meta.filename), function () {
         let pendingA: ReturnType<typeof fireRequest> | undefined;
         let pendingB: ReturnType<typeof fireRequest> | undefined;
         let diag = createDiagLog('errored transpile shared');
+        diag.watch(assert);
         let passed = false;
         try {
           let before = testRealm.__testOnlyGetTranspileCallCount();
@@ -913,7 +967,7 @@ module(basename(import.meta.filename), function () {
               (p): p is ReturnType<typeof fireRequest> => p !== undefined,
             ),
           );
-          if (!passed) {
+          if (diag.shouldDump(passed)) {
             diag.dump();
           }
         }
