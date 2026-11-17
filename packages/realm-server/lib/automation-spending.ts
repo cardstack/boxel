@@ -95,9 +95,11 @@ export function buildAdmitSpending({
         excludeRunId: run.id,
       });
       if (balance - held < minimum) {
+        // The message reaches the run's row and log, which every direct
+        // writer of the realm reads, so it never says what the person holds.
         return refuse(
           'insufficient-credits',
-          `${run.actsAs} has ${balance} credits, ${held} of them held by other automation runs in flight, and the run needs ${minimum} available: the most it can cost under its caps${minimum > ceiling ? ', raised to the minimum balance' : ''}`,
+          `The credits available to ${run.actsAs}, after their other automation runs in flight, are below this run's minimum balance of ${minimum} credits`,
         );
       }
       if (run.attempt !== null) {

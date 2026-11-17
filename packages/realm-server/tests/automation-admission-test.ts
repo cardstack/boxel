@@ -874,6 +874,15 @@ module(basename(import.meta.filename), function (hooks) {
       let short = await newRun(SPENDING);
       let result = await attempt(short, { calls, checks: spending() });
       await assertRefused(assert, short, result, calls, 'insufficient-credits');
+      let message = (await getAutomationRun(dbAdapter, short.id))?.errorMessage;
+      assert.true(
+        message?.includes('1000 credits'),
+        'the refusal names the minimum',
+      );
+      assert.false(
+        message?.includes('999'),
+        'the refusal never says what the person holds, since every direct writer reads it',
+      );
 
       await fund(OWNER, 1);
       let run = await newRun(SPENDING);
