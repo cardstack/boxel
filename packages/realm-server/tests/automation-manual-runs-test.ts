@@ -98,7 +98,10 @@ module(basename(import.meta.filename), function (hooks) {
         path: SLOW,
         caps: { seconds: 5 },
       }),
-      [`${SLOW}-script.js`]: `while (true) {}`,
+      // Indexing also loads this file as a module in the prerender tab, where
+      // `realm` isn't defined. Naming it first makes that load throw before
+      // the loop, so the template build doesn't wait out the render timeout.
+      [`${SLOW}-script.js`]: [`void realm;`, `while (true) {}`].join('\n'),
     },
     onRealmSetup(args) {
       realm = args.testRealm;
