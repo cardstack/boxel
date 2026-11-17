@@ -91,13 +91,16 @@ read, and mark the validation incomplete. A path that a route dropped for
 now could answer MUST get 503, not not-found. A realm SHOULD have at most
 `MAX_DYNAMIC_HOST_ROUTES` dynamic routes.
 
-### 1.6. The browser gets the server's routes
+### 1.6. Every renderer gets the server's routes
 
 The server MUST put the validated route tree, with `complete`, into the
 page's host config as `hostDynamicRoutes`. For a dynamically routed page it
 MUST also add a serve rule for exactly the requested path to
-`hostRoutingMap`. The host app MUST NOT validate the tree again. The tree,
-each `where` included, is public, so a route MUST NOT hold anything private.
+`hostRoutingMap`. A realm MUST also serve its validated route tree from a
+read-only endpoint, which the prerender and interact mode read once per
+realm and again after the realm is indexed. No reader MUST validate the tree
+again. The tree, each `where` included, is public, so a route MUST NOT hold
+anything private.
 
 ### 1.7. Addresses are worked out from the routes, never on the way out
 
@@ -106,28 +109,36 @@ prerender and in the browser, by `hostRouteAddress`. It MUST be synchronous
 over cards already loaded, and MUST NOT load a card or search. It MUST stop
 at the first route in canonical order that it can't decide yet (a card,
 parent or value not loaded) and give no address, instead of trying a later
-route. Where the server needs a card's canonical address, as for an alias's
-301, it MUST work it out from index data, as the visitor, through the same
-canonical route walk. Both MUST give the same address for the same card. An
-address is a path on the realm's URL. The server MUST NOT work out a routed
-address when a response leaves it. Translating the realm's URL to a host URL
-at that boundary is ADR 033 §1.4 and §1.5, not this ADR. A link into another
-realm MUST keep that card's own URL.
+route. When a link needs a card that isn't loaded, the link helper MUST ask
+the store for it and give the card's own URL until it arrives, then the
+address. The prerender MUST wait for those loads before it stores the HTML.
+Where the server needs a card's canonical address, as for an alias's 301, it
+MUST work it out from index data, as the visitor, through the same canonical
+route walk. Both MUST give the same address for the same card, at prerender
+and in the browser alike. An address is a path on the realm's URL. The
+server MUST NOT work out a routed address when a response leaves it.
+Translating the realm's URL to a host URL at that boundary is ADR 033 §1.4
+and §1.5, not this ADR. A link into another realm MUST keep that card's own
+URL.
 
 ### 1.8. Links are portable across realms
 
 A template MUST say what a link points to, and the realm the card renders in
 works out the address: one or more cards or ids, a card type with field
-values, or a route name. A template MUST NOT need to know another realm's
-routes. A link given a card or an id MUST fall back to the card's own URL
-when no route fits it. A link given a type and field values, or a route
-name, MUST render with no `href` when no route fits it, and MUST NOT fail the
-render. A link from a type and field values is filled from the values alone,
-so the route's `where` isn't checked and the address MAY answer not-found.
-Route names SHOULD be used only by a site's own cards, such as its frame,
-home page and listings. A shared card type SHOULD use the card or type form.
-Each link that doesn't resolve MUST be recorded against the card that
-rendered it, so the realm's author can see it.
+values, or a route name given as a named argument
+(`{{hrefTo route="people"}}`). A plain string MUST be read as a card id. A
+template MUST NOT need to know another realm's routes. A link given a card or
+an id MUST fall back to the card's own URL when no route fits it. A link
+given a type and field values, or a route name, MUST give `undefined` when no
+route fits it, so it renders with no `href`, and MUST NOT fail the render. A
+link MUST NOT search for its card. A link from a type and field values is
+filled from the values alone, so the route's `where` isn't checked and the
+address MAY answer not-found. Route names SHOULD be used only by a site's own
+cards, such as its frame, home page and listings. A shared card type SHOULD
+use the card or type form. Each link that doesn't resolve MUST be recorded as
+a warning in the `diagnostics` of the index row of the card that rendered it
+(`boxel_index.diagnostics`). How the warnings are shown to the author is not
+decided here.
 
 ### 1.9. No route cache, and no memory of old addresses
 
@@ -141,22 +152,47 @@ old path.
 Exact paths need one rule per card [1] (ADR 015 §3). Neither form computes,
 so routing needs no interpreter (ADR 015 §1.4). Both forms invert, so an
 address leads back to its card [1] and can be worked out from loaded cards
-in the prerender and the browser alike [5]. A stored table from addresses to
-cards would need to be kept in sync with every card change [8].
+in the prerender and the browser alike [5]. The two forms cover the routes
+of the earlier build's five demo sites [10]. A field match lets each route
+choose its field, and a card id template serves cards that have no such
+field, so no card type needs a routing field of its own [10]. Routes are a
+list because order decides fall-through and the canonical route, and the
+index's `jsonb` keeps array order but not object key order [10].
 
 Order carries meaning because siblings can share a pattern, such as a
 `Category` and a `Page` at `/:slug`, and a card can fit more than one route
-[4][5]. One resolver on both sides gives a full page load and in-app
+[4][5]. A resolved level commits so that the cost stays bounded, at most one
+lookup per sibling at each level, and a nested URL means one thing: a wrong
+pair is not found, not a different page [10]. A card's own path and a realm
+file still win, so adding a wide route doesn't break URLs that worked before
+[10]. One resolver on both sides gives a full page load and in-app
 navigation the same answer [4][7]. Lookups run as the visitor, so the realm
 admits, limits and refuses each one as it would the visitor's own request
 [6], and a failed lookup isn't a not-found, so a crawler keeps the page [6].
 
-The reverse lookup stops at a route it can't decide yet because a later
-route's address would not be canonical, and the prerender and the browser
-would disagree once the card loads [5]. The server never holds a loaded card
-(ADR 015 §1.1), so its canonical address comes from the index [9].
-Addresses are paths on the realm's URL because ADR 033 §1.5 keeps that URL
-in prerendered HTML.
+Addresses are worked out at render because the render has the loaded card,
+its fields and its `where` check. On the way out, the server would have to
+parse the HTML and look up each link on every response. With the address in
+the stored HTML, a page is correct with no work per request [10]. The
+reverse lookup stops at a route it can't decide yet, because a later route's
+address would not be canonical, and the prerender and the browser would
+disagree once the card loads [5]. It doesn't search, because it must be
+synchronous and give the same answer at prerender and in the browser [10].
+The server never holds a loaded card (ADR 015 §1.1), so its canonical address
+comes from the index [9]. Addresses are paths on the realm's URL because ADR
+033 §1.5 keeps that URL in prerendered HTML.
+
+A link with no route renders with no `href` instead of failing, as Rails and
+Ember do, because there one team owns the templates and the routes. A shared
+card must not break a page in a realm whose routes it doesn't control [10].
+A route name can't be told from a card id by the shape of the string, so the
+name takes a named argument, as Rails and Ember also name a route apart from
+its values [10].
+
+There is no route cache until the cost per request has been measured on a
+blog-sized realm [10]. Old addresses aren't stored: a table of them needs
+storage and cleanup, and two cards can claim the same old address over time.
+A hand-written redirect is explicit [10].
 
 ## 3. Considered options
 
@@ -164,39 +200,26 @@ in prerendered HTML.
 - **Exact paths only; authored regular expressions.** Rejected by ADR 015 §3.
 - **A stored table from addresses to cards.** It must be kept in sync with
   every card change [8].
-- **A computed form, such as a BXL query; page types answered by an index
-  search [8]; rewriting links on the way out [8].** See Open questions.
+- **Page types: a path template answered by a search, with segment values
+  computed for each card at indexing [8].** Computed segments need a stored
+  value for each card and a way to compute it. A computed field on the card
+  type does the same job for types the realm owns [10].
+- **A slug on every card.** It forces a field on every card type, including
+  types a realm doesn't own, such as catalog cards [10].
+- **A computed form, such as a BXL query.** A filter can't apply a function
+  to a stored field, so it wouldn't derive slugs, and links would need a
+  second expression for the reverse direction. One new key on a route can
+  add it later [10].
+- **Rewriting links on the way out [8].** Work on every response; see
+  Rationale [10].
+- **A link that searches for its card when no route fits.** It makes each
+  such link slow and async [10].
+- **Card types that declare the route names they need, which each realm maps
+  to its routes (as Ember engines' `externalRoutes`).** Deferred until a
+  shared card must link to a page that isn't a card, such as a search page
+  or a cart [10].
 
-## 4. Open questions
-
-No public source states these reasons. Ask Matic Jurglic.
-
-1. Why were page types [8] set aside?
-2. Why is there no computed form, such as a BXL query? Probable reason, as
-   the design notes state it: a filter can't apply a function to a stored
-   field, so it wouldn't derive slugs, and links would need a second,
-   reverse expression.
-3. Was a slug on every card considered, and why was it rejected?
-4. Why are addresses worked out at render rather than by rewriting
-   responses on the way out, as the earlier build did [8]?
-5. Why does a resolved level commit rather than fall back to a later
-   sibling [4]?
-6. Why are routes a list, not an object keyed by path? Probable reason, as
-   the design notes state it: `jsonb` keeps array order but not object key
-   order.
-7. Why is there no route cache at launch? Probable reason, as the design
-   notes state it: measure first.
-8. Why doesn't the platform remember old addresses?
-9. Why does a type or name link that doesn't resolve render with no `href`
-   rather than fail loudly, as Rails and Ember do?
-10. Why doesn't a link search for its card when no route fits it?
-11. Why is deferred the option of card types declaring the route names they
-    need, which each realm maps to its routes (as Ember engines'
-    `externalRoutes`)?
-12. Why do a card's own path and a realm file win over a route that
-    resolves to nothing?
-
-## 5. Sources
+## 4. Sources
 
 1. https://github.com/cardstack/boxel/pull/7388
 2. https://github.com/cardstack/boxel/pull/7389
@@ -207,7 +230,8 @@ No public source states these reasons. Ask Matic Jurglic.
 7. https://github.com/cardstack/boxel/pull/7474 (open)
 8. https://github.com/cardstack/boxel/pull/7118 (draft, not for merge)
 9. https://github.com/cardstack/boxel/pull/7506 (open)
+10. Matic Jurglic, 2026-11-17: answers to this ADR's open questions.
 
-## 6. Remediation
+## 5. Remediation
 
 Known gaps are listed in [remediation/036.md](remediation/036.md).
