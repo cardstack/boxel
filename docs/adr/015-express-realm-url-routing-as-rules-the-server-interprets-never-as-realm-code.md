@@ -30,6 +30,10 @@ where. The realm server MUST NOT run JavaScript that a realm's author wrote to
 make a routing decision. It MUST NOT `import` a realm module, or run authored
 source through `eval`, `new Function`, `node:vm`, or a worker. It MUST NOT ask
 the prerender to run card code for a routing decision while a request waits.
+A request MAY wait for a card type's definition read through the definitions
+cache, as a search does, even when the read runs the type's module in the
+prerender: the module only reports the type's fields, and the rules still
+make the decision.
 
 ### 1.2. Rules reach the server as data
 
@@ -77,7 +81,10 @@ Card code may compute the rules because the prerender runs it, once each time
 `realm.json` is indexed, and not while a request waits. A realm can make
 `realm.json` adopt from its own card definition, or edit the file by hand, so
 what reaches the realm server is data from an untrusted author. The server
-validates it for that reason.
+validates it for that reason. A definition read is different: the module runs
+in the prerender, as it does for every search on a cold cache, and what comes
+back is the type's fields, which no authored code turns into a routing
+decision.
 
 ## 3. Considered options
 
