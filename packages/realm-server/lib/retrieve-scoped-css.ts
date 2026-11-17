@@ -149,16 +149,14 @@ export async function lookupScopedCSSByHash(
   dbAdapter: DBAdapter,
   hashes: string[],
 ): Promise<Map<string, string>> {
-  let uniqueHashes = [...new Set(hashes)];
-  if (uniqueHashes.length === 0) {
+  if (hashes.length === 0) {
     return new Map();
   }
-  let values = uniqueHashes.map((_, i) => `($${i + 1})`).join(', ');
   let rows = (await dbAdapter.execute(
     `SELECT h.hash,
             (SELECT s.css FROM scoped_css AS s WHERE s.hash = h.hash LIMIT 1) AS css
-     FROM (VALUES ${values}) AS h(hash)`,
-    { bind: uniqueHashes },
+     FROM unnest($1::varchar[]) AS h(hash)`,
+    { bind: [hashes] },
   )) as { hash: string; css: string | null }[];
   return new Map(
     rows
