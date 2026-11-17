@@ -12806,7 +12806,20 @@ export class Realm {
     return ref;
   }
 
+  // A file's stored bytes, marked as such (see
+  // `ResponseWithNodeStream.servesStoredBytes`). The answer for a file that
+  // isn't there is not marked.
   private async serveLocalFile(
+    ...args: Parameters<Realm['serveStoredFile']>
+  ): Promise<ResponseWithNodeStream> {
+    let response = await this.serveStoredFile(...args);
+    if (response.ok || response.status === 304) {
+      response.servesStoredBytes = true;
+    }
+    return response;
+  }
+
+  private async serveStoredFile(
     request: Request,
     ref: FileRef,
     requestContext: RequestContext,
@@ -15140,8 +15153,8 @@ export class Realm {
     requestContext: RequestContext,
     path: LocalPath,
     content: Uint8Array<ArrayBuffer>,
-  ): Response {
-    return createResponse({
+  ): ResponseWithNodeStream {
+    let response: ResponseWithNodeStream = createResponse({
       body: request.method === 'HEAD' ? null : content,
       init: {
         status: 200,
@@ -15153,6 +15166,8 @@ export class Realm {
       },
       requestContext,
     });
+    response.servesStoredBytes = true;
+    return response;
   }
 
   private async upsertCardSource(
