@@ -215,7 +215,7 @@ The views get the row from `GET <realm>/_automation-status?automation=<card URL>
 
 Both shapes carry `lastRun`, the automation's last run that started and has ended (`readLastRunMilestones`), and `currentRun`, its run in progress (`readCurrentRunMilestones`), each with its milestones (_Run milestones_) or null. A Preview is a test of the script, so neither is ever one. A run can start and end before switch-on (a Run now), so neither depends on the row.
 
-`payer` is the payer's Matrix id only when the viewer is the payer or `shareARealmGrant` finds a realm whose permission rows name both (ADR 011 §1.2). Otherwise it is null, and the view reads "A person who shares no workspace with you". Each trigger's next run and whether the trigger is spent come from `computeAutomationSchedule` at the realm's clock (`now()` in `clock.ts`), as the tick computes them. Runs left are counted one trigger at a time over the indexed declaration, the row's `scheduled_since` and `trigger_runs`, with no `now`, so a slot that has passed but isn't enqueued yet still counts as left. Counting stops after `RUNS_LEFT_BUDGET_MS` (250 ms) per answer; a trigger past the budget reports no `runsLeft`. When the card no longer reads as a declaration, each trigger the row has counted reports `runs` alone. The response is `no-store`. The view fetches again when the card is re-indexed, not when the row changes.
+`payer` is the payer's Matrix id only when the viewer is the payer or `shareARealmGrant` finds a realm whose permission rows name both (ADR 011 §1.2). Otherwise it is null, and the view reads "A person who shares no workspace with you". Each trigger's next run and whether the trigger is spent come from `computeAutomationSchedule` at the realm's clock (`now()` in `clock.ts`), as the tick computes them. Runs left are counted one trigger at a time over the indexed declaration, the row's `scheduled_since` and `trigger_runs`, with no `now`, so a slot that has passed but isn't enqueued yet still counts as left. Counting stops after `RUNS_LEFT_BUDGET_MS` (250 ms) per answer; a trigger past the budget reports no `runsLeft`. When the card no longer reads as a declaration, each trigger the row has counted reports `runs` alone. The response is `no-store`. The view fetches again when the card is re-indexed, and on a `job` or `automation` realm event naming the automation (below), since a run or a change to the row changes the answer and not the card.
 
 The realm loads `automation-status.ts` with a dynamic `import()` on the route's first use, so the schedule code stays out of every bundle that imports the realm. An in-browser test realm has no `automations` table. Host tests mount a virtual-network handler that answers the route (`tests/acceptance/automation-view-test.gts`).
 
@@ -1319,6 +1319,74 @@ To see the events locally, read the direct writer's session room
 nothing, check that they hold a `write` row of their own in
 `realm_user_permissions` and aren't a bot account (`isBotAccount`), and that
 `users.session_room_id` is set.
+
+## The `automation` realm event
+
+A change to an automation's own row sends an `automation` realm event: a
+direct writer switches it on, pauses, resumes or removes it; something pauses
+it without a person (a raised cap, the payer losing access, archiving the
+realm); its card is deleted or stops adopting from `Automation`, which removes
+the row; or its state moves between active, waiting for credits and done. The
+event is `AutomationEventContent` in `packages/base/matrix-event.gts`:
+
+```json
+{
+  "eventName": "automation",
+  "automation": "<the automation card's id, in RRI form>",
+  "realmURL": "<the realm's URL>"
+}
+```
+
+It is its own event rather than a `job` event with no run. A `job` event
+describes a run: its `runId`, its run state, its step and its milestone. None
+of those exist for a change to the row, and a subscriber that reads a run on
+every `job` event would have to learn to skip run-less ones. The `automation`
+event carries no state of its own, only the automation, so it can't go stale
+behind another event: a subscriber reads the automation again on it
+(`GET <realm>/_automation-status`). A change that cancels runs (a pause, a
+remove) sends a `job` event for each run and one `automation` event.
+
+### Who receives it, who reports it
+
+It goes where a `job` event goes: `Realm.broadcastAutomationEvent` sends it to
+the session rooms of the realm's direct writers alone, read again as it is
+sent, never into the realm's own room. `Realm.broadcastEvent` (the worker's
+bridge) and the realm's private broadcast route any `automation` event there.
+
+Every function that changes the row takes `AutomationReporters`
+(`reportRunChange`, `reportAutomationChange`) and reports once its
+transaction has committed. `withChanges` in `automations.ts` collects the
+canceled runs and the changed automations, so a transaction the database
+retries reports once. A `ReportAutomationChange` (`automation-change-events.ts`)
+takes the automation's id and realm, since a removed automation has no row to
+read them from, and never rejects; a failed report is logged as
+`could not send the automation event for …`.
+
+| Change                                                                                                     | Reported by                                                                                                                                                               |
+| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Switch-on, pause, resume, remove                                                                           | `switchOnAutomation`, `pauseAutomation`, `resumeAutomation`, `removeAutomation`, given the reporter                                                                       |
+| The payer losing access                                                                                    | `checkAutomationPayer`, `pauseForPayerLostAccess`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                   |
+| Archiving the realm                                                                                        | `pauseRealmAutomations`, from the archive handler (`realmServerAutomationChangeReporter`)                                                                                 |
+| The card's index hook removes it, pauses it for a raised cap or batched AI, or makes it done/active        | `syncAutomationWithCard`, from `syncAutomationsAfterIndex` in the indexing tasks. `checkAutomationCaps` pauses the same way and reports to a caller that passes reporters |
+| The tick makes it done, or moves its next run without starting a run (every due slot joined a pending run) | `tickAutomations` (`AutomationTickOptions.reportAutomationChange`)                                                                                                        |
+
+A sync that leaves the state as it was reports nothing: its new next run
+follows a card edit, which the card's `index` event already announces. A tick
+that starts a run and leaves the state as it was reports nothing either, since
+the run's `job` event announces it. A worker reports through
+`taskAutomationChangeReporter`, which hands the event to `reportRealmEvent`.
+A realm route that changes a row passes `Realm.reportAutomationChange`. **New
+code that changes an automation's state** (waiting for credits, a pause of its
+own) reports the automation the same way once its change commits.
+
+### Watching it
+
+Subscribe to the realm's events, skip any event whose `eventName` isn't
+`'automation'` (or `'job'`, when runs matter too), match `automation` against
+the card's id, and read `_automation-status` again. The catalog `Automation`
+card's status does this, and so should anything that lists a realm's
+automations. To see it locally, read a direct writer's session room in
+Synapse for `app.boxel.realm-event` with `content.eventName = "automation"`.
 
 ## The automation command
 

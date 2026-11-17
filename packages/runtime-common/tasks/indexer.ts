@@ -40,6 +40,7 @@ import {
   type RunIndexing,
 } from '../run-indexing.ts';
 import { syncAutomationsAfterIndex } from '../automation-index-hook.ts';
+import { taskAutomationChangeReporter } from '../automation-change-events.ts';
 import { taskRunChangeReporter } from '../automation-run-events.ts';
 
 export { fromScratchIndex, incrementalIndex };
@@ -838,6 +839,11 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
         reportRealmEvent,
         log,
       }),
+      reportAutomationChange: taskAutomationChangeReporter({
+        virtualNetwork,
+        reportRealmEvent,
+        log,
+      }),
     });
     reportStatus(args.jobInfo, 'finish');
     let queueClaim = queueClaimOf(jobInfo);
@@ -1072,6 +1078,11 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       touched: [...invalidations, ...changes.map(({ url }) => url)],
       reportRunChange: taskRunChangeReporter({
         dbAdapter,
+        virtualNetwork,
+        reportRealmEvent,
+        log,
+      }),
+      reportAutomationChange: taskAutomationChangeReporter({
         virtualNetwork,
         reportRealmEvent,
         log,

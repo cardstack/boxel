@@ -2608,6 +2608,7 @@ export {
 export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
 export * from './automation-runs.ts';
+export * from './automation-change-events.ts';
 export * from './automation-run-events.ts';
 export * from './automation-run-charge.ts';
 export * from './automation-run-command.ts';

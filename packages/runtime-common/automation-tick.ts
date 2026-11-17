@@ -52,7 +52,15 @@
 // comes due. A card that raises a cap above the snapshot is left for the index
 // hook to pause, and a card that doesn't read as a declaration leaves the row
 // due and unchanged until it does.
+//
+// The tick reports each run it starts (`job` events, from the task), and each
+// automation whose state or next run it moves without starting a run
+// (`reportAutomationChange`).
 
+import type {
+  ChangedAutomation,
+  ReportAutomationChange,
+} from './automation-change-events.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import type { QueuePublisher } from './queue.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -102,6 +110,9 @@ export interface AutomationTickOptions {
   // tick handles every due row.
   overdueBy?: number;
   pageSize?: number;
+  // Told of each automation whose state the tick changed, or whose next run
+  // it moved without starting a run, once its transaction has committed.
+  reportAutomationChange?: ReportAutomationChange;
   // Called after each automation the tick handles.
   onProgress?: () => void;
 }
@@ -226,6 +237,7 @@ async function tickAutomation(
   // The runs' `enqueued` telemetry, written once the tick's transaction has
   // committed and the row records the runs it started.
   let enqueued: AutomationRunEnqueuedEvent[] = [];
+  let changed: { automation?: ChangedAutomation } = {};
   let outcome = await claimAndEnqueue(
     dbAdapter,
     automationId,
@@ -233,12 +245,16 @@ async function tickAutomation(
     dueBy,
     options,
     enqueued,
+    changed,
   );
   if (outcome?.kind === 'enqueued') {
     for (let event of enqueued) {
       emitAutomationRunEvent(event);
     }
     await logTriggers(dbAdapter, outcome.triggers);
+  }
+  if (changed.automation) {
+    await options.reportAutomationChange?.(changed.automation);
   }
   return outcome;
 }
@@ -250,11 +266,14 @@ async function claimAndEnqueue(
   dueBy: number,
   options: AutomationTickOptions,
   enqueued: AutomationRunEnqueuedEvent[],
+  // Set to the automation when the committed change moved its state.
+  changed: { automation?: ChangedAutomation },
 ): Promise<AutomationTickOutcome | undefined> {
   return await dbAdapter.withTransaction(async (txQuery) => {
     // A retried transaction starts its runs again, so only the last pass's
     // events are the runs' `enqueued` telemetry.
     enqueued.length = 0;
+    changed.automation = undefined;
     let [row] = await txQuery([
       'SELECT * FROM automations WHERE automation_id =',
       param(automationId),
@@ -411,6 +430,16 @@ async function claimAndEnqueue(
       'updated_at = now() WHERE automation_id =',
       param(automationId),
     ]);
+    // A run the tick starts sends its own `job` event, which a subscriber
+    // reads the automation again on. A tick that starts none and still moves
+    // the state or the next run (every due slot joined a pending run, or
+    // nothing was due after all) reports the automation itself.
+    if (
+      state !== automation.state ||
+      (!started && nextRun !== automation.nextRun)
+    ) {
+      changed.automation = automation;
+    }
 
     if (handled.length === 0) {
       return { kind: 'not-due', automationId, state, nextRun };
