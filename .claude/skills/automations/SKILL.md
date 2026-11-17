@@ -1298,6 +1298,12 @@ spending hook. A worker without them refuses every run as
 | `run-admission-failed`, `run-admission-unavailable`                               | The worker couldn't ask the realm (the realm's answer is in `error_message`), or the realm has no `admitAutomation` (a published realm)                                                                                                                                                                                                                                                                  | Look at the realm server's log for the `_run-admission` request                                                        |
 | the spending hook's code                                                          | `AutomationAdmissionChecks.admitSpending`: the balance and the monthly cap                                                                                                                                                                                                                                                                                                                               | See the `pricing` skill                                                                                                |
 
+When admission pauses the automation with `payer-lost-access`, the refused
+run ends with its own code first, and the pause follows (the refusal carries
+it, and `runAutomationAttempt` makes it). A pause cancels the automation's
+unfinished runs, so its other pending runs end `canceled` with
+`error_reason = 'payer-lost-access'`.
+
 A run's kind comes from its job: `triggerKind: 'manual'` (Preview, Run now)
 or `'batch'` (a batch's follow-up); a job without one is a trigger's, even
 when the card no longer names that trigger. Trigger and batch runs need the
