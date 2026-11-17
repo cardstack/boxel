@@ -53,7 +53,9 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=key_uses \
   --exclude-table-and-children=automation_runs \
   --exclude-table-and-children=run_overlay_files \
+  --exclude-table-and-children=automation_preview_files \
   --exclude-table-and-children=automation_run_log \
+  --exclude-table-and-children=automation_run_milestones \
   --exclude-table-and-children=automations \
   --exclude-table-and-children=ai_batches \
   --exclude-table-and-children=automation_files \
@@ -65,6 +67,7 @@ docker exec boxel-pg pg_dump \
   --exclude-table-and-children=oauth_connect_requests \
   --exclude-table-and-children=oauth_provider_dynamic_clients \
   --exclude-table-and-children=oauth_provider_objects \
+  --exclude-table-and-children=oauth_provider_grants \
   --exclude-table-and-children=secure_sessions \
   --exclude-table-and-children=password_change_device_sweeps \
   --exclude-table-and-children=proxy_endpoint_history \

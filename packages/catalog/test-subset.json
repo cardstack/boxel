@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "7769aac5bca8d47985391aa3fac7664b9ae312ba",
+  "revision": "d0d28d607e28cd2cb585be364c26d2a6108f86d0",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -34,8 +34,11 @@
       "Integration | a realm that checks permissions"
     ],
     "realmServer": [
+      "anonymous-home-page-test",
       "anonymous-key-use-test",
+      "automation-admission-test",
       "automation-card-test",
+      "automation-manual-runs-test",
       "automation-run-attempt-test",
       "automation-run-command-test",
       "automation-run-limits-test",

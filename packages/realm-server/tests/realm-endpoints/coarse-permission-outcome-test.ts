@@ -595,6 +595,8 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `QUERY ${SupportedMimeType.JSON} /_sign-capture-urls`,
           `POST ${SupportedMimeType.JSONAPI} /_run-commit`,
           `POST ${SupportedMimeType.JSONAPI} /_run-log`,
+          `GET ${SupportedMimeType.JSONAPI} /_run-admission`,
+          `GET ${SupportedMimeType.JSONAPI} /_run-state`,
           `GET ${SupportedMimeType.JSON} /_automation-status`,
           `GET ${SupportedMimeType.Permissions} /_permissions`,
           `PATCH ${SupportedMimeType.Permissions} /_permissions`,
@@ -603,7 +605,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
           `POST ${SupportedMimeType.JSON} /_full-reindex`,
           `POST ${SupportedMimeType.JSONAPI} /_invalidate`,
         ].sort(),
-        "the index-backed reads, an automation run's commit, an automation run's log, and the administration routes",
+        "the index-backed reads, an automation run's commit, its log, its state check and its admission, and the administration routes",
       );
       assert.deepEqual(
         testRealm

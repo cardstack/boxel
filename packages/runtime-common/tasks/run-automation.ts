@@ -1,5 +1,12 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 
+import {
+  admitRunIdentity,
+  admitRunOperations,
+  scriptParseError,
+  type AdmittedRunKind,
+  type AutomationAdmissionChecks,
+} from '../automation-admission.ts';
 import { MAX_RUN_SECONDS } from '../automation-declaration.ts';
 import {
   type AutomationJobInput,
@@ -13,15 +20,20 @@ import {
   isAutomationScriptOutcome,
 } from '../automation-run-command.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
+import { logRunPlatformLine } from '../automation-run-log.ts';
+import { chargeAutomationRun } from '../automation-run-charge.ts';
 import {
+  addAutomationRunTabTime,
   finishAutomationRun,
   getAutomationRun,
+  recordAutomationRunAdmitted,
   recordAutomationRunScript,
   startAutomationRunAttempt,
   type AutomationRun,
   type AutomationRunOutcome,
 } from '../automation-runs.ts';
 import type { DBAdapter } from '../db.ts';
+import type { MeteredCharges } from '../metered-charges.ts';
 import type { DefinitionLookup } from '../definition-lookup.ts';
 import { param, query } from '../expression.ts';
 import {
@@ -30,6 +42,7 @@ import {
   type Prerenderer,
   type RunCommandResponse,
 } from '../index.ts';
+import { renderTabMs } from '../run-indexing.ts';
 import { RUN_COMMIT_PATH } from '../run-overlay.ts';
 import { SupportedMimeType } from '../supported-mime-type.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
@@ -67,6 +80,14 @@ export interface AutomationAttemptContext {
   virtualNetwork: VirtualNetwork;
   prerenderer: Prerenderer;
   mintRunToken: MintRunToken | undefined;
+  // The paired Matrix server, whose bot accounts are never direct writers.
+  matrixServerName: string | undefined;
+  // What admission asks the realm server's side of the worker (see
+  // `automation-admission.ts`). A worker without them admits no run.
+  admissionChecks: AutomationAdmissionChecks | undefined;
+  // Writes the run's compute and network charge once the run has ended.
+  // Without it, as in a harness, the run is measured and nothing is charged.
+  meteredCharges?: MeteredCharges;
   log: Log;
 }
 
@@ -79,12 +100,45 @@ export interface AutomationAttemptResult {
 }
 
 // Runs one attempt of an automation run (ADR 025, ADR 027 §1.4): takes the
-// run through its row, runs its script in a warm prerender tab on the run's
-// own affinity with the run's token, then commits the overlay as one batch
-// or, for a script that threw or ran out of time, discards it and records the
-// error. The run row is the source of truth: every step is refused once a
-// newer attempt owns the run, a person cancels it, or it ends at a cap.
+// run through its row, admits it (`automation-admission.ts`), which refuses a
+// run that can't go ahead before it costs anything, runs its script in a warm
+// prerender tab on the run's own affinity with the run's token, then commits
+// the overlay as one batch or, for a script that threw or ran out of time,
+// discards it and records the error. The run row is the source of truth:
+// every step is refused once a newer attempt owns the run, a person cancels
+// it, or it ends at a cap.
+//
+// The tab time the script takes is added to the run's row (see
+// `addTabTime`), and once the attempt is done, a run that has ended (however
+// it ended, including one a person canceled while its script ran) is charged
+// its compute and network (`chargeAutomationRun`). The charge is written even
+// when the attempt throws, since the run may have ended before it did, and
+// the queue doesn't run a job again after its handler throws.
 export async function runAutomationAttempt(
+  ctx: AutomationAttemptContext,
+  input: AutomationJobInput,
+  dedupeKey: string | null,
+  jobInfo: JobInfo | undefined,
+): Promise<AutomationAttemptResult> {
+  let result: AutomationAttemptResult | undefined;
+  try {
+    result = await attemptRun(ctx, input, dedupeKey, jobInfo);
+    return result;
+  } finally {
+    if (result?.reason !== NOT_THE_RUNS_JOB) {
+      await chargeAutomationRun({
+        dbAdapter: ctx.dbAdapter,
+        meteredCharges: ctx.meteredCharges,
+        runId: input.runId,
+        log: ctx.log,
+      });
+    }
+  }
+}
+
+const NOT_THE_RUNS_JOB = 'not-the-runs-job';
+
+async function attemptRun(
   ctx: AutomationAttemptContext,
   input: AutomationJobInput,
   dedupeKey: string | null,
@@ -106,7 +160,7 @@ export async function runAutomationAttempt(
     log.warn(
       `${tag} refused: the job's key ${JSON.stringify(dedupeKey)} isn't the run's`,
     );
-    return { state: 'left', reason: 'not-the-runs-job' };
+    return { state: 'left', reason: NOT_THE_RUNS_JOB };
   }
 
   let start = await startAutomationRunAttempt(dbAdapter, runId, attempt);
@@ -129,6 +183,28 @@ export async function runAutomationAttempt(
   let run = start.run;
   let fail = (reason: string, message: string) =>
     finish(ctx, tag, runId, attempt, { state: 'error', reason, message });
+  // A refusal at admission: the run ends with the refusal's code, and its
+  // log says admission refused it.
+  let refuse = async (reason: string, message: string) => {
+    await logRunPlatformLine(dbAdapter, runId, {
+      kind: 'admission',
+      level: 'error',
+      message: `Admission refused the run (${reason}): ${message}`,
+      data: { admitted: false, reason, actsAs: run.actsAs },
+    });
+    return await fail(reason, message);
+  };
+  // The row decides whether the run is a Preview, since everything after
+  // the run (its kept batch, its report, `lastSuccessAt`) reads the row. A
+  // job that says otherwise runs nothing, so a run its job calls a Preview
+  // never commits.
+  let dryRun = run.dryRun;
+  if (input.dryRun !== dryRun) {
+    return await fail(
+      'dry-run-mismatch',
+      `The run's job ${input.dryRun ? 'is' : "isn't"} a Preview and its row ${dryRun ? 'is' : "isn't"}, so the run didn't start`,
+    );
+  }
 
   let realmURL = ensureTrailingSlash(ctx.virtualNetwork.toURLHref(run.realm));
   let [limits, declaration] = await Promise.all([
@@ -136,13 +212,44 @@ export async function runAutomationAttempt(
     readRunDeclaration({ ...ctx, automationId: run.automationId }),
   ]);
   if (!limits.ok || !declaration.ok) {
-    return await fail(
+    return await refuse(
       'not-an-automation',
       !limits.ok
         ? limits.message
         : (declaration as { message: string }).message,
     );
   }
+  // The job says how the run was started; a run without a `triggerKind` is
+  // a trigger's, even when the card no longer names its trigger.
+  let kind: AdmittedRunKind =
+    input.triggerKind === 'manual'
+      ? 'manual'
+      : input.triggerKind === 'batch'
+        ? 'batch'
+        : 'trigger';
+  let admission = {
+    dbAdapter,
+    virtualNetwork: ctx.virtualNetwork,
+    matrixServerName: ctx.matrixServerName,
+    checks: ctx.admissionChecks,
+  };
+  let identity = await admitRunIdentity(admission, run, { kind });
+  if (!identity.ok) {
+    let refused = await refuse(identity.reason, identity.message);
+    // The payer lost access: the automation pauses, which cancels its other
+    // unfinished runs, once this one has ended with its refusal's code. The
+    // run's outcome is already recorded, so a pause that fails is logged and
+    // the next run's admission pauses it.
+    try {
+      await identity.pause?.();
+    } catch (e: any) {
+      log.error(
+        `${tag} couldn't pause the automation after its payer lost access: ${e?.message ?? e}`,
+      );
+    }
+    return refused;
+  }
+
   let { caps } = limits;
   let timeLimitSeconds = Math.min(caps.seconds, MAX_RUN_SECONDS);
   // A retry keeps the run's first start, so it gets what is left of the
@@ -182,24 +289,53 @@ export async function runAutomationAttempt(
       },
     });
     if (!response.ok) {
-      return await fail(
+      return await refuse(
         'missing-script',
         `The script ${scriptURL} could not be read: ${response.status}`,
       );
     }
     code = await response.text();
   } catch (e: any) {
-    return await fail(
+    return await refuse(
       'missing-script',
       redact(`The script ${scriptURL} could not be read: ${e?.message ?? e}`),
     );
   }
   if (!code.trim() || code.length > MAX_AUTOMATION_SCRIPT_CHARS) {
-    return await fail(
+    return await refuse(
       'script-error',
       `The script ${scriptURL} must be between 1 and ${MAX_AUTOMATION_SCRIPT_CHARS} characters`,
     );
   }
+  let parseError = scriptParseError(code);
+  if (parseError) {
+    return await refuse(
+      'script-error',
+      `The script ${scriptURL} doesn't parse: ${parseError}`,
+    );
+  }
+  let operationsAdmitted = await admitRunOperations(admission, run, {
+    automation: identity.automation,
+    realmURL,
+    token,
+  });
+  if (!operationsAdmitted.ok) {
+    return await refuse(operationsAdmitted.reason, operationsAdmitted.message);
+  }
+  if (!(await recordAutomationRunAdmitted(dbAdapter, runId, attempt))) {
+    log.info(`${tag} left alone: another attempt owns the run, or it ended`);
+    return { state: 'left', reason: 'superseded' };
+  }
+  await logRunPlatformLine(dbAdapter, runId, {
+    kind: 'admission',
+    level: 'info',
+    message: `Admitted the run as ${run.actsAs}, with ${operationsAdmitted.operations} declared ${operationsAdmitted.operations === 1 ? 'operation' : 'operations'} checked`,
+    data: {
+      admitted: true,
+      actsAs: run.actsAs,
+      operations: operationsAdmitted.operations,
+    },
+  });
   let recorded = await recordAutomationRunScript(dbAdapter, runId, attempt, {
     scriptId: declaration.declaration.script,
     scriptHash: await scriptHash(code),
@@ -224,13 +360,14 @@ export async function runAutomationAttempt(
       ...(input.webhookPayload !== undefined
         ? { webhookPayload: input.webhookPayload }
         : {}),
-      dryRun: input.dryRun,
+      dryRun,
     },
     secondsCap: remainingMs / 1000,
     endsAt: new Date(deadline).toISOString(),
   };
 
   let outcome: AutomationScriptOutcome;
+  let tabStartedAt = Date.now();
   try {
     let result = await ctx.prerenderer.runCommand({
       userId: run.actsAs,
@@ -241,8 +378,17 @@ export async function runAutomationAttempt(
       priority: jobInfo.priority,
       timeoutMs: remainingMs + AUTOMATION_TAB_GRACE_MS,
     });
+    await addTabTime(
+      ctx,
+      runId,
+      renderTabMs(result?.meta, tabStartedAt),
+      remainingMs,
+    );
     outcome = outcomeOf(result, redact);
   } catch (e: any) {
+    // A call that throws carries no measure from a prerender server, and
+    // may never have reached a tab (the request found no server, or every
+    // try was refused), so it adds no tab time.
     outcome = {
       state: 'error',
       reason: 'run-failed',
@@ -257,11 +403,34 @@ export async function runAutomationAttempt(
         : outcome.message;
     return await fail(outcome.reason, message);
   }
-  if (input.dryRun) {
-    // A Preview stops before the commit; its finish discards the overlay.
+  if (dryRun) {
+    // A Preview stops before the commit. Its finish keeps a copy of what it
+    // staged as the batch it shows, discards the overlay, and nothing
+    // reaches the realm.
     return await finish(ctx, tag, runId, attempt, { state: 'complete' });
   }
   return await commit(ctx, tag, run, attempt, realmURL, token);
+}
+
+// Records the tab time the script took on the run's row, where the run's
+// charge reads it. The time is held to `remainingMs`, what was left of the
+// run's time limit when the script started: the tab call's grace past the
+// limit (`AUTOMATION_TAB_GRACE_MS`) lets the tab answer, and isn't charged,
+// so a run's compute never costs more than its seconds cap prices it at in
+// the minimum balance and the switch-on estimate. A failure to record it is
+// logged rather than failing the run, whose script has already run.
+async function addTabTime(
+  ctx: AutomationAttemptContext,
+  runId: string,
+  measuredMs: number,
+  remainingMs: number,
+): Promise<void> {
+  let ms = Math.max(0, Math.min(measuredMs, remainingMs));
+  try {
+    await addAutomationRunTabTime(ctx.dbAdapter, runId, ms);
+  } catch (e) {
+    ctx.log.error(`could not record ${ms} ms of tab time on run ${runId}`, e);
+  }
 }
 
 async function commit(
@@ -438,7 +607,8 @@ function triggerKind(
   return triggers.find((t) => t.label === run.trigger)?.kind ?? 'manual';
 }
 
-// When the automation's last complete run started, other than this one.
+// When the automation's last complete run started, other than this one. A
+// Preview wrote nothing, so it never counts.
 async function lastSuccessAt(
   dbAdapter: DBAdapter,
   run: AutomationRun,
@@ -446,7 +616,7 @@ async function lastSuccessAt(
   let [row] = await query(dbAdapter, [
     'SELECT started_at FROM automation_runs WHERE automation_id =',
     param(run.automationId),
-    "AND state = 'complete' AND started_at IS NOT NULL AND id <>",
+    "AND state = 'complete' AND NOT dry_run AND started_at IS NOT NULL AND id <>",
     param(run.id),
     'ORDER BY started_at DESC LIMIT 1',
   ]);

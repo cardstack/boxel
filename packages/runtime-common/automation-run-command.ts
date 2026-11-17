@@ -156,10 +156,15 @@ export type AutomationScriptOutcome =
 // `timed-out`: the run reached its time limit.
 // `run-failed`: a realm call whose error the script didn't catch, or the
 // runner itself, failed the run.
+// `stopped`: the run stopped running while its script ran: a person canceled
+// it, a pause or remove canceled it, it ended at a cap, or a newer attempt
+// took it over. The tab stopped the script. The run's row already says how
+// the run ended, so the worker records nothing over it.
 export type AutomationScriptErrorReason =
   | 'script-error'
   | 'timed-out'
-  | 'run-failed';
+  | 'run-failed'
+  | 'stopped';
 
 export function isAutomationScriptOutcome(
   value: unknown,
@@ -175,11 +180,23 @@ export function isAutomationScriptOutcome(
     outcome.state === 'error' &&
     (outcome.reason === 'script-error' ||
       outcome.reason === 'timed-out' ||
-      outcome.reason === 'run-failed') &&
+      outcome.reason === 'run-failed' ||
+      outcome.reason === 'stopped') &&
     typeof outcome.message === 'string' &&
     (outcome.line === undefined || typeof outcome.line === 'number')
   );
 }
+
+// The realm route a run's tab asks, with the run's token, whether the run is
+// still running. It answers 200 while the run's row lets the run's calls
+// through, and 401 (`The automation run is not running`) once it doesn't,
+// whereupon the tab stops the script. It is how the tab learns of a cancel
+// while the script makes no calls of its own.
+export const RUN_STATE_PATH = '/_run-state';
+
+// How often a run's tab asks `RUN_STATE_PATH`: the longest a canceled run's
+// script keeps running in its tab.
+export const RUN_STATE_POLL_MS = 2_000;
 
 // Time the tab is given past the script's own time limit, to send what the
 // script staged through `cards.update` and flush its progress before it

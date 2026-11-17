@@ -10,6 +10,8 @@ import {
   createAutomationRun,
   getAutomationRun,
   logger,
+  param,
+  query,
   ri,
   rri,
   runAutomationAttempt,
@@ -26,13 +28,25 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { presentsAsRunToken } from '@cardstack/runtime-common/run-token';
+import { runOverlayFiles } from '@cardstack/runtime-common/run-overlay';
+import type { MeteredCharges } from '@cardstack/runtime-common/metered-charges';
+import {
+  addToCreditsLedger,
+  getLedgerEntries,
+  getUserByMatrixUserId,
+  getLedgerUsage,
+} from '@cardstack/billing/billing-queries';
 import {
   TEST_AUTOMATION_PATH,
   automationFixture,
+  ensureTestUser,
   realmSecretSeed,
   setupPermissionedRealmCached,
+  testAutomationAdmissionChecks,
   testCreatePrerenderAuth,
+  testPricing,
 } from './helpers/index.ts';
+import { meteredChargesFor } from '../lib/metered-charge.ts';
 import { nodeStreamToBuffer } from '../stream.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import { buildMintRunToken, verifyRunToken } from '../lib/run-token.ts';
@@ -88,13 +102,16 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
-  async function newRun(): Promise<AutomationRun> {
+  async function newRun({
+    dryRun = false,
+  }: { dryRun?: boolean } = {}): Promise<AutomationRun> {
     return await createAutomationRun(dbAdapter, {
       automationId: rri(`${realm.url}${TEST_AUTOMATION_PATH}`),
       realm: ri(realm.url),
       trigger: 'manual',
       slot: randomUUID(),
       actsAs: OWNER,
+      dryRun,
     });
   }
 
@@ -152,6 +169,7 @@ module(basename(import.meta.filename), function (hooks) {
       dedupeKey = automationRunDedupeKey(run),
       reservationId = 7,
       commit,
+      meteredCharges,
     }: {
       input?: Partial<AutomationJobInput>;
       dedupeKey?: string | null;
@@ -159,6 +177,7 @@ module(basename(import.meta.filename), function (hooks) {
       // Stands in for the network on the worker's commit requests only;
       // `send` sends one to the realm.
       commit?: (send: () => Promise<Response>) => Promise<Response>;
+      meteredCharges?: MeteredCharges;
     } = {},
   ) {
     let network = commit
@@ -184,18 +203,22 @@ module(basename(import.meta.filename), function (hooks) {
       concurrencyGroup: null,
       laneFamily: null,
     };
+    let definitionLookup = new CachingDefinitionLookup(
+      dbAdapter,
+      prerenderer,
+      virtualNetwork,
+      testCreatePrerenderAuth,
+    );
     return await runAutomationAttempt(
       {
         dbAdapter,
-        definitionLookup: new CachingDefinitionLookup(
-          dbAdapter,
-          prerenderer,
-          virtualNetwork,
-          testCreatePrerenderAuth,
-        ),
+        definitionLookup,
         virtualNetwork: network,
         prerenderer,
         mintRunToken: buildMintRunToken(realmSecretSeed),
+        matrixServerName: 'localhost',
+        admissionChecks: testAutomationAdmissionChecks,
+        meteredCharges,
         log,
       },
       {
@@ -507,22 +530,193 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(await readFile('out/raced.txt'), 'after the race');
   });
 
-  test('a Preview runs the script and commits nothing', async function (assert) {
-    let run = await newRun();
+  test("a Preview runs the script, commits nothing, keeps a copy of its batch, and is never the automation's last success", async function (assert) {
+    let preview = await newRun({ dryRun: true });
     let calls: TabCall[] = [];
     await attempt(
-      run,
+      preview,
       stubTab(calls, {
-        writes: { 'out/preview.txt': 'shown, not written' },
+        writes: { 'out/kept.txt': 'the batch a Preview shows' },
         answer: { state: 'complete' },
       }),
       { input: { dryRun: true } },
     );
     assert.true(calls[0].input.automation.dryRun, 'the script sees dryRun');
-    let after = await getAutomationRun(dbAdapter, run.id);
+    let after = await getAutomationRun(dbAdapter, preview.id);
     assert.strictEqual(after?.state, 'complete');
     assert.strictEqual(after?.commitStartedAt, null, 'no commit was claimed');
-    assert.strictEqual(await readFile('out/preview.txt'), undefined);
+    assert.strictEqual(await readFile('out/kept.txt'), undefined);
+    let kept = await query(dbAdapter, [
+      "SELECT path, convert_from(content, 'UTF8') AS text FROM automation_preview_files WHERE run_id =",
+      param(preview.id),
+    ]);
+    assert.deepEqual(
+      kept,
+      [{ path: 'out/kept.txt', text: 'the batch a Preview shows' }],
+      'the finished Preview keeps a copy of the files it staged',
+    );
+    assert.deepEqual(
+      await runOverlayFiles(dbAdapter, {
+        runId: preview.id,
+        attempt: after!.attempt!,
+      }),
+      [],
+      'and its overlay is discarded, as for every run',
+    );
+
+    let next = await newRun();
+    let nextCalls: TabCall[] = [];
+    await attempt(next, stubTab(nextCalls, { answer: { state: 'complete' } }));
+    assert.strictEqual(
+      nextCalls[0].input.automation.lastSuccessAt,
+      undefined,
+      'a complete Preview is not a last success',
+    );
+  });
+
+  test('a job that disagrees with its row about being a Preview runs nothing', async function (assert) {
+    for (let { rowDryRun, jobDryRun } of [
+      { rowDryRun: false, jobDryRun: true },
+      { rowDryRun: true, jobDryRun: false },
+    ]) {
+      let run = await newRun({ dryRun: rowDryRun });
+      let calls: TabCall[] = [];
+      let result = await attempt(
+        run,
+        stubTab(calls, {
+          writes: { 'out/mismatch.txt': 'never staged' },
+          answer: { state: 'complete' },
+        }),
+        { input: { dryRun: jobDryRun } },
+      );
+      assert.strictEqual(calls.length, 0, 'no tab was asked to run anything');
+      assert.strictEqual(result.state, 'error');
+      assert.strictEqual(result.reason, 'dry-run-mismatch');
+      let after = await getAutomationRun(dbAdapter, run.id);
+      assert.strictEqual(after?.state, 'error');
+      assert.strictEqual(after?.commitStartedAt, null);
+    }
+    assert.strictEqual(await readFile('out/mismatch.txt'), undefined);
+  });
+
+  // The run's identity, with credits to pay for its run.
+  async function fundOwner() {
+    await ensureTestUser(dbAdapter, OWNER);
+    let user = (await getUserByMatrixUserId(dbAdapter, OWNER))!;
+    await addToCreditsLedger(dbAdapter, {
+      userId: user.id,
+      creditAmount: 10_000,
+      creditType: 'extra_credit',
+      subscriptionCycleId: null,
+    });
+    return user;
+  }
+
+  test("an attempt adds its script's tab time to the run, and the run is charged its compute once it ends", async function (assert) {
+    let owner = await fundOwner();
+    let run = await newRun();
+    let result = await attempt(
+      run,
+      stubTab([], {
+        answer: () => ({
+          status: 'ready',
+          cardResultString: JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { json: { state: 'complete' } },
+            },
+          }),
+          meta: {
+            diagnostics: { renderElapsedMs: 4200, totalElapsedMs: 4500 },
+          },
+        }),
+      }),
+      { meteredCharges: meteredChargesFor(dbAdapter, testPricing) },
+    );
+
+    assert.deepEqual(result, { state: 'complete' });
+    let after = await getAutomationRun(dbAdapter, run.id);
+    assert.strictEqual(
+      after?.prerenderTabMs,
+      4200,
+      "the tab time is the server's measure of the render",
+    );
+    let charges = await getLedgerEntries(dbAdapter, {
+      runId: run.id,
+      chargeKind: 'run',
+    });
+    assert.true(charges.length > 0, 'the run is charged');
+    assert.true(
+      charges.every((e) => e.userId === owner.id),
+      "to the run's identity",
+    );
+    let usage = Object.fromEntries(
+      (await getLedgerUsage(dbAdapter, { runId: run.id }))
+        .filter((u) => u.chargeKind === 'run')
+        .map(({ unit, quantity }) => [unit, quantity]),
+    );
+    assert.strictEqual(
+      usage.prerender_tab_seconds,
+      4.2,
+      'for the tab time its script took',
+    );
+  });
+
+  test("a script's tab time past the run's time limit isn't charged", async function (assert) {
+    await fundOwner();
+    let run = await newRun();
+    await attempt(
+      run,
+      stubTab([], {
+        answer: () => ({
+          status: 'ready',
+          cardResultString: JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: { json: { state: 'complete' } },
+            },
+          }),
+          // Longer than the run's 300 s seconds cap: the tab answered in the
+          // grace its call gets past the limit.
+          meta: { diagnostics: { renderElapsedMs: 330_000 } },
+        }),
+      }),
+      { meteredCharges: meteredChargesFor(dbAdapter, testPricing) },
+    );
+
+    let after = await getAutomationRun(dbAdapter, run.id);
+    assert.true(
+      after!.prerenderTabMs <= 300_000,
+      `the recorded tab time (${after!.prerenderTabMs} ms) is held to the run's time limit`,
+    );
+    assert.true(
+      after!.prerenderTabMs > 290_000,
+      'and is what the run had left when its script started',
+    );
+  });
+
+  test('a tab call that throws adds no tab time, and leaves nothing to charge', async function (assert) {
+    await fundOwner();
+    let run = await newRun();
+    let result = await attempt(
+      run,
+      stubTab([], {
+        answer: () => {
+          throw new Error('no prerender server answered');
+        },
+      }),
+      { meteredCharges: meteredChargesFor(dbAdapter, testPricing) },
+    );
+
+    assert.strictEqual(result.state, 'error');
+    assert.strictEqual(result.reason, 'run-failed');
+    let after = await getAutomationRun(dbAdapter, run.id);
+    assert.strictEqual(after?.prerenderTabMs, 0, 'no tab time is recorded');
+    assert.deepEqual(
+      await getLedgerEntries(dbAdapter, { runId: run.id, chargeKind: 'run' }),
+      [],
+      'and the run is not charged',
+    );
   });
 
   test("a job whose key isn't its run's runs nothing", async function (assert) {

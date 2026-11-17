@@ -23,8 +23,18 @@
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import { logRunPlatformLine } from './automation-run-log.ts';
+import {
+  clearRunMilestones,
+  closeRunMilestones,
+} from './automation-run-milestones.ts';
 import type { DBAdapter } from './db.ts';
-import { param, query, type Expression, type Querier } from './expression.ts';
+import {
+  dbAdapterQuerier,
+  param,
+  query,
+  type Expression,
+  type Querier,
+} from './expression.ts';
 import type { PgPrimitive } from './index.ts';
 import type {
   RealmIdentifier,
@@ -56,6 +66,13 @@ export interface AutomationRun extends AutomationRunCounts {
   slot: string;
   // The Matrix user id of the person the run acts as.
   actsAs: string;
+  // A Preview: the run stops before its commit, and once it finishes
+  // complete the files it staged are kept as the batch it shows
+  // (`automation_preview_files`).
+  dryRun: boolean;
+  // For a complete Preview whose batch a later one by the same person
+  // replaced: that Preview.
+  previewReplacedBy: string | null;
   // The queue attempt (the job's reservation id) that owns the run, once one
   // has started it.
   attempt: number | null;
@@ -73,8 +90,15 @@ export interface AutomationRun extends AutomationRunCounts {
   // `reserveAutomationRunAICredits`).
   aiCreditsSpent: number;
   aiCreditsReserved: number;
+  // Milliseconds of prerender tab time the run's script took, summed over
+  // the attempts that ran it (see `addAutomationRunTabTime`).
+  prerenderTabMs: number;
   createdAt: string;
   startedAt: string | null;
+  // When the attempt that owns the run admitted it (see
+  // `automation-admission.ts`). Each attempt admits the run again before it
+  // runs the script, so this is the latest admission.
+  admittedAt: string | null;
   commitStartedAt: string | null;
   committedAt: string | null;
   finishedAt: string | null;
@@ -86,6 +110,8 @@ export interface NewAutomationRun {
   trigger: string;
   slot: string;
   actsAs: string;
+  // A Preview; false when absent.
+  dryRun?: boolean;
 }
 
 // What an attempt that has just taken a run must do with it:
@@ -126,8 +152,16 @@ export async function createAutomationRun(
   dbAdapter: DBAdapter,
   run: NewAutomationRun,
 ): Promise<AutomationRun> {
-  let [created] = await query(dbAdapter, [
-    'INSERT INTO automation_runs (automation_id, realm, trigger, slot, acts_as) VALUES (',
+  return await insertAutomationRun(dbAdapterQuerier(dbAdapter), run);
+}
+
+// `createAutomationRun` inside the caller's transaction.
+export async function insertAutomationRun(
+  querier: Querier,
+  run: NewAutomationRun,
+): Promise<AutomationRun> {
+  let [created] = await querier([
+    'INSERT INTO automation_runs (automation_id, realm, trigger, slot, acts_as, dry_run) VALUES (',
     param(run.automationId),
     ',',
     param(run.realm),
@@ -137,12 +171,14 @@ export async function createAutomationRun(
     param(run.slot),
     ',',
     param(run.actsAs),
+    ',',
+    param(run.dryRun ?? false),
     ') ON CONFLICT ON CONSTRAINT automation_runs_slot_key DO NOTHING RETURNING *',
   ]);
   if (created) {
     return runFromRow(created);
   }
-  let [existing] = await query(dbAdapter, [
+  let [existing] = await querier([
     'SELECT * FROM automation_runs WHERE automation_id =',
     param(run.automationId),
     'AND trigger =',
@@ -209,8 +245,16 @@ export async function startAutomationRunAttempt(
   // statement, which sees a file a replaced attempt staged while it held the
   // run's row, since the takeover waited on that lock. A run whose commit was
   // already claimed keeps its files: the claiming attempt may still be
-  // reading them to send its batch.
+  // reading them to send its batch. An attempt that takes the run from
+  // another also clears the run's milestones, since the script runs again
+  // from its start and reports them afresh. The run's row is locked first,
+  // the order `appendRunLog` takes the locks in.
   let row = await dbAdapter.withTransaction(async (txQuery) => {
+    let [owner] = await txQuery([
+      'SELECT attempt FROM automation_runs WHERE id =',
+      param(id),
+      'FOR UPDATE',
+    ]);
     let [started] = await txQuery([
       "UPDATE automation_runs SET state = 'running', attempt =",
       param(attempt),
@@ -227,6 +271,9 @@ export async function startAutomationRunAttempt(
         'AND attempt <>',
         param(attempt),
       ]);
+      if (owner?.attempt != null && Number(owner.attempt) !== attempt) {
+        await clearRunMilestones(txQuery, id);
+      }
     }
     return started;
   });
@@ -266,6 +313,16 @@ export async function recordAutomationRunScript(
     ', script_hash =',
     param(script.scriptHash),
   ]);
+}
+
+// Records that `attempt` admitted the run. Refused unless the run is running
+// and `attempt` owns it.
+export async function recordAutomationRunAdmitted(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+): Promise<AutomationRun | undefined> {
+  return await updateOwned(dbAdapter, id, attempt, ['admitted_at = now()']);
 }
 
 // Claims the run's one commit for `attempt`. The claim is refused unless the
@@ -342,18 +399,21 @@ export async function finishAutomationRun(
           { ends: true },
         );
   if (run) {
-    await logRunEnded(dbAdapter, run);
+    await logAutomationRunEnded(dbAdapter, run);
   }
   return run;
 }
 
 // The run log's last line: how the run ended, as its row says. The realm
 // server writes it, so a run whose tab can no longer send (its token expired
-// at its time limit, say) still ends its log with why.
-async function logRunEnded(
+// at its time limit, say) still ends its log with why. Writing a line locks
+// the run's row, so a caller that ended the run inside a transaction of its
+// own writes the line once that transaction has committed.
+export async function logAutomationRunEnded(
   dbAdapter: DBAdapter,
   run: AutomationRun,
 ): Promise<void> {
+  await closeRunMilestones(dbAdapter, run);
   await logRunPlatformLine(
     dbAdapter,
     run.id,
@@ -363,7 +423,10 @@ async function logRunEnded(
         ? {
             kind: 'finish',
             level: 'warn',
-            message: `The run was canceled${run.canceledBy ? ` by ${run.canceledBy}` : ''}`,
+            message: run.canceledBy
+              ? `The run was canceled by ${run.canceledBy}`
+              : `The run was canceled${run.errorReason ? ` (${run.errorReason})` : ''}`,
+            ...(run.errorReason ? { data: { reason: run.errorReason } } : {}),
           }
         : {
             kind: 'finish',
@@ -377,7 +440,8 @@ async function logRunEnded(
 // Closes a pending or running run whose job is gone, such as one whose job ran
 // out of retries, whoever owned it. A run whose commit landed finishes as
 // complete. Any other run finishes as an error with `reason`, including one
-// whose commit was claimed but never recorded as landed.
+// whose commit was claimed but never recorded as landed. No attempt is left to
+// charge the run, so the caller charges it (`chargeAutomationRun`).
 export async function abandonAutomationRun(
   dbAdapter: DBAdapter,
   id: string,
@@ -394,50 +458,107 @@ export async function abandonAutomationRun(
   ]);
   let run = row ? runFromRow(row) : undefined;
   if (run) {
-    await logRunEnded(dbAdapter, run);
+    await logAutomationRunEnded(dbAdapter, run);
   }
   return run;
 }
 
 // Cancels a pending or running run, for `canceledBy`. A run whose commit was
-// claimed can't be canceled, since its writes may already be landing.
+// claimed can't be canceled, since its writes may already be landing. The
+// cancel discards the run's overlay, so nothing it staged lands; the realm
+// server refuses the run's next call, and its tab stops the script once the
+// realm answers that the run is not running. A person's cancel goes through
+// `cancelAutomationRunFor` in `automations.ts`, which checks they may.
 export async function cancelAutomationRun(
   dbAdapter: DBAdapter,
   id: string,
   canceledBy: string,
 ): Promise<AutomationRun | undefined> {
-  let row = await endRun(dbAdapter, [
+  let run = await dbAdapter.withTransaction((txQuery) =>
+    cancelAutomationRunIn(txQuery, id, canceledBy),
+  );
+  if (run) {
+    await logAutomationRunEnded(dbAdapter, run);
+  }
+  return run;
+}
+
+// `cancelAutomationRun` inside the caller's transaction, which then writes
+// the run's last log line with `logAutomationRunEnded` once it commits.
+export async function cancelAutomationRunIn(
+  txQuery: Querier,
+  id: string,
+  canceledBy: string,
+): Promise<AutomationRun | undefined> {
+  let [row] = await txQuery([
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
     param(canceledBy),
     'WHERE id =',
     param(id),
     "AND state IN ('pending', 'running') AND commit_started_at IS NULL RETURNING *",
   ]);
-  let run = row ? runFromRow(row) : undefined;
-  if (run) {
-    await logRunEnded(dbAdapter, run);
+  if (!row) {
+    return undefined;
   }
-  return run;
+  await discardOverlays(txQuery, [String(row.id)]);
+  return runFromRow(row);
 }
 
-// Cancels every run of the automation that hasn't started, as pausing or
-// removing the automation does, inside the caller's transaction. A running
-// run is left to finish. A person's pause or remove names them in
+// Cancels every run of the automation that hasn't ended, as pausing or
+// removing the automation does, inside the caller's transaction, and returns
+// the runs it canceled. A pending run never starts. A running run is
+// canceled as `cancelAutomationRun` cancels it: its overlay is discarded, the
+// realm server refuses its next call and its tab stops the script. A running
+// run whose commit was claimed is left to finish, since its writes may
+// already be landing. A person's pause or remove names them in
 // `canceled_by`. A pause no person asked for names no one, and records its
-// reason (such as `caps-raised`) in `error_reason`.
-export async function cancelPendingAutomationRuns(
+// reason (such as `caps-raised`) in `error_reason`. The caller writes each
+// canceled run's last log line with `logAutomationRunEnded` once its
+// transaction commits.
+export async function cancelUnfinishedAutomationRuns(
   querier: Querier,
   automationId: RealmResourceIdentifier,
   by: { canceledBy: string } | { reason: string },
-): Promise<void> {
-  await querier([
+): Promise<AutomationRun[]> {
+  let rows = await querier([
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
     param('canceledBy' in by ? by.canceledBy : null),
     ', error_reason =',
     param('reason' in by ? by.reason : null),
     'WHERE automation_id =',
     param(automationId),
-    "AND state = 'pending'",
+    "AND (state = 'pending' OR (state = 'running' AND commit_started_at IS NULL))",
+    'RETURNING *',
+  ]);
+  await discardOverlays(
+    querier,
+    rows.map((row) => String(row.id)),
+  );
+  return rows.map(runFromRow);
+}
+
+// Adds the prerender tab time one attempt's script took to the run. The tab
+// was held whatever state the run is in by then, so the time is added in any
+// state, like the counts below.
+export async function addAutomationRunTabTime(
+  dbAdapter: DBAdapter,
+  id: string,
+  ms: number,
+): Promise<void> {
+  let whole = Math.ceil(ms);
+  if (!Number.isSafeInteger(whole) || whole < 0) {
+    throw new Error(
+      `a run's tab time can only grow by 0 ms or more, not ${ms}`,
+    );
+  }
+  if (whole === 0) {
+    return;
+  }
+  await query(dbAdapter, [
+    'UPDATE automation_runs SET prerender_tab_ms = prerender_tab_ms +',
+    param(whole),
+    'WHERE id =',
+    param(id),
   ]);
 }
 
@@ -697,6 +818,9 @@ async function updateOwned(
 // the update: a file staged while the update waited on the run's row lock has
 // committed by then, and a later stage waits on the lock and then finds the
 // run no longer running.
+//
+// A Preview that finishes complete first keeps the files its owning attempt
+// staged, as the batch it shows (`keepPreviewBatch`).
 async function endRun(
   dbAdapter: DBAdapter,
   update: Expression,
@@ -704,13 +828,96 @@ async function endRun(
   return await dbAdapter.withTransaction(async (txQuery) => {
     let [row] = await txQuery(update);
     if (row) {
-      await txQuery([
-        'DELETE FROM run_overlay_files WHERE run_id =',
-        param(String(row.id)),
-      ]);
+      if (
+        row.dry_run === true &&
+        row.state === 'complete' &&
+        row.attempt != null
+      ) {
+        await keepPreviewBatch(txQuery, row);
+      }
+      await discardOverlays(txQuery, [String(row.id)]);
     }
     return row;
   });
+}
+
+// Deletes what the runs staged, as a statement of its own after the update
+// that ended them (see `endRun`).
+async function discardOverlays(querier: Querier, runIds: string[]) {
+  for (let runId of runIds) {
+    await querier([
+      'DELETE FROM run_overlay_files WHERE run_id =',
+      param(runId),
+    ]);
+  }
+}
+
+// Copies a complete Preview's staged files into `automation_preview_files`,
+// inside the transaction that finishes it. Only a person's latest complete
+// Preview of an automation, ordered by when each was asked for, keeps its
+// batch: keeping one deletes the batch of every earlier one and records it
+// in their `preview_replaced_by`, and a Preview that finishes after a later
+// one has completed keeps nothing and records that one. The finishes of one
+// person's Previews of one automation take a transaction-scoped advisory
+// lock, so two finishing together can't both keep a batch, and each sees
+// the other's finish once it has the lock.
+async function keepPreviewBatch(
+  txQuery: Querier,
+  row: Record<string, PgPrimitive>,
+): Promise<void> {
+  let runId = String(row.id);
+  let samePerson: Expression = [
+    'automation_id =',
+    param(String(row.automation_id)),
+    'AND acts_as =',
+    param(String(row.acts_as)),
+    "AND dry_run AND state = 'complete' AND id <>",
+    param(runId),
+  ];
+  await txQuery([
+    'SELECT pg_advisory_xact_lock(hashtext(',
+    param(`automation-preview:${row.automation_id}:${row.acts_as}`),
+    '))',
+  ]);
+  let [later] = await txQuery([
+    'SELECT id FROM automation_runs WHERE',
+    ...samePerson,
+    'AND (created_at, id) > (SELECT created_at, id FROM automation_runs WHERE id =',
+    param(runId),
+    ') ORDER BY created_at DESC, id DESC LIMIT 1',
+  ]);
+  if (later) {
+    await txQuery([
+      'UPDATE automation_runs SET preview_replaced_by =',
+      param(String(later.id)),
+      'WHERE id =',
+      param(runId),
+    ]);
+    return;
+  }
+  let earlier = [
+    'SELECT id FROM automation_runs WHERE',
+    ...samePerson,
+    'AND preview_replaced_by IS NULL',
+  ];
+  await txQuery([
+    'DELETE FROM automation_preview_files WHERE run_id IN (',
+    ...earlier,
+    ')',
+  ]);
+  await txQuery([
+    'UPDATE automation_runs SET preview_replaced_by =',
+    param(runId),
+    'WHERE id IN (',
+    ...earlier,
+    ')',
+  ]);
+  await txQuery([
+    'INSERT INTO automation_preview_files (run_id, path, content, size) SELECT run_id, path, content, size FROM run_overlay_files WHERE run_id =',
+    param(runId),
+    'AND attempt =',
+    param(Number(row.attempt)),
+  ]);
 }
 
 function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
@@ -721,6 +928,8 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     trigger: String(row.trigger),
     slot: String(row.slot),
     actsAs: String(row.acts_as),
+    dryRun: row.dry_run === true || row.dry_run === 1,
+    previewReplacedBy: (row.preview_replaced_by as string | null) ?? null,
     attempt: row.attempt == null ? null : Number(row.attempt),
     scriptId: (row.script_id as RealmResourceIdentifier | null) ?? null,
     scriptHash: (row.script_hash as string | null) ?? null,
@@ -734,8 +943,10 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     writes: Number(row.writes),
     aiCreditsSpent: Number(row.ai_credits_spent ?? 0),
     aiCreditsReserved: Number(row.ai_credits_reserved ?? 0),
+    prerenderTabMs: Number(row.prerender_tab_ms ?? 0),
     createdAt: iso(row.created_at)!,
     startedAt: iso(row.started_at),
+    admittedAt: iso(row.admitted_at),
     commitStartedAt: iso(row.commit_started_at),
     committedAt: iso(row.committed_at),
     finishedAt: iso(row.finished_at),

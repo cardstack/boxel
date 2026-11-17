@@ -17,6 +17,18 @@ export function automationTimeLimitMs(secondsCap: number): number {
 // caller can tell a run out of time from a script that failed.
 export class AutomationTimeLimitError extends Error {}
 
+// What an automation run's script is stopped with when its run stops running
+// under it: a person canceled the run, a pause or remove canceled it, it
+// ended at a cap, or a newer attempt took it over (see `RunStateWatch`).
+export class AutomationRunStoppedError extends Error {
+  constructor(
+    message = 'The automation run stopped running, so its script was stopped',
+  ) {
+    super(message);
+    this.name = 'AutomationRunStoppedError';
+  }
+}
+
 export type ConsoleLevel = 'log' | 'info' | 'warn' | 'error';
 
 // What an automation run reports while it runs, in the order it happens.

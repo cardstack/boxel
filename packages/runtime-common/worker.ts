@@ -30,6 +30,7 @@ import type { MediaCacheAdapter } from './media-cache.ts';
 import type { MeteredCharges } from './metered-charges.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs, MintRunToken } from './tasks/index.ts';
+import type { AutomationAdmissionChecks } from './automation-admission.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { heartbeatJob } from './queue.ts';
 
@@ -231,6 +232,7 @@ export class Worker {
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #createPrerenderAuth: CreatePrerenderAuth;
   #mintRunToken: MintRunToken | undefined;
+  #automationAdmissionChecks: AutomationAdmissionChecks | undefined;
   #meteredCharges: MeteredCharges | undefined;
 
   constructor({
@@ -249,6 +251,7 @@ export class Worker {
     prerenderer,
     createPrerenderAuth,
     mintRunToken,
+    automationAdmissionChecks,
     indexJobsOnly,
     skipPrerenderHtmlRealms,
     mediaCacheAdapter,
@@ -279,6 +282,8 @@ export class Worker {
     createPrerenderAuth: CreatePrerenderAuth;
     // See `TaskArgs.mintRunToken`.
     mintRunToken?: MintRunToken;
+    // See `TaskArgs.automationAdmissionChecks`.
+    automationAdmissionChecks?: AutomationAdmissionChecks;
     // See `TaskArgs.meteredCharges`.
     meteredCharges?: MeteredCharges;
   }) {
@@ -297,6 +302,7 @@ export class Worker {
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
     this.#mintRunToken = mintRunToken;
+    this.#automationAdmissionChecks = automationAdmissionChecks;
     this.#indexJobsOnly = indexJobsOnly ?? false;
     this.#skipPrerenderHtmlRealms = skipPrerenderHtmlRealms ?? [];
     this.#mediaCacheAdapter = mediaCacheAdapter;
@@ -327,6 +333,7 @@ export class Worker {
       reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
       mintRunToken: this.#mintRunToken,
+      automationAdmissionChecks: this.#automationAdmissionChecks,
       mediaCacheAdapter: this.#mediaCacheAdapter,
       skipPrerenderHtmlRealms: this.#skipPrerenderHtmlRealms,
       meteredCharges: this.#meteredCharges,
@@ -370,6 +377,11 @@ export class Worker {
         this.#queue.register(
           `automation-storage-charge`,
           Tasks['automationStorageCharge'](taskArgs),
+        ),
+      'automation-tick': () =>
+        this.#queue.register(
+          `automation-tick`,
+          Tasks['automationTick'](taskArgs),
         ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),

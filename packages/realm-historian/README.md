@@ -99,6 +99,61 @@ and no recorder gets one, which is dropped once idle again. A job that fails is
 logged and tried again after its kind's retry delay. The realm records on,
 unless the kind stalls the realm on failure.
 
+## Maintenance
+
+The recorder writes every object loose, and captures every write, including
+intermediate states that no revision keeps. `src/maintenance.ts` keeps each
+repo small and fast to read, as two kinds of background work:
+
+- `maintain` runs a pass once a realm has committed nothing for 5 minutes
+  after committing a revision. It also runs when the task loads the realm,
+  so a repo a crash left unmaintained gets its pass, and an hour after its
+  last pass, so a realm that never goes quiet gets one between revisions. It
+  skips a realm whose `info/refs` already names HEAD.
+- `commit-graph` writes the commit-graph after every 100 revisions, so a busy
+  realm's path-filtered reads stay fast between passes.
+
+A pass runs four steps:
+
+1. `git repack -d` packs the loose objects HEAD reaches. Once a repo has 32
+   packs, the pass uses `git repack -a -d` instead and merges them into one.
+2. `git commit-graph write --reachable --split --changed-paths` keeps a
+   commit-graph with changed-path Bloom filters, so a path-filtered `git log`
+   doesn't read a tree per commit. It also runs on its own after every 100
+   revisions.
+3. `git prune --expire=1.hour.ago` removes captured objects no revision uses.
+   The hour protects objects another task is writing during a lease handover.
+   A pass that leaves younger ones runs again an hour later. It records that
+   time in the repo (`realm-historian-prune-after`), so the rerun survives a
+   restart and a handover of the realm to another task.
+4. `git update-server-info` writes `info/refs` and `objects/info/packs`, so a
+   repo can be cloned read-only over git's dumb HTTP protocol from a static
+   file server. `info/refs` also names the HEAD the last complete pass saw.
+
+`git repack --geometric` isn't used: it packs loose objects whether or not
+anything reaches them, and prune never removes an object once it is packed.
+A pack left under a temporary name, as a killed repack leaves one, is
+replaced by the next pass once it is an hour old.
+
+On one host, a reader never misses an object during a pass: repack removes
+a loose copy only once its pack is in place, and prune removes only objects
+HEAD doesn't reach. A reader on another host of the shared file system can
+go on seeing a cached listing of the pack directory, or a pack that a `-a`
+repack removed, for as long as its client caches them. Whether reads there
+stay whole through a pass is measured on the deployed file system.
+
+Each pass logs one line of `key=value` fields: the realm, its HEAD, what made
+the pass due (`head-moved` or `prune-rerun`), how it ended (`done`, `failed`
+or `aborted`), each step's duration, the loose and packed object counts and
+sizes before and after, whether the packs were put into one, and the objects
+pruned.
+
+The commit-graph's Bloom filters serve `git log` with one path filter from
+git 2.27, and with several path filters only from git 2.51. `probeGit`
+(`src/git-capabilities.ts`) tries both on the git on PATH, and the service
+logs the answer at startup. Its `bloomWithSeveralPaths` is the value for the
+reader's option of that name.
+
 ## Reading
 
 The realm server reads history itself, through `GitRealmHistoryReader` from

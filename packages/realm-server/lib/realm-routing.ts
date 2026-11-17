@@ -196,7 +196,7 @@ export async function matchHostRoutingRule(
     // no match rather than surfacing the error on the hot HTML path.
     return undefined;
   }
-  let rule = routingMap.find((r) => r.path === pathInRealm);
+  let rule = hostRoutingRuleFor(routingMap, pathInRealm);
   if (!rule) {
     return undefined;
   }
@@ -205,6 +205,15 @@ export async function matchHostRoutingRule(
     rule,
     canonicalPathname: realmURL.pathname + rule.path.replace(/^\//, ''),
   };
+}
+
+// The rule a realm's routing map applies to `pathInRealm`, a path within the
+// realm that starts with `/` (the realm root is `/`).
+export function hostRoutingRuleFor(
+  routingMap: HostRoutingRule[],
+  pathInRealm: string,
+): HostRoutingRule | undefined {
+  return routingMap.find((rule) => rule.path === pathInRealm);
 }
 
 // Whether a realm's validated host routes hold any route the fixed routing
@@ -363,13 +372,23 @@ export async function hasExtensionlessSourceModule(
   deps: RealmRoutingDeps,
 ): Promise<boolean> {
   let realm = await findOrMountRealm(cardURL, deps);
-  if (!realm?.dir) {
+  return realm ? realmHoldsExtensionlessSourceModule(realm, cardURL) : false;
+}
+
+// Whether `url`, which names no extension, is the import name of a module
+// file in `realm`'s directory: `<path>.gts` and the like, or the `index`
+// module of a directory at `<path>`.
+export function realmHoldsExtensionlessSourceModule(
+  realm: Realm,
+  url: URL,
+): boolean {
+  if (!realm.dir) {
     return false;
   }
 
   let localPath: string;
   try {
-    localPath = realm.paths.local(cardURL);
+    localPath = realm.paths.local(url);
   } catch {
     return false;
   }

@@ -1,6 +1,7 @@
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common/realm-identifiers';
 
 import type { RoomAnalysis } from './room-analysis.ts';
+import type { RoutingResult } from './routing.ts';
 
 // The shape of one run's JSON in the results directory, and the grade read
 // off it. Shared by the spec that writes it and run-eval.ts that turns it
@@ -50,6 +51,9 @@ export interface RunResult {
   skillFeatures: string[];
   // The evaluation's own time budget per prompt, when it sets one.
   secondsPerPrompt?: number;
+  // Whether each question's covering skill was opened, when the evaluation
+  // sets `expectedReads`.
+  routing?: RoutingResult;
   username: string;
   stoppedBy:
     | 'idle'
