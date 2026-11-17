@@ -100,6 +100,16 @@ const COALESCE_MAX_WAIT_MS = 720_000;
 // converges as soon as no invalidation lands mid-populate; the cap keeps an
 // invalidation storm from spinning on prerenders instead of surfacing.
 const POPULATE_RACE_MAX_ATTEMPTS = 3;
+
+// How long a remembered definitions row holds whatever the generation says:
+// the five seconds a remembered policy answer holds (`MAX_REMEMBERED_MS`,
+// card-operations/gate.ts). An edit in this process moves the generation at
+// once; the age bound limits how long a peer's lost invalidation notice can
+// leave a row stale. Only the row is remembered, never the permissions that
+// chose it.
+export const REMEMBERED_ROW_MS = 5_000;
+// A bound on the remembered rows; the map starts over once it holds this many.
+const MAX_REMEMBERED_ROWS = 2_000;
 // A module in a realm this server does not host can only be placed by asking
 // the realm that holds it, so `buildLookupContext` reaches the network — and
 // the cost of that request is set by the far end, not by anything local. An
@@ -366,6 +376,12 @@ export interface PopulateCoordinator {
 // downgrade to background priority for its module sub-renders.
 export interface DefinitionLookupOptions {
   priority?: number;
+  // Serve the module's definitions row from memory where this lookup read it
+  // under the current definition generation within the last
+  // `REMEMBERED_ROW_MS` (`#rememberedRows`). The lookup context, which reads
+  // the module's realm permissions, is still built afresh every time, so the
+  // row remembered is the one those permissions select now.
+  remember?: boolean;
 }
 
 // Explicit cache context for a read-through populate. Callers that
@@ -457,6 +473,8 @@ interface LookupContext {
   // `RealmIndexQueryEngine`'s search opts; the search engine threads
   // it here when it calls `lookupDefinition`.
   priority?: number;
+  // `DefinitionLookupOptions.remember`.
+  remember?: boolean;
 }
 
 interface RemoteRealmProbe {
@@ -563,6 +581,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // the delete a reader can still read the row being removed, and an answer
   // derived from that row must not outlive the delete.
   #definitionGeneration = 0;
+  // Definitions rows a `remember` lookup read, keyed by the context that
+  // selected them and the module, with the definition generation they were
+  // read under and when. Only a lookup that asks reads from here; see
+  // `DefinitionLookupOptions.remember`.
+  #rememberedRows = new Map<
+    string,
+    { generation: number; at: number; entry: DefinitionCacheEntry }
+  >();
   // Remote-realm visibility probes. `#probeInFlight` shares one request among
   // concurrent probes of the same module and requesting user;
   // `#unreachableOrigins` maps an origin whose transport failed to the
@@ -597,6 +623,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return (
       await this.lookupDefinitionEntryWithContext(codeRef, {
         ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+        ...(opts?.remember ? { remember: true } : {}),
       })
     ).definition;
   }
@@ -607,6 +634,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   ): Promise<ModuleDefinitionResult> {
     return await this.lookupDefinitionEntryWithContext(codeRef, {
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      ...(opts?.remember ? { remember: true } : {}),
     });
   }
 
@@ -1194,7 +1222,28 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     // an empty cache: the two are indistinguishable in the result and only
     // this separates "no such module" from "every populate was discarded".
     let exhaustedByInvalidation = false;
-    for (let attempt = 0; attempt < POPULATE_RACE_MAX_ATTEMPTS; attempt++) {
+    let rememberKey = contextOpts?.remember
+      ? [resolvedRealmURL, canonicalModuleURL, cacheScope, cacheUserId].join(
+          '\n',
+        )
+      : undefined;
+    let readUnder = this.#definitionGeneration;
+    let readAt = Date.now();
+    if (rememberKey) {
+      let row = this.#rememberedRows.get(rememberKey);
+      if (
+        row &&
+        row.generation === readUnder &&
+        readAt - row.at < REMEMBERED_ROW_MS
+      ) {
+        moduleEntry = row.entry;
+      }
+    }
+    for (
+      let attempt = 0;
+      !moduleEntry && attempt < POPULATE_RACE_MAX_ATTEMPTS;
+      attempt++
+    ) {
       let snapshot = this.snapshotGeneration(
         resolvedRealmURL,
         canonicalModuleURL,
@@ -1239,6 +1288,19 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: moduleEntry.error,
       });
+    }
+
+    if (rememberKey && this.#definitionGeneration === readUnder) {
+      if (this.#rememberedRows.size >= MAX_REMEMBERED_ROWS) {
+        this.#rememberedRows.clear();
+      }
+      if (this.#rememberedRows.get(rememberKey)?.entry !== moduleEntry) {
+        this.#rememberedRows.set(rememberKey, {
+          generation: readUnder,
+          at: readAt,
+          entry: moduleEntry,
+        });
+      }
     }
 
     let defOrError = this.definitionEntryFor(
@@ -1480,6 +1542,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       await this.lookupDefinitionEntryWithContext(codeRef, {
         requestingRealm: realm,
         ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+        ...(opts?.remember ? { remember: true } : {}),
       })
     ).definition;
   }
@@ -1492,6 +1555,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return await this.lookupDefinitionEntryWithContext(codeRef, {
       requestingRealm: realm,
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      ...(opts?.remember ? { remember: true } : {}),
     });
   }
 
