@@ -1439,6 +1439,18 @@ function sameCodeRef(
   );
 }
 
+// Whether two byte arrays hold the same bytes.
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) {
+    return false;
+  }
+  for (let i = 0; i < a.byteLength; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
 function namesGrantableBytes(localPath: LocalPath): boolean {
   return localPath.slice(localPath.lastIndexOf('/') + 1) !== '';
 }
@@ -4090,11 +4102,17 @@ export class Realm {
         this.invalidateURLs.bind(this),
         ACL_ONLY,
       )
+      // An automation run's create and patch are staged in its overlay, and
+      // its card removal is refused with the reason (see `#runRemovalRefusal`).
       .post(
         '(/|/.+/)',
         SupportedMimeType.CardJson,
         this.createCard.bind(this),
-        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_CARD_CREATE },
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_CARD_CREATE,
+          takesRunWrites: true,
+        },
       )
       .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this), {
         ...APPLIES_ARCHIVED_SEAL,
@@ -4127,13 +4145,21 @@ export class Realm {
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.patchCardInstance.bind(this),
-        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_CARD_UPDATE },
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_CARD_UPDATE,
+          takesRunWrites: true,
+        },
       )
       .delete(
         '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.removeCard.bind(this),
-        { ...APPLIES_ARCHIVED_SEAL, anonymous: ANONYMOUS_CARD_DELETE },
+        {
+          ...APPLIES_ARCHIVED_SEAL,
+          anonymous: ANONYMOUS_CARD_DELETE,
+          takesRunWrites: true,
+        },
       )
       // The card+source write, its octet-stream spelling and the card+source
       // removal replace or remove stored bytes verbatim. Each is judged by the
@@ -4175,7 +4201,7 @@ export class Realm {
         '/.+',
         SupportedMimeType.CardSource,
         this.removeCardSource.bind(this),
-        APPLIES_ARCHIVED_SEAL,
+        { ...APPLIES_ARCHIVED_SEAL, takesRunWrites: true },
       )
       .get(
         '.*/',
@@ -9846,8 +9872,8 @@ export class Realm {
       let dispatch = this.#routeRequest(request, localPath, requestContext);
       // A run's writes are staged, never written to the realm while it runs
       // (ADR 027 §1.2), so a run's write reaches only a route that stages
-      // it. A route that would write the realm, or remove from it, refuses
-      // the run until it stages too.
+      // it, or one that answers why it can't (a card or file removal). Any
+      // other route that would change the realm refuses the run here.
       if (
         requestContext.automationRun &&
         requiredPermission === 'write' &&
@@ -9857,7 +9883,7 @@ export class Realm {
           `run-token call ${request.method} ${maskLoggedURL(request.url)} refused: run ${requestContext.automationRun.runId} wrote through a route that doesn't stage its writes`,
         );
         throw new AuthorizationError(
-          "An automation run's writes go through the card+source write alone, so they can be committed together",
+          "An automation run's writes are staged until the run commits them together, and this route doesn't stage its write",
         );
       }
       if (!isLocal) {
@@ -10656,6 +10682,22 @@ export class Realm {
     let start = Date.now();
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
+    // A run reads its own writes: a file it staged is served from its overlay,
+    // at the exact path it wrote, as the card+source read serves it. A run
+    // never stages a module (see `#runMayNotWrite`), so nothing staged is
+    // transpiled.
+    let run = this.#runOverlay(requestContext);
+    if (run && (request.method === 'GET' || request.method === 'HEAD')) {
+      let staged = await readRunOverlayFile(this.#dbAdapter, run, localPath);
+      if (staged) {
+        return this.#stagedFileResponse(
+          request,
+          requestContext,
+          localPath,
+          staged,
+        );
+      }
+    }
     // A caller whose read the policy gate decides is answered from the module
     // cache only once the gate has admitted them, so the lookup below, which
     // runs before any gate, is not theirs (see `#moduleForGatedCaller`).
@@ -14292,13 +14334,7 @@ export class Realm {
         if (!bytes) {
           return await core.fileMetaDocument(localPath);
         }
-        let lastModified = Math.floor(Date.now() / 1000);
-        return await this.#fileMetaDocumentOf(localPath, {
-          lastModified,
-          createdAt: (await this.getCreatedTime(localPath)) ?? lastModified,
-          contentHash: computeContentHash(bytes),
-          contentSize: bytes.byteLength,
-        });
+        return await this.#stagedFileMetaDocument(localPath, bytes);
       },
     };
   }
@@ -14412,7 +14448,32 @@ export class Realm {
           files.set(path, joined);
         }
         let list = [...files].map(([path, content]) => ({ path, content }));
-        let refusal = await this.#stageRunFiles(requestContext, run, list);
+        // A file whose bytes are the realm's, where the run has staged
+        // nothing, isn't staged: the realm's commit skips a write that
+        // changes nothing, and a staged copy would count against the run's
+        // `writes` cap and, at commit, put these bytes back over any change
+        // made to the realm's file since.
+        let changed: typeof list = [];
+        for (let file of list) {
+          if ((await staged(file.path)) === undefined) {
+            let source = await core.openSourceBytes(file.path);
+            if (
+              source &&
+              source.size === file.content.byteLength &&
+              sameBytes(
+                await collectBytes(source.read(0, source.size)),
+                file.content,
+              )
+            ) {
+              continue;
+            }
+          }
+          changed.push(file);
+        }
+        let refusal =
+          changed.length > 0
+            ? await this.#stageRunFiles(requestContext, run, changed)
+            : undefined;
         if (refusal) {
           throw new OperationFailure({
             status: refusal.status,
@@ -14434,6 +14495,39 @@ export class Realm {
         };
       },
     };
+  }
+
+  // A run's removal of a card or file, refused (ADR 027 §1.2): an overlay row
+  // holds a file's bytes, with nothing to mark a staged removal, so the
+  // removal could neither be staged nor read back. It carries the code a
+  // run's `_operations` removal is refused with, so a script tells the
+  // refusal apart the same way whichever route it removed through. Undefined
+  // for a call that isn't a run's.
+  #runRemovalRefusal(
+    request: Request,
+    requestContext: RequestContext,
+  ): Response | undefined {
+    if (!requestContext.automationRun) {
+      return undefined;
+    }
+    let path = this.paths.local(new URL(request.url));
+    return createResponse({
+      body: JSON.stringify({
+        errors: [
+          {
+            status: '403',
+            code: 'run-write-not-staged',
+            title: 'Forbidden',
+            detail: `an automation run may not remove ${path || '/'}: its writes are staged until it commits, and a staged write can't remove a file`,
+          },
+        ],
+      }),
+      init: {
+        status: 403,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
   }
 
   // A run acts as a direct writer of its realm (ADR 026 §1.5), so a run's
@@ -15798,6 +15892,10 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let runRefusal = this.#runRemovalRefusal(request, requestContext);
+    if (runRefusal) {
+      return runRefusal;
+    }
     // Source-content-type callers, by definition, don't depend on indexed
     // state — symmetric with upsertCardSource. Return as soon as the file
     // is gone from disk; indexing happens async and surfaces errors via
@@ -16012,6 +16110,52 @@ export class Realm {
     return await this.#adapter.openFile(localPath);
   }
 
+  // `nonJsonFileExists` against the files a run sees: its staged files as
+  // well as the realm's.
+  async #runNonJsonFileExists(
+    run: RunOverlayKey,
+    localPath: LocalPath,
+  ): Promise<boolean> {
+    if (localPath.endsWith('.json')) {
+      localPath = localPath.slice(0, -5);
+    }
+    let sees = async (path: LocalPath) =>
+      (await readRunOverlayFile(this.#dbAdapter, run, path)) !== undefined ||
+      (await this.#adapter.exists(path));
+    if (await sees(`${localPath}.json`)) {
+      return false;
+    }
+    return await sees(localPath);
+  }
+
+  // A run's conditional write: refused whenever `If-Match` names a
+  // validator. A run's write is staged, and the realm's version can change
+  // between staging and the run's commit, which checks the files it reads
+  // but not a caller's validator. So a check made at staging would promise a
+  // lost-update guard the commit doesn't keep, and the run's own staged card
+  // has no validator to compare. `*`, or no `If-Match`, asks nothing.
+  #runConditionalWrite(
+    request: Request,
+    url: URL,
+  ): (() => Promise<void>) | undefined {
+    let ifMatch = request.headers.get('if-match');
+    if (ifMatch === null || ifMatch.trim() === '*') {
+      return undefined;
+    }
+    return async () => {
+      throw new OperationFailure({
+        id: url.href,
+        status: 412,
+        code: 'version-conflict',
+        title: 'Precondition Failed',
+        detail:
+          `${request.method} of ${url.href} sent If-Match: ${ifMatch}, and ` +
+          `an automation run's write is staged until the run commits, so ` +
+          `it can't be made conditional on a card's version`,
+      });
+    };
+  }
+
   private async nonJsonFileExists(localPath: LocalPath): Promise<boolean> {
     if (localPath?.endsWith('.json')) {
       localPath = localPath.slice(0, -5);
@@ -16106,6 +16250,24 @@ export class Realm {
         persistedMeta.contentHash ?? (await computeContentHashFromRef(fileRef)),
       contentSize:
         persistedMeta.contentSize ?? (await computeContentSizeFromRef(fileRef)),
+    });
+  }
+
+  // The metadata document of a file a run staged (ADR 027 §1.3), derived from
+  // the staged bytes. Staged files aren't indexed, so it carries what the
+  // bytes say and nothing an index row would add. Its modification time is
+  // the time of the read, and its creation time the realm's file's where the
+  // realm holds one.
+  async #stagedFileMetaDocument(
+    localPath: LocalPath,
+    bytes: Uint8Array,
+  ): Promise<SingleFileMetaDocument> {
+    let lastModified = Math.floor(Date.now() / 1000);
+    return await this.#fileMetaDocumentOf(localPath, {
+      lastModified,
+      createdAt: (await this.getCreatedTime(localPath)) ?? lastModified,
+      contentHash: computeContentHash(bytes),
+      contentSize: bytes.byteLength,
     });
   }
 
@@ -16363,6 +16525,28 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
+    // A run reads its own writes: a file it staged is described from its
+    // staged bytes, never from the realm's file or its index row.
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      let staged = await readRunOverlayFile(this.#dbAdapter, run, localPath);
+      if (staged) {
+        return createResponse({
+          body: JSON.stringify(
+            await this.#stagedFileMetaDocument(localPath, staged),
+            null,
+            2,
+          ),
+          init: {
+            headers: {
+              'content-type': SupportedMimeType.FileMeta,
+              'cache-control': 'no-store',
+            },
+          },
+          requestContext,
+        });
+      }
+    }
     let fileEntry = await this.#realmIndexQueryEngine.file(
       this.paths.fileURL(localPath),
     );
@@ -16453,7 +16637,18 @@ export class Realm {
     // (whether the batch waits for indexing, and whether the new card is read
     // back out of the index or echoed) and nothing prerender-specific beyond
     // them.
-    let answerFromEcho = skipsIndexWait(request);
+    //
+    // An automation run's create is staged in its overlay (ADR 027 §1.2), with
+    // the checks every staged write meets (see `#runBatchCore`). The overlay
+    // is never indexed, so the run is answered from the echo too.
+    let run = this.#runOverlay(requestContext);
+    if (run) {
+      let refusal = this.#runWriteWithoutDirectWrite(requestContext);
+      if (refusal) {
+        return refusal;
+      }
+    }
+    let answerFromEcho = skipsIndexWait(request) || run !== undefined;
     let body = await request.text();
     let json;
     try {
@@ -16522,37 +16717,41 @@ export class Realm {
       };
       await this.#sealAdmittedCardWrite(requestContext, admission, entry);
       result = (
-        await commitBatch(this.batchCore, [entry], {
-          ...admission.batch,
-          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-          history: writeContextFromHeaders(request.headers),
-          policyAudit: policyAuditOptionsFor(
-            request,
-            requestContext.authenticatedUser,
-          ),
-          ...(requestContext.authenticatedUser
-            ? { actor: requestContext.authenticatedUser }
-            : {}),
-          // Waiting decides two things and an echoing caller wants neither:
-          // the batch drains indexing already in flight before it stages,
-          // and it returns only once its own index job has landed. A
-          // prerender-originated write MUST NOT wait — the job it would wait
-          // on needs the render slot, and on the queued-command path the
-          // worker, that this caller is holding, so waiting deadlocks — and
-          // it has nothing to read back either, since it answers from what
-          // it wrote. Skipping the drain costs the write nothing: serializing
-          // a card resolves its type through `lookupDefinition`, which reads
-          // the module off disk rather than out of the index, and the commit
-          // drops a rewritten module's cached definition as it writes the
-          // bytes.
-          ...indexWaitOptions(request, { bounded: false }),
-          reportStoredContent: answerFromEcho,
-          // A side-load claiming another realm is not this realm's to
-          // create, and a `POST` carrying one has always stored the card
-          // with that edge empty rather than refusing the write.
-          foreignSideLoadLink: 'leave',
-          timings,
-        })
+        await commitBatch(
+          run ? this.#runBatchCore(requestContext, run) : this.batchCore,
+          [entry],
+          {
+            ...admission.batch,
+            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            history: writeContextFromHeaders(request.headers),
+            policyAudit: policyAuditOptionsFor(
+              request,
+              requestContext.authenticatedUser,
+            ),
+            ...(requestContext.authenticatedUser
+              ? { actor: requestContext.authenticatedUser }
+              : {}),
+            // Waiting decides two things and an echoing caller wants neither:
+            // the batch drains indexing already in flight before it stages,
+            // and it returns only once its own index job has landed. A
+            // prerender-originated write MUST NOT wait — the job it would wait
+            // on needs the render slot, and on the queued-command path the
+            // worker, that this caller is holding, so waiting deadlocks — and
+            // it has nothing to read back either, since it answers from what
+            // it wrote. Skipping the drain costs the write nothing: serializing
+            // a card resolves its type through `lookupDefinition`, which reads
+            // the module off disk rather than out of the index, and the commit
+            // drops a rewritten module's cached definition as it writes the
+            // bytes.
+            ...indexWaitOptions(request, { bounded: false }),
+            reportStoredContent: answerFromEcho,
+            // A side-load claiming another realm is not this realm's to
+            // create, and a `POST` carrying one has always stored the card
+            // with that edge empty rather than refusing the write.
+            foreignSideLoadLink: 'leave',
+            timings,
+          },
+        )
       )[0];
     } catch (err: unknown) {
       return this.#cardWriteRefusal(
@@ -16623,8 +16822,9 @@ export class Realm {
       // `lid`, so the host pairs it with its local id only from the `POST`
       // response's `data.id`, which the save flow hands to `api.setId`. The
       // caller it mints for sends no side-loads, since the gate refuses them.
-      // Writes that answer from the serialized echo — prerender and
-      // skip-index-wait callers — return no `included` at all and always have.
+      // Writes that answer from the serialized echo — prerender,
+      // skip-index-wait and automation-run callers — return no `included` at
+      // all.
       let entry = await timings.time('readback', () =>
         this.#realmIndexQueryEngine.cardDocument(new URL(newURL)),
       );
@@ -16925,6 +17125,12 @@ export class Realm {
   ): Promise<Response> {
     let localPath = this.paths.local(new URL(request.url));
     let instanceURL = this.paths.fileURL(localPath).href.replace(/\.json$/, '');
+    if (this.#runOverlay(requestContext)) {
+      let refusal = this.#runWriteWithoutDirectWrite(requestContext);
+      if (refusal) {
+        return refusal;
+      }
+    }
     // The gate's refusal and the batch's are answered from the one place, so a
     // card no grant admits and a card that does not exist get the same bytes
     // (see `#cardWriteRefusal`).
@@ -16971,7 +17177,14 @@ export class Realm {
       admission: CardWriteAdmission;
     },
   ): Promise<Response> {
-    if (await this.nonJsonFileExists(localPath)) {
+    // A run's patch is judged against the files as the run sees them, its
+    // staged ones included.
+    let run = this.#runOverlay(requestContext);
+    if (
+      run
+        ? await this.#runNonJsonFileExists(run, localPath)
+        : await this.nonJsonFileExists(localPath)
+    ) {
       return await admission.answer(
         unsupportedMediaType(request, requestContext),
       );
@@ -16979,14 +17192,25 @@ export class Realm {
     if (localPath.startsWith('_')) {
       return await admission.answer(methodNotAllowed(request, requestContext));
     }
-    if (await this.openFileForMetadata(localPath)) {
+    if (
+      (await this.openFileForMetadata(localPath)) ||
+      (run &&
+        (await readRunOverlayFile(this.#dbAdapter, run, localPath)) !==
+          undefined)
+    ) {
       return await admission.answer(methodNotAllowed(request, requestContext));
     }
 
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) takes the same
     // write-side path as a prerender write: index deferred, answer from the
     // serialized echo.
-    let answerFromEcho = skipsIndexWait(request);
+    //
+    // An automation run's patch is staged in its overlay (ADR 027 §1.2): it
+    // merges into the card as the run sees it, staged or the realm's, and
+    // meets the checks every staged write meets (see `#runBatchCore`). The
+    // overlay is never indexed, so the run is answered from the echo, also
+    // for a patch that changed nothing.
+    let answerFromEcho = skipsIndexWait(request) || run !== undefined;
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -17022,7 +17246,9 @@ export class Realm {
     // Built after the body is validated, so a payload the realm would have
     // refused anyway still gets the 400 naming what is wrong with it and a
     // 412 means only that the card moved. It runs inside the commit's lock.
-    let precondition = this.#conditionalWrite(request, new URL(instanceURL));
+    let precondition = run
+      ? this.#runConditionalWrite(request, new URL(instanceURL))
+      : this.#conditionalWrite(request, new URL(instanceURL));
 
     // The merge belongs to the update this stages: arrays replacing rather
     // than merging into what is there, the realm-managed `meta` keys a client
@@ -17041,7 +17267,7 @@ export class Realm {
     let commit = async (reserialize?: true) =>
       (
         await commitBatch(
-          this.batchCore,
+          run ? this.#runBatchCore(requestContext, run) : this.batchCore,
           [
             {
               op: 'update',
@@ -17110,7 +17336,7 @@ export class Realm {
         this.#realmIndexQueryEngine.cardDocument(new URL(instanceURL)),
       );
     let doc: SingleCardDocument;
-    if (!result.meta.changed) {
+    if (!result.meta.changed && !run) {
       // The patch left the card exactly as it was, so the answer is the card
       // as the realm already holds it — read before anything else is decided,
       // because a request that changed nothing is answered from the index
@@ -19203,6 +19429,10 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let runRefusal = this.#runRemovalRefusal(request, requestContext);
+    if (runRefusal) {
+      return runRefusal;
+    }
     let requestedPath = this.paths.local(new URL(request.url));
     let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
