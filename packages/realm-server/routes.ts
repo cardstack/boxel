@@ -30,6 +30,12 @@ import {
   handleSetSystemKeyResponseCap,
   handleShowSystemKey,
 } from './handlers/handle-system-keys.ts';
+import {
+  handleDeletePlatformSecret,
+  handleListPlatformSecrets,
+  handleSetPlatformSecret,
+  handleShowPlatformSecret,
+} from './handlers/handle-platform-secrets.ts';
 import { handleDiagnosticRenderToken } from './handlers/handle-diagnostic-render-token.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
 import handlePrefixRealmsRequest from './handlers/handle-prefix-realms.ts';
@@ -128,6 +134,7 @@ import {
   OAUTH_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
   PLATFORM_OAUTH_CLIENTS_PATH,
+  PLATFORM_SECRETS_PATH,
   REQUEST_FORWARD_PATH,
   SECURE_SESSION_PATH,
   SECURE_SESSIONS_PATH,
@@ -932,6 +939,36 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${PLATFORM_OAUTH_CLIENTS_PATH}/:name`,
     systemKeysAuthorization,
     handleDeletePlatformClient(args),
+  );
+
+  // Platform secrets: secrets the platform keeps and only reads, such as the
+  // secret that verifies a vendor's signed webhook. Only an operator token
+  // for `platform-secrets` reaches these, and none of them answers with a
+  // value.
+  let platformSecretsAuthorization = operatorAuthorization(
+    args.realmSecretSeed,
+    'platform-secrets',
+    args.serverURL,
+  );
+  router.get(
+    PLATFORM_SECRETS_PATH,
+    platformSecretsAuthorization,
+    handleListPlatformSecrets(args),
+  );
+  router.get(
+    `${PLATFORM_SECRETS_PATH}/:name`,
+    platformSecretsAuthorization,
+    handleShowPlatformSecret(args),
+  );
+  router.put(
+    `${PLATFORM_SECRETS_PATH}/:name`,
+    platformSecretsAuthorization,
+    handleSetPlatformSecret(args),
+  );
+  router.delete(
+    `${PLATFORM_SECRETS_PATH}/:name`,
+    platformSecretsAuthorization,
+    handleDeletePlatformSecret(args),
   );
 
   // Diagnostic sessions: what an operator renders a live card under to see it

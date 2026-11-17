@@ -98,7 +98,11 @@ export function mintRealmServerToken(
   });
 }
 
-export type OperatorScope = 'data-keys' | 'system-keys' | 'diagnostic-render';
+export type OperatorScope =
+  | 'data-keys'
+  | 'system-keys'
+  | 'platform-secrets'
+  | 'diagnostic-render';
 
 /**
  * Mint an operator token for one family of the realm server's operator
