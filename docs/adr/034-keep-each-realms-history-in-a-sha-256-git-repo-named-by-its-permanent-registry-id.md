@@ -6,7 +6,9 @@ scope:
   - packages/runtime-common/realm-history.ts
   - packages/realm-server/lib/realm-registry-backfill.ts
   - packages/realm-server/lib/realm-registry-writes.ts
+  - packages/realm-server/handlers/handle-delete-realm.ts
   - packages/postgres/migrations/*realm-registry*
+  - packages/postgres/migrations/1779100257124_canonical-url-http-to-https.js
 ---
 
 # 034. Keep each realm's history in a SHA-256 git repo named by its permanent registry id
@@ -33,7 +35,8 @@ compare-and-swap (`git update-ref` with the expected old value). Each move
 MUST be to a commit whose only parent is the commit the branch names, or, in
 an empty repo, to a commit with no parent. Code MUST NOT rewrite or remove a
 commit that `refs/heads/main` reaches. A realm's history ends only when its
-whole repo is deleted.
+whole repo is deleted. Deleting a realm MUST delete its repo, with no grace
+period. Archiving a realm MUST keep its repo.
 
 ### 1.2. A realm's registry id never changes
 
@@ -41,12 +44,12 @@ A realm's `realm_registry.id` MUST NOT change while the realm exists. A change
 to a realm's URL, such as a rename, a domain move or a migration, MUST update
 the realm's row in place and keep its `id`. The update MUST land before any
 realm server boots with the new URL, for example in a migration. The boot-time
-backfill (`packages/realm-server/lib/realm-registry-backfill.ts`) upserts rows
-by URL, so a late update leaves it to insert a second row with a new id, which
-starts a second history. A realm that is deleted and created again at the same
-URL MUST get a new `id`, and so a new history. A revision MUST NOT record the
-realm's URL. Paths in a repo and in its trailers are relative to the realm, so
-a URL change touches only the registry row.
+backfill (`packages/realm-server/lib/realm-registry-backfill.ts`) MUST NOT
+insert a row for a realm directory that already has a row under another URL.
+It MUST log an error instead. A realm that is deleted and created again at the
+same URL MUST get a new `id`, and so a new history. A revision MUST NOT record
+the realm's URL. Paths in a repo and in its trailers are relative to the
+realm, so a URL change leaves every repo as it is.
 
 ### 1.3. Authors and dates
 
@@ -89,15 +92,19 @@ realm's revisions references, until the realm is deleted.
 ### 1.7. One package writes and reads the format
 
 Code outside `@cardstack/realm-historian` MUST NOT write to a history repo. It
-MUST read one only through the `RealmHistoryReader` that the package exports.
-The package MUST write each revision's objects itself, as loose objects in
-git's format. Each object MUST be durable before `refs/heads/main` reaches it:
-written to a temporary file, fsynced, and renamed into place. The package uses
-the `git` executable for ref updates, reads and maintenance. Maintenance MUST
-NOT remove an object that `refs/heads/main` reaches. The package's tests MUST
-run `git fsck --strict` over every repo they produce. Measurement on EFS may
-call for one pack per commit in place of loose objects. That change MUST amend
-this section.
+MUST read one only through the package's `GitRealmHistoryReader`, which
+implements `RealmHistoryReader` from `packages/runtime-common/realm-history.ts`
+and runs in the realm server. The package MUST write each revision's objects
+itself, as loose objects in git's format. Each object MUST be durable before
+`refs/heads/main` reaches it: written to a temporary file, fsynced, and renamed
+into place. The package uses the `git` executable for ref updates, reads and
+maintenance. A process that runs those commands MUST check when it starts that
+its `git` supports the SHA-256 object format. Without that support, it MUST NOT
+read or write history. Maintenance MUST NOT remove an object that
+`refs/heads/main` reaches. The package's tests MUST run `git fsck --strict`
+over every repo they produce. Measurement on EFS may call for one pack per
+commit in place of loose objects, which would change this section under ADR
+001 §1.6.
 
 ## 2. Rationale
 
@@ -138,16 +145,26 @@ one passes every git operation that history uses, with git 2.35 and 2.54:
 - `repack`;
 - a clone over dumb HTTP.
 
-git itself plans to make SHA-256 the default for new repos.
+git itself plans to make SHA-256 the default for new repos. A `git` without
+SHA-256 support fails on every read, so each process checks its `git` when it
+starts.
 
 The repo is named by `realm_registry.id` for two reasons. The change journal
 carries the id, and the id is the one identity a realm keeps when its URL
-changes. URLs do change: migration `1779100257124` moved local realms from
-`http` to `https`, and it rewrote their registry rows in place. If repos were
-named by URL, every URL change would be a repo move. Worse, a realm deleted
-and created again at the same URL would inherit the old realm's history. That
-history is content its owner chose to destroy, attributed to people who may
-have no access to the new realm.
+changes. If repos were named by URL, every URL change would be a repo move.
+Worse, a realm deleted and created again at the same URL would inherit the old
+realm's history. That history is content its owner chose to destroy,
+attributed to people who may have no access to the new realm. For the same
+reason, deleting a realm deletes its repo at once. Archive is the state a
+realm comes back from.
+
+The id stays permanent only if nothing gives a realm a second row, and that
+has happened once already. Migration `1779100257124` moved local realms from
+`http` to `https` and rewrote their registry rows in place. Realm servers then
+started under the old scheme inserted their `http` rows again, with new ids,
+and migration `1779972468714` deleted them. With history, each of those rows
+would have started a second repo for the same realm. So the backfill refuses
+such a row, instead of relying on deploy order alone.
 
 Trailers keep each revision's metadata in the revision, so a repo describes
 itself. A crash between a commit and its cursor update, a lease handover, or a
@@ -194,6 +211,11 @@ ADR 002 §1.2 and §1.3 when they turn those IDs into paths.
   it.
 - **Naming the repo by `disk_id`.** Its meaning differs by realm kind. It also
   changes when an operator moves a bootstrap realm on disk.
+- **The backfill moving a realm's row to its new URL.** A URL change also
+  rewrites every other table that stores the URL, as `1779100257124` did. The
+  backfill can't do that, so the realm would be left half-moved.
+- **Keeping a deleted realm's history for a grace period.** The repo would
+  outlive the realm as the only copy of content its owner chose to destroy.
 - **A `.git` directory inside the realm.** Realm serving, indexing, listing,
   publish and copy would all see it.
 - **One repo for every realm, or one per owner.** Realms would contend for one
@@ -217,10 +239,15 @@ ADR 002 §1.2 and §1.3 when they turn those IDs into paths.
 
 ## 4. Sources
 
-- `packages/realm-historian/src/repo-format.ts` and
-  `packages/realm-historian/src/git-objects.ts`: the format as written so far.
+- `packages/realm-historian/src/repo-format.ts`,
+  `packages/realm-historian/src/git-objects.ts` and
+  `packages/realm-historian/src/reader.ts`: the format as written and read so
+  far.
 - `packages/postgres/migrations/1779100257124_canonical-url-http-to-https.js`:
   the URL change that rewrote registry rows in place.
+- `packages/postgres/migrations/1779972468714_remove-stale-http-canonical-realm-registry-rows.js`:
+  the `http` rows that realm servers started under the old scheme inserted
+  again, with new ids.
 - G. Leurent and T. Peyrin,
   [SHA-1 is a Shambles](https://sha-mbles.github.io/) (USENIX Security 2020):
   an identical-prefix SHA-1 collision for about US$11k of rented GPU time.
