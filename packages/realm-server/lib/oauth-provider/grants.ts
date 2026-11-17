@@ -231,3 +231,40 @@ export async function deleteGrant(
     bind: [id],
   });
 }
+
+// The grant checks (ADR 021 §1.5), shared by every place a grant is used:
+// the token endpoint, on each code and refresh exchange (`GrantAdapter`), and
+// a resource's lookup of an access token (`lookup.ts`), so the two always
+// agree. A query selects `GRANT_STATE_COLUMNS`, with the grant as `g` and its
+// user as `u`, and hands the row to `grantUsable`.
+export const GRANT_STATE_COLUMNS = `g.ended_at IS NOT NULL AS grant_ended,
+       g.expires_at <= now() AS grant_expired,
+       COALESCE(g.created_at <= u.oauth_grants_revoked_at, false)
+         AS grant_revoked`;
+
+export interface GrantState {
+  grant_ended: boolean;
+  grant_expired: boolean;
+  // Created at or before the user's OAuth grants were last revoked.
+  grant_revoked: boolean;
+}
+
+// Whether a grant may still be used: not ended, not expired, and created
+// after the user's OAuth grants were last revoked. A grant the revocation
+// covers but that hasn't ended (one whose consent came just before the
+// revocation, and whose flow finished after it) is ended here, with reason
+// `sessions-revoked`.
+export async function grantUsable(
+  dbAdapter: DBAdapter,
+  grantId: string,
+  state: GrantState,
+): Promise<boolean> {
+  if (state.grant_ended || state.grant_expired) {
+    return false;
+  }
+  if (state.grant_revoked) {
+    await endGrant(dbAdapter, grantId, 'sessions-revoked');
+    return false;
+  }
+  return true;
+}
