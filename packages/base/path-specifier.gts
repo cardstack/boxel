@@ -113,11 +113,21 @@ function prefixRow(prefix: string, index: number, draft: boolean): PrefixRow {
   };
 }
 
+// Where the editor puts the cursor after a change. Each request is a new
+// object, and the element it names takes it once, so a later render of that
+// element doesn't take the focus again.
+interface FocusRequest {
+  target: 'input' | 'remove' | 'add';
+  index?: number;
+  taken?: boolean;
+}
+
 class Edit extends Component<typeof PathSpecifierField> {
   // Whether the author has added a row and not typed in it yet. An empty
   // prefix is invalid, so the new row isn't stored until it has content, and
   // it goes away if the author leaves it empty.
   @tracked private drafting = false;
+  @tracked private focusRequest: FocusRequest | undefined;
 
   private get prefixes(): readonly string[] {
     return this.args.model ?? [];
@@ -156,11 +166,22 @@ class Edit extends Component<typeof PathSpecifierField> {
 
   private addPrefix = () => {
     this.drafting = true;
+    this.focusRequest = { target: 'input', index: this.prefixes.length };
   };
 
   // Removing the last prefix leaves an empty list, which means no path limit.
   private removePrefix = (index: number) => {
-    this.args.set(this.prefixes.filter((_, i) => i !== index));
+    let next = this.prefixes.filter((_, i) => i !== index);
+    // The rows are keyed by position, so a removal takes the bottom row's
+    // elements off the page. Removing any other row leaves the focus on the
+    // same remove button, now in the row that moved up. Removing the bottom
+    // row takes away the button that had the focus, so it goes to the row
+    // above, or to Add when no rows are left.
+    if (index === next.length) {
+      this.focusRequest =
+        index > 0 ? { target: 'remove', index: index - 1 } : { target: 'add' };
+    }
+    this.args.set(next);
   };
 
   private leaveRow = (index: number, event: FocusEvent) => {
@@ -174,12 +195,26 @@ class Edit extends Component<typeof PathSpecifierField> {
     }
   };
 
-  // Puts the cursor in the row the author just added.
-  private focusDraft = modifier((element: HTMLElement, [draft]: [boolean]) => {
-    if (draft) {
-      element.focus();
-    }
-  });
+  private takeFocus = modifier(
+    (
+      element: HTMLElement,
+      [request, target, index]: [
+        FocusRequest | undefined,
+        FocusRequest['target'],
+        number?,
+      ],
+    ) => {
+      if (
+        request &&
+        !request.taken &&
+        request.target === target &&
+        request.index === index
+      ) {
+        request.taken = true;
+        element.focus();
+      }
+    },
+  );
 
   <template>
     <div class='path-specifier-edit' data-test-path-specifier-edit>
@@ -198,7 +233,7 @@ class Edit extends Component<typeof PathSpecifierField> {
                 @placeholder='blog/'
                 aria-label={{row.label}}
                 {{on 'blur' (fn this.leaveRow row.index)}}
-                {{this.focusDraft row.draft}}
+                {{this.takeFocus this.focusRequest 'input' row.index}}
                 data-test-path-specifier-input={{row.index}}
               />
               {{! A new row has nothing stored to remove until the author
@@ -211,6 +246,7 @@ class Edit extends Component<typeof PathSpecifierField> {
                     @appearance='plain'
                     @size='s'
                     {{on 'click' (fn this.removePrefix row.index)}}
+                    {{this.takeFocus this.focusRequest 'remove' row.index}}
                     data-test-path-specifier-remove={{row.index}}
                   />
                 {{/unless}}
@@ -229,6 +265,7 @@ class Edit extends Component<typeof PathSpecifierField> {
           @appearance='outlined'
           @size='s'
           {{on 'click' this.addPrefix}}
+          {{this.takeFocus this.focusRequest 'add'}}
           data-test-path-specifier-add
         >
           Add path prefix

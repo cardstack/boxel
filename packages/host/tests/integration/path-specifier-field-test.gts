@@ -65,6 +65,8 @@ function messageFor(prefix: string): string {
 }
 
 const input = (index: number) => `[data-test-path-specifier-input="${index}"]`;
+const remove = (index: number) =>
+  `[data-test-path-specifier-remove="${index}"]`;
 
 // The message the input is announced with, found the way assistive
 // technology finds it: through the input's `aria-errormessage`.
@@ -250,21 +252,35 @@ module('Integration | PathSpecifierField', function (hooks) {
     assert.dom('[data-test-path-specifier-remove="1"]').exists();
   });
 
-  test('the editor removes prefixes, and removing the last one leaves an empty list', async function (assert) {
+  test('the editor removes prefixes, keeps the focus in the list, and removing the last one leaves an empty list', async function (assert) {
     allowEditing(true);
-    let site = new Site({ paths: ['blog/', 'posts/'] });
+    let site = new Site({ paths: ['blog/', 'posts/', 'drafts/'] });
     await renderCard(loader, site, 'edit');
 
-    await click('[data-test-path-specifier-remove="0"]');
-    assert.deepEqual(site.paths, ['posts/']);
+    await click(remove(0));
+    assert.deepEqual(site.paths, ['posts/', 'drafts/']);
     assert.dom(input(0)).hasValue('posts/');
+    assert
+      .dom(remove(0))
+      .isFocused(
+        'the focus stays on the remove button of the row that moved up',
+      );
 
-    await click('[data-test-path-specifier-remove="0"]');
+    await click(remove(1));
+    assert.deepEqual(site.paths, ['posts/']);
+    assert
+      .dom(remove(0))
+      .isFocused('removing the bottom row moves the focus to the row above');
+
+    await click(remove(0));
     assert.deepEqual(
       site.paths,
       [],
       'removing the last prefix leaves an empty list',
     );
+    assert
+      .dom('[data-test-path-specifier-add]')
+      .isFocused('removing the last prefix moves the focus to Add');
     assert.dom('[data-test-path-specifier-row]').doesNotExist();
     assert
       .dom(
