@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -7,6 +8,8 @@ import {
   rri,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common/realm-identifiers';
+import { prefixRealmNetworkFor } from '@cardstack/runtime-common/prefix-realm-network';
+import { SKILLS_REALM_PREFIX } from '@cardstack/runtime-common/realm-prefixes';
 
 import {
   allRoomEvents,
@@ -14,6 +17,14 @@ import {
   type MatrixEvent,
 } from './matrix-api.ts';
 import { analyzeRoom } from './room-analysis.ts';
+import { REALM_SERVER_URL } from './eval-config.ts';
+import {
+  routingLines,
+  routingSummary,
+  scoreRouting,
+  skillsPath,
+  underFeature,
+} from './routing.ts';
 import { grade, type RunResult, type Verdict } from './run-result.ts';
 
 import {
@@ -47,6 +58,12 @@ import { captureWorkspace } from './workspace-snapshot.ts';
 
 const RESULTS_DIR =
   process.env.EVAL_RESULTS_DIR ?? join(import.meta.dirname, 'eval-results');
+// The folder of the boxel-skills clone the stack serves as its skills realm.
+// An expected read that isn't in it can't be checked; without the clone every
+// expected path is taken to exist.
+const SKILLS_DIR =
+  process.env.EVAL_SKILLS_DIR ??
+  join(import.meta.dirname, '..', 'skills-realm', 'contents', 'skills');
 const EVAL_BUNDLE = process.env.EVAL_BUNDLE;
 const SESSION_ID = process.env.EVAL_SESSION_ID;
 const EVAL_PROMPT =
@@ -1188,6 +1205,25 @@ test.beforeAll(async () => {
   await mkdir(RESULTS_DIR, { recursive: true });
 });
 
+// Where the stack serves the skills realm, read off the realm server's prefix
+// map, for reads that name a skill by URL. Only the routing check and the
+// feature check need it, so a map that can't be read doesn't fail the run: it
+// leaves only reads by prefix recognized, and says so in `reasons`.
+async function skillsRealmURLFor(
+  reasons: string[],
+): Promise<string | undefined> {
+  try {
+    return (await prefixRealmNetworkFor(REALM_SERVER_URL)).toURLHref(
+      SKILLS_REALM_PREFIX,
+    );
+  } catch (error) {
+    reasons.push(
+      `skill reads by URL aren't recognized: no skills realm from the realm server's prefix map (${error instanceof Error ? error.message : String(error)})`,
+    );
+    return undefined;
+  }
+}
+
 async function runModel(
   page: Page,
   requestedModel: string,
@@ -1505,14 +1541,49 @@ async function runModel(
     result.reasons = verdict.reasons;
     // An enabled feature whose skill the model never opened means the run
     // did not exercise it, whatever the verdict says. This assumes each
-    // feature's skill lives in a skills/<feature name>/SKILL.md directory.
-    for (let feature of result.skillFeatures) {
-      let read = result.analysis.filesRead.some((url) =>
-        url.endsWith(`/skills/${feature}/SKILL.md`),
+    // feature's skill is <feature name>/SKILL.md in the skills realm. A
+    // feature whose skill an expected read names is left to the routing rows,
+    // which say which questions needed it and whether it was opened.
+    let expectedReads = evaluation?.expectedReads ?? [];
+    let featureSkills = result.skillFeatures.filter(
+      (feature) =>
+        !expectedReads.some((paths) =>
+          paths.some((path) => underFeature(path, feature)),
+        ),
+    );
+    let skillsRealmURL =
+      expectedReads.length || featureSkills.length
+        ? await skillsRealmURLFor(result.reasons)
+        : undefined;
+    if (evaluation && expectedReads.length) {
+      let skillsCloned = existsSync(SKILLS_DIR);
+      result.routing = scoreRouting(
+        prompts.slice(0, result.promptsSent),
+        expectedReads,
+        result.analysis.readsByPrompt,
+        {
+          skillsRealmURL,
+          exists: (path) => !skillsCloned || existsSync(join(SKILLS_DIR, path)),
+          featuresOff: SKILL_FEATURES_OFF,
+        },
+      );
+      result.reasons.push(
+        routingSummary(result.routing),
+        ...routingLines(result.routing),
+      );
+      if (result.routing.mismatch) {
+        result.reasons.push(
+          `routing may credit reads to the wrong question: ${result.routing.mismatch}`,
+        );
+      }
+    }
+    for (let feature of featureSkills) {
+      let read = result.analysis.filesRead.some(
+        (url) => skillsPath(url, skillsRealmURL) === `${feature}/SKILL.md`,
       );
       if (!read) {
         result.reasons.push(
-          `skill feature "${feature}" was enabled but skills/${feature}/SKILL.md was never read`,
+          `skill feature "${feature}" was enabled but ${SKILLS_REALM_PREFIX}${feature}/SKILL.md was never read`,
         );
       }
     }

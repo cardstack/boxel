@@ -59,7 +59,12 @@ import { receiveSecretsKeyring } from './lib/secrets-at-rest/index.ts';
 import { getInstanceId } from './lib/instance-id.ts';
 import { matrixServerNameFromEnv } from './utils/matrix-server-name.ts';
 import { checkPricingAtStartup } from './lib/pricing.ts';
-import { meteredChargesFor } from './lib/metered-charge.ts';
+import {
+  meteredChargesFor,
+  recordCurrentPricing,
+} from './lib/metered-charge.ts';
+import { buildMintRunToken } from './lib/run-token.ts';
+import { buildAutomationAdmissionChecks } from './lib/automation-admission-checks.ts';
 
 let log = logger('worker');
 checkPricingAtStartup('worker');
@@ -278,6 +283,17 @@ let autoMigrate = migrateDB || undefined;
     queuePublisher: new PgQueuePublisher(dbAdapter),
     prerenderer,
     createPrerenderAuth,
+    mintRunToken: buildMintRunToken(REALM_SECRET_SEED),
+    // An automation run's admission asks the Matrix server whether the
+    // account the run acts as can still sign in, with the admin credentials
+    // the realm server also holds, and checks the run's spending at this
+    // process's prices.
+    automationAdmissionChecks: buildAutomationAdmissionChecks({
+      dbAdapter,
+      matrixURL: new URL(matrixURL),
+      matrixAdminUsername: process.env.MATRIX_ADMIN_USERNAME,
+      matrixAdminPassword: process.env.MATRIX_ADMIN_PASSWORD,
+    }),
     indexJobsOnly,
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
@@ -289,6 +305,9 @@ let autoMigrate = migrateDB || undefined;
   if (process.send) {
     process.send(`ready:${workerId}`);
   }
+  // Recorded after the worker reports ready, so a slow or failing insert
+  // never holds up its start; `recordCurrentPricing` logs any failure.
+  void recordCurrentPricing(dbAdapter, 'worker');
 
   // Handle graceful shutdown. Registered against four triggers
   // (SIGINT/SIGTERM, parent IPC disconnect, and a `'stop'` message from the

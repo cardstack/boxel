@@ -19,6 +19,7 @@ import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  commandRequestTimeoutMs,
   resolvePrerenderServerProxyTimeoutMs,
   retryPolicyForPath,
   sanitizePrerenderJobId,
@@ -1184,6 +1185,12 @@ export function buildPrerenderManagerApp(options?: {
         attrs.priority >= 0
           ? attrs.priority
           : 0;
+      // A command given its own time limit (an automation run's) is proxied
+      // for that long, plus the request overhead.
+      let attemptProxyTimeoutMs = commandRequestTimeoutMs(
+        proxyTimeoutMs,
+        attrs.timeoutMs,
+      );
       if (!affinityType) {
         ctxt.status = 400;
         ctxt.body = {
@@ -1287,7 +1294,10 @@ export function buildPrerenderManagerApp(options?: {
           };
           return;
         }
-        const timer = setTimeout(() => ac.abort(), proxyTimeoutMs).unref?.();
+        const timer = setTimeout(
+          () => ac.abort(),
+          attemptProxyTimeoutMs,
+        ).unref?.();
         // Only a request that can still be retried somewhere is worth
         // abandoning to shorten a drain. A dispatched command has no retry
         // left on either layer, so aborting it here would not defer the work —

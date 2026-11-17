@@ -508,6 +508,50 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    test('an OAuth access token in a form-encoded body is masked, and no other body is changed', function (assert) {
+      let form = 'note=kept&access_token=body-token-marker';
+      for (let [contentType, data] of [
+        ['application/x-www-form-urlencoded', form],
+        ['Application/X-WWW-Form-Urlencoded ; charset=utf-8', form],
+        [undefined, { note: 'kept', access_token: 'body-token-marker' }],
+      ] as const) {
+        let event = scrubRequestTelemetry({
+          request: {
+            method: 'POST',
+            url: 'https://app.telemetry.test/mcp',
+            ...(contentType
+              ? { headers: { 'content-type': contentType } }
+              : {}),
+            data,
+          },
+        });
+        let recorded = JSON.stringify(event);
+        assert.false(
+          recorded.includes('body-token-marker'),
+          `no token in ${contentType ?? 'recorded fields'}`,
+        );
+        assert.true(recorded.includes('note'), 'the rest stays');
+      }
+      for (let [contentType, data] of [
+        ['application/json', '{"access_token":"kept-json","note":"a b"}'],
+        ['text/plain', 'a note & more&access_token=kept-text'],
+      ]) {
+        let event = scrubRequestTelemetry({
+          request: {
+            method: 'POST',
+            url: 'https://app.telemetry.test/_search',
+            headers: { 'content-type': contentType },
+            data,
+          },
+        });
+        assert.strictEqual(
+          (event.request as { data?: unknown }).data,
+          data,
+          `a ${contentType} body is left exactly as recorded`,
+        );
+      }
+    });
+
     test("an event masks the app page's login token", function (assert) {
       let event = scrubRequestTelemetry({
         request: {

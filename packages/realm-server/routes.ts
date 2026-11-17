@@ -13,7 +13,6 @@ import { DBRateLimitStore } from '@cardstack/runtime-common';
 import { AuthenticationErrorMessages } from '@cardstack/runtime-common/router';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
-import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session.ts';
 import handleCreateRealmRequest, {
   type CreateRealmDeps,
@@ -51,7 +50,7 @@ import {
   sendResponseForUnauthorizedRequest,
 } from './middleware/index.ts';
 import type Koa from 'koa';
-import { carriesRunToken } from '@cardstack/runtime-common/run-token';
+import { runTokenOf } from '@cardstack/runtime-common/run-token';
 import { verifyRunToken } from './lib/run-token.ts';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
 import handleClientTelemetry from './handlers/handle-client-telemetry.ts';
@@ -62,6 +61,7 @@ import handleFullReindex from './handlers/handle-full-reindex.ts';
 import handleRemoveJob from './handlers/handle-remove-job.ts';
 import handleAddCredit from './handlers/handle-add-credit.ts';
 import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission.ts';
+import handleRemoveRealmUserPermission from './handlers/handle-remove-realm-user-permission.ts';
 import handleRevokeUserSessions from './handlers/handle-revoke-user-sessions.ts';
 import handleInviteCheck from './handlers/handle-invite-check.ts';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session.ts';
@@ -214,6 +214,7 @@ import {
   handleStartConnect,
 } from './handlers/handle-oauth.ts';
 import type { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
+import { realmServerRunChangeReporter } from './lib/run-change-reporter.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -635,16 +636,11 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(
     REQUEST_FORWARD_PATH,
     async (ctxt: Koa.Context, next: Koa.Next) => {
-      let authorization = ctxt.req.headers['authorization'] ?? null;
-      if (!carriesRunToken(authorization)) {
+      let runToken = runTokenOf(ctxt.req.headers['authorization'] ?? null);
+      if (!runToken) {
         return await requestForwardSession(ctxt, next);
       }
-      if (
-        !verifyRunToken(
-          authorization!.slice('Bearer '.length),
-          args.realmSecretSeed,
-        )
-      ) {
+      if (!verifyRunToken(runToken, args.realmSecretSeed)) {
         return await sendResponseForUnauthorizedRequest(
           ctxt,
           AuthenticationErrorMessages.TokenInvalid,
@@ -657,6 +653,10 @@ export function createRoutes(args: CreateRoutesArgs) {
       definitionLookup: args.definitionLookup,
       virtualNetwork: args.virtualNetwork,
       realmSecretSeed: args.realmSecretSeed,
+      reportRunChange: realmServerRunChangeReporter({
+        ...args,
+        background: true,
+      }),
     }),
   );
   // An automation run's calls to OpenRouter's Batch API. They carry a run
@@ -924,6 +924,10 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleUpsertRealmUserPermission(args),
   );
   registerGrafanaEndpoint(
+    '/_grafana-remove-realm-user-permission',
+    handleRemoveRealmUserPermission(args),
+  );
+  registerGrafanaEndpoint(
     '/_grafana-revoke-user-sessions',
     handleRevokeUserSessions(args),
   );
@@ -977,15 +981,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleUnlistedRealmPathRequest(args),
   );
-  // Matrix tests don't need the GitHub PR integration, and skipping this route
-  // keeps the realm server from loading Octokit's ESM entrypoint during boot.
-  if (process.env.DISABLE_GITHUB_PR_ROUTE !== 'true') {
-    router.post(
-      '/_github-pr',
-      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
-      handleGitHubPRRequestLazy(args),
-    );
-  }
   router.get('/_download-realm', handleDownloadRealm(args));
   router.post(
     '/_bot-registration',
@@ -1055,21 +1050,4 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_webhooks/:webhookPath', handleWebhookReceiverRequest(args));
 
   return router.routes();
-}
-
-function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
-  let handler:
-    | ((ctxt: Koa.Context, next: Koa.Next) => Promise<void>)
-    | undefined;
-
-  return async function (ctxt: Koa.Context, next: Koa.Next) {
-    if (!handler) {
-      handler = (
-        createRequire(import.meta.filename)(
-          './handlers/handle-github-pr',
-        ) as typeof import('./handlers/handle-github-pr.ts')
-      ).default(args);
-    }
-    return await handler(ctxt, next);
-  };
 }

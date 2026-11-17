@@ -1073,6 +1073,40 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
+      test('the only description meta tag is the one the card head supplies', async function (assert) {
+        let descriptionTags = (html: string) =>
+          html.match(/<meta[^>]*\bname="description"[^>]*>/g) ?? [];
+
+        let withDescription = await request
+          .get('/test/unsafe-head-test')
+          .set('Accept', 'text/html');
+        assert.strictEqual(withDescription.status, 200, 'serves HTML response');
+        let tags = descriptionTags(withDescription.text);
+        assert.strictEqual(
+          tags.length,
+          1,
+          'a card whose head has a description gets exactly one description tag',
+        );
+        assert.ok(
+          tags[0]?.includes('content="safe description"'),
+          "that tag carries the card's description",
+        );
+
+        let withoutDescription = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+        assert.strictEqual(
+          withoutDescription.status,
+          200,
+          'serves HTML response',
+        );
+        assert.deepEqual(
+          descriptionTags(withoutDescription.text),
+          [],
+          'a card whose head has no description gets no description tag',
+        );
+      });
+
       test('HTML response includes exactly one favicon and one apple-touch-icon', async function (assert) {
         let response = await request
           .get('/test/isolated-test')

@@ -13,17 +13,22 @@ import type { JobInfo, IndexingProgressEvent } from '../worker.ts';
 import type { MediaCacheAdapter } from '../media-cache.ts';
 import type { MeteredCharges } from '../metered-charges.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type { MintRunToken } from './run-automation.ts';
+import type { AutomationAdmissionChecks } from '../automation-admission.ts';
 export type * from './lint.ts';
 export * from '#lint-task';
 export * from './full-reindex.ts';
 export * from './daily-credit-grant.ts';
 export * from './automation-storage-charge.ts';
+export * from './automation-tick.ts';
+export * from './automation-reconcile.ts';
 export * from './indexer.ts';
 export * from './media-cache-gc.ts';
 export * from './scoped-css-gc.ts';
 export * from './prerender-html.ts';
 export * from './prerender-html-reconcile.ts';
 export * from './run-command.ts';
+export * from './run-automation.ts';
 export * from './capture.ts';
 
 type LoggerInstance = ReturnType<typeof import('../index.ts').logger>;
@@ -68,6 +73,13 @@ export interface TaskArgs {
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
   createPrerenderAuth: CreatePrerenderAuth;
+  // Mints an automation run's token. Optional: a worker without it runs no
+  // automation, and a run's job there ends the run as an error.
+  mintRunToken?: MintRunToken;
+  // What an automation run's admission asks of the realm server's side of the
+  // worker: the Matrix server's view of an account, and the run's spending.
+  // Optional: a worker without it admits no automation run.
+  automationAdmissionChecks?: AutomationAdmissionChecks;
   // Writes metered charges at the process's prices. Optional: a worker
   // without it, such as a test harness's, measures what it would charge and
   // writes nothing.

@@ -8,6 +8,8 @@
 // Postgres.
 
 import { automationRef } from './automation-declaration.ts';
+import type { ReportAutomationChange } from './automation-change-events.ts';
+import type { ReportRunChange } from './automation-run-events.ts';
 import {
   automationsInRealm,
   syncAutomationWithCard,
@@ -30,6 +32,11 @@ export interface AutomationIndexHookArgs {
   touched?: readonly string[];
   // Unix seconds; the current time when absent.
   now?: number;
+  // Told of each run a sync cancels.
+  reportRunChange?: ReportRunChange;
+  // Told of each automation a sync removes, pauses, or moves between active
+  // and done.
+  reportAutomationChange?: ReportAutomationChange;
 }
 
 // What the hook did with one automation: the sync's result, or the error
@@ -50,6 +57,8 @@ export async function syncAutomationsAfterIndex({
   realmURL,
   touched,
   now,
+  reportRunChange,
+  reportAutomationChange,
 }: AutomationIndexHookArgs): Promise<Map<string, AutomationSyncOutcome>> {
   let synced = new Map<string, AutomationSyncOutcome>();
   if (dbAdapter.kind !== 'pg') {
@@ -86,7 +95,13 @@ export async function syncAutomationsAfterIndex({
         dbAdapter,
         automationId,
         () => engine.getInstanceSource(new URL(cardURL)),
-        { automationTypeKey, virtualNetwork, now },
+        {
+          automationTypeKey,
+          virtualNetwork,
+          now,
+          reportRunChange,
+          reportAutomationChange,
+        },
       );
       if (result) {
         synced.set(automationId, result);

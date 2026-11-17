@@ -30,6 +30,7 @@ import {
   fetchRequestFromContext,
 } from '../middleware/index.ts';
 import { Prerenderer } from './index.ts';
+import { renderSessionOf } from './affinity.ts';
 import type { Timings } from './render-runner.ts';
 import { fetchFromManager, resolvePrerenderManagerURL } from './config.ts';
 import { heapTelemetry } from './heap-telemetry.ts';
@@ -44,6 +45,7 @@ import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  commandTimeoutMs,
   sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
 } from './prerender-constants.ts';
@@ -650,10 +652,12 @@ export function buildPrerenderApp(options: {
   };
 
   type RunCommandRouteArgs = RouteBaseArgs & {
-    affinityType: 'user';
+    // `realm` only for an automation run, whose auth is its run token.
+    affinityType: 'user' | 'realm';
     affinityValue: string;
     command: string;
     commandInput?: unknown;
+    timeoutMs?: number;
   };
 
   type CaptureRouteArgs = RouteBaseArgs & {
@@ -763,6 +767,15 @@ export function buildPrerenderApp(options: {
     };
   };
 
+  // The realms an auth bundle holds sessions for.
+  let sessionRealmsOf = (auth: string): string[] => {
+    try {
+      return Object.keys(JSON.parse(auth));
+    } catch {
+      return [];
+    }
+  };
+
   let parseRunCommandAttributes = (
     attrs: any,
   ): RouteParseResult<RunCommandRouteArgs> => {
@@ -774,23 +787,35 @@ export function buildPrerenderApp(options: {
     let renderOptions = parseRenderOptions(attrs);
     let missing: string[] = [];
     if (!isNonEmptyString(rawAuth)) missing.push('auth');
-    if (rawAffinityType !== 'user') missing.push('affinityType');
+    // A command runs on its user's affinity, except an automation run, which
+    // runs on its realm's run affinity. That one is taken only with a run
+    // token for that realm as the whole of its auth, so no other session
+    // reaches a run's tab, and a run's token reaches no other tab.
+    let isRun =
+      rawAffinityType === 'realm' &&
+      isNonEmptyString(rawAuth) &&
+      isNonEmptyString(rawAffinityValue) &&
+      renderSessionOf(rawAuth).kind === 'run' &&
+      sessionRealmsOf(rawAuth).join() === rawAffinityValue;
+    if (rawAffinityType !== 'user' && !isRun) missing.push('affinityType');
     if (!isNonEmptyString(rawAffinityValue)) missing.push('affinityValue');
     if (!isNonEmptyString(command)) missing.push('command');
     let commandValue = isNonEmptyString(command) ? command : undefined;
     let priority = parsePriority(attrs);
+    let timeoutMs = commandTimeoutMs(attrs.timeoutMs);
     return {
       args:
         missing.length > 0
           ? undefined
           : {
-              affinityType: rawAffinityType as 'user',
+              affinityType: rawAffinityType as 'user' | 'realm',
               affinityValue: rawAffinityValue as string,
               auth: rawAuth as string,
               command: command as string,
               commandInput,
               renderOptions,
               ...(priority !== undefined ? { priority } : {}),
+              ...(timeoutMs !== undefined ? { timeoutMs } : {}),
             },
       missing,
       missingMessage:
@@ -1130,11 +1155,16 @@ export function buildPrerenderApp(options: {
       parseAttributes: parseRunCommandAttributes,
       execute: (args, { signal }) =>
         prerenderer.runCommand({
-          userId: args.affinityValue,
+          ...(args.affinityType === 'realm'
+            ? { runRealm: args.affinityValue }
+            : { userId: args.affinityValue }),
           auth: args.auth,
           command: args.command,
           commandInput: args.commandInput as Record<string, unknown> | null,
           ...(args.priority !== undefined ? { priority: args.priority } : {}),
+          ...(args.timeoutMs !== undefined
+            ? { opts: { timeoutMs: args.timeoutMs } }
+            : {}),
           signal,
         }),
     },

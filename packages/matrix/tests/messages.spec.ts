@@ -22,6 +22,7 @@ import {
   setupTwoStackItems,
   showAllCards,
   waitUntil,
+  waitForBoxelMessageEvents,
 } from '../helpers/index.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../support/matrix-constants.ts';
@@ -288,8 +289,12 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents(username, password);
-    let message = messages[messages.length - 1];
+    let messages = await waitForBoxelMessageEvents(page, username, password, [
+      'This is a card without base64',
+    ]);
+    let message = messages.find(
+      (event) => event.content.body === 'This is a card without base64',
+    )!;
     let messageData = JSON.parse(message.content.data);
     let cardText = await (
       await fetch(messageData.attachedCards[0].url, {
@@ -361,9 +366,14 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents(username, password);
-    let lastMessage = messages[messages.length - 1];
-    let attachedFiles = JSON.parse(lastMessage.content.data).attachedFiles;
+    let messages = await waitForBoxelMessageEvents(page, username, password, [
+      'Are there any computed fields in person.gts?',
+    ]);
+    let message = messages.find(
+      (event) =>
+        event.content.body === 'Are there any computed fields in person.gts?',
+    )!;
+    let attachedFiles = JSON.parse(message.content.data).attachedFiles;
     expect(attachedFiles.length).toStrictEqual(1);
     expect(attachedFiles[0].name).toStrictEqual('person.gts');
     expect(attachedFiles[0].contentType).toStrictEqual(
@@ -1061,13 +1071,13 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    // There should only be one card fragments event for multiple message events
-    // if the card remains unchanged and is attached multiple times.
-    let events = await getRoomEvents(username, password);
-    let messageEvents = events.filter(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE,
+    // Attaching the same card to several messages sends exactly one Boxel
+    // message event per send.
+    let messageEvents = await waitForBoxelMessageEvents(
+      page,
+      username,
+      password,
+      ['Message - 1', 'Message - 2', 'Message - 3'],
     );
     expect(messageEvents.length).toEqual(3);
   });

@@ -355,6 +355,11 @@ module(basename(import.meta.filename), function () {
           'https://realms.example.test/_test-resource',
         ],
       );
+      assert.deepEqual(
+        registry.map(({ testOnly }) => testOnly === true),
+        [false, true],
+        'only the resource a test added is marked test-only',
+      );
     });
 
     test("lists each resource's scopes once, in order", function (assert) {
@@ -474,10 +479,13 @@ module(basename(import.meta.filename), function () {
         response_types_supported: ['code'],
         code_challenge_methods_supported: ['S256'],
         token_endpoint_auth_methods_supported: ['none'],
-        grant_types_supported: ['authorization_code'],
+        authorization_response_iss_parameter_supported: true,
+        grant_types_supported: ['authorization_code', 'refresh_token'],
         scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
         authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
+        token_endpoint: 'http://127.0.0.1:0/_oauth-provider/token',
         registration_endpoint: 'http://127.0.0.1:0/_oauth-provider/reg',
+        client_id_metadata_document_supported: true,
       });
       assert.strictEqual(
         response.headers['access-control-allow-origin'],
@@ -499,7 +507,8 @@ module(basename(import.meta.filename), function () {
       for (let path of [
         OPENID_DISCOVERY,
         '/_oauth-provider/jwks',
-        '/_oauth-provider/token',
+        '/_oauth-provider/token/revocation',
+        '/_oauth-provider/device/auth',
       ]) {
         let response = await request.get(path);
         assert.strictEqual(response.status, 404, `${path} is not found`);

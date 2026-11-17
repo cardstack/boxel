@@ -28,13 +28,20 @@ export const GIT_MAX_BUFFER_BYTES = 256 * 1024 * 1024;
 
 // Runs a git command against the repo and returns its standard output as
 // bytes, so blob content and NUL-separated listings come back unaltered.
-export async function runGit(gitDir: string, args: string[]): Promise<Buffer> {
+// Aborting `signal` sends git SIGTERM, on which git removes its lock files,
+// and rejects with an `AbortError`.
+export async function runGit(
+  gitDir: string,
+  args: string[],
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<Buffer> {
   let { stdout } = await execFileAsync(
     'git',
     [`--git-dir=${gitDir}`, ...args],
     {
       encoding: 'buffer',
       maxBuffer: GIT_MAX_BUFFER_BYTES,
+      signal,
     },
   );
   return stdout;

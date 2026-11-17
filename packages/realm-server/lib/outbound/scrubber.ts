@@ -30,6 +30,8 @@
 // one ended at the size cap) discards that held tail rather than delivering
 // it, so everything delivered had already cleared the window.
 
+import { CREDENTIAL_PREFIXES } from '@cardstack/runtime-common/credential-prefixes';
+
 export const REDACTED = '[REDACTED]';
 
 // The shortest partial echo that counts as a credential. Shorter runs are too
@@ -40,34 +42,9 @@ export const MIN_PARTIAL_LENGTH = 10;
 // unrelated encoded payload to be worth removing.
 const MIN_BASE64_RUN_LENGTH = 8;
 
-// Fixed prefixes vendors put on every key they issue. Every key of that vendor
-// shares one, and text about the vendor quotes it, so it identifies no one:
-// partial echoes are matched only in what follows it. These are listed rather
-// than recognized by shape, because a pattern can't tell a prefix from the
-// start of a random tail that happens to contain a `-` or `_`.
-const PUBLIC_PREFIXES = [
-  'sk-or-v1-', // OpenRouter
-  'sk-ant-api03-', // Anthropic
-  'sk-ant-',
-  'sk-proj-', // OpenAI
-  'sk-svcacct-',
-  'sk-',
-  'github_pat_', // GitHub
-  'ghp_',
-  'gho_',
-  'ghu_',
-  'ghs_',
-  'ghr_',
-  'glpat-', // GitLab
-  'xoxb-', // Slack
-  'xoxp-',
-  'xapp-',
-  'sk_live_', // Stripe
-  'sk_test_',
-  'rk_live_',
-  'rk_test_',
-  'AIza', // Google API keys
-].sort((a, b) => b.length - a.length);
+// Vendors' fixed key prefixes: partial echoes are matched only in what
+// follows one (see `CREDENTIAL_PREFIXES`).
+const PUBLIC_PREFIXES = CREDENTIAL_PREFIXES;
 
 // The longest listed vendor prefix `value` starts with, or ''.
 export function publicPrefix(value: string): string {

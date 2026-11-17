@@ -1,24 +1,29 @@
 // The provider's short-lived objects, in `oauth_provider_objects`: the
-// library's interactions, the error references Boxel's error page reads
-// (ADR 021 §1.8), and each flow's consent decision and the ticket that
-// finishes it (§1.7).
+// library's interactions, sessions and authorization codes, the error
+// references Boxel's error page reads (ADR 021 §1.8), and each flow's consent
+// decision and the ticket that finishes it (§1.7).
 //
 // Each object's value is a bearer secret: an interaction's ID is in the
-// browser's URL, and an error reference and a ticket are too. A decision is
+// browser's URL, a session's ID is its cookie, and an authorization code, an
+// error reference and a ticket are values a browser carries too. A decision is
 // stored under its flow's interaction ID. A row is stored and found only
 // by the SHA-256 of that value, and never holds the value itself (ADR 021
-// §1.2). The library copies an interaction's ID into its payload twice, as
-// `jti` and in `returnTo`, the URL the flow resumes at. The interaction
-// adapter leaves both out and rebuilds them when it finds the row. A payload
-// that still holds the value anywhere else is refused, never stored.
+// §1.2). The library copies each object's value into its payload as `jti`,
+// and an interaction's ID a second time in `returnTo`, the URL the flow
+// resumes at. The adapters leave these out and rebuild them when they find
+// the row. A payload that still holds the value anywhere else is refused,
+// never stored.
 //
 // A row past its expiry reads as missing, whether or not it has been deleted.
 // Each store first deletes rows that have expired, so abandoned flows and
 // error pages nobody opened don't pile up.
 
 import { createHash, randomBytes } from 'crypto';
-import type { Adapter, AdapterPayload } from 'oidc-provider';
-import type { DBAdapter } from '@cardstack/runtime-common';
+import { errors, type Adapter, type AdapterPayload } from 'oidc-provider';
+import { logger, type DBAdapter } from '@cardstack/runtime-common';
+import { endGrant } from './grants.ts';
+
+const log = logger('boxel:oauth-provider');
 
 const ERROR_REFERENCE_KIND = 'ErrorReference';
 
@@ -115,7 +120,7 @@ async function destroyObject(
   );
 }
 
-function asRecord(stored: unknown): Record<string, unknown> {
+export function asRecord(stored: unknown): Record<string, unknown> {
   return (typeof stored === 'string' ? JSON.parse(stored) : stored) as Record<
     string,
     unknown
@@ -127,19 +132,75 @@ function jsonEscaped(value: string): string {
   return JSON.stringify(value).slice(1, -1);
 }
 
-const INTERACTION_KIND = 'Interaction';
+// The part of the library's adapter interface it uses for none of Boxel's
+// kinds: finding by user code (the device flow is off), by UID, consuming and
+// revoking by grant. Each throws, naming the kind.
+export abstract class OAuthProviderAdapter implements Adapter {
+  readonly #kind: string;
 
-// The library's adapter for its interactions. An interaction is stored, found
-// and deleted by its ID; the library looks up nothing else for one.
-// `resumeURL` builds the URL the flow resumes at from the issuer and the ID,
-// never from the request that started the flow.
-export class InteractionAdapter implements Adapter {
+  constructor(kind: string) {
+    this.#kind = kind;
+  }
+
+  abstract upsert(
+    id: string,
+    payload: AdapterPayload,
+    expiresIn: number,
+  ): Promise<void>;
+  abstract find(id: string): Promise<AdapterPayload | undefined>;
+  abstract destroy(id: string): Promise<void>;
+
+  async findByUserCode(): Promise<never> {
+    throw this.unused('findByUserCode');
+  }
+
+  async findByUid(): Promise<never> {
+    throw this.unused('findByUid');
+  }
+
+  async consume(_id: string): Promise<void> {
+    throw this.unused('consume');
+  }
+
+  async revokeByGrantId(_grantId: string): Promise<void> {
+    throw this.unused('revokeByGrantId');
+  }
+
+  protected unused(method: string): OAuthProviderObjectError {
+    return new OAuthProviderObjectError(
+      `the OAuth provider's ${this.#kind} has no ${method}`,
+    );
+  }
+}
+
+// The library's adapter for a kind of object it stores, finds and deletes by
+// the object's own value, which is a bearer secret. The value is the row's
+// key, hashed, and the library's copy of it in the payload (`jti`) is left
+// out and put back when the row is found. The library looks up nothing else
+// for these kinds, so every other lookup throws.
+class BearerKeyedAdapter extends OAuthProviderAdapter {
   #dbAdapter: DBAdapter;
-  #resumeURL: (id: string) => string;
+  #kind: string;
 
-  constructor(dbAdapter: DBAdapter, resumeURL: (id: string) => string) {
+  constructor(dbAdapter: DBAdapter, kind: string) {
+    super(kind);
     this.#dbAdapter = dbAdapter;
-    this.#resumeURL = resumeURL;
+    this.#kind = kind;
+  }
+
+  // The payload as stored: without `jti`, and without anything else that
+  // holds a bearer value or that `restore` rebuilds.
+  protected stored(payload: AdapterPayload): Record<string, unknown> {
+    let { jti: _jti, ...rest } = payload;
+    return rest;
+  }
+
+  // The payload as the library stored it, from what the row holds.
+  protected restore(
+    id: string,
+    stored: Record<string, unknown>,
+  ): AdapterPayload {
+    return { ...stored, jti: id } as AdapterPayload;
   }
 
   async upsert(
@@ -147,52 +208,131 @@ export class InteractionAdapter implements Adapter {
     payload: AdapterPayload,
     expiresIn: number,
   ): Promise<void> {
-    let { jti: _jti, returnTo: _returnTo, ...rest } = payload;
     await storeObject(
       this.#dbAdapter,
-      INTERACTION_KIND,
+      this.#kind,
       id,
-      rest as Record<string, unknown>,
+      this.stored(payload),
       expiresIn,
     );
   }
 
   async find(id: string): Promise<AdapterPayload | undefined> {
-    let payload = await findObject(this.#dbAdapter, INTERACTION_KIND, id);
-    return payload
-      ? ({
-          ...payload,
-          jti: id,
-          returnTo: this.#resumeURL(id),
-        } as AdapterPayload)
-      : undefined;
+    let payload = await findObject(this.#dbAdapter, this.#kind, id);
+    return payload ? this.restore(id, payload) : undefined;
   }
 
   async destroy(id: string): Promise<void> {
-    await destroyObject(this.#dbAdapter, INTERACTION_KIND, id);
+    await destroyObject(this.#dbAdapter, this.#kind, id);
+  }
+}
+
+// The library's adapter for its interactions, stored by their IDs. The library
+// copies the ID into the payload a second time, in `returnTo`, the URL the
+// flow resumes at, which `resumeURL` rebuilds from the issuer and the ID,
+// never from the request that started the flow. An interaction started under
+// a signed-in library session would also hold that session's ID
+// (`session.cookie`), the value of its cookie. Boxel drops the session at the
+// start of every flow, so none does, and the field is left out all the same:
+// the library never reads it back.
+export class InteractionAdapter extends BearerKeyedAdapter {
+  #resumeURL: (id: string) => string;
+
+  constructor(dbAdapter: DBAdapter, resumeURL: (id: string) => string) {
+    super(dbAdapter, 'Interaction');
+    this.#resumeURL = resumeURL;
   }
 
-  async findByUserCode(): Promise<never> {
-    throw this.#unused('findByUserCode');
+  protected stored(payload: AdapterPayload): Record<string, unknown> {
+    let { returnTo: _returnTo, session, ...rest } = super.stored(payload);
+    if (isRecord(session)) {
+      let { cookie: _cookie, ...kept } = session;
+      return { ...rest, session: kept };
+    }
+    return rest;
   }
 
-  async findByUid(): Promise<never> {
-    throw this.#unused('findByUid');
+  protected restore(
+    id: string,
+    stored: Record<string, unknown>,
+  ): AdapterPayload {
+    return { ...super.restore(id, stored), returnTo: this.#resumeURL(id) };
+  }
+}
+
+// The library's adapter for its sessions, stored by their IDs, which are the
+// values of its session cookie. A session lives only through the end of one
+// flow (ADR 021 §1.7). The library looks one up by its `uid` (`findByUid`) in
+// two places, and neither is reached:
+// - checking a code or token tied to its session, and none is, since
+//   `expiresWithSession` is false (`provider.ts`);
+// - reading an interaction started under a signed-in session
+//   (`interactionDetails`, `interactionFinished`), and none is, since both
+//   routes that start an interaction, the authorization endpoint and the
+//   resume route, drop the session cookie first.
+// So `findByUid` throws, which a change that reaches either would show.
+export class SessionAdapter extends BearerKeyedAdapter {
+  constructor(dbAdapter: DBAdapter) {
+    super(dbAdapter, 'Session');
+  }
+}
+
+// The library's adapter for its authorization codes, stored by their values.
+// A code is exchanged once. The library checks that a code is unused and then
+// marks it used, so two exchanges at once could both pass its check: marking
+// it used here is atomic, and the exchange that loses ends the grant as reuse,
+// as presenting a used code does (ADR 021 §1.9). A code that expired in
+// between is refused without ending its grant.
+export class AuthorizationCodeAdapter extends BearerKeyedAdapter {
+  #dbAdapter: DBAdapter;
+
+  constructor(dbAdapter: DBAdapter) {
+    super(dbAdapter, 'AuthorizationCode');
+    this.#dbAdapter = dbAdapter;
   }
 
-  async consume(): Promise<never> {
-    throw this.#unused('consume');
+  async consume(id: string): Promise<void> {
+    let hash = sha256Hex(id);
+    let marked = await this.#dbAdapter.execute(
+      `UPDATE oauth_provider_objects
+          SET payload = payload || jsonb_build_object(
+                'consumed', floor(extract(epoch FROM now()))::bigint
+              )
+        WHERE kind = 'AuthorizationCode' AND id_hash = decode($1, 'hex')
+          AND payload->'consumed' IS NULL AND expires_at > now()
+        RETURNING 1`,
+      { bind: [hash] },
+    );
+    if (marked.length > 0) {
+      return;
+    }
+    let [row] = (await this.#dbAdapter.execute(
+      `SELECT payload->>'grantId' AS grant_id FROM oauth_provider_objects
+        WHERE kind = 'AuthorizationCode' AND id_hash = decode($1, 'hex')
+          AND payload->'consumed' IS NOT NULL`,
+      { bind: [hash] },
+    )) as { grant_id: string | null }[];
+    if (!row) {
+      throw new errors.InvalidGrant('authorization code is expired');
+    }
+    if (row.grant_id) {
+      log.info('authorization code reused');
+      await endGrant(this.#dbAdapter, row.grant_id, 'reuse');
+    }
+    throw new errors.InvalidGrant('authorization code already consumed');
   }
 
-  async revokeByGrantId(): Promise<never> {
-    throw this.#unused('revokeByGrantId');
-  }
-
-  #unused(method: string) {
-    return new Error(
-      `the OAuth provider's ${INTERACTION_KIND} has no ${method}`,
+  async revokeByGrantId(grantId: string): Promise<void> {
+    await this.#dbAdapter.execute(
+      `DELETE FROM oauth_provider_objects
+        WHERE kind = 'AuthorizationCode' AND payload->>'grantId' = $1`,
+      { bind: [grantId] },
     );
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 // Why an authorization request didn't reach consent. Each is a fixed label
@@ -355,6 +495,28 @@ export async function findConsentDecision(
     | undefined;
 }
 
+// Finds a flow's decision and deletes it, so only one request can finish the
+// flow with it. `decidedAt` is when the decision was first stored, which a
+// second decision never moves.
+export async function takeConsentDecision(
+  dbAdapter: DBAdapter,
+  interactionId: string,
+): Promise<(ConsentDecisionRecord & { decidedAt: Date }) | undefined> {
+  let [row] = (await dbAdapter.execute(
+    `DELETE FROM oauth_provider_objects
+       WHERE kind = $1 AND id_hash = decode($2, 'hex')
+       RETURNING payload, created_at, expires_at > now() AS current`,
+    { bind: [CONSENT_DECISION_KIND, sha256Hex(interactionId)] },
+  )) as { payload: unknown; created_at: string | Date; current: boolean }[];
+  if (!row?.current) {
+    return undefined;
+  }
+  return {
+    ...(asRecord(row.payload) as unknown as ConsentDecisionRecord),
+    decidedAt: new Date(row.created_at),
+  };
+}
+
 // Finds a ticket and deletes it, so it is spent on its first presentation.
 export async function takeConsentTicket(
   dbAdapter: DBAdapter,
@@ -363,4 +525,33 @@ export async function takeConsentTicket(
   return (await takeObject(dbAdapter, CONSENT_TICKET_KIND, ticket)) as
     | ConsentTicketRecord
     | undefined;
+}
+
+// Deletes every ticket presented, in one statement, and answers those that
+// were current, in no particular order.
+export async function takeConsentTickets(
+  dbAdapter: DBAdapter,
+  tickets: readonly string[],
+): Promise<ConsentTicketRecord[]> {
+  if (tickets.length === 0) {
+    return [];
+  }
+  let rows = (await dbAdapter.execute(
+    `DELETE FROM oauth_provider_objects
+       WHERE kind = $1
+         AND id_hash IN (SELECT decode(hash, 'hex') FROM unnest($2::text[]) AS hash)
+       RETURNING payload, expires_at > now() AS current`,
+    { bind: [CONSENT_TICKET_KIND, tickets.map(sha256Hex)] },
+  )) as { payload: unknown; current: boolean }[];
+  return rows
+    .filter(({ current }) => current)
+    .map(({ payload }) => asRecord(payload) as unknown as ConsentTicketRecord);
+}
+
+// Deletes a flow's decision once the flow has finished or been cancelled.
+export async function destroyConsentDecision(
+  dbAdapter: DBAdapter,
+  interactionId: string,
+): Promise<void> {
+  await destroyObject(dbAdapter, CONSENT_DECISION_KIND, interactionId);
 }

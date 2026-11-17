@@ -210,7 +210,7 @@ module('create-listing-pr handler', () => {
     };
 
     let handler = new CreateListingPRHandler(githubClient);
-    await handler.addContentsToCommit(eventContent, [
+    await handler.addContentsToCommit(eventContent, '@alice:localhost', [
       { path: 'CardListing/abc.json', content: '{}' },
       { path: 'Spec/def.json', content: '{}' },
       { path: 'Recipe.gts', content: 'export const x = 1;' },
@@ -230,6 +230,198 @@ module('create-listing-pr handler', () => {
       writeCalls[0].syncFolder,
       branchName,
       'the write syncs the submission folder so a retry drops paths missing from the fresh collection',
+    );
+  });
+
+  test('a trigger that names a branch no submission could have refuses to write or open anything', async (assert) => {
+    let calls: string[] = [];
+    let githubClient: GitHubClient = {
+      openPullRequest: async () => {
+        calls.push('openPullRequest');
+        return { number: 1, html_url: 'x' };
+      },
+      createBranch: async () => {
+        calls.push('createBranch');
+        return { ref: 'refs/heads/test', sha: 'abc123' };
+      },
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async () => {
+        calls.push('writeFilesToBranch');
+        return { commitSha: 'def456' };
+      },
+    };
+    let handler = new CreateListingPRHandler(githubClient);
+
+    for (let branchName of [
+      'scripts',
+      'commands',
+      'catalog-app',
+      '.github',
+      '.github/workflows',
+      'a1b2c3-listing/../scripts',
+      'A1B2C3-listing',
+      'a1b2c3_listing',
+      'main',
+    ]) {
+      let eventContent: BotTriggerEventContent = {
+        type: 'pr-listing-create',
+        realm: 'http://localhost:4201/test/',
+        userId: '@alice:localhost',
+        input: {
+          roomId: '!abc123:localhost',
+          listingName: 'My Listing',
+          branchName,
+        },
+      };
+      await assert.rejects(
+        handler.ensureCreateListingBranch(eventContent),
+        /is not a submission branch/,
+        `'${branchName}' creates no branch`,
+      );
+      await assert.rejects(
+        handler.addContentsToCommit(eventContent, '@alice:localhost', [
+          { path: 'Recipe.gts', content: 'x' },
+        ]),
+        /is not a submission branch/,
+        `'${branchName}' writes no files`,
+      );
+      await assert.rejects(
+        handler.openCreateListingPR(eventContent, '@alice:localhost', 1),
+        /is not a submission branch/,
+        `'${branchName}' opens no pull request`,
+      );
+    }
+    assert.deepEqual(calls, [], 'GitHub is never called');
+  });
+
+  test('addContentsToCommit refuses a file path that leaves the submission folder', async (assert) => {
+    let writes = 0;
+    let githubClient: GitHubClient = {
+      openPullRequest: async () => ({ number: 1, html_url: 'x' }),
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async () => {
+        writes++;
+        return { commitSha: 'def456' };
+      },
+    };
+    let eventContent: BotTriggerEventContent = {
+      type: 'pr-listing-create',
+      realm: 'http://localhost:4201/test/',
+      userId: '@alice:localhost',
+      input: {
+        roomId: '!abc123:localhost',
+        listingName: 'My Listing',
+        branchName: 'a1b2c3-my-listing',
+      },
+    };
+    let handler = new CreateListingPRHandler(githubClient);
+
+    for (let path of [
+      '../scripts/preview-paths.mjs',
+      'nested/../../.github/workflows/ci.yml',
+      '/etc/passwd',
+      './Recipe.gts',
+      'nested//Recipe.gts',
+      'nested\\Recipe.gts',
+      '',
+      ' ',
+      'nested/.. ',
+      ' ../Recipe.gts',
+    ]) {
+      await assert.rejects(
+        handler.addContentsToCommit(eventContent, '@alice:localhost', [
+          { path, content: 'x' },
+        ]),
+        /is not a path inside the submission folder/,
+        `'${path}' is refused as a text file`,
+      );
+      await assert.rejects(
+        handler.addContentsToCommit(
+          eventContent,
+          '@alice:localhost',
+          [],
+          [{ path, content: 'x' }],
+        ),
+        /is not a path inside the submission folder/,
+        `'${path}' is refused as a binary file`,
+      );
+    }
+    assert.strictEqual(writes, 0, 'nothing is written');
+  });
+
+  test('addContentsToCommit refuses a submission with no files', async (assert) => {
+    let writes = 0;
+    let githubClient: GitHubClient = {
+      openPullRequest: async () => ({ number: 1, html_url: 'x' }),
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async () => {
+        writes++;
+        return { commitSha: 'def456' };
+      },
+    };
+    let handler = new CreateListingPRHandler(githubClient);
+    await assert.rejects(
+      handler.addContentsToCommit(
+        {
+          type: 'pr-listing-create',
+          realm: 'http://localhost:4201/test/',
+          userId: '@alice:localhost',
+          input: {
+            roomId: '!abc123:localhost',
+            listingName: 'My Listing',
+            branchName: 'a1b2c3-my-listing',
+          },
+        },
+        '@alice:localhost',
+        [],
+        [],
+      ),
+      /must have at least one file/,
+    );
+    assert.strictEqual(writes, 0, 'nothing is written');
+  });
+
+  test('addContentsToCommit asks for a folder new on the base branch and tags the commit with its submitter', async (assert) => {
+    let asked: (string | undefined)[] = [];
+    let tagged: boolean[] = [];
+    let githubClient: GitHubClient = {
+      openPullRequest: async () => ({ number: 1, html_url: 'x' }),
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async (params) => {
+        asked.push(params.folderMustBeNewOn);
+        tagged.push(
+          !!params.submitterTag &&
+            params.message.endsWith(
+              `[boxel-submitter:${params.submitterTag}]`,
+            ) &&
+            !params.message.includes('@alice'),
+        );
+        return { commitSha: 'def456' };
+      },
+    };
+    let handler = new CreateListingPRHandler(githubClient);
+    await handler.addContentsToCommit(
+      {
+        type: 'pr-listing-create',
+        realm: 'http://localhost:4201/test/',
+        userId: '@alice:localhost',
+        input: {
+          roomId: '!abc123:localhost',
+          listingName: 'My Listing',
+          branchName: 'a1b2c3-my-listing',
+        },
+      },
+      '@alice:localhost',
+      [{ path: 'Recipe.gts', content: 'x' }],
+    );
+    assert.deepEqual(asked, ['main']);
+    assert.deepEqual(
+      tagged,
+      [true],
+      'the message ends with the tag and does not spell out the submitter',
     );
   });
 
@@ -258,8 +450,8 @@ module('create-listing-pr handler', () => {
 
     let handler = new CreateListingPRHandler(githubClient);
     let files = [{ path: 'Recipe.gts', content: 'x' }];
-    await handler.addContentsToCommit(eventContent, files);
-    await handler.addContentsToCommit(eventContent, files);
+    await handler.addContentsToCommit(eventContent, '@alice:localhost', files);
+    await handler.addContentsToCommit(eventContent, '@alice:localhost', files);
 
     assert.strictEqual(writeCalls.length, 2, 'writes twice');
     assert.deepEqual(
@@ -291,6 +483,7 @@ module('create-listing-pr handler', () => {
         userId: '@alice:localhost',
         input: { roomId: '!room-a:localhost', listingName: 'My Listing' },
       },
+      '@alice:localhost',
       files,
     );
 

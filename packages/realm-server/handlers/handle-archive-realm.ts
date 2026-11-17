@@ -18,6 +18,10 @@ import {
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import {
+  realmServerAutomationChangeReporter,
+  realmServerRunChangeReporter,
+} from '../lib/run-change-reporter.ts';
+import {
   notifyRealmsListUpdated,
   resolveAndAuthorizeArchiveTarget,
 } from './archive-realm-utils.ts';
@@ -28,7 +32,9 @@ export default function handleArchiveRealm({
   dbAdapter,
   matrixClient,
   sendEvent,
+  serverURL,
   virtualNetwork,
+  reconciler,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let target = await resolveAndAuthorizeArchiveTarget(
@@ -36,6 +42,7 @@ export default function handleArchiveRealm({
       dbAdapter,
       'archive',
       matrixClient.serverName,
+      serverURL,
     );
     if (!target) {
       return;
@@ -44,13 +51,24 @@ export default function handleArchiveRealm({
 
     try {
       // An archived realm's automations stop with it: each is paused, and its
-      // pending run canceled, until a direct writer resumes it. They pause
+      // pending and running runs canceled, until a direct writer resumes it. They pause
       // before the realm is marked archived, so a failure in between leaves
       // the realm visible with its automations stopped, never archived with
       // them running, and a retry archives it.
       await pauseRealmAutomations(
         dbAdapter,
         ri(virtualNetwork.unresolveURL(realmURL)),
+        {
+          reportRunChange: realmServerRunChangeReporter({
+            dbAdapter,
+            virtualNetwork,
+            reconciler,
+          }),
+          reportAutomationChange: realmServerAutomationChangeReporter({
+            virtualNetwork,
+            reconciler,
+          }),
+        },
       );
       await archiveRealm(dbAdapter, new URL(realmURL));
       // Stop the realm's indexer: cancel any in-flight from-scratch /

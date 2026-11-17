@@ -18,7 +18,6 @@
     "@glint/ember-tsc": "catalog:",
     "@koa/cors": "catalog:",
     "@koa/router": "catalog:",
-    "@octokit/rest": "catalog:",
     "@opentelemetry/api": "catalog:",
     "@sentry/node": "catalog:",
     "@types/archiver": "catalog:",
@@ -113,6 +112,7 @@
     "start:icons": "mise run services:icons",
     "start:host-dist": "./scripts/start-host-dist.sh",
     "start:pg": "./scripts/start-pg.sh",
+    "oauth:mock-client": "node tests/support/mock-oauth-client/run.ts",
     "stop:pg": "./scripts/stop-pg.sh",
     "test:wait-for-servers": "WAIT_ON_TIMEOUT=900000 NODE_NO_WARNINGS=1 START_SERVER_AND_TEST_INSECURE=1 start-server-and-test 'pnpm run wait' 'https-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson' 'pnpm run wait' 'https-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:8008|http://localhost:5001' 'test'",
     "setup:base-in-deployment": "mkdir -p /persistent/base && rsync --dry-run --itemize-changes --checksum --recursive --delete ../base/. /persistent/base/ && rsync --checksum --recursive --delete ../base/. /persistent/base/",
@@ -154,6 +154,7 @@
     "check-user-pg-connections": "./scripts/check-user-pg-connections.sh",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-stripe-products.ts",
     "sync-openrouter-models": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/sync-openrouter-models.ts",
+    "run-automation": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 node scripts/run-automation.ts",
     "stripe": "docker run --rm --add-host=host.docker.internal:host-gateway -it stripe/stripe-cli:latest",
     "build:secure-origin": "pnpm --dir=../secure-origin build",
     "build:secure-origin:if-stale": "pnpm --dir=../secure-origin build:if-stale"

@@ -2,10 +2,11 @@ import type Koa from 'koa';
 import type {
   DBAdapter,
   DefinitionLookup,
+  ReportRunChange,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
-import { carriesRunToken } from '@cardstack/runtime-common/run-token';
+import { runTokenOf } from '@cardstack/runtime-common/run-token';
 import {
   sendResponseForBadRequest,
   sendResponseForError,
@@ -42,6 +43,10 @@ import {
   isOpenRouterBatchURL,
 } from '../lib/openrouter-batches.ts';
 import * as Sentry from '@sentry/node';
+import {
+  logRunPlatformLine,
+  type RunLogLine,
+} from '@cardstack/runtime-common/automation-run-log';
 
 const log = logger('request-forward');
 
@@ -156,11 +161,14 @@ export default function handleRequestForward({
   definitionLookup,
   virtualNetwork,
   realmSecretSeed,
+  reportRunChange,
 }: {
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   realmSecretSeed: string;
+  // Told when a run's request ends the run at a cap.
+  reportRunChange?: ReportRunChange;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     // A caller that stops waiting must take the upstream call with it. Each
@@ -179,6 +187,9 @@ export default function handleRequestForward({
     // once however the request ends.
     let runForward: AdmittedRunForward | undefined;
     let sent = false;
+    let sentAt: number | undefined;
+    // The model a run's request named, for its line in the run's log.
+    let runModel: string | undefined;
     let costInUsd: number | undefined;
     // The upstream's status, once it has answered.
     let upstreamStatus: number | undefined;
@@ -186,9 +197,7 @@ export default function handleRequestForward({
     try {
       // 1. Validate JWT token and extract user
       let authorization = ctxt.req.headers['authorization'] ?? null;
-      let runToken = carriesRunToken(authorization)
-        ? authorization!.slice('Bearer '.length)
-        : undefined;
+      let runToken = runTokenOf(authorization);
       const token = ctxt.state.token;
       if (!token && !runToken) {
         await sendResponseForForbiddenRequest(
@@ -337,7 +346,13 @@ export default function handleRequestForward({
       let matrixUserId: string;
       if (runToken) {
         let admission = await admitRunForward(
-          { dbAdapter, definitionLookup, virtualNetwork, realmSecretSeed },
+          {
+            dbAdapter,
+            definitionLookup,
+            virtualNetwork,
+            realmSecretSeed,
+            reportRunChange,
+          },
           {
             token: runToken,
             url: json.url,
@@ -358,6 +373,9 @@ export default function handleRequestForward({
         }
         runForward = admission.admitted;
         matrixUserId = runForward.run.actsAs;
+        let model = (parsedRequestBody as { model?: unknown } | undefined)
+          ?.model;
+        runModel = typeof model === 'string' ? model : undefined;
       } else {
         matrixUserId = token.user;
       }
@@ -437,6 +455,7 @@ export default function handleRequestForward({
           }
           const upstreamCall = upstreamCallSignal(clientGone);
           sent = true;
+          sentAt = Date.now();
           const externalResponse = await outboundFetch({
             url: json.url,
             method: json.method,
@@ -512,6 +531,18 @@ export default function handleRequestForward({
             error,
           ),
         );
+      if (runForward && sent) {
+        await logRunPlatformLine(
+          dbAdapter,
+          runForward.run.runId,
+          resolveLogLine({
+            model: runModel,
+            status: upstreamStatus,
+            ms: sentAt !== undefined ? Date.now() - sentAt : undefined,
+            costInUsd: settledCost,
+          }),
+        );
+      }
     }
   };
 }
@@ -522,3 +553,33 @@ const STATUS_TEXT = {
   422: 'Unprocessable Content',
   503: 'Service Unavailable',
 } as const;
+
+// A run's `resolve` call as its line in the run's log: the model, the
+// provider's status and time, and what the call cost.
+export function resolveLogLine({
+  model,
+  status,
+  ms,
+  costInUsd,
+}: {
+  model?: string;
+  status?: number;
+  ms?: number;
+  costInUsd?: number;
+}): Omit<RunLogLine, 'source' | 'at'> {
+  let measured = [
+    ...(ms !== undefined ? [`${ms} ms`] : []),
+    ...(costInUsd !== undefined ? [`$${costInUsd.toFixed(6)}`] : []),
+  ].join(', ');
+  return {
+    kind: 'resolve',
+    level: status === undefined ? 'error' : status >= 400 ? 'warn' : 'info',
+    message: `resolve${model ? ` ${model}` : ''}: ${status ?? 'failed'}${measured ? ` (${measured})` : ''}`,
+    data: {
+      ...(model ? { model } : {}),
+      ...(status !== undefined ? { status } : {}),
+      ...(ms !== undefined ? { ms } : {}),
+      ...(costInUsd !== undefined ? { costInUsd } : {}),
+    },
+  };
+}

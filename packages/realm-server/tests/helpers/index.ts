@@ -8,7 +8,11 @@ const {
   copySync,
 } = fsExtra;
 import { NodeAdapter } from '../../node-realm.ts';
-import { mintRunToken } from '../../lib/run-token.ts';
+import { buildMintRunToken, mintRunToken } from '../../lib/run-token.ts';
+import type {
+  AccountStanding,
+  AutomationAdmissionChecks,
+} from '@cardstack/runtime-common/automation-admission';
 import { automationRef } from '@cardstack/runtime-common/automation-declaration';
 import {
   createAutomationRun,
@@ -1709,6 +1713,8 @@ export async function createRealm({
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
+      mintRunToken: buildMintRunToken(realmSecretSeed),
+      automationAdmissionChecks: testAutomationAdmissionChecks,
       mediaCacheAdapter,
       meteredCharges: meteredChargesFor(dbAdapter, testPricing),
     });
@@ -1832,8 +1838,10 @@ export async function runTestRealmServer({
   googleSignIn,
   oauthProvider,
   oauthTestResources,
+  oauthTestDocumentOrigins,
   oauthNewClientLimit,
   oauthAuthorizationLimit,
+  oauthTokenLimit,
   secureOriginAppOrigins,
   clientAddress,
   cardDocumentCache,
@@ -1877,6 +1885,9 @@ export async function runTestRealmServer({
   oauthTestResources?: ConstructorParameters<
     typeof RealmServer
   >[0]['__testOnlyOAuthResources'];
+  // Client ID metadata documents served from a stub: each `https://` origin
+  // maps to the stub's plain HTTP origin.
+  oauthTestDocumentOrigins?: ReadonlyMap<string, string>;
   // The provider's limit on new clients; omit for the production default.
   oauthNewClientLimit?: ConstructorParameters<
     typeof RealmServer
@@ -1885,6 +1896,11 @@ export async function runTestRealmServer({
   oauthAuthorizationLimit?: ConstructorParameters<
     typeof RealmServer
   >[0]['oauthAuthorizationLimit'];
+  // The provider's limits on its token endpoint; omit for the production
+  // default.
+  oauthTokenLimit?: ConstructorParameters<
+    typeof RealmServer
+  >[0]['oauthTokenLimit'];
   // App origins listed for the secure origin, as `--secureOriginAppOrigin`.
   secureOriginAppOrigins?: string[];
   // How the server works out a caller's address. Omit for none in front of
@@ -1917,6 +1933,8 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mintRunToken: buildMintRunToken(realmSecretSeed),
+    automationAdmissionChecks: testAutomationAdmissionChecks,
     // The indexing worker persists declared captures when a store is
     // configured — same wiring as the production worker child.
     mediaCacheAdapter,
@@ -1996,8 +2014,12 @@ export async function runTestRealmServer({
     ...(oauthTestResources
       ? { __testOnlyOAuthResources: oauthTestResources }
       : {}),
+    ...(oauthTestDocumentOrigins
+      ? { __testOnlyOAuthDocumentOrigins: oauthTestDocumentOrigins }
+      : {}),
     ...(oauthNewClientLimit ? { oauthNewClientLimit } : {}),
     ...(oauthAuthorizationLimit ? { oauthAuthorizationLimit } : {}),
+    ...(oauthTokenLimit ? { oauthTokenLimit } : {}),
     ...(secureOriginAppOrigins ? { secureOriginAppOrigins } : {}),
     ...(clientAddress ? { clientAddress } : {}),
   });
@@ -2111,6 +2133,8 @@ export async function runTestRealmServerWithRealms({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    mintRunToken: buildMintRunToken(realmSecretSeed),
+    automationAdmissionChecks: testAutomationAdmissionChecks,
     mediaCacheAdapter,
     meteredCharges: meteredChargesFor(dbAdapter, testPricing),
   });
@@ -4110,3 +4134,15 @@ export function realmConfigCardJSON(
     },
   });
 }
+
+// What the test Matrix server says of each account an automation run's
+// admission asks about. An account not named here is usable; a test that
+// deactivates one sets it here and clears it when it's done.
+export const testAccountStandings = new Map<string, AccountStanding>();
+
+// The admission checks a test worker uses: account standings read from
+// `testAccountStandings` rather than the Matrix server, where the test users
+// have no accounts.
+export const testAutomationAdmissionChecks: AutomationAdmissionChecks = {
+  accountStanding: async (user) => testAccountStandings.get(user) ?? 'usable',
+};

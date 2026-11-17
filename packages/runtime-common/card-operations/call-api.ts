@@ -7,6 +7,7 @@ import {
   type CallApiSlotKey,
   type CallApiSlotPlacement,
   type OperationCallApi,
+  type OperationError,
   type OperationCallApiResult,
   type OperationDefinition,
   type OperationLoweringIssueCode,
@@ -19,6 +20,8 @@ import { destinationCovers } from './destination-covers.ts';
 
 export { destinationCovers };
 import type { KeyReadiness } from './capability-wire.ts';
+import type { OperationCore } from './dispatch.ts';
+import type { ResolvedCodeRef } from '../code-ref.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
@@ -955,12 +958,39 @@ export interface CallApiFilledSlot {
   // The share or personal key this slot's use is counted against, which the
   // executor hands back to the sender's `recordUse` unread.
   countsAgainst?: CallApiUseSubject;
+  // Whether `value` is an access token the key minted for this call (an
+  // OAuth connection, a `client_credentials` client, a service account),
+  // rather than the key's stored value.
+  mints?: boolean;
 }
 
 // A share, or one of a user's own keys, whose use is recorded.
 export interface CallApiUseSubject {
   kind: 'share' | 'key';
   id: string;
+}
+
+// Which share or personal key a refusal raised while a `callApi`'s slots are
+// being filled came from, so the refusal is recorded against it, and an
+// automation run that ends on it records it. The refusal a caller receives
+// carries none of this: a reader isn't told which of a realm's shares refused
+// them.
+const refusedBy = new WeakMap<OperationFailure, CallApiUseSubject>();
+
+// Marks `failure` as raised by `subject`, and answers it, for a throw site to
+// write `throw refusedFrom(subject, failure)`.
+export function refusedFrom(
+  subject: CallApiUseSubject,
+  failure: OperationFailure,
+): OperationFailure {
+  refusedBy.set(failure, subject);
+  return failure;
+}
+
+export function subjectOfRefusal(
+  failure: OperationFailure,
+): CallApiUseSubject | undefined {
+  return refusedBy.get(failure);
 }
 
 // One invocation's use of the shares and keys filling its slots, as the
@@ -1004,10 +1034,27 @@ export interface CallApiUse {
 // slots, against the shares and keys `fill` said they count against. It
 // describes what happened and never changes it, so whatever it throws is
 // logged and dropped.
+//
+// `admitAutomation` asks, before an automation run starts and without opening
+// any key, whether `payer` may invoke one operation the automation declares
+// as an automation call: the refusal the call would get, marked with the share
+// or key that refused it (`refusedFrom`), or `undefined` when it would be
+// served. A sender that can't tell leaves it out, and a run's
+// admission then refuses the run.
 export interface CallApiSender {
   fill(lookup: CallApiSlotLookup): Promise<CallApiFilledSlot[]>;
   recordUse?(use: CallApiUse): Promise<void>;
   readiness?(lookup: CallApiReadinessLookup): Promise<KeyReadiness | undefined>;
+  admitAutomation?(args: {
+    core: Pick<
+      OperationCore,
+      'resolveCodeRef' | 'definitionLookup' | 'readsRealmOf'
+    >;
+    realmURL: URL;
+    codeRef: ResolvedCodeRef;
+    operation: string;
+    payer: string;
+  }): Promise<OperationFailure | undefined>;
   send(
     request: CallApiRequest,
     credentials: CallApiCredential[],
@@ -1051,6 +1098,59 @@ export interface CallApiRunMeter {
     bytes: number,
     budgetReached: boolean,
   ): Promise<ConstructorParameters<typeof OperationFailure>[0] | undefined>;
+  // Writes the call's line in the run's log. It never throws.
+  logCall(call: CallApiRunLogEntry): Promise<void>;
+  // How long to wait before filling the call's slots again, the `retry`th
+  // time, after a key's token endpoint failed for now (`credential-rejected`
+  // with `meta.reason: 'unavailable'`); `undefined` when no retry is left, or
+  // the run has stopped running.
+  credentialRetryDelay(retry: number): Promise<number | undefined>;
+  // Whether the run is still running under this attempt.
+  isRunning(): Promise<boolean>;
+  // Ends the run as an error on a credential refused for a reason a person
+  // must fix (see `endsRunOnCredential`), recording the share or personal key
+  // the refused slot is filled from. A run that already ended is left as it
+  // is.
+  endOnCredential(
+    refusal: OperationError,
+    subject: CallApiUseSubject | undefined,
+  ): Promise<void>;
+}
+
+// Whether a refusal ends an automation run: a credential the vendor no longer
+// accepts (`rejected`, or a key whose 401 rejected its grant), or whose OAuth
+// client or share needs an administrator (`needs-admin`). Retrying the call
+// can't succeed until a person acts. A token endpoint failing for now
+// (`unavailable`) is retried instead, and refuses only the call.
+export function endsRunOnCredential(refusal: OperationError): boolean {
+  return (
+    refusal.code === 'credential-rejected' &&
+    refusal.meta?.reason !== 'unavailable'
+  );
+}
+
+function credentialUnavailable(refusal: OperationError): boolean {
+  return (
+    refusal.code === 'credential-rejected' &&
+    refusal.meta?.reason === 'unavailable'
+  );
+}
+
+// One `callApi` call as a run's log records it. `url` is the request as
+// built, every credential slot still a token; the log masks its query
+// values. Nothing here carries a header value.
+export interface CallApiRunLogEntry {
+  operation: string;
+  method?: string;
+  url?: string;
+  // The vendor's status, for a call that was answered.
+  status?: number;
+  // Why the call was refused or failed, for one that wasn't.
+  code?: string;
+  detail?: string;
+  ms?: number;
+  // The response bytes read.
+  bytes?: number;
 }
 
 // What the request's values are filled from.
@@ -1372,6 +1472,22 @@ export async function callApiOperation(
   // The slots' credentials once `fill` has found them, whose shares and keys
   // each outcome from then on is recorded against.
   let filled: CallApiFilledSlot[] = [];
+  // Set once the request is built and about to be sent.
+  let sending: { method: string; url: string; startedAt: number } | undefined;
+  let bytesRead: number | undefined;
+  let logCall = (entry: Omit<CallApiRunLogEntry, 'operation'>) =>
+    invocation.runMeter?.logCall({
+      operation: request.name,
+      ...(sending
+        ? {
+            method: sending.method,
+            url: sending.url,
+            ms: Date.now() - sending.startedAt,
+          }
+        : {}),
+      ...(bytesRead !== undefined ? { bytes: bytesRead } : {}),
+      ...entry,
+    });
   let refuse = async (
     error: ConstructorParameters<typeof OperationFailure>[0],
     url?: string,
@@ -1379,6 +1495,11 @@ export async function callApiOperation(
     await recordKeyUse(request, invocation, url, filled, {
       outcome: 'refused',
       code: error.code,
+    });
+    await logCall({
+      ...(url && !sending ? { url } : {}),
+      code: error.code ?? 'refused',
+      ...(error.detail ? { detail: error.detail } : {}),
     });
     throw new OperationFailure({ ...(id ? { id } : {}), ...error });
   };
@@ -1453,29 +1574,72 @@ export async function callApiOperation(
   // A slot is filled only by the key a binding names: one its owner approved
   // for this operation in this realm. The binding is found before anything is
   // built, so a request nobody approved reads nothing of the card either.
+  let sender = invocation.sender;
+  // A refusal of the credential a run's slot is filled from, when only a
+  // person can fix it, ends the run as well as the call: a script that went
+  // on without the call would commit a batch that is missing what it was
+  // for. The run records the share or key it ended on.
+  let refuseCredential = async (
+    failure: OperationFailure,
+    url?: string,
+  ): Promise<never> => {
+    if (runMeter && endsRunOnCredential(failure.error)) {
+      await runMeter.endOnCredential(
+        failure.error,
+        subjectOfRefusal(failure) ?? subjectOfSlot(filled, failure.error),
+      );
+    }
+    return refuse(failure.error, url);
+  };
+  let lookup: CallApiSlotLookup | undefined;
+  // Fills the slots. A run's call whose key's token endpoint is failing for
+  // now waits and asks again, as the run's meter allows, so a brief outage
+  // at the vendor costs an unattended run time rather than its result.
+  let fill = async (url?: string): Promise<CallApiFilledSlot[]> => {
+    for (let retry = 1; ; retry++) {
+      try {
+        return await sender.fill(lookup!);
+      } catch (error) {
+        if (!(error instanceof OperationFailure)) {
+          throw error;
+        }
+        let delay =
+          runMeter && credentialUnavailable(error.error)
+            ? await runMeter.credentialRetryDelay(retry)
+            : undefined;
+        if (delay === undefined) {
+          return refuseCredential(error, url);
+        }
+        await logCall({
+          code: error.error.code,
+          detail: `${error.error.detail}; asking again in ${Math.round(delay / 1000)} s`,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        // A run that stopped during the pause asks the token endpoint
+        // nothing more.
+        if (!(await runMeter!.isRunning())) {
+          return refuse(error.error, url);
+        }
+      }
+    }
+  };
   if (declared.slots.length > 0) {
     let type = await invocation.type();
     if (!type) {
       return refuse(notApproved(request.name, declared, invocation.realmURL));
     }
-    try {
-      filled = await invocation.sender.fill({
-        realmURL: invocation.realmURL,
-        type,
-        operation: request.name,
-        ...(id ? { instance: id } : {}),
-        caller: request.actor || ANONYMOUS_ACTOR,
-        ...(anonymous ? { anonymous } : {}),
-        mode: invocation.mode,
-        ...(invocation.runId ? { runId: invocation.runId } : {}),
-        request: declared,
-      });
-    } catch (error) {
-      if (error instanceof OperationFailure) {
-        return refuse(error.error);
-      }
-      throw error;
-    }
+    lookup = {
+      realmURL: invocation.realmURL,
+      type,
+      operation: request.name,
+      ...(id ? { instance: id } : {}),
+      caller: request.actor || ANONYMOUS_ACTOR,
+      ...(anonymous ? { anonymous } : {}),
+      mode: invocation.mode,
+      ...(invocation.runId ? { runId: invocation.runId } : {}),
+      request: declared,
+    };
+    filled = await fill();
   }
   let built: CallApiRequest;
   try {
@@ -1510,36 +1674,46 @@ export async function callApiOperation(
   // Each key is sent only under the destination its owner approved it for,
   // which the grant stored when they did. The request is checked as built,
   // with every slot still a token, so a credential in the path can't move it.
-  let credentials: CallApiCredential[] = [];
-  for (let slot of built.slots) {
-    let fill = filled.find(({ name }) => name === slot.name);
-    if (!fill) {
-      return refuse(notApproved(request.name, declared, invocation.realmURL));
+  let credentialsFor = async (
+    slots: CallApiFilledSlot[],
+  ): Promise<CallApiCredential[]> => {
+    let credentials: CallApiCredential[] = [];
+    for (let slot of built.slots) {
+      let fill = slots.find(({ name }) => name === slot.name);
+      if (!fill) {
+        return refuse(notApproved(request.name, declared, invocation.realmURL));
+      }
+      if (!destinationCovers(fill.destination, built.url)) {
+        return refuse(
+          {
+            status: 502,
+            code: 'guard-refused',
+            title: 'Destination refused',
+            detail: `operation "${request.name}" built a request outside ${fill.destination}, where the key for the credential slot "${slot.name}" was approved to be sent`,
+            meta: { reason: 'destination' },
+          },
+          built.url,
+        );
+      }
+      credentials.push({
+        token: slot.token,
+        value: fill.value,
+        ...(fill.raw !== undefined ? { raw: fill.raw } : {}),
+        ...(fill.grant ? { grant: fill.grant } : {}),
+      });
     }
-    if (!destinationCovers(fill.destination, built.url)) {
-      return refuse(
-        {
-          status: 502,
-          code: 'guard-refused',
-          title: 'Destination refused',
-          detail: `operation "${request.name}" built a request outside ${fill.destination}, where the key for the credential slot "${slot.name}" was approved to be sent`,
-          meta: { reason: 'destination' },
-        },
-        built.url,
-      );
-    }
-    credentials.push({
-      token: slot.token,
-      value: fill.value,
-      ...(fill.raw !== undefined ? { raw: fill.raw } : {}),
-      ...(fill.grant ? { grant: fill.grant } : {}),
-    });
-  }
-  // A run's call counts against its caps just before it is sent, so a call
-  // refused before here never counts.
+    return credentials;
+  };
+  let credentials = await credentialsFor(filled);
+  // A run's request counts against its caps just before it is sent, so a call
+  // refused before here never counts. Each request the vendor is sent counts,
+  // a retry included, and is admitted only while the run is still running.
   let sendOptions: CallApiSendOptions | undefined;
   let responseBytes: { bytes: number; budgetReached: boolean } | undefined;
-  if (runMeter) {
+  let admit = async (): Promise<void> => {
+    if (!runMeter) {
+      return;
+    }
     let admission: CallApiRunAdmission;
     try {
       admission = await runMeter.admitCall();
@@ -1553,9 +1727,12 @@ export async function callApiOperation(
       responseByteBudget: admission.responseByteBudget,
       onResponseBytes: (bytes, budgetReached) => {
         responseBytes = { bytes, budgetReached };
+        bytesRead = bytes;
       },
     };
-  }
+  };
+  await admit();
+  sending = { method: built.method, url: built.url, startedAt: Date.now() };
   let recordResponseBytes = async () =>
     runMeter && responseBytes
       ? await runMeter.recordResponse(
@@ -1563,28 +1740,66 @@ export async function callApiOperation(
           responseBytes.budgetReached,
         )
       : undefined;
-  let response: CallApiResponse;
-  try {
-    response = await invocation.sender.send(built, credentials, sendOptions);
-  } catch (error) {
-    let capReached = await recordResponseBytes();
-    if (capReached) {
-      return refuse(capReached, built.url);
+  let send = async (): Promise<CallApiResponse> => {
+    let response: CallApiResponse;
+    try {
+      response = await sender.send(built, credentials, sendOptions);
+    } catch (error) {
+      let capReached = await recordResponseBytes();
+      if (capReached) {
+        return refuse(capReached, built.url);
+      }
+      if (error instanceof OperationFailure) {
+        return refuseCredential(error, built.url);
+      }
+      await recordKeyUse(request, invocation, built.url, filled, {
+        outcome: 'failed',
+      });
+      await logCall({
+        code: 'failed',
+        detail: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
-    if (error instanceof OperationFailure) {
-      return refuse(error.error, built.url);
-    }
+    await recordResponseBytes();
     await recordKeyUse(request, invocation, built.url, filled, {
-      outcome: 'failed',
+      outcome: 'sent',
+      status: response.status,
     });
-    throw error;
+    await logCall({ status: response.status });
+    return response;
+  };
+  let response = await send();
+  // A vendor that refuses a token minted for a run's call is asked once more
+  // with the token the key mints now: another process may have refreshed the
+  // connection just before, and a vendor such as GitHub revokes the previous
+  // access token when it does. A second 401 is the vendor's answer.
+  if (
+    runMeter &&
+    lookup &&
+    response.status === 401 &&
+    filled.some(({ mints }) => mints)
+  ) {
+    filled = await fill(built.url);
+    credentials = await credentialsFor(filled);
+    responseBytes = undefined;
+    bytesRead = undefined;
+    sending = undefined;
+    await admit();
+    sending = { method: built.method, url: built.url, startedAt: Date.now() };
+    response = await send();
   }
-  await recordResponseBytes();
-  await recordKeyUse(request, invocation, built.url, filled, {
-    outcome: 'sent',
-    status: response.status,
-  });
   return { callApi: response };
+}
+
+// The share or personal key filling the slot a refusal names, for one raised
+// once the slots were filled, such as a vendor's 401 to a stored key.
+function subjectOfSlot(
+  filled: CallApiFilledSlot[],
+  refusal: OperationError,
+): CallApiUseSubject | undefined {
+  let slot = (refusal.meta?.slot as { name?: unknown } | undefined)?.name;
+  return filled.find(({ name }) => name === slot)?.countsAgainst;
 }
 
 // The refusal for a slot no binding fills. The detail names each slot with

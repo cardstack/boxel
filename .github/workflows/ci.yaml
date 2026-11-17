@@ -214,6 +214,8 @@ jobs:
               - 'packages/bxl/**'
               - 'packages/host/**'
               - 'packages/eslint-plugin-boxel/**'
+              # The suite's Synapse starts from a template here.
+              - 'packages/matrix/support/synapse/**'
               - 'packages/postgres/**'
               - 'packages/pretui/**'
               - 'packages/realm-historian/**'

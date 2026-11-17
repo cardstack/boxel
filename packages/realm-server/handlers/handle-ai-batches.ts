@@ -56,7 +56,7 @@ import {
   readOpenRouterBatch,
 } from '../lib/openrouter-batches.ts';
 import { verifyRunToken } from '../lib/run-token.ts';
-import { carriesRunToken } from '@cardstack/runtime-common/run-token';
+import { runTokenOf } from '@cardstack/runtime-common/run-token';
 
 const log = logger('ai-batches');
 
@@ -331,17 +331,15 @@ async function batchCaller(
     );
     return undefined;
   }
-  if (!carriesRunToken(authorization)) {
+  let runToken = runTokenOf(authorization);
+  if (!runToken) {
     await sendResponseForForbiddenRequest(
       ctxt,
       'Batched AI is only for automation runs: a batch call needs an automation run token',
     );
     return undefined;
   }
-  let token = verifyRunToken(
-    authorization.slice('Bearer '.length),
-    realmSecretSeed,
-  );
+  let token = verifyRunToken(runToken, realmSecretSeed);
   if (!token) {
     await sendResponseForUnauthorizedRequest(
       ctxt,
