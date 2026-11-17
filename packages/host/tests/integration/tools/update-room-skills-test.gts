@@ -427,10 +427,30 @@ Instructions live in the markdown body.
 
         await command.execute({
           roomId: matrixRoomId,
+          skillCardIdsToActivate: [prefixFormId],
+          skillCardIdsToDeactivate: [],
+        });
+        let skillsRoomState = mockMatrixUtils.getRoomState(
+          matrixRoomId,
+          APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        );
+        assert.deepEqual(
+          skillsRoomState.enabledSkillCards.map((card: any) => card.sourceUrl),
+          [skillURL],
+          'activating the enabled skill by its prefix-form id adds no entry',
+        );
+        assert.strictEqual(
+          mockMatrixUtils.getUploadedContents().size,
+          uploadCount,
+          'activating the enabled skill by its prefix-form id uploads nothing',
+        );
+
+        await command.execute({
+          roomId: matrixRoomId,
           skillCardIdsToActivate: [],
           skillCardIdsToDeactivate: [prefixFormId],
         });
-        let skillsRoomState = mockMatrixUtils.getRoomState(
+        skillsRoomState = mockMatrixUtils.getRoomState(
           matrixRoomId,
           APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
         );
