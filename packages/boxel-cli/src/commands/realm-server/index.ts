@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { registerDataKeysCommand } from './data-keys.ts';
 import { registerKeysCommand } from './keys.ts';
 import { registerRenderTokenCommand } from './render-token.ts';
+import { registerSecretsCommand } from './secrets.ts';
 
 // Operator commands for a realm server, authorized with its realm secret
 // seed. The namespace stays out of the general help.
@@ -15,4 +16,5 @@ export function registerRealmServerCommand(program: Command): void {
   registerDataKeysCommand(realmServer);
   registerKeysCommand(realmServer);
   registerRenderTokenCommand(realmServer);
+  registerSecretsCommand(realmServer);
 }
