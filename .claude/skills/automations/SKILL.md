@@ -353,6 +353,43 @@ The ticks themselves are `automation-tick` rows in `jobs`; their `result` counts
 - A run made but never started: its job is waiting. `SELECT id, status, priority, concurrency_group FROM jobs WHERE job_type = 'run-command' AND args->>'dedupeKey' LIKE 'automation:<automation card id>:%'`.
 - A trigger with `runs` at its `count`, or whose next slot is past `until`, is spent and doesn't run again.
 
+### Reconcile: making up a missed run
+
+`reconcileAutomations` (`packages/runtime-common/automation-reconcile.ts`, imported as `@cardstack/runtime-common/automation-reconcile`) makes up runs an outage cost (ADR 028 §1.5). Every worker manager enqueues an `automation-reconcile` job when it starts and on a cron every five minutes (`lib/automation-reconcile-config.ts`; `AUTOMATION_RECONCILE_CRON_SCHEDULE` overrides it), at the automation tier in the `automation-reconcile` concurrency group. A pass that arrives while another waits joins it. Each pass handles two kinds of missed work, at most one run per trigger:
+
+1. **A run whose job is gone**: `pending` or `running`, made at least `AUTOMATION_RECONCILE_GRACE_SECONDS` (2 minutes) ago, with no `unfulfilled` `run-command` job carrying its `dedupeKey`. The queue gave up on its job after the last reservation, or the job finished without ending the run, or it was never published. Holding the automation's row (as the tick does while it writes runs), reconcile **enqueues the same run's job again** and sets `reconciled_at`. The new attempt takes the run over through `startAutomationRunAttempt`, so a run whose commit wasn't claimed runs its script again, one whose commit landed finishes complete, and one whose commit was claimed and never recorded ends `commit-interrupted`. The run keeps its slot, which is the missed instant, so its trigger's count and cursor don't change, and a slot that joined the pending run is covered when it runs. Reconcile **ends** the run with `abandonAutomationRun` (`error_reason` `job-lost`, or `complete` if its commit landed) and charges it when:
+   - `reconciled_at` is already set: its extra job was lost too;
+   - a scheduled run's automation is paused or no longer switched on;
+   - no cron or one-time trigger on the card has the run's label.
+
+   A Run now or Preview is enqueued again whether or not the automation is switched on. A run whose card can't be read is left for a later pass, since its time limit comes from the card.
+
+2. **A due time that passed with nothing enqueued**: a row whose `next_run` is the grace or more behind `now`, which the minute tick missed (the tick was down, or the worker manager just started). Reconcile runs the tick's own procedure on those rows (`tickAutomations` with `overdueBy`), so every slot that passed collapses into one make-up run at the latest of them, counted once against `count`. The tick and reconcile both claim with `FOR UPDATE SKIP LOCKED` and key each run by automation, trigger and slot, so they can't both start it.
+
+Lost runs go first, so a due slot finds a pending run that will run (and joins it) or none (and starts its own). Other missed work, such as a batch follow-up whose deadline passed with nothing enqueued, registers a step with `registerAutomationReconcileStep(name, step)`; each pass runs every registered step after its own and logs how many runs each made up.
+
+**What reconcile did.** The worker logs one `automation-reconcile` line per run or automation it handled, and a summary per pass that found anything:
+
+```
+automation-reconcile: run <run id> of automation <id> (trigger <label>, slot <slot>) had no live job; enqueued it again as job <job id>
+automation-reconcile: run <run id> of automation <id> (trigger <label>, slot <slot>) had no live job and ended error: <why>
+automation-reconcile: run <run id> of automation <id> has no live job, left for a later pass: its card can't be read: <message>
+automation-reconcile: automation <id> trigger <label> was overdue; made up run <run id> (job <job id>) for <slot>
+automation-reconcile: <n> requeued, <n> ended, <n> left, <n> overdue, <n> made up, <n> skipped, <n> failed
+```
+
+A run reconcile enqueued again has a `trigger` line in its log, `Reconcile enqueued this run again: it was unfinished and its job was gone` (`data.reconciled` true); one it ended has a `finish` line with `job-lost`. The passes themselves are `automation-reconcile` rows in `jobs`, whose `result` counts what each did.
+
+```sql
+-- Runs reconcile has enqueued again, and how they ended.
+SELECT id, trigger, slot, state, error_reason, reconciled_at, finished_at
+  FROM automation_runs
+ WHERE reconciled_at IS NOT NULL
+ ORDER BY reconciled_at DESC LIMIT 20;
+```
+
+Make-ups that keep happening point at the queue rather than at reconcile: `requeued` lines for one automation mean its jobs keep dying (look up the rejected `run-command` job's `result` for the queue's reason, often a worker killed for memory); `overdue` lines mean the tick isn't running or isn't claiming (see _Why a due run didn't start_).
+
 ## The run row
 
 Every run has one row in `automation_runs`, and that row is the source of
@@ -379,6 +416,7 @@ cancel works by changing it. The functions that change it are in
 | `call_api_calls`, `call_api_response_bytes`, `resolve_calls`, `writes`         | The metered counts, which the realm server must add to where it does the work, never taking them from the tab                                                                                      |
 | `ai_credits_spent`, `ai_credits_reserved`, `ai_reservations`                   | Credits the run's finished AI requests cost, and the worst case of those in flight (see _The AI spending cap_)                                                                                     |
 | `created_at`, `started_at`, `commit_started_at`, `committed_at`, `finished_at` | When the run was enqueued, first started (a retry keeps it), claimed its commit, had its commit land, and ended                                                                                    |
+| `reconciled_at`                                                                | When reconcile enqueued the run's job again because its job was gone. Reconcile does that once; null for a run it never touched                                                                    |
 
 A run is unique by `(automation_id, trigger, slot)`, the same three its
 `dedupeKey` names, so `createAutomationRun` called twice for one firing
@@ -436,9 +474,11 @@ says why) rather than throwing.
   (`automation_preview_files`) before it discards the overlay.
 - **`abandonAutomationRun(db, id, reason)`** closes a pending or running run
   whose job is gone, whoever owned it: the queue gives up on a job after its
-  last reservation, and no attempt is left to finish the run. This is for the
-  reconcile pass (ADR 028 §1.5). A run whose commit landed finishes complete;
-  any other finishes as an error with `reason`.
+  last reservation, and no attempt is left to finish the run. Reconcile calls
+  it with `job-lost` for a run it already enqueued once more (see
+  _Reconcile: making up a missed run_). A run whose commit landed finishes
+  complete; any other finishes as an error with `reason`. No attempt is left
+  to charge it, so the caller does (`chargeAutomationRun`).
 - **`cancelUnfinishedAutomationRuns(querier, automationId, by)`** cancels
   every pending run of an automation, and its running one unless its commit
   was claimed, inside the caller's transaction, as pausing and removing it do.
@@ -545,10 +585,11 @@ SELECT state, attempt, error_reason, error_message, canceled_by,
 ```
 
 - `running` with no live job: the attempt died. If the job has a reservation
-  left, its next attempt takes the run over. If not, the run stays `running`
-  until the reconcile pass closes it with `abandonAutomationRun`. `started_at`
-  is the first attempt's start, so an old one alone says only that the run was
-  retried.
+  left, its next attempt takes the run over. If not, reconcile enqueues the
+  run's job once more within a few minutes, and ends the run with
+  `job-lost` if that job is lost too (`reconciled_at` set means it already
+  had its extra job). `started_at` is the first attempt's start, so an old
+  one alone says only that the run was retried.
 - `commit_started_at` set and `committed_at` null on a finished run: the
   claiming attempt stopped between the claim and the landing. Check the
   realm's files for the batch's writes to see whether it landed.
