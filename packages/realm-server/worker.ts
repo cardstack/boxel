@@ -299,11 +299,13 @@ let autoMigrate = migrateDB || undefined;
   });
 
   await worker.run();
-  await recordCurrentPricing(dbAdapter, 'worker');
   log.info(`worker started`);
   if (process.send) {
     process.send(`ready:${workerId}`);
   }
+  // Recorded after the worker reports ready, so a slow or failing insert
+  // never holds up its start; `recordCurrentPricing` logs any failure.
+  void recordCurrentPricing(dbAdapter, 'worker');
 
   // Handle graceful shutdown. Registered against four triggers
   // (SIGINT/SIGTERM, parent IPC disconnect, and a `'stop'` message from the
