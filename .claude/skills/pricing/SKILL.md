@@ -866,7 +866,7 @@ read the ledger above for the dashboard's time range. An operator answers
 
 The panels show every amount as a positive number. The ledger stores a
 charge as a negative `credit_amount`, and the panels show the amount under
-Charged; grants and purchases appear under Added. A realm or payer cell
+Credits charged; grants and purchases appear under Credits added. A realm or payer cell
 links to the realm's or user's dashboard with the same time range. Each
 table shows at most 500 rows, so widen or move the time range to find older
 charges.

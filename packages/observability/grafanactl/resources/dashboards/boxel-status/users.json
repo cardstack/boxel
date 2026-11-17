@@ -914,7 +914,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "The user's credit ledger in the time range, by charge kind. Charged adds up the credits that run, run_indexing, storage, ai and batched_ai charges drew and that expiries removed. Added adds up the credits that grants and purchases added. Charges counts each charge once, however many credit buckets the charge drew on. When Boxel wrote an entry without a kind, the panel reads the kind from the entry's credit type, as the pricing skill describes.",
+        "description": "The user's credit ledger in the time range, by charge kind. Credits charged adds up the credits that run, run_indexing, storage, ai and batched_ai charges drew and that expiries removed. Credits added adds up the credits that grants and purchases added. Charges counts each charge once, however many credit buckets the charge drew on. When Boxel wrote an entry without a kind, the panel reads the kind from the entry's credit type, as the pricing skill describes.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -972,7 +972,7 @@
               "properties": [
                 {
                   "id": "displayName",
-                  "value": "Charged"
+                  "value": "Credits charged"
                 }
               ]
             },
@@ -984,7 +984,7 @@
               "properties": [
                 {
                   "id": "displayName",
-                  "value": "Added"
+                  "value": "Credits added"
                 }
               ]
             },
@@ -1044,7 +1044,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Every charge on the user's credit ledger in the time range, newest first. Charged shows the credits that a run, run indexing, storage, AI or batched AI charge drew from the user's balance, or that an expiry removed. Added shows the credits that a grant or purchase added. Credit buckets shows how the charge split across plan allowance, daily credit and extra credit. The reference columns show what the charge paid for: the realm, the run's automation and trigger, the run, the AI batch, or the storage day. Usage priced lists the usage that the charge's pricing version priced: tab-seconds, worker-seconds, GB downloaded, GB-months, and the AI provider's cost and tokens.",
+        "description": "Every charge on the user's credit ledger in the time range, newest first. Credits charged shows the credits that a run, run indexing, storage, AI or batched AI charge drew from the user's balance, or that an expiry removed. Credits added shows the credits that a grant or purchase added. Credit buckets shows how the charge split across plan allowance, daily credit and extra credit. The reference columns show what the charge paid for: the realm, the run's automation and trigger, the run, the AI batch, or the storage day. Usage priced lists the usage that the charge's pricing version priced: tab-seconds, worker-seconds, GB downloaded, GB-months, and the AI provider's cost and tokens.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1106,7 +1106,7 @@
               "properties": [
                 {
                   "id": "displayName",
-                  "value": "Charged"
+                  "value": "Credits charged"
                 }
               ]
             },
@@ -1118,7 +1118,7 @@
               "properties": [
                 {
                   "id": "displayName",
-                  "value": "Added"
+                  "value": "Credits added"
                 }
               ]
             },

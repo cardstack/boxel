@@ -1124,7 +1124,7 @@
               "properties": [
                 {
                   "id": "displayName",
-                  "value": "Charged"
+                  "value": "Credits charged"
                 }
               ]
             },
@@ -1184,7 +1184,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Every charge that names the realm in the time range, newest first, with the payer. Charged shows the credits the charge drew from the payer's balance. Credit buckets shows how the charge split across the payer's plan allowance, daily credit and extra credit. The reference columns show what the charge paid for: the run's automation and trigger, the run, the AI batch, or the storage day. Usage priced lists the usage that the charge's pricing version priced: tab-seconds, worker-seconds, GB downloaded, GB-months, and the AI provider's cost and tokens.",
+        "description": "Every charge that names the realm in the time range, newest first, with the payer. Credits charged shows the credits the charge drew from the payer's balance. Credit buckets shows how the charge split across the payer's plan allowance, daily credit and extra credit. The reference columns show what the charge paid for: the run's automation and trigger, the run, the AI batch, or the storage day. Usage priced lists the usage that the charge's pricing version priced: tab-seconds, worker-seconds, GB downloaded, GB-months, and the AI provider's cost and tokens.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1246,7 +1246,7 @@
               "properties": [
                 {
                   "id": "displayName",
-                  "value": "Charged"
+                  "value": "Credits charged"
                 }
               ]
             },
