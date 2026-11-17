@@ -2704,9 +2704,13 @@ export interface WriteOptions {
   // write that restores an earlier revision. Absent, the write is recorded
   // as `api`. It never decides the author, which is `initiatingUser`.
   history?: WriteContext;
-  // The automation run whose batch this write commits. The files the write
-  // creates are recorded as the run's automation's, which its storage charge
-  // prices. Set only by the commit of a run's batch.
+  // The automation run whose batch this write commits. Set only by the commit
+  // of a run's batch. The files the write creates are recorded as the run's
+  // automation's, which its storage charge prices. The indexing the write
+  // causes is charged to the run's identity once it is done (see
+  // `RunIndexing`), and its index passes and renders run on their own, never
+  // shared with another write's. A write that changes nothing on disk causes
+  // no indexing and no charge.
   automationRun?: AutomationRunWrite;
   // Where a caller reporting where its write's time went wants this commit's
   // stages stamped. The commit drains prior indexing, makes the bytes
@@ -2729,12 +2733,6 @@ export interface WriteOptions {
   // Called at most once, and not at all by a write that failed before reaching
   // durability.
   onDurable?: () => void;
-  // The `automation_runs` id of the automation run whose commit this write
-  // is. The indexing the write causes is charged to the run's identity once
-  // it is done (see `RunIndexing`), and its index passes and renders run on
-  // their own, never shared with another write's. A write that changes
-  // nothing on disk causes no indexing and no charge.
-  runId?: string;
 }
 
 // Who a realm event is delivered to. By default it goes to every session room
@@ -6090,8 +6088,8 @@ export class Realm {
     // The run's indexing so far, carried from pass to pass of this commit
     // like the deferred render set below, and handed with it to the job that
     // ends the commit's indexing, which charges it.
-    let runIndexing: RunIndexing | null = options?.runId
-      ? runIndexingFor(options.runId)
+    let runIndexing: RunIndexing | null = options?.automationRun
+      ? runIndexingFor(options.automationRun.runId)
       : null;
     // The /_atomic endpoint (and any other writeMany caller that opts
     // out of post-write indexing via waitForIndex:false) does not read
@@ -14905,7 +14903,8 @@ export class Realm {
           actor: actsAs,
           // The files the batch creates are recorded as this run's
           // automation's, which is what the automation's payer is charged
-          // storage for.
+          // storage for, and the indexing the batch causes is charged to the
+          // run's identity.
           automationRun: { runId, automationId: call.automationId },
           waitForIndex: false,
           broadcastRealmEvents: true,
