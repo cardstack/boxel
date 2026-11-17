@@ -127,8 +127,7 @@ export async function endGrant(
               SET ended_at = now(), ended_reason = $2
              FROM users AS u
             WHERE g.id = $1 AND u.id = g.user_id AND u.matrix_user_id = $3
-              AND g.ended_at IS NULL AND g.expires_at > now()
-              AND NOT COALESCE(g.created_at <= u.oauth_grants_revoked_at, false)
+              AND ${GRANT_USABLE}
             RETURNING g.client_id`,
           { bind: [grantId, reason, owner] },
         )
@@ -264,14 +263,24 @@ export async function deleteGrant(
 }
 
 // The grant checks (ADR 021 §1.5), shared by every place a grant is used:
-// the token endpoint, on each code and refresh exchange (`GrantAdapter`), and
-// a resource's lookup of an access token (`lookup.ts`), so the two always
-// agree. A query selects `GRANT_STATE_COLUMNS`, with the grant as `g` and its
-// user as `u`, and hands the row to `grantUsable`.
-export const GRANT_STATE_COLUMNS = `g.ended_at IS NOT NULL AS grant_ended,
-       g.expires_at <= now() AS grant_expired,
-       COALESCE(g.created_at <= u.oauth_grants_revoked_at, false)
-         AS grant_revoked`;
+// the token endpoint, on each code and refresh exchange (`GrantAdapter`), a
+// resource's lookup of an access token (`lookup.ts`), and Connected apps'
+// list and disconnect (`connections.ts`, `endGrant` with an owner), so they
+// always agree. Each is written once, with the grant as `g` and its user as
+// `u`. A query that acts on the result selects `GRANT_STATE_COLUMNS` and
+// hands the row to `grantUsable`; one that only filters uses `GRANT_USABLE`.
+const GRANT_ENDED = 'g.ended_at IS NOT NULL';
+const GRANT_EXPIRED = 'g.expires_at <= now()';
+const GRANT_REVOKED =
+  'COALESCE(g.created_at <= u.oauth_grants_revoked_at, false)';
+
+export const GRANT_STATE_COLUMNS = `${GRANT_ENDED} AS grant_ended,
+       ${GRANT_EXPIRED} AS grant_expired,
+       ${GRANT_REVOKED} AS grant_revoked`;
+
+// The grant checks as a condition: the grant may still be used.
+export const GRANT_USABLE = `NOT (${GRANT_ENDED}) AND NOT (${GRANT_EXPIRED})
+       AND NOT (${GRANT_REVOKED})`;
 
 export interface GrantState {
   grant_ended: boolean;

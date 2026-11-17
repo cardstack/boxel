@@ -547,6 +547,25 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(refreshed.status, 200, 'it still refreshes');
     });
 
+    test('ends a live grant whose code has not been exchanged, so the code is refused', async function (assert) {
+      let who = await user();
+      let clientId = await registerOAuthClient(server!);
+      let code = await codeForOAuthClient(server!, clientId, who.session, {
+        resources: [RESOURCE],
+      });
+      let [grantId] = await grantsOf(who);
+      assert.deepEqual(await listed(who), [], 'not listed yet');
+
+      let response = await disconnect(grantId, { authorization: who.session });
+      assert.strictEqual(response.status, 204, response.text);
+      assert.strictEqual((await grantRow(grantId)).ended_reason, 'user');
+
+      let exchanged = await exchangeOAuthCode(server!, clientId, code);
+      assert.strictEqual(exchanged.status, 400, 'its code is refused');
+      assert.strictEqual(exchanged.body.error, 'invalid_grant');
+      assert.deepEqual(await listed(who), [], 'and it is never listed');
+    });
+
     test('answers a connection that is not live as not found', async function (assert) {
       let who = await user();
       let ended = await connect(who);

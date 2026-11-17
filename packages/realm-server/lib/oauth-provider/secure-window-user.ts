@@ -1,7 +1,8 @@
-// The check every route the secure origin's own pages call is behind: consent
-// (`consent.ts`) and Connected apps (`connections.ts`). Card code on the app's
-// origin can't reach the secure window's session, so it can neither decide a
-// flow nor see or end a user's connections.
+// The check the OAuth provider's signed-in routes for the secure origin's
+// pages are behind: consent (`consent.ts`) and Connected apps
+// (`connections.ts`). Card code on the app's origin can't reach the secure
+// window's session, so it can neither decide a flow nor see or end a user's
+// connections.
 
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';

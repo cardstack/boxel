@@ -1,20 +1,26 @@
-// Connected apps (ADR 021 §1.7): the routes the secure origin's page calls to
+// Connected apps (ADR 021 §1.9): the routes the secure origin's page calls to
 // list the apps connected to the user's account, and to disconnect one. A
 // connection is one OAuth grant (`grants.ts`), and disconnecting it ends that
 // grant alone: two connections of the same app are ended apart.
 //
 // Both routes are behind the check consent is behind (`secure-window-user.ts`),
-// and answer only for the signed-in user's own grants. A grant ID naming
-// anyone else's grant, or one that isn't live, is answered as unknown.
+// and answer only for the signed-in user's own live grants: those that pass
+// the grant checks (`GRANT_USABLE`). The list shows the live grants whose code
+// has been exchanged; the disconnect ends any live grant, which also stops a
+// code not yet exchanged. A grant ID naming anyone else's grant, or one that
+// isn't live, is answered as unknown.
 //
 // What the access means comes from the registry, and the app's name from
-// `appName`, as consent named it.
+// `appName`, as consent named it for a client identified by a metadata
+// document or one that registered itself. A pre-registered client is shown by
+// its client ID until pre-registered clients carry a name this list can read:
+// none is registered yet (ADR 021's remediation lists the gap).
 
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
 import { appName, type AppName } from './app-name.ts';
-import { endGrant, GRANT_STATE_COLUMNS } from './grants.ts';
+import { endGrant, GRANT_USABLE } from './grants.ts';
 import type { OAuthResource } from './registry.ts';
 import {
   respond,
@@ -26,8 +32,9 @@ export const OAUTH_CONNECTIONS_PATH = `${OAUTH_PROVIDER_PATH}/connections`;
 
 // One connection, as `GET /_oauth-provider/connections` lists it.
 export interface Connection {
-  // The grant's ID, which `DELETE /_oauth-provider/connections/:id` takes. It
-  // is no bearer secret (ADR 021 §1.2).
+  // The grant's ID, which `DELETE /_oauth-provider/connections/:grantId`
+  // takes. It is no bearer secret (ADR 021 §1.2): it ends a grant only under
+  // its owner's secure window session.
   id: string;
   app: AppName;
   // Each resource the grant reaches, and the scopes approved there, with the
@@ -72,7 +79,7 @@ interface ConnectionRow {
 
 // A user's live connections, newest first. A grant is listed while it is
 // usable, by the same checks the token endpoint and the resources apply
-// (`GRANT_STATE_COLUMNS`), and only once the app holds a token of it that
+// (`GRANT_USABLE`), and only once the app holds a token of it that
 // hasn't expired. A grant whose flow was abandoned before its code was
 // exchanged holds none, so the app never connected. A connection's tokens
 // last until its grant expires (a renewing grant's refresh token, a
@@ -84,26 +91,22 @@ export async function listConnections(
   matrixUserId: string,
 ): Promise<Connection[]> {
   let rows = (await dbAdapter.execute(
-    `SELECT * FROM (
-       SELECT g.id, g.client_id, g.redirect_uri, g.resources, g.renewing,
-              c.metadata->>'client_name' AS client_name,
-              extract(epoch FROM g.created_at) AS created,
-              extract(epoch FROM g.last_used_at) AS last_used,
-              extract(epoch FROM g.expires_at) AS expires,
-              g.created_at,
-              ${GRANT_STATE_COLUMNS}
-         FROM oauth_provider_grants AS g
-         JOIN users AS u ON u.id = g.user_id
-         LEFT JOIN oauth_provider_dynamic_clients AS c
-           ON c.client_id = g.client_id
-        WHERE u.matrix_user_id = $1
-          AND EXISTS (
-            SELECT 1 FROM oauth_provider_tokens AS t
-             WHERE t.grant_id = g.id AND t.expires_at > now()
-          )
-     ) AS grants
-     WHERE NOT grant_ended AND NOT grant_expired AND NOT grant_revoked
-     ORDER BY created_at DESC, id`,
+    `SELECT g.id, g.client_id, g.redirect_uri, g.resources, g.renewing,
+            c.metadata->>'client_name' AS client_name,
+            extract(epoch FROM g.created_at) AS created,
+            extract(epoch FROM g.last_used_at) AS last_used,
+            extract(epoch FROM g.expires_at) AS expires
+       FROM oauth_provider_grants AS g
+       JOIN users AS u ON u.id = g.user_id
+       LEFT JOIN oauth_provider_dynamic_clients AS c
+         ON c.client_id = g.client_id
+      WHERE u.matrix_user_id = $1
+        AND ${GRANT_USABLE}
+        AND EXISTS (
+          SELECT 1 FROM oauth_provider_tokens AS t
+           WHERE t.grant_id = g.id AND t.expires_at > now()
+        )
+      ORDER BY g.created_at DESC, g.id`,
     { bind: [matrixUserId] },
   )) as unknown as ConnectionRow[];
   return rows.map((row) => ({
