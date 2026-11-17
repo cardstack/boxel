@@ -7,7 +7,12 @@
 //
 // Trigger lines are a small share of a run's log (one per slot that started
 // or joined the run, plus one per reconcile requeue), so the index is partial
-// on `kind = 'trigger'`.
+// on `kind = 'trigger'`. The predicate stops at `kind` rather than also
+// requiring `skipped`: the planner matches a partial index only when a
+// query's WHERE clause implies its predicate, and `skipped` lives in `data`,
+// so a predicate on it would hold only while every reader spells the filter
+// as `(data->>'skipped')::boolean`. Keeping the started lines costs one index
+// entry per run, against the up to thousands of lines a run's log holds.
 //
 // The index is built CONCURRENTLY, outside a transaction, so building it
 // doesn't block the run log's writes. node-pg-migrate logs
