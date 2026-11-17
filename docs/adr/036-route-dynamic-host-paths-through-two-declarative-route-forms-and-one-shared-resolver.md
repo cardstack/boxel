@@ -90,13 +90,14 @@ own path and a realm file MUST still be served there.
 The server MUST read routes only through `validateHostRoutes`
 (`Realm.getHostRoutes`), as ADR 015 §1.2 requires. A route that fails
 validation MUST be dropped with a warning, with its child routes. A field
-match's type MUST be read only from definitions the index has already
-cached (`lookupCachedDefinition`). A definition that isn't cached is read by
-running the type's module in the prerender, which ADR 015 §1.1 forbids while
-a request waits. A type whose
-definition isn't cached MUST drop its routes for now, start a background
-read, and mark the validation incomplete. A path that a route dropped for
-now could answer MUST get 503, not not-found. Validation MUST drop each
+match's type MUST be read through the definitions cache
+(`lookupDefinitionEntry`), as a search reads it, so a request that finds the
+cache empty waits for the read. On a cache miss, the read runs the type's
+module in the prerender only to learn its fields. The routes still make
+every routing decision, so this read is not one under ADR 015 §1.1. When the
+read fails, the route MUST be dropped for now and the validation marked
+incomplete, and a path the route could answer MUST get 503, not not-found.
+Validation MUST drop each
 dynamic route past `MAX_DYNAMIC_HOST_ROUTES`, with a warning. Validation
 SHOULD warn when a literal or fixed route takes a path that a dynamic sibling
 matches.
@@ -185,6 +186,8 @@ file still win, so adding a wide route doesn't break URLs that worked before
 navigation the same answer [4][7]. Lookups run as the visitor, so the realm
 admits, limits and refuses each one as it would the visitor's own request
 [6], and a failed lookup isn't a not-found, so a crawler keeps the page [6].
+Route validation reads a type's definition as a search does, so the first
+request after a restart serves the page instead of not-found [15].
 A link can't tell cards with the same value apart, because it doesn't
 search, but the resolver's search returns them all and can warn at no extra
 cost [13]. The route tree endpoint gives no more than the realm does to the
@@ -267,6 +270,9 @@ A hand-written redirect is explicit [10].
     literal route shadows, and that duplicate values are accepted, with a
     warning from the resolver.
 14. https://github.com/cardstack/boxel/pull/7507#discussion_r4599611687
+15. Matic Jurglic, 2026-11-17: route validation reads definitions through
+    the cache, as a search does; reading a definition is not a routing
+    decision.
 
 ## 5. Remediation
 
