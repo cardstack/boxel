@@ -1189,7 +1189,7 @@
                 "type": "linear"
               },
               "showPoints": "auto",
-              "spanNulls": false,
+              "spanNulls": 1800000,
               "stacking": {
                 "group": "A",
                 "mode": "none"
@@ -1245,7 +1245,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(r.finished_at, $__interval, 0),\n       percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.finished_at - r.started_at)) AS \"run p50\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.finished_at - r.started_at)) AS \"run p95\",\n       MAX(EXTRACT(EPOCH FROM r.finished_at - r.started_at)) AS \"run max\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.finished_at - r.created_at)) AS \"enqueue to end p95\"\n  FROM automation_runs r\n WHERE r.finished_at IS NOT NULL\n   AND r.started_at IS NOT NULL\n   AND $__timeFilter(r.finished_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1\n ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(r.finished_at, $__interval, NULL),\n       percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.finished_at - r.started_at)) AS \"run p50\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.finished_at - r.started_at)) AS \"run p95\",\n       MAX(EXTRACT(EPOCH FROM r.finished_at - r.started_at)) AS \"run max\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.finished_at - r.created_at)) AS \"enqueue to end p95\"\n  FROM automation_runs r\n WHERE r.finished_at IS NOT NULL\n   AND r.started_at IS NOT NULL\n   AND $__timeFilter(r.finished_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1\n ORDER BY 1;",
             "refId": "A"
           }
         ],
@@ -1283,7 +1283,7 @@
                 "type": "linear"
               },
               "showPoints": "auto",
-              "spanNulls": false,
+              "spanNulls": 1800000,
               "stacking": {
                 "group": "A",
                 "mode": "none"
@@ -1339,7 +1339,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(j.created_at, $__interval, 0),\n       percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM fr.claimed_at - j.created_at)) AS \"queue wait p50\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM fr.claimed_at - j.created_at)) AS \"queue wait p95\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.created_at - r.slot::timestamptz))\n         FILTER (WHERE r.trigger <> 'manual' AND r.slot ~ '^\\d{4}-\\d{2}-\\d{2}T') AS \"schedule lag p95\"\n  FROM jobs j\n  JOIN automation_runs r ON r.id::text = j.args->'commandInput'->>'runId'\n  JOIN LATERAL (\n    SELECT MIN(jr.created_at) AS claimed_at\n      FROM job_reservations jr WHERE jr.job_id = j.id\n  ) fr ON fr.claimed_at IS NOT NULL\n WHERE j.job_type = 'run-command'\n   AND j.concurrency_group LIKE 'automation:%'\n   AND $__timeFilter(j.created_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1\n ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(j.created_at, $__interval, NULL),\n       percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM fr.claimed_at - j.created_at)) AS \"queue wait p50\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM fr.claimed_at - j.created_at)) AS \"queue wait p95\",\n       percentile_cont(0.95) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM r.created_at - r.slot::timestamptz))\n         FILTER (WHERE r.trigger <> 'manual' AND r.slot ~ '^\\d{4}-\\d{2}-\\d{2}T') AS \"schedule lag p95\"\n  FROM jobs j\n  JOIN automation_runs r ON r.id::text = j.args->'commandInput'->>'runId'\n  JOIN LATERAL (\n    SELECT MIN(jr.created_at) AS claimed_at\n      FROM job_reservations jr WHERE jr.job_id = j.id\n  ) fr ON fr.claimed_at IS NOT NULL\n WHERE j.job_type = 'run-command'\n   AND j.concurrency_group LIKE 'automation:%'\n   AND $__timeFilter(j.created_at)\n   AND ('__all' IN ($realm) OR r.realm IN ($realm))\n   AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n   AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n GROUP BY 1\n ORDER BY 1;",
             "refId": "A"
           }
         ],
@@ -2129,6 +2129,10 @@
                 {
                   "id": "displayName",
                   "value": "Credits charged (priced)"
+                },
+                {
+                  "id": "custom.width",
+                  "value": 200
                 }
               ]
             },
@@ -2145,6 +2149,10 @@
                 {
                   "id": "decimals",
                   "value": 1
+                },
+                {
+                  "id": "custom.width",
+                  "value": 170
                 }
               ]
             },
@@ -2161,6 +2169,10 @@
                 {
                   "id": "decimals",
                   "value": 1
+                },
+                {
+                  "id": "custom.width",
+                  "value": 140
                 }
               ]
             },
@@ -2356,7 +2368,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Each switched-on automation the filters match, with the automation's current state and the automation's runs, errors, credits charged and AWS cost in the time range. Payer names the person each scheduled run acts as and charges.",
+        "description": "Each switched-on automation the filters match, with the automation's current state and the automation's runs, errors, credits charged and AWS cost in the time range. Payer names the person each scheduled run acts as and charges. The automation column shows the card's path inside the realm, and the realm column shows the realm's path on the realm server.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -2467,6 +2479,30 @@
                   }
                 }
               ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "automation"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 260
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 230
+                }
+              ]
             }
           ]
         },
@@ -2500,7 +2536,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge_id,\n         l.charge_kind,\n         l.pricing_version,\n         l.created_at,\n         l.realm,\n         l.run_id,\n         COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         r.trigger,\n         u.matrix_user_id AS payer,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n    LEFT JOIN users u ON u.id = l.user_id\n   WHERE $__unixEpochFilter(l.created_at)\n     AND (l.charge_kind IN ('run', 'run_indexing', 'storage', 'batched_ai')\n          OR (l.charge_kind = 'ai' AND l.run_id IS NOT NULL))\n   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9\n),\ncosted AS (\n  SELECT charges.*, c.cost_usd\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND $__unixEpochFilter(c.created_at)\n   WHERE ('__all' IN ($realm) OR charges.realm IN ($realm))\n     AND ('__all' IN ($automation) OR charges.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR charges.payer IN ($payer))\n     AND ('__all' IN ($trigger) OR charges.trigger IN ($trigger))\n),\nruns AS (\n  SELECT r.automation_id,\n         COUNT(*) AS runs,\n         COUNT(*) FILTER (WHERE r.state = 'error') AS errors,\n         MAX(r.created_at) AS last_run\n    FROM automation_runs r\n   WHERE $__timeFilter(r.created_at)\n     AND ('__all' IN ($realm) OR r.realm IN ($realm))\n     AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n     AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n   GROUP BY 1\n),\nspend AS (\n  SELECT automation_id, SUM(credits) AS credits, SUM(cost_usd) AS cost_usd\n    FROM costed GROUP BY 1\n)\nSELECT a.automation_id AS automation,\n       a.realm,\n       a.payer,\n       a.state,\n       a.pause_reason AS \"pause reason\",\n       a.next_run AS \"next run\",\n       COALESCE(runs.runs, 0) AS runs,\n       COALESCE(runs.errors, 0) AS errors,\n       COALESCE(spend.credits, 0) AS \"Credits charged\",\n       spend.cost_usd AS \"AWS cost\",\n       a.last_finished_at AS \"last finished\",\n       a.last_result AS \"last result\"\n  FROM automations a\n  LEFT JOIN runs ON runs.automation_id = a.automation_id\n  LEFT JOIN spend ON spend.automation_id = a.automation_id\n WHERE ('__all' IN ($realm) OR a.realm IN ($realm))\n   AND ('__all' IN ($automation) OR a.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR a.payer IN ($payer))\n ORDER BY COALESCE(runs.last_run, a.last_finished_at) DESC NULLS LAST\n LIMIT 500;",
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge_id,\n         l.charge_kind,\n         l.pricing_version,\n         l.created_at,\n         l.realm,\n         l.run_id,\n         COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         r.trigger,\n         u.matrix_user_id AS payer,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n    LEFT JOIN users u ON u.id = l.user_id\n   WHERE $__unixEpochFilter(l.created_at)\n     AND (l.charge_kind IN ('run', 'run_indexing', 'storage', 'batched_ai')\n          OR (l.charge_kind = 'ai' AND l.run_id IS NOT NULL))\n   GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9\n),\ncosted AS (\n  SELECT charges.*, c.cost_usd\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND $__unixEpochFilter(c.created_at)\n   WHERE ('__all' IN ($realm) OR charges.realm IN ($realm))\n     AND ('__all' IN ($automation) OR charges.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR charges.payer IN ($payer))\n     AND ('__all' IN ($trigger) OR charges.trigger IN ($trigger))\n),\nruns AS (\n  SELECT r.automation_id,\n         COUNT(*) AS runs,\n         COUNT(*) FILTER (WHERE r.state = 'error') AS errors,\n         MAX(r.created_at) AS last_run\n    FROM automation_runs r\n   WHERE $__timeFilter(r.created_at)\n     AND ('__all' IN ($realm) OR r.realm IN ($realm))\n     AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n     AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n   GROUP BY 1\n),\nspend AS (\n  SELECT automation_id, SUM(credits) AS credits, SUM(cost_usd) AS cost_usd\n    FROM costed GROUP BY 1\n)\nSELECT CASE WHEN starts_with(a.automation_id, a.realm) THEN substr(a.automation_id, length(a.realm) + 1)\n            ELSE a.automation_id END AS automation,\n       REGEXP_REPLACE(a.realm, '^https?://[^/]+/', '') AS realm,\n       a.payer,\n       a.state,\n       a.pause_reason AS \"pause reason\",\n       a.next_run AS \"next run\",\n       COALESCE(runs.runs, 0) AS runs,\n       COALESCE(runs.errors, 0) AS errors,\n       COALESCE(spend.credits, 0) AS \"Credits charged\",\n       spend.cost_usd AS \"AWS cost\",\n       a.last_finished_at AS \"last finished\",\n       a.last_result AS \"last result\"\n  FROM automations a\n  LEFT JOIN runs ON runs.automation_id = a.automation_id\n  LEFT JOIN spend ON spend.automation_id = a.automation_id\n WHERE ('__all' IN ($realm) OR a.realm IN ($realm))\n   AND ('__all' IN ($automation) OR a.automation_id IN ($automation))\n   AND ('__all' IN ($payer) OR a.payer IN ($payer))\n ORDER BY COALESCE(runs.last_run, a.last_finished_at) DESC NULLS LAST\n LIMIT 500;",
             "refId": "A"
           }
         ],
@@ -2624,6 +2660,26 @@
                           "index": 2
                         }
                       }
+                    },
+                    {
+                      "type": "regex",
+                      "options": {
+                        "pattern": "^running.*",
+                        "result": {
+                          "color": "blue",
+                          "index": 3
+                        }
+                      }
+                    },
+                    {
+                      "type": "regex",
+                      "options": {
+                        "pattern": "^pending.*",
+                        "result": {
+                          "color": "purple",
+                          "index": 4
+                        }
+                      }
                     }
                   ]
                 },
@@ -2632,6 +2688,42 @@
                   "value": {
                     "type": "color-text"
                   }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "automation"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 260
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 230
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "created"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 170
                 }
               ]
             }
@@ -2667,7 +2759,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "WITH runs AS (\n  SELECT r.*\n    FROM automation_runs r\n   WHERE $__timeFilter(r.created_at)\n     AND ('__all' IN ($realm) OR r.realm IN ($realm))\n     AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n     AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n   ORDER BY r.created_at DESC\n   LIMIT 500\n),\ncharges AS (\n  SELECT l.run_id,\n         COALESCE(l.charge_id, l.id) AS charge_id,\n         MAX(l.pricing_version) AS pricing_version,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n   WHERE l.run_id IN (SELECT id FROM runs)\n   GROUP BY 1, 2\n),\nper_run AS (\n  SELECT charges.run_id,\n         SUM(charges.credits) AS credits,\n         SUM(c.cost_usd) AS cost_usd,\n         string_agg(DISTINCT charges.pricing_version, ', ') AS pricing_versions\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND c.created_at >= EXTRACT(EPOCH FROM (SELECT MIN(created_at) FROM runs))::integer\n   GROUP BY 1\n)\nSELECT runs.created_at AS created,\n       runs.automation_id AS automation,\n       runs.trigger,\n       runs.realm,\n       runs.acts_as AS payer,\n       CASE WHEN runs.dry_run THEN runs.state || ' (preview)' ELSE runs.state END AS state,\n       runs.error_reason AS \"error reason\",\n       q.queue_wait_s AS \"queue wait\",\n       EXTRACT(EPOCH FROM runs.finished_at - runs.started_at) AS \"run time\",\n       runs.writes,\n       COALESCE(per_run.credits, 0) AS \"Credits charged\",\n       per_run.cost_usd AS \"AWS cost\",\n       per_run.pricing_versions AS \"pricing version\",\n       runs.error_message AS \"error message\",\n       runs.id AS run\n  FROM runs\n  LEFT JOIN per_run ON per_run.run_id = runs.id\n  LEFT JOIN LATERAL (\n    SELECT EXTRACT(EPOCH FROM MIN(jr.created_at) - MIN(j.created_at)) AS queue_wait_s\n      FROM jobs j\n      JOIN job_reservations jr ON jr.job_id = j.id\n     WHERE j.concurrency_group = 'automation:' || runs.automation_id\n       AND j.args->'commandInput'->>'runId' = runs.id::text\n  ) q ON true\n ORDER BY runs.created_at DESC;",
+            "rawSql": "WITH runs AS (\n  SELECT r.*\n    FROM automation_runs r\n   WHERE $__timeFilter(r.created_at)\n     AND ('__all' IN ($realm) OR r.realm IN ($realm))\n     AND ('__all' IN ($automation) OR r.automation_id IN ($automation))\n     AND ('__all' IN ($payer) OR r.acts_as IN ($payer))\n     AND ('__all' IN ($trigger) OR r.trigger IN ($trigger))\n   ORDER BY r.created_at DESC\n   LIMIT 500\n),\ncharges AS (\n  SELECT l.run_id,\n         COALESCE(l.charge_id, l.id) AS charge_id,\n         MAX(l.pricing_version) AS pricing_version,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n   WHERE l.run_id IN (SELECT id FROM runs)\n   GROUP BY 1, 2\n),\nper_run AS (\n  SELECT charges.run_id,\n         SUM(charges.credits) AS credits,\n         SUM(c.cost_usd) AS cost_usd,\n         string_agg(DISTINCT charges.pricing_version, ', ') AS pricing_versions\n    FROM charges\n    LEFT JOIN credit_charge_costs c\n      ON c.charge_id = charges.charge_id\n     AND c.created_at >= EXTRACT(EPOCH FROM (SELECT MIN(created_at) FROM runs))::integer\n   GROUP BY 1\n)\nSELECT runs.created_at AS created,\n       CASE WHEN starts_with(runs.automation_id, runs.realm) THEN substr(runs.automation_id, length(runs.realm) + 1)\n            ELSE runs.automation_id END AS automation,\n       runs.trigger,\n       REGEXP_REPLACE(runs.realm, '^https?://[^/]+/', '') AS realm,\n       runs.acts_as AS payer,\n       CASE WHEN runs.dry_run THEN runs.state || ' (preview)' ELSE runs.state END AS state,\n       runs.error_reason AS \"error reason\",\n       q.queue_wait_s AS \"queue wait\",\n       EXTRACT(EPOCH FROM runs.finished_at - runs.started_at) AS \"run time\",\n       runs.writes,\n       COALESCE(per_run.credits, 0) AS \"Credits charged\",\n       per_run.cost_usd AS \"AWS cost\",\n       per_run.pricing_versions AS \"pricing version\",\n       runs.error_message AS \"error message\",\n       runs.id AS run\n  FROM runs\n  LEFT JOIN per_run ON per_run.run_id = runs.id\n  LEFT JOIN LATERAL (\n    SELECT EXTRACT(EPOCH FROM MIN(jr.created_at) - MIN(j.created_at)) AS queue_wait_s\n      FROM jobs j\n      JOIN job_reservations jr ON jr.job_id = j.id\n     WHERE j.concurrency_group = 'automation:' || runs.automation_id\n       AND j.args->'commandInput'->>'runId' = runs.id::text\n  ) q ON true\n ORDER BY runs.created_at DESC;",
             "refId": "A"
           }
         ],
