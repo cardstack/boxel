@@ -157,16 +157,16 @@ async function pauseIfFailingRepeatedly(
     if (!run || run.state !== 'error') {
       return;
     }
-    let automation = await pauseAfterRepeatedFailures(
+    let result = await pauseAfterRepeatedFailures(
       ctx.dbAdapter,
       run.automationId,
       ctx.failuresBeforePause !== undefined
         ? { failuresBeforePause: ctx.failuresBeforePause }
         : {},
     );
-    if (automation?.pauseReason === 'repeated-failures') {
+    if (result?.paused) {
       ctx.log.warn(
-        `automation ${run.automationId} is paused after repeated failed runs; the last was run ${runId} (${run.errorReason ?? 'error'})`,
+        `automation ${run.automationId} paused after repeated failed runs; the last was run ${runId} (${run.errorReason ?? 'error'})`,
       );
     }
   } catch (e: any) {

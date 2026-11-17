@@ -109,12 +109,36 @@ export const AUTOMATION_FAILURES_BEFORE_PAUSE = 5;
 // The error reasons of runs that admission refused for the payer's spending:
 // their balance is short, a credit cap is reached, or the worker has no
 // prices. The automation waits for credits instead, and runs again once the
-// payer can pay, so these runs neither extend nor break a failure streak.
-const SPENDING_REFUSAL_REASONS = [
+// payer can pay. Admission refuses with exactly these codes.
+export const SPENDING_REFUSAL_REASONS = [
   'insufficient-credits',
   'daily-credit-cap-reached',
   'monthly-credit-cap-reached',
   'pricing-unavailable',
+] as const;
+export type SpendingRefusalReason = (typeof SPENDING_REFUSAL_REASONS)[number];
+
+// The error reasons of runs the platform failed, rather than the automation:
+// the worker couldn't ask Matrix or the realm whether the run may start, the
+// run's tab or its runner failed or never answered, the commit couldn't be
+// sent or its outcome is unknown, the run's job was lost, or its job and row
+// disagreed. A Matrix, prerender or worker outage fails every automation's
+// runs this way, and counting them would pause every automation that runs
+// during it, each waiting on a person to resume it.
+export const PLATFORM_FAILURE_REASONS = [
+  'account-unverifiable',
+  'run-admission-failed',
+  'run-failed',
+  'commit-failed',
+  'commit-interrupted',
+  'job-lost',
+  'dry-run-mismatch',
+] as const;
+
+// Failed runs that neither extend nor break a failure streak.
+const UNCOUNTED_FAILURE_REASONS: readonly string[] = [
+  ...SPENDING_REFUSAL_REASONS,
+  ...PLATFORM_FAILURE_REASONS,
 ];
 
 // The caps the payer agreed to pay for when they switched the automation on
@@ -608,8 +632,9 @@ export interface AutomationFailures {
 // starts as themselves whether or not the automation is on. Of those, only
 // runs created at or after the row's `failures_since` count, which switch-on
 // and resume set, so a resume clears the streak. A complete run ends the
-// streak. A canceled run, and a run admission refused for the payer's
-// spending (`SPENDING_REFUSAL_REASONS`), neither break nor extend it. Runs
+// streak. A canceled run, a run admission refused for the payer's spending
+// (`SPENDING_REFUSAL_REASONS`) and a run the platform failed
+// (`PLATFORM_FAILURE_REASONS`) neither break nor extend it. Runs
 // are ordered by when they finished, so a commit that lands after its run
 // was recorded as an error, which makes the run complete, ends the streak
 // too.
@@ -617,21 +642,30 @@ export async function readAutomationFailures(
   querier: Querier,
   automationId: RealmResourceIdentifier,
 ): Promise<AutomationFailures> {
+  let since: Expression = [
+    '(SELECT failures_since FROM automations WHERE automation_id =',
+    param(automationId),
+    ')',
+  ];
+  // A run created at or after `failures_since` also finished after it, so
+  // the bound on `finished_at` changes nothing but lets the scans read only
+  // the runs since then from `automation_runs_last_finished_idx`.
   let own: Expression = [
     'automation_id =',
     param(automationId),
-    'AND finished_at IS NOT NULL AND NOT dry_run AND trigger <>',
+    'AND finished_at >=',
+    ...since,
+    'AND created_at >=',
+    ...since,
+    'AND NOT dry_run AND trigger <>',
     param(MANUAL_RUN_TRIGGER),
     "AND state IN ('complete', 'error')",
     "AND NOT (state = 'error' AND COALESCE(error_reason, '') IN (",
-    ...SPENDING_REFUSAL_REASONS.flatMap((reason, i) => [
+    ...UNCOUNTED_FAILURE_REASONS.flatMap((reason, i) => [
       ...(i ? [','] : []),
       param(reason),
     ]),
     '))',
-    'AND created_at >= (SELECT failures_since FROM automations WHERE automation_id =',
-    param(automationId),
-    ')',
   ];
   let rows = await querier([
     'SELECT id, error_reason, error_message, finished_at FROM automation_runs WHERE',
@@ -660,15 +694,17 @@ export async function readAutomationFailures(
 // cancels its pending run as every pause does. The streak is read from the
 // runs, so calling this again, or for a run that didn't fail, changes
 // nothing, and a call a crash skipped is made up by the next failed run's.
-// An automation already paused keeps the reason it has. Returns the row, or
-// undefined when the automation isn't switched on.
+// Only an active automation, or one waiting for credits, pauses: one already
+// paused keeps the reason it has, and one *done* has no runs left to stop.
+// Returns the row and whether this call paused it, or undefined when the
+// automation isn't switched on.
 export async function pauseAfterRepeatedFailures(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
   {
     failuresBeforePause = AUTOMATION_FAILURES_BEFORE_PAUSE,
   }: { failuresBeforePause?: number } = {},
-): Promise<AutomationRow | undefined> {
+): Promise<{ automation: AutomationRow; paused: boolean } | undefined> {
   if (!Number.isSafeInteger(failuresBeforePause) || failuresBeforePause < 1) {
     throw new Error(
       `an automation pauses after a whole number of failed runs, 1 or more, not ${failuresBeforePause}`,
@@ -680,14 +716,25 @@ export async function pauseAfterRepeatedFailures(
       return undefined;
     }
     let automation = automationFromRow(row);
-    if (automation.state === 'paused') {
-      return automation;
+    if (
+      automation.state !== 'active' &&
+      automation.state !== 'waiting-for-credits'
+    ) {
+      return { automation, paused: false };
     }
     let failures = await readAutomationFailures(txQuery, automationId);
     if (failures.inARow < failuresBeforePause) {
-      return automation;
+      return { automation, paused: false };
     }
-    return await pause(txQuery, canceled, automationId, 'repeated-failures');
+    return {
+      automation: await pause(
+        txQuery,
+        canceled,
+        automationId,
+        'repeated-failures',
+      ),
+      paused: true,
+    };
   });
 }
 

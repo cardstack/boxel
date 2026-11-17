@@ -217,7 +217,7 @@ export async function answerAutomationStatus({
 // card as indexed, absent when the card doesn't read as one; then each
 // trigger reports only its run count. `payerShown` says whether the viewer
 // may see the payer's Matrix id. `lastRun` is the automation's last ended
-// run, if it has one, and `failures` its failure streak, none when absent.
+// run, if it has one, and `failures` its failure streak.
 export function automationStatusDocument({
   url,
   row,
@@ -227,7 +227,7 @@ export function automationStatusDocument({
   now,
   lastRun = null,
   currentRun = null,
-  failures = { inARow: 0, last: null },
+  failures,
 }: {
   url: string;
   row: AutomationRow | undefined;
@@ -238,7 +238,8 @@ export function automationStatusDocument({
   now: number;
   lastRun?: AutomationLastRun | null;
   currentRun?: AutomationCurrentRun | null;
-  failures?: AutomationFailures;
+  // Read only for a switched-on automation, so absent when `row` is.
+  failures: AutomationFailures | undefined;
 }): AutomationStatusDocument {
   return {
     data: {
@@ -254,8 +255,8 @@ export function automationStatusDocument({
             nextRun: isoOrNull(row.nextRun),
             lastResult: row.lastResult,
             lastFinishedAt: row.lastFinishedAt,
-            failuresInARow: failures.inARow,
-            lastFailure: failures.last,
+            failuresInARow: failures?.inARow ?? 0,
+            lastFailure: failures?.last ?? null,
             triggers: triggerStatuses(row, declaration, now),
             lastRun,
             currentRun,

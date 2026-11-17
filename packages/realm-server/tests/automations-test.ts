@@ -24,6 +24,8 @@ import {
   getAutomation,
   pauseAfterRepeatedFailures,
   pauseAutomation,
+  PLATFORM_FAILURE_REASONS,
+  SPENDING_REFUSAL_REASONS,
   pauseRealmAutomations,
   readAutomationFailures,
   removeAutomation,
@@ -279,10 +281,9 @@ module(basename(import.meta.filename), function () {
           reason: 'timed-out',
           message: 'The run reached its time limit',
         });
-        let automation = await pauseAfterRepeatedFailures(
-          dbAdapter,
-          AUTOMATION,
-        );
+        let result = await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION);
+        assert.true(result?.paused, 'this call paused it');
+        let automation = result?.automation;
         assert.strictEqual(automation?.state, 'paused');
         assert.strictEqual(automation?.pauseReason, 'repeated-failures');
         assert.strictEqual(automation?.pausedBy, null);
@@ -347,7 +348,7 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test("a Preview, a Run now, a canceled run and a run refused for the payer's spending neither extend nor break the streak", async function (assert) {
+      test("a Preview, a Run now, a canceled run, a run refused for the payer's spending and a run the platform failed neither extend nor break the streak", async function (assert) {
         await switchOn();
         await failTimes(3);
         await endedRun('error', { trigger: MANUAL_RUN_TRIGGER });
@@ -359,10 +360,8 @@ module(basename(import.meta.filename), function () {
         });
         await endedRun('canceled');
         for (let reason of [
-          'insufficient-credits',
-          'daily-credit-cap-reached',
-          'monthly-credit-cap-reached',
-          'pricing-unavailable',
+          ...SPENDING_REFUSAL_REASONS,
+          ...PLATFORM_FAILURE_REASONS,
         ]) {
           await endedRun('error', { reason });
         }
@@ -386,9 +385,11 @@ module(basename(import.meta.filename), function () {
         });
         await startAutomationRunAttempt(dbAdapter, run.id, 1);
         await claimAutomationRunCommit(dbAdapter, run.id, 1);
+        // The realm refused the commit with a code of its own, which the
+        // streak counts, and then the batch landed after all.
         await finishAutomationRun(dbAdapter, run.id, 1, {
           state: 'error',
-          reason: 'commit-failed',
+          reason: 'overlay-changed',
         });
         assert.strictEqual((await failures()).inARow, 4);
         await recordAutomationRunCommitted(dbAdapter, run.id);
@@ -400,16 +401,15 @@ module(basename(import.meta.filename), function () {
         await endedRun('error');
         await endedRun('error');
         assert.strictEqual(
-          (await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION))?.state,
+          (await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION))?.automation
+            .state,
           'active',
           'two failures are under the default',
         );
-        let automation = await pauseAfterRepeatedFailures(
-          dbAdapter,
-          AUTOMATION,
-          { failuresBeforePause: 2 },
-        );
-        assert.strictEqual(automation?.pauseReason, 'repeated-failures');
+        let result = await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION, {
+          failuresBeforePause: 2,
+        });
+        assert.strictEqual(result?.automation.pauseReason, 'repeated-failures');
       });
 
       test('an automation already paused keeps its reason, and one not switched on is left alone', async function (assert) {
@@ -427,6 +427,33 @@ module(basename(import.meta.filename), function () {
         let automation = await getAutomation(dbAdapter, AUTOMATION);
         assert.strictEqual(automation?.pauseReason, 'requested');
         assert.strictEqual(automation?.pausedBy, OWNER);
+        assert.false(
+          (await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION))?.paused,
+        );
+      });
+
+      test('an automation that is done has no runs left to stop, and stays done', async function (assert) {
+        await switchOn();
+        await dbAdapter.execute(
+          `UPDATE automations SET state = 'done', next_run = NULL`,
+        );
+        await failTimes(5);
+        let automation = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(automation?.state, 'done');
+        assert.strictEqual(automation?.pauseReason, null);
+        assert.strictEqual((await failures()).inARow, 5);
+      });
+
+      test('an automation waiting for credits pauses after repeated failures too', async function (assert) {
+        await switchOn();
+        await dbAdapter.execute(
+          `UPDATE automations SET state = 'waiting-for-credits'`,
+        );
+        await failTimes(5);
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.pauseReason,
+          'repeated-failures',
+        );
       });
     });
 
