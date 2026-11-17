@@ -1059,7 +1059,7 @@ of the person who switched the automation on.
 | `trigger`        | `{ label?, kind }`, kind one of `cron`, `once`, `webhook`, `manual` (Preview, Run now), `batch` |
 | `scheduledAt`    | when the trigger was due, or when a manual run was asked for (ISO 8601)                         |
 | `lastSuccessAt`  | when the automation's last complete run started, if it has had one; a Preview never counts      |
-| `params`         | the card's params with the trigger's own merged over them                                       |
+| `params`         | the automation card's params; a trigger has none of its own                                     |
 | `webhookPayload` | the delivery's JSON body, for a webhook run                                                     |
 | `dryRun`         | true for a Preview                                                                              |
 
