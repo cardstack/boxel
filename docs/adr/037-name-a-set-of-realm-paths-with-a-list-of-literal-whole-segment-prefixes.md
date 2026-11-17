@@ -108,10 +108,11 @@ that remains after dropping it means everywhere.
 
 - **A list of literal, whole-segment prefixes (chosen).** Each use above can
   lower it without reinterpreting it, and it is matched in linear time.
-- **A glob with `*` and `**`.** Search can't lower a one-segment wildcard to an
-indexed SQL test, the pending-changes query's prefix index can't serve it
-either, and `git log` accepts a glob but doesn't use its changed-path Bloom
-  filters for one. A glob is also harder to match in linear time.
+- **A glob.** With `*` and `**`, search can't lower a one-segment wildcard to
+  an indexed SQL test, and neither can a lookup of not-yet-committed changes by
+  path in `realm_change_event_paths`. `git log` accepts a glob but doesn't use
+  its changed-path Bloom filters for one. A glob is also harder to match in
+  linear time.
 - **The dynamic-routes segment syntax.** Its `:name` captures exactly one
   segment and can't say "everything under".
 - **`startswith` on `.id` in a grant's `where`.** `.id` is the card's absolute
