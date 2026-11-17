@@ -5,6 +5,10 @@ import { expect, test } from './fixtures.ts';
 import { EvalValidationStep } from '../src/validators/eval-step.ts';
 import type { EvalValidationDetails } from '../src/validators/eval-step.ts';
 import { buildTestClient } from './helpers/test-client.ts';
+import {
+  syncWorkspaceToRealm,
+  writeRealmFile,
+} from './helpers/write-realm-file.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
@@ -64,12 +68,12 @@ test.describe('eval-validation e2e', () => {
 
     try {
       // Write a valid module
-      let writeResult = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'valid-card.gts',
         VALID_MODULE_GTS,
       );
-      expect(writeResult.ok).toBe(true);
 
       let indexed = await client.waitForFile(realmUrl, 'valid-card.gts', {
         pollMs: 300,
@@ -92,7 +96,7 @@ test.describe('eval-validation e2e', () => {
 
       // Push the EvalResult artifact card to the realm so the
       // client.read assertion below finds it.
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Must pass — valid modules with correct imports
@@ -146,12 +150,12 @@ test.describe('eval-validation e2e', () => {
       // Write a module with a broken relative import that is consumed as a field
       // type. The import must be consumed — unused imports get tree-shaken by the
       // compiler and the Loader never sees them (lint catches unused imports).
-      let writeResult = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'broken-module.gts',
         BROKEN_MODULE_GTS,
       );
-      expect(writeResult.ok).toBe(true);
 
       let indexed = await client.waitForFile(realmUrl, 'broken-module.gts', {
         pollMs: 300,
@@ -172,7 +176,7 @@ test.describe('eval-validation e2e', () => {
 
       let result = await step.run(realmUrl);
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Must fail — broken-module.gts imports from a non-existent module
@@ -238,7 +242,7 @@ test.describe('eval-validation e2e', () => {
 
       let result = await step.run(realmUrl);
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // The fixture realm has hello.gts and hello.test.gts
