@@ -166,12 +166,19 @@ module(basename(import.meta.filename), function () {
       matrixUserId: string,
       hostname: string,
     ): Promise<void> {
-      let user = await insertUser(
-        dbAdapter,
-        matrixUserId,
-        `cus_${matrixUserId}`,
-        `${matrixUserId}@example.com`,
-      );
+      // The realm's setup already made a row for its owner.
+      let [existing] = (await query(dbAdapter, [
+        `SELECT id FROM users WHERE matrix_user_id =`,
+        param(matrixUserId),
+      ])) as { id: string }[];
+      let user =
+        existing ??
+        (await insertUser(
+          dbAdapter,
+          matrixUserId,
+          `cus_${matrixUserId}`,
+          `${matrixUserId}@example.com`,
+        ));
       await query(dbAdapter, [
         `INSERT INTO claimed_domains_for_sites (user_id, hostname, source_realm_url, claimed_at) VALUES (`,
         param(user.id),
