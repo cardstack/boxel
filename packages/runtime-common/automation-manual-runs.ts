@@ -396,8 +396,7 @@ export async function readAutomationRunSummary(
     ]),
   ]);
   if (!milestones) {
-    // The run's row went between the reads: a removed automation's runs go
-    // with it.
+    // The run's row was deleted between the reads.
     return { ok: false, reason: 'missing' };
   }
   let callApiCalls: RunCallApiCall[] = [];
