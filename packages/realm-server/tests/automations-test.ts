@@ -20,6 +20,7 @@ import {
   checkAutomationPayer,
   getAutomation,
   pauseAutomation,
+  pauseForPayerLostAccess,
   pauseRealmAutomations,
   removeAutomation,
   resumeAutomation,
@@ -37,6 +38,11 @@ import {
   type AutomationIndexEntry,
 } from '@cardstack/runtime-common/automation-declaration';
 import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
+import {
+  countRunCall,
+  endRunAtCap,
+} from '@cardstack/runtime-common/automation-run-limits';
+import type { ReportRunChange } from '@cardstack/runtime-common';
 import { stageRunOverlayFile } from '@cardstack/runtime-common/run-overlay';
 import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-index-hook';
 import type { DefinitionLookup } from '@cardstack/runtime-common';
@@ -330,6 +336,165 @@ module(basename(import.meta.filename), function () {
             options,
           ),
           { ok: false, reason: 'missing' },
+        );
+      });
+    });
+
+    module('reporting run changes', function () {
+      // A reporter that records, for each report, the run's state as its row
+      // holds it when the report arrives: a report made inside the change's
+      // transaction would still see the run as it was before.
+      function recordingReporter() {
+        let reports: { runId: string; state: string | undefined }[] = [];
+        let report: ReportRunChange = async (runId) => {
+          reports.push({
+            runId,
+            state: (await getAutomationRun(dbAdapter, runId))?.state,
+          });
+        };
+        return { reports, report };
+      }
+
+      test('a pause reports each run it cancels once, after it commits, and not a run left to finish', async function (assert) {
+        await switchOn();
+        let pending = await pendingRun();
+        let running = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, running.id, 1);
+        let committing = await pendingRun('2026-11-09T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, committing.id, 1);
+        await claimAutomationRunCommit(dbAdapter, committing.id, 1);
+
+        let { reports, report } = recordingReporter();
+        let result = await pauseAutomation(
+          rollsBackFirstTransaction(dbAdapter),
+          { automationId: AUTOMATION, user: ADMIN },
+          { ...options, reportRunChange: report },
+        );
+        assert.true(result.ok);
+        assert.deepEqual(
+          [...reports].sort((a, b) => a.runId.localeCompare(b.runId)),
+          [
+            { runId: pending.id, state: 'canceled' },
+            { runId: running.id, state: 'canceled' },
+          ].sort((a, b) => a.runId.localeCompare(b.runId)),
+          'each canceled run is reported once, as canceled, even when the transaction is retried; the run whose commit was claimed is not',
+        );
+      });
+
+      test('removing an automation and checks that pause it report the runs they cancel', async function (assert) {
+        await switchOn();
+        let removed = await pendingRun();
+        let { reports, report } = recordingReporter();
+        await removeAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: ADMIN },
+          { ...options, reportRunChange: report },
+        );
+        assert.deepEqual(reports, [{ runId: removed.id, state: 'canceled' }]);
+
+        await switchOn();
+        let pausedForPayer = await pendingRun('2026-11-12T11:30:00.000Z');
+        reports.length = 0;
+        await pauseForPayerLostAccess(dbAdapter, AUTOMATION, OWNER, report);
+        assert.deepEqual(
+          reports,
+          [{ runId: pausedForPayer.id, state: 'canceled' }],
+          "a pause for the payer's lost access reports",
+        );
+
+        await resumeAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            user: OWNER,
+            declaration: declaration(),
+          },
+          options,
+        );
+        let pausedForRealm = await pendingRun('2026-11-13T11:30:00.000Z');
+        reports.length = 0;
+        await pauseRealmAutomations(dbAdapter, REALM, report);
+        assert.deepEqual(
+          reports,
+          [{ runId: pausedForRealm.id, state: 'canceled' }],
+          "pausing the realm's automations reports",
+        );
+      });
+
+      test("a person's cancel reports the run once, and a refused cancel reports nothing", async function (assert) {
+        await switchOn();
+        let run = await pendingRun();
+        let { reports, report } = recordingReporter();
+        let refused = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: READER },
+          { ...options, reportRunChange: report },
+        );
+        assert.false(refused.ok);
+        assert.deepEqual(reports, [], 'a refused cancel reports nothing');
+
+        let result = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: ADMIN },
+          { ...options, reportRunChange: report },
+        );
+        assert.true(result.ok);
+        assert.deepEqual(reports, [{ runId: run.id, state: 'canceled' }]);
+
+        let again = await cancelAutomationRunFor(
+          dbAdapter,
+          { runId: run.id, user: ADMIN },
+          { ...options, reportRunChange: report },
+        );
+        assert.false(again.ok);
+        assert.strictEqual(
+          reports.length,
+          1,
+          'canceling a run that has ended reports nothing more',
+        );
+      });
+
+      test('a run ended at a cap is reported once, and a run that already ended is not', async function (assert) {
+        await switchOn();
+        let run = await pendingRun();
+        await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        let limited = { runId: run.id, attempt: 1, automationId: AUTOMATION };
+        let { reports, report } = recordingReporter();
+
+        await endRunAtCap(dbAdapter, limited, 'writes', report);
+        assert.deepEqual(reports, [{ runId: run.id, state: 'error' }]);
+
+        await endRunAtCap(dbAdapter, limited, 'writes', report);
+        assert.strictEqual(
+          reports.length,
+          1,
+          'ending a run that already ended reports nothing',
+        );
+
+        let counted = await pendingRun('2026-11-10T11:30:00.000Z');
+        await startAutomationRunAttempt(dbAdapter, counted.id, 1);
+        reports.length = 0;
+        let within = await countRunCall(
+          dbAdapter,
+          { runId: counted.id, attempt: 1, automationId: AUTOMATION },
+          'callApiCalls',
+          1,
+          report,
+        );
+        assert.true(within.ok);
+        assert.deepEqual(reports, [], 'a call within the cap reports nothing');
+        let past = await countRunCall(
+          dbAdapter,
+          { runId: counted.id, attempt: 1, automationId: AUTOMATION },
+          'callApiCalls',
+          1,
+          report,
+        );
+        assert.false(past.ok);
+        assert.deepEqual(
+          reports,
+          [{ runId: counted.id, state: 'error' }],
+          'the call past the cap ends the run and reports it once',
         );
       });
     });
