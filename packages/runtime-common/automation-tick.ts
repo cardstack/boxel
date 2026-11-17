@@ -51,10 +51,11 @@
 // hook does (`withEditCursors`), so a slot that passed before the edit never
 // comes due. A card that raises a cap above the snapshot is left for the index
 // hook to pause. A card that indexed but doesn't read as a declaration pauses
-// the automation with `invalid-declaration` (`pauseForInvalidDeclaration`), as
-// the index hook does, so an automation whose card the index hook never
-// re-read, after a rule the declaration reader applies changed, doesn't stay
-// due and silent; a card with nothing indexed to read leaves the row due and
+// the automation with `invalid-declaration` (`pauseForInvalidDeclaration`):
+// a run is due and nothing can start it, so the automation says why rather
+// than skipping its runs in silence. The index hook leaves such a card alone,
+// since the card saves itself mid-edit, and lifts the pause once the card
+// reads again. A card with nothing indexed to read leaves the row due and
 // unchanged until it does.
 //
 // The tick reports each run it starts (`job` events, from the task), and each

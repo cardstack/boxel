@@ -9,6 +9,8 @@ import {
   getAutomationRun,
   insertPermissions,
   internalKeyFor,
+  param,
+  query,
   ri,
   rri,
   recordAutomationRunCommitted,
@@ -24,6 +26,7 @@ import {
   getAutomation,
   pauseAfterRepeatedFailures,
   pauseAutomation,
+  pauseForInvalidDeclaration,
   pauseForPayerLostAccess,
   PLATFORM_FAILURE_REASONS,
   SPENDING_REFUSAL_REASONS,
@@ -41,6 +44,7 @@ import {
 import {
   automationRef,
   MANUAL_RUN_TRIGGER,
+  readAutomationDeclaration,
   type AutomationCaps,
   type AutomationDeclaration,
   type AutomationIndexEntry,
@@ -1909,51 +1913,148 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(await getAutomation(dbAdapter, AUTOMATION), before);
       });
 
-      test('a card that indexed but does not read as a declaration pauses the automation with the problems', async function (assert) {
+      test('a card that indexed but does not read as a declaration leaves the row as it was', async function (assert) {
+        let before = await switchOn();
+        // The card saves itself mid-edit: a trigger just added has no label
+        // or kind yet, and an expression can be half typed.
+        for (let triggers of [
+          [cronTrigger(), { kind: null, label: null }],
+          [cronTrigger({ expression: '58,1 0,23 * * *' })],
+        ]) {
+          let result = await sync(indexed({ triggers }));
+          assert.strictEqual(result?.kind, 'unchanged');
+        }
+        assert.deepEqual(await getAutomation(dbAdapter, AUTOMATION), before);
+      });
+
+      test('an automation paused for an invalid declaration follows the card: its problems update, and it resumes once the card reads', async function (assert) {
         await switchOn();
+        let pending = await pendingRun();
+        let running = await pendingRun('2026-11-11T11:00:00.000Z');
+        await query(dbAdapter, [
+          "UPDATE automation_runs SET state = 'running', started_at = now() WHERE id =",
+          param(running.id),
+        ]);
+        let reported: string[] = [];
         // 23:58 and the next day's 00:01 are 3 minutes apart, which a check
         // of times within one day misses.
-        let result = await sync(
-          indexed({
-            triggers: [cronTrigger({ expression: '58,1 0,23 * * *' })],
-          }),
+        let tooFrequent = indexed({
+          triggers: [cronTrigger({ expression: '58,1 0,23 * * *' })],
+        });
+        let paused = await pauseForInvalidDeclaration(
+          dbAdapter,
+          AUTOMATION,
+          async () => {
+            let read = readAutomationDeclaration(
+              { ...tooFrequent, url: AUTOMATION },
+              {
+                automationTypeKey: automationTypeKey(),
+                virtualNetwork: options.virtualNetwork,
+              },
+            );
+            return read.ok ? undefined : read.problems;
+          },
+          {
+            reportAutomationChange: async ({ automationId }) => {
+              reported.push(automationId);
+            },
+          },
         );
-        assert.strictEqual(result?.kind, 'paused');
-        let automation = await getAutomation(dbAdapter, AUTOMATION);
-        assert.strictEqual(automation?.state, 'paused');
-        assert.strictEqual(automation?.pauseReason, 'invalid-declaration');
+        assert.strictEqual(paused?.state, 'paused');
+        assert.strictEqual(paused?.pauseReason, 'invalid-declaration');
         assert.deepEqual(
-          automation?.pauseProblems?.map(({ code, path }) => [code, path]),
+          paused?.pauseProblems?.map(({ code, path }) => [code, path]),
           [['cron-too-frequent', 'triggers.0.expression']],
         );
-        assert.ok(
-          automation?.pauseProblems?.[0].message.includes('3 minutes apart'),
-          automation?.pauseProblems?.[0].message,
+        assert.deepEqual(reported, [AUTOMATION], 'the pause is reported');
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, pending.id))?.state,
+          'canceled',
+          'a pending run is canceled',
+        );
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, running.id))?.state,
+          'running',
+          'a running run is left to finish',
         );
 
-        let again = await sync(
+        let followed = await sync(
           indexed({ triggers: [cronTrigger({ expression: 'not cron' })] }),
         );
-        assert.strictEqual(
-          again?.kind,
-          'unchanged',
-          'a paused automation keeps the problems it paused with',
+        assert.strictEqual(followed?.kind, 'recomputed');
+        assert.deepEqual(
+          followed?.automation.pauseProblems?.map(({ code }) => code),
+          ['invalid-cron'],
+          'the problems follow the card',
         );
+        assert.strictEqual(followed?.automation.state, 'paused');
         assert.strictEqual(
-          (await getAutomation(dbAdapter, AUTOMATION))?.pauseProblems?.[0].code,
-          'cron-too-frequent',
+          (
+            await sync(
+              indexed({ triggers: [cronTrigger({ expression: 'not cron' })] }),
+            )
+          )?.kind,
+          'unchanged',
+          'the same problems change nothing',
         );
 
-        let resumed = await resumeAutomation(
-          dbAdapter,
-          { automationId: AUTOMATION, user: OWNER, declaration: declaration() },
-          options,
-        );
-        assert.true(resumed.ok, 'a resume with a fixed card succeeds');
+        let resumed = await sync(indexed(), NOW + 3600);
+        assert.strictEqual(resumed?.kind, 'resumed');
         let after = await getAutomation(dbAdapter, AUTOMATION);
         assert.strictEqual(after?.state, 'active');
         assert.strictEqual(after?.pauseReason, null);
-        assert.strictEqual(after?.pauseProblems, null, 'resume clears them');
+        assert.strictEqual(after?.pauseProblems, null);
+        assert.strictEqual(after?.payer, OWNER, 'the payer stays');
+        assert.strictEqual(
+          after?.scheduledSince,
+          NOW + 3600,
+          'the schedule restarts at the resume, so no slot from the pause runs',
+        );
+      });
+
+      test('an automation paused for an invalid declaration whose fixed card raises a cap pauses for the cap', async function (assert) {
+        await switchOn();
+        await pauseForInvalidDeclaration(dbAdapter, AUTOMATION, async () => [
+          { code: 'invalid-cron', path: 'triggers.0.expression', message: 'x' },
+        ]);
+        let result = await sync(indexed({ caps: { ...CAPS, writes: 500 } }));
+        assert.strictEqual(result?.kind, 'paused');
+        assert.strictEqual(result?.automation.pauseReason, 'caps-raised');
+        assert.strictEqual(result?.automation.pauseProblems, null);
+      });
+
+      test('a paused automation is not paused again for an invalid declaration, and a readable card does not pause', async function (assert) {
+        await switchOn();
+        let fine = await pauseForInvalidDeclaration(
+          dbAdapter,
+          AUTOMATION,
+          async () => undefined,
+        );
+        assert.strictEqual(fine?.state, 'active');
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        let kept = await pauseForInvalidDeclaration(
+          dbAdapter,
+          AUTOMATION,
+          async () => [
+            {
+              code: 'invalid-cron',
+              path: 'triggers.0.expression',
+              message: 'x',
+            },
+          ],
+        );
+        assert.strictEqual(kept?.pauseReason, 'requested');
+        assert.strictEqual(kept?.pauseProblems, null);
+        let stillPaused = await sync(indexed());
+        assert.strictEqual(
+          stillPaused?.kind,
+          'unchanged',
+          'a person’s pause is not lifted when the card reads',
+        );
       });
 
       test('a card that raises a cap pauses the automation', async function (assert) {

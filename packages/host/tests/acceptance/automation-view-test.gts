@@ -816,7 +816,7 @@ module('Acceptance | automation view', function (hooks) {
           {
             code: 'missing-cap',
             path: 'caps.writes',
-            message: 'Set a limit on saves',
+            message: 'Set the "Saves" limit',
           },
         ],
       },
@@ -833,7 +833,7 @@ module('Acceptance | automation view', function (hooks) {
       .includesText('can fire twice 3 minutes apart');
     assert
       .dom('[data-test-automation-pause-problem="Limits"]')
-      .includesText('Set a limit on saves');
+      .includesText('Set the "Saves" limit');
 
     answer = {
       status: 200,

@@ -749,13 +749,15 @@ export async function cancelAutomationRunIn(
 // run whose commit was claimed is left to finish, since its writes may
 // already be landing. A person's pause or remove names them in
 // `canceled_by`. A pause no person asked for names no one, and records its
-// reason (such as `caps-raised`) in `error_reason`. The caller writes each
-// canceled run's last log line with `logAutomationRunEnded` once its
-// transaction commits.
+// reason (such as `caps-raised`) in `error_reason`. With `pendingOnly`, a
+// running run is left to finish and only pending runs are canceled. The caller
+// writes each canceled run's last log line with `logAutomationRunEnded` once
+// its transaction commits.
 export async function cancelUnfinishedAutomationRuns(
   querier: Querier,
   automationId: RealmResourceIdentifier,
   by: { canceledBy: string } | { reason: string },
+  { pendingOnly = false }: { pendingOnly?: boolean } = {},
 ): Promise<AutomationRun[]> {
   let rows = await querier([
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
@@ -764,7 +766,9 @@ export async function cancelUnfinishedAutomationRuns(
     param('reason' in by ? by.reason : null),
     'WHERE automation_id =',
     param(automationId),
-    "AND (state = 'pending' OR (state = 'running' AND commit_started_at IS NULL))",
+    pendingOnly
+      ? "AND state = 'pending'"
+      : "AND (state = 'pending' OR (state = 'running' AND commit_started_at IS NULL))",
     'RETURNING *',
   ]);
   await discardOverlays(

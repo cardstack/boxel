@@ -97,6 +97,18 @@ export const AUTOMATION_CAP_NAMES: readonly (keyof AutomationCaps)[] = [
   'monthlyCredits',
 ];
 
+// Each limit as the automation card labels it, for messages a person reads.
+const CAP_LABELS: Record<keyof AutomationCaps, string> = {
+  callApiCalls: 'Outside calls',
+  responseBytes: 'Data received',
+  resolveCalls: 'AI requests',
+  aiCredits: 'AI spending',
+  writes: 'Saves',
+  seconds: 'Run time',
+  dailyCredits: 'Credits a day',
+  monthlyCredits: 'Credits a month',
+};
+
 export interface AutomationDeclaration {
   url: string;
   realmURL: string;
@@ -247,7 +259,7 @@ function readScript(
     report(
       'script-outside-realm',
       'script',
-      `The script link "${self}" doesn't name a file in the automation's realm`,
+      `The script link "${self}" doesn't name a file in the automation's workspace; link a script file from the automation's workspace`,
     );
     return undefined;
   }
@@ -255,7 +267,7 @@ function readScript(
     report(
       'script-outside-realm',
       'script',
-      `The script ${script} is outside the automation's realm ${entry.realmURL}`,
+      `The script ${script} is outside the automation's workspace; link a script file from the automation's workspace`,
     );
     return undefined;
   }
@@ -289,7 +301,7 @@ function readTriggers(
       report(
         'duplicate-label',
         `${path}.label`,
-        `The label "${label}" names more than one trigger; each trigger's label must be unique within its automation`,
+        `More than one trigger has the label "${label}"; give each trigger a different label`,
       );
     } else {
       labels.add(label);
@@ -311,7 +323,7 @@ function readTriggers(
         report(
           'missing-webhook-path',
           `${path}.webhookPath`,
-          'A webhook trigger names one of the realm’s incoming webhooks by its path',
+          'A webhook trigger needs the path of one of the workspace’s incoming webhooks',
         );
       } else if (label !== undefined) {
         triggers.push({ kind, label, webhookPath });
@@ -320,7 +332,7 @@ function readTriggers(
       report(
         'invalid-trigger-kind',
         `${path}.kind`,
-        `A trigger's kind is "cron", "once" or "webhook", not ${JSON.stringify(kind ?? null)}`,
+        `A trigger runs on a schedule ("cron"), once ("once") or from a webhook ("webhook"), not ${JSON.stringify(kind ?? null)}; pick one of those kinds`,
       );
     }
   }
@@ -337,7 +349,7 @@ function readTimeZone(
     report(
       'missing-time-zone',
       `${path}.timeZone`,
-      'This trigger needs a time zone, such as America/Chicago',
+      'A trigger needs a time zone, such as America/Chicago',
     );
     return undefined;
   }
@@ -345,7 +357,7 @@ function readTimeZone(
     report(
       'invalid-time-zone',
       `${path}.timeZone`,
-      `"${timeZone}" is not a time zone this server knows; use an IANA name such as America/Chicago`,
+      `"${timeZone}" isn't a time zone Boxel knows; pick a name such as America/Chicago`,
     );
     return undefined;
   }
@@ -364,7 +376,7 @@ function readCron(
     report(
       'invalid-cron',
       `${path}.expression`,
-      'A cron trigger needs a cron expression',
+      'A schedule trigger needs a cron expression',
     );
     ok = false;
   } else {
@@ -495,7 +507,7 @@ function readOperations(
       report(
         'invalid-operation',
         `${path}.targetType`,
-        'An operation names the card type that declares it, by module and name',
+        'An outside service needs the card type that declares the service, by module and name',
       );
       continue;
     }
@@ -503,7 +515,7 @@ function readOperations(
       report(
         'invalid-operation',
         `${path}.operation`,
-        'An operation needs the name of a callApi operation on its card type',
+        'An outside service needs the name of an operation on the card type',
       );
       continue;
     }
@@ -538,7 +550,7 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
         caps[name] = null;
         continue;
       }
-      report('missing-cap', path, `An automation must set its ${name} cap`);
+      report('missing-cap', path, `Set the "${CAP_LABELS[name]}" limit`);
       ok = false;
       continue;
     }
@@ -547,7 +559,7 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
       report(
         'invalid-cap',
         path,
-        `The ${name} cap is a whole number, 0 or more, not ${JSON.stringify(stored[name])}`,
+        `"${CAP_LABELS[name]}" is a whole number, 0 or more, not ${JSON.stringify(stored[name])}`,
       );
       ok = false;
       continue;
@@ -556,7 +568,7 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
       report(
         'seconds-cap-too-high',
         path,
-        `A run may last at most ${MAX_RUN_SECONDS} seconds (20 minutes), not ${value}`,
+        `"Run time" is at most 20 minutes (${MAX_RUN_SECONDS} seconds), not ${value} seconds`,
       );
       ok = false;
       continue;
@@ -568,7 +580,7 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
     report(
       'missing-credit-cap',
       'caps.monthlyCredits',
-      'An automation must set a daily or a monthly credit cap, or both',
+      'Set "Credits a day", "Credits a month", or both',
     );
     ok = false;
   }
@@ -580,7 +592,7 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
     report(
       'daily-credits-above-monthly',
       'caps.dailyCredits',
-      `The daily credit cap (${caps.dailyCredits}) can't be more than the monthly one (${caps.monthlyCredits})`,
+      `"Credits a day" (${caps.dailyCredits}) can't be more than "Credits a month" (${caps.monthlyCredits})`,
     );
     ok = false;
   }
