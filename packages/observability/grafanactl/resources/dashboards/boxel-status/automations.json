@@ -2046,7 +2046,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "The cost coverage report over the dashboard's time range: for each charge kind and pricing version, the credits charged beside the hosting cost of the usage the charges priced, in credits (1,000 to the dollar). Margin equals charged (priced) less AWS cost; coverage says how many times the cost a kind recovered. A fully paid metered kind reads at least the version's margin, and more where rounding a small charge up to a whole credit adds credits (compare full credits with cost at margin); AI reads about 1. A negative margin or a coverage under 1 marks a kind charging less than the usage costs. Shortfall counts credits the payer's balance could not cover. The report covers every charge, not only automation charges, and the dashboard's filters do not narrow the report. The pricing skill's \"The cost coverage report\" explains each column.",
+        "description": "The cost coverage report over the dashboard's time range: for each charge kind and pricing version, the credits charged beside the hosting cost of the usage the charges priced, in credits (1,000 to the dollar). Margin equals Credits charged (priced) less AWS cost; coverage says how many times the cost a kind recovered. A fully paid metered kind reads at least the version's margin, and more where rounding a small charge up to a whole credit adds credits (compare full credits with cost at margin); AI reads about 1. A negative margin or a coverage under 1 marks a kind charging less than the usage costs. Shortfall counts credits the payer's balance could not cover. The report covers every charge, not only automation charges, and the dashboard's filters do not narrow the report. The pricing skill's \"The cost coverage report\" explains each column.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -2116,7 +2116,7 @@
               "properties": [
                 {
                   "id": "displayName",
-                  "value": "charged"
+                  "value": "Credits charged"
                 }
               ]
             },
@@ -2128,7 +2128,7 @@
               "properties": [
                 {
                   "id": "displayName",
-                  "value": "charged (priced)"
+                  "value": "Credits charged (priced)"
                 }
               ]
             },
