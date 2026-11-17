@@ -24,7 +24,7 @@
         }
       ]
     },
-    "description": "Automation runs, their timings, writes and errors, what they charged and what the usage cost, and the cost coverage report.",
+    "description": "Automation runs with timings, writes and errors, the credits automation charges drew beside the AWS cost of the usage, and the cost coverage report.",
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 1,
@@ -71,7 +71,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Switched-on automations whose tick schedules their next run (state active), filtered by realm, automation and payer. Paused and waiting-for-credits automations are counted beside it.",
+        "description": "Switched-on automations in the active state: the tick schedules the next run of each one. The realm, automation and payer filters narrow the count. The Paused and Waiting for credits stats count the other switched-on automations.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -135,7 +135,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Automations paused by a person or by the platform (pause_reason says which). The Automations table lists them with their reason.",
+        "description": "Switched-on automations a person or the platform paused. The Automations table lists each paused automation with the pause reason.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -203,7 +203,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Automations whose payer's balance was under the minimum when a run came due. Each resumes on its own once the balance covers a run.",
+        "description": "Switched-on automations whose payer held less than the minimum balance when a run came due. The tick resumes each automation once the payer's balance covers a run.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -271,7 +271,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Runs enqueued and not yet claimed by a worker. A run waiting behind its own automation's running run counts here too.",
+        "description": "Runs the tick or a click enqueued and no worker has claimed yet, including a run waiting behind a running run of the same automation.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -343,7 +343,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Runs a worker has claimed and not yet ended.",
+        "description": "Runs a worker claimed and has not ended yet.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -407,7 +407,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "How long the oldest automation run that a worker could claim has waited: from its job's creation, or from the end of its last attempt when an attempt was lost. A run behind its own automation's running run (the same concurrency group) or a claim hold waits for that, not for a worker, and is left out. Red past 5 minutes, the threshold of the \"Automation runs waiting for a worker\" alert, which runs the same query. Not narrowed by the dashboard's filters.",
+        "description": "How long the oldest automation run a worker could claim has waited: from the creation of the run's job, or from the end of the job's last attempt when a worker lost an attempt. The query leaves out a run waiting behind a running run of the same automation (the same concurrency group) or behind a claim hold, since no worker could claim such a run yet. The stat turns red past 5 minutes, the threshold of the \"Automation runs waiting for a worker\" alert, which runs the same query. The dashboard's filters do not narrow the oldest wait.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -556,7 +556,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Runs created in the time range that ended as an error. The \"Errors by reason\" panel breaks them down, and the Runs table holds each message.",
+        "description": "Runs created in the time range and ending as an error. The Errors by reason panel breaks the errors down by reason, and the Runs table shows each error message.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -624,7 +624,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Scheduled slots that came due while a scheduled run of the same automation was still pending, so they joined that run instead of starting one. The pending run catches up on everything since the automation's last run.",
+        "description": "Scheduled slots coming due while a scheduled run of the same automation still waited to start. The tick joins each such slot to the pending run instead of starting a new run, and the pending run catches up on everything since the automation's last run.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -692,7 +692,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Credits drawn by automation charges written in the time range: each run's compute and network, the indexing its writes caused, its AI requests, and daily storage.",
+        "description": "Credits automation charges drew in the time range: each run's compute and network, the indexing each run's writes caused, each run's AI requests, and daily storage.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -757,7 +757,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "The hosting cost of the usage those charges priced, at the unit rates of each charge's own pricing version, plus AI providers' reported cost. Charges with no usage recorded, or at a pricing version no process recorded, are left out (the Cost coverage table counts them).",
+        "description": "The hosting cost, in USD, of the usage the automation charges priced: each charge's usage at the unit rates of the charge's own pricing version, plus the cost AI providers reported. The stat leaves out a charge with no usage rows or at a pricing version no process recorded; the Cost coverage table counts such charges as unpriced.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -822,7 +822,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "The pricing versions that priced automation charges in the time range. More than one means a price, the margin or a task shape changed within it; the Pricing versions table says when each one was first recorded.",
+        "description": "How many pricing versions priced automation charges in the time range. More than one version means someone changed a price, the margin or a task shape during the time range; the Pricing versions table shows when a process first recorded each version.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -903,7 +903,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Runs created in each interval, by the state each is in now. A run ends as complete, error or canceled; pending and running are runs still in flight.",
+        "description": "Runs created in each interval, by each run's current state. A finished run reads complete, error or canceled; pending and running are runs still in flight.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1071,7 +1071,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Runs that ended as an error in each interval, by error_reason. Admission refusals (insufficient-credits, a credit cap, a credential) end before the script starts; timed-out, run-failed and script-error are the script's own. The automation-diagnostics skill walks each one.",
+        "description": "Runs ending as an error in each interval, by error_reason. An admission refusal (insufficient-credits, a credit cap, a credential) ends a run before the script starts; timed-out, run-failed and script-error come from the script. The automation-diagnostics skill walks through each reason.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1163,7 +1163,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Time from a worker claiming the run to its end (started → finished), for runs that ended in each interval, and the whole run from its enqueue (created → finished), which adds its queue wait.",
+        "description": "For runs ending in each interval: the time from a worker claiming the run to the run's end (started → finished), and the whole run from enqueue to end (created → finished), which adds the queue wait.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1257,7 +1257,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Queue wait: from a run's job being enqueued to a worker's first claim of it, for runs whose job was enqueued in each interval and has been claimed. A long wait is a backlog on the automation lane, or the automation's previous run still holding its concurrency group. Schedule lag: from a scheduled run's slot to its enqueue, which grows when the tick runs late. The \"Oldest unclaimed automation run\" stat covers runs not claimed yet.",
+        "description": "Queue wait: the time from the queue receiving a run's job to a worker's first claim of the job, for jobs the queue received in each interval and a worker has claimed. A long wait means a backlog on the automation lane, or the automation's previous run still holding the concurrency group. Schedule lag: the time from a scheduled run's slot to the tick enqueuing the run; a late tick makes the lag grow. The Oldest unclaimed automation run stat covers runs no worker has claimed yet.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1351,7 +1351,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Scheduled slots that joined a still-pending run of the same automation instead of starting their own, by trigger. Steady skips mean runs wait longer than the schedule's interval: read Queue wait beside it.",
+        "description": "Scheduled slots the tick joined to a pending run of the same automation instead of starting a new run, by trigger. Steady skips mean runs wait longer than the schedule's interval; compare with Queue wait.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1443,7 +1443,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Runs that had been claimed and not yet ended at each instant. A prerender tab carries one run at a time, so this is the run tabs in use across the prerender servers; the Prerender capacity row below breaks it down per server.",
+        "description": "Runs a worker had claimed and not yet ended, at each instant. A prerender tab carries one run at a time, so the count equals the run tabs in use across the prerender servers; the Prerender capacity row below breaks the count down per server.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1536,7 +1536,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "For runs that ended in each interval: the files their commits wrote, their callApi calls and their AI (resolve) calls. A Preview stages its writes and commits none, so it adds no writes here.",
+        "description": "For runs ending in each interval: the files each run's commit wrote, the run's callApi calls and the run's AI (resolve) calls. A Preview stages writes and commits none, so a Preview adds no writes here.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1628,7 +1628,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "For runs that ended in each interval: what their callApi calls downloaded, and the prerender tab time their scripts held, the two quantities a run's own charge prices.",
+        "description": "For runs ending in each interval: the bytes each run's callApi calls downloaded, and the prerender tab time each run's script held: the two quantities a run's own charge prices.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1762,7 +1762,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Credits drawn by automation charges written in each interval, by charge kind: run (a run's compute and network), run_indexing (the indexing its writes caused, charged when the last index pass ends), ai and batched_ai (its AI requests) and storage (daily, per automation).",
+        "description": "Credits automation charges drew in each interval, by charge kind: run (a run's compute and network), run_indexing (the indexing a run's writes caused; the last index pass writes the charge), ai and batched_ai (a run's AI requests) and storage (daily, per automation).",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1855,7 +1855,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "The hosting cost, in USD, of the usage those charges priced, by charge kind: each charge's usage at its own pricing version's unit rates, and an AI charge's provider-reported cost.",
+        "description": "The hosting cost, in USD, of the usage the automation charges priced, by charge kind: each charge's usage at the unit rates of the charge's own pricing version, and the cost an AI provider reported for an AI charge.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1948,7 +1948,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Each pricing version that priced automation charges in the time range: its margin, when a process first recorded it, and the charges, credits and hosting cost at it. A blank version is AI, which carries none. The pricing skill explains how to read a version's values and unit rates (pricing_versions, pricing_version_rates).",
+        "description": "Each pricing version pricing automation charges in the time range, with the version's margin, the time a process first recorded the version, and the charges, credits charged and hosting cost at the version. AI charges carry no version and show a blank one. The pricing skill explains how to read a version's values and unit rates (pricing_versions, pricing_version_rates).",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -2046,7 +2046,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "The cost coverage report for the dashboard's time range: for each charge kind and pricing version, the credits charged beside the hosting cost of the usage they priced, in credits (1,000 to the dollar). Margin is priced credits less cost; coverage is how many times its cost a kind recovered. A fully paid metered kind reads at least its version's margin, more where rounding a small charge up to a whole credit adds to it (compare full credits with cost at margin); AI reads about 1. A negative margin or a coverage under 1 is a kind that under-charges. Shortfall is credits the balance could not cover. Covers every charge, not only automations', and ignores the dashboard's filters. The pricing skill's \"The cost coverage report\" explains each column.",
+        "description": "The cost coverage report over the dashboard's time range: for each charge kind and pricing version, the credits charged beside the hosting cost of the usage the charges priced, in credits (1,000 to the dollar). Margin equals charged (priced) less AWS cost; coverage says how many times the cost a kind recovered. A fully paid metered kind reads at least the version's margin, and more where rounding a small charge up to a whole credit adds credits (compare full credits with cost at margin); AI reads about 1. A negative margin or a coverage under 1 marks a kind charging less than the usage costs. Shortfall counts credits the payer's balance could not cover. The report covers every charge, not only automation charges, and the dashboard's filters do not narrow the report. The pricing skill's \"The cost coverage report\" explains each column.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -2356,7 +2356,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Each automation the filters match, with its state now and its runs, errors, credits and AWS cost in the time range. Payer is who its scheduled runs act as and are charged to.",
+        "description": "Each switched-on automation the filters match, with the automation's current state and the automation's runs, errors, credits charged and AWS cost in the time range. Payer names the person each scheduled run acts as and charges.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -2512,7 +2512,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "The latest runs the filters match, newest first: the automation, trigger, realm and payer (who the run acts as and is charged to), its state and error, its queue wait and run time, its writes, and the credits its charges drew with their AWS cost and pricing version. A run's indexing is charged when its last index pass ends, so a recent run's credits can still grow. The automation-diagnostics skill walks from a run id to its job, log, milestones and charges.",
+        "description": "The latest runs the filters match, newest first. Each row shows the automation, trigger, realm and payer (the person the run acts as and charges), the run's state and error, queue wait and run time, writes, and the credits the run's charges drew with the AWS cost and pricing version. The last index pass of a run writes the run's indexing charge, so a recent run's credits can still grow. The automation-diagnostics skill walks from a run id to the run's job, log, milestones and charges.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -2689,7 +2689,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "Each prerender server's run tabs, from the capacity line it writes every 30 seconds while it holds any run tab: runningRuns (runs it runs at once, one per tab), queuedRuns (runs waiting for a tab another run of the same realm and identity holds) and runTabs. A server holding no run tab writes no line, so a gap is an idle server. Loki scans every prerender line in the window to find these, so the panel covers the last hour; widen it with care.",
+            "description": "Each prerender server's run tabs, from the capacity line each server writes every 30 seconds while the server holds a run tab: runningRuns (runs the server runs at once, one per tab), queuedRuns (runs waiting for a tab another run of the same realm and identity holds) and runTabs. A server holding no run tab writes no line, so a gap means an idle server. Loki scans every prerender line in the window to find the capacity lines, so the panel covers the last hour; widen the window with care.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -2866,7 +2866,7 @@
             "uid": "cef5v5sl9k7i8f"
           },
           "definition": "SELECT automation_id FROM automations WHERE ('__all' IN ($realm) OR realm IN ($realm)) UNION SELECT automation_id FROM automation_runs WHERE $__timeFilter(created_at) AND ('__all' IN ($realm) OR realm IN ($realm)) ORDER BY 1",
-          "description": "Automations in the selected realms that are switched on or ran in the time range.",
+          "description": "Automations in the selected realms, switched on or with a run in the time range.",
           "hide": 0,
           "includeAll": true,
           "label": "Automation",
@@ -2896,7 +2896,7 @@
             "uid": "cef5v5sl9k7i8f"
           },
           "definition": "SELECT payer FROM automations UNION SELECT acts_as FROM automation_runs WHERE $__timeFilter(created_at) ORDER BY 1",
-          "description": "Who runs act as and are charged to: an automation's payer for its scheduled runs, and whoever clicked for a Preview or Run now.",
+          "description": "The person each run acts as and charges: the automation's payer for a scheduled run, and whoever clicked for a Preview or Run now.",
           "hide": 0,
           "includeAll": true,
           "label": "Payer",
@@ -2926,7 +2926,7 @@
             "uid": "cef5v5sl9k7i8f"
           },
           "definition": "SELECT DISTINCT trigger FROM automation_runs WHERE $__timeFilter(created_at) AND ('__all' IN ($automation) OR automation_id IN ($automation)) ORDER BY 1",
-          "description": "The card's trigger label that started a run; manual is a Preview or Run now.",
+          "description": "The card's trigger label starting each run; manual means a Preview or Run now.",
           "hide": 0,
           "includeAll": true,
           "label": "Trigger",
