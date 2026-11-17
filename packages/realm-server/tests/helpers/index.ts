@@ -3933,12 +3933,16 @@ export function automationFixture({
   operations,
   caps = {},
   path = TEST_AUTOMATION_PATH,
+  triggers = [],
 }: {
   operations: {
     type: { module: string; name: string };
     names: string[];
   }[];
-  caps?: Partial<typeof ROOMY_AUTOMATION_CAPS>;
+  caps?: Partial<Record<keyof typeof ROOMY_AUTOMATION_CAPS, number | null>>;
+  // The card's triggers, as the card stores them (`kind`, `label`, and the
+  // fields for that kind).
+  triggers?: Record<string, unknown>[];
   // Where the card goes, relative to the realm's root, for a realm that
   // holds more than one.
   path?: string;
@@ -3950,7 +3954,7 @@ export function automationFixture({
         type: 'card',
         attributes: {
           cardInfo: { name: 'Test automation' },
-          triggers: [],
+          triggers,
           operations: operations.flatMap(({ type, names }) =>
             names.map((operation) => ({
               targetType: { module: type.module, name: type.name },

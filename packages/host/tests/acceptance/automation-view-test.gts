@@ -373,6 +373,61 @@ module('Acceptance | automation view', function (hooks) {
       .includesText('Next run None while paused');
   });
 
+  test("an automation event naming the automation makes the view ask its status again, and one naming another automation doesn't", async function (assert) {
+    // Switching an automation on, pausing, resuming or removing it changes
+    // its row and not its card, so the realm tells its direct writers with an
+    // `automation` event, the way the realm server sends one into a writer's
+    // session room.
+    function simulateAutomationChange(automation: string) {
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(
+          testRealmURL,
+          '@testuser:localhost',
+        ),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'automation',
+          automation,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+    }
+
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-state="Paused"]', { timeout: 10000 });
+    await settled();
+    let askedBefore = asked.length;
+
+    answer = { status: 200, attributes: ACTIVE };
+    simulateAutomationChange(PLANNED);
+    await settled();
+    assert.strictEqual(
+      asked.length,
+      askedBefore,
+      'an automation event naming another automation asks nothing',
+    );
+    assert.dom('[data-test-automation-state="Paused"]').exists();
+
+    simulateAutomationChange(AUTOMATION);
+    await waitFor('[data-test-automation-state="On"]', { timeout: 10000 });
+    await settled();
+    // One read per event: an ask the other automation's event had set off,
+    // however late it landed, would show here as a second.
+    assert.deepEqual(
+      asked.slice(askedBefore),
+      [AUTOMATION],
+      'an automation event naming the automation asks its status route once',
+    );
+    assert
+      .dom('[data-test-automation-status]')
+      .doesNotIncludeText('Next run None');
+  });
+
   test("the card lists the milestones of the automation's last run from the run", async function (assert) {
     answer = {
       status: 200,

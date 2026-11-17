@@ -889,6 +889,130 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a batch that ended before its deadline passes on its results', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+      await submit(token, twoRequests());
+      let finalizedAt = Math.floor(Date.now() / 1000) - 60;
+      statusAnswer = {
+        status: 200,
+        body: {
+          id: 'batch_123',
+          status: 'completed',
+          finalized_at: finalizedAt,
+          results: [{ custom_id: 'ticket-1', response: { status_code: 200 } }],
+        },
+      };
+
+      let response = await request
+        .get('/_ai-batches/batch_123')
+        .set('Authorization', `Bearer ${token}`);
+
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(response.body.results, [
+        { custom_id: 'ticket-1', response: { status_code: 200 } },
+      ]);
+      assert.strictEqual(
+        (await getAIBatch(dbAdapter, 'batch_123'))?.finalizedAt,
+        new Date(finalizedAt * 1000).toISOString(),
+        "OpenRouter's time is recorded as when the batch ended",
+      );
+    });
+
+    // Moves the batch's deadline into the past, as if the script's wait had
+    // run out.
+    async function deadlinePassed() {
+      await dbAdapter.execute(
+        `UPDATE ai_batches SET deadline = now() - interval '1 minute' WHERE batch_id = 'batch_123'`,
+      );
+    }
+
+    function completedAnswer() {
+      return {
+        status: 200,
+        body: {
+          id: 'batch_123',
+          status: 'completed',
+          finalized_at: Math.floor(Date.now() / 1000),
+          request_counts: { total: 2, completed: 2, failed: 0 },
+          results: [{ custom_id: 'ticket-1', response: { status_code: 200 } }],
+        },
+      };
+    }
+
+    test('a batch a run found still open past its deadline has its results discarded once it ends', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+      await submit(token, twoRequests());
+      await deadlinePassed();
+      // The follow-up reads the batch still running, so it falls back to the
+      // normal price.
+      await request
+        .get('/_ai-batches/batch_123')
+        .set('Authorization', `Bearer ${token}`);
+      assert.ok(
+        (await getAIBatch(dbAdapter, 'batch_123'))?.deadlineMissedAt,
+        'the batch is recorded as late',
+      );
+      statusAnswer = completedAnswer();
+
+      let response = await request
+        .get('/_ai-batches/batch_123')
+        .set('Authorization', `Bearer ${token}`);
+
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(response.body.status, 'completed');
+      assert.strictEqual(
+        response.body.results,
+        null,
+        'its results are withheld',
+      );
+      assert.deepEqual(
+        response.body.request_counts,
+        { total: 2, completed: 2, failed: 0 },
+        'the rest of the batch is passed on',
+      );
+    });
+
+    test('a batch that ended before a run read it past its deadline passes on its results', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+      await submit(token, twoRequests());
+      await deadlinePassed();
+      statusAnswer = completedAnswer();
+
+      let response = await request
+        .get('/_ai-batches/batch_123')
+        .set('Authorization', `Bearer ${token}`);
+
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        response.body.results,
+        [{ custom_id: 'ticket-1', response: { status_code: 200 } }],
+        'the follow-up that finds it ended uses its results',
+      );
+      assert.strictEqual(
+        (await getAIBatch(dbAdapter, 'batch_123'))?.deadlineMissedAt,
+        null,
+        'the batch is not late',
+      );
+    });
+
+    test('a batch read still open before its deadline is not late', async function (assert) {
+      await switchOn();
+      let { token } = await runningRun();
+      await submit(token, twoRequests());
+
+      await request
+        .get('/_ai-batches/batch_123')
+        .set('Authorization', `Bearer ${token}`);
+
+      assert.strictEqual(
+        (await getAIBatch(dbAdapter, 'batch_123'))?.deadlineMissedAt,
+        null,
+      );
+    });
+
     test('a run reads only its own automation’s batches', async function (assert) {
       await switchOn();
       await switchOn(OTHER_AUTOMATION);
