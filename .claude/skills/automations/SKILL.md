@@ -1355,8 +1355,8 @@ nothing, check that they hold a `write` row of their own in
 
 A change to an automation's own row sends an `automation` realm event: a
 direct writer switches it on, pauses, resumes or removes it; something pauses
-it without a person (a raised cap, the payer losing access, archiving the
-realm); its card is deleted or stops adopting from `Automation`, which removes
+it without a person (a raised cap, the payer losing access, its runs failing
+repeatedly, archiving the realm); its card is deleted or stops adopting from `Automation`, which removes
 the row; or its state moves between active, waiting for credits and done. The
 event is `AutomationEventContent` in `packages/base/matrix-event.gts`:
 
@@ -1398,6 +1398,7 @@ read them from, and never rejects; a failed report is logged as
 | Switch-on, pause, resume, remove                                                                           | `switchOnAutomation`, `pauseAutomation`, `resumeAutomation`, `removeAutomation`, given the reporter                                                                       |
 | The payer losing access                                                                                    | `checkAutomationPayer`, `pauseForPayerLostAccess`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                   |
 | Archiving the realm                                                                                        | `pauseRealmAutomations`, from the archive handler (`realmServerAutomationChangeReporter`)                                                                                 |
+| Its runs failing repeatedly                                                                                | `pauseAfterRepeatedFailures`, from `runAutomationAttempt` (`AutomationAttemptContext.reportAutomationChange`)                                                             |
 | The card's index hook removes it, pauses it for a raised cap or batched AI, or makes it done/active        | `syncAutomationWithCard`, from `syncAutomationsAfterIndex` in the indexing tasks. `checkAutomationCaps` pauses the same way and reports to a caller that passes reporters |
 | The tick makes it done, or moves its next run without starting a run (every due slot joined a pending run) | `tickAutomations` (`AutomationTickOptions.reportAutomationChange`)                                                                                                        |
 
@@ -1407,8 +1408,8 @@ that starts a run and leaves the state as it was reports nothing either, since
 the run's `job` event announces it. A worker reports through
 `taskAutomationChangeReporter`, which hands the event to `reportRealmEvent`.
 A realm route that changes a row passes `Realm.reportAutomationChange`. **New
-code that changes an automation's state** (waiting for credits, a pause of its
-own) reports the automation the same way once its change commits.
+code that changes an automation's state** (such as waiting for credits)
+reports the automation the same way once its change commits.
 
 ### Watching it
 

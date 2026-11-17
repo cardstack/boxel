@@ -726,9 +726,10 @@ export async function readAutomationFailures(
 // Pauses the automation with `repeated-failures` once `failuresBeforePause`
 // of its own runs have failed in a row (see `readAutomationFailures`), which
 // cancels its pending run as every pause does; `reporters` hear about the
-// paused automation and each canceled run once the pause commits. The streak is read from the
-// runs, so calling this again, or for a run that didn't fail, changes
-// nothing, and a call a crash skipped is made up by the next failed run's.
+// paused automation and each canceled run once the pause commits. The streak
+// is read from the runs, so calling this again, or for a run that didn't
+// fail, changes nothing, and a call a crash skipped is made up by the next
+// failed run's.
 // Only an active automation, or one waiting for credits, pauses: one already
 // paused keeps the reason it has, and one *done* has no runs left to stop.
 // Returns the row and whether this call paused it, or undefined when the
