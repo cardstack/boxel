@@ -581,20 +581,25 @@ export interface CostCoverage {
   pricedCharges: number;
   pricedCredits: number;
   // The hosting cost of the priced charges' usage, in USD and in credits (at
-  // `CREDITS_PER_USD`), and that cost times each charge's margin: what the
-  // charges would have drawn had each been paid in full, before rounding.
+  // `CREDITS_PER_USD`), and that cost times each charge's margin.
   costUsd: number;
   costCredits: number;
-  chargedAtMarginCredits: number;
+  costAtMarginCredits: number;
+  // What the priced charges draw when every balance covers them: each one's
+  // cost at its margin, rounded up to a whole credit (to the nearest credit
+  // for AI). `fullCredits - costAtMarginCredits` is what rounding adds, which
+  // for charges well under a credit each is most of what they draw.
+  fullCredits: number;
   // `pricedCredits / costCredits`: how many times their cost the priced
-  // charges recovered. A metered kind should read at least its margin and an
-  // AI kind about 1; less means it under-charges. Null when the cost is 0.
+  // charges recovered. A fully paid metered kind reads at least its margin
+  // and an AI kind about 1. Null when the cost is 0.
   coverage: number | null;
-  // `chargedAtMarginCredits - pricedCredits`: credits the priced charges would
-  // have drawn at their margin and didn't, such as an indexing charge the
-  // balance couldn't cover. Rounding each charge up to a whole credit makes a
-  // fully paid metered kind read slightly below 0.
+  // How far short of `fullCredits` the priced charges fell, summed per charge,
+  // and how many fell short: credits a balance couldn't cover, such as an
+  // indexing charge drawn after the balance ran low. A charge that rounded up
+  // never offsets one that went unpaid.
   shortfallCredits: number;
+  shortChargedCharges: number;
 }
 
 // Compares, for the consumption charges written from `from` (inclusive) to
@@ -612,7 +617,10 @@ export async function getCostCoverage(
     `COUNT(*) FILTER (WHERE cost_usd IS NOT NULL) AS priced_charges,`,
     `COALESCE(SUM(credits) FILTER (WHERE cost_usd IS NOT NULL), 0) AS priced_credits,`,
     `COALESCE(SUM(cost_usd), 0) AS cost_usd,`,
-    `COALESCE(SUM(cost_usd * margin), 0) AS cost_at_margin_usd`,
+    `COALESCE(SUM(cost_usd * margin), 0) AS cost_at_margin_usd,`,
+    `COALESCE(SUM(full_credits), 0) AS full_credits,`,
+    `COALESCE(SUM(unpaid_credits), 0) AS shortfall_credits,`,
+    `COUNT(*) FILTER (WHERE unpaid_credits > 0) AS short_charged_charges`,
     `FROM credit_charge_costs WHERE created_at >=`,
     param(Math.floor(from.getTime() / 1000)),
     `AND created_at <`,
@@ -624,8 +632,6 @@ export async function getCostCoverage(
     let pricedCredits = Number(row.priced_credits);
     let costUsd = Number(row.cost_usd);
     let costCredits = costUsd * CREDITS_PER_USD;
-    let chargedAtMarginCredits =
-      Number(row.cost_at_margin_usd) * CREDITS_PER_USD;
     return {
       chargeKind: row.charge_kind as CostCoverage['chargeKind'],
       pricingVersion: (row.pricing_version as string | null) ?? null,
@@ -635,9 +641,11 @@ export async function getCostCoverage(
       pricedCredits,
       costUsd,
       costCredits,
-      chargedAtMarginCredits,
+      costAtMarginCredits: Number(row.cost_at_margin_usd) * CREDITS_PER_USD,
+      fullCredits: Number(row.full_credits),
       coverage: costCredits > 0 ? pricedCredits / costCredits : null,
-      shortfallCredits: chargedAtMarginCredits - pricedCredits,
+      shortfallCredits: Number(row.shortfall_credits),
+      shortChargedCharges: Number(row.short_charged_charges),
     };
   });
 }

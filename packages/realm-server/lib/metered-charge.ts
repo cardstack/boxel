@@ -113,8 +113,8 @@ export async function chargeMetered(
 
 // Records the prices `pricing.version` stands for (see `recordPricingVersion`),
 // so the cost coverage report can price the usage of the charges written at
-// them. The realm-server and every worker record their version at startup,
-// since those are the processes that write metered charges.
+// them. Every worker records its version at startup, since workers write the
+// metered charges (through `meteredChargesFor`).
 export async function recordPricing(
   dbAdapter: DBAdapter,
   pricing: Pricing,

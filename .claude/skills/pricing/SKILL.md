@@ -115,10 +115,10 @@ packages/observability/scripts/tail-logs.sh --env staging --service worker \
   --regex 'pricing check' --since 1h --no-follow
 ```
 
-**The record of a version.** The realm-server and every worker process also
-record their version in the database at startup (`recordCurrentPricing` in
-`packages/realm-server/lib/metered-charge.ts`), once per version, since those
-are the processes that write metered charges. `pricing_versions` holds the
+**The record of a version.** Every worker process also records its version
+in the database at startup (`recordCurrentPricing` in
+`packages/realm-server/lib/metered-charge.ts`), once per version, since
+workers write the metered charges. `pricing_versions` holds the
 version and its margin, `pricing_version_values` every value by its variable
 name, and `pricing_version_rates` the USD one unit of each metered usage
 costs at those values, keyed by the `credit_charge_usage` unit. A version is a
@@ -806,10 +806,15 @@ reported cost.
 **Where it runs.** `credit_charge_costs` is a view with one row per
 consumption charge: `charge_id`, `charge_kind`, `pricing_version`, `user_id`,
 `realm`, `created_at`, `credits` (what it drew, across every credit bucket),
-`cost_usd` and `margin`. It is plain SQL over the ledger, so a Grafana
-panel on the Postgres data source can group it the same way. In code, `getCostCoverage(dbAdapter, { from, to })`
-(`packages/billing/billing-queries.ts`) groups it for charges written from
-`from` (inclusive) to `to` (exclusive). Against the read-only database:
+`cost_usd`, `margin`, `full_credits` and `unpaid_credits`. `full_credits` is
+what the charge draws when the balance covers it: its cost at the margin
+rounded up to a whole credit, or for AI its cost rounded to the nearest
+credit. `unpaid_credits` is how far short of that the charge fell, never
+below 0. The view is plain SQL over the ledger, so a Grafana panel on the
+Postgres data source can group it the same way. In code,
+`getCostCoverage(dbAdapter, { from, to })` (`packages/billing/billing-queries.ts`)
+groups it for charges written from `from` (inclusive) to `to` (exclusive).
+Against the read-only database:
 
 ```sql
 -- Cost coverage for November 2026, by kind and pricing version.
@@ -819,10 +824,12 @@ SELECT charge_kind, pricing_version,
        COUNT(*) FILTER (WHERE cost_usd IS NOT NULL) AS priced_charges,
        SUM(credits) FILTER (WHERE cost_usd IS NOT NULL) AS priced_credits,
        SUM(cost_usd) * 1000 AS cost_credits,
+       SUM(cost_usd * margin) * 1000 AS cost_at_margin_credits,
+       SUM(full_credits) AS full_credits,
        SUM(credits) FILTER (WHERE cost_usd IS NOT NULL)
          / NULLIF(SUM(cost_usd) * 1000, 0) AS coverage,
-       SUM(cost_usd * margin) * 1000
-         - SUM(credits) FILTER (WHERE cost_usd IS NOT NULL) AS shortfall_credits
+       SUM(unpaid_credits) AS shortfall_credits,
+       COUNT(*) FILTER (WHERE unpaid_credits > 0) AS short_charged_charges
 FROM credit_charge_costs
 WHERE created_at >= EXTRACT(EPOCH FROM timestamptz '2026-11-01 00:00Z')
   AND created_at <  EXTRACT(EPOCH FROM timestamptz '2026-12-01 00:00Z')
@@ -831,29 +838,37 @@ GROUP BY 1, 2 ORDER BY 1, 2 NULLS FIRST;
 
 **How to read a line.**
 
-- `coverage` is how many times its cost a kind recovered. A metered kind
-  (run, run indexing, storage) should read its pricing version's margin or a
-  little above it, since each charge rounds up to a whole credit. An AI kind
-  carries no margin and should read about 1; each AI charge rounds to the
-  nearest credit, so a kind of many tiny calls can read a little either side.
-- Coverage below the margin means the kind under-charges. `shortfall_credits`
-  says by how much: what the priced charges would have drawn at their margin,
-  less what they drew. Rounding makes a fully paid metered kind read slightly
-  below 0. The usual cause of a real shortfall is `run_indexing`, which is
-  charged against whatever the balance holds when the index pass completes and
-  can go partly unpaid (see "The indexing a run's writes cause"). A shortfall
-  on `run` or `storage` means a balance ran out under a charge the minimum
-  balance should have covered, which is worth finding by run or automation.
-- A line with coverage well above its margin on a metered kind means the
-  formula over-charges for what was used, often a unit priced at the wrong
-  rate for its task shape.
+- `coverage` is how many times its cost a kind recovered. A fully paid
+  metered kind (run, run indexing, storage) reads at least its pricing
+  version's margin. How far above depends on charge size: every metered
+  charge rounds up to a whole credit, and run and run-indexing charges are
+  often well under one, so rounding alone can put coverage at twice the
+  margin or more. Storage reads close to its margin, since its charge waits
+  until its days cost a whole credit. An AI kind carries no margin and reads
+  about 1; each AI charge rounds to the nearest credit, so a kind of many
+  tiny calls can read a little either side.
+- To tell rounding from a wrong rate, compare `full_credits` with
+  `cost_at_margin_credits`: the difference is what rounding adds. A fully
+  paid line's `priced_credits` equals its `full_credits`. A coverage above
+  the margin that rounding doesn't explain means the formula over-charges for
+  what was used, often a unit priced at the wrong rate for its task shape.
+- `shortfall_credits` is credits the priced charges should have drawn and
+  didn't, summed per charge, so a charge that rounded up never hides one that
+  went unpaid; `short_charged_charges` counts the charges behind it. A charge
+  falls short when the balance it draws on can't cover it. That's expected
+  of `run_indexing`, charged against whatever the balance holds when the
+  index pass completes (see "The indexing a run's writes cause"). It also
+  happens to `run`, when an earlier run's index pass drew down the balance
+  the run was admitted against (ADR 029 §2), and to `storage`, which the
+  minimum balance doesn't cover. Find the charges with `unpaid_credits > 0`
+  in the view to see which runs or automations they were.
 - `charges` above `priced_charges` means some charges couldn't be priced and
   are left out of the cost, coverage and shortfall: a charge with no usage
   rows, one at a pricing version no process recorded, or one using a unit
   that has no rate at its version. Read their versions from the line and look
   for the `pricing check passed` line that named them.
-- A null `pricing_version` is an AI line, or a charge written before charges
-  recorded a version.
+- A null `pricing_version` is an AI line: the ledger requires a version on
+  every run, run-indexing and storage charge.
 
 The usage a charge records is the usage it priced, so a charge that the
 balance couldn't cover at all wrote nothing and appears nowhere: the report

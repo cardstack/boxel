@@ -73,11 +73,13 @@ Each process MUST log its prices and a pricing version, a hash of them, at
 startup. Every metered charge (§1.1) MUST record the pricing version it was
 priced at.
 
-Each process that writes metered charges MUST also record, once per pricing
+Each process that writes metered charges SHOULD also record, once per pricing
 version, its values and the USD one unit of each metered usage costs at them,
-in the database. A version's record MUST NOT change once written, and MUST
-NOT be read to price a charge (§1.2): it exists so a charge's usage can be
-priced again at its version after the startup log is gone.
+in the database. A failure to record MUST NOT stop the process or its
+charges, since the startup log still names the version's prices. A version's
+record MUST NOT change once written, and MUST NOT be read to price a charge
+(§1.2): it exists so a charge's usage can be priced again at its version
+after the startup log is gone.
 
 ### 1.5. The minimum balance covers a run's compute, network and AI
 

@@ -275,10 +275,17 @@ module(basename(import.meta.filename), function (hooks) {
     );
     closeTo(
       assert,
-      run.chargedAtMarginCredits,
+      run.costAtMarginCredits,
       2 * runUsd * 2 * CREDITS_PER_USD,
       'run cost at its margin',
     );
+    assert.strictEqual(
+      run.fullCredits,
+      run.credits,
+      'a fully paid charge draws what it costs in full',
+    );
+    assert.strictEqual(run.shortfallCredits, 0, 'a paid kind falls short by 0');
+    assert.strictEqual(run.shortChargedCharges, 0);
     closeTo(
       assert,
       run.coverage,
@@ -290,7 +297,7 @@ module(basename(import.meta.filename), function (hooks) {
       `a fully paid metered kind covers at least its margin, got ${run.coverage}`,
     );
     // Each of the two charges rounds up by less than one credit.
-    let roundingUp = run.credits - run.chargedAtMarginCredits;
+    let roundingUp = run.fullCredits - run.costAtMarginCredits;
     assert.ok(
       roundingUp >= 0,
       `rounding each charge up never draws less than its cost, got ${roundingUp}`,
@@ -328,7 +335,8 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(ai.credits, 12);
     closeTo(assert, ai.costUsd, 0.012, 'AI cost is the provider cost');
     closeTo(assert, ai.coverage, 1, 'AI recovers its cost, no margin');
-    closeTo(assert, ai.shortfallCredits, 0, 'AI is charged at margin 1');
+    assert.strictEqual(ai.fullCredits, 12, 'AI is charged at margin 1');
+    assert.strictEqual(ai.shortfallCredits, 0);
 
     let batched = lineFor(report, 'batched_ai', null);
     closeTo(assert, batched.costUsd, 0.04, 'a batch costs what was reported');
@@ -361,12 +369,17 @@ module(basename(import.meta.filename), function (hooks) {
       'the charge drew what the balance held',
     );
     closeTo(assert, line.costUsd, usd, 'the cost is of all the usage');
-    closeTo(
-      assert,
-      line.shortfallCredits,
-      usd * 2 * CREDITS_PER_USD - 5,
-      'the shortfall is the unpaid part at the margin',
+    assert.strictEqual(
+      line.fullCredits,
+      meteredCredits(usage, pricing),
+      'in full, the charge draws its cost at the margin, rounded up',
     );
+    assert.strictEqual(
+      line.shortfallCredits,
+      meteredCredits(usage, pricing) - 5,
+      'the shortfall is the unpaid part',
+    );
+    assert.strictEqual(line.shortChargedCharges, 1);
     assert.ok(
       line.coverage! < 1,
       `an under-paid kind covers less than its cost, got ${line.coverage}`,
@@ -523,10 +536,116 @@ module(basename(import.meta.filename), function (hooks) {
     );
     closeTo(
       assert,
-      atThree.chargedAtMarginCredits,
+      atThree.costAtMarginCredits,
       atThree.costCredits * 3,
       'each version is held to its own margin',
     );
     assert.strictEqual(atThree.credits, meteredCredits(usage, raised));
+  });
+  test('a charge that rounded up never offsets one the balance could not cover', async function (assert) {
+    await recordPricing(dbAdapter, pricing);
+    let since = Math.floor(Date.now() / 1000) - 1;
+    // Ten small passes, each well under a credit, round up to 1 credit each.
+    let small = { worker_process_seconds: 1 };
+    assert.strictEqual(meteredCredits(small, pricing), 1);
+    for (let i = 0; i < 10; i++) {
+      await chargeMetered(dbAdapter, {
+        payer: PAYER,
+        charge: {
+          kind: 'run_indexing',
+          realm: REALM,
+          runId: `0b9f1a52-6c43-4c0e-8f1d-3f6a9d6c1f0${i}`,
+        },
+        usage: small,
+        pricing,
+      });
+    }
+    // One large pass drawn against a balance of 5 credits.
+    let large = { worker_process_seconds: 400 };
+    await chargeMetered(dbAdapter, {
+      payer: SHORT_PAYER,
+      charge: { kind: 'run_indexing', realm: REALM, runId: RUN_C },
+      usage: large,
+      pricing,
+    });
+    await dateChargesAfter(since, IN_PERIOD);
+
+    let [line] = await getCostCoverage(dbAdapter, { from: FROM, to: TO });
+    let unpaid = meteredCredits(large, pricing) - 5;
+    assert.ok(unpaid > 0, `the large pass went partly unpaid by ${unpaid}`);
+    assert.ok(
+      line.fullCredits - line.costAtMarginCredits > unpaid,
+      'rounding the small passes up adds more than the large pass left unpaid',
+    );
+    assert.strictEqual(
+      line.shortfallCredits,
+      unpaid,
+      'the shortfall is the unpaid charge alone',
+    );
+    assert.strictEqual(line.shortChargedCharges, 1);
+  });
+
+  test('prices each charge at the rates of its own pricing version', async function (assert) {
+    // A second version whose prerender tab costs twice as much per vCPU-hour
+    // and per GB-hour, so its tab-second rate is twice the first's.
+    let check = readPricing({
+      ...Object.fromEntries(
+        (
+          Object.keys(PRICING_VARIABLES) as (keyof typeof PRICING_VARIABLES)[]
+        ).map((name) => [
+          PRICING_VARIABLES[name],
+          String(pricing.values[name]),
+        ]),
+      ),
+      PRICING_PRERENDER_USD_PER_VCPU_HOUR: '0.08096',
+      PRICING_PRERENDER_USD_PER_MEMORY_GB_HOUR: '0.00889',
+    });
+    if (!check.ok) {
+      throw new Error('expected the second prices to pass their check');
+    }
+    let pricier = check.pricing;
+    assert.notStrictEqual(pricier.version, pricing.version);
+    await recordPricing(dbAdapter, pricing);
+    await recordPricing(dbAdapter, pricier);
+
+    let usage = { prerender_tab_seconds: 600 };
+    let since = Math.floor(Date.now() / 1000) - 1;
+    await chargeMetered(dbAdapter, {
+      payer: PAYER,
+      charge: { kind: 'run', realm: REALM, runId: RUN_A },
+      usage,
+      pricing,
+    });
+    await chargeMetered(dbAdapter, {
+      payer: PAYER,
+      charge: { kind: 'run', realm: REALM, runId: RUN_B },
+      usage,
+      pricing: pricier,
+    });
+    await dateChargesAfter(since, IN_PERIOD);
+
+    let report = await getCostCoverage(dbAdapter, { from: FROM, to: TO });
+    let cheap = lineFor(report, 'run', pricing.version);
+    let dear = lineFor(report, 'run', pricier.version);
+    closeTo(
+      assert,
+      cheap.costUsd,
+      600 * pricing.prerenderTabUsdPerSecond,
+      'the first charge is priced at the first rates',
+    );
+    closeTo(
+      assert,
+      dear.costUsd,
+      600 * pricier.prerenderTabUsdPerSecond,
+      'the second charge is priced at the second rates',
+    );
+    closeTo(
+      assert,
+      dear.costUsd,
+      2 * cheap.costUsd,
+      'twice the rate costs twice as much',
+    );
+    assert.strictEqual(dear.shortfallCredits, 0);
+    assert.strictEqual(cheap.shortfallCredits, 0);
   });
 });
