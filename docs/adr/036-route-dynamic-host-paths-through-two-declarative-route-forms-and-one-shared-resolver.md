@@ -111,7 +111,10 @@ parent or value not loaded) and give no address, instead of trying a later
 route. When a link needs a card that isn't loaded, the link helper MUST ask
 the store for it and give the card's own URL until it arrives, then the
 address. The prerender MUST wait for those loads before it stores the HTML.
-Where the server needs a card's canonical address, as for an alias's 301, it
+A link to a nested route MAY give one card or id for each dynamic level
+(`{{hrefTo category product}}`). Given only the child, the parent MUST come
+from the child's link to it, and when only the parent holds the link, the
+link MUST fall back to the card's own URL. Where the server needs a card's canonical address, as for an alias's 301, it
 MUST work it out from index data, as the visitor, through the same canonical
 route walk. Both MUST give the same address for the same card, at prerender
 and in the browser alike. An address MUST be the routed path on the realm's
@@ -178,7 +181,11 @@ reverse lookup stops at a route it can't decide yet, because a later route's
 address would not be canonical, and the prerender and the browser would
 disagree once the card loads [5]. It doesn't search, because it must be
 synchronous and give the same answer at prerender and in the browser [10].
-The server never holds a loaded card (ADR 015 §1.1), so its canonical address
+A nested link may give a card per level, so a template that has both cards
+loads nothing more and picks the parent when there are several. One card
+also works, because the alias 301, a card's own path, the sitemap and
+`og:url` have only one card, and they must give the same address as a link
+[5][12]. The server never holds a loaded card (ADR 015 §1.1), so its canonical address
 comes from the index [9]. The stored HTML keeps the realm's URL, and ADR
 033's prefix swap puts in the host URL, so a change of host URL needs no new
 prerender [11]. Until host URLs serve a realm directly, a site is a published
@@ -235,6 +242,8 @@ A hand-written redirect is explicit [10].
 10. Matic Jurglic, 2026-11-17: answers to this ADR's open questions.
 11. Matic Jurglic, 2026-11-17: agreed that stored links keep the routed path
     on the realm's URL, and that ADR 033's prefix swap supplies the host URL.
+12. Matic Jurglic, 2026-11-17: agreed that a nested link may give one card
+    or one card per level.
 
 ## 5. Remediation
 
