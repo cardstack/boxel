@@ -49,6 +49,13 @@ import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
 const MODULES_TABLE = 'modules';
+// The version of what a modules row holds. The realm server keeps the table
+// across a restart when nothing that derived its rows changed (its boot key),
+// and this is part of that key: a change to how a definition is derived or
+// shaped that moves neither the host shell nor the transpiler must bump this,
+// or rows from before the change outlive it. Bumped by hand, like
+// `TRANSPILE_VERSION`.
+export const DEFINITION_CACHE_VERSION = 1;
 const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
 // Postgres NOTIFY channel for cross-instance module-cache invalidation
 // (CS-10952). Each invalidation path emits one or more notifications so
