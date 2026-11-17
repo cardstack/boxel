@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens), the record of each pricing version's values and unit rates (`pricing_versions`), and the cost coverage report that compares, for a period, the credits each charge kind drew with the hosting cost of the usage it priced, by pricing version (`getCostCoverage` and the `credit_charge_costs` view). Use when asking whether the margin covers our cost, which charge kind under-charges, or what prices a pricing version stands for, when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens), the record of each pricing version's values and unit rates (`pricing_versions`), and the cost coverage report that compares, for a period, the credits each charge kind drew with the hosting cost of the usage it priced, by pricing version (`getCostCoverage` and the `credit_charge_costs` view). Use when asking whether the margin covers our cost, which charge kind under-charges, or what prices a pricing version stands for, when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when an automation run was refused for its balance or a credit cap (`insufficient-credits`, `daily-credit-cap-reached`, `monthly-credit-cap-reached`, `pricing-unavailable`), when asking how a run's minimum balance is computed, what runs in flight hold against a balance, or which charges count toward an automation's daily and monthly caps, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/automation-spending.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -88,7 +88,8 @@ every prerender server. The code holds no prices and no fallbacks.
   check rather than being guessed at.
 - **The floor is a floor.** An automation's minimum balance is computed from
   its caps at the current prices, and is never lower than
-  `PRICING_MINIMUM_BALANCE_FLOOR_CREDITS` (ADR 029 §1.5).
+  `PRICING_MINIMUM_BALANCE_FLOOR_CREDITS` (ADR 029 §1.5; _The minimum balance
+  and the credit caps_, below).
 
 ## The startup check and the pricing version
 
@@ -378,6 +379,106 @@ added to it, since Preview is charged to whoever clicks, not the payer.
 The result also breaks the ceiling into its parts (`perRun`) and the runs
 into `unboundedRunsPerMonth`, `boundedRunsPerMonth`, `onceRuns` and one entry
 per trigger, so the screen can show where the number comes from.
+
+## The minimum balance and the credit caps
+
+Before a run costs anything, its admission's spending check
+(`buildAdmitSpending` in `packages/realm-server/lib/automation-spending.ts`,
+wired as `admitSpending` by `buildAutomationAdmissionChecks`) admits it or
+refuses it (ADR 029 §1.5). It holds the cost lock of the person the run acts
+as (`withUserCostLock`), so it serializes with that person's charges and
+their other runs' checks, and in order:
+
+1. **The minimum balance.** The person's balance (every bucket's grants and
+   purchases less what was used and expired, `sumUpAvailableCredits`), less
+   what their other runs in flight hold, must be at least the run's minimum
+   balance:
+
+   ```
+   ceiling = ceil(runCostCeiling(caps).totalCredits)
+   minimum = max(ceiling, PRICING_MINIMUM_BALANCE_FLOOR_CREDITS)
+   ```
+
+   `caps` is the caps snapshot once the automation is switched on, and the
+   run's caps for a run with no row. The minimum covers a whole run because
+   `spendCredits` charges only what the balance holds. Like the estimate, it
+   leaves out the run's indexing.
+
+2. **The automation's credit caps**, for a run of the automation's own (a
+   trigger's run or a batch's follow-up; a Preview or Run now is charged to
+   whoever clicked and isn't held to the payer's caps). What the ledger
+   charged the automation since the start of this UTC day, and of this UTC
+   month, plus what its other runs in flight hold, must be under
+   `dailyCredits` and `monthlyCredits` from the caps snapshot. A cap the
+   snapshot leaves unset doesn't limit. The caps cover every charge kind that
+   names the automation: rows whose `run_id` is one of its runs (run, run
+   indexing, AI, batched AI) and its `storage` rows. Only runs created up to
+   two days before the day or month began are read, which covers a batch
+   billed up to its 24-hour deadline after its run. A run admitted under a
+   cap can take the automation past it by at most what that run costs. The
+   balance comes first, so a run refused for a cap had balance enough.
+3. **The hold.** An admitted run records `ceiling` as
+   `automation_runs.cost_ceiling_credits` (`holdAutomationRunCredits`), so the
+   next check counts it. `creditsHeldByRunsInFlight` sums the holds:
+   - a run holds its ceiling less the AI the ledger has charged it (its `ai`
+     rows), since each AI request is charged as it finishes and is already
+     out of the balance. `ai_credits_spent` isn't used: a request whose cost
+     couldn't be learned adds its reservation there but charges nothing;
+   - a hold counts from admission until `chargeAutomationRun` releases it
+     (`credit_hold_released_at`, `releaseAutomationRunCreditHold`) once the
+     run has ended and its `run` charge is written, or it had nothing to
+     charge. A run canceled while its tab still runs keeps its hold until the
+     attempt has charged what the tab used;
+   - a hold nothing releases (the charge couldn't be written, or the run was
+     closed without an attempt) lapses an hour after the run ended.
+
+   Two runs admitted at once can't both pass on one run's worth of balance.
+
+The hold binds automation runs only: an interactive AI request is admitted on
+the plain balance (`validateAICredits`), so it can spend credits a run holds,
+and the run's charge then draws what is left.
+
+A worker whose pricing check failed refuses every run. The refusal codes,
+each the run's `error_reason`:
+
+| Code                         | Why                                                                                     |
+| ---------------------------- | --------------------------------------------------------------------------------------- |
+| `insufficient-credits`       | the balance less the holds is below the minimum                                         |
+| `daily-credit-cap-reached`   | the automation's charges today (UTC) plus its other holds reached `dailyCredits`        |
+| `monthly-credit-cap-reached` | the automation's charges this month (UTC) plus its other holds reached `monthlyCredits` |
+| `pricing-unavailable`        | the worker has no prices (ADR 029 §1.3)                                                 |
+
+`SPENDING_REFUSAL_REASONS` in `automation-admission.ts` lists them. A payer's
+run refused with `insufficient-credits` moves the automation to _waiting for
+credits_ (the `automations` skill); a payer's run admitted, or refused only
+for a cap, moves it back to active. A cap leaves the automation's runs
+refused until the day or month turns.
+
+```sql
+-- What a person's runs in flight hold against their balance, as admission
+-- counts it.
+SELECT r.id, r.automation_id, r.state, r.cost_ceiling_credits,
+       COALESCE(ai.charged, 0) AS ai_charged,
+       GREATEST(r.cost_ceiling_credits - COALESCE(ai.charged, 0), 0) AS held
+FROM automation_runs r
+LEFT JOIN LATERAL (
+  SELECT -SUM(l.credit_amount) AS charged FROM credits_ledger l
+  WHERE l.run_id = r.id AND l.charge_kind = 'ai'
+) ai ON true
+WHERE r.acts_as = '<matrix user id>'
+  AND r.cost_ceiling_credits IS NOT NULL
+  AND r.credit_hold_released_at IS NULL
+  AND (r.finished_at IS NULL OR r.finished_at > now() - interval '1 hour');
+
+-- What an automation was charged this UTC month, by kind.
+SELECT l.charge_kind, -SUM(l.credit_amount) AS credits
+FROM credits_ledger l
+WHERE l.created_at >= extract(epoch FROM date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+  AND ((l.charge_kind = 'storage' AND l.automation_id = '<automation card id>')
+       OR l.run_id IN (SELECT id FROM automation_runs
+                       WHERE automation_id = '<automation card id>' AND trigger <> 'manual'))
+GROUP BY l.charge_kind;
+```
 
 ## A run's AI requests
 
