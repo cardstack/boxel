@@ -217,7 +217,11 @@ import {
   getAutomationRun,
   recordAutomationRunCommitted,
 } from './automation-runs.ts';
-import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
+import { runChangeReporter } from './automation-run-events.ts';
+import {
+  fetchDirectWriters,
+  isDirectWriter,
+} from './db-queries/realm-permission-queries.ts';
 import {
   RUN_COMMIT_PATH,
   claimRunOverlayCommit,
@@ -663,6 +667,7 @@ import type {
   CoalescedIndexWrite,
   FileWatcherEventContent,
   IncrementalIndexEventContent,
+  JobEventContent,
   RealmEventContent,
   RealmWideIncrementalIndexEventContent,
   UpdateRealmEventContent,
@@ -13502,6 +13507,7 @@ export class Realm {
         definitionLookup: this.#definitionLookup,
         virtualNetwork: this.#virtualNetwork,
         run,
+        reportRunChange: (runId) => this.reportRunChange(runId),
       });
       this.#callApiRunMeters.set(requestContext, meter);
     }
@@ -14537,6 +14543,11 @@ export class Realm {
       secrets: token ? [token] : [],
       attempt: call.attempt,
     });
+    if (result.milestones > 0) {
+      // Not awaited: the run's tab is waiting on this answer, and the event
+      // is a report the run doesn't depend on.
+      void this.reportRunChange(call.runId);
+    }
     return answer(200, {
       data: {
         type: 'run-log',
@@ -14846,6 +14857,7 @@ export class Realm {
         );
       }
       claimed = true;
+      void this.reportRunChange(runId);
     };
 
     // A repeat of a commit that landed, such as one whose answer was lost,
@@ -14887,6 +14899,7 @@ export class Realm {
         // writes anything, so the claim it holds can go.
         if (claimed) {
           await releaseRunOverlayCommitClaim(this.#dbAdapter, key);
+          void this.reportRunChange(runId);
         }
         this.#log.warn(
           `run ${runId} commit refused before any file was written: ${err.error.code ?? err.message}`,
@@ -14908,7 +14921,9 @@ export class Realm {
       );
       throw err;
     }
-    await recordAutomationRunCommitted(this.#dbAdapter, runId);
+    if (await recordAutomationRunCommitted(this.#dbAdapter, runId)) {
+      void this.reportRunChange(runId);
+    }
     // The batch has landed, so the answer is a success from here on: the
     // count and the discard are bookkeeping, and the run's finish discards
     // the overlay again.
@@ -22197,6 +22212,10 @@ export class Realm {
     event: RealmEventContent,
     delivery?: RealmEventDelivery,
   ): Promise<void> {
+    if (event.eventName === 'job') {
+      await this.broadcastJobEvent(event);
+      return;
+    }
     this.#adapter.broadcastRealmEvent(
       event,
       this.url,
@@ -22217,12 +22236,51 @@ export class Realm {
   // The adapter stamps this realm's canonical url on the event, so it reaches
   // subscribed hosts exactly as a web-tier-originated event does.
   async broadcastEvent(event: RealmEventContent): Promise<void> {
+    if (event.eventName === 'job') {
+      await this.broadcastJobEvent(event);
+      return;
+    }
     await this.#adapter.broadcastRealmEvent(
       event,
       this.url,
       this.#matrixClient,
       this.#dbAdapter,
     );
+  }
+
+  // An automation run's `job` event goes to the session rooms of the realm's
+  // direct writers and nowhere else: never into the realm's own room, and
+  // never to a reader, a `*` or `users` grant, or a policy grant. The writers
+  // are read as the event goes out, so a writer whose row was removed stops
+  // receiving them at once. A realm with no direct writer sends nothing.
+  async broadcastJobEvent(event: JobEventContent): Promise<void> {
+    let recipients = await fetchDirectWriters(
+      this.#dbAdapter,
+      new URL(this.url),
+      this.#matrixClient.serverName,
+    );
+    if (recipients.length === 0) {
+      return;
+    }
+    await this.#adapter.broadcastRealmEvent(
+      { ...event, realmURL: this.url },
+      this.url,
+      this.#matrixClient,
+      this.#dbAdapter,
+      { recipients },
+    );
+  }
+
+  // Reports that one of this realm's automation runs moved (see
+  // `automation-run-events.ts`), for the changes the realm itself makes to a
+  // run: its milestones, its commit, and a call that ends it at a cap.
+  async reportRunChange(runId: string): Promise<void> {
+    await runChangeReporter({
+      dbAdapter: this.#dbAdapter,
+      virtualNetwork: this.#virtualNetwork,
+      send: (event) => this.broadcastJobEvent(event),
+      log: this.#log,
+    })(runId);
   }
 
   // CS-11126: no memoization. `realm_permissions` is indexed by

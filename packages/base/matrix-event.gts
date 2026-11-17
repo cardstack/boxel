@@ -484,7 +484,8 @@ export interface RealmEvent extends BaseMatrixEvent {
 export type RealmEventContent =
   | IndexRealmEventContent
   | PrerenderHtmlEventContent
-  | UpdateRealmEventContent;
+  | UpdateRealmEventContent
+  | JobEventContent;
 
 export type IndexRealmEventContent =
   | IncrementalIndexEventContent
@@ -660,6 +661,29 @@ export interface UpdateRealmEventContent {
   added?: string[];
   updated?: string[];
   removed?: string[];
+  realmURL: string;
+}
+
+// An automation run moved: its state, its step or its run milestone changed.
+// It goes only to the session rooms of the realm's direct writers, never into
+// the realm's own room, and it names no person: who the run acts as, who
+// canceled it and why it ended are read from the realm's routes, which check
+// who is asking. A subscriber treats it as a cue to read the run again, since
+// a later change can overtake an earlier event.
+export interface JobEventContent {
+  eventName: 'job';
+  // The run's `automation_runs` id.
+  runId: string;
+  // The URL of the automation card the run belongs to.
+  automation: string;
+  state: 'pending' | 'running' | 'complete' | 'error' | 'canceled';
+  // Where the run is, or for an ended run where it got to: `admission`
+  // checks the run may go ahead, `script` runs it, `commit` lands its writes.
+  // Null for a run no attempt has started.
+  step: 'admission' | 'script' | 'commit' | null;
+  // The name of the run milestone the script reported last, or null before
+  // its first.
+  milestone: string | null;
   realmURL: string;
 }
 
