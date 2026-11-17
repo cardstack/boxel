@@ -216,6 +216,7 @@ import {
   automationRunForCall,
   getAutomationRun,
   recordAutomationRunCommitted,
+  recordAutomationRunCredentialRefusal,
 } from './automation-runs.ts';
 import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import {
@@ -231,8 +232,13 @@ import {
 } from './run-overlay.ts';
 import {
   automationRunCallApiMeter,
+  credentialRefusalOf,
   readRunLimits,
 } from './automation-run-limits.ts';
+import {
+  endsRunOnCredential,
+  subjectOfRefusal,
+} from './card-operations/call-api.ts';
 import {
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
@@ -14525,6 +14531,7 @@ export class Realm {
   // Checks each operation the run's automation declares as the run's
   // identity, without opening any key (`CallApiSender.admitAutomation`), and
   // answers the first refusal, or none (see `automation-admission-route.ts`).
+  // A refused credential that ends the run is recorded on its row.
   private async admitRunOperations(
     _request: Request,
     requestContext: RequestContext,
@@ -14585,10 +14592,22 @@ export class Realm {
         payer: call.actsAs,
       });
       if (refused) {
+        // A credential only a person can fix is recorded on the run, with
+        // the share or key the refused slot is filled from, before the
+        // worker ends it: the run's notices are read against it.
+        let subject = subjectOfRefusal(refused);
+        if (subject && endsRunOnCredential(refused.error)) {
+          await recordAutomationRunCredentialRefusal(
+            this.#dbAdapter,
+            call.runId,
+            call.attempt,
+            credentialRefusalOf(refused.error, subject),
+          );
+        }
         return answer({
           refusal: {
-            code: refused.code,
-            detail: refused.detail,
+            code: refused.error.code,
+            detail: refused.error.detail,
             operation: declared.operation,
             targetType: {
               module: String(declared.targetType.module),

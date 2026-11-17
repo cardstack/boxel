@@ -133,9 +133,8 @@ export function createCallApiSender(
     ...(publishedFrom
       ? {}
       : {
-          admitAutomation: async (args) =>
-            (await automationAdmission(dbAdapter, { ...args, probeIntervalMs }))
-              ?.error,
+          admitAutomation: (args) =>
+            automationAdmission(dbAdapter, { ...args, probeIntervalMs }),
         }),
     send: async (request, credentials, options) => {
       if (await tokenEndpointAt(dbAdapter, request.url)) {
