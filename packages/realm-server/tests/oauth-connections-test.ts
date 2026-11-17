@@ -1712,7 +1712,8 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(await notices(refused.run), [
         {
           kind: 'fix-share',
-          recipients: [OWNER, TEAMMATE, REALM_USER].sort(),
+          // The realm's own user is a bot account, never a direct writer.
+          recipients: [OWNER, TEAMMATE].sort(),
           shareId: share.id,
           realmURL: realmURL.href,
         },
