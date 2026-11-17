@@ -1,7 +1,6 @@
 import { test, expect } from './fixtures.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 import {
-  clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
   enterWorkspace,
@@ -10,7 +9,6 @@ import {
 test.describe('Create Realm via Dashboard', () => {
   test('it can create a new realm', async ({ page }) => {
     let serverIndexUrl = new URL(appURL).origin;
-    await clearLocalStorage(page, serverIndexUrl);
 
     let { username } = await createSubscribedUserAndLogin(
       page,

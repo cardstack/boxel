@@ -5,6 +5,7 @@ import {
   type Frame,
   type FrameLocator,
   type Page,
+  type Request,
 } from '@playwright/test';
 import type { Credentials } from '../support/synapse/index.ts';
 import {
@@ -415,13 +416,42 @@ export async function createRealm(
   }
 }
 
+// The page being left can still start a navigation of its own while the
+// `goto` is pending (a signed-out app sends itself to the secure origin's
+// sign-in after it boots, for example), and Chromium then aborts the `goto`
+// with `net::ERR_ABORTED`. If the `goto` fails, its error names the page it
+// started from and every main-frame navigation request made while it ran,
+// so the navigation that won shows in the test output.
 export async function openRoot(page: Page, url = testHost) {
-  await page.goto(url);
-}
-
-export async function clearLocalStorage(page: Page, appURL = testHost) {
-  await openRoot(page, appURL);
-  await page.evaluate(() => window.localStorage.clear());
+  let startedAt = Date.now();
+  let from = page.url();
+  let navigations: string[] = [];
+  let onRequest = (request: Request) => {
+    try {
+      if (
+        request.isNavigationRequest() &&
+        request.frame() === page.mainFrame()
+      ) {
+        navigations.push(`+${Date.now() - startedAt}ms ${request.url()}`);
+      }
+    } catch {
+      // A service worker's request has no frame.
+    }
+  };
+  page.on('request', onRequest);
+  try {
+    await page.goto(url);
+  } catch (e) {
+    if (e instanceof Error) {
+      e.message +=
+        `\n[openRoot] started from ${from}; failed after ` +
+        `${Date.now() - startedAt}ms. Main-frame navigation requests ` +
+        `during the goto: ${navigations.join(' → ') || '(none)'}`;
+    }
+    throw e;
+  } finally {
+    page.off('request', onRequest);
+  }
 }
 
 // The model shown in the editor. An older model can still be in the list
