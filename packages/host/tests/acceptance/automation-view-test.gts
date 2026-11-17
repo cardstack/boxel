@@ -210,10 +210,10 @@ module('Acceptance | automation view', function (hooks) {
   }
 
   // The automation in one format, as code mode previews it.
-  async function openFormat(format: 'embedded' | 'fitted') {
+  async function openFormat(format: 'embedded' | 'fitted', id = AUTOMATION) {
     await visitOperatorMode({
       submode: 'code',
-      codePath: `${AUTOMATION}.json`,
+      codePath: `${id}.json`,
     });
     await click(`[data-test-format-chooser="${format}"]`);
     await waitFor(`[data-test-automation-${format}]`, { timeout: 10000 });
@@ -758,5 +758,206 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-status]')
       .includesText('Next run None', 'a done automation has no next run');
+  });
+  // A run that ended with an error in its second planned milestone, after a
+  // milestone the plan didn't list.
+  const FAILED_RUN = {
+    runId: 'run-1',
+    state: 'error',
+    startedAt: '2030-01-01T08:59:00.000Z',
+    finishedAt: '2030-01-01T09:00:00.000Z',
+    plan: ['Fetch issues', 'Group by label', 'Write digest'],
+    milestones: [
+      {
+        name: 'Fetch issues',
+        planned: true,
+        startedAt: '2030-01-01T08:59:00.000Z',
+        endedAt: '2030-01-01T08:59:04.000Z',
+        ms: 4_000,
+      },
+      {
+        name: 'Retry',
+        planned: false,
+        startedAt: '2030-01-01T08:59:04.000Z',
+        endedAt: '2030-01-01T08:59:05.000Z',
+        ms: 1_000,
+      },
+      {
+        name: 'Group by label',
+        planned: true,
+        startedAt: '2030-01-01T08:59:05.000Z',
+        endedAt: '2030-01-01T09:00:00.000Z',
+        ms: 55_000,
+        done: 12,
+        total: 40,
+      },
+    ],
+    ahead: ['Write digest'],
+    failedIn: 'Group by label',
+    dropped: 0,
+  };
+
+  test('the fitted and embedded views show where the last run failed, from the run', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, lastResult: 'error', lastRun: FAILED_RUN },
+    };
+    await openFormat('embedded');
+    await waitFor('[data-test-automation-embedded-milestones="failed"]', {
+      timeout: 10000,
+    });
+    let embedded = text('[data-test-automation-embedded-milestones]') ?? '';
+    assert.true(
+      embedded.includes('Failed in Group by label'),
+      'names the milestone the run failed in',
+    );
+    assert.true(
+      /(^|\D)2 of 4(\D|$)/.test(embedded),
+      "counts the run's milestones, the one the plan didn't list included",
+    );
+    assert.dom('[data-test-automation-embedded-last="error"]').exists();
+    assert.dom('[data-test-automation-embedded-next]').exists();
+
+    await openFormat('fitted');
+    await waitFor('[data-test-automation-fitted-milestones="failed"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-fitted-milestones]')
+      .includesText('Failed in Group by label');
+    assert
+      .dom('[data-test-automation-fitted-milestones]')
+      .includesText(
+        '2 of 4',
+        'the fitted lists name the milestones without their counts, so this is the run count',
+      );
+    assert
+      .dom('[data-test-automation-fitted-focus]')
+      .hasText(
+        'Failed in Group by label',
+        'the two-line sizes lead with the failure, not the schedule',
+      );
+    assert.dom('[data-test-automation-fitted-last="error"]').exists();
+    assert
+      .dom('[data-test-automation-fitted-next]')
+      .exists('an active automation shows its next run');
+  });
+
+  test('the fitted and embedded views show the milestone a run is in', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        currentRun: {
+          ...FAILED_RUN,
+          runId: 'run-2',
+          state: 'running',
+          current: 'Group by label',
+          finishedAt: null,
+          // The milestone the run is in hasn't ended.
+          milestones: FAILED_RUN.milestones.map((milestone, index) =>
+            index === FAILED_RUN.milestones.length - 1
+              ? { ...milestone, endedAt: null }
+              : milestone,
+          ),
+          failedIn: null,
+        },
+      },
+    };
+    await openFormat('embedded');
+    await waitFor('[data-test-automation-embedded-milestones="running"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-embedded-milestones]')
+      .includesText('Running Group by label');
+    await openFormat('fitted');
+    await waitFor('[data-test-automation-fitted-milestones="running"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-fitted-focus]')
+      .hasText('Running Group by label');
+  });
+
+  test('a run that has reached no milestone yet reads as running', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        currentRun: {
+          ...FAILED_RUN,
+          runId: 'run-3',
+          state: 'running',
+          current: null,
+          finishedAt: null,
+          milestones: [],
+          ahead: FAILED_RUN.plan,
+          failedIn: null,
+        },
+      },
+    };
+    await openFormat('embedded');
+    await waitFor('[data-test-automation-embedded-milestones="running"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-embedded-milestones]')
+      .includesText('Running, before the first milestone');
+    assert
+      .dom('[data-test-automation-embedded-milestones]')
+      .includesText('0 of 3');
+  });
+
+  test('before any run, the fitted and embedded views count the milestones the script declares', async function (assert) {
+    answer = { status: 200, attributes: { ...ACTIVE, lastRun: null } };
+    await openFormat('embedded', PLANNED);
+    await waitFor('[data-test-automation-embedded-milestones="planned"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-embedded-milestones]')
+      .includesText('3 milestones planned');
+    await openFormat('fitted', PLANNED);
+    await waitFor('[data-test-automation-fitted-milestones="planned"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-fitted-milestones]')
+      .includesText('0 of 3');
+  });
+
+  test('a viewer the route refuses sees the declared milestones but no runs in the fitted and embedded views', async function (assert) {
+    await openFormat('embedded', PLANNED);
+    await waitFor('[data-test-automation-embedded-milestones="planned"]', {
+      timeout: 10000,
+    });
+    assert.dom('[data-test-automation-embedded-next]').doesNotExist();
+    assert.dom('[data-test-automation-embedded-last]').doesNotExist();
+    await openFormat('fitted', PLANNED);
+    await waitFor('[data-test-automation-fitted-milestones="planned"]', {
+      timeout: 10000,
+    });
+    assert.dom('[data-test-automation-fitted-state]').doesNotExist();
+    assert.dom('[data-test-automation-fitted-next]').doesNotExist();
+    assert.dom('[data-test-automation-fitted-last]').doesNotExist();
+  });
+
+  test('a paused automation shows no next run in the fitted and embedded views', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    await openFormat('embedded');
+    await waitFor('[data-test-automation-embedded-state="Paused"]', {
+      timeout: 10000,
+    });
+    assert.dom('[data-test-automation-embedded-next]').doesNotExist();
+    assert.dom('[data-test-automation-embedded-last="complete"]').exists();
+    await openFormat('fitted');
+    await waitFor('[data-test-automation-fitted-state="Paused"]', {
+      timeout: 10000,
+    });
+    assert.dom('[data-test-automation-fitted-next]').doesNotExist();
   });
 });
