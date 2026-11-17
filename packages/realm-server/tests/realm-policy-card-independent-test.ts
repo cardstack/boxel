@@ -182,6 +182,9 @@ module(basename(import.meta.filename), function () {
         '.[0] == 1',
         '(.status | length) > 0',
         'IF(.status == "open"; true; false)',
+        // Uppercase builtins that read their input.
+        'IN(null)',
+        'JOIN({}; actor()) == []',
       ]) {
         assert.true(reads(source), source);
       }

@@ -21,7 +21,9 @@
 // counts as a read of it:
 //
 // - a path (`.status`, `.[]`, `.[0]`), `..`, a format (`@base64`), and any
-//   builtin run on it, since a builtin may read its input;
+//   builtin run on it but the calls that read the caller and the settings,
+//   since a builtin may read its input. An uppercase name is no exception:
+//   `IN`, `INDEX` and `JOIN` read theirs;
 // - testing it for truth, comparing it, or doing arithmetic with it;
 // - indexing, slicing or iterating it, and a computed object key;
 // - binding it to a variable, since a destructuring pattern reads what it
@@ -65,9 +67,6 @@ function use(fromCard: boolean): void {
     throw new ReadsTheCard();
   }
 }
-
-// An Excel formula computes from its arguments and never reads its input.
-const FORMULA_NAME = /^[A-Z][A-Z0-9_.]*$/;
 
 // Calls that read nothing of their input: the caller, and the realm's and
 // the policy card's settings.
@@ -211,16 +210,9 @@ function call(node: AstNode, input: boolean): boolean {
   if (name === 'instance' || name === 'params') {
     throw new ReadsTheCard();
   }
-  if (FORMULA_NAME.test(name)) {
-    // A formula's arguments run over its input, and it computes its output
-    // from theirs.
-    for (let arg of args) {
-      use(walk(arg, input));
-    }
-    return false;
-  }
-  // Any other builtin may read its input. Once the input is known to hold
-  // nothing of the card, so does everything an argument runs over: the
+  // Any other builtin may read its input, whatever its name: `IN(s)`
+  // compares its input with each output of `s`. Once the input is known to
+  // hold nothing of the card, so does everything an argument runs over: the
   // input, its items, what lies beneath it, or another argument's outputs,
   // each of which is used here.
   use(input);
