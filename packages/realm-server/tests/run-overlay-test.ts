@@ -308,7 +308,12 @@ export class Notice extends CardDef {
     };
   }
 
-  async function patchCardJson(token: string, path: string, doc: unknown) {
+  async function patchCardJson(
+    token: string,
+    path: string,
+    doc: unknown,
+    headers: Record<string, string> = {},
+  ) {
     let response = (await realm.handle(
       new Request(`${realmURL.href}${path}`, {
         method: 'PATCH',
@@ -316,6 +321,7 @@ export class Notice extends CardDef {
           Accept: SupportedMimeType.CardJson,
           'Content-Type': SupportedMimeType.CardJson,
           Authorization: `Bearer ${token}`,
+          ...headers,
         },
         body: JSON.stringify(doc),
       }),
@@ -1125,6 +1131,97 @@ export class Mine extends Automation {}`;
     assert.deepEqual((await readCard(token, path)).data.attributes.nicknames, [
       'Amazing Grace',
     ]);
+  });
+
+  test('a run’s conditional card patch is refused, since nothing holds its check until the commit', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let conditional = await patchCardJson(
+      token,
+      'people/ada',
+      personPatch({ name: 'Ada Lovelace' }),
+      { 'If-Match': '"some-version"' },
+    );
+    assert.strictEqual(conditional.status, 412, conditional.text);
+    assert.deepEqual(await overlayRows(run.id), [], 'nothing is staged');
+
+    let unconditional = await patchCardJson(
+      token,
+      'people/ada',
+      personPatch({ name: 'Ada Lovelace' }),
+      { 'If-Match': '*' },
+    );
+    assert.strictEqual(unconditional.status, 200, unconditional.text);
+  });
+
+  test('a run’s card patch that changes nothing stages nothing', async function (assert) {
+    // Written once through the realm, so the stored file is in the form a
+    // patch serializes it in.
+    let canonical = await patchCardJson(
+      session(),
+      'people/ada',
+      personPatch({ name: 'Ada' }),
+    );
+    assert.strictEqual(canonical.status, 200, canonical.text);
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    let unchanged = await patchCardJson(
+      token,
+      'people/ada',
+      personPatch({ name: 'Ada' }),
+    );
+    assert.strictEqual(unchanged.status, 200, unchanged.text);
+    assert.strictEqual(unchanged.json.data.attributes.name, 'Ada');
+    assert.deepEqual(
+      await overlayRows(run.id),
+      [],
+      'the realm already holds these bytes, so no copy is staged',
+    );
+  });
+
+  test('a run’s card patch at a path where it staged a plain file is refused as the realm refuses one', async function (assert) {
+    let { token } = await createAutomationRunToken(dbAdapter, realm, OWNER);
+    assert.strictEqual(
+      (await writeText(token, 'drafts/memo', 'a plain file')).status,
+      204,
+    );
+    let patched = await patchCardJson(
+      token,
+      'drafts/memo',
+      personPatch({ name: 'Memo' }),
+    );
+    assert.strictEqual(patched.status, 415, patched.text);
+  });
+
+  test('a run’s card create of an automation or a realm policy is refused, and nothing is staged', async function (assert) {
+    let { token, run } = await createAutomationRunToken(
+      dbAdapter,
+      realm,
+      OWNER,
+    );
+    for (let [module, name] of [
+      ['@cardstack/catalog/automation/automation', 'Automation'],
+      ['@cardstack/catalog/realm-policy/realm-policy', 'RealmPolicy'],
+    ]) {
+      let created = await createCardJson(token, {
+        data: {
+          type: 'card',
+          attributes: {},
+          meta: { adoptsFrom: { module, name } },
+        },
+      });
+      assert.true(
+        created.status >= 400,
+        `${name} is refused: ${created.status} ${created.text}`,
+      );
+    }
+    assert.deepEqual(await overlayRows(run.id), [], 'nothing is staged');
   });
 
   function notice(op: 'add' | 'update', href: string, body: string) {

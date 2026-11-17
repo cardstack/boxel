@@ -1439,6 +1439,18 @@ function sameCodeRef(
   );
 }
 
+// Whether two byte arrays hold the same bytes.
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) {
+    return false;
+  }
+  for (let i = 0; i < a.byteLength; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
 function namesGrantableBytes(localPath: LocalPath): boolean {
   return localPath.slice(localPath.lastIndexOf('/') + 1) !== '';
 }
@@ -14438,7 +14450,32 @@ export class Realm {
           files.set(path, joined);
         }
         let list = [...files].map(([path, content]) => ({ path, content }));
-        let refusal = await this.#stageRunFiles(requestContext, run, list);
+        // A file whose bytes are the realm's, where the run has staged
+        // nothing, isn't staged: the realm's commit skips a write that
+        // changes nothing, and a staged copy would count against the run's
+        // `writes` cap and, at commit, put these bytes back over any change
+        // made to the realm's file since.
+        let changed: typeof list = [];
+        for (let file of list) {
+          if ((await staged(file.path)) === undefined) {
+            let source = await core.openSourceBytes(file.path);
+            if (
+              source &&
+              source.size === file.content.byteLength &&
+              sameBytes(
+                await collectBytes(source.read(0, source.size)),
+                file.content,
+              )
+            ) {
+              continue;
+            }
+          }
+          changed.push(file);
+        }
+        let refusal =
+          changed.length > 0
+            ? await this.#stageRunFiles(requestContext, run, changed)
+            : undefined;
         if (refusal) {
           throw new OperationFailure({
             status: refusal.status,
@@ -16074,6 +16111,52 @@ export class Realm {
     return await this.#adapter.openFile(localPath);
   }
 
+  // `nonJsonFileExists` against the files a run sees: its staged files as
+  // well as the realm's.
+  async #runNonJsonFileExists(
+    run: RunOverlayKey,
+    localPath: LocalPath,
+  ): Promise<boolean> {
+    if (localPath.endsWith('.json')) {
+      localPath = localPath.slice(0, -5);
+    }
+    let sees = async (path: LocalPath) =>
+      (await readRunOverlayFile(this.#dbAdapter, run, path)) !== undefined ||
+      (await this.#adapter.exists(path));
+    if (await sees(`${localPath}.json`)) {
+      return false;
+    }
+    return await sees(localPath);
+  }
+
+  // A run's conditional write: refused whenever `If-Match` names a
+  // validator. A run's write is staged, and the realm's version can change
+  // between staging and the run's commit, which checks the files it reads
+  // but not a caller's validator. So a check made at staging would promise a
+  // lost-update guard the commit doesn't keep, and the run's own staged card
+  // has no validator to compare. `*`, or no `If-Match`, asks nothing.
+  #runConditionalWrite(
+    request: Request,
+    url: URL,
+  ): (() => Promise<void>) | undefined {
+    let ifMatch = request.headers.get('if-match');
+    if (ifMatch === null || ifMatch.trim() === '*') {
+      return undefined;
+    }
+    return async () => {
+      throw new OperationFailure({
+        id: url.href,
+        status: 412,
+        code: 'version-conflict',
+        title: 'Precondition Failed',
+        detail:
+          `${request.method} of ${url.href} sent If-Match: ${ifMatch}, and ` +
+          `an automation run's write is staged until the run commits, so ` +
+          `it can't be made conditional on a card's version`,
+      });
+    };
+  }
+
   private async nonJsonFileExists(localPath: LocalPath): Promise<boolean> {
     if (localPath?.endsWith('.json')) {
       localPath = localPath.slice(0, -5);
@@ -16740,8 +16823,9 @@ export class Realm {
       // `lid`, so the host pairs it with its local id only from the `POST`
       // response's `data.id`, which the save flow hands to `api.setId`. The
       // caller it mints for sends no side-loads, since the gate refuses them.
-      // Writes that answer from the serialized echo — prerender and
-      // skip-index-wait callers — return no `included` at all and always have.
+      // Writes that answer from the serialized echo — prerender,
+      // skip-index-wait and automation-run callers — return no `included` at
+      // all.
       let entry = await timings.time('readback', () =>
         this.#realmIndexQueryEngine.cardDocument(new URL(newURL)),
       );
@@ -17094,7 +17178,14 @@ export class Realm {
       admission: CardWriteAdmission;
     },
   ): Promise<Response> {
-    if (await this.nonJsonFileExists(localPath)) {
+    // A run's patch is judged against the files as the run sees them, its
+    // staged ones included.
+    let run = this.#runOverlay(requestContext);
+    if (
+      run
+        ? await this.#runNonJsonFileExists(run, localPath)
+        : await this.nonJsonFileExists(localPath)
+    ) {
       return await admission.answer(
         unsupportedMediaType(request, requestContext),
       );
@@ -17102,7 +17193,12 @@ export class Realm {
     if (localPath.startsWith('_')) {
       return await admission.answer(methodNotAllowed(request, requestContext));
     }
-    if (await this.openFileForMetadata(localPath)) {
+    if (
+      (await this.openFileForMetadata(localPath)) ||
+      (run &&
+        (await readRunOverlayFile(this.#dbAdapter, run, localPath)) !==
+          undefined)
+    ) {
       return await admission.answer(methodNotAllowed(request, requestContext));
     }
 
@@ -17115,7 +17211,6 @@ export class Realm {
     // meets the checks every staged write meets (see `#runBatchCore`). The
     // overlay is never indexed, so the run is answered from the echo, also
     // for a patch that changed nothing.
-    let run = this.#runOverlay(requestContext);
     let answerFromEcho = skipsIndexWait(request) || run !== undefined;
 
     let { data: patch, included: maybeIncluded } = await request.json();
@@ -17152,7 +17247,9 @@ export class Realm {
     // Built after the body is validated, so a payload the realm would have
     // refused anyway still gets the 400 naming what is wrong with it and a
     // 412 means only that the card moved. It runs inside the commit's lock.
-    let precondition = this.#conditionalWrite(request, new URL(instanceURL));
+    let precondition = run
+      ? this.#runConditionalWrite(request, new URL(instanceURL))
+      : this.#conditionalWrite(request, new URL(instanceURL));
 
     // The merge belongs to the update this stages: arrays replacing rather
     // than merging into what is there, the realm-managed `meta` keys a client
