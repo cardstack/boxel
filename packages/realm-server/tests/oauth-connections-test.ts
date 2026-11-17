@@ -26,6 +26,7 @@ import {
   type SecretsKeyring,
 } from '../lib/secrets-at-rest/index.ts';
 import {
+  addUserKey,
   mintKeyWriteTicket,
   deleteUserKey,
   replaceUserKeyValue,
@@ -99,6 +100,12 @@ const serviceModule = `
       base: 'callApi',
       url: '${PROVIDER}/probe',
       headers: { authorization: 'Bearer {{userKey}}' },
+    };
+
+    @operation static team = {
+      base: 'callApi',
+      url: '${PROVIDER}/api/team',
+      headers: { authorization: 'Bearer {{apiKey}}' },
     };
   }
 `;
@@ -175,7 +182,9 @@ module(basename(import.meta.filename), function (hooks) {
     fileSystem: {
       'service.gts': serviceModule,
       ...automationFixture({
-        operations: [{ type: SERVICE, names: ['me', 'elsewhere', 'probe'] }],
+        operations: [
+          { type: SERVICE, names: ['me', 'elsewhere', 'probe', 'team'] },
+        ],
       }),
       'the-service.json': service,
     },
@@ -305,7 +314,16 @@ module(basename(import.meta.filename), function (hooks) {
     };
   }
 
-  async function approve(user: string, keyId: string, operation = 'me') {
+  // Approves `operation` for `user`, filling its slot from `fill`: the
+  // connection or key `keyId` as their own key by default.
+  async function approve(
+    user: string,
+    keyId: string,
+    operation = 'me',
+    fill: Record<string, { keyId?: string; shareId?: string }> = {
+      userKey: { keyId },
+    },
+  ) {
     let auth = await secureSessionAuth(dbAdapter, user);
     let shown = await request
       .get('/_key-bindings/preview')
@@ -333,7 +351,12 @@ module(basename(import.meta.filename), function (hooks) {
                 codeRef: SERVICE,
                 operation,
                 expectedDestination: destination,
-                slots: { userKey: { keyId, expectedFingerprint: fingerprint } },
+                slots: Object.fromEntries(
+                  Object.entries(fill).map(([slot, from]) => [
+                    slot,
+                    { ...from, expectedFingerprint: fingerprint },
+                  ]),
+                ),
               },
             ],
           },
@@ -1762,7 +1785,8 @@ module(basename(import.meta.filename), function (hooks) {
     test("a vendor's 401 to a minted token is asked once more with the token minted then", async function (assert) {
       let { keyId } = await connectAndApprove();
       await allowInteractive();
-      assert.strictEqual((await call(OWNER)).status, 200);
+      let plain = await call(OWNER);
+      assert.strictEqual(plain.status, 200);
       let first = provider.apiCalls.length;
       provider.apiUnauthorized = 1;
       // Another process refreshes the connection while the call is out, and
@@ -1780,6 +1804,20 @@ module(basename(import.meta.filename), function (hooks) {
       assert.notStrictEqual(fresh.token, revoked.token, 'a fresh token');
       assert.strictEqual(refreshes(), 1, 'minted after the other refresh');
       assert.strictEqual(served.run.state, 'running');
+      assert.strictEqual(
+        served.run.callApiCalls,
+        2,
+        "each request the vendor is sent counts against the run's calls",
+      );
+      assert.true(
+        served.run.callApiResponseBytes > plain.run.callApiResponseBytes,
+        'and the bytes of both answers count',
+      );
+      let [uses] = await dbAdapter.execute(
+        `SELECT SUM(count)::int AS n FROM key_uses WHERE run_id = $1`,
+        { bind: [served.run.id] },
+      );
+      assert.strictEqual(uses.n, 2, 'each request is recorded as a use');
 
       provider.onApiUnauthorized = undefined;
       provider.apiUnauthorized = 2;
@@ -1803,6 +1841,105 @@ module(basename(import.meta.filename), function (hooks) {
         'an interactive call is not asked again',
       );
       provider.apiUnauthorized = 0;
+    });
+
+    test("a vendor's 401 to a key shared into the realm ends the run, and tells the realm's direct writers until the key is replaced", async function (assert) {
+      let key = await addUserKey(dbAdapter, keyring, {
+        owner: OWNER,
+        name: 'team token',
+        value: 'static-team-token-1',
+        ticket: await ticket(OWNER, 'add'),
+      });
+      let share = await shareKey(dbAdapter, {
+        owner: OWNER,
+        realm: realmURL.href,
+        keyId: key.id,
+        label: 'Team token',
+        ticket: await ticket(OWNER, 'share', {
+          keyId: key.id,
+          realm: realmURL,
+        }),
+      });
+      let approved = await approve(OWNER, key.id, 'team', {
+        apiKey: { shareId: share.id },
+      });
+      assert.strictEqual(approved.status, 201, approved.text);
+      let before = provider.apiCalls.length;
+      provider.apiUnauthorized = 1;
+      let refused = await call(TEAMMATE, 'team');
+      assert.strictEqual(refused.status, 424, JSON.stringify(refused.body));
+      assert.strictEqual(refused.body.errors[0].code, 'credential-rejected');
+      assert.strictEqual(
+        provider.apiCalls.length,
+        before + 1,
+        'a stored key is not asked again',
+      );
+      assert.strictEqual(refused.run.state, 'error', 'the run ended');
+      assert.deepEqual(refused.run.credentialRefusal, {
+        reason: 'rejected',
+        subject: { kind: 'share', id: share.id },
+      });
+      assert.deepEqual(await notices(refused.run), [
+        {
+          kind: 'fix-share',
+          recipients: [OWNER, TEAMMATE].sort(),
+          shareId: share.id,
+          realmURL: realmURL.href,
+        },
+      ]);
+
+      await replaceUserKeyValue(dbAdapter, keyring, {
+        owner: OWNER,
+        id: key.id,
+        value: 'static-team-token-2',
+        ticket: await ticket(OWNER, 'replace', { keyId: key.id }),
+      });
+      assert.deepEqual(
+        await notices(refused.run),
+        [],
+        'the notice ends once the key is replaced',
+      );
+    });
+
+    test("a broken client_credentials client shared into the realm ends the run, and tells the client's owner", async function (assert) {
+      let machine = await addClient(
+        OWNER,
+        { grantType: 'client_credentials', authorizeUrl: undefined },
+        'machine',
+      );
+      let share = await shareKey(dbAdapter, {
+        owner: OWNER,
+        realm: realmURL.href,
+        keyId: machine.id,
+        label: 'Machine',
+        ticket: await ticket(OWNER, 'share', {
+          keyId: machine.id,
+          realm: realmURL,
+        }),
+      });
+      let approved = await approve(OWNER, machine.id, 'team', {
+        apiKey: { shareId: share.id },
+      });
+      assert.strictEqual(approved.status, 201, approved.text);
+      assert.strictEqual((await call(TEAMMATE, 'team')).status, 200);
+
+      // What the vendor refusing the client's credentials leaves behind.
+      await dbAdapter.execute(
+        `UPDATE oauth_clients SET state = 'broken', broken_at = NOW() WHERE key_id = $1`,
+        { bind: [machine.id] },
+      );
+      let refused = await call(TEAMMATE, 'team');
+      assert.strictEqual(refused.body.errors[0].meta.reason, 'needs-admin');
+      assert.strictEqual(refused.run.state, 'error', 'the run ended');
+      assert.deepEqual(refused.run.credentialRefusal, {
+        reason: 'needs-admin',
+        subject: { kind: 'share', id: share.id },
+      });
+      assert.deepEqual(
+        await notices(refused.run),
+        [{ kind: 'fix-client', recipients: [OWNER], clientKeyId: machine.id }],
+        "the client's owner is told, not the realm's writers",
+      );
     });
   });
 });

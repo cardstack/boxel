@@ -25,7 +25,8 @@ import { mintingFix } from './oauth.ts';
 // - `fix-client`: the OAuth client the credential mints through is broken.
 //   Its owner replaces the client's secret.
 // - `fix-share`: the realm's share is broken: suspended, unshared, holding no
-//   key or another app, or holding a key the vendor refused. The realm's
+//   key or another app, or holding a key the vendor refused, everywhere or at
+//   a destination one of the share's own bindings sends it to. The realm's
 //   direct writers resume it or swap a working key in.
 //
 // A platform client that is broken is the operators' to fix, and tells no
@@ -97,8 +98,10 @@ async function noticesForShare(
 ): Promise<AutomationCredentialNotice[]> {
   let [share] = await query(dbAdapter, [
     `SELECT s.realm_url, s.state, s.key_id, k.kind, k.state AS key_state,
-            EXISTS (SELECT 1 FROM user_key_grants g
-                     WHERE g.key_id = s.key_id AND g.state = 'rejected') AS grant_rejected
+            EXISTS (SELECT 1 FROM key_bindings b
+                      JOIN user_key_grants g ON g.id = b.grant_id
+                     WHERE b.share_id = s.id AND g.key_id = s.key_id
+                       AND g.state = 'rejected') AS grant_rejected
        FROM key_shares s LEFT JOIN user_keys k ON k.id = s.key_id
       WHERE s.id = `,
     param(shareId),

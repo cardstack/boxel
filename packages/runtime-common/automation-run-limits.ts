@@ -382,13 +382,13 @@ export function automationRunCallApiMeter({
     },
     async credentialRetryDelay(retry) {
       let delay = credentialRetryDelaysMs[retry - 1];
-      if (delay === undefined) {
-        return undefined;
-      }
-      let current = await getAutomationRun(dbAdapter, run.runId);
-      return current?.state === 'running' && current.attempt === run.attempt
+      return delay !== undefined && (await this.isRunning())
         ? delay
         : undefined;
+    },
+    async isRunning() {
+      let current = await getAutomationRun(dbAdapter, run.runId);
+      return current?.state === 'running' && current.attempt === run.attempt;
     },
     async endOnCredential(refusal, subject) {
       let ended = await finishAutomationRun(dbAdapter, run.runId, run.attempt, {

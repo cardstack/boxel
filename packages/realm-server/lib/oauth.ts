@@ -966,7 +966,7 @@ export function validateClientRef(raw: unknown): ClientRef {
 const CLIENT_RESOLUTION_COLUMNS = `
   n.client_key_id, n.client_share_id, n.platform_client_id,
   n.client_id AS pinned_client_id, n.token_url AS pinned_token_url,
-  s.state AS share_state, s.label AS share_label,
+  s.state AS share_state, s.label AS share_label, s.realm_url AS share_realm_url,
   own.key_id AS own_key_id, own.state AS own_state, own.grant_type AS own_grant_type,
   own.client_id AS own_client_id, own.token_url AS own_token_url, own.token_auth AS own_token_auth, own.authorize_url AS own_authorize_url,
   ok.owner AS own_owner, ok.name AS own_name,
@@ -1078,17 +1078,61 @@ function clientRefOf(row: Record<string, unknown>): ClientRef | null {
 
 function resolvedClientOf(row: Record<string, unknown>): ResolvedClient {
   let resolved = resolvedClientOfRef(row);
+  return clientFixOf(row, resolved) ? { ...resolved, usable: false } : resolved;
+}
+
+// Which part of the client a connection or connect request names keeps it
+// from minting (see `MintingFix`), or nothing when it may. This is the one
+// judgment of whether a client is usable: `resolvedClientOf` reads it, and so
+// does `mintingFix`, which says whose action fixes it.
+function clientFixOf(
+  row: Record<string, unknown>,
+  resolved = resolvedClientOfRef(row),
+): Exclude<MintingFix, { kind: 'connection' }> | undefined {
   // A connection is pinned to the client its tokens were issued to: one
   // whose share now holds another client (another id, another token
   // endpoint) can't mint through it, and needs an administrator.
-  if (
+  let pinnedElsewhere =
     row.pinned_client_id != null &&
     (resolved.clientId !== row.pinned_client_id ||
-      resolved.tokenURL !== row.pinned_token_url)
-  ) {
-    return { ...resolved, usable: false };
+      resolved.tokenURL !== row.pinned_token_url);
+  let usable = resolved.usable && !pinnedElsewhere;
+  if (row.client_key_id) {
+    return usable
+      ? undefined
+      : {
+          kind: 'client',
+          clientKeyId: row.client_key_id as string,
+          owner: row.own_owner as string,
+        };
   }
-  return resolved;
+  if (row.client_share_id) {
+    if (usable) {
+      return undefined;
+    }
+    // The share still holds the app the connection signed in through, and
+    // only that app is broken.
+    let holdsItsClient =
+      row.share_state === 'active' &&
+      row.shared_key_id != null &&
+      row.shared_grant_type === 'authorization_code' &&
+      !pinnedElsewhere;
+    return holdsItsClient
+      ? {
+          kind: 'client',
+          clientKeyId: row.shared_key_id as string,
+          owner: row.shared_owner as string,
+        }
+      : {
+          kind: 'share',
+          shareId: row.client_share_id as string,
+          realmURL: row.share_realm_url as string,
+        };
+  }
+  if (row.platform_client_id) {
+    return usable ? undefined : { kind: 'platform' };
+  }
+  return { kind: 'gone' };
 }
 
 function resolvedClientOfRef(row: Record<string, unknown>): ResolvedClient {
@@ -2064,8 +2108,7 @@ export async function mintingFix(
 ): Promise<MintingFix | undefined> {
   let [row] = await query(dbAdapter, [
     `SELECT k.kind, k.owner, k.state AS key_state, n.access_expires_at,
-            c.state AS client_state, s.realm_url AS share_realm_url,
-            ${CLIENT_RESOLUTION_COLUMNS}
+            c.state AS client_state, ${CLIENT_RESOLUTION_COLUMNS}
        FROM user_keys k
        LEFT JOIN oauth_connections n ON n.key_id = k.id
        LEFT JOIN oauth_clients c ON c.key_id = k.id
@@ -2090,44 +2133,7 @@ export async function mintingFix(
   if (row.key_state === 'rejected' || accessExpired) {
     return { kind: 'connection' };
   }
-  if (resolvedClientOf(row).usable) {
-    return undefined;
-  }
-  if (row.client_key_id) {
-    return {
-      kind: 'client',
-      clientKeyId: row.own_key_id as string,
-      owner: row.own_owner as string,
-    };
-  }
-  if (row.client_share_id) {
-    let swapped =
-      row.shared_key_id != null &&
-      (row.shared_client_id !== row.pinned_client_id ||
-        row.shared_token_url !== row.pinned_token_url ||
-        row.shared_grant_type !== 'authorization_code');
-    if (
-      row.share_state === 'active' &&
-      row.shared_key_id != null &&
-      !swapped &&
-      row.shared_state !== 'active'
-    ) {
-      return {
-        kind: 'client',
-        clientKeyId: row.shared_key_id as string,
-        owner: row.shared_owner as string,
-      };
-    }
-    return {
-      kind: 'share',
-      shareId: row.client_share_id as string,
-      realmURL: row.share_realm_url as string,
-    };
-  }
-  if (row.platform_client_id) {
-    return { kind: 'platform' };
-  }
-  return { kind: 'gone' };
+  return clientFixOf(row);
 }
 
 class OAuthTokens {

@@ -1105,6 +1105,8 @@ export interface CallApiRunMeter {
   // with `meta.reason: 'unavailable'`); `undefined` when no retry is left, or
   // the run has stopped running.
   credentialRetryDelay(retry: number): Promise<number | undefined>;
+  // Whether the run is still running under this attempt.
+  isRunning(): Promise<boolean>;
   // Ends the run as an error on a credential refused for a reason a person
   // must fix (see `endsRunOnCredential`), recording the share or personal key
   // the refused slot is filled from. A run that already ended is left as it
@@ -1613,6 +1615,11 @@ export async function callApiOperation(
           detail: `${error.error.detail}; asking again in ${Math.round(delay / 1000)} s`,
         });
         await new Promise((resolve) => setTimeout(resolve, delay));
+        // A run that stopped during the pause asks the token endpoint
+        // nothing more.
+        if (!(await runMeter!.isRunning())) {
+          return refuse(error.error, url);
+        }
       }
     }
   };
@@ -1698,11 +1705,15 @@ export async function callApiOperation(
     return credentials;
   };
   let credentials = await credentialsFor(filled);
-  // A run's call counts against its caps just before it is sent, so a call
-  // refused before here never counts.
+  // A run's request counts against its caps just before it is sent, so a call
+  // refused before here never counts. Each request the vendor is sent counts,
+  // a retry included, and is admitted only while the run is still running.
   let sendOptions: CallApiSendOptions | undefined;
   let responseBytes: { bytes: number; budgetReached: boolean } | undefined;
-  if (runMeter) {
+  let admit = async (): Promise<void> => {
+    if (!runMeter) {
+      return;
+    }
     let admission: CallApiRunAdmission;
     try {
       admission = await runMeter.admitCall();
@@ -1719,7 +1730,8 @@ export async function callApiOperation(
         bytesRead = bytes;
       },
     };
-  }
+  };
+  await admit();
   sending = { method: built.method, url: built.url, startedAt: Date.now() };
   let recordResponseBytes = async () =>
     runMeter && responseBytes
@@ -1770,17 +1782,10 @@ export async function callApiOperation(
   ) {
     filled = await fill(built.url);
     credentials = await credentialsFor(filled);
-    if (sendOptions?.responseByteBudget !== undefined) {
-      sendOptions = {
-        ...sendOptions,
-        responseByteBudget: Math.max(
-          0,
-          sendOptions.responseByteBudget - (responseBytes?.bytes ?? 0),
-        ),
-      };
-    }
     responseBytes = undefined;
     bytesRead = undefined;
+    sending = undefined;
+    await admit();
     sending = { method: built.method, url: built.url, startedAt: Date.now() };
     response = await send();
   }
