@@ -135,9 +135,9 @@ that is:
   pass closes it. The `automations` skill's _Diagnosing a run_ covers it.
 - **`error`**: `error_reason` says why. A run admission refused ends before
   its script runs, and its log has an `admission` line naming the code (the
-  `automations` skill's _Admission_ lists them). `timed-out`, `run-failed` and
-  `script-error` after the script started are the script's own. Read the run
-  log (step 5).
+  `automations` skill's _Admission_ lists them). `timed-out`, `call-failed` and
+  `script-error` after the script started are the script's own; `run-failed`
+  is the runner or the platform failing it. Read the run log (step 5).
 - **`canceled`**: `canceled_by` names the person; empty means an automatic
   pause or a remove, and `error_reason` names which.
 - **`complete`**: it ran. The question is what it did: steps 5 and 6.

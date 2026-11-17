@@ -346,6 +346,31 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(canceled?.errorReason, 'repeated-failures');
       });
 
+      test("five runs in a row that a realm call of the script's failed pause the automation, while runs the platform failed don't count", async function (assert) {
+        await switchOn();
+        for (let i = 0; i < 4; i++) {
+          await endedRun('error', {
+            reason: 'call-failed',
+            message: 'File not found: notes/missing.md',
+          });
+          await endedRun('error', { reason: 'run-failed' });
+          await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION);
+        }
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.state,
+          'active',
+        );
+        assert.strictEqual((await failures()).inARow, 4);
+        await endedRun('error', {
+          reason: 'call-failed',
+          message: 'File not found: notes/missing.md',
+        });
+        let result = await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION);
+        assert.true(result?.paused);
+        assert.strictEqual(result?.automation.pauseReason, 'repeated-failures');
+        assert.strictEqual((await failures()).last?.reason, 'call-failed');
+      });
+
       test('a complete run in between resets the streak', async function (assert) {
         await switchOn();
         await failTimes(4);
