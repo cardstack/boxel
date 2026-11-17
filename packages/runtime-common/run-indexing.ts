@@ -2,6 +2,7 @@ import type * as JSONTypes from 'json-typescript';
 
 import { getAutomationRun } from './automation-runs.ts';
 import {
+  automationRunLogTag,
   emitAutomationRunEvent,
   jobOfAttempt,
   type AutomationRunIds,
@@ -298,11 +299,12 @@ export async function chargeRunIndexing({
         workerProcessSeconds,
         prerenderTabSeconds,
       });
-      let message = `indexing of run ${runId} in ${run.realm} for ${run.actsAs} (${measured}): ${result}`;
+      let tag = telemetry ? automationRunLogTag(telemetry.ids) : `run ${runId}`;
+      let message = `in ${run.realm} for ${run.actsAs} (${measured}): ${result}`;
       if (result === 'no-prices' || result === 'no-payer') {
-        log.error(`could not charge the ${message}`);
+        log.error(`${tag} indexing could not be charged ${message}`);
       } else {
-        log.info(`charged the ${message}`);
+        log.info(`${tag} indexing charged ${message}`);
       }
     }, attemptDelaysMs);
   } catch (e) {
