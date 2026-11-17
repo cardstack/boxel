@@ -405,8 +405,9 @@ export function createOAuthProvider({
       }
       return { accountId, claims: async () => ({ sub: accountId }) };
     },
-    // A browser may call the token endpoint only from a page on the origin
-    // of one of the client's redirect URIs, and only for a public client.
+    // A browser may call the token and revocation endpoints only from a page
+    // on the origin of one of the client's redirect URIs, and only for a
+    // public client.
     // The library's default, set so an upgrade can't change it.
     clientBasedCORS: (_ctx: KoaContextWithOIDC, origin: string, client) =>
       browserOriginAllowed(origin, client),

@@ -363,6 +363,60 @@ module(basename(import.meta.filename), function () {
         /grant ended: client/.test(telemetry.logs),
         'the end of the grant is logged with its reason',
       );
+      let stored = JSON.stringify(
+        await db().execute(
+          `SELECT encode(id_hash, 'hex') AS id_hash, payload::text AS payload
+             FROM oauth_provider_tokens
+           UNION ALL
+           SELECT encode(id_hash, 'hex'), payload::text
+             FROM oauth_provider_objects`,
+        ),
+      );
+      for (let [name, value] of Object.entries(secrets)) {
+        assert.false(stored.includes(value), `no row holds the ${name}`);
+      }
+    });
+
+    test('a revocation that fails part way leaves its token, so a retry still ends the grant', async function (assert) {
+      let connection = await connect();
+      // Every update of a grant fails, so ending one fails part way.
+      await db().execute(`
+        CREATE FUNCTION refuse_grant_update() RETURNS trigger AS $$
+        BEGIN
+          RAISE EXCEPTION 'grant updates are refused for this test';
+        END
+        $$ LANGUAGE plpgsql`);
+      await db().execute(`
+        CREATE TRIGGER refuse_grant_update
+          BEFORE UPDATE ON oauth_provider_grants
+          FOR EACH ROW EXECUTE FUNCTION refuse_grant_update()`);
+      try {
+        let failed = await revokeOAuthToken(server(), {
+          client_id: connection.clientId,
+          token: connection.tokens.refresh_token,
+        });
+        assert.notStrictEqual(failed.status, 200, 'the revocation fails');
+      } finally {
+        await db().execute(
+          `DROP TRIGGER refuse_grant_update ON oauth_provider_grants`,
+        );
+        await db().execute(`DROP FUNCTION refuse_grant_update()`);
+      }
+      assert.deepEqual(
+        await grant(connection.grantId),
+        { ended: false, ended_reason: null, tokens: 2 },
+        'the grant is live and keeps its tokens',
+      );
+      let retried = await revokeOAuthToken(server(), {
+        client_id: connection.clientId,
+        token: connection.tokens.refresh_token,
+      });
+      assert.strictEqual(retried.status, 200, retried.text);
+      assert.deepEqual(
+        await grant(connection.grantId),
+        { ended: true, ended_reason: 'client', tokens: 0 },
+        'the retry ends the grant',
+      );
     });
 
     module('CORS', function () {
@@ -508,6 +562,39 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // A body sent as written, which `revokeOAuthToken` would encode.
+    function revokeWithBody(body: string) {
+      return supertest(server())
+        .post('/_oauth-provider/token/revocation')
+        .set('Host', OAUTH_TEST_SERVER_URL.host)
+        .set('Content-Type', 'application/x-www-form-urlencoded')
+        .send(body);
+    }
+
+    test('a body that hides an unknown token behind a live one counts as a failed attempt', async function (assert) {
+      let connection = await connect();
+      let live = encodeURIComponent(connection.tokens.refresh_token!);
+      let client = encodeURIComponent(connection.clientId);
+      let bodies = [
+        // The library reads the first parameter as `?token`, so the token it
+        // acts on is the second.
+        `?token=${live}&token=not-a-token-1&client_id=${client}`,
+        `token=${live}&token=not-a-token-2&client_id=${client}`,
+        `token=not-a-token-3&client_id=${client}&client_id=${client}`,
+      ];
+      for (let body of bodies) {
+        await revokeWithBody(body);
+      }
+      let limited = await revokeWithBody(
+        `?token=${live}&token=not-a-token-4&client_id=${client}`,
+      );
+      assert.strictEqual(limited.status, 429, 'the address is limited');
+      assert.false(
+        (await grant(connection.grantId)).ended,
+        'the live token was never revoked',
+      );
+    });
+
     test("a client's own revocation goes through from a limited address", async function (assert) {
       let connection = await connect();
       for (let i = 0; i < 3; i++) {
@@ -528,6 +615,57 @@ module(basename(import.meta.filename), function () {
         'client',
         'and ends its grant',
       );
+    });
+  });
+
+  module('with a tight grant limit', function (hooks) {
+    let state = setupProvider(hooks, {
+      tokenLimit: {
+        perGrant: { requests: 3, windowSeconds: 3600 },
+        failures: {
+          perAddress: { requests: 1000, windowSeconds: 600 },
+          perNetwork: { requests: 1000, windowSeconds: 600 },
+          overall: { requests: 1000, windowSeconds: 600 },
+          alertAfter: 999,
+        },
+      },
+    });
+    let { server, connect, grant, refreshes } = helpers(state);
+
+    test("a live token sent in requests the library refuses counts against its grant's revocations, apart from its refreshes", async function (assert) {
+      let connection = await connect();
+      let other = await connect();
+      for (let i = 0; i < 3; i++) {
+        let refused = await revokeOAuthToken(
+          server(),
+          {
+            client_id: connection.clientId,
+            token: connection.tokens.refresh_token,
+          },
+          { origin: OTHER_ORIGIN },
+        );
+        assert.strictEqual(refused.status, 400, `refused ${i + 1}`);
+      }
+      let limited = await revokeOAuthToken(server(), {
+        client_id: connection.clientId,
+        token: connection.tokens.refresh_token,
+      });
+      assert.strictEqual(
+        limited.status,
+        429,
+        "the grant's revocations are limited",
+      );
+      assert.ok(limited.headers['retry-after'], 'with when to try again');
+      assert.true(
+        await refreshes(connection),
+        'its refreshes are counted apart, and still go through',
+      );
+      let revoked = await revokeOAuthToken(server(), {
+        client_id: other.clientId,
+        token: other.tokens.refresh_token,
+      });
+      assert.strictEqual(revoked.status, 200, 'another grant is not limited');
+      assert.true((await grant(other.grantId)).ended, 'and is revoked');
     });
   });
 });
