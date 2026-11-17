@@ -34,6 +34,10 @@ import {
   automationJobTimeoutSec,
 } from '@cardstack/runtime-common/automation-run-command';
 import { enqueueAutomationRunJob } from '@cardstack/runtime-common/jobs/run-command';
+import type {
+  ChangedAutomation,
+  ReportAutomationChange,
+} from '@cardstack/runtime-common/automation-change-events';
 import { setupDB } from './helpers/index.ts';
 
 const REALM_URL = 'http://127.0.0.1:4444/payroll/';
@@ -138,12 +142,16 @@ module(basename(import.meta.filename), function (hooks) {
     return result.automation;
   }
 
-  async function tick(now: number): Promise<AutomationTickOutcome[]> {
+  async function tick(
+    now: number,
+    reportAutomationChange?: ReportAutomationChange,
+  ): Promise<AutomationTickOutcome[]> {
     return await tickAutomations(dbAdapter, {
       queue: publisher,
       virtualNetwork,
       readDeclaration: async () => card,
       now,
+      reportAutomationChange,
     });
   }
 
@@ -633,6 +641,30 @@ module(basename(import.meta.filename), function (hooks) {
       'a done automation is not due',
     );
     assert.strictEqual((await runs()).length, 2, 'two runs in all');
+  });
+
+  test('a tick that makes an automation done reports the automation, and a tick that leaves its state reports nothing', async function (assert) {
+    await switchOn([{ ...HOURLY, count: 2 }]);
+    let reported: ChangedAutomation[] = [];
+    let report: ReportAutomationChange = async (automation) => {
+      reported.push(automation);
+    };
+    await tick(NOON + 30, report);
+    assert.deepEqual(
+      reported,
+      [],
+      'the first run leaves the automation active',
+    );
+    await query(dbAdapter, [
+      `UPDATE automation_runs SET state = 'complete', finished_at = now()`,
+    ]);
+    await tick(ONE + 30, report);
+    assert.strictEqual((await row()).state, 'done');
+    assert.deepEqual(
+      reported.map(({ automationId, realm }) => [automationId, realm]),
+      [[AUTOMATION, REALM]],
+      'the last run makes it done, which is reported',
+    );
   });
 
   test('`until` stops a trigger: no slot after it runs', async function (assert) {

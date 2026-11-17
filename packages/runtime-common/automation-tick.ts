@@ -52,7 +52,14 @@
 // comes due. A card that raises a cap above the snapshot is left for the index
 // hook to pause, and a card that doesn't read as a declaration leaves the row
 // due and unchanged until it does.
+//
+// The tick reports each run it starts (`job` events, from the task) and each
+// automation it moves to *done* (`reportAutomationChange`).
 
+import type {
+  ChangedAutomation,
+  ReportAutomationChange,
+} from './automation-change-events.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import type { QueuePublisher } from './queue.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -94,6 +101,9 @@ export interface AutomationTickOptions {
   // Unix seconds; the current time when absent.
   now?: number;
   pageSize?: number;
+  // Told of each automation whose state the tick changed, once its
+  // transaction has committed.
+  reportAutomationChange?: ReportAutomationChange;
 }
 
 // What the tick did with one due trigger slot.
@@ -209,9 +219,19 @@ async function tickAutomation(
   now: number,
   options: AutomationTickOptions,
 ): Promise<AutomationTickOutcome | undefined> {
-  let outcome = await claimAndEnqueue(dbAdapter, automationId, now, options);
+  let changed: { automation?: ChangedAutomation } = {};
+  let outcome = await claimAndEnqueue(
+    dbAdapter,
+    automationId,
+    now,
+    options,
+    changed,
+  );
   if (outcome?.kind === 'enqueued') {
     await logTriggers(dbAdapter, outcome.triggers);
+  }
+  if (changed.automation) {
+    await options.reportAutomationChange?.(changed.automation);
   }
   return outcome;
 }
@@ -221,8 +241,11 @@ async function claimAndEnqueue(
   automationId: RealmResourceIdentifier,
   now: number,
   options: AutomationTickOptions,
+  // Set to the automation when the committed change moved its state.
+  changed: { automation?: ChangedAutomation },
 ): Promise<AutomationTickOutcome | undefined> {
   return await dbAdapter.withTransaction(async (txQuery) => {
+    changed.automation = undefined;
     let [row] = await txQuery([
       'SELECT * FROM automations WHERE automation_id =',
       param(automationId),
@@ -364,6 +387,9 @@ async function claimAndEnqueue(
       'updated_at = now() WHERE automation_id =',
       param(automationId),
     ]);
+    if (state !== automation.state) {
+      changed.automation = automation;
+    }
 
     if (handled.length === 0) {
       return { kind: 'not-due', automationId, state, nextRun };

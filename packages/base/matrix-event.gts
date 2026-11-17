@@ -485,7 +485,8 @@ export type RealmEventContent =
   | IndexRealmEventContent
   | PrerenderHtmlEventContent
   | UpdateRealmEventContent
-  | JobEventContent;
+  | JobEventContent
+  | AutomationEventContent;
 
 export type IndexRealmEventContent =
   | IncrementalIndexEventContent
@@ -685,6 +686,21 @@ export interface JobEventContent {
   // The name of the run milestone the script reported last, or null before
   // its first.
   milestone: string | null;
+  realmURL: string;
+}
+
+// An automation's own row changed: it was switched on, paused, resumed or
+// removed, or its state moved between active, waiting for credits and done.
+// A change that moves one of its runs sends a `job` event instead. Like
+// `job`, it goes only to the session rooms of the realm's direct writers and
+// names no person: who pays, who paused it and why are read from the realm's
+// `_automation-status` route, which checks who is asking. It carries no state
+// of its own, so a subscriber reads the automation again on it.
+export interface AutomationEventContent {
+  eventName: 'automation';
+  // The automation card, as its identifier in RRI form (ADR 002): the
+  // spelling the card's own id has.
+  automation: string;
   realmURL: string;
 }
 
