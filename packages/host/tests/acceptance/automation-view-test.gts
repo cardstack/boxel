@@ -826,7 +826,7 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-state-sentence]')
       .hasText(
-        'Boxel paused the automation because the automation’s settings have problems. Boxel resumes the automation by itself once someone who can edit this workspace fixes each problem below.',
+        'Boxel paused the automation because the automation’s settings have problems. Boxel will resume the automation once someone who can edit this workspace fixes each problem below.',
       );
     assert
       .dom('[data-test-automation-pause-problem="Trigger “hourly”"]')
