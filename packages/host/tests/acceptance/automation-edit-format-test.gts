@@ -301,6 +301,18 @@ module('Acceptance | automation edit format', function (hooks) {
           attributes.batchedAI = true;
           return json;
         })(),
+        // A webhook trigger naming a webhook outside the workspace's list.
+        'automations/stale-webhook.json': (() => {
+          let json = automationJSON('Stale webhook');
+          (json.data.attributes as Record<string, unknown>).triggers = [
+            trigger('webhook', {
+              label: 'stripe',
+              timeZone: null,
+              webhookPath: 'whk_stripe',
+            }),
+          ];
+          return json;
+        })(),
         'automations/fresh.json': (() => {
           let json = automationJSON('Fresh');
           (json.data.attributes as Record<string, unknown>).caps = {};
@@ -675,22 +687,18 @@ module('Acceptance | automation edit format', function (hooks) {
           d.attributes.triggers[0].webhookPath === 'whk_github',
         'the picked webhook’s path is saved',
       );
-      assert.strictEqual(messageOf('Webhook', item), '');
+      assert.strictEqual(
+        messageOf('Webhook', item),
+        'Each delivery to this webhook starts a run. The list shows every webhook that a workspace administrator made.',
+        'with a webhook picked, the field shows its hint and no problem',
+      );
     });
 
     test('a path the list lacks stays a choice, with a problem under the field', async function (assert) {
-      await openEdit();
-      let item = triggerItem(0);
-      await click(item.querySelector('input[type="radio"][value="webhook"]')!);
-      let options = await openPicker(item);
-      await click(options[0]);
-      await waitForSave(
-        (d) => d.attributes.triggers[0].webhookPath === 'whk_stripe',
-        'the first webhook is saved',
-      );
+      // The card names a webhook the route doesn't list.
       webhooks = webhooks!.slice(1);
-      await openEdit();
-      item = triggerItem(0);
+      await openEdit('stale-webhook');
+      let item = triggerItem(0);
       await waitFor('[data-test-automation-webhook-picker]');
       assert.strictEqual(
         messageOf('Webhook', item),
