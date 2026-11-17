@@ -1,12 +1,16 @@
 // The sign-in screen, as both origins draw it: the title, the Google button
 // when the Matrix server offers Google, the fields the caller puts in its
 // block, the link to reset a forgotten password, Sign In, and the link to
-// create an account. A page that signs in for something other than the app,
-// such as the CLI's, names itself with `@title` and says what signing in
-// grants in its `intro` block, in place of the Google subtitle; the screen
-// sets the intro's type and the space around it. It holds no state and sends
-// nothing; the caller decides what each control does. On the secure origin
-// the fields are its own inputs; in the app they are the credential frame.
+// create an account. A page that signs in for one thing alone, such as an app
+// asking to connect, leaves out the links to reset a password and create an
+// account (`@onForgotPassword`, `@onRegister`), which would leave it, and can
+// offer Cancel (`@onCancel`). A page that signs in for something other than
+// the app, such as the CLI's, names itself with `@title` and says what
+// signing in grants in its `intro` block, in place of the Google subtitle; the
+// screen sets the intro's type and the space around it. It holds no state and
+// sends nothing; the caller decides what each control does. On the secure
+// origin the fields are its own inputs; in the app they are the credential
+// frame.
 // The form's method is `post`, as a password manager expects of a sign-in
 // form, so a submit the caller doesn't prevent puts no field in the address.
 //
@@ -15,6 +19,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
 import AuthButton from '../components/auth-button.gts';
+import cn from '../helpers/cn.ts';
 import { Button } from '@cardstack/pretui/components/button';
 import GoogleColor from '../components/icons/google-color.gts';
 
@@ -33,8 +38,10 @@ interface Signature {
     error?: string;
     onSubmit: (event: Event) => void;
     onGoogle: (event: Event) => void;
-    onForgotPassword: (event: Event) => void;
-    onRegister: (event: Event) => void;
+    // Each control is drawn only when given its action.
+    onForgotPassword?: (event: Event) => void;
+    onRegister?: (event: Event) => void;
+    onCancel?: (event: Event) => void;
   };
   Blocks: { default: []; intro: [] };
 }
@@ -78,22 +85,34 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       </div>
     {{/if}}
     {{yield}}
-    <Button
-      type='button'
-      class='forgot-password'
-      @variant='link'
-      {{on 'click' @onForgotPassword}}
-      data-test-forgot-password
-      data-test-secure-forgot-password
-    >Forgot password?</Button>
+    {{#if @onForgotPassword}}
+      <Button
+        type='button'
+        class='forgot-password'
+        @variant='link'
+        {{on 'click' @onForgotPassword}}
+        data-test-forgot-password
+        data-test-secure-forgot-password
+      >Forgot password?</Button>
+    {{/if}}
     <AuthButton
       type='submit'
+      class={{cn after-fields=(if @onForgotPassword false true)}}
       @variant='primary'
       @disabled={{@submitDisabled}}
       @loading={{@submitting}}
       data-test-login-btn
       data-test-secure-password-submit
     >Sign In</AuthButton>
+    {{#if @onCancel}}
+      <AuthButton
+        type='button'
+        class='cancel'
+        @variant='secondary'
+        {{on 'click' @onCancel}}
+        data-test-secure-sign-in-cancel
+      >Cancel</AuthButton>
+    {{/if}}
     {{#if @error}}
       <div
         class='error'
@@ -104,18 +123,22 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
         {{@error}}
       </div>
     {{/if}}
-    <p class='register-prompt'>
-      <span class='register-prompt-text' data-test-secure-register-prompt>Don't
-        have an account?</span>
-      <Button
-        type='button'
-        class='register-link'
-        @variant='link'
-        {{on 'click' @onRegister}}
-        data-test-register-user
-        data-test-secure-register
-      >Create a new Boxel account</Button>
-    </p>
+    {{#if @onRegister}}
+      <p class='register-prompt'>
+        <span
+          class='register-prompt-text'
+          data-test-secure-register-prompt
+        >Don't have an account?</span>
+        <Button
+          type='button'
+          class='register-link'
+          @variant='link'
+          {{on 'click' @onRegister}}
+          data-test-register-user
+          data-test-secure-register
+        >Create a new Boxel account</Button>
+      </p>
+    {{/if}}
   </form>
 
   <style scoped>
@@ -183,6 +206,13 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       margin-top: var(--boxel-sp-4xs);
       margin-bottom: var(--boxel-sp-lg);
       margin-inline-start: auto;
+    }
+    /* Without the reset link, Sign In keeps the space that link leaves. */
+    .after-fields {
+      margin-top: var(--boxel-sp-lg);
+    }
+    .cancel {
+      margin-top: var(--boxel-sp-sm);
     }
     .google-button {
       --pretui-button-gap: var(--boxel-sp-xs);

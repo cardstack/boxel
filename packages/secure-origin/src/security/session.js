@@ -265,8 +265,8 @@ function base64url(bytes) {
 // Begins a sign-in with Google, and answers the address at Google to send
 // this window to. The state, nonce and PKCE verifier stay in this origin's
 // session storage; `resume` is whatever the callback needs to carry on with,
-// or to start again from (which client, the CLI's listener, and the username
-// the CLI named).
+// or to start again from (which client, the CLI's listener, the username the
+// CLI named, and the OAuth flow the authorize page signs in for).
 export async function beginGoogleSignIn(google, resume) {
   let state = randomToken();
   let nonce = randomToken();

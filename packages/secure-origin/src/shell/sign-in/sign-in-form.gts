@@ -37,6 +37,13 @@ interface Signature {
     // The page's heading, for a page that signs in for something other than
     // the app, such as the CLI's; the sign-in's own when not given.
     title?: string;
+    // The OAuth flow a sign-in on the authorize page is for, by its
+    // interaction ID. A Google sign-in returns to that flow's authorize page,
+    // and the links to reset a password and create an account, which would
+    // leave the flow, aren't offered.
+    interaction?: string;
+    // Cancel, offered only when given.
+    onCancel?: () => void;
   };
   // What signing in grants, under the heading, in place of the line
   // inviting a new user to start with Google.
@@ -105,8 +112,9 @@ export default class SignInForm extends Component<Signature> {
         @error={{this.state.error}}
         @onSubmit={{this.submit}}
         @onGoogle={{this.startGoogle}}
-        @onForgotPassword={{this.forgotPassword}}
-        @onRegister={{this.register}}
+        @onForgotPassword={{unless @interaction this.forgotPassword}}
+        @onRegister={{unless @interaction this.register}}
+        @onCancel={{@onCancel}}
       >
         <:intro>{{yield to='intro'}}</:intro>
         <:default>
@@ -131,8 +139,9 @@ export default class SignInForm extends Component<Signature> {
         @error={{this.state.error}}
         @onSubmit={{this.submit}}
         @onGoogle={{this.startGoogle}}
-        @onForgotPassword={{this.forgotPassword}}
-        @onRegister={{this.register}}
+        @onForgotPassword={{unless @interaction this.forgotPassword}}
+        @onRegister={{unless @interaction this.register}}
+        @onCancel={{@onCancel}}
       >
         <Fields
           @username={{this.state.username}}
@@ -235,6 +244,7 @@ export default class SignInForm extends Component<Signature> {
           client: this.args.client,
           cli: this.args.cli,
           username: this.args.username,
+          interaction: this.args.interaction,
         }),
       );
     } catch (e: any) {
