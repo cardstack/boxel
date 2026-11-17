@@ -358,10 +358,13 @@ module('Acceptance | automation view', function (hooks) {
 
     simulateJob(AUTOMATION);
     await waitFor('[data-test-automation-state="Paused"]', { timeout: 10000 });
+    await settled();
+    // One read per event: an ask the other automation's event had set off,
+    // however late it landed, would show here as a second.
     assert.deepEqual(
-      [...new Set(asked.slice(askedBefore))],
+      asked.slice(askedBefore),
       [AUTOMATION],
-      'a job event naming the automation asks its status route again',
+      'a job event naming the automation asks its status route once',
     );
     assert
       .dom('[data-test-automation-status]')
