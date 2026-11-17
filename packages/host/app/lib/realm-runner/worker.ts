@@ -106,6 +106,25 @@ const BOOTSTRAP = `
       }
       return value;
     };
+    // A card that realm.cards.get or realm.cards.search answers is the card
+    // itself, with its fields at the top level, not the document of its
+    // .json file. Reading .data from one throws and names the shape, where it
+    // would otherwise be undefined and the card would read as missing. The
+    // property is not enumerable, so the card still serializes, spreads and
+    // goes back into a realm call without it.
+    const withoutData = (card, answers) => {
+      if (card !== null && typeof card === 'object') {
+        Object.defineProperty(card, 'data', {
+          get() {
+            throw new TypeError(
+              answers +
+                ': { id, path, type, attributes, relationships }. There is no .data; read its fields from .attributes and its links from .relationships',
+            );
+          },
+        });
+      }
+      return card;
+    };
     const onSurface = (methods, prefix) => {
       const kept = {};
       for (const [key, value] of Object.entries(methods)) {
@@ -183,8 +202,18 @@ const BOOTSTRAP = `
               call('fs.download', [sourceUrl, path]),
           },
           cards: {
-            search: (query) => call('cards.search', [query]),
-            get: (path) => call('cards.get', [path]),
+            search: async (query) => {
+              const found = await call('cards.search', [query]);
+              for (const card of found?.cards ?? []) {
+                withoutData(card, 'realm.cards.search returns each card itself');
+              }
+              return found;
+            },
+            get: async (path) =>
+              withoutData(
+                await call('cards.get', [path]),
+                'realm.cards.get returns the card itself',
+              ),
             update: (path, attributes) =>
               call('cards.update', [path, attributes]),
           },

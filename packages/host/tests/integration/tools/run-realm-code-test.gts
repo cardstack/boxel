@@ -1051,6 +1051,39 @@ return await realm.cards.get('people/hassan');`,
     );
   });
 
+  test('realm.cards.get throws on .data, naming the shape it answers, and serializes without it', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    for (let read of ['card.data', 'card?.data?.attributes']) {
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `const card = await realm.cards.get('people/hassan');
+return ${read};`,
+        }),
+        /TypeError in the script.*: realm\.cards\.get returns the card itself: \{ id, path, type, attributes, relationships \}\. There is no \.data; read its fields from \.attributes and its links from \.relationships/,
+        `${read} throws`,
+      );
+    }
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `const card = await realm.cards.get('people/hassan');
+return {
+  card,
+  spread: Object.keys({ ...card }),
+  stringified: Object.keys(JSON.parse(JSON.stringify(card))),
+};`,
+    });
+    let { card, spread, stringified } = JSON.parse(result.scriptResult!);
+    let keys = ['id', 'path', 'type', 'attributes', 'relationships'];
+    assert.deepEqual(Object.keys(card), keys, 'a returned card has no data');
+    assert.deepEqual(spread, keys, 'a spread card has no data');
+    assert.deepEqual(stringified, keys, 'a serialized card has no data');
+  });
+
   test('realm.cards.get says to read a card that is not indexed again only while the workspace is indexing, and names the call that indexes it otherwise', async function (assert) {
     await adapter.write('Pet/unindexed.json', UNINDEXED_PET);
     let command = new RunRealmCodeTool(getService('tool-service').toolContext);
@@ -3799,6 +3832,34 @@ return errors;`);
         card.relationships.chef,
         `${testRealmURL}Chef/ana`,
         'a link is the full URL of the card it names',
+      );
+    });
+
+    test('a found card throws on .data, naming the shape it answers, and serializes without it', async function (assert) {
+      await assert.rejects(
+        run(`const { cards } = await realm.cards.search({ filter: { eq: { name: 'Pancakes' }, on: ${recipeRef} } });
+return cards[0].data.attributes;`),
+        /TypeError in the script.*: realm\.cards\.search returns each card itself: \{ id, path, type, attributes, relationships \}\. There is no \.data; read its fields from \.attributes and its links from \.relationships/,
+      );
+
+      let { value } = await run(`
+const found = await realm.cards.search({ filter: { eq: { name: 'Pancakes' }, on: ${recipeRef} } });
+return {
+  found,
+  spread: Object.keys({ ...found.cards[0] }),
+  stringified: Object.keys(JSON.parse(JSON.stringify(found.cards[0]))),
+};`);
+      let keys = ['id', 'path', 'type', 'attributes', 'relationships'];
+      assert.deepEqual(
+        Object.keys(value.found.cards[0]),
+        keys,
+        'a returned card has no data',
+      );
+      assert.deepEqual(value.spread, keys, 'a spread card has no data');
+      assert.deepEqual(
+        value.stringified,
+        keys,
+        'a serialized card has no data',
       );
     });
 

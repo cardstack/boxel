@@ -1572,7 +1572,8 @@ class RealmFsSession {
       // not count toward MAX_FILES and does not see this run's unsaved
       // state. Values cross into the sandbox only as JSON, so the script gets
       // the card serialized, as read-card-for-ai-assistant sends it to the
-      // model, and not an instance.
+      // model, and not an instance. The sandbox makes reading `.data` from
+      // it, or from a card a search found, throw with this shape.
       case 'cards.get': {
         let id = this.resolve(method, args[0]).replace(/\.json$/, '');
         let read = await this.readCard(id);
@@ -3771,7 +3772,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'can change the skills and model of this room with room.*, can read ' +
     "the user's plan, credit balance and this room's spend with " +
     'room.credits(), and can ' +
-    'refresh the index of the workspace with realm.index.*. A card that ' +
+    'refresh the index of the workspace with realm.index.*. ' +
+    'realm.cards.get answers the card itself, and realm.cards.search ' +
+    'answers { cards, total, truncated } with each card the same: { id, ' +
+    'path, type, attributes, relationships }, where path is its file and ' +
+    "relationships holds each link's URL by field path. Neither has the " +
+    ".data of a card's .json file. realm.cards.get throws when it cannot " +
+    'read the card, with the reason, so a card it answers was found. ' +
+    'A card that ' +
     'realm.cards.get reports as not indexed while the workspace is not ' +
     'indexing will not index by waiting: run ' +
     "realm.index.invalidate('<card path>.json') and read it again, and " +
