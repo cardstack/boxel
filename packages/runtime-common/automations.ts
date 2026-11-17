@@ -153,11 +153,13 @@ export type SpendingRefusalReason = (typeof SPENDING_REFUSAL_REASONS)[number];
 
 // The error reasons of runs the platform failed, rather than the automation:
 // the worker couldn't ask Matrix or the realm whether the run may start, the
-// run's tab or its runner failed or never answered, the commit couldn't be
-// sent or its outcome is unknown, the run's job was lost, or its job and row
-// disagreed. A Matrix, prerender or worker outage fails every automation's
-// runs this way, and counting them would pause every automation that runs
-// during it, each waiting on a person to resume it.
+// run's tab or its runner failed or never answered, a realm call failed while
+// the platform was failing the run's requests, the commit couldn't be sent or
+// its outcome is unknown, the run's job was lost, or its job and row
+// disagreed. A Matrix, prerender, realm or worker outage fails every
+// automation's runs this way, and counting them would pause every automation
+// that runs during it, each waiting on a person to resume it. A realm call
+// that fails on its own terms ends its run as `call-failed`, which counts.
 export const PLATFORM_FAILURE_REASONS = [
   'account-unverifiable',
   'run-admission-failed',
