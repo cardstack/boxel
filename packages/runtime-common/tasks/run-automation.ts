@@ -171,7 +171,10 @@ async function pauseIfFailingRepeatedly(
         ...(ctx.failuresBeforePause !== undefined
           ? { failuresBeforePause: ctx.failuresBeforePause }
           : {}),
+      },
+      {
         reportRunChange: ctx.reportRunChange,
+        reportAutomationChange: ctx.reportAutomationChange,
       },
     );
     if (result?.paused) {

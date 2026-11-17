@@ -275,27 +275,38 @@ module(basename(import.meta.filename), function () {
         return last!;
       }
 
-      test('the pause reports the pending run it cancels once, after it commits', async function (assert) {
+      test('the pause reports the automation and the pending run it cancels once each, after it commits', async function (assert) {
         await switchOn();
         await failTimes(1);
         let pending = await pendingRun('2026-11-12T11:30:00.000Z');
-        let reports: { runId: string; state: string | undefined }[] = [];
-        let reportRunChange: ReportRunChange = async (runId) => {
-          reports.push({
-            runId,
-            state: (await getAutomationRun(dbAdapter, runId))?.state,
-          });
-        };
+        // Each report with what the rows hold when it arrives: a report made
+        // inside the pause's transaction would still see them as they were.
+        let reports: string[] = [];
         let result = await pauseAfterRepeatedFailures(
           rollsBackFirstTransaction(dbAdapter),
           AUTOMATION,
-          { failuresBeforePause: 1, reportRunChange },
+          { failuresBeforePause: 1 },
+          {
+            reportAutomationChange: async ({ automationId, realm }) => {
+              let automation = await getAutomation(dbAdapter, automationId);
+              reports.push(
+                `automation ${automationId} in ${realm} ${automation?.state}`,
+              );
+            },
+            reportRunChange: async (runId) => {
+              let run = await getAutomationRun(dbAdapter, runId);
+              reports.push(`run ${runId} ${run?.state}`);
+            },
+          },
         );
         assert.true(result?.paused);
         assert.deepEqual(
-          reports,
-          [{ runId: pending.id, state: 'canceled' }],
-          'the canceled run is reported once, as canceled, even when the transaction is retried',
+          [...reports].sort(),
+          [
+            `automation ${AUTOMATION} in ${REALM} paused`,
+            `run ${pending.id} canceled`,
+          ].sort(),
+          'the paused automation and the canceled run are each reported once, even when the transaction is retried',
         );
       });
 

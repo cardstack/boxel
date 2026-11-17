@@ -723,8 +723,8 @@ export async function readAutomationFailures(
 
 // Pauses the automation with `repeated-failures` once `failuresBeforePause`
 // of its own runs have failed in a row (see `readAutomationFailures`), which
-// cancels its pending run as every pause does, telling `reportRunChange`
-// about each run it cancels. The streak is read from the
+// cancels its pending run as every pause does; `reporters` hear about the
+// paused automation and each canceled run once the pause commits. The streak is read from the
 // runs, so calling this again, or for a run that didn't fail, changes
 // nothing, and a call a crash skipped is made up by the next failed run's.
 // Only an active automation, or one waiting for credits, pauses: one already
@@ -736,44 +736,40 @@ export async function pauseAfterRepeatedFailures(
   automationId: RealmResourceIdentifier,
   {
     failuresBeforePause = AUTOMATION_FAILURES_BEFORE_PAUSE,
-    reportRunChange,
-  }: { failuresBeforePause?: number; reportRunChange?: ReportRunChange } = {},
+  }: { failuresBeforePause?: number } = {},
+  reporters: AutomationReporters = {},
 ): Promise<{ automation: AutomationRow; paused: boolean } | undefined> {
   if (!Number.isSafeInteger(failuresBeforePause) || failuresBeforePause < 1) {
     throw new Error(
       `an automation pauses after a whole number of failed runs, 1 or more, not ${failuresBeforePause}`,
     );
   }
-  return await withRunCancels(
-    dbAdapter,
-    reportRunChange,
-    async (txQuery, canceled) => {
-      let row = await selectAutomation(txQuery, automationId, { lock: true });
-      if (!row) {
-        return undefined;
-      }
-      let automation = automationFromRow(row);
-      if (
-        automation.state !== 'active' &&
-        automation.state !== 'waiting-for-credits'
-      ) {
-        return { automation, paused: false };
-      }
-      let failures = await readAutomationFailures(txQuery, automationId);
-      if (failures.inARow < failuresBeforePause) {
-        return { automation, paused: false };
-      }
-      return {
-        automation: await pause(
-          txQuery,
-          canceled,
-          automationId,
-          'repeated-failures',
-        ),
-        paused: true,
-      };
-    },
-  );
+  return await withChanges(dbAdapter, reporters, async (txQuery, changes) => {
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    if (
+      automation.state !== 'active' &&
+      automation.state !== 'waiting-for-credits'
+    ) {
+      return { automation, paused: false };
+    }
+    let failures = await readAutomationFailures(txQuery, automationId);
+    if (failures.inARow < failuresBeforePause) {
+      return { automation, paused: false };
+    }
+    return {
+      automation: await pause(
+        txQuery,
+        changes,
+        automationId,
+        'repeated-failures',
+      ),
+      paused: true,
+    };
+  });
 }
 
 // What the index hook did with an automation's row:
