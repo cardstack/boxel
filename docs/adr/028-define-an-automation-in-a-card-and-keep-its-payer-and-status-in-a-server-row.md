@@ -79,8 +79,12 @@ batched-AI follow-up run, and a new id per click for Preview and Run now. A
 run's job args MUST depend only on the automation, the trigger and the slot.
 
 A system cron MUST enqueue a tick job every minute. The tick MUST claim due
-rows with `FOR UPDATE SKIP LOCKED`. It MUST advance a row's next run and the
-trigger's run count in the same transaction that enqueues the run.
+rows with `FOR UPDATE SKIP LOCKED`, and MUST hold a row's claim while it
+enqueues the row's runs. It MUST advance the row's next run and each
+trigger's run count in the claim's transaction, after the runs it advances
+past are enqueued. A run's row and job are keyed by its automation, trigger
+and slot, so a tick that stops before the advance leaves the slot due, and
+the next tick finds the same run and the same job.
 
 A reconcile pass MUST run at startup and periodically. It MUST enqueue a
 make-up run for a trigger whose due time passed with nothing enqueued, or
@@ -122,9 +126,13 @@ catch-up run. UTC storage with the time zone used only for the next run keeps
 
 `run-command` already runs a host command in a prerender tab from a queue
 job, with `runAs`, a `dedupeKey` and a `concurrencyGroup`. Every worker
-manager fires every system cron, so the tick must coalesce. Claiming a row
-and advancing its next run in the transaction that enqueues the run is what
-makes a duplicate tick find nothing due. The `dedupeKey` joins a duplicate
+manager fires every system cron, so the tick must coalesce. Holding a row's
+claim while its runs are enqueued, and advancing its next run before the
+claim is released, is what makes a duplicate tick find nothing due. The
+queue publishes a job in a transaction of its own, and a worker must find a
+run's row when it takes the job, so the run's row and job are written before
+the advance rather than in its transaction; their keys make a repeat of them
+harmless. The `dedupeKey` joins a duplicate
 enqueue that arrives while the run is still queued or running, which
 `run-command` does only for identical args. Two triggers that fire at the
 same moment still start two runs, one after the other in the automation's

@@ -1,4 +1,5 @@
 import {
+  type AffinityArgs,
   type AffinityType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
@@ -23,6 +24,7 @@ import {
   isAffinityOfRealm,
   isRealmAuthorityAffinityKey,
   realmAffinityKeyOf,
+  renderSessionOf,
   toAffinityKey,
 } from './affinity.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
@@ -680,6 +682,7 @@ export class Prerenderer {
 
   async runCommand({
     userId,
+    runRealm,
     auth,
     command,
     commandInput,
@@ -687,7 +690,11 @@ export class Prerenderer {
     priority,
     signal,
   }: {
-    userId: string;
+    // The user a command runs for, on their own affinity. An automation run
+    // names its realm instead, and runs on that realm's run affinity, keyed
+    // by the identity its run token acts as (ADR 025 §1.2).
+    userId?: string;
+    runRealm?: string;
     auth: string;
     command: string;
     commandInput?: Record<string, unknown> | null;
@@ -703,16 +710,24 @@ export class Prerenderer {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
+    let affinity: AffinityArgs;
+    if (runRealm) {
+      if (renderSessionOf(auth).kind !== 'run') {
+        throw new Error(
+          `a command runs on a realm's affinity only for an automation run, whose auth is its run token`,
+        );
+      }
+      affinity = { affinityType: 'realm', affinityValue: runRealm };
+    } else if (userId) {
+      affinity = { affinityType: 'user', affinityValue: userId };
+    } else {
+      throw new Error('a command needs the user it runs for, or its run realm');
+    }
     let commandStart = Date.now();
-    let affinityKey = toAffinityKey({
-      affinityType: 'user',
-      affinityValue: userId,
-      auth,
-    });
+    let affinityKey = toAffinityKey({ ...affinity, auth });
     try {
       let result = await this.#renderRunner.runCommandAttempt({
-        affinityType: 'user',
-        affinityValue: userId,
+        ...affinity,
         auth,
         command,
         commandInput,
@@ -737,7 +752,7 @@ export class Prerenderer {
         );
         throw e;
       }
-      log.error(`command run attempt failed (user ${userId})`, e);
+      log.error(`command run attempt failed (${affinityKey})`, e);
       throw e;
     }
   }

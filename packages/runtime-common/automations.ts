@@ -27,7 +27,10 @@
 // takes a new snapshot.
 //
 // Pausing and removing cancel the automation's pending run, so nothing it
-// queued starts once it stops. A run already running carries on.
+// queued starts once it stops, and its running run, which the realm server
+// refuses from its next call and its tab stops (unless the run already
+// claimed its commit). A person cancels one run, leaving the automation as it
+// is, with `cancelAutomationRunFor`.
 //
 // The tick, the card's index hook and the run task own `next_run`,
 // `trigger_runs`, *waiting for credits*, *done* and the `last_*` columns once
@@ -42,7 +45,13 @@ import {
   type AutomationIndexEntry,
   type AutomationTriggerDeclaration,
 } from './automation-declaration.ts';
-import { cancelPendingAutomationRuns } from './automation-runs.ts';
+import {
+  cancelAutomationRunIn,
+  cancelUnfinishedAutomationRuns,
+  getAutomationRun,
+  logAutomationRunEnded,
+  type AutomationRun,
+} from './automation-runs.ts';
 import {
   computeAutomationSchedule,
   type AutomationSchedule,
@@ -257,8 +266,8 @@ export async function switchOnAutomation(
 }
 
 // Pauses an automation for `user`, a direct writer of its realm, and cancels
-// its pending run. An automation that is paused already keeps the reason it
-// has.
+// its pending run and its running one (see `cancelUnfinishedAutomationRuns`).
+// An automation that is paused already keeps the reason it has.
 export async function pauseAutomation(
   dbAdapter: DBAdapter,
   {
@@ -267,7 +276,7 @@ export async function pauseAutomation(
   }: { automationId: RealmResourceIdentifier; user: string },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
-  return await dbAdapter.withTransaction(async (txQuery) => {
+  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
     let found = await lockForDirectWriter(txQuery, automationId, user, options);
     if (!found.ok) {
       return found;
@@ -281,7 +290,13 @@ export async function pauseAutomation(
     }
     return {
       ok: true,
-      automation: await pause(txQuery, automationId, 'requested', user),
+      automation: await pause(
+        txQuery,
+        canceled,
+        automationId,
+        'requested',
+        user,
+      ),
     };
   });
 }
@@ -342,7 +357,8 @@ export async function resumeAutomation(
 }
 
 // Removes an automation for `user`, a direct writer of its realm: deletes its
-// row and cancels its pending run. Its card and script stay. It returns the
+// row and cancels its pending run and its running one (see
+// `cancelUnfinishedAutomationRuns`). Its card and script stay. It returns the
 // row as it was.
 export async function removeAutomation(
   dbAdapter: DBAdapter,
@@ -352,20 +368,78 @@ export async function removeAutomation(
   }: { automationId: RealmResourceIdentifier; user: string },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
-  return await dbAdapter.withTransaction(async (txQuery) => {
+  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
     let found = await lockForDirectWriter(txQuery, automationId, user, options);
     if (!found.ok) {
       return found;
     }
-    await cancelPendingAutomationRuns(txQuery, automationId, {
-      canceledBy: user,
-    });
+    canceled.push(
+      ...(await cancelUnfinishedAutomationRuns(txQuery, automationId, {
+        canceledBy: user,
+      })),
+    );
     await txQuery([
       'DELETE FROM automations WHERE automation_id =',
       param(automationId),
     ]);
     return { ok: true, automation: found.automation };
   });
+}
+
+// A person's cancel of a run was refused:
+//
+// - `missing`: no such run.
+// - `not-a-direct-writer`: the caller isn't a direct writer of the run's
+//   realm.
+// - `not-cancelable`: the run already ended, or its commit was claimed, so
+//   its writes may already be landing.
+export type AutomationRunCancel =
+  | { ok: true; run: AutomationRun }
+  | { ok: false; reason: 'missing' | 'not-a-direct-writer' }
+  | { ok: false; reason: 'not-cancelable'; run: AutomationRun };
+
+// Cancels a pending or running run for `user`, a direct writer of the run's
+// realm, who the run then names in `canceled_by`. A pending run never starts.
+// A running run's overlay is discarded, so a cancel before the commit writes
+// nothing; the realm server refuses the run's next call, and the run's tab
+// stops its script once the realm answers that the run is not running. The
+// automation's own state doesn't change: its next run comes due as
+// scheduled. A run whose commit was claimed is refused (`not-cancelable`)
+// and finishes as its commit does.
+export async function cancelAutomationRunFor(
+  dbAdapter: DBAdapter,
+  { runId, user }: { runId: string; user: string },
+  options: Omit<AutomationActorOptions, 'now'>,
+): Promise<AutomationRunCancel> {
+  let seen = await getAutomationRun(dbAdapter, runId);
+  if (!seen) {
+    return { ok: false, reason: 'missing' };
+  }
+  let { realm } = seen;
+  let result: AutomationRunCancel = await dbAdapter.withTransaction(
+    async (txQuery): Promise<AutomationRunCancel> => {
+      // The person's permission row is locked before the run's row, as every
+      // change to an automation takes them.
+      if (!(await isDirectWriterOf(txQuery, realm, user, options))) {
+        return { ok: false, reason: 'not-a-direct-writer' };
+      }
+      let run = await cancelAutomationRunIn(txQuery, runId, user);
+      return run ? { ok: true, run } : { ok: false, reason: 'missing' };
+    },
+  );
+  if (result.ok) {
+    await logAutomationRunEnded(dbAdapter, result.run);
+    return result;
+  }
+  if (result.reason === 'not-a-direct-writer') {
+    return result;
+  }
+  // The cancel found the run ended or its commit claimed; answer with the
+  // run as it stands now.
+  let run = await getAutomationRun(dbAdapter, runId);
+  return run
+    ? { ok: false, reason: 'not-cancelable', run }
+    : { ok: false, reason: 'missing' };
 }
 
 // Whether the card's caps and `batchedAI` ask for more than the snapshot the
@@ -406,7 +480,7 @@ export async function checkAutomationCaps(
   automationId: RealmResourceIdentifier,
   card: Pick<AutomationDeclaration, 'caps' | 'batchedAI'>,
 ): Promise<AutomationRow | undefined> {
-  return await dbAdapter.withTransaction(async (txQuery) => {
+  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
     let row = await selectAutomation(txQuery, automationId, { lock: true });
     if (!row) {
       return undefined;
@@ -419,7 +493,7 @@ export async function checkAutomationCaps(
     if (!reason) {
       return automation;
     }
-    return await pause(txQuery, automationId, reason);
+    return await pause(txQuery, canceled, automationId, reason);
   });
 }
 
@@ -432,7 +506,7 @@ export async function checkAutomationPayer(
   automationId: RealmResourceIdentifier,
   options: Omit<AutomationActorOptions, 'now'>,
 ): Promise<AutomationRow | undefined> {
-  return await dbAdapter.withTransaction(async (txQuery) => {
+  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
     let seen = await selectAutomation(txQuery, automationId);
     if (!seen) {
       return undefined;
@@ -454,15 +528,15 @@ export async function checkAutomationPayer(
     ) {
       return automation;
     }
-    return await pause(txQuery, automationId, 'payer-lost-access');
+    return await pause(txQuery, canceled, automationId, 'payer-lost-access');
   });
 }
 
 // What the index hook did with an automation's row:
 //
 // - `removed`: the card is deleted (`card-deleted`), or no longer adopts from
-//   the catalog `Automation` type (`not-an-automation`), so the row and its
-//   pending run are gone.
+//   the catalog `Automation` type (`not-an-automation`), so the row is gone
+//   and its pending and running runs are canceled.
 // - `paused`: the card raised a cap or turned on `batchedAI`.
 // - `recomputed`: the next run, *done* and the trigger cursors follow the
 //   card as indexed.
@@ -512,7 +586,7 @@ export async function syncAutomationWithCard(
   options: AutomationSyncOptions,
 ): Promise<AutomationSync | undefined> {
   let now = options.now ?? currentUnixSeconds();
-  return await dbAdapter.withTransaction(async (txQuery) => {
+  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
     let row = await selectAutomation(txQuery, automationId, { lock: true });
     if (!row) {
       return undefined;
@@ -520,7 +594,7 @@ export async function syncAutomationWithCard(
     let automation = automationFromRow(row);
     let card = await readCard();
     if (!card) {
-      return await removeForCard(txQuery, automation, 'card-deleted');
+      return await removeForCard(txQuery, canceled, automation, 'card-deleted');
     }
     // A card that failed to index carries no document to read, or carries
     // only what an earlier visit recorded. Its row keeps the schedule it had:
@@ -540,7 +614,12 @@ export async function syncAutomationWithCard(
     );
     if (!read.ok) {
       if (read.problems.some(({ code }) => code === 'not-an-automation')) {
-        return await removeForCard(txQuery, automation, 'not-an-automation');
+        return await removeForCard(
+          txQuery,
+          canceled,
+          automation,
+          'not-an-automation',
+        );
       }
       return { kind: 'unchanged', automation };
     }
@@ -552,7 +631,7 @@ export async function syncAutomationWithCard(
     if (reason) {
       return {
         kind: 'paused',
-        automation: await pause(txQuery, automationId, reason),
+        automation: await pause(txQuery, canceled, automationId, reason),
       };
     }
     let cursors = withEditCursors(
@@ -606,14 +685,14 @@ export async function automationsInRealm(
 }
 
 // Pauses every automation in `realm` that isn't paused already, with
-// `realm-archived`, and cancels their pending runs, as archiving the realm
+// `realm-archived`, and cancels their pending and running runs, as archiving the realm
 // does. One already paused keeps its reason: a resume ends any pause. Returns
 // the automations it paused.
 export async function pauseRealmAutomations(
   dbAdapter: DBAdapter,
   realm: RealmIdentifier,
 ): Promise<AutomationRow[]> {
-  return await dbAdapter.withTransaction(async (txQuery) => {
+  return await withRunCancels(dbAdapter, async (txQuery, canceled) => {
     let rows = await txQuery([
       'SELECT automation_id FROM automations WHERE realm =',
       param(realm),
@@ -624,6 +703,7 @@ export async function pauseRealmAutomations(
       paused.push(
         await pause(
           txQuery,
+          canceled,
           row.automation_id as RealmResourceIdentifier,
           'realm-archived',
         ),
@@ -634,15 +714,18 @@ export async function pauseRealmAutomations(
 }
 
 // Deletes the row of an automation whose card is gone or is no longer an
-// automation, and cancels its pending run with that reason.
+// automation, and cancels its pending and running runs with that reason.
 async function removeForCard(
   txQuery: Querier,
+  canceled: AutomationRun[],
   automation: AutomationRow,
   reason: 'card-deleted' | 'not-an-automation',
 ): Promise<AutomationSync> {
-  await cancelPendingAutomationRuns(txQuery, automation.automationId, {
-    reason,
-  });
+  canceled.push(
+    ...(await cancelUnfinishedAutomationRuns(txQuery, automation.automationId, {
+      reason,
+    })),
+  );
   await txQuery([
     'DELETE FROM automations WHERE automation_id =',
     param(automation.automationId),
@@ -675,7 +758,7 @@ function triggerTiming(trigger: AutomationTriggerDeclaration): string {
 // followed the card. A run state that predates those records starts nothing
 // afresh. Run states of labels the card no longer has are kept, so a label
 // that comes back keeps its count.
-function withEditCursors(
+export function withEditCursors(
   triggerRuns: Record<string, AutomationTriggerRuns>,
   triggers: AutomationTriggerDeclaration[],
   editedAt: number,
@@ -697,7 +780,7 @@ function withEditCursors(
 
 // Records, on each run state, the trigger's timing and whether it is live
 // under `schedule`. A label the card no longer has is recorded as not live.
-function recordTriggers(
+export function recordTriggers(
   triggerRuns: Record<string, AutomationTriggerRuns>,
   triggers: AutomationTriggerDeclaration[],
   schedule: AutomationSchedule,
@@ -717,11 +800,12 @@ function recordTriggers(
   return next;
 }
 
-// Pauses the row and cancels its pending run. A run a person's pause cancels
-// names them in `canceled_by`; one any other pause cancels names no one, and
-// carries the pause's reason in `error_reason`.
+// Pauses the row and cancels its pending and running runs. A run a person's
+// pause cancels names them in `canceled_by`; one any other pause cancels
+// names no one, and carries the pause's reason in `error_reason`.
 async function pause(
   txQuery: Querier,
+  canceled: AutomationRun[],
   automationId: RealmResourceIdentifier,
   reason: AutomationPauseReason,
   pausedBy?: string,
@@ -735,12 +819,35 @@ async function pause(
     param(automationId),
     'RETURNING *',
   ]);
-  await cancelPendingAutomationRuns(
-    txQuery,
-    automationId,
-    pausedBy ? { canceledBy: pausedBy } : { reason },
+  canceled.push(
+    ...(await cancelUnfinishedAutomationRuns(
+      txQuery,
+      automationId,
+      pausedBy ? { canceledBy: pausedBy } : { reason },
+    )),
   );
   return automationFromRow(row);
+}
+
+// Runs a change to automations in one transaction, collecting the runs it
+// cancels in `canceled`, and writes each canceled run's last log line once
+// the transaction has committed: a log line locks its run's row, which the
+// transaction holds until then. A transaction the database rolls back and
+// retries starts its collection afresh, so only the attempt that committed
+// is logged.
+async function withRunCancels<T>(
+  dbAdapter: DBAdapter,
+  change: (txQuery: Querier, canceled: AutomationRun[]) => Promise<T>,
+): Promise<T> {
+  let canceled: AutomationRun[] = [];
+  let result = await dbAdapter.withTransaction((txQuery) => {
+    canceled = [];
+    return change(txQuery, canceled);
+  });
+  for (let run of canceled) {
+    await logAutomationRunEnded(dbAdapter, run);
+  }
+  return result;
 }
 
 // Locks the automation's row for a change `user` asks for, once it is found
@@ -775,7 +882,7 @@ async function lockForDirectWriter(
 
 // Whether `declaration` was read from the automation's own card. The two may
 // be spelled in different forms, so both are compared as served URLs.
-function isDeclarationOf(
+export function isDeclarationOf(
   declaration: AutomationDeclaration,
   automationId: RealmResourceIdentifier,
   { virtualNetwork }: Pick<AutomationActorOptions, 'virtualNetwork'>,
@@ -790,7 +897,7 @@ function isDeclarationOf(
   }
 }
 
-async function isDirectWriterOf(
+export async function isDirectWriterOf(
   txQuery: Querier,
   realm: RealmIdentifier,
   user: string,
@@ -859,7 +966,9 @@ function snapshotCaps(
   } as AutomationCapsSnapshot;
 }
 
-function automationFromRow(row: Record<string, PgPrimitive>): AutomationRow {
+export function automationFromRow(
+  row: Record<string, PgPrimitive>,
+): AutomationRow {
   return {
     automationId: row.automation_id as RealmResourceIdentifier,
     realm: row.realm as RealmIdentifier,

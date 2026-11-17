@@ -1,5 +1,6 @@
 import {
   isLintNotRunRuleId,
+  LINT_NOT_RUN_RULE_IDS,
   logger,
   userInitiatedPriority,
   type LintArgs,
@@ -19,6 +20,9 @@ export interface LintOutcome {
   fixedFiles: SubmissionFile[];
   lintErrors: string[];
   fixedFileCount: number;
+  // True when the lint thread ran out of memory on a file. That is a fault
+  // in the lint worker, not in the submitted code.
+  lintRanOutOfMemory: boolean;
 }
 
 const log = logger('bot-runner');
@@ -51,6 +55,7 @@ export function makeLintSubmissionFiles(queuePublisher: QueuePublisher) {
     let fixedFiles: SubmissionFile[] = [];
     let lintErrors: string[] = [];
     let fixedFileCount = 0;
+    let lintRanOutOfMemory = false;
     for (let [i, file] of files.entries()) {
       let result = results[i];
       if (!result) {
@@ -74,6 +79,9 @@ export function makeLintSubmissionFiles(queuePublisher: QueuePublisher) {
         if (message.severity === 2 || isLintNotRunRuleId(message.ruleId)) {
           lintErrors.push(formatLintError(file.filename, message));
         }
+        if (message.ruleId === LINT_NOT_RUN_RULE_IDS.outOfMemory) {
+          lintRanOutOfMemory = true;
+        }
       }
     }
 
@@ -82,6 +90,7 @@ export function makeLintSubmissionFiles(queuePublisher: QueuePublisher) {
       fixedFiles,
       lintErrors,
       fixedFileCount,
+      lintRanOutOfMemory,
     };
     log.info('submission lint: completed', {
       roomId: opts.roomId,
@@ -89,6 +98,7 @@ export function makeLintSubmissionFiles(queuePublisher: QueuePublisher) {
       passed: outcome.passed,
       errorCount: lintErrors.length,
       fixedFileCount,
+      lintRanOutOfMemory,
     });
     return outcome;
   };

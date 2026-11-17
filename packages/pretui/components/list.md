@@ -14,7 +14,7 @@ The kit has other things that draw rows, and none of them is this. **Feed** is `
 @size?                                  — xs|s|m|l|xl; sm/md/lg accepted
 @selectionMode?                         — none|single|multi
 @selected?, @defaultSelected?, @onSelectionChange?
-@onActivate?                            — (row, index): Enter on the focused row
+@onActivate?                            — (row, index): a click on the row, or Enter on the focused row
 @rowLabel?                              — (row, index) => the row's accessible name
 @expandedKeys?, @defaultExpandedKeys?, @onExpandedChange?
 @divided? (default true), @bordered?
@@ -29,6 +29,8 @@ The kit has other things that draw rows, and none of them is this. **Feed** is `
 **Selection is controlled or uncontrolled by the same rule as DataTable:** pass `@selected` and the component stops keeping its own copy; leave it out and it keeps state and still calls `@onSelectionChange`. In `multi` mode the control is a checkbox; in `single` it is a radio, and every radio shares one `name` so the browser enforces the single choice.
 
 **Keys are handled only when the row itself has focus.** ArrowDown/ArrowUp move the cursor, Home/End jump to the ends, Space toggles selection, Enter calls `@onActivate`. A caret in a text field inside a row still gets Home/End and Space types a space, because the handler checks that the event target is the `<li>`.
+
+**A row click calls `@onActivate`** unless the click landed on a link, button, input, menu item or other control or widget inside the row, ended a text selection, or landed in the row's expanded detail.
 
 **`@onActivate` is not a link.** A row with one obvious destination should carry a real `<a>` inside `<:item>` (**Item** has an `href` arg for exactly this); the activate callback is for rows whose action is not navigation.
 

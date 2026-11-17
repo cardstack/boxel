@@ -226,11 +226,12 @@ export type GateSubject =
   // operation that def declares itself. A type the realm cannot resolve never
   // gets here. Resolution refuses it first, as not found.
   | { kind: 'type'; types: string[] }
-  // A stored path that names no card. Only a stored-bytes read is matched
-  // against one, and it resolves what the path actually holds for itself:
-  // the extension table names a file's type, but it does not name every
-  // stored file, and a card's own document is addressed through one of those
-  // extensions too. Every other behavior treats this as unmatched.
+  // A stored path that names no card. Only a stored-bytes read and an update
+  // that replaces the file's bytes are matched against one, and each resolves
+  // what the path actually holds for itself: the extension table names a
+  // file's type, but it does not name every stored file, and a card's own
+  // document is addressed through one of those extensions too. Every other
+  // behavior treats this as unmatched.
   | { kind: 'file'; url: URL }
   // A target no rule is matched against: a URL that does not parse.
   | { kind: 'unmatched' };
@@ -612,10 +613,12 @@ async function decide(
   if (subject.kind === 'type' && base !== 'create') {
     return refuse('unmatchable-target');
   }
-  // The gate grants a file one behavior, the read of its stored bytes. What a
-  // file def carries besides — its metadata `read`, its writes — is granted on
-  // nothing.
-  if (subject.kind === 'file' && base !== 'readSource') {
+  // The gate grants a file two behaviors: the read of its stored bytes, and
+  // the update that replaces them. What a file def carries besides — its
+  // metadata `read`, an `appendLine` — is granted on nothing. A file is
+  // created or removed only by a caller the realm ACL allows, since no
+  // operation a file def carries does either.
+  if (subject.kind === 'file' && base !== 'readSource' && base !== 'update') {
     return refuse('unmatchable-target');
   }
   // The realm's config card and the card its policy key names together
@@ -635,11 +638,12 @@ async function decide(
     return refuse('authorization-infrastructure');
   }
   // Every other behavior is matched on its card's index row, which is peeked
-  // before the policy loads. A stored-bytes read is typed from the bytes it
-  // will serve instead, which costs a file read and a definition lookup, so
-  // none of that is paid until a policy is known to be there.
+  // before the policy loads. A stored-bytes read, and a file's update, are
+  // typed from the bytes stored at the path instead, which costs a file read
+  // and a definition lookup, so none of that is paid until a policy is known
+  // to be there.
   let rowMatched: MatchedSubject | undefined;
-  if (base !== 'readSource') {
+  if (base !== 'readSource' && subject.kind !== 'file') {
     let indexed = await indexedSubject(scope, subject);
     if (!indexed) {
       return refuse('unmatchable-target');
@@ -659,6 +663,13 @@ async function decide(
       ? undefined
       : await storedBytesSubject(core, subject.url));
   if (!matchOn) {
+    return refuse('unmatchable-target');
+  }
+  // A file's update replaces the bytes of a file, so it is matched only where
+  // the path holds one. A card's stored document is updated as the card, by
+  // the card's own `update`, whose grants are matched on the card's type and
+  // whose write the lock judges again from its bytes.
+  if (subject.kind === 'file' && base === 'update' && matchOn.kind !== 'file') {
     return refuse('unmatchable-target');
   }
   let { types } = matchOn;
@@ -749,6 +760,12 @@ async function decide(
   if (unconditional) {
     await admittedAs(scope, unconditional);
     return { kind: 'granted', grant: unconditional, matchedOn, ...lockCheck };
+  }
+  // A write's predicate is judged under the write lock against the card the
+  // write changes, and a file's update changes no card: its bytes are not
+  // fields a predicate reads. So only a grant with no `where` admits one.
+  if (isWrite(base) && matchOn.kind === 'file') {
+    return refuse('unmatchable-target');
   }
   if (isWrite(base)) {
     return {

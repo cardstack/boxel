@@ -16,6 +16,9 @@ import { PgAdapter } from '@cardstack/postgres';
 import { logger } from '@cardstack/runtime-common';
 import { Historian } from './src/historian.ts';
 import { Heartbeat, startHealthServer } from './src/health.ts';
+import { DEFAULT_BACKGROUND_CONCURRENCY } from './src/background.ts';
+import { probeGit } from './src/git-capabilities.ts';
+import { maintenanceKinds } from './src/maintenance.ts';
 
 const log = logger('realm-historian');
 
@@ -30,6 +33,10 @@ let { values: args } = parseArgs({
     taskCount: { type: 'string', default: '1' },
     leaseRenewMs: { type: 'string', default: '10000' },
     leaseExpiryMs: { type: 'string', default: '30000' },
+    backgroundConcurrency: {
+      type: 'string',
+      default: String(DEFAULT_BACKGROUND_CONCURRENCY),
+    },
   },
   strict: true,
 });
@@ -60,6 +67,7 @@ let shardCount = integer('shardCount', 1);
 let taskCount = integer('taskCount', 1);
 let leaseRenewMs = integer('leaseRenewMs', 1);
 let leaseExpiryMs = integer('leaseExpiryMs', 1);
+let backgroundConcurrency = integer('backgroundConcurrency', 1);
 if (leaseExpiryMs <= leaseRenewMs) {
   console.error('--leaseExpiryMs must be greater than --leaseRenewMs');
   process.exit(2);
@@ -90,6 +98,10 @@ let historian = new Historian({
     expiryMs: leaseExpiryMs,
     holder,
   },
+  background: {
+    concurrency: backgroundConcurrency,
+    kinds: maintenanceKinds({ historyRoot }),
+  },
 });
 
 let health = await startHealthServer({
@@ -99,6 +111,23 @@ let health = await startHealthServer({
 });
 log.info(
   `realm-historian started: pid=${process.pid} holder=${holder} port=${health.port} historyRoot=${historyRoot}`,
+);
+
+// What the git on PATH can do for path-filtered history reads. Recording and
+// maintenance don't depend on the answer, so a probe that fails is only
+// logged.
+probeGit().then(
+  ({ version, bloomWithOnePath, bloomWithSeveralPaths }) =>
+    log.info(
+      `git ${version}: changed-path Bloom filters serve ${
+        bloomWithSeveralPaths
+          ? 'several path filters'
+          : bloomWithOnePath
+            ? 'one path filter only'
+            : 'no path filter'
+      }`,
+    ),
+  (error) => log.warn(`probing git failed: ${String(error)}`),
 );
 
 for (let signal of ['SIGTERM', 'SIGINT'] as const) {

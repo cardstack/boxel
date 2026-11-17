@@ -20,12 +20,14 @@ A secure session is a realm-server JWT with `user`, `sessionRoom` and
 `secureSession`: the id of a `secure_sessions` row. It works anywhere the
 user's session does, and additionally:
 
-| Gate                                | Requires                                                                                                            |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `POST /_key-write-tickets`          | `isSecureSession`: the claim, naming a row of the token's user, not expired                                         |
-| `GET /_secure-session`              | The same; answers 204, or 401 `signed-out`                                                                          |
-| `POST /_secure-session/login-token` | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user                    |
-| `POST /_secure-session/renewal`     | `Origin` the secure origin's, a `window` row that hasn't ended, and the row's current token, which may have expired |
+| Gate                                 | Requires                                                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `POST /_key-write-tickets`           | `isSecureSession`: the claim, naming a row of the token's user, not expired                                         |
+| `GET /_secure-session`               | The same; answers 204, or 401 `signed-out`                                                                          |
+| `POST /_secure-session/login-token`  | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user                    |
+| `POST /_secure-session/renewal`      | `Origin` the secure origin's, a `window` row that hasn't ended, and the row's current token, which may have expired |
+| `GET /_oauth-provider/consent/:uid`  | `Origin` the secure origin's, a session that verifies and isn't revoked, and a `window` row that hasn't ended       |
+| `POST /_oauth-provider/consent/:uid` | The same; records the flow's decision once and answers its ticket                                                   |
 
 Minting also still requires the request's `Origin` to be the secure origin's
 or absent (the CLI). Only `createSecureSessionJWT` mints the claim (ADR 005

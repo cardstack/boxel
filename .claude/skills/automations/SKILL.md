@@ -15,6 +15,10 @@ description: >-
   the card's index hook, which recomputes the row's next run and *done* when
   the card is indexed and removes the row when the card is deleted or stops
   being an automation, and archiving a realm, which pauses its automations.
+  Also covers the tick (`runtime-common/automation-tick.ts`), the
+  every-minute `automation-tick` job that claims due rows, starts a run per due
+  trigger or joins a pending one (*skipped*), and advances the row, with how to
+  see what it enqueued and why a due run didn't start.
   Use when calling or changing those functions, adding a column to
   `automations`, changing the indexer tasks or the realm archive handler, or
   diagnosing why an automation is paused, has no next run, isn't running, or
@@ -29,10 +33,20 @@ description: >-
   `packages/runtime-common/automation-runs.ts`, writing the run-command task or
   the `Realm.handleAutomation` checks that read the run row, adding a column to
   `automation_runs`, or diagnosing a run that is stuck, errored with
-  `commit-interrupted`, or committed twice. Also covers the run token a run's
+  `commit-interrupted`, or committed twice. Also covers canceling a run
+  (`cancelAutomationRunFor`, for a direct writer) and pausing or removing an
+  automation while its run runs: what each leaves behind on the run row, the
+  overlay and the log, and how the run's tab learns of it (`/_run-state`,
+  `RunStateWatch`) and stops the QuickJS worker. Also covers the run token a run's
   calls carry (`run-token.ts`, `mintRunToken`, `verifyRunToken`), how
   `Realm.handleAutomation` admits a call against the run row, and how to trace
-  a refused run-token call or a run's `key_uses`. Also covers how an automation run
+  a refused run-token call or a run's `key_uses`. Also covers the run
+  overlay (`run-overlay.ts`, `run_overlay_files`): how a run's writes are
+  staged (file writes, `_atomic` and write operations in `_operations`), how
+  its reads, listings, card reads and searches read through them, the search
+  limit and how scripts work around it, the `writes` cap, and
+  how to inspect a run's staged files; and the commit (`/_run-commit`), its
+  checks and its failure modes. Also covers how an automation run
   reaches a worker — the automation priority tier (`automationInitiatedPriority
   = 5` in runtime-common's queue.ts), the automation worker lane
   (`--automationCount` on the worker manager, `WORKER_AUTOMATION_PRIORITY_COUNT`
@@ -43,6 +57,31 @@ description: >-
   now), when a run waits in the queue longer than expected, when sizing or
   adding the automation lane in a deployment, or when changing the priority
   tiers, `lib/worker-lanes.ts` or `worker-manager.ts`.
+  Also covers the Realm Runner automation surface a run's script runs on —
+  its method list and allowlist test (`surfaces.ts`), `realm.current.automation`,
+  the time limit from the `seconds` cap, progress and console lines sent to a
+  progress sink with secrets redacted, and `runAutomationScript`. Use when
+  adding or moving a Realm Runner method, changing what an automation script
+  can call, or diagnosing a method an automation run refused.
+  Also covers the automation command that runs one attempt of a run
+  (`AUTOMATION_COMMAND`, `runAutomationAttempt` in
+  `runtime-common/tasks/run-automation.ts`, `enqueueAutomationRunJob`, the
+  host's `run-automation` tool): the run's job and its timeout, the run's own
+  prerender affinity and warm tab, the run token as the tab's only session,
+  handed to the tab in memory rather than in `localStorage`, the commit or the recorded error, and how to run one automation by hand in
+  development (`pnpm run-automation`) and read its outcome.
+  Also covers Preview and Run now (`automation-manual-runs.ts`):
+  `startAutomationPreview` and `startAutomationRunNow`, which start a run at
+  once for a direct writer, acting as and charged to whoever clicked, the
+  batch a finished Preview keeps, `readAutomationRunReport` (a run's state,
+  log, timings, cost, and the files it staged or saved), and how to compare
+  a Preview with a Run now.
+  Also covers a run's log — `automation_run_log`, `appendRunLog` and
+  `readRunLog` in `automation-run-log.ts`, the `/_run-log` route and the
+  host's `RunLogSink`, the platform's `callApi`, `resolve`, commit and cap
+  lines, redaction, the per-run size cap, and the `[automation-run-log]` lines
+  in Loki. Use when reading a run's log in Postgres or Loki, adding a line the
+  platform logs for a run, or diagnosing a run whose log is missing lines.
 ---
 
 # Automations
@@ -141,7 +180,7 @@ A trigger's fields by kind: `cron` reads `expression`, `timeZone`, optional `cou
 
 Every view is built from Pret UI, which subset files may import, and speaks plainly: "workspace", "outside services", "AI requests" and "saves", never realm, `callApi` or `resolve`.
 
-- **Isolated**: `PanelSection`s. The script shows read-only in a `CodeView` (from `fields/code/code.gts`, the catalog `CodeField`'s read face over Pret UI's `CodeBlock`). Each trigger is an `Item` row: an icon for its kind (a lightning bolt for a webhook), its label, its schedule in words with the raw expression as a `Token`, and the times, days or months it names as bulleted lists. Limits are two bordered `Descriptions` grids, _Each run_ and _Each month_, with a line under each value saying what it counts. Outside calls are `Item` rows, params a `KeyValue` list, and each empty group an `EmptyState`. Run milestones aren't a field: the script declares its steps as it runs with `realm.plan(steps)` and reports each with `realm.activity({...})`. The card's _Run milestones_ section is an `EmptyState` saying the steps the script reports will show there. A `Callout` says who runs it and who pays.
+- **Isolated**: `PanelSection`s. The script shows read-only in a `CodeView` (from `fields/code/code.gts`, the catalog `CodeField`'s read face over Pret UI's `CodeBlock`). Each trigger is an `Item` row: an icon for its kind (a lightning bolt for a webhook), its label, its schedule in words with the raw expression as a `Token`, and the times, days or months it names as bulleted lists. Limits are two bordered `Descriptions` grids, _Each run_ and _Each month_, with a line under each value saying what it counts. Outside calls are `Item` rows, params a `KeyValue` list, and each empty group an `EmptyState`. Run milestones aren't a field: the script declares them with `realm.progress.plan([...])` and marks each with `realm.progress.milestone(name)` as it reaches it (_Run milestones_, below). For a direct writer, the card's _Run milestones_ section lists the milestones of the run in progress (`currentRun`), or else of the last run (`lastRun`), as a Pret UI `Timeline` whose rail joins them: each one's time and last count, and a marker shaded by state, gray before a milestone runs, yellow while it runs, green once it is done, red where the run ended with an error, and a pause where Boxel stopped the run. The plan's milestones the run hasn't started stay gray after it, marked _Not started_. Without a last run to list, and for everyone else, the section lists the milestones the script declares, each _Not started_. The card reads them from the script's text: the first `realm.progress.plan([...])` whose array holds only string literals (`declaredMilestones`). A plan built at run time shows nothing until a run reports one, and the section shows an `EmptyState`. A `Callout` says who runs it and who pays.
 - **Edit**: `FormSection`s of `Field`s. The script is edited in place in a `CodeEdit` (the `CodeField`'s edit face over Pret UI's `CodeEditor`) and saved to its file with the host's `write-text-file` tool. It reloads when the file changes elsewhere, unless it holds unsaved edits. A trigger's form shows only its kind's fields: a `SegmentedControl` for the kind, a `Combobox` of IANA zones, `DatePicker`, `TimeInput` and `NumberInput` controls, and the schedule's reading under its expression.
 - **Cron in words**: `describeCron(expression)` in `automation/describe-cron.ts` returns `{ summary, groups }`. A short summary ("Weekdays at 9:00 AM", "3 times a day") plus a labelled group for every list of times, days or months, so several values are listed rather than joined into a long sentence. It returns undefined for shapes it can't put plainly, and the view falls back to the expression alone. It is display only; validity and firing times are `automation-schedule.ts`'s.
 
@@ -159,6 +198,8 @@ The views get the row from `GET <realm>/_automation-status?automation=<card URL>
 - **403** unless the caller is a direct writer of the realm (`isDirectWriter`), asked of the session the realm vouches for (`#sessionPrincipal`): a reader, a writer by the `*` or `users` row, a policy grant, a revoked session, a session delegated to another realm, and a realm-authority or diagnostic session never see the row. An anonymous caller gets 401 from the ACL on a realm only signed-in users can read, and 403 from the route on one anyone can read.
 - **400** when `automation` is missing, not a URL, or outside the realm.
 - **200** with `{ data: { type: 'automation-status', id, attributes } }`. `attributes` is `{ switchedOn: false }` when no row exists. Otherwise it holds `state`, `pauseReason`, `payer`, `viewerIsPayer`, `nextRun`, `lastResult`, `lastFinishedAt` and `triggers`, one per trigger the card declares, in the card's order: `label`, `runs`, and for a bounded trigger `runsLeft` (with `runsLeftAtLeast` past `REMAINING_RUNS_LIMIT`) and `until`, plus `nextRun` and `spent`. Times are ISO strings.
+
+Both shapes carry `lastRun`, the automation's last run that started and has ended (`readLastRunMilestones`), and `currentRun`, its run in progress (`readCurrentRunMilestones`), each with its milestones (_Run milestones_) or null. A Preview is a test of the script, so neither is ever one. A run can start and end before switch-on (a Run now), so neither depends on the row.
 
 `payer` is the payer's Matrix id only when the viewer is the payer or `shareARealmGrant` finds a realm whose permission rows name both (ADR 011 §1.2). Otherwise it is null, and the view reads "A person who shares no workspace with you". Each trigger's next run and whether the trigger is spent come from `computeAutomationSchedule` at the realm's clock (`now()` in `clock.ts`), as the tick computes them. Runs left are counted one trigger at a time over the indexed declaration, the row's `scheduled_since` and `trigger_runs`, with no `now`, so a slot that has passed but isn't enqueued yet still counts as left. Counting stops after `RUNS_LEFT_BUDGET_MS` (250 ms) per answer; a trigger past the budget reports no `runsLeft`. When the card no longer reads as a declaration, each trigger the row has counted reports `runs` alone. The response is `no-store`. The view fetches again when the card is re-indexed, not when the row changes.
 
@@ -215,7 +256,7 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 | `realm-archived`         | `pauseRealmAutomations`: the realm was archived (`handlers/handle-archive-realm.ts`)                                      |
 
 - **`switchOnAutomation`** makes the row for a direct writer, who becomes the payer, snapshots the caps the declaration sets, and starts the schedule now. A row whose triggers are all spent starts `done`. A second switch-on is refused (`already-switched-on`).
-- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it); restoring the realm leaves them paused until a direct writer resumes each one.
+- **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending and running runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it); restoring the realm leaves them paused until a direct writer resumes each one.
 - **`checkAutomationCaps`** and **`checkAutomationPayer`** pause without a person. A row already paused keeps its reason, since a resume takes a new snapshot whatever paused it. A cap the snapshot doesn't limit (an unset credit cap, or a cap added to the card type after the snapshot) is never "raised"; `capsRaisedAbove` is the comparison.
 - The tick, the card's index hook and the run task own `next_run`, `trigger_runs`, `waiting-for-credits`, `done` and the `last_*` columns once the row exists. The lifecycle functions set the next run and `done` only where they start a schedule. Whatever writes `trigger_runs` keeps each entry's `timing`.
 
@@ -225,8 +266,8 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 
 | The card as indexed                                                                                                                      | The row                                                                                                                                                      |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| No live instance (deleted)                                                                                                               | Removed, pending run canceled with `error_reason` `card-deleted`                                                                                             |
-| Doesn't adopt from the catalog `Automation` type                                                                                         | Removed, pending run canceled with `not-an-automation`                                                                                                       |
+| No live instance (deleted)                                                                                                               | Removed, pending and running runs canceled with `error_reason` `card-deleted`                                                                                |
+| Doesn't adopt from the catalog `Automation` type                                                                                         | Removed, pending and running runs canceled with `not-an-automation`                                                                                          |
 | Failed to index (or carries only an earlier visit, `failureWithheld`), or doesn't read as a declaration (an invalid cron, a missing cap) | Unchanged: the next index that reads it recomputes                                                                                                           |
 | Row is paused                                                                                                                            | Unchanged, whatever paused it: a resume restarts the schedule                                                                                                |
 | Raises a cap or turns on `batchedAI` (`capsRaisedAbove`)                                                                                 | Paused with `caps-raised` or `batched-ai-enabled`                                                                                                            |
@@ -242,7 +283,7 @@ Every direct-writer check is `isDirectWriterLocked`, asked inside the change's t
 
 The row's `realm` is what every later check asks about, so switch-on refuses a realm that doesn't contain the automation (`outside-realm`, decided by `RealmPaths.inRealm`), and switch-on and resume refuse a declaration read from another card (`other-card`). Each change locks the person's permission row before the automation's row, in that order everywhere, so two changes never wait on each other; code that touches both, such as a realm's archive or delete, takes them in the same order.
 
-**Pausing and removing cancel the automation's pending run** in the same transaction, so nothing it queued starts. A running run carries on. A run that a person's pause or remove canceled names them in `canceled_by`; one that `checkAutomationCaps` or `checkAutomationPayer` canceled has no `canceled_by` and carries the pause reason in `error_reason`.
+**Every pause and every remove cancels the automation's pending and running runs** in the same transaction (`cancelUnfinishedAutomationRuns`), whatever paused or removed it: a person, a raised cap, the payer losing access, archiving, or the index hook. A pending run never starts. A running run stops as a canceled one does (see _Canceling a run_): its overlay is discarded, the realm server refuses its next call, and its tab stops the script. A running run whose commit was claimed is left to finish, since its writes may already be landing. A run that a person's pause or remove canceled names them in `canceled_by`; one any other pause or remove canceled has no `canceled_by` and carries the reason in `error_reason`. Each canceled run's log ends with a `finish` line saying so, written once the transaction commits (a log line locks the run's row, which the transaction holds).
 
 ### Inspecting an automation
 
@@ -258,7 +299,51 @@ SELECT state, pause_reason, paused_by, payer, next_run, scheduled_since,
 - `paused` with `caps-raised` or `batched-ai-enabled`: compare `caps_snapshot` with the card's `caps` and `batchedAI`. A direct writer resumes it to agree to the new caps and pay for them.
 - `paused` with `payer-lost-access`: the payer's own permission row no longer grants write. Another direct writer resumes it and becomes the payer.
 - `active` with a null `next_run`: only webhook triggers, or none left that the schedule can place.
-- A run canceled with no `canceled_by`: an automatic pause canceled it; its `error_reason` names which.
+- A run canceled with no `canceled_by`: an automatic pause, or the index hook's remove, canceled it; its `error_reason` names which.
+
+### The tick: enqueueing due runs
+
+`tickAutomations` (`packages/runtime-common/automation-tick.ts`, imported as `@cardstack/runtime-common/automation-tick`) starts the runs of every trigger that has come due. A system cron (`lib/automation-tick-config.ts`, every minute, `AUTOMATION_TICK_CRON_SCHEDULE` overrides it) enqueues an `automation-tick` job from every worker manager, at the automation tier in the `automation-tick` concurrency group. A tick that arrives while another is still waiting joins it; one that arrives while another runs queues behind it. The job (`tasks/automation-tick.ts`) reads each card's declaration with `readRunDeclaration`, as a run does.
+
+For each row due at `now` (`state` `active` or `waiting-for-credits`, `next_run` at or before now; the `automations_due_idx` rows), one transaction:
+
+1. Claims the row with `FOR UPDATE SKIP LOCKED`. A row another tick holds, or one no longer due, is skipped.
+2. Reads the card. A card that doesn't read as a declaration leaves the row due and unchanged (`unreadable`). A card that raises a cap above the snapshot enqueues nothing (`caps-raised`); the index hook pauses it.
+3. Follows an edit the index hook hasn't applied yet the way the hook does (`withEditCursors`), then computes the schedule with `now`.
+4. For each trigger due at the next run: if a **scheduled** run of the automation (one a cron or one-time trigger on the card started) is pending from an **earlier instant**, the slot **joins** it (_skipped_): no run, no job, the trigger's `runs` stays, its `lastSlot` moves to the slot, and the pending run's log gets a `trigger` line naming the slot. Otherwise it makes the run row (`trigger` = label, `slot` = the instant as ISO text, `acts_as` = the payer) and enqueues its job with `enqueueAutomationRunJob` (the card's `seconds` cap sets the timeout), then counts the run and moves `lastSlot`. A run at the same instant is another trigger's and is never joined, nor is a Preview or Run now (a Preview never commits, and a Run now acts as whoever clicked), nor a run already running: the new run waits behind it in the automation's concurrency group.
+5. Repeats for any other trigger due by now (each cron trigger owes at most one make-up run), then writes `trigger_runs` (each entry's `timing` and `live` recorded as the index hook records them), `next_run`, `done` when every trigger is spent, and `last_enqueued_at` when a run started.
+
+Two triggers due at the same instant start two runs, keyed apart by their labels, which the concurrency group runs one after the other.
+
+The run row and the job are written before the row is advanced, while the claim is held: the queue publishes in a transaction of its own, and a worker taking the job must find the run row. Both are keyed by the automation, trigger and slot, so a tick that dies before the advance leaves the slot due, and the next tick finds the same run (`createAutomationRun` returns it) and joins the same job (the `dedupeKey` and identical args), or, once that job has run, enqueues one that finds the run over and leaves it. Before scheduling, the tick **adopts** every pending run that a trigger on the card started for a slot past that trigger's `lastSlot`: only a tick that stopped before advancing the row leaves one. Each is counted as started, its trigger's `lastSlot` moves to its slot, and its job is enqueued again (the queue joins the job still there), so a stopped tick's runs are each counted once, however many triggers it had handled.
+
+**What the tick enqueued.** The worker logs one `automation-tick` line per trigger it handled and a summary per tick that had anything due:
+
+```
+automation-tick: automation <id> trigger <label> started run <run id> (job <job id>) for <slot>
+automation-tick: automation <id> trigger <label> skipped <slot>: it joined pending run <run id>
+automation-tick: <n> due, <n> started, <n> skipped, <n> unreadable, <n> caps raised, <n> failed
+```
+
+In Postgres, a run's log starts with a `trigger` line saying which trigger and slot started it, and a run that slots joined carries one `trigger` line per joined slot (`data.skipped` is true):
+
+```sql
+SELECT r.id, r.trigger, r.slot, r.state, r.created_at, l.message
+  FROM automation_runs r
+  LEFT JOIN automation_run_log l ON l.run_id = r.id AND l.kind = 'trigger'
+ WHERE r.automation_id = '<automation card id>'
+ ORDER BY r.created_at DESC, l.seq;
+```
+
+The ticks themselves are `automation-tick` rows in `jobs`; their `result` counts what each did.
+
+**Why a due run didn't start.** Check in this order:
+
+- The row: `state` must be `active` or `waiting-for-credits` and `next_run` at or before now (see _Inspecting an automation_). A paused or _done_ row is never due, and an `active` row with a null `next_run` has nothing to schedule.
+- `next_run` long past and not moving: the tick isn't claiming it. Look for `automation-tick` lines naming the automation: `can't be read` (the card fails to read as a declaration: the index row's `has_error`, an invalid trigger or cap), `asks for more than its caps snapshot` (the index hook should pause it; check its log), or `failed`. No lines at all: check that `automation-tick` jobs are being enqueued and completed (the cron logs `automation-tick cron scheduled for …` at startup, and `automation-tick cron failed to enqueue job` on an error) and that some worker claims the automation tier.
+- A slot reported _skipped_: the automation had a run still pending (waiting for its turn in the concurrency group, or for a worker). That pending run covers the slot. Several skipped slots in a row mean runs take longer than the trigger's interval, or the automation tier is backed up (see _The queue tier and worker lane_).
+- A run made but never started: its job is waiting. `SELECT id, status, priority, concurrency_group FROM jobs WHERE job_type = 'run-command' AND args->>'dedupeKey' LIKE 'automation:<automation card id>:%'`.
+- A trigger with `runs` at its `count`, or whose next slot is past `until`, is spent and doesn't run again.
 
 ## The run row
 
@@ -277,6 +362,7 @@ cancel works by changing it. The functions that change it are in
 | `automation_id`, `realm`                                                       | The automation card and its realm, as canonical identifiers (ADR 002), never served URLs                                                                                                           |
 | `trigger`, `slot`                                                              | The trigger's label and the slot it fired for: the scheduled instant, a webhook delivery's id, a batch's id, or a click's id                                                                       |
 | `acts_as`                                                                      | The Matrix user id of the person the run acts as (ADR 026 §1.1)                                                                                                                                    |
+| `dry_run`                                                                      | A Preview: the run stops before its commit, and a complete one keeps a copy of its staged files (_Preview and Run now_)                                                                            |
 | `attempt`                                                                      | The queue attempt that owns the run: the job's reservation id, which grows with each reservation                                                                                                   |
 | `script_id`, `script_hash`                                                     | The script file the run read, as an identifier, and the hash of the text it ran                                                                                                                    |
 | `state`                                                                        | `pending`, `running`, `complete`, `error` or `canceled`                                                                                                                                            |
@@ -337,17 +423,27 @@ says why) rather than throwing.
 - **`finishAutomationRun`** ends a running run as `complete` or `error`, owner
   only. A run that claimed its commit can't finish as complete until the
   commit is recorded as landed, and a run whose commit landed can't finish as
-  an error. A Preview never claims a commit and finishes complete.
+  an error. A Preview never claims a commit and finishes complete, and its
+  finish keeps a copy of the files its attempt staged
+  (`automation_preview_files`) before it discards the overlay.
 - **`abandonAutomationRun(db, id, reason)`** closes a pending or running run
   whose job is gone, whoever owned it: the queue gives up on a job after its
   last reservation, and no attempt is left to finish the run. This is for the
   reconcile pass (ADR 028 §1.5). A run whose commit landed finishes complete;
   any other finishes as an error with `reason`.
-- **`cancelPendingAutomationRuns(querier, automationId, by)`** cancels every pending run of an automation inside the caller's transaction, as pausing and removing it do. It leaves a running run to finish.
-- **`cancelAutomationRun`** cancels a pending or running run, and records who
-  canceled it. It is refused once the commit is claimed, since the writes may
-  already be landing. A canceled run can't be started, claim a commit or
-  finish.
+- **`cancelUnfinishedAutomationRuns(querier, automationId, by)`** cancels
+  every pending run of an automation, and its running one unless its commit
+  was claimed, inside the caller's transaction, as pausing and removing it do.
+  It discards the overlays of the runs it cancels and returns them; the caller
+  writes each one's `finish` line with `logAutomationRunEnded` once its
+  transaction commits.
+- **`cancelAutomationRun`** cancels a pending or running run, records who
+  canceled it, discards its overlay and logs its `finish` line.
+  `cancelAutomationRunIn` does the same inside the caller's transaction,
+  without the line. It is refused once the commit is claimed, since the
+  writes may already be landing. A canceled run can't be started, claim a
+  commit or finish. A person's cancel goes through `cancelAutomationRunFor`
+  (_Canceling a run_), which checks they may.
 - **`addAutomationRunCounts`** adds to the metered counts in any state, since
   the work they count was done either way. A negative or fractional amount
   throws.
@@ -382,6 +478,54 @@ if (await claimAutomationRunCommit(db, runId, attempt)) {
 A claim that returns `undefined` means a retry took the run over or someone
 canceled it. Discard the staged writes and stop.
 
+### Canceling a run
+
+`cancelAutomationRunFor(dbAdapter, { runId, user }, options)` in
+`automations.ts` (imported as `@cardstack/runtime-common/automations`, with
+the `AutomationActorOptions` the lifecycle functions take) cancels a pending
+or running run for a direct writer of the run's realm. It locks the person's
+permission row before the run's row, the order every change here takes them
+in, and returns `{ ok: true, run }` or a refusal: `missing`,
+`not-a-direct-writer`, or `not-cancelable` with the run as it stands (it
+already ended, or its commit was claimed). The automation's own row doesn't
+change: it stays active, and its next run comes due as scheduled. It is a
+server function, and no route serves it.
+
+What a cancel leaves behind:
+
+- **The run row**: `state` `canceled`, `canceled_by` the person,
+  `finished_at` set, `commit_started_at` null. The metered counts and AI
+  credits it spent stay, since the work they count was done.
+- **The overlay**: discarded in the cancel's transaction, so a cancel before
+  the commit writes nothing to the realm. A write staged while the cancel
+  waited on the run's row lock is discarded too; one after finds the run
+  not running and is refused (401).
+- **The log**: a `finish` line, `The run was canceled by <user>`, after
+  whatever the script and the platform logged before it. The tab's later
+  lines are refused, since `/_run-log` admits only a running run.
+- **The run's calls**: `Realm.handleAutomation` refuses the next one with
+  401 `The automation run is not running`. A commit sent after the cancel is
+  refused the same way, and the worker's finish is refused, so the attempt
+  leaves the run as the cancel left it (`could not finish the run`).
+- **The tab**: the `run-automation` tool runs a `RunStateWatch`
+  (`host/app/lib/realm-runner/run-state-watch.ts`) beside the script. Every
+  `RUN_STATE_POLL_MS` (2 s) it asks the realm's `GET /_run-state`
+  (`RUN_STATE_PATH` in `automation-run-command.ts`) with the run's token,
+  which `handleAutomation` admits only while the run is running under the
+  token's attempt; the route answers 200 with the run's id, and 403
+  `not-a-run` to anything but the run's own token in its own realm. On a
+  401 the watch aborts the signal `runAutomationScript` runs under, which
+  terminates the QuickJS web worker at once, so a script spinning in a loop
+  with no calls of its own stops too. The tool answers `error` with reason
+  `stopped`. A 401 saying `Token expired` is not a stop: the token expires
+  at the run's time limit, which the runner enforces and reports as
+  `timed-out`. A failed or slow ask is not a stop either; the time limit
+  still bounds the script.
+
+A pause or remove stops a running run the same way (_States and who changes
+them_, above), with `canceled_by` the person who paused or removed it, or
+none and the reason in `error_reason`.
+
 ### Diagnosing a run
 
 ```sql
@@ -404,8 +548,9 @@ SELECT state, attempt, error_reason, error_message, canceled_by,
   after a retry or the reconcile pass had closed the run as an error, and
   recording the landing made it complete.
 
-The row holds run state only. A run's log (its console lines and platform
-calls) doesn't go on it.
+The row holds run state, and the counts its log's cap is checked against
+(`log_lines`, `log_chars`, `log_dropped`). The log itself is in
+`automation_run_log` (_The run log_).
 
 ### The run token
 
@@ -413,7 +558,9 @@ Every call a run makes carries the run's token (ADR 026 §1.2), minted per
 attempt by `mintRunToken` (`packages/realm-server/lib/run-token.ts`) once the
 attempt has started the run. It names the run (`run.id`) and the attempt
 (`run.attempt`), acts as the run's `acts_as` (`user`), and expires at the run's
-time limit. It admits read and write in the automation's realm (`realm`) and
+time limit. It carries the automation's `writes` cap (`run.writesCap`),
+which bounds the files the run stages. It admits read and write in the
+automation's realm (`realm`) and
 read in `run.readRealms`, the base and catalog realms its cards' modules load
 from. It carries no permissions; every call is checked as `acts_as`. It is
 signed under `runTokenSecret(seed)`, so no ordinary session verifier accepts it
@@ -441,7 +588,7 @@ token, so only a run token reaches automation mode.
 
 A realm-server route that serves run tokens verifies one with
 `verifyRunToken(token, seed)`, which answers `{ runId, attempt, actsAs, realm,
-readRealms, iat, exp }` or nothing, and then checks the run's row with
+readRealms, writesCap, iat, exp }` or nothing, and then checks the run's row with
 `automationRunForCall` itself.
 
 Tracing a run-token call: every refusal logs on the realm's log as
@@ -457,13 +604,238 @@ To read a token you have in hand, decode its payload (the middle segment,
 base64url) without verifying it: `run.id` and `run.attempt` name the row to
 check, and `exp` is when the run's time limit passes.
 
+### The run overlay
+
+A run's writes don't reach the realm while it runs (ADR 027 §1.2). Three
+routes stage them: the card+source write and its octet-stream spelling, the
+operations envelope (`_operations`) and the atomic write (`_atomic`). Every
+other run-token write (any `PUT`, `PATCH`, `POST` or `DELETE`) to a route
+without `takesRunWrites` is refused with 403 before the route runs, and logged
+as `run-token call <method> <url> refused: … wrote through a route that
+doesn't stage its writes`. So `fs.delete` and the card+json writes are refused
+for a run (see `docs/adr/remediation/027.md`). Each staged write lands in the
+run's **overlay**, `run_overlay_files` in Postgres, one row per file keyed by
+run, attempt and realm-local path, with the bytes inline. The functions are in
+`packages/runtime-common/run-overlay.ts`. Every realm-server instance reads
+the same overlay, so a run's calls can land on any of them.
+
+What goes through it, for a run-token call in the run's own realm
+(`requestContext.automationRun`, not `readOnly`):
+
+- **File writes** (`realm.fs.writeText`, `writeBytes`, and the writes behind
+  `replace` and `copy`): a card+source `POST`, or its octet-stream spelling,
+  is staged with `stageRunOverlayFile` instead of written.
+- **`cards.update`**, which the Realm Runner saves through `_atomic`:
+  `Realm.#stageRunAtomic` stages every file the request adds or updates, all
+  or none. An `add` of a path the run sees (staged or in the realm) is 409,
+  an `update` of one it doesn't see is 404, as the atomic write answers.
+- **Write operations** (`operations.invoke` and
+  `operations.invokeBatchOperation` on `appendLine`, `appendContainsMany`,
+  `update`, `create`, `transform`): `handleOperations` hands a run's batch to
+  `commitBatch` with `Realm.#runBatchCore` in place of the realm's batch
+  core. It is the realm's own, except that every file the batch reads (whole,
+  in byte ranges, or for whether it exists) is read through the overlay, and
+  its commit stages the batch's result with `stageRunOverlayFiles`, in one
+  transaction, instead of writing the realm. So the operation runs against
+  the overlay's view of the file, and a second `appendLine` adds to what the
+  first staged. A `delete` operation is refused (403 `run-write-not-staged`),
+  since the overlay can't hold a removal; a result the overlay refuses
+  answers with the status and code below (`run-write-refused` where the
+  commit has no code for it). A `callApi` entry still
+  runs at once and isn't staged. The envelope still resolves each entry, and
+  runs its `read` and `readSource` entries, against the realm and its index:
+  a declared operation on a card created in this run doesn't resolve, and a
+  read entry answers the realm's version (`docs/adr/remediation/027.md`).
+
+Every staged write meets the same checks (`Realm.#stageRunFiles`), and they
+include every check the commit makes of a file on its own, in the commit's
+order (with one exception through `_operations`, below), so a staged write (a 204 from the card+source write, a 201 from
+`_atomic`, a 200 from `_operations`) is a file the commit takes unless the
+realm changes in between. Any file may be staged, card instance or not.
+First, `Realm.#runFileRefusal`, which the commit asks again of every file,
+refuses the realm's reserved paths and the files a run may not write:
+`realm.json`, a module (`.gts`, `.ts`, `.gjs`, `.js`), the realm's policy
+card, a RealmPolicy card or an automation card, whether the realm holds one
+at the path or the run's bytes would make one (403 `forbidden-path`). It also
+refuses a file under a path the realm holds as a file, or at a path where it
+holds a directory (409 `path-clash`). Modules are refused because the module
+a card's class comes from decides whether it's a RealmPolicy or an
+automation, and the type check reads modules from the index, which never sees
+a staged one. Then the realm's size limit for the file's kind applies,
+through the same `assertWriteSize` the commit's batch applies (the card limit
+for a card document, the file limit otherwise) (413 `payload-too-large`).
+The card+source write refuses a body past the larger of the two before
+buffering it, after asking `#runFileRefusal` what the path alone decides. A
+refusal carries the commit's status, code and reason, without its "nothing
+was saved", on every route: a run's write to a reserved path is answered by
+`#routeRequest` whatever route it names, and in a run's `_operations` batch
+the run's batch core gives the coordinator's reserved-path refusal
+(`BatchCore.reservedWriteRefusal`), and `_atomic` refuses a reserved path
+ahead of whether it exists. The exception: through `_operations` the batch
+checks a file's size before the overlay sees it, so a file refused for its
+size and for its path (409 `path-clash`, or 403 `forbidden-path` for
+anything but a reserved path, such as an oversize automation card) answers
+413 there. A path can't be
+staged as both a file and a directory among the run's own files either (409
+`path-clash`). The token's
+`run.writesCap` bounds how many files the attempt stages (403 `writes-cap`,
+titled `Writes cap reached`), and `RUN_OVERLAY_MAX_BYTES` (100 MiB) bounds their bytes together
+(413). Rewriting a staged path replaces it and doesn't count again. The run's
+row is locked for the check, so racing writes can't pass the cap or stage a
+path as both a file and a directory, and a write after the run stopped
+running is refused (401). A request that stages several files stages all of
+them or none. Every staging route takes the realm's write locks on the
+files it stages, as the batch does, so a write can't land between a batch's
+read of a file and its commit.
+
+And the run's reads:
+
+- **File reads** (`realm.fs.readText`, `exists`): a card+source `GET` or
+  `HEAD` of a path the attempt staged answers with the staged bytes; any other
+  path reads the realm as usual.
+- **Listings** (`realm.fs.list`): a directory listing adds the files the
+  attempt staged under it, and the directories they make, beside the realm's
+  own entries. A directory only staged files make is listed for the run.
+- **`cards.get`**: a card+json `GET` of a card the attempt staged answers
+  with the staged document (`Realm.#stagedCardResource`): its resource with
+  the card's id, its own link, its type's module resolved against the card,
+  and `realmURL` and `realmInfo`, never cached. It has no computed fields
+  and no expanded links, since staged files aren't indexed. A card the run
+  created is read this way too. A staged `.json` that isn't a card document
+  answers 422, never the realm's version.
+- **Operations** (`operations.invoke`, `operations.invokeBatchOperation`):
+  `handleOperations` resolves a run's batch against `Realm.#runOperationCore`,
+  the realm's operation core with each card the attempt staged answered from
+  the overlay. Its index row is built from the staged document, with the
+  adoption chain its `adoptsFrom` names, so an operation on a card the run
+  created or re-typed resolves against the staged type (a declared name the
+  staged type carries runs, and the policy gate matches rules against that
+  type), and a predicate reads the staged fields. A `read` entry answers the
+  staged document as the realm's card+json `GET` of it does, so with no
+  computed fields and no expanded links (unlike a script's `cards.get`, whose
+  `readCard` computes them). Its generation is taken from the realm's index
+  row, or 0 for a card the run created, and a `read` of a staged file that
+  isn't a card answers its metadata from the staged bytes. A staged `.json`
+  that isn't a card document is no card to an entry, and a `read` of it
+  answers 422, as the card+json `GET` does. A transform program reads a
+  staged card as not indexed (`#runBatchCore`'s `indexedCardValues`), so it
+  never sees the realm row's computed or linked values. An entry that finds
+  its targets with a query searches the index, as `cards.search` does.
+- **`cards.search`** runs on the index, and answers each card the attempt
+  staged as staged (`Realm.#withStagedCards`): its attributes,
+  relationships and type come from the staged document, and the rest of what
+  the search answered for it stays. Its attributes are the staged ones, so a
+  staged hit carries no computed fields; read it with `cards.get`, which
+  computes them from the staged values. A hit whose staged file isn't a card
+  document keeps the index's version. Which cards match, and their order, are
+  the index's, so **a search won't find a card created in this run, and
+  won't match on a value this run changed**; a card it returns staged may no
+  longer match the query. This is the decided shape (ADR 027 §1.3), not a
+  gap: indexing staged cards would cost a render each.
+
+A script works around the search limit by keeping what it writes in memory:
+it builds each card's path from a stable key in the upstream data, so it
+reads a card it may have written with `cards.get` (which sees the staged
+version) instead of searching for it, and it keeps the cards it creates in
+this run in a map of its own rather than finding them again. A search is for
+what the realm held when the run started.
+
+No other caller sees a staged file. Staged files aren't indexed.
+
+An overlay is per attempt. `startAutomationRunAttempt` drops what any other
+attempt staged, in the transaction that makes the new attempt the owner, so a
+retry starts from an empty overlay and a replaced attempt's writes never
+reach its commit. A run whose commit was already claimed keeps its files,
+since the claiming attempt may still be sending them. Every way a run ends
+(`finishAutomationRun`, `cancelAutomationRun`, `abandonAutomationRun`)
+discards its overlay in the transaction that ends it, as a statement of its
+own after the update, so it also catches a file staged while the end waited
+on the run's row lock. Deleting a run row deletes its overlay
+(`ON DELETE CASCADE`).
+
+The bound on a run's overlay is `writesCap` files, each within the realm's
+limit for its kind, and `RUN_OVERLAY_MAX_BYTES` together. Binary content is
+stored inline rather than as a reference, since the overlay lives only as
+long as its run and stays within that byte bound. A row holds a file's bytes
+and nothing else, so the overlay can't record a delete. A run's deletes are
+refused rather than staged.
+
+Inspecting what a run has staged:
+
+```sql
+SELECT attempt, path, size, updated_at
+  FROM run_overlay_files WHERE run_id = '<run id>' ORDER BY attempt, path;
+```
+
+A finished run has no rows. Rows from more than one attempt would mean a
+start that didn't drop its predecessors' files. To read a staged file's text:
+`SELECT convert_from(content, 'UTF8') FROM run_overlay_files WHERE run_id = …
+AND path = …`.
+
+### Committing the overlay
+
+When the script finishes, the run commits its overlay with a `POST` to the
+realm's `/_run-commit` (`RUN_COMMIT_PATH` in `run-overlay.ts`), carrying the
+run's token and no body (ADR 027 §1.4). `Realm.commitRunOverlay` refuses
+anything but the run's own call in its own realm (403 `not-a-run`); the call
+was admitted as the run's identity under their current permissions. It reads
+the attempt's staged files and sends them as one `commitBatch` of `rawSource`
+updates, one per file. Inside the batch's write lock, before anything is
+staged, its precondition:
+
+1. re-confirms that the identity is a **direct writer** of the realm
+   (`isDirectWriter`), so a person who lost direct write but keeps a policy
+   or wildcard grant can't write through it (403 `not-a-direct-writer`);
+2. checks the files again: no more than `run.writesCap` (403 `writes-cap`);
+   none at a reserved path, `realm.json`, the policy card, a RealmPolicy card
+   or an automation card (403 `forbidden-path`); none where the realm holds a
+   directory, or under a path it holds as a file (409 `path-clash`). Paths
+   are realm-local, so every file is in the run's realm, and the batch has no
+   `callApi` entry;
+3. claims the commit with `claimRunOverlayCommit`, which locks the run row,
+   checks the run is running under this attempt and has never claimed one,
+   and checks the overlay still holds exactly the files read (409
+   `overlay-changed` when a write was staged in between). Staging refuses a
+   run whose commit is claimed.
+
+The batch then writes every file or none for any entry it refuses, under one
+index pass the commit doesn't wait for. A file whose text matches the stored
+file's is left alone and enqueues no indexing. The batch carries the run's
+`automationRun` (its run id, and the automation id from the run's row), so
+the realm records every file it creates in `automation_files` as the
+automation's, in the same transaction as its `realm_file_meta` row (after
+its bytes are on disk, so a write that fails partway still records the files
+that landed); a file the run only changes gets no row. Those rows are what the daily storage charge counts
+(see the `pricing` skill). Once it lands, the commit
+records it (`recordAutomationRunCommitted`), adds the files committed to the
+run's `writes` count (an unchanged file included), discards the overlay, and
+answers `200` with `data.attributes.files`.
+
+Failure modes, and what the caller does:
+
+| Answer                                                    | Claim                        | What happened                                                                    | Next                                                                                             |
+| --------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 403 `not-a-direct-writer`, `writes-cap`, `forbidden-path` | none                         | the identity or the overlay breaks the run's limits                              | finish the run as an error                                                                       |
+| 409 `path-clash`                                          | none                         | the realm holds a file or directory in the way                                   | finish as an error; the next run compares and catches up                                         |
+| 409 `overlay-changed`                                     | none                         | a write was staged while the commit started                                      | commit again                                                                                     |
+| a batch refusal of an entry (4xx)                         | released                     | nothing was written                                                              | finish as an error                                                                               |
+| 409 `commit-refused`                                      | earlier, unrecorded, or none | this attempt's earlier commit hasn't landed, or the run isn't under this attempt | finish as an error, or stop when another attempt owns the run                                    |
+| 401                                                       | none                         | the token's run isn't running, or the token expired                              | stop                                                                                             |
+| 5xx from a failure while writing                          | kept, unrecorded             | some files may have landed                                                       | finish as an error; a retry finds `commit-interrupted`, and the next run compares and catches up |
+| 200 again                                                 | recorded                     | the commit landed earlier (a repeat after a lost answer)                         | finish complete                                                                                  |
+
+A Preview never commits: it finishes complete, and the finish copies its
+attempt's staged files out as the batch it shows (_Preview and Run now_)
+and discards its overlay. A run with nothing staged commits an empty batch, which claims and
+records the commit and writes nothing.
+
 ### The AI spending cap
 
 A cap on `resolve` calls holds no price, since one AI request can cost a fraction of a cent or several dollars, so the card also caps what a run's AI may cost: `caps.aiCredits`, in credits (ADR 029 §1.5). It is required like every run limit; 0 forbids AI spending. The switch-on estimate counts it in full as the most one run's AI can cost (`runCostCeiling`, the `pricing` skill), and ADR 029 §1.5 has the minimum balance count it the same way.
 
 Before the server sends an AI request for a run, `admitAutomationRunAIRequest` (`packages/realm-server/lib/automation-ai-spending.ts`) prices its worst case and reserves it on the run row:
 
-- **The worst case** is `aiRequestCostCeiling(body, price)` in `packages/runtime-common/automation-ai-cost.ts`: one input token per byte of the request body (no tokenizer encodes text in fewer bytes than tokens), plus `TOOL_PROMPT_ALLOWANCE_TOKENS` (1,000) when the request has `tools` for the tool-use system prompt a provider adds outside the body, at the input price, the request's `max_completion_tokens` or `max_tokens` plus any `reasoning.max_tokens` (the model's context window when it sets none, and never more than that window) at the output price, plus the per-request price. A provider's own output limit isn't used, since OpenRouter can route to a provider with a higher one.
+- **The worst case** is `aiRequestCostCeiling(body, price)` in `packages/runtime-common/automation-ai-cost.ts`: one input token per byte of the request body (no tokenizer encodes text in fewer bytes than tokens), plus `TOOL_PROMPT_ALLOWANCE_TOKENS` (1,000) when the request has `tools` for the tool-use system prompt a provider adds outside the body, at the input price, the request's `max_completion_tokens` or `max_tokens` plus any `reasoning.max_tokens` (the model's context window when it sets none, and never more than that window) at the output price, plus the per-request price. The prices are the highest of the model's base rates and each tier in its `pricing.overrides` (synced onto its `OpenRouterModel` card) the request can reach: a prompt-length tier once the input bound passes its `minPromptTokens`, and a time-of-day tier always. A provider's own output limit isn't used, since OpenRouter can route to a provider with a higher one.
 - **What it refuses rather than prices**: a body that names another model or lists fallback `models` (`model-mismatch`); web search (`:online`, `plugins`, `web_search_options`) any non-text content part, and audio or image output (`modalities` beyond `text`, or `audio`), which bill in ways the body's bytes and the completion rate don't bound (`unpriced-input`); and a request with no output limit to a model with no listed context window (`unbounded-output`).
 - **Media goes through the author's own key.** Boxel's AI requests carry text only, and the refusal says so. An automation that sends or receives images, audio or files declares a `callApi` operation to the AI vendor with a `{{userKey}}` slot (the `call-api` skill). The vendor bills the key's owner directly, and the run's `callApiCalls` and `responseBytes` caps bound those calls in place of `aiCredits`.
 - **The price** is the model's OpenRouter listing, read from its indexed `OpenRouterModel` card with `readOpenRouterModelPrice`. The prompt and completion prices are required; a missing one, or a variable price (`-1`, as `openrouter/auto` lists), can't be read, so that model can't be priced.
@@ -479,6 +851,632 @@ SELECT state, ai_credits_spent, ai_credits_reserved, resolve_calls
 ```
 
 A finished run with `ai_credits_reserved` above 0 has an admitted request that was never settled; `ai_reservations` names it and what it holds.
+
+### Declared operations and the per-run caps
+
+The realm server holds every run-token call to the automation's declaration, which it reads from the card's live index row with `readRunDeclaration` (`packages/runtime-common/automation-run-limits.ts`), never by running the card's code. A card that isn't indexed, failed to index, or doesn't read as an automation declares nothing, so its run may call no outside service and make no AI request.
+
+- **Declared operations.** A run's `callApi` is refused (`operation-not-declared`, 403, nothing sent and nothing counted) unless the card's `operations` names that operation on the type it was resolved on. Both sides are compared as `internalKeyFor` spells them, so a prefix-form declaration matches a URL-form type. The check comes before any key is looked for.
+- **Where each count is kept.** Each is added on the run row by the realm server where it does the work, never taken from the tab:
+
+  | Cap             | Row column                | Counted                                                                   | Where                                                            |
+  | --------------- | ------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+  | `callApiCalls`  | `call_api_calls`          | one per `callApi`, just before it is sent, so a refused call never counts | `callApiOperation`, through the request's `CallApiRunMeter`      |
+  | `responseBytes` | `call_api_response_bytes` | the bytes of each response actually read                                  | `sendCallApiRequest`, where `outboundFetch` caps the response    |
+  | `resolveCalls`  | `resolve_calls`           | one per AI request the run forwards, just before it is sent               | `_request-forward`, through `admitRunForward`                    |
+  | `aiCredits`     | `ai_credits_spent`        | the reservation, then the generation's cost (_The AI spending cap_)       | `_request-forward`, through `admitRunForward`                    |
+  | `writes`        | `writes`                  | the files the run's commit writes                                         | the run overlay's commit; the cap rides the token as `writesCap` |
+  | `seconds`       | —                         | the run token's expiry                                                    | `mintRunToken`                                                   |
+
+- **A call past a cap** is refused (`run-cap-reached`, 403, `meta.cap` naming the cap) and ends the run with `endAutomationRunAtCap`: state `error`, `error_reason = 'hit-a-cap'`, and `error_message` naming the cap. The next call is refused as `The automation run is not running`. `countAutomationRunCall` checks and counts in one conditional `UPDATE`, owner attempt only, so two calls racing for a run's last call can't both make it.
+- **Response bytes** are bounded by a byte budget: what is left of `responseBytes` when the call is admitted, passed to `outboundFetch` as `responseByteBudget` beside the path's own size cap. A response the budget refuses throws `OutboundResponseTooLargeError` with `byBudget`, which ends the run. Every byte read is counted, including those read before a stream fails for any other reason. Calls in flight at once each get the same remaining budget, so with n of them the run can read up to (n − 1) times that remainder past the cap; n is bounded by the `callApiCalls` cap, since each call counts against it when it is admitted. The next call after the cap is passed is refused.
+- **The forwarding path.** A run token reaches `_request-forward` past the session check (the route lets a request carrying one through), and `admitRunForward` (`packages/realm-server/lib/run-token-forward.ts`) checks it: the token verifies, its person's sessions weren't revoked, and the run is running and owned by the token's attempt. Only an unstreamed chat completion to OpenRouter is forwarded for a run, since a `resolve` is the only request a run sends there. The model's price is read from its indexed `OpenRouterModel` card (`openRouterModelPrice` in `lib/openrouter-model-price.ts`); a model with no listed price is refused (422). The request is billed to the person the run acts as. Its reservation, held for the token's attempt, is settled once however the forward ends: 0 when nothing was sent or the upstream answered with an error and no cost, the cost the credit strategy resolved, or the whole reservation when the cost couldn't be learned.
+
+To see a run's counts against its caps:
+
+```sql
+SELECT state, error_reason, error_message,
+       call_api_calls, call_api_response_bytes, resolve_calls, writes,
+       ai_credits_spent, ai_credits_reserved
+  FROM automation_runs WHERE id = '<run id>';
+```
+
+The caps are the card's `caps`, each held to no more than the automation's caps snapshot (`readRunLimits`): a run already going when someone raises a cap on the card keeps to what the payer agreed. A refused call logs on `automation-run-limits` (`run <id>'s callApi refused: …`, `run <id> … hit its <cap> cap and ended`) or on `request-forward` (`run-token request forward to <url> refused: …`).
+
+## The automation surface
+
+A run's script runs on Realm Runner's **automation surface** (ADR 025 §1.4):
+the engine and method names of the assistant's interactive surface, with its
+own allowlist of methods, its own time limit, no chat room, and its progress
+sent to the run record. The pieces live in `packages/host/app/lib/realm-runner/`:
+
+- `surfaces.ts`: `AUTOMATION_METHODS` and `INTERACTIVE_METHODS`, and
+  `METHOD_REACH`, what each method can reach outside QuickJS;
+- `automation.ts`: `automationTimeLimitMs`, the progress sink
+  (`RunProgressSink`, `RunProgressEvent`) and `redactSecrets`;
+- `worker.ts`: builds the guest's `realm`, `room` and `console` from the
+  surface's list, so a method off the list is not defined in the script at
+  all;
+- `runAutomationScript` in `packages/host/app/tools/run-realm-code.ts`: runs
+  one script on the surface, with the realm I/O it's given
+  (`AutomationRealmIO`). `RunRealmCodeTool.automationRealmIO(realmURL)`
+  builds that I/O from the tab's own realm calls, which carry the token the
+  tab holds for the realm: the run's token, in an automation run.
+
+### The method list
+
+| Group                 | Methods                                                                               | On the automation surface                                                                                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reads                 | `cards.search`, `cards.get`, `entries.search`, `fs.readText`, `fs.list`, `fs.exists`  | yes, in the run's own realm only: `entries.search` refuses any other, and both searches go to the realm's own `_search` (the realm server's `_federated-search` takes only a session token)                     |
+| Writes                | `fs.writeText`, `fs.writeBytes`, `fs.replace`, `fs.copy`                              | yes; card+source writes the realm server stages in the run's overlay (_The run overlay_)                                                                                                                        |
+| Card updates          | `cards.update`                                                                        | yes; saved through `_atomic` when the script finishes, within its time limit. The realm server refuses a run's `_atomic` unless that route stages its writes, and the run then fails at the save                |
+| Operations            | `operations.invoke`, `operations.invokeBatchOperation`                                | yes; the realm server admits a `callApi` only for an operation the card declares, counts it against `callApiCalls`, and refuses a write operation it doesn't stage (_Declared operations and the per-run caps_) |
+| Resolve               | `resolve`                                                                             | yes; counted against `resolveCalls` and priced against `aiCredits` at `_request-forward` when the forward carries the run's token                                                                               |
+| Progress              | `activity`, `progress.plan`, `progress.milestone`, `progress.count`                   | yes; `progress.*` only here                                                                                                                                                                                     |
+| Console               | `console.log`, `console.info`, `console.warn`, `console.error`                        | yes; only here                                                                                                                                                                                                  |
+| Downloads and deletes | `fs.download`, `fs.delete`                                                            | no                                                                                                                                                                                                              |
+| Web, images, capture  | `web.search`, `web.read`, `images.generate`, `capture`                                | no                                                                                                                                                                                                              |
+| Session and UI        | `room.*`, `ui.*`, `workspaces.*`, `index.*`, `plan`, `ask`, `operations.capabilities` | no                                                                                                                                                                                                              |
+| Transforms            | `transform`                                                                           | no; interactive surface only                                                                                                                                                                                    |
+
+The unit test `realm-runner-surfaces-test.ts` pins `AUTOMATION_METHODS` and
+fails when a method on it reaches anything but a realm read, a staged write,
+an operation, the model, progress or the console. Adding a method, or moving
+one between surfaces, changes that test in review. The interactive surface's
+guest has `realm` and `room`, and no `console` or `progress`.
+
+How a method differs from the interactive surface:
+
+- **`fs.writeText` writes the file whole**, whether or not it exists. The
+  interactive surface only creates, and edits through `fs.replace`. A write
+  of the content the file already holds is reported as unchanged.
+- **No interactive per-run limits**: no 20-file, 200-card-update,
+  200-operation or 3-`resolve` limit. The card's caps take their place, and
+  the realm server counts each against the run row (_Declared operations and
+  the per-run caps_).
+- **A limit on file content held**: a run keeps every file it reads, every
+  version it writes and every card it updates until it ends, in a tab other
+  runs share, so it holds at most `MAX_AUTOMATION_HELD_CHARS` (20,000,000)
+  characters of them. A read, write or update past that throws in the script,
+  before anything is held or written. A file counts as the version the run
+  first read and its latest one, so a loop of edits to one file stays within
+  it.
+- **Progress and console are one-way**: they return nothing, so a script
+  needn't await them, and an unawaited one doesn't fail the run. A bad
+  argument (an empty milestone name, `count(3, 2)`) throws in the script.
+  A run reports at most `MAX_RUN_NOTIFICATIONS` (5,000) of them, of
+  `MAX_RUN_NOTIFICATION_CHARS` (2,000,000) characters of arguments together:
+  they cost memory in a tab other runs share. The worker drops the rest
+  before posting them, and the run's progress ends with one `warn` line
+  saying how many it dropped.
+
+For media from an AI vendor, author guidance is boxel-skills'
+`api-integrations` skill, _Images from an AI vendor_: an automation's own AI
+requests carry text only, and an image goes through a `callApi` with the key
+of the person who switched the automation on.
+
+### `realm.current.automation`
+
+`AutomationRunContext` in `types.ts`, frozen in the script:
+
+| Field            | What it holds                                                                                   |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| `url`            | the automation card's URL                                                                       |
+| `trigger`        | `{ label?, kind }`, kind one of `cron`, `once`, `webhook`, `manual` (Preview, Run now), `batch` |
+| `scheduledAt`    | when the trigger was due, or when a manual run was asked for (ISO 8601)                         |
+| `lastSuccessAt`  | when the automation's last complete run started, if it has had one; a Preview never counts      |
+| `params`         | the card's params with the trigger's own merged over them                                       |
+| `webhookPayload` | the delivery's JSON body, for a webhook run                                                     |
+| `dryRun`         | true for a Preview                                                                              |
+
+`realm.current.url` is the realm's root, as on the interactive surface.
+
+### The time limit
+
+`automationTimeLimitMs(seconds)` is the card's `seconds` cap in ms, never more
+than `MAX_RUN_SECONDS` (20 minutes); it takes the place of the interactive
+100-second deadline. It bounds everything the script does, waiting on realm
+calls included: QuickJS's interrupt stops a script that computes past it, and
+the runner's own timer stops one that waits past it. Either way
+`runAutomationScript` rejects with `The automation run reached its time limit
+of N s (its seconds cap)`. A script error rejects with `RealmScriptError`,
+which names the script's line.
+
+### Progress and redaction
+
+The run's progress goes to the `RunProgressSink` the caller passes, one
+`RunProgressEvent` at a time, in the order the script made them: `activity`
+lines, the milestone `plan`, each `milestone` reached, `count`s within one,
+and `console` lines with their level and script line (a value that isn't a
+string is shown as JSON, an `Error` as `Name: message`; a line past 10,000
+characters is cut and says how many it lost). Each event's time is `at`.
+
+Every text in an event, the script's result and the message of the error a
+run rejects with pass through `redactSecrets` first. It replaces with
+`[REDACTED]` each value the caller registers in `secrets` (the run's own
+token) and every credential it recognizes:
+
+- by shape: a vendor key (a prefix in `CREDENTIAL_PREFIXES`,
+  `packages/runtime-common/credential-prefixes.ts`, the list the realm
+  server's response scrubber uses too, and a key-like tail), a JWT, a
+  `Bearer` token (only as written, so "the bearer of" stays), an AWS access
+  key id and a PEM private key;
+- by name: the value of an `Authorization` header, and of a JSON field or
+  query parameter named like a credential (`"api_key": "…"`, `"password":
+…`, `?token=…`, `&key=…`).
+
+The name it was found under stays (`Authorization: Bearer [REDACTED]`,
+`"api_key":"[REDACTED]"`). `redactSecrets` lives in
+`packages/runtime-common/redact-secrets.ts`, a leaf module the worker bundle
+and the realm server both import. The scrubber still removes a vendor's own
+key from a `callApi` response before the script sees it.
+
+When the run rejects, `runAutomationScript` records one last event before it
+does: `{ kind: 'error', message, line?, stack? }`. `line` is the script's line
+the error was thrown on, and `stack` keeps only the stack's frames on the
+script's own lines, each naming its `script line N` (the bootstrap's frames
+and the wrapper's call to the script are left out). The worker maps them from
+QuickJS's dumped stack, minus the wrapper's line
+(`REALM_RUNNER_WRAPPER_LINES`), for every error the script throws, not only
+the four kinds `RealmScriptError` describes. A run stopped at its time limit
+ends with that message and no line or stack, since it was stopped wherever it
+was. The run's token expires at that same limit, so the tab's send of that
+line is usually refused; the realm server's `finish` line (below) says why the
+run ended either way.
+
+## The run log
+
+A run's log is its script's lines and the platform's lines (ADR 025 §1.1). It is stored in Postgres for the console and written to the
+realm server's log for Loki. The code is
+`packages/runtime-common/automation-run-log.ts`.
+
+### Where the lines come from
+
+| `source`   | `kind`                                                       | Written by                                                                                                                                                                                                                                 |
+| ---------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `script`   | `console`, `activity`, `plan`, `milestone`, `count`, `error` | the run's tab: `RunLogSink` (`packages/host/app/lib/realm-runner/run-log-sink.ts`) sends the progress sink's events to the realm's `POST /_run-log` with the run token                                                                     |
+| `platform` | `call-api`                                                   | `callApiOperation`, through the run's `CallApiRunMeter.logCall`: operation, method, destination with query values masked, status, time and size, or why it was refused                                                                     |
+| `platform` | `resolve`                                                    | `_request-forward`, for a forward that carried the run's token: model, status, time and cost                                                                                                                                               |
+| `platform` | `commit`                                                     | `/_run-commit`: the files saved, or the refusal's code and detail                                                                                                                                                                          |
+| `platform` | `finish`                                                     | `finishAutomationRun`, `abandonAutomationRun` and `cancelAutomationRun`, once the row changes: how the run ended, with the row's `error_reason` and `error_message` (a cap that ended it, a time limit, a script error) or who canceled it |
+
+`RunLogSink` implements `FlushableRunProgressSink`. It sends a batch of at
+most `RUN_LOG_MAX_BATCH_LINES` (500) events and `RUN_LOG_MAX_BATCH_BYTES`
+encoded bytes (`RUN_LOG_MAX_REQUEST_BYTES`, 2 MiB, less headroom; the realm
+counts the body in bytes, so text outside ASCII fills a batch first) once
+either is reached or a second after the first of them, one batch at a time, each given up on after
+`RUN_LOG_SEND_TIMEOUT_MS` (10 s), so `flush` always settles. Whoever runs the
+script calls `await sink.flush()` before the commit and before finishing the
+run.
+
+**Order.** The realm server stores its lines as it does the work, while the
+script's lines wait in the sink. So `runAutomationScript` flushes a flushable
+sink before each `operations.*` and `resolve` call, and the script's lines
+from before a call are stored before the call's own line. `seq` is the order
+lines were stored in.
+`/_run-log` goes through `Realm.handleAutomation` like every run-token call,
+so it takes lines only while the run is `running` under the token's attempt.
+A flush after the run finished is refused with a 401, and the sink reports
+that to its `onError` and never throws: the log never fails a run. A route
+takes only the script's kinds, so nothing the tab sends can pass for a
+platform line.
+
+Every line is redacted again as it is stored, with `redactSecrets` and the
+token it arrived with, whoever sent it. A message is cut at
+`RUN_LOG_MAX_MESSAGE_CHARS` (10,000) and says how much it lost. Query values
+in a logged URL are always masked (`maskedRunLogURL`); header values are
+never logged.
+
+### The cap
+
+A run's log holds at most `RUN_LOG_MAX_LINES` (10,000) lines and
+`RUN_LOG_MAX_CHARS` (5,000,000) characters of messages and data together.
+`appendRunLog` locks the run row, checks the cap against `log_lines` and
+`log_chars`, stores what fits and adds the rest to `log_dropped`. `readRunLog`
+ends a capped log with one `warn` line saying how many were dropped. Separately,
+the worker drops one-way calls past `MAX_RUN_NOTIFICATIONS`, and `RunLogSink`
+drops the oldest past `RUN_LOG_MAX_PENDING` (5,000) waiting events, besides
+the batch in flight, when the realm server answers slowly; each says how many
+in a line of its own. A time no `Date` holds is stored as the time the line
+arrived, and a script line past Postgres's `integer` is left off, so one bad
+event doesn't cost its batch.
+
+### Reading a run's log in Postgres
+
+```sql
+SELECT seq, at, source, kind, level, script_line, message, data
+  FROM automation_run_log WHERE run_id = '<run id>' ORDER BY seq;
+
+-- the log's size against its cap
+SELECT log_lines, log_chars, log_dropped FROM automation_runs WHERE id = '<run id>';
+
+-- just the errors and refusals, across an automation's recent runs
+SELECT l.run_id, l.at, l.kind, l.message
+  FROM automation_run_log l JOIN automation_runs r ON r.id = l.run_id
+ WHERE r.automation_id = '<automation card id>' AND l.level = 'error'
+ ORDER BY l.at DESC LIMIT 50;
+```
+
+Deleting a run row deletes its log (`ON DELETE CASCADE`).
+
+### Reading a run's log in Loki
+
+Each stored line is also logged once by the realm server on the
+`automation-run-log` logger, as
+
+```
+[automation-run-log] automation=<card id> run=<run id> job=<queue job id> seq=3 source=platform kind=call-api level=info status=200 ms=41 msg="callApi latest GET https://…: 200 in 41 ms, 912 bytes"
+```
+
+The tags are in the line, not Loki labels (a run id per label would be a
+series per run). `job` is the queue job that owns the run's attempt
+(`job_reservations.job_id` for the row's `attempt`), absent when there is
+none. The tags come right after the prefix and the message is last and
+JSON-quoted, but a script can print text that looks like tags, and LogQL's
+`|=` and `|~` match anywhere in the line. Anchor a query on the prefix and the
+tags, so it reads the tags the platform wrote. With the `tail-logs` skill:
+
+```bash
+packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+  --regex '\[automation-run-log\] automation=\S+ run=<run id> ' --since 1h --no-follow
+# one queue job's run
+packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+  --regex '\[automation-run-log\] automation=\S+ run=\S+ job=42 ' --since 1h --no-follow
+```
+
+A log that reaches its cap logs one `warn` line saying later lines are
+dropped. Lines come from whichever realm-server task took the request, so
+query by the run, not by one task.
+
+### Run milestones
+
+The script is the only source of a run's milestones; the card holds no list of them, since a list kept on the card drifts from what the code does. The script declares them all up front and marks each as it reaches it:
+
+```js
+realm.progress.plan(['Fetch issues', 'Group by label', 'Write digest']);
+realm.progress.milestone('Fetch issues');
+for (let [i, page] of pages.entries()) {
+  realm.progress.count(i + 1, pages.length); // within the milestone
+  // …
+}
+realm.progress.milestone('Group by label');
+```
+
+They reach the realm server as the run's `plan`, `milestone` and `count` log lines. `appendRunLog` hands each batch to `recordRunMilestones` (`packages/runtime-common/automation-run-milestones.ts`) under the run row's lock, before it checks the log's cap, so a run whose log is full still records where it got to:
+
+| Where                                | Holds                                                                                                                                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `automation_runs.milestone_plan`     | the plan the script declared last (a second `plan` replaces it), at most `RUN_MILESTONE_MAX_PLAN` (50) names of `RUN_MILESTONE_MAX_NAME_CHARS` (80) characters, the surface's limits |
+| `automation_run_milestones`          | one row per milestone the run reached, at `position` in the order reached, with `started_at` (the tab's time for the mark) and the last `count_done` / `count_total` inside it       |
+| `automation_runs.milestones_dropped` | marks past `RUN_MAX_MILESTONES` (200) a run records; the run's last recorded milestone then lasts until the run ends                                                                 |
+
+A milestone lasts until the next one starts, or until the run ends (`finished_at`). A milestone the plan doesn't name is recorded like any other and reads as unplanned; one marked twice is two rows. A count before the run's first milestone is ignored, as is one inside a milestone marked past the limit. An attempt that takes a run from another attempt (`startAutomationRunAttempt`, before the commit is claimed) clears the run's plan and milestones, since the script runs again from its start.
+
+**Reading them.** `readRunMilestones(dbAdapter, runId)` answers a run's `plan`, its `milestones` in order (`name`, `planned`, `startedAt`, `endedAt`, `ms`, and `done` / `total` when counted), `current` (the milestone a running run is in), `ahead` (the plan's milestones it hasn't reached), `failedIn` (for a run that ended with an error, the milestone it was in) and `dropped`. `readLastRunMilestones(dbAdapter, automationId)` answers the same for the automation's last run that started and has ended, leaving Previews out: what the card shows, through `_automation-status`'s `lastRun`.
+
+```sql
+SELECT r.state, r.milestone_plan, m.position, m.name, m.started_at, m.count_done, m.count_total
+  FROM automation_runs r LEFT JOIN automation_run_milestones m ON m.run_id = r.id
+ WHERE r.id = '<run id>' ORDER BY m.position;
+```
+
+**Telemetry.** As a run ends (`finishAutomationRun`, `abandonAutomationRun`, `cancelAutomationRun`), `closeRunMilestones` writes each of its milestones once to the `boxel:automation-milestones` channel: one JSON line with `automation`, `realm`, `run`, `outcome`, `errorReason`, `milestone`, `position`, `planned`, `ms`, `done`, `total` and `failedHere`, the numbers flat so LogQL can `unwrap` them. `outcome` is the run's state as it ended, so a `commit-interrupted` run whose batch landed afterwards reads `error` there and `complete` on its row:
+
+```bash
+packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
+  --regex '"channel":"boxel:automation-milestones"' --since 1d --no-follow
+```
+
+## The automation command
+
+One attempt of a run is a `run-command` job naming `AUTOMATION_COMMAND`
+(`@cardstack/boxel-host/tools/run-automation/default`, in
+`runtime-common/automation-run-command.ts`). The run-command task hands such a
+job to `runAutomationAttempt` (`runtime-common/tasks/run-automation.ts`)
+instead of the ordinary command path. No other path runs it:
+`prepareRunCommand` refuses it, so `/_run-command`, bot commands and webhook
+receivers can't run it with a person's sessions (ADR 025 §1.3).
+
+### The job
+
+`enqueueAutomationRunJob` (`runtime-common/jobs/run-command.ts`) enqueues it
+for a run row its trigger has already made with `createAutomationRun`:
+
+- `commandInput` is an `AutomationJobInput`: the run's id, `scheduledAt`,
+  `dryRun`, and for a run no trigger on the card names, `triggerKind`
+  (`manual` or `batch`), plus a webhook run's `webhookPayload`;
+- `dedupeKey` is `automationRunDedupeKey(run)`,
+  `automation:<id>:<trigger>:<slot>`. The worker runs a job only when its key
+  is its run's, so a job some other publisher enqueued that names a run id
+  touches nothing (`not-the-runs-job`);
+- `concurrencyGroup` is `automation:<id>`, so an automation runs one at a time;
+- the priority is `automationInitiatedPriority`;
+- the timeout is `automationJobTimeoutSec(secondsCap)`: the run's time limit
+  plus `AUTOMATION_JOB_OVERHEAD_SEC` (120 s) for the steps around the script.
+  Every other `run-command` job keeps `RUN_COMMAND_JOB_TIMEOUT_SEC` (60 s).
+
+### One attempt
+
+`runAutomationAttempt`, in order:
+
+1. Checks the job's key against the run, then `startAutomationRunAttempt`
+   with the job's reservation id as the attempt, and does what the start says
+   (_An attempt, start to finish_).
+2. Reads the card's declaration and the run's limits from the index. A card
+   that doesn't read as an automation ends the run (`not-an-automation`). A
+   retry gets what is left of the run's time, counted from its first start,
+   never a fresh limit; none left ends it (`timed-out`).
+3. Mints the run's token with the worker's `mintRunToken`
+   (`buildMintRunToken` in `realm-server/lib/run-token.ts`, wired in
+   `worker.ts`). Read realms are `RUN_READ_REALMS`, the base and catalog
+   realms.
+4. Reads the script file with the run's token, so the read takes the realm's
+   check as the run's identity (`missing-script` when it can't), and records
+   its id and the sha256 of its text with `recordAutomationRunScript`. At
+   most `MAX_AUTOMATION_SCRIPT_CHARS` (100,000) characters.
+5. Sends the script to a prerender tab with `prerenderer.runCommand`, with
+   `runRealm` set to the automation's realm, the run's token as the whole of
+   the tab's auth, the `AutomationScriptInput` as a `JsonCard`'s `json`, and
+   `timeoutMs` of what's left of the time limit plus 30 s
+   (`AUTOMATION_TAB_GRACE_MS`). The input carries `endsAt`, when the time
+   limit passes, so time spent waiting for the tab comes off the script's.
+6. Finishes the run from what the tab answers:
+   - `complete`, Preview (the row's `dry_run`, or the job's `dryRun`):
+     finishes complete without a commit, which copies the staged files out
+     as the Preview's batch and discards the overlay;
+   - `complete`: commits with `POST /_run-commit` carrying the token, sent
+     again up to three times on `overlay-changed` or when its answer is lost
+     (the realm answers this attempt's commit again with the same success),
+     and finishes complete on `200`. Any other answer finishes the run as an
+     error named by the refusal's code (_Committing the overlay_), unless
+     the row says the batch landed, which finishes it complete;
+   - `error`: finishes the run as an error with the outcome's reason
+     (`script-error`, `timed-out`, `run-failed`, `stopped`) and its message, prefixed
+     `line N:` for a script error that has a line. The finish discards the
+     overlay, so nothing the script staged lands;
+   - a tab that never answered (`unusable`) is `timed-out`; a command that
+     failed or a request that failed is `run-failed`.
+
+The run's token is redacted from every message the row records.
+
+### The tab
+
+The run goes to its realm's **run affinity**, `realm:<realm>#run:<identity>`
+(`renderSessionOf` reads a run token as a `run` session; `toAffinityKey`). The
+prerender server takes a realm affinity for `/run-command` only when the
+whole of the auth is one run token, so no other session reaches a run's tab
+and a run's token reaches no other tab. The pool holds a run affinity to one
+tab (`isRunAffinityKey`), so runs of one realm and identity take turns on that
+tab and never hold more than one of the tabs index renders also draw on. The
+tab is a warm one, never one the run starts itself (ADR 025 §1.2); see the
+`prerender-sizing` skill.
+
+**The token reaches the tab in memory.** A run's token MUST NOT be written
+anywhere the tab keeps state (ADR 026 §1.2), so the run's sessions never go
+through `localStorage['boxel-session']`, which hands every render and every
+other command its sessions. `runCommandAttempt` in `render-runner.ts` sees a
+`run` session and sets the sessions map on the page global
+`__boxelInMemorySessions` (`inMemorySessionsGlobal` in
+`runtime-common/in-memory-sessions.ts`), and removes `boxel-session` from the
+tab's storage, so the tab holds no other session. While that global is set the
+host reads and writes the tab's sessions there and nowhere else: the realm
+service's session store and `restoreSessionsFromStorage`
+(`host/app/utils/realm-sessions.ts`), `RealmAuthClient.getJWT` in a render
+context, and the realm-server service's session read. No session is synced to
+the auth service worker, which would keep the token past the run, and the
+visit's start clears the worker's tokens (`clearServiceWorkerTokens`), since a
+tab taken from another affinity brings that affinity's worker with it. The
+`command-runner` route answers through `#answer`, which first calls
+`RealmService.dropInMemorySessions`: every realm holding a session is removed,
+along with its token and refresher, and the global is deleted, so nothing of
+the run is left in the tab once the run answers. A run that doesn't answer
+(the tab's wait times out, or the attempt throws) may still be running its
+script with the token, so `runCommandAttempt` evicts the run's affinity and
+the page never goes back to the pool. Every other prerender visit
+(render, module, capture, ordinary command) sets `boxel-session` and deletes
+the global, so a tab that served a run and is then handed to another affinity
+never reads the run's sessions in place of its own.
+
+To check a tab by hand after a run, read `localStorage` and
+`globalThis.__boxelInMemorySessions` in it: neither holds the run's token.
+
+While the script runs, the tool's `RunStateWatch` asks the realm every 2 s
+whether the run is still running, and stops the script once it isn't: a
+cancel, a pause or remove, a cap that ended the run, or a newer attempt
+taking it over (_Canceling a run_). The tool then answers `stopped`, and the
+worker's finish is refused unless the run is still running under this
+attempt (the person's sessions were revoked, say), when it records the run
+as an error with reason `stopped`.
+
+`timeoutMs` widens every layer's timeout for this one request: the worker's
+request to the manager, the manager's proxy, and the tab's wait on the
+command (`commandRequestTimeoutMs` in `prerender-constants.ts`, up to
+`MAX_COMMAND_TIMEOUT_MS`, which is `MAX_RUN_SECONDS` plus the tab's grace).
+
+In the tab, the `run-automation` tool (`host/app/tools/run-automation.ts`)
+refuses to run unless the tab's session for the realm is a run token. It runs
+the script with `runAutomationScript` on `automationRealmIO`, with `resolve`
+sent to the realm server's `_request-forward` carrying the run's token, so it
+is counted and priced against the run's caps. It answers an
+`AutomationScriptOutcome`: an error the script throws itself
+(`RealmScriptError`) is `script-error` with its line, a run out of time
+(`AutomationTimeLimitError`) is `timed-out`, and a realm call's error the
+script didn't catch is `run-failed`. In the script, a realm call's error is
+an `Error` named `RealmCallError`. A script that couldn't start before the
+run's `endsAt` is `timed-out`.
+
+The run's progress goes to its run log: the tool records it with a
+`RunLogSink` for the run's realm and token, sending through the host's
+`network.fetch` like the run's other realm calls, so the script's console
+lines, its activity and milestones, and the error it ends with reach
+`automation_run_log` and Loki (_The run log_). The tool flushes the sink
+before it answers, while the run is still running, since `/_run-log` takes
+lines only from a running run and the worker finishes the run once it has
+the answer. It waits on that flush only until `FINAL_FLUSH_MARGIN_MS` (5 s)
+before the run's `endsAt`, so a slow log never costs the run its commit; a
+line sent past the limit is refused with the expired token anyway. A batch
+the log refuses or can't take is reported with the tab's `console.warn`,
+prefixed `[automation run <run id>]`.
+
+### Running one automation by hand in development
+
+With the dev stack up (a worker and the prerender server running), from
+`packages/realm-server`:
+
+```sh
+pnpm run-automation \
+  --realm http://localhost:4201/user/my-realm/ \
+  --card http://localhost:4201/user/my-realm/automation/sync \
+  --as @user:localhost          # add --preview to stop before the commit
+```
+
+It creates a `manual` run row for the card, enqueues its job, waits for it
+and prints the run row. `--as` must be a direct writer of the realm, since the
+commit re-confirms it. The script skips the direct-writer check
+`startAutomationRunNow` makes before the row; with `--preview` the row is a
+Preview (`dry_run`), and its staged files are in `automation_preview_files`
+once it completes. Then read the outcome:
+
+- the printed row: `state`, `error_reason`, `error_message` (a script error
+  starts `line N:`), `script_hash`, `committed_at`;
+- the files: a complete run's writes are in the realm, indexed in the
+  background (`writes` on the row counts them);
+- the worker's log: `automation run <id> attempt <n> complete`, `ended as an
+error (<reason>)` or `left alone: …`;
+- the run's log: the script's console lines, progress and the error it
+  ended with, beside the platform's lines (_Reading a run's log in
+  Postgres_). A batch the run's log refused or couldn't be sent shows in
+  the prerender server's log as the tab's `[automation run <run id>]`
+  warning, saying why.
+
+A run that stays `pending` was never claimed: check that a worker can claim
+priority 5 (_The lanes_). One that stays `running` lost its attempt; see
+_Diagnosing a run_.
+
+## Preview and Run now
+
+A direct writer starts a run of an automation at once, whether or not it is
+switched on, acting as and charged to whoever clicked (not the payer). The
+functions are in `packages/runtime-common/automation-manual-runs.ts`,
+imported as `@cardstack/runtime-common/automation-manual-runs`:
+
+- **`startAutomationPreview(ctx, request, options)`**: a run with
+  `dry_run` true. The script runs as usual and sees
+  `realm.current.automation.dryRun`, its writes are staged, and it stops
+  before the commit, so the realm is left as it was.
+- **`startAutomationRunNow(ctx, request, options)`**: the same run, which
+  commits.
+
+`ctx` is `{ dbAdapter, queue }`, `options` the `AutomationActorOptions` the
+lifecycle functions take, and `request` is `{ automationId, realm, user,
+click, declaration }`: `user` is whoever clicked, `click` a fresh id per
+click, and `declaration` the card as `readAutomationDeclaration` read it.
+Each checks, in this order, that the automation is in `realm`
+(`outside-realm`), that the declaration is the card's own (`other-card`),
+and that `user` is a direct writer of the realm (`not-a-direct-writer`,
+asked with `isDirectWriterLocked` in the transaction that makes the row).
+It then makes an ordinary run row, trigger `manual` (`MANUAL_RUN_TRIGGER`),
+slot the click, `acts_as` the clicker, and enqueues it with
+`enqueueAutomationRunJob` (`triggerKind: 'manual'`, the card's `seconds`
+cap for the job's timeout, `scheduledAt` the row's `created_at`). The
+declaration reader refuses a card trigger labelled `manual`
+(`reserved-label`), so a click never shares a slot and dedupe key with a
+scheduled run. A worker runs it exactly as it runs a scheduled run, through
+`runAutomationAttempt`: every check that makes before the script starts
+applies to it, as do the caps (`readRunLimits`: the card's caps, held to
+the snapshot once the automation is switched on), the automation's
+concurrency group, which queues a click behind a run of the same automation
+already going, and the automation tier. The commit re-confirms the
+clicker's direct write, as for any run.
+
+The row's `dry_run` alone decides whether a run is a Preview: everything
+after the run (its batch, its report, `lastSuccessAt`) reads the row. A job
+whose `dryRun` disagrees with its row runs nothing and ends the run as an
+error with `error_reason` `dry-run-mismatch`.
+
+They answer `{ ok: true, run, job? }`, with the run `pending`. Sending the
+same click again answers the same run: a pending one joins the job already
+enqueued (the job's key is the run's), and a finished one isn't enqueued
+again (`job` absent). A click that already started a run for someone else,
+or a run of the other kind, is refused (`click-reused`). Both then move
+through `pending`, `running`, and `complete` or `error`, like any run.
+
+### The batch a Preview keeps
+
+A Preview that finishes complete copies the files its attempt staged into
+`automation_preview_files` (run, realm-local path, bytes and size), in the
+transaction that finishes it, and then discards its overlay like every run
+(ADR 027 §1.4). The copy is the batch the Preview shows, and nothing writes
+to it afterwards. A Preview that errors or is canceled keeps nothing.
+
+Only a person's latest complete Preview of an automation keeps its batch,
+"latest" by when each was asked for (`created_at`, then `id`), not by when
+it finished (`keepPreviewBatch` in `automation-runs.ts`). The finish that
+keeps a batch deletes the batch of every earlier complete Preview by that
+person of that automation and records itself in their
+`preview_replaced_by`. A Preview that finishes after a later one has
+completed keeps nothing, and records that one. The finishes of one
+person's Previews of one automation take a transaction-scoped advisory
+lock, so two finishing together never both keep a batch. A Preview is
+never the automation's `lastSuccessAt`.
+
+To read a batch by hand:
+
+```sql
+SELECT path, size, convert_from(content, 'UTF8') AS text
+  FROM automation_preview_files WHERE run_id = '<run id>' ORDER BY path;
+```
+
+### The run's report
+
+`readAutomationRunReport(dbAdapter, { runId, user }, options)` answers
+`not-a-direct-writer` unless `user` directly writes the run's realm, and
+`missing` for no such run. Otherwise its `report` holds:
+
+- `run`: the run row (`state`, `acts_as`, `dryRun`, `error_reason`, …);
+- `timings`: the row's times, plus `queuedMs` (enqueue to first start),
+  `runMs` (first start to finish) and `commitMs` (claim to landing);
+- `cost`: the run's charges in `credits_ledger` by `charge_kind` and in
+  total (`credits`, `creditsByKind`), and the metered counts against its
+  caps (`callApiCalls`, `callApiResponseBytes`, `resolveCalls`, `writes`,
+  `aiCreditsSpent`, `aiCreditsReserved`);
+- `log`: the run's log (`readRunLog`);
+- `stagedFiles`: for a complete Preview, `{ path, size }` per staged file,
+  in path order. Empty when the script staged nothing, or when
+  `stagedFilesReplacedBy` names the later Preview whose batch replaced
+  this one's;
+- `committedPaths`: for a run whose commit landed, the realm-local paths
+  its commit line records (`data.paths` on the `commit` platform line).
+  Absent when the log dropped that line at its cap (_The cap_); `cost.writes`
+  still counts the files.
+
+The report carries no file bytes, since a Preview's batch can reach
+`RUN_OVERLAY_MAX_BYTES`. `readAutomationPreviewFile(dbAdapter, { runId,
+path, user }, options)` answers one staged file's `content`, for a direct
+writer of the run's realm, or `missing` when the Preview kept no file at
+`path`.
+
+### Comparing a Preview with a Run now
+
+Both read the realm and call every vendor fresh: nothing a Preview fetched
+is reused by the Run now that follows it, and each pays its own `callApi`
+and `resolve` calls. So a Preview shows what a run would write at the time
+it ran, not what the next run will write. To compare them, set the
+Preview's `stagedFiles` paths beside the Run now's `committedPaths`, and
+read each file's committed text from the realm. A difference comes from
+one of:
+
+- an upstream answer that changed between the two runs (compare the
+  `call-api` lines in both logs: status, size and time);
+- the realm changing between them: a search reads what the realm held when
+  the run started (_The run overlay_), and the commit leaves a file whose
+  text matches the stored file's alone, though `committedPaths` names it
+  too;
+- the card or script changing between them (`script_hash` on each row);
+- a cap reached in one and not the other (`error_reason` `hit-a-cap`).
+
+`cost.writes` is 0 for a Preview, which commits nothing, and counts every
+file the commit wrote for a Run now.
 
 ## The queue tier and worker lane
 
@@ -519,6 +1517,7 @@ The tests that pin these claims are the `queue - automation lane`, `queue - auto
 
 - **Worker task memory.** The worker manager divides its task's memory across every worker it starts, automation workers included (`workerHeapLimitMb` in `lib/worker-heap-limit.ts`). Each automation worker added shrinks every other worker's heap in that task.
 - **Prerender tabs.** An automation run is a run-command job, which runs its command in a prerender tab at its job priority. Each worker that can claim a run is one more tab the prerender servers may have to hold at once. See the `prerender-sizing` skill before raising the count.
+- **The deployed counts.** The `prerender-sizing` skill's _Automation runs and the worker lanes_ records the counts each environment runs, why, what a run's tab was measured to cost, and how to measure it again.
 
 ### The prerender high-priority tier
 

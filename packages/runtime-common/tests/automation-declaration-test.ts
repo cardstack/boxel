@@ -671,6 +671,23 @@ const tests = Object.freeze({
     );
   },
 
+  'refuses the trigger label that runs started by hand carry': async (
+    assert,
+  ) => {
+    assert.deepEqual(
+      codes(
+        read(
+          entry({
+            attributes: {
+              triggers: [cron('0 9 * * *', { label: 'manual' })],
+            },
+          }),
+        ),
+      ),
+      [['reserved-label', 'triggers.0.label']],
+    );
+  },
+
   'reports bad trigger kinds, counts, dates and webhook paths': async (
     assert,
   ) => {

@@ -1,5 +1,3 @@
-import { CATALOG_REALM_PREFIX } from '../realm-prefixes.ts';
-
 export const DEBUG_COMMAND_PREFIX = 'boxel-debug';
 
 // The skill features a room can enable, with what each one does. A feature
@@ -7,10 +5,7 @@ export const DEBUG_COMMAND_PREFIX = 'boxel-debug';
 // `<!-- /feature:<name> -->`, left out of the prompt unless the room enabled
 // it. A name added to a skill file must be added here too, or no room can
 // enable it.
-export const SKILL_FEATURES = {
-  'catalog-reuse':
-    'Makes the assistant search the catalog for a listing to install or remix, and for specs to reuse, before it writes any .gts file.',
-} as const satisfies Record<string, string>;
+export const SKILL_FEATURES = {} as const satisfies Record<string, string>;
 
 // The realms a feature's skill sections send the assistant to search, by
 // realm prefix. In a room that has not enabled the feature, the host leaves
@@ -20,13 +15,16 @@ export const SKILL_FEATURES = {
 // realm no room can ever enable.
 export const SKILL_FEATURE_REALMS: {
   [feature in keyof typeof SKILL_FEATURES]?: string[];
-} = {
-  'catalog-reuse': [CATALOG_REALM_PREFIX],
-};
+} = {};
 
 // The realms gated behind a feature that `enabledFeatures` does not include.
 export function realmsOfDisabledFeatures(enabledFeatures: string[]): string[] {
-  return Object.entries(SKILL_FEATURE_REALMS).flatMap(([feature, realms]) =>
+  // Typed by value: with no feature registered, the key type is `never` and
+  // `Object.entries` would type each value as `{}`.
+  let entries = Object.entries(
+    SKILL_FEATURE_REALMS as Record<string, string[] | undefined>,
+  );
+  return entries.flatMap(([feature, realms]) =>
     enabledFeatures.includes(feature) ? [] : (realms ?? []),
   );
 }
@@ -81,7 +79,7 @@ export function sessionSkillFeatures(
     let body = (event.content as { body?: unknown })?.body;
     let command =
       typeof body === 'string' ? parseFeatureCommand(body) : undefined;
-    if (!command || !(command.feature in SKILL_FEATURES)) {
+    if (!command || !Object.hasOwn(SKILL_FEATURES, command.feature)) {
       continue;
     }
     if (command.enable) {

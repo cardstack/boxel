@@ -43,6 +43,8 @@ The script and mise task are in this repo:
 - `scripts/claude-aws.sh`
 - `mise-tasks/claude-aws`
 
+The same session also gives Claude read-only Sentry access: the role can read the Sentry API token in SSM. The `sentry` skill covers it.
+
 Profile convention is fixed (don't change without a heads-up):
 
 - `claude-staging` — staging temp session (holds `boxel-claude-readonly` role creds)

@@ -18,6 +18,8 @@ import {
   logger,
   param,
   query,
+  realmEndpointPattern,
+  realmURLFor,
   SupportedMimeType,
   userInitiatedPriority,
   withChangeEvent,
@@ -81,17 +83,7 @@ interface RealmCreationJSON {
   };
 }
 
-// Where the realm an owner makes at an endpoint lives on this server.
-export function realmURLFor(
-  serverURL: URL,
-  ownerUserId: string,
-  endpoint: string,
-): string {
-  return new URL(
-    `${serverURL.pathname.replace(/\/$/, '')}/${getMatrixUsername(ownerUserId)}/${endpoint}/`,
-    serverURL,
-  ).href;
-}
+export { realmURLFor };
 
 export async function createRealm(
   deps: CreateRealmDeps,
@@ -136,7 +128,7 @@ export async function createRealm(
       `Cannot create a realm: a realm is already mounted at the origin of this server: ${serverRootRows[0].url}`,
     );
   }
-  if (!endpoint.match(/^[a-z0-9-]+$/)) {
+  if (!realmEndpointPattern.test(endpoint)) {
     throw errorWithStatus(
       400,
       `realm endpoint '${endpoint}' contains invalid characters`,
@@ -220,22 +212,26 @@ export async function createRealm(
         param(null),
         `) ON CONFLICT (url) DO UPDATE SET publishable = true, show_as_catalog = NULL, updated_at = now()`,
       ]);
-      writeJSONSync(join(realmPath, 'realm.json'), {
-        data: {
-          type: 'card',
-          attributes: {
-            cardInfo: { name },
-            ...(iconURL ? { iconURL } : {}),
-            ...(backgroundURL ? { backgroundURL } : {}),
-          },
-          meta: {
-            adoptsFrom: {
-              module: '@cardstack/base/realm-config',
-              name: 'RealmConfig',
+      writeJSONSync(
+        join(realmPath, 'realm.json'),
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              cardInfo: { name },
+              ...(iconURL ? { iconURL } : {}),
+              ...(backgroundURL ? { backgroundURL } : {}),
+            },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/realm-config',
+                name: 'RealmConfig',
+              },
             },
           },
         },
-      });
+        { spaces: 2 },
+      );
       let indexCard: Record<string, any> = {
         data: {
           type: 'card',
@@ -268,7 +264,7 @@ export async function createRealm(
           Sentry.captureException(err);
         }
       }
-      writeJSONSync(join(realmPath, 'index.json'), indexCard);
+      writeJSONSync(join(realmPath, 'index.json'), indexCard, { spaces: 2 });
 
       // Register the source realm in realm_registry. The INSERT emits
       // NOTIFY realm_registry; the reconciler on every instance picks

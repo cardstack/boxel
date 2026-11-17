@@ -56,12 +56,16 @@ export async function admitAutomationRunAIRequest(
   dbAdapter: DBAdapter,
   {
     runId,
+    attempt,
     aiCreditsCap,
     body,
     price,
     batched = false,
   }: {
     runId: string;
+    // The attempt the request was admitted for. A run a retry has taken over
+    // from it refuses the request.
+    attempt?: number;
     // The automation's `aiCredits` cap.
     aiCreditsCap: number;
     // The request body as it will be sent.
@@ -84,6 +88,7 @@ export async function admitAutomationRunAIRequest(
     runId,
     credits,
     aiCreditsCap,
+    attempt !== undefined ? { attempt } : {},
   );
   switch (reservation.kind) {
     case 'reserved':
@@ -109,7 +114,10 @@ export async function admitAutomationRunAIRequest(
       return {
         kind: 'refused',
         reason: 'run-not-running',
-        message: `The run is ${reservation.run.state}, so it can't make AI requests`,
+        message:
+          reservation.run.state === 'running'
+            ? "Another attempt has taken the run over, so this one can't make AI requests"
+            : `The run is ${reservation.run.state}, so it can't make AI requests`,
       };
     case 'missing':
       return {
