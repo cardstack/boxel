@@ -22,6 +22,7 @@ import {
 import type { ReportAutomationChange } from '../automation-change-events.ts';
 import type { ReportRunChange } from '../automation-run-events.ts';
 import { readRunLimits, readRunDeclaration } from '../automation-run-limits.ts';
+import { pauseAfterRepeatedFailures } from '../automations.ts';
 import { logRunPlatformLine } from '../automation-run-log.ts';
 import {
   automationRunLogTag,
@@ -97,6 +98,9 @@ export interface AutomationAttemptContext {
   // Writes the run's compute and network charge once the run has ended.
   // Without it, as in a harness, the run is measured and nothing is charged.
   meteredCharges?: MeteredCharges;
+  // How many of an automation's own runs fail in a row before it pauses
+  // itself; `AUTOMATION_FAILURES_BEFORE_PAUSE` when absent.
+  failuresBeforePause?: number;
   // Told each time the attempt moves the run: it starts it, admits it, or
   // ends it, and when a pause the admission makes cancels other runs.
   reportRunChange?: ReportRunChange;
@@ -146,7 +150,49 @@ export async function runAutomationAttempt(
         runId: input.runId,
         log: ctx.log,
       });
+      await pauseIfFailingRepeatedly(ctx, input.runId);
     }
+  }
+}
+
+// Once the run has ended as an error, however it ended (this attempt's
+// finish, a cap or a refused credential that the realm server ended it at,
+// or an earlier attempt), pauses its automation if its own runs have now
+// failed `failuresBeforePause` times in a row. The streak is read from the
+// runs, so an attempt that finds the run already over asks again harmlessly.
+// A failure to pause is logged: the run's outcome is recorded already, and the
+// next failed run asks again.
+async function pauseIfFailingRepeatedly(
+  ctx: AutomationAttemptContext,
+  runId: string,
+): Promise<void> {
+  try {
+    let run = await getAutomationRun(ctx.dbAdapter, runId);
+    if (!run || run.state !== 'error') {
+      return;
+    }
+    let result = await pauseAfterRepeatedFailures(
+      ctx.dbAdapter,
+      run.automationId,
+      {
+        ...(ctx.failuresBeforePause !== undefined
+          ? { failuresBeforePause: ctx.failuresBeforePause }
+          : {}),
+      },
+      {
+        reportRunChange: ctx.reportRunChange,
+        reportAutomationChange: ctx.reportAutomationChange,
+      },
+    );
+    if (result?.paused) {
+      ctx.log.warn(
+        `automation ${run.automationId} paused after repeated failed runs; the last was run ${runId} (${run.errorReason ?? 'error'})`,
+      );
+    }
+  } catch (e: any) {
+    ctx.log.error(
+      `could not check whether automation run ${runId}'s failure pauses its automation: ${e?.message ?? e}`,
+    );
   }
 }
 

@@ -128,11 +128,12 @@ module(basename(import.meta.filename), function (hooks) {
 
   async function newRun({
     dryRun = false,
-  }: { dryRun?: boolean } = {}): Promise<AutomationRun> {
+    trigger = 'manual',
+  }: { dryRun?: boolean; trigger?: string } = {}): Promise<AutomationRun> {
     return await createAutomationRun(dbAdapter, {
       automationId: rri(`${realm.url}${TEST_AUTOMATION_PATH}`),
       realm: ri(realm.url),
-      trigger: 'manual',
+      trigger,
       slot: randomUUID(),
       actsAs: OWNER,
       dryRun,
@@ -197,6 +198,7 @@ module(basename(import.meta.filename), function (hooks) {
       concurrencyGroup = null,
       commit,
       meteredCharges,
+      failuresBeforePause,
       workerLog = log,
       reportRunChange,
     }: {
@@ -212,6 +214,7 @@ module(basename(import.meta.filename), function (hooks) {
       // `send` sends one to the realm.
       commit?: (send: () => Promise<Response>) => Promise<Response>;
       meteredCharges?: MeteredCharges;
+      failuresBeforePause?: number;
       reportRunChange?: ReportRunChange;
     } = {},
   ) {
@@ -254,6 +257,7 @@ module(basename(import.meta.filename), function (hooks) {
         matrixServerName: 'localhost',
         admissionChecks: testAutomationAdmissionChecks,
         meteredCharges,
+        failuresBeforePause,
         reportRunChange,
         log: workerLog,
       },
@@ -607,6 +611,56 @@ module(basename(import.meta.filename), function (hooks) {
       nextCalls[0].input.automation.lastSuccessAt,
       undefined,
       'a complete Preview is not a last success',
+    );
+  });
+
+  test('an automation whose own runs fail in a row pauses itself once the last of them ends', async function (assert) {
+    let automationId = rri(`${realm.url}${TEST_AUTOMATION_PATH}`);
+    await query(dbAdapter, [
+      'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since) VALUES (',
+      param(automationId),
+      ',',
+      param(ri(realm.url)),
+      ',',
+      param(OWNER),
+      ", 'active', '{}'::jsonb, '{}'::jsonb, now())",
+    ]);
+    let thrown: AutomationScriptOutcome = {
+      state: 'error',
+      reason: 'script-error',
+      message: 'Error: upstream said no',
+    };
+    let first = await newRun({ trigger: 'nightly' });
+    await attempt(first, stubTab([], { answer: thrown }), {
+      input: { triggerKind: undefined },
+      failuresBeforePause: 2,
+    });
+    let [afterOne] = await query(dbAdapter, [
+      'SELECT state FROM automations WHERE automation_id =',
+      param(automationId),
+    ]);
+    assert.strictEqual(
+      afterOne?.state,
+      'active',
+      'one failure is not a streak',
+    );
+
+    let second = await newRun({ trigger: 'nightly' });
+    let result = await attempt(second, stubTab([], { answer: thrown }), {
+      input: { triggerKind: undefined },
+      failuresBeforePause: 2,
+    });
+    assert.strictEqual(result.state, 'error');
+    let [afterTwo] = await query(dbAdapter, [
+      'SELECT state, pause_reason FROM automations WHERE automation_id =',
+      param(automationId),
+    ]);
+    assert.strictEqual(afterTwo?.state, 'paused');
+    assert.strictEqual(afterTwo?.pause_reason, 'repeated-failures');
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, second.id))?.state,
+      'error',
+      'the run that tripped the pause keeps its own error, not a cancel',
     );
   });
 

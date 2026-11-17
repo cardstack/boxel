@@ -67,7 +67,9 @@ import {
   getAutomation,
   pauseForPayerLostAccess,
   setAutomationWaitingForCredits,
+  SPENDING_REFUSAL_REASONS,
   type AutomationRow,
+  type SpendingRefusalReason,
 } from './automations.ts';
 import type { ReportAutomationChange } from './automation-change-events.ts';
 import type { ReportRunChange } from './automation-run-events.ts';
@@ -110,7 +112,8 @@ export interface AdmissionRefusal {
   message: string;
 }
 
-// The codes the spending check refuses a run with. None of them is the
+// The codes the spending check refuses a run with, kept in `automations.ts`,
+// whose failure streak leaves them out. None of them is the
 // script's fault, and each clears without anyone changing the automation:
 // the balance recovers, the day or month turns, or the worker gets its
 // prices back.
@@ -122,13 +125,7 @@ export interface AdmissionRefusal {
 //   in flight hold, has reached the cap.
 // - `pricing-unavailable`: the worker's pricing check failed, so it admits
 //   no run (ADR 029 §1.3).
-export const SPENDING_REFUSAL_REASONS = [
-  'insufficient-credits',
-  'daily-credit-cap-reached',
-  'monthly-credit-cap-reached',
-  'pricing-unavailable',
-] as const;
-export type SpendingRefusalReason = (typeof SPENDING_REFUSAL_REASONS)[number];
+export { SPENDING_REFUSAL_REASONS, type SpendingRefusalReason };
 
 const CREDIT_CAP_REASONS: ReadonlySet<string> = new Set<SpendingRefusalReason>([
   'daily-credit-cap-reached',

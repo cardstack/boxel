@@ -95,6 +95,8 @@ const ACTIVE = {
   nextRun: '2030-01-01T10:00:00.000Z',
   lastResult: 'complete',
   lastFinishedAt: '2030-01-01T09:00:00.000Z',
+  failuresInARow: 0,
+  lastFailure: null,
   triggers: [
     {
       label: 'nightly',
@@ -691,6 +693,57 @@ module('Acceptance | automation view', function (hooks) {
       .includesText('Payer A person who shares no workspace with you');
   });
 
+  test("an automation whose runs keep failing shows the streak's last error, as stored, until a run completes", async function (assert) {
+    let failing = {
+      ...ACTIVE,
+      lastResult: 'error',
+      failuresInARow: 3,
+      lastFailure: {
+        runId: 'run-3',
+        reason: 'script-error',
+        message: 'line 3: Error: upstream said no...',
+        finishedAt: '2030-01-01T09:00:00.000Z',
+      },
+    };
+    answer = { status: 200, attributes: failing };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-status]')
+      .includesText('Last error line 3: Error: upstream said no...');
+
+    answer = {
+      status: 200,
+      attributes: {
+        ...failing,
+        lastFailure: { ...failing.lastFailure, message: null },
+      },
+    };
+    await openFormat('embedded');
+    await openIsolated();
+    await waitUntil(() =>
+      text('[data-test-automation-status]')?.includes(
+        'Last error script-error',
+      ),
+    );
+    assert
+      .dom('[data-test-automation-status]')
+      .includesText(
+        'Last error script-error',
+        'a failure with no message shows its code',
+      );
+
+    answer = { status: 200, attributes: ACTIVE };
+    await openFormat('embedded');
+    await openIsolated();
+    await waitUntil(() =>
+      text('[data-test-automation-status]')?.includes('Last run: Completed'),
+    );
+    assert
+      .dom('[data-test-automation-status]')
+      .doesNotIncludeText('Last error', 'no streak, no last error');
+  });
+
   test('a paused, waiting and done automation each read with that state', async function (assert) {
     let cases: [Record<string, unknown>, string, string][] = [
       [
@@ -707,6 +760,33 @@ module('Acceptance | automation view', function (hooks) {
         { state: 'paused', pauseReason: 'payer-lost-access' },
         'Paused',
         'The payer can no longer edit this workspace, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and becomes the new payer.',
+      ],
+      [
+        {
+          state: 'paused',
+          pauseReason: 'repeated-failures',
+          lastResult: 'error',
+          failuresInARow: 5,
+          lastFailure: {
+            runId: 'run-5',
+            reason: 'script-error',
+            message: 'line 3: Error: upstream said no',
+            finishedAt: '2030-01-01T09:00:00.000Z',
+          },
+        },
+        'Paused',
+        'Boxel paused the automation after 5 runs in a row failed. Boxel runs nothing until someone who can edit this workspace fixes what the runs fail on and resumes the automation.',
+      ],
+      [
+        {
+          state: 'paused',
+          pauseReason: 'repeated-failures',
+          lastResult: 'error',
+          failuresInARow: 0,
+          lastFailure: null,
+        },
+        'Paused',
+        'Boxel paused the automation after several runs in a row failed. Boxel runs nothing until someone who can edit this workspace fixes what the runs fail on and resumes the automation.',
       ],
       [
         { state: 'waiting-for-credits', pauseReason: null },

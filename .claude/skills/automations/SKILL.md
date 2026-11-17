@@ -11,7 +11,9 @@ description: >-
   done), caps snapshot, per-trigger run counts and next run, and the functions
   in `packages/runtime-common/automations.ts` that switch an automation on,
   pause, resume and remove it, pause it when a card edit raises a cap or turns
-  on `batchedAI`, and pause it when its payer loses direct write. Also covers
+  on `batchedAI`, pause it when its payer loses direct write, and pause it
+  after its own runs fail several times in a row (`repeated-failures`), with
+  how to read why. Also covers
   the card's index hook, which recomputes the row's next run and *done* when
   the card is indexed and removes the row when the card is deleted or stops
   being an automation, and archiving a realm, which pauses its automations.
@@ -211,7 +213,7 @@ The views get the row from `GET <realm>/_automation-status?automation=<card URL>
 
 - **403** unless the caller is a direct writer of the realm (`isDirectWriter`), asked of the session the realm vouches for (`#sessionPrincipal`): a reader, a writer by the `*` or `users` row, a policy grant, a revoked session, a session delegated to another realm, and a realm-authority or diagnostic session never see the row. An anonymous caller gets 401 from the ACL on a realm only signed-in users can read, and 403 from the route on one anyone can read.
 - **400** when `automation` is missing, not a URL, or outside the realm.
-- **200** with `{ data: { type: 'automation-status', id, attributes } }`. `attributes` is `{ switchedOn: false }` when no row exists. Otherwise it holds `state`, `pauseReason`, `payer`, `viewerIsPayer`, `nextRun`, `lastResult`, `lastFinishedAt` and `triggers`, one per trigger the card declares, in the card's order: `label`, `runs`, and for a bounded trigger `runsLeft` (with `runsLeftAtLeast` past `REMAINING_RUNS_LIMIT`) and `until`, plus `nextRun` and `spent`. Times are ISO strings.
+- **200** with `{ data: { type: 'automation-status', id, attributes } }`. `attributes` is `{ switchedOn: false }` when no row exists. Otherwise it holds `state`, `pauseReason`, `payer`, `viewerIsPayer`, `nextRun`, `lastResult`, `lastFinishedAt`, `failuresInARow` and `lastFailure` (the failure streak and its latest run's id, `reason`, `message` and `finishedAt`, or null; see _Pausing after repeated failures_), and `triggers`, one per trigger the card declares, in the card's order: `label`, `runs`, and for a bounded trigger `runsLeft` (with `runsLeftAtLeast` past `REMAINING_RUNS_LIMIT`) and `until`, plus `nextRun` and `spent`. Times are ISO strings.
 
 Both shapes carry `lastRun`, the automation's last run that started and has ended (`readLastRunMilestones`), and `currentRun`, its run in progress (`readCurrentRunMilestones`), each with its milestones (_Run milestones_) or null. A Preview is a test of the script, so neither is ever one. A run can start and end before switch-on (a Run now), so neither depends on the row.
 
@@ -257,6 +259,7 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 | `scheduled_since`                                                        | When it was switched on or last resumed: the schedule's `since`. Slots at or before it never run                                                                                                                                            |
 | `next_run`                                                               | The earliest next run across unspent cron and one-time triggers; null when none is left. The `automations_due_idx` partial index serves the tick's search over active and waiting-for-credits rows                                          |
 | `last_enqueued_at`, `last_started_at`, `last_finished_at`, `last_result` | The most recent run: when it was enqueued, started and finished, and whether it ended `complete`, `error` or `canceled`                                                                                                                     |
+| `failures_since`                                                         | When it was switched on or last resumed, by the database clock: only runs created at or after it count toward a pause for repeated failures (see _Pausing after repeated failures_)                                                         |
 | `switched_on_at`, `updated_at`                                           | When the row was made and last changed                                                                                                                                                                                                      |
 
 ### States and who changes them
@@ -268,6 +271,7 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 | `batched-ai-enabled`     | `checkAutomationCaps`: the card turned on `batchedAI` and the snapshot had it off                                                                                                                |
 | `payer-lost-access`      | `checkAutomationPayer`: the payer is no longer a direct writer of the realm; or a run's admission (`pauseForPayerLostAccess`): the payer's sessions were revoked, or their account can't sign in |
 | `realm-archived`         | `pauseRealmAutomations`: the realm was archived (`handlers/handle-archive-realm.ts`)                                                                                                             |
+| `repeated-failures`      | `pauseAfterRepeatedFailures`: the automation's own runs failed `AUTOMATION_FAILURES_BEFORE_PAUSE` (5) times in a row; the worker asks once each run ends as an error                             |
 
 - **`switchOnAutomation`** makes the row for a direct writer, who becomes the payer, snapshots the caps the declaration sets, and starts the schedule now. A row whose triggers are all spent starts `done`. A second switch-on is refused (`already-switched-on`).
 - **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending and running runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it); restoring the realm leaves them paused until a direct writer resumes each one.
@@ -313,9 +317,38 @@ SELECT state, pause_reason, paused_by, payer, next_run, scheduled_since,
 - `paused` with `realm-archived`: the realm was archived. Restoring it doesn't resume the automation; a direct writer does.
 - `paused` with `caps-raised` or `batched-ai-enabled`: compare `caps_snapshot` with the card's `caps` and `batchedAI`. A direct writer resumes it to agree to the new caps and pay for them.
 - `paused` with `payer-lost-access`: the payer's own permission row no longer grants write. Another direct writer resumes it and becomes the payer.
+- `paused` with `repeated-failures`: the automation's own runs kept failing. `readAutomationFailures` (or the status route's `failuresInARow` and `lastFailure`) names the latest failed run, its `error_reason` and its `error_message`; the query under _Pausing after repeated failures_ lists the whole streak. Fix what the runs fail on (the script, a key, the card), check it with a Preview, then resume, which clears the streak.
 - `active` with a null `next_run`: only webhook triggers, or none left that the schedule can place.
 - `waiting-for-credits`: the payer's last run was refused with `insufficient-credits`. Its due runs still start and are refused until the payer's balance, less what their runs in flight hold, reaches the run's minimum balance (the `pricing` skill, _The minimum balance and the credit caps_). The first run admitted makes it `active`.
 - A run canceled with no `canceled_by`: an automatic pause, or the index hook's remove, canceled it; its `error_reason` names which.
+
+### Pausing after repeated failures
+
+An automation whose own runs keep failing pauses itself with `repeated-failures`, so a broken script, key or card stops spending the payer's credits every slot, and the payer learns why from the last error.
+
+- **The streak is read from the runs, never stored.** `readAutomationFailures(querier, automationId)` counts the automation's runs that ended as `error` after its latest `complete` one, ordered by `finished_at`, and returns that count (`inARow`) and the latest of them (`last`: run id, `error_reason`, `error_message`, `finished_at`). So a complete run resets it, and a run recorded as an error whose commit lands after all (`recordAutomationRunCommitted` makes it complete) ends it too.
+- **Only the automation's own runs count:** runs its triggers started, a batch follow-up included. A Preview (`dry_run`) and a Run now (trigger `manual`) are a person's runs, acting as and charged to them whether or not the automation is on, so they neither extend nor break the streak. Nor does a canceled run, or a failed run whose reason is in either of two lists:
+  - `SPENDING_REFUSAL_REASONS` (`insufficient-credits`, `daily-credit-cap-reached`, `monthly-credit-cap-reached`, `pricing-unavailable`): admission refused the run for the payer's spending, and the automation waits for credits instead and runs again once the payer can pay.
+  - `PLATFORM_FAILURE_REASONS` (`account-unverifiable`, `run-admission-failed`, `run-failed`, `commit-failed`, `commit-interrupted`, `job-lost`, `dry-run-mismatch`): the platform failed the run, not the automation. A Matrix, prerender or worker outage fails every automation's runs this way, and counting them would pause every automation that runs during it.
+- **Resuming clears it.** Only runs created at or after the row's `failures_since` count, and switch-on and resume set it.
+- **`pauseAfterRepeatedFailures(dbAdapter, automationId, { failuresBeforePause }, reporters)`** locks the row, reads the streak and pauses once it reaches `failuresBeforePause` (default `AUTOMATION_FAILURES_BEFORE_PAUSE`, 5), cancelling the pending run as every pause does. Like the other pauses it runs in `withChanges`, so `reporters` hear about the paused automation and each canceled run once the pause commits. Only an active automation, or one waiting for credits, pauses: one already paused keeps its reason, and one _done_ has no runs left to stop. It returns `{ automation, paused }`, where `paused` says whether this call paused it. Since the streak is read from the runs, calling it again, or for a run that didn't fail, changes nothing.
+- **Who asks.** The worker's `runAutomationAttempt` asks after every attempt whose run has ended as an error, however it ended: the attempt's own finish, or the realm server ending the run at a cap or a refused credential. The threshold comes from `AutomationAttemptContext.failuresBeforePause`. Reconcile doesn't ask: `abandonAutomationRun` ends a run as `job-lost`, which never counts, or as `complete`, which resets the streak. Anything else that ends an automation's run with a reason that counts calls it too; a call that is missed is made up by the next failed run's.
+- **The run that tripped the pause keeps its own error.** It had ended before the pause, so the pause cancels only the runs after it.
+
+The streak, by hand:
+
+```sql
+SELECT id, state, error_reason, error_message, finished_at
+  FROM automation_runs
+ WHERE automation_id = '<automation card id>'
+   AND finished_at IS NOT NULL AND NOT dry_run AND trigger <> 'manual'
+   AND created_at >= (SELECT failures_since FROM automations
+                       WHERE automation_id = '<automation card id>')
+ ORDER BY finished_at DESC
+ LIMIT 10;
+```
+
+Reading down, the streak is the `error` rows above the first `complete` one, skipping `canceled` rows and errors whose reason is in `SPENDING_REFUSAL_REASONS` or `PLATFORM_FAILURE_REASONS`. The worker logs `automation <id> paused after repeated failed runs; the last was run <run id> (<reason>)` once, from the attempt whose run tripped the pause.
 
 ### The tick: enqueueing due runs
 
@@ -1327,8 +1360,8 @@ nothing, check that they hold a `write` row of their own in
 
 A change to an automation's own row sends an `automation` realm event: a
 direct writer switches it on, pauses, resumes or removes it; something pauses
-it without a person (a raised cap, the payer losing access, archiving the
-realm); its card is deleted or stops adopting from `Automation`, which removes
+it without a person (a raised cap, the payer losing access, its runs failing
+repeatedly, archiving the realm); its card is deleted or stops adopting from `Automation`, which removes
 the row; or its state moves between active, waiting for credits and done. The
 event is `AutomationEventContent` in `packages/base/matrix-event.gts`:
 
@@ -1370,6 +1403,7 @@ read them from, and never rejects; a failed report is logged as
 | Switch-on, pause, resume, remove                                                                           | `switchOnAutomation`, `pauseAutomation`, `resumeAutomation`, `removeAutomation`, given the reporter                                                                       |
 | The payer losing access                                                                                    | `checkAutomationPayer`, `pauseForPayerLostAccess`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                   |
 | Archiving the realm                                                                                        | `pauseRealmAutomations`, from the archive handler (`realmServerAutomationChangeReporter`)                                                                                 |
+| Its runs failing repeatedly                                                                                | `pauseAfterRepeatedFailures`, from `runAutomationAttempt` (`AutomationAttemptContext.reportAutomationChange`)                                                             |
 | The card's index hook removes it, pauses it for a raised cap or batched AI, or makes it done/active        | `syncAutomationWithCard`, from `syncAutomationsAfterIndex` in the indexing tasks. `checkAutomationCaps` pauses the same way and reports to a caller that passes reporters |
 | The tick makes it done, or moves its next run without starting a run (every due slot joined a pending run) | `tickAutomations` (`AutomationTickOptions.reportAutomationChange`)                                                                                                        |
 
@@ -1379,8 +1413,8 @@ that starts a run and leaves the state as it was reports nothing either, since
 the run's `job` event announces it. A worker reports through
 `taskAutomationChangeReporter`, which hands the event to `reportRealmEvent`.
 A realm route that changes a row passes `Realm.reportAutomationChange`. **New
-code that changes an automation's state** (waiting for credits, a pause of its
-own) reports the automation the same way once its change commits.
+code that changes an automation's state** (such as waiting for credits)
+reports the automation the same way once its change commits.
 
 ### Watching it
 
