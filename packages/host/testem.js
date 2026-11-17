@@ -10,18 +10,21 @@ if (typeof module !== 'undefined') {
   const config = {
     test_page: 'tests/index.html?hidepassed',
     disable_watching: true,
-    browser_timeout: 120,
-    browser_no_activity_timeout: 120,
     browser_disconnect_timeout: 60,
     // socket.io pingTimeout. testem otherwise derives this from
     // browser_disconnect_timeout (60s), which is too tight for this suite: on
-    // a CI runner the whole service stack and Chrome contend for two vCPUs, so
-    // the browser can be too starved to answer a socket.io ping within 60s
-    // even while every test is still passing — the control socket then drops
-    // and testem reports the browser dead mid-run. browser_no_activity_timeout
-    // (120s) still bounds a genuinely stuck browser that stops producing
-    // results, so widening the ping tolerance only keeps a slow-but-
-    // progressing browser connected.
+    // a CI runner the whole service stack and Chrome contend for the runner's
+    // vCPUs, so the browser can be too starved to answer a socket.io ping
+    // within 60s even while every test is still passing — the control socket
+    // then drops and testem reports the browser dead mid-run.
+    //
+    // This is also the only bound testem puts on a browser whose main thread
+    // hangs: it has no per-test or no-activity timeout. A hung page drops the
+    // socket with `ping timeout` after up to the 25s ping interval plus this
+    // timeout, and testem then waits browser_disconnect_timeout before
+    // reporting `Browser timeout exceeded` — up to about six and a half
+    // minutes in all. The disconnect reason in the debug log below names
+    // which case a failure was.
     socket_heartbeat_timeout: 300,
     launch_in_ci: ['Chrome'],
     launch_in_dev: ['Chrome'],
@@ -136,6 +139,79 @@ if (typeof module !== 'undefined') {
         }
       });
     }
+
+    // A mid-run `Browser timeout exceeded` is testem's disconnect path: the
+    // control socket closed and no reconnect arrived within
+    // browser_disconnect_timeout. socket.io hands the disconnect a reason that
+    // separates the causes — `transport close` (the page went away: renderer
+    // crash or navigation), `ping timeout` (the page stopped answering: a hung
+    // main thread), `transport error` — but testem discards it. Record it,
+    // with socket.io's description, which for `transport error` carries the
+    // underlying error.
+    const BrowserTestRunner = require('testem/lib/runners/browser_test_runner');
+    const onDisconnect = BrowserTestRunner.prototype.onDisconnect;
+    BrowserTestRunner.prototype.onDisconnect = function (
+      reason,
+      description,
+      ...rest
+    ) {
+      try {
+        testemInternalLog.warn(
+          `browser control socket disconnected: reason=${JSON.stringify(
+            reason,
+          )} description=${JSON.stringify(
+            String(description?.message ?? description ?? ''),
+          )} finished=${Boolean(this.finished)} priorDisconnects=${
+            this.disconnectCount ?? 0
+          }`,
+        );
+      } catch (e) {
+        // best-effort diagnostics — never let logging break the run
+      }
+      return onDisconnect.call(this, reason, description, ...rest);
+    };
+
+    // The browser's lifeline (tests/helpers/lifeline.ts) reports here over
+    // plain HTTP, independent of the control socket, so its record of the
+    // running test, main-thread liveness and any cross-document navigation
+    // survives the socket dropping. A GET answers 204 so the page can tell
+    // the endpoint exists; outside CI it is absent and the lifeline stays off.
+    //
+    // Mounted by wrapping testem's own middleware injection rather than
+    // through the `middleware` option: `ember test` passes its addon
+    // middlewares as that option, which replaces any list set here.
+    const mountLifeline = (app) => {
+      app.get('/__host-test-lifeline', (req, res) => {
+        res.status(204).end();
+      });
+      app.post('/__host-test-lifeline', (req, res) => {
+        let body = '';
+        req.setEncoding('utf8');
+        req.on('data', (chunk) => {
+          if (body.length < 16384) {
+            body += chunk;
+          }
+        });
+        req.on('end', () => {
+          try {
+            debugStream.write(
+              `${new Date().toISOString()} [lifeline] ${body
+                .replace(/\s+/g, ' ')
+                .slice(0, 16384)}\n`,
+            );
+          } catch (e) {
+            // best-effort diagnostics — never let logging break the run
+          }
+          res.status(204).end();
+        });
+      });
+    };
+    const TestemServer = require('testem/lib/server');
+    const injectMiddleware = TestemServer.prototype.injectMiddleware;
+    TestemServer.prototype.injectMiddleware = function (app, ...rest) {
+      mountLifeline(app);
+      return injectMiddleware.call(this, app, ...rest);
+    };
   }
 
   module.exports = config;
