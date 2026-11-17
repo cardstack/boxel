@@ -250,7 +250,14 @@ module('Integration | authorize errors', function (hooks) {
 
   test('Close closes the window, and says it can be closed when it stays open', async function (assert) {
     await open('?error=rate_limited');
-    assert.dom('[data-test-oauth-error-close-hint]').doesNotExist();
+    assert
+      .dom('[data-test-oauth-error-close-hint]')
+      .hasAttribute(
+        'role',
+        'status',
+        'the line is in the page, empty, before Close',
+      );
+    assert.dom('[data-test-oauth-error-close-hint]').hasNoText();
     await click('[data-test-oauth-error-close]');
     assert.deepEqual(moves, [{ how: 'close' }]);
     assert

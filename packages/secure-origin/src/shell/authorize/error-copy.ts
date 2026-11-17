@@ -3,6 +3,7 @@
 // is the app's name, and a state words itself with "the app" when it has
 // none.
 
+import { LOOPBACK_APP_NAME } from '../../security/oauth-error-states.js';
 import type { ErrorApp, ErrorState } from '../../security/oauth-errors.ts';
 
 export type ErrorPageState = ErrorState | 'load-failed';
@@ -13,10 +14,12 @@ export interface ErrorCopy {
 }
 
 // An app's name at the start of a sentence. A domain or a client's own name
-// is written as it is; a phrase standing in for a name ("an app on this
-// computer") starts with a capital.
+// is written as it is; the phrase standing in for an app on the user's
+// computer starts with a capital.
 function sentenceStart(name: string): string {
-  return /\s/.test(name) ? name[0]!.toUpperCase() + name.slice(1) : name;
+  return name === LOOPBACK_APP_NAME
+    ? name[0]!.toUpperCase() + name.slice(1)
+    : name;
 }
 
 export function errorCopy(
@@ -66,7 +69,7 @@ export function errorCopy(
     case 'rate-limited':
       return {
         heading: 'Too many attempts',
-        info: `Wait a minute, then start connecting again from ${from}.`,
+        info: `Wait a few minutes, then start connecting again from ${from}.`,
       };
     case 'load-failed':
       return {

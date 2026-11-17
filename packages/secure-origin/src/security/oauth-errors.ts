@@ -14,6 +14,7 @@ import {
   ERROR_REFERENCE,
   ERROR_STATE_BY_REASON,
   FIXED_ERRORS,
+  UNKNOWN_APP_NAME,
   UNKNOWN_REASON_STATE,
 } from './oauth-error-states.js';
 import { timedFetch } from './session.js';
@@ -64,10 +65,6 @@ export class ErrorDetailsFailure extends Error {
 
 // How long a lookup may take before the page says it couldn't load.
 export const ERROR_DETAILS_TIMEOUT_MS = 15_000;
-
-// What the realm server names an app it can't name, which the page words as
-// it words no app at all.
-const UNKNOWN_APP_NAME = 'an unknown app';
 
 // The states "Return" may be shown in. The realm server never offers it for
 // the others, and the page doesn't draw it there whatever it's told.
@@ -174,6 +171,7 @@ function toErrorDetails(body: unknown, status: number): ErrorDetails {
     isRecord(body.app) &&
     typeof body.app.shown === 'string' &&
     body.app.shown !== '' &&
+    // An app the server can't name is worded as no app at all.
     body.app.shown !== UNKNOWN_APP_NAME
   ) {
     app = { shown: body.app.shown };

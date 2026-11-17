@@ -25,6 +25,14 @@ export const ERROR_STATE_BY_REASON = Object.freeze({
 // The state for a reason this build doesn't know, from a newer server.
 export const UNKNOWN_REASON_STATE = 'cant-continue';
 
+// What the realm server names an app by when it has no name Boxel can check:
+// an app whose redirect URI is on the user's own computer, and one that
+// registered itself with no redirect URI to go by. The realm server names
+// apps with these (`lib/oauth-provider/app-name.ts`), and the error page words
+// them as phrases, not names.
+export const LOOPBACK_APP_NAME = 'an app on this computer';
+export const UNKNOWN_APP_NAME = 'an unknown app';
+
 // The `error` values the realm server sends the browser with that need no
 // lookup: a request over the rate limit, which stores nothing, and a
 // reference that is spent, expired or was never issued.

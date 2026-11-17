@@ -31,6 +31,7 @@ import {
 import {
   ERROR_REFERENCE,
   ERROR_STATE_BY_REASON,
+  FIXED_ERRORS,
 } from '@cardstack/secure-origin/security/oauth-error-states.js';
 import { asTheIssuerServes } from '../lib/oauth-provider/serve.ts';
 import { appName } from '../lib/oauth-provider/app-name.ts';
@@ -39,7 +40,10 @@ import {
   withOAuthProviderSecretsLabeled,
 } from '../lib/request-telemetry.ts';
 import type { CallerLimit } from '../lib/oauth-provider/caller-limit.ts';
-import { DEFAULT_AUTHORIZATION_LIMIT } from '../lib/oauth-provider/authorization.ts';
+import {
+  DEFAULT_AUTHORIZATION_LIMIT,
+  FIXED_ERROR_PAGES,
+} from '../lib/oauth-provider/authorization.ts';
 import {
   OAuthProviderConfigError,
   readAuthorizationLimit,
@@ -361,6 +365,13 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         Object.keys(ERROR_STATE_BY_REASON).sort(),
         [...AUTHORIZATION_REFUSAL_REASONS].sort(),
+      );
+    });
+
+    test('the error page knows each error the provider sends by name, and no other', function (assert) {
+      assert.deepEqual(
+        Object.keys(FIXED_ERRORS).sort(),
+        Object.values(FIXED_ERROR_PAGES).sort(),
       );
     });
   });

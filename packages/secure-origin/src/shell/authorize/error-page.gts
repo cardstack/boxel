@@ -52,10 +52,15 @@ export default class ErrorPage extends Component<Signature> {
   <template>
     {{#if this.shownState}}
       <div class='error-page' data-test-oauth-error={{this.shownState}}>
-        <MessagePage @heading={{this.copy.heading}} @info={{this.copy.info}}>
+        <MessagePage
+          @heading={{this.copy.heading}}
+          @info={{this.copy.info}}
+          @focus={{true}}
+        >
           <div class='actions'>
             {{#if this.returnTo}}
               <AuthButton
+                class='return'
                 @href={{this.returnTo}}
                 @variant='primary'
                 data-test-oauth-error-return
@@ -76,11 +81,12 @@ export default class ErrorPage extends Component<Signature> {
               data-test-oauth-error-close
             >Close</AuthButton>
           </div>
-          {{#if this.closeTried}}
-            <p class='hint' role='status' data-test-oauth-error-close-hint>
-              {{CLOSE_HINT}}
-            </p>
-          {{/if}}
+          {{! In the page from the start, so a screen reader announces the
+              line when it is filled in. }}
+          <p class='hint' role='status' data-test-oauth-error-close-hint>{{if
+              this.closeTried
+              CLOSE_HINT
+            }}</p>
         </MessagePage>
       </div>
     {{else}}
@@ -99,10 +105,20 @@ export default class ErrorPage extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp-sm);
       }
+      /* The app's name comes from the server and can be long, so the label
+         wraps rather than running out of the button. */
+      .return {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        text-align: center;
+      }
       .hint {
         margin: var(--boxel-sp-sm) 0 0;
-        color: var(--foreground);
         letter-spacing: var(--boxel-lsp);
+      }
+      /* Kept in the page while empty, out of the layout's way. */
+      .hint:empty {
+        margin: 0;
       }
     </style>
   </template>

@@ -7,12 +7,17 @@
 // any program on the user's computer. A pre-registered client is one of
 // Boxel's own apps, named in code.
 
+import {
+  LOOPBACK_APP_NAME,
+  UNKNOWN_APP_NAME,
+} from '@cardstack/secure-origin/security/oauth-error-states.js';
 import { registrableDomain } from '../secure-window.ts';
 import { isLoopbackRedirect } from './redirect-uris.ts';
 
-export const LOOPBACK_APP_NAME = 'an app on this computer';
-// A client that registered itself, named without a redirect URI to go by.
-export const UNKNOWN_APP_NAME = 'an unknown app';
+// The secure origin's pages read these names, so they are defined there.
+// `UNKNOWN_APP_NAME` names a client that registered itself, without a
+// redirect URI to go by.
+export { LOOPBACK_APP_NAME, UNKNOWN_APP_NAME };
 
 export type OAuthClientKind =
   | 'pre-registered'
