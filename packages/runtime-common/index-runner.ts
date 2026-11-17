@@ -44,6 +44,7 @@ import {
   CardError,
   coerceErrorMessage,
   isCardError,
+  isVisitRequestFailure,
   serializableError,
   stringifyErrorForLog,
 } from './error.ts';
@@ -1279,6 +1280,14 @@ export class IndexRunner {
           }),
         );
     error.message = message;
+    // The visit's prerender request itself failed (it aborted, timed out or
+    // lost its connection; `markVisitRequestFailure`): the failure describes
+    // the request, not the file, so it is transient (`isTransientRenderError`).
+    // The writer keeps the file's last good row instead of an error row, and a
+    // card linking the file does not inherit it.
+    if (isVisitRequestFailure(err)) {
+      error.visitRequestFailure = true;
+    }
     let fileEntry: FileErrorIndexEntry = {
       type: 'file-error',
       error,

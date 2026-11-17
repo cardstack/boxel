@@ -63,6 +63,7 @@ import {
   renderErrorSummary,
   type RenderErrorSummary,
   type SerializedError,
+  ungatedRenderErrorSQL,
 } from './error.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
@@ -2722,7 +2723,13 @@ export function prerenderedJoin(opts?: WIPOptions) {
 // the liveness gates of the capture routes, publishing. A reader of the
 // card's data asks the index channel alone (`INDEX_HAS_ERROR`), because a
 // render failure leaves the data the index visit read intact.
-const RENDER_ERROR_IS_CURRENT = `(ph.url IS NOT NULL AND ph.error_doc IS NOT NULL AND ph.generation >= i.generation)`;
+// A transient render failure (a render timeout, an aborted prerender request,
+// a gateway failure: `isTransientRenderError`) says the render did not finish,
+// not that the card is broken. The writer keeps the last good render over one
+// instead of storing it as an error, and this ignores those stored as errors
+// before it did (`ungatedRenderErrorSQL`). One stored on a row with no good
+// render to keep (`noGoodRowToKeep`) counts.
+const RENDER_ERROR_IS_CURRENT = `(ph.url IS NOT NULL AND ph.error_doc IS NOT NULL AND ph.generation >= i.generation AND NOT ${ungatedRenderErrorSQL('ph')})`;
 
 const INDEX_HAS_ERROR = `COALESCE(i.has_error, FALSE)`;
 

@@ -14,6 +14,11 @@ import {
   type SpawningIndexPass,
 } from './jobs/prerender-html.ts';
 import { laneFamiliesPredicate, laneFamilyOf } from './jobs/lane-family.ts';
+import {
+  TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS,
+  TRANSIENT_RENDER_FAILURE_RETRY_CAP,
+  transientRenderErrorSQL,
+} from './error.ts';
 
 // The catch-up sweep's read side. It reconciles two independently-advancing
 // channels — the search-doc index (`boxel_index`) and the prerendered HTML
@@ -99,6 +104,34 @@ export const STALE_SHELL_FAILURE_RETRY_MIN_AGE_MS = 10 * 60 * 1000;
 export const GATEWAY_FAILURE_RETRY_CAP = 3;
 export const GATEWAY_FAILURE_RETRY_MIN_AGE_MS = 5 * 60 * 1000;
 
+// The transient-render-failure twin. The writer stamps a render that did not
+// finish (`isTransientRenderError`: a render timeout, an aborted prerender
+// request) as `diagnostics.transientRenderFailure` instead of publishing it as
+// the card's error, so the row reads as current and nothing else asks for
+// the re-render. This lane re-drives it with backoff: retry n of
+// `TRANSIENT_RENDER_FAILURE_RETRY_CAP` waits
+// `TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS * 2^(n-1)` after the last attempt,
+// time for an overloaded prerender service to drain, which is the cause it
+// expects. Past the cap the row keeps its stale render and `_indexing-errors`
+// lists it. The index pass's rows take the same retries
+// (`findTransientIndexRetryRows`).
+export {
+  TRANSIENT_RENDER_FAILURE_RETRY_CAP,
+  TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS,
+};
+
+// Whether a row stamped with a transient failure is due its next retry:
+// `alias` is the row, `attemptedAt` its column holding when the last attempt
+// was written (epoch ms). Postgres only.
+function transientRetryDueSQL(alias: string, attemptedAt: string): string {
+  let runs = `COALESCE((${alias}.diagnostics->>'transientRenderFailureRenders')::int, 1)`;
+  return `(jsonb_typeof(${alias}.diagnostics->'transientRenderFailure') = 'array'
+           AND ${runs} <= ${TRANSIENT_RENDER_FAILURE_RETRY_CAP}
+           AND ${alias}.${attemptedAt}
+             < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               - ${TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS} * power(2, GREATEST(${runs} - 1, 0))::bigint)`;
+}
+
 export const DECLARED_CAPTURE_RETRY_CAP = 3;
 export const DECLARED_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 
@@ -148,6 +181,17 @@ export const DECLARED_CAPTURE_RETRY_MIN_AGE_MS = 45 * 60 * 1000;
 // recurring stops costing renders at the cap. Their caps and min ages are
 // tuned per cause (see the constants above).
 //
+// The seventh arm is the transient-render-failure lane, keyed on
+// `diagnostics.transientRenderFailure` and its run, with backoff
+// (`transientRetryDueSQL`). It holds whether or not the row carries an
+// `error_doc` (a transient failure with no prior render to keep is written as
+// an error row, `noGoodRowToKeep`, and retried all the same).
+// The eighth re-renders, once, a transient render error stored before the
+// writer stamped the verdict (`transientRenderErrorSQL` on a row without the
+// stamp): the re-render's write either succeeds or carries the stamp, so the
+// arm cannot fire for the same row twice. A visit-request failure is left to
+// its own lane (the third arm) and its cap.
+//
 // The jsonb operators here are Postgres-only, like the `jobs`-table scans
 // in this module: the reconcile task that issues this query runs solely
 // behind the Postgres queue.
@@ -195,7 +239,15 @@ export async function findStalePrerenderedHtmlRows(
              < ${GATEWAY_FAILURE_RETRY_CAP}
            AND ph.rendered_at
              < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
-               - ${GATEWAY_FAILURE_RETRY_MIN_AGE_MS}))`,
+               - ${GATEWAY_FAILURE_RETRY_MIN_AGE_MS})
+         OR ${transientRetryDueSQL('ph', 'rendered_at')}
+         OR (ph.error_doc IS NOT NULL
+           AND ph.diagnostics->'transientRenderFailure' IS NULL
+           AND (ph.error_doc->>'visitRequestFailure') IS DISTINCT FROM 'true'
+           AND ${transientRenderErrorSQL('ph')}
+           AND ph.rendered_at
+             < (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint
+               - ${TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS}))`,
   ] as Expression)) as {
     realm_url: string;
     url: string;
@@ -206,6 +258,44 @@ export async function findStalePrerenderedHtmlRows(
     url: row.url,
     generation: Number(row.generation),
   }));
+}
+
+// Index rows due a retry of a transient failure: the index pass kept the
+// file's or card's previous good row over a visit that timed out or whose
+// prerender request aborted (or, with no good row, stored the failure as the
+// row's error) and stamped `diagnostics.transientRenderFailure`. Same backoff
+// and cap as the HTML channel's lane (`transientRetryDueSQL`), timed from
+// the row's `indexed_at`; the repair is an incremental index of exactly
+// those URLs. Rows an index job already queued or running for the realm
+// names are left to it. Postgres only.
+export async function findTransientIndexRetryRows(
+  dbAdapter: DBAdapter,
+): Promise<Map<string, string[]>> {
+  let rows = (await query(dbAdapter, [
+    `SELECT i.realm_url, i.url
+     FROM boxel_index i
+     WHERE i.is_deleted IS NOT TRUE
+       AND ${transientRetryDueSQL('i', 'indexed_at')}
+       AND NOT EXISTS (
+         SELECT 1 FROM jobs j
+         WHERE j.job_type IN ('incremental-index', 'from-scratch-index')
+           AND j.status = 'unfulfilled'
+           AND j.args->>'realmURL' = i.realm_url
+           AND (j.job_type = 'from-scratch-index'
+             OR EXISTS (
+               SELECT 1 FROM jsonb_array_elements(j.args->'changes') AS c
+               WHERE c->>'url' = i.url)))
+     ORDER BY i.realm_url, i.url`,
+  ] as Expression)) as { realm_url: string; url: string }[];
+  let byRealm = new Map<string, string[]>();
+  for (let row of rows) {
+    let urls = byRealm.get(row.realm_url) ?? [];
+    if (!urls.includes(row.url)) {
+      urls.push(row.url);
+    }
+    byRealm.set(row.realm_url, urls);
+  }
+  return byRealm;
 }
 
 // The highest generation at which a still-pending prerender_html job is on

@@ -1373,8 +1373,10 @@ async function visitForPrerenderedHtml({
 // retry can legitimately succeed (e.g. an abort under temporary prerender
 // congestion). The reconcile sweep gives such rows a bounded retry lane:
 // re-rendered at most `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP` consecutive
-// times, spaced by the sweep cadence, then terminal exactly like a
-// deterministic render error. The bound is what protects the fleet — each
+// times, spaced by the sweep cadence, then terminal. The marker also makes the
+// failure transient (`isTransientRenderError`): the writer keeps a prior good
+// render in place of the error, and a stored one never gates the card's
+// liveness or search. The bound is what protects the fleet — each
 // retry of a genuinely pathological visit burns its realm's prerender
 // affinity lane for the full request timeout, so retries must converge to
 // "recorded error, move on" rather than repeat indefinitely.

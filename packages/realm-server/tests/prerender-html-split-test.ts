@@ -2550,14 +2550,23 @@ module(basename(import.meta.filename), function () {
           2,
           'the error row carries the batch generation, so the reconcile sweep reads the failure as this generation’s recorded outcome',
         );
+        // A request failure is transient: with a good render to keep, it is
+        // withheld rather than published as the card's render error.
+        assert.strictEqual(
+          instanceRow.error_doc,
+          null,
+          'the request failure is not the card’s current render error',
+        );
         assert.ok(
-          instanceRow.error_doc?.message?.includes('aborted after 120000ms'),
-          'the instance error doc carries the underlying request failure',
+          (
+            instanceRow.diagnostics as Diagnostics | null
+          )?.transientRenderError?.message?.includes('aborted after 120000ms'),
+          'its diagnostics carry the underlying request failure',
         );
         assert.strictEqual(
           instanceRow.isolated_html,
           '<h1>good</h1>',
-          'the last-known-good HTML is preserved beneath the error',
+          'the last-known-good HTML is kept',
         );
         assert.false(Boolean(instanceRow.is_deleted));
 
@@ -2657,8 +2666,15 @@ module(basename(import.meta.filename), function () {
         });
 
         let instanceRow = await productionRow(url);
+        assert.strictEqual(
+          instanceRow.error_doc,
+          null,
+          'the request failure is withheld over the kept render',
+        );
         assert.ok(
-          instanceRow.error_doc?.message?.includes('aborted after'),
+          (
+            instanceRow.diagnostics as Diagnostics | null
+          )?.transientRenderError?.message?.includes('aborted after'),
           'the previously-live instance row records the failure instead of staying tombstoned',
         );
         assert.false(Boolean(instanceRow.is_deleted));

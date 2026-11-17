@@ -45,11 +45,12 @@ import {
 //      server (which cancels the in-flight render and disposes the wedged
 //      tab), and the visit loop records the failure instead of letting it
 //      reject the whole job.
-//   2. A real error row lands in `prerendered_html`, stamped at the
-//      generation the pass targeted and marked `visitRequestFailure` with
-//      its consecutive-failure count — the shape the reconcile sweep's
-//      bounded retry lane keys on. Last-known-good HTML survives beneath
-//      the error.
+//   2. The failure lands in `prerendered_html`, stamped at the generation
+//      the pass targeted. An aborted request is a transient failure, so
+//      with a good render to keep the row keeps it and records the failure
+//      in diagnostics (`transientRenderFailure` and its run length, the
+//      shape the reconcile sweep's bounded retry lane keys on) instead of
+//      as the card's render error.
 //   3. The reconcile sweep enqueues nothing for the failed URL: the error
 //      row reads as "attempted, recorded" rather than "never attempted",
 //      so the sweep does not re-enqueue the identical batch every tick.
@@ -321,21 +322,33 @@ module(basename(import.meta.filename), function (hooks) {
       `the visit failed within the client's request budget (${elapsedMs}ms < ${prerenderRenderTimeoutMs}ms)`,
     );
 
-    // ── a real error row is persisted, in the retry lane's shape ───────
+    // ── the failure is recorded, but not as the card's render error ────
+    // An aborted request is a transient failure: the card had a good render,
+    // so the row keeps it and records the failure in diagnostics, where it
+    // gates neither liveness nor search.
     let errorRow = await prerenderedHtmlRowFor(dbAdapter, wedgeCardURL);
-    let errorDoc = errorRow?.error_doc as {
-      visitRequestFailure?: true;
-      consecutiveVisitFailures?: number;
+    let rowDiagnostics = errorRow?.diagnostics as {
+      transientRenderFailure?: string[];
+      transientRenderFailureRenders?: number;
+      transientRenderError?: { message?: string };
     } | null;
-    assert.ok(errorDoc, 'an error row is persisted for the wedged visit');
-    assert.true(
-      errorDoc?.visitRequestFailure,
-      'marked as a visit-request failure: the request was aborted before the render returned any verdict',
+    assert.notOk(
+      errorRow?.error_doc,
+      'no current render error for a visit whose request was aborted',
+    );
+    assert.deepEqual(
+      rowDiagnostics?.transientRenderFailure,
+      ['instance'],
+      'the row records the transient failure',
+    );
+    assert.ok(
+      rowDiagnostics?.transientRenderError?.message?.includes('aborted after'),
+      'with the request failure that caused it',
     );
     assert.strictEqual(
-      errorDoc?.consecutiveVisitFailures,
+      rowDiagnostics?.transientRenderFailureRenders,
       1,
-      'the failure starts a consecutive-failure run of one — the counter the bounded retry lane caps on',
+      'the failure starts a run of one — the counter the bounded retry lane caps on',
     );
     assert.strictEqual(
       errorRow?.generation,
@@ -344,15 +357,24 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.ok(
       errorRow?.isolated_html?.includes('calm before the block'),
-      'last-known-good HTML is preserved beneath the error',
+      'last-known-good HTML is kept',
     );
     let fileErrorRow = await prerenderedHtmlRowFor(
       dbAdapter,
       wedgeCardURL,
       'file',
     );
-    assert.ok(
-      fileErrorRow?.error_doc,
+    let fileRowRecordsFailure =
+      Boolean(fileErrorRow?.error_doc) ||
+      Boolean(
+        (
+          fileErrorRow?.diagnostics as {
+            transientRenderFailure?: string[];
+          } | null
+        )?.transientRenderFailure?.includes('file'),
+      );
+    assert.true(
+      fileRowRecordsFailure,
       "the file rendering row records the failure too — both of the URL's rows carry the outcome",
     );
 
@@ -425,8 +447,11 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let rowWhileBroken = await prerenderedHtmlRowFor(dbAdapter, wedgeCardURL);
     assert.ok(
-      (rowWhileBroken?.error_doc as { visitRequestFailure?: true } | null)
-        ?.visitRequestFailure,
+      (
+        rowWhileBroken?.diagnostics as {
+          transientRenderFailure?: string[];
+        } | null
+      )?.transientRenderFailure,
       "the bad card's recorded failure still stands — the healthy realm's progress did not disturb it",
     );
 
@@ -440,7 +465,7 @@ module(basename(import.meta.filename), function (hooks) {
     let healedRow = await prerenderedHtmlRowFor(dbAdapter, wedgeCardURL);
     assert.notOk(
       healedRow?.error_doc,
-      'a successful render replaces the error row outright, ending the consecutive-failure run',
+      'a successful render replaces the row outright, ending the failure run',
     );
     assert.ok(
       healedRow?.isolated_html?.includes('unblocked at last'),

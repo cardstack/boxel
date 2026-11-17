@@ -14,6 +14,7 @@ import {
   asExpressions,
   DECLARED_CAPTURE_RETRY_CAP,
   GATEWAY_FAILURE_RETRY_CAP,
+  TRANSIENT_RENDER_FAILURE_RETRY_CAP,
   STALE_SHELL_FAILURE_RETRY_CAP,
   findPrerenderHtmlRejectionStreaks,
   insert,
@@ -1718,5 +1719,52 @@ module(basename(import.meta.filename), function (hooks) {
       'successful captures leave nothing to repair',
     );
     assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
+  });
+  test('re-indexes, as the realm owner, the index rows whose visits failed transiently and are due a retry', async function (assert) {
+    let realmURL = 'http://test-realm/transient-index/';
+    await seedOwner(realmURL);
+    let stamp = (renders: number) =>
+      JSON.stringify({
+        transientRenderFailure: ['file'],
+        transientRenderFailureRenders: renders,
+      });
+    for (let [name, renders, indexedAt] of [
+      ['due.jsonl', 1, 0],
+      ['backing-off.jsonl', 2, Date.now()],
+      ['exhausted.jsonl', TRANSIENT_RENDER_FAILURE_RETRY_CAP + 1, 0],
+    ] as const) {
+      await dbAdapter.execute(
+        `INSERT INTO boxel_index (url, file_alias, realm_url, type, generation, diagnostics, indexed_at)
+         VALUES ($1, $1, $2, 'file', 1, $3::jsonb, $4)`,
+        { bind: [`${realmURL}${name}`, realmURL, stamp(renders), indexedAt] },
+      );
+    }
+
+    let result = await runReconcile();
+    assert.strictEqual(result.indexRetriesEnqueued, 1);
+
+    let jobs = (await dbAdapter.execute(
+      `SELECT args, concurrency_group FROM jobs WHERE job_type = 'incremental-index'`,
+    )) as {
+      args: {
+        realmURL: string;
+        realmUsername: string;
+        changes: { url: string; operation: string }[];
+      };
+      concurrency_group: string;
+    }[];
+    assert.strictEqual(jobs.length, 1, 'one incremental pass');
+    assert.deepEqual(jobs[0].args.changes, [
+      { url: `${realmURL}due.jsonl`, operation: 'update' },
+    ]);
+    assert.strictEqual(jobs[0].args.realmUsername, 'owner');
+    assert.strictEqual(jobs[0].concurrency_group, `indexing:${realmURL}`);
+
+    let again = await runReconcile();
+    assert.strictEqual(
+      again.indexRetriesEnqueued,
+      undefined,
+      'a URL the queued pass names is left to it',
+    );
   });
 });

@@ -36,6 +36,9 @@ import {
 } from './expression.ts';
 import {
   clampSerializedError,
+  isTransientRenderError,
+  renderErrorSummary,
+  TRANSIENT_RENDER_FAILURE_RETRY_CAP,
   sanitizeForJsonb,
   type SerializedError,
 } from './error.ts';
@@ -346,8 +349,30 @@ export function verdictCoversRow(
 ): boolean {
   return (
     verdictArrayCoversRow(diagnostics?.staleShellFailure, type) ||
-    verdictArrayCoversRow(diagnostics?.gatewayFailure, type)
+    verdictArrayCoversRow(diagnostics?.gatewayFailure, type) ||
+    verdictArrayCoversRow(diagnostics?.transientRenderFailure, type)
   );
+}
+
+// The transient-failure verdict for a row about to be written: the row type,
+// what failed, and the run of failed renders it extends (the prior row's run,
+// when that row recorded one, plus this render). The run is what the reconcile
+// sweep's bounded, backed-off retries key on, and what `_indexing-errors`
+// reports once it passes `TRANSIENT_RENDER_FAILURE_RETRY_CAP`. A successful
+// render replaces the row's diagnostics and so ends the run.
+function stampTransientRenderFailure(
+  diagnostics: Diagnostics,
+  type: 'instance' | 'file',
+  error: SerializedError,
+  prior: Diagnostics | null | undefined,
+): Diagnostics {
+  return {
+    ...diagnostics,
+    transientRenderFailure: [type],
+    transientRenderFailureRenders:
+      (prior?.transientRenderFailureRenders ?? 0) + 1,
+    transientRenderError: renderErrorSummary(error),
+  };
 }
 
 // Rows held in the write-behind buffer before a flush is forced (see
@@ -1767,9 +1792,30 @@ export class Batch {
         // to protect, and withholding its error would leave nothing at all —
         // the failure has to surface somewhere, and an error row is the right
         // output there even when the environment caused it.
+        //
+        // A transient failure (`isTransientRenderError`: the visit's render
+        // timed out, or its prerender request aborted) is the same kind of
+        // failure stated by the error itself, so it is stamped here as its own
+        // verdict and withheld the same way, its retries scheduled by the
+        // reconcile sweep. Past the retry cap the last good row still stays;
+        // `_indexing-errors` lists it. With no good row to keep it is stored
+        // as the row's error at once, marked `noGoodRowToKeep`.
+        let transient = isTransientRenderError(entry.error);
+        if (transient) {
+          diagnostics = stampTransientRenderFailure(
+            diagnostics,
+            baseTypeFromError(entry),
+            entry.error,
+            await this.#priorRowDiagnostics(url, baseTypeFromError(entry)),
+          );
+          this.#noteTransientRetriesExhausted(url, diagnostics);
+        }
         let withholdFailure =
           verdictCoversRow(diagnostics, baseTypeFromError(entry)) &&
           Boolean(production.pristine_doc);
+        if (transient && !withholdFailure && errorEntry) {
+          errorEntry.error.noGoodRowToKeep = true;
+        }
         entryPayload = {
           types: entry.types,
           // favor the last known good types over the types derived from the error state
@@ -2206,8 +2252,32 @@ export class Batch {
           production?.head_html ??
           production?.markdown,
         );
+        // A render that did not finish — it timed out, its prerender request
+        // aborted or lost its client, a fetch met a gateway failure — is the
+        // environment's failure, not the card's (`isTransientRenderError`).
+        // The verdict is stamped here, at the one sink every producer of
+        // renderings writes through (the HTML pass, a fused pass, a visit
+        // that failed outright), so it is withheld like the prerender
+        // server's verdicts below and its retries are scheduled by the
+        // reconcile sweep. Past the retry cap the last good render still
+        // stays; `_indexing-errors` lists the row. With no render to keep, the
+        // failure is stored as the row's error at once (`noGoodRowToKeep`),
+        // and counts like any other, so the card shows as errored.
+        let transient = isTransientRenderError(entry.error);
+        if (transient) {
+          diagnostics = stampTransientRenderFailure(
+            diagnostics,
+            type,
+            entry.error,
+            production?.diagnostics as Diagnostics | null,
+          );
+          this.#noteTransientRetriesExhausted(url, diagnostics);
+        }
         let withholdHtmlFailure =
           verdictCoversRow(diagnostics, type) && hasPriorRender;
+        if (transient && !withholdHtmlFailure) {
+          errorDoc.noGoodRowToKeep = true;
+        }
         if (withholdHtmlFailure) {
           // Withholding keeps the prior render published and clears the error
           // that would otherwise have flagged the row — so nothing is left
@@ -5295,6 +5365,39 @@ export class Batch {
     }
     // non-executable files should recurse by concrete URL
     return url;
+  }
+
+  // The diagnostics of the row's current production row, errored or not: the
+  // run of transient failures a new one extends is on it either way.
+  async #priorRowDiagnostics(
+    url: URL,
+    type: BoxelIndexTable['type'],
+  ): Promise<Diagnostics | null> {
+    let [row] = (await this.#query([
+      'SELECT diagnostics FROM boxel_index WHERE',
+      ...every([
+        any([
+          ['url =', param(url.href)],
+          ['file_alias =', param(url.href)],
+        ]),
+        ['type =', param(type)],
+      ]),
+    ] as Expression)) as { diagnostics: Diagnostics | null }[];
+    return row?.diagnostics ?? null;
+  }
+
+  // The render that used up a row's transient-failure retries: say so where
+  // an operator reads, once, as the row goes stale. `_indexing-errors` keeps
+  // listing it afterwards.
+  #noteTransientRetriesExhausted(url: URL, diagnostics: Diagnostics) {
+    if (
+      diagnostics.transientRenderFailureRenders ===
+      TRANSIENT_RENDER_FAILURE_RETRY_CAP + 1
+    ) {
+      this.#log.warn(
+        `${jobIdentity(this.jobInfo)} ${url.href} failed to render transiently ${diagnostics.transientRenderFailureRenders} times in a row (${diagnostics.transientRenderError?.message ?? 'no message'}); its retries are exhausted, so it keeps its last good content and is listed by _indexing-errors as transient-render-retries-exhausted`,
+      );
+    }
   }
 
   private normalizeErrorDoc(

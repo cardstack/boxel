@@ -305,6 +305,8 @@ import {
   formattedError,
   stringifyErrorForLog,
   unsupportedMediaType,
+  TRANSIENT_RENDER_FAILURE_RETRY_CAP,
+  transientRenderRetriesExhausted,
   type RenderErrorSummary,
   type SerializedError,
 } from './error.ts';
@@ -3329,6 +3331,10 @@ export interface ServedRealm {
   mount(): Promise<Realm | undefined>;
 }
 
+// An index row or rendering whose run of transient render failures has used up
+// its retries (`transientRenderRetriesExhausted`). Postgres only, like the
+// `_indexing-errors` query that reads it.
+const transientRetriesExhaustedSQL = `(jsonb_typeof(diagnostics->'transientRenderFailure') = 'array' AND COALESCE((diagnostics->>'transientRenderFailureRenders')::int, 1) > ${TRANSIENT_RENDER_FAILURE_RETRY_CAP})`;
 export class Realm {
   #startedUp = new Deferred<void>();
   #matrixClient: MatrixClient;
@@ -20680,6 +20686,7 @@ export class Realm {
       `    jsonb_typeof(diagnostics->'toolSchemaErrors') = 'array'`,
       `    AND jsonb_array_length(diagnostics->'toolSchemaErrors') > 0`,
       `  )`,
+      `  OR ${transientRetriesExhaustedSQL}`,
       `)`,
       `ORDER BY type, url`,
     ])) as {
@@ -20747,7 +20754,8 @@ export class Realm {
             | 'indexing-error'
             | 'broken-link'
             | 'frontmatter-error'
-            | 'tool-schema-error';
+            | 'tool-schema-error'
+            | 'transient-render-retries-exhausted';
           attributes: Record<string, unknown>;
         }[] = [];
         if (hasError) {
@@ -20778,6 +20786,24 @@ export class Realm {
               attributes: { ...baseAttributes, brokenLinks },
             });
           }
+          // The row kept its last good content because its visit kept
+          // failing transiently through every retry.
+          if (
+            Array.isArray(row.diagnostics?.transientRenderFailure) &&
+            transientRenderRetriesExhausted(
+              row.diagnostics?.transientRenderFailureRenders as number,
+            )
+          ) {
+            findings.push({
+              type: 'transient-render-retries-exhausted',
+              attributes: {
+                ...baseAttributes,
+                channel: 'index',
+                failedRenders: row.diagnostics?.transientRenderFailureRenders,
+                transientRenderError: row.diagnostics?.transientRenderError,
+              },
+            });
+          }
         }
         return findings.map((finding) => ({
           type: finding.type,
@@ -20795,14 +20821,51 @@ export class Realm {
       }),
     };
 
+    // Renderings whose transient render failures used up their retries: the
+    // HTML channel's twin of the index rows the query above admits by the
+    // same test. Each keeps its last good render; this is where that shows.
+    let staleRenderings = (await query(this.#dbAdapter, [
+      `SELECT url, type, diagnostics FROM prerendered_html WHERE realm_url =`,
+      param(sourceRealmURL),
+      `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      `AND ${transientRetriesExhaustedSQL}`,
+      `ORDER BY type, url`,
+    ])) as {
+      url: string;
+      type: string;
+      diagnostics: Record<string, unknown> | null;
+    }[];
+    let renderingFindings = staleRenderings.map((row) => ({
+      type: 'transient-render-retries-exhausted',
+      id: `html::${row.type}::${row.url}::transient-render-retries-exhausted`,
+      attributes: {
+        url: row.url,
+        entryType: row.type,
+        channel: 'html',
+        failedRenders: row.diagnostics?.transientRenderFailureRenders ?? null,
+        transientRenderError: row.diagnostics?.transientRenderError ?? null,
+      },
+    }));
+    let data = [...renderingFindings, ...doc.data];
+    let body = {
+      data,
+      meta: {
+        // How many index rows and renderings are stale because their
+        // transient render failures used up their retries.
+        transientRenderRetriesExhausted: data.filter(
+          (finding) => finding.type === 'transient-render-retries-exhausted',
+        ).length,
+      },
+    };
+
     // The stored error documents carry the stacks an error response would
     // withhold, and this answers with a 200, so `createResponse` leaves it be.
     if (withholdsStacksFrom(requestContext)) {
-      removeStacks(doc.data);
+      removeStacks(body.data);
     }
 
     return createResponse({
-      body: JSON.stringify(doc, null, 2),
+      body: JSON.stringify(body, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.JSONAPI },
       },

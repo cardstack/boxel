@@ -40,6 +40,14 @@ export interface SerializedError {
   // is eligible for the reconcile sweep's bounded retry lane, unlike a
   // deterministic render error.
   visitRequestFailure?: true;
+  // Set by the prerender server on the error of a render that ran out of
+  // time ("Render timed-out after N ms"). Typed, so classification never
+  // reads the message (`isTransientRenderError`).
+  renderTimeout?: true;
+  // Set by the index and prerendered-html writers on a transient failure they
+  // stored as the row's error because the row had no good content to keep. It
+  // counts like any error: the card shows as errored at once, never invisible.
+  noGoodRowToKeep?: true;
   // How many consecutive `visitRequestFailure` rows this URL has recorded,
   // maintained by the prerendered-html writer: incremented while each
   // successive write carries the marker, cleared whenever a render
@@ -108,13 +116,120 @@ export interface ErrorEntry {
 // `CardError.fromFetchResponse` — to recognize such a failure and stamp it
 // with the `gatewayFailure` marker the prerender classifier withholds on. It
 // is deliberately not used to classify a persisted error after the fact: the
-// same status can originate from a card render (a render timeout is a 504), so
-// classification keys on the marker rather than re-deriving intent from the
-// number.
+// same status can originate from a card render, so classification keys on the
+// marker rather than re-deriving intent from the number. (A render timeout is
+// a 504; `isTransientRenderError` recognizes it by its title.)
 export const GATEWAY_ERROR_STATUSES = [502, 503, 504];
 
 export function isGatewayFailureStatus(status: unknown): boolean {
   return typeof status === 'number' && GATEWAY_ERROR_STATUSES.includes(status);
+}
+
+// A render error that records the render failing to finish rather than a
+// verdict about the card, read from its markers: a render that ran out of time
+// (`renderTimeout`, stamped by the prerender server), a visit whose prerender
+// request aborted, timed out, met a 502/503/504 from the prerender path or lost
+// its connection before any response existed (`visitRequestFailure`, stamped
+// by the visit loops), or a fetch that met a gateway or network failure
+// (`gatewayFailure`). The render twin of `isTransientModuleError`
+// (definition-lookup.ts). Never keyed on a bare status, which a card render
+// can produce for its own reasons. A genuine render error (a template that
+// throws, a 500 from the card) is not transient.
+//
+// The writers keep a row's last good content over such a failure, record it
+// in diagnostics, and let the reconcile sweep retry it with backoff up to
+// `TRANSIENT_RENDER_FAILURE_RETRY_CAP` times; past the cap the stale row stays
+// and `_indexing-errors` lists it. With no good content to keep, the failure
+// is stored as the row's error at once (`noGoodRowToKeep`).
+export function isTransientRenderError(
+  error: SerializedError | null | undefined,
+): boolean {
+  if (!error) {
+    return false;
+  }
+  return (
+    error.renderTimeout === true ||
+    error.visitRequestFailure === true ||
+    error.gatewayFailure === true ||
+    isLegacyRenderTimeout(error)
+  );
+}
+
+// LEGACY READER, delete once no stored row predates the `renderTimeout`
+// marker: a render timeout recorded before the prerender server stamped it,
+// recognized by its title or message. Mirrored in `transientRenderErrorSQL`.
+function isLegacyRenderTimeout(error: SerializedError): boolean {
+  return (
+    error.title === RENDER_TIMEOUT_TITLE ||
+    (typeof error.message === 'string' &&
+      error.message.startsWith(RENDER_TIMEOUT_MESSAGE_PREFIX))
+  );
+}
+
+export const RENDER_TIMEOUT_TITLE = 'Render timeout';
+// The prerender server's message for a render timeout:
+// `Render timed-out after ${timeoutMs} ms`.
+export const RENDER_TIMEOUT_MESSAGE_PREFIX = 'Render timed-out after ';
+
+// How many times the reconcile sweep re-renders (or re-indexes) a row whose
+// render failed transiently, after the failure itself. Retry n waits
+// `TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS * 2^(n-1)` after the last attempt
+// (5, 10, 20 minutes), long enough for an overloaded prerender service to
+// drain. A row whose run of failed renders passes the cap keeps its stale
+// content; `_indexing-errors` reports it (`transientRenderRetriesExhausted`).
+export const TRANSIENT_RENDER_FAILURE_RETRY_CAP = 3;
+export const TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS = 5 * 60 * 1000;
+
+// Whether a row's run of transient failures (its diagnostics'
+// `transientRenderFailureRenders`, the failure plus each failed retry) has
+// used up its retries.
+export function transientRenderRetriesExhausted(
+  failedRenders: number | null | undefined,
+): boolean {
+  return (failedRenders ?? 0) > TRANSIENT_RENDER_FAILURE_RETRY_CAP;
+}
+
+// Marks an error thrown by a visit's prerender request (it aborted, timed out,
+// met a 5xx from the prerender path or lost its connection) as a failure of
+// the request rather than of the file, so whoever records it can stamp the
+// error doc `visitRequestFailure`. Returns the error for rethrowing.
+const VISIT_REQUEST_FAILURE = Symbol.for('boxel.visitRequestFailure');
+export function markVisitRequestFailure<T>(err: T): T {
+  if (err && typeof err === 'object') {
+    (err as Record<symbol, unknown>)[VISIT_REQUEST_FAILURE] = true;
+  }
+  return err;
+}
+export function isVisitRequestFailure(err: unknown): boolean {
+  return Boolean(
+    err &&
+    typeof err === 'object' &&
+    (err as Record<symbol, unknown>)[VISIT_REQUEST_FAILURE],
+  );
+}
+
+// `isTransientRenderError` over a stored `error_doc`, for SQL: `alias` is a
+// `prerendered_html` or `boxel_index` row. Text comparisons only, so it reads
+// the same on Postgres (`->>` answers text) and SQLite (`->>` answers the
+// JSON scalar, which the casts turn into text: `true` reads as '1').
+// COALESCEd so a doc without these keys reads as not transient, never as
+// NULL: a NULL here would drop a genuine error from a `NOT EXISTS` gate.
+export function transientRenderErrorSQL(alias: string): string {
+  let doc = `${alias}.error_doc`;
+  let flag = (key: string) =>
+    `CAST(${doc} ->> '${key}' AS TEXT) IN ('true', '1')`;
+  return `COALESCE((${flag('renderTimeout')} OR ${flag('visitRequestFailure')} OR ${flag('gatewayFailure')} OR ${
+    // LEGACY READER (see `isLegacyRenderTimeout`): delete with it.
+    `${doc} ->> 'title' = '${RENDER_TIMEOUT_TITLE}' OR ${doc} ->> 'message' LIKE '${RENDER_TIMEOUT_MESSAGE_PREFIX}%'`
+  }), FALSE)`;
+}
+
+// A stored render error the liveness and search gates ignore: a transient
+// failure a writer stored as the row's error before the writers kept the
+// last good row instead. A transient failure written now either leaves no
+// error (it is withheld) or carries `noGoodRowToKeep` and counts.
+export function ungatedRenderErrorSQL(alias: string): string {
+  return `(${transientRenderErrorSQL(alias)} AND NOT COALESCE(CAST(${alias}.error_doc ->> 'noGoodRowToKeep' AS TEXT) IN ('true', '1'), FALSE))`;
 }
 
 // Postgres `jsonb` containers store child offsets in 28 bits, so a

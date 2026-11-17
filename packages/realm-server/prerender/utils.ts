@@ -3537,6 +3537,9 @@ export async function withTimeout<T>(
         title: 'Render timeout',
         message,
         additionalErrors: null,
+        // The typed marker the index and prerendered-html writers classify
+        // a transient failure on (`isTransientRenderError`).
+        renderTimeout: true,
       },
       evict: true,
       diagnostics,

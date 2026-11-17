@@ -1,6 +1,6 @@
 import type { DependencyIndexRow, SearchIndexErrorEntry } from '../index.ts';
 import type { DefinitionCacheEntries } from '../definition-lookup.ts';
-import type { SerializedError } from '../error.ts';
+import { isTransientRenderError, type SerializedError } from '../error.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import { canonicalURL, type CanonicalURLMemo } from './dependency-url.ts';
 import {
@@ -369,10 +369,14 @@ export class IndexBackedDependencyErrors {
         // upstream instance's error_doc into the consumer's additionalErrors
         // would duplicate diagnostics rather than add to them. Module-deps
         // reachable through this instance still resolve below.
+        // A dependency whose render did not finish (a timeout, an aborted
+        // prerender request) is not broken, so its error is not passed on:
+        // the consumer rendered against it and is fine.
         if (
           selected.hasError &&
           selected.errorDoc &&
-          selected.type !== 'instance'
+          selected.type !== 'instance' &&
+          !isTransientRenderError(selected.errorDoc)
         ) {
           let normalized = {
             ...selected.errorDoc,
@@ -441,6 +445,12 @@ export class IndexBackedDependencyErrors {
       // placeholder's own `getRelationshipMembershipState(...)` read — its
       // `membership[i].reference` / `.errorDoc`.
       if (selected.type === 'instance') {
+        continue;
+      }
+      // A transient failure of the dependency (its render timed out, its
+      // prerender request aborted) says nothing about it, so the consumer
+      // does not inherit it as its own error.
+      if (isTransientRenderError(selected.errorDoc)) {
         continue;
       }
       let normalized = {

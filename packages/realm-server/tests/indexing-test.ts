@@ -6288,7 +6288,8 @@ module(basename(import.meta.filename), function () {
         return (await testDbAdapter.execute(
           `SELECT type, has_error, is_deleted,
                   (pristine_doc IS NOT NULL) as has_pristine_doc,
-                  error_doc->>'message' as error_message
+                  error_doc->>'message' as error_message,
+                  diagnostics->'transientRenderError'->>'message' as transient_message
            FROM boxel_index
            WHERE url = '${testRealm}mango.json'
            ORDER BY type`,
@@ -6298,10 +6299,11 @@ module(basename(import.meta.filename), function () {
           is_deleted: boolean | null;
           has_pristine_doc: boolean;
           error_message: string | null;
+          transient_message: string | null;
         }[];
       }
 
-      test('a transport-level visit failure isolates to its file: the batch still commits and the card keeps last-known-good state under an error row', async function (assert) {
+      test('a transport-level visit failure isolates to its file: the batch still commits and the card keeps its last-known-good rows', async function (assert) {
         failVisitsFor = 'mango.json';
         await realm.write('mango.json', JSON.stringify(mangoDoc('Mang-Mang')));
 
@@ -6311,18 +6313,20 @@ module(basename(import.meta.filename), function () {
           ['file', 'instance'],
           'both the file and instance rows exist for the failed card',
         );
+        // The request failed, not the card: a transient failure with good
+        // rows to keep is recorded in diagnostics, not as an error row.
         for (let row of rows) {
-          assert.true(
+          assert.false(
             row.has_error,
-            `the ${row.type} row carries the failure as an error`,
+            `the ${row.type} row is not stored as an error`,
           );
           assert.notOk(
             row.is_deleted,
             `the ${row.type} row is not tombstoned by the transient failure`,
           );
           assert.ok(
-            row.error_message?.includes('simulated transport failure'),
-            `the ${row.type} row's error_doc carries the underlying failure text`,
+            row.transient_message?.includes('simulated transport failure'),
+            `the ${row.type} row's diagnostics carry the underlying failure text`,
           );
         }
         let instanceRow = rows.find((row) => row.type === 'instance')!;
@@ -6358,8 +6362,8 @@ module(basename(import.meta.filename), function () {
         );
         rows = await mangoIndexRows();
         assert.true(
-          rows.every((row) => !row.has_error),
-          'the error state clears once the visit succeeds',
+          rows.every((row) => !row.has_error && !row.transient_message),
+          'the recorded failure clears once the visit succeeds',
         );
         let { data: recovered } = await searchCardsForTest(
           realm.realmIndexQueryEngine,

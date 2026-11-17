@@ -7,18 +7,26 @@ import {
   jobIdentity,
   systemInitiatedPriority,
 } from '../index.ts';
+import type { QueuePublisher } from '../queue.ts';
 import { joinAnyJobOfSameType, registerQueueJobDefinition } from '../queue.ts';
 import {
   enqueuePrerenderHtmlJob,
   skipsPrerenderHtml,
 } from '../jobs/prerender-html.ts';
 import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from './indexer.ts';
+import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  indexingConcurrencyGroup,
+  makeIncrementalArgsWithCallerMetadata,
+  systemInitiatedIndexPriority,
+} from '../jobs/indexing.ts';
 import { isUserOfMatrixServer } from '../matrix-server-name.ts';
 import {
   fetchRealmGenerations,
   findActivePrerenderHtmlJobCoverage,
   findPrerenderHtmlRejectionStreaks,
   findStalePrerenderedHtmlRows,
+  findTransientIndexRetryRows,
   planPrerenderHtmlRepairs,
   prerenderHtmlRepairBackoffMs,
 } from '../prerender-html-reconcile.ts';
@@ -33,6 +41,10 @@ export interface PrerenderHtmlReconcileResult extends JSONTypes.Object {
   // prerender_html jobs' rejection streak has them waiting out a backoff
   // interval (see `prerenderHtmlRepairBackoffMs`).
   realmsInBackoff: number;
+  // Also `indexRetriesEnqueued`, when there were any: the URLs re-indexed
+  // because their index visit failed transiently and is due a retry
+  // (`findTransientIndexRetryRows`). Not declared, since the JSON index
+  // signature admits no optional member.
 }
 
 export { prerenderHtmlReconcile };
@@ -77,13 +89,26 @@ const prerenderHtmlReconcile: Task<
     let { jobInfo } = args;
     reportStatus(jobInfo, 'start');
 
+    let indexRetriesEnqueued = await retryTransientIndexFailures({
+      dbAdapter,
+      queuePublisher,
+      log,
+      matrixServerName,
+      jobLabel: jobIdentity(jobInfo),
+    });
+
     let staleRows = await findStalePrerenderedHtmlRows(dbAdapter);
     if (staleRows.length === 0) {
       log.debug(
         `${jobIdentity(jobInfo)} prerender-html reconcile: no stale rows`,
       );
       reportStatus(jobInfo, 'finish');
-      return { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 };
+      return {
+        realmsRepaired: 0,
+        urlsEnqueued: 0,
+        realmsInBackoff: 0,
+        ...(indexRetriesEnqueued > 0 ? { indexRetriesEnqueued } : {}),
+      };
     }
 
     let coverage = await findActivePrerenderHtmlJobCoverage(dbAdapter);
@@ -93,7 +118,12 @@ const prerenderHtmlReconcile: Task<
         `${jobIdentity(jobInfo)} prerender-html reconcile: ${staleRows.length} stale row(s), all covered by active prerender_html jobs`,
       );
       reportStatus(jobInfo, 'finish');
-      return { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 };
+      return {
+        realmsRepaired: 0,
+        urlsEnqueued: 0,
+        realmsInBackoff: 0,
+        ...(indexRetriesEnqueued > 0 ? { indexRetriesEnqueued } : {}),
+      };
     }
 
     let rejectionStreaks = await findPrerenderHtmlRejectionStreaks(dbAdapter, [
@@ -210,5 +240,81 @@ const prerenderHtmlReconcile: Task<
       `${jobIdentity(jobInfo)} prerender-html reconcile: enqueued repair for ${urlsEnqueued} url(s) across ${realmsRepaired} realm(s) (from ${staleRows.length} stale row(s), ${realmsInBackoff} realm(s) in backoff)`,
     );
     reportStatus(jobInfo, 'finish');
-    return { realmsRepaired, urlsEnqueued, realmsInBackoff };
+    return {
+      realmsRepaired,
+      urlsEnqueued,
+      realmsInBackoff,
+      ...(indexRetriesEnqueued > 0 ? { indexRetriesEnqueued } : {}),
+    };
   };
+
+// The index pass's half of the transient-failure retries: each realm's index
+// rows due a retry (`findTransientIndexRetryRows`) are re-indexed by one
+// incremental pass over exactly those URLs, run as the realm's owner at the
+// system tier, the way any other repair is. Each attempt's write extends the
+// row's run or ends it, so the cap and the backoff bound the retries. Answers
+// how many URLs it enqueued.
+async function retryTransientIndexFailures({
+  dbAdapter,
+  queuePublisher,
+  log,
+  matrixServerName,
+  jobLabel,
+}: {
+  dbAdapter: Parameters<typeof findTransientIndexRetryRows>[0];
+  queuePublisher: QueuePublisher;
+  log: {
+    info(message: string): void;
+    error(message: string, e?: unknown): void;
+  };
+  matrixServerName: string;
+  jobLabel: string;
+}): Promise<number> {
+  let due = await findTransientIndexRetryRows(dbAdapter);
+  if (due.size === 0) {
+    return 0;
+  }
+  let owners = new Map(
+    (await fetchAllRealmsWithOwners(dbAdapter, matrixServerName)).map(
+      (realm) => [realm.realm_url, realm.owner_user_id],
+    ),
+  );
+  let enqueued = 0;
+  for (let [realmURL, urls] of due) {
+    let owner = owners.get(realmURL);
+    if (
+      !owner ||
+      isPublishedRealmAccount(owner, matrixServerName) ||
+      !isUserOfMatrixServer(owner, matrixServerName)
+    ) {
+      continue;
+    }
+    try {
+      await queuePublisher.publish({
+        jobType: 'incremental-index',
+        concurrencyGroup: indexingConcurrencyGroup(realmURL),
+        timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        priority: systemInitiatedIndexPriority(realmURL),
+        args: makeIncrementalArgsWithCallerMetadata(
+          {
+            realmURL,
+            realmUsername: getMatrixUsername(owner),
+            changes: urls.map((url) => ({ url, operation: 'update' as const })),
+            ignoreData: {},
+          },
+          null,
+        ),
+      });
+      enqueued += urls.length;
+    } catch (error: any) {
+      log.error(
+        `${jobLabel} prerender-html reconcile: failed to enqueue the index retry of ${urls.length} url(s) in ${realmURL}`,
+        error,
+      );
+    }
+  }
+  log.info(
+    `${jobLabel} prerender-html reconcile: enqueued index retries of ${enqueued} url(s) whose visits failed transiently`,
+  );
+  return enqueued;
+}
