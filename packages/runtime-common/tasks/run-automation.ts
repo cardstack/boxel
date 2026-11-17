@@ -93,7 +93,8 @@ export interface AutomationAttemptContext {
   // Told each time the attempt moves the run: it starts it, admits it, or
   // ends it, and when a pause the admission makes cancels other runs.
   reportRunChange?: ReportRunChange;
-  // Told when a pause the admission makes changes the automation.
+  // Told when the admission pauses the automation, or moves it into or out
+  // of waiting for credits.
   reportAutomationChange?: ReportAutomationChange;
   log: Log;
 }

@@ -142,7 +142,8 @@ export interface AdmissionContext {
   checks: AutomationAdmissionChecks | undefined;
   // Told of each run a pause the admission makes cancels.
   reportRunChange?: ReportRunChange;
-  // Told of the automation a pause the admission makes.
+  // Told of the automation when the admission pauses it, or moves it into or
+  // out of waiting for credits.
   reportAutomationChange?: ReportAutomationChange;
 }
 
@@ -375,7 +376,7 @@ export async function admitRunOperations(
   return { ok: true, operations: asked.answer.operations ?? 0 };
 }
 
-// Moves the run's automation into or out of *waiting for credits*, and tells
+// Moves the run's automation into or out of *waiting for credits*, telling
 // `reportAutomationChange` when it moved. The run's own outcome doesn't depend
 // on it, so a failure is logged and the next run's admission moves it.
 async function waitingForCredits(
@@ -388,15 +389,12 @@ async function waitingForCredits(
       ctx.dbAdapter,
       run.automationId,
       { payer: run.actsAs, waiting },
+      { reportAutomationChange: ctx.reportAutomationChange },
     );
     if (moved) {
       log.info(
         `run ${run.id}: automation ${run.automationId} is ${waiting ? 'waiting for credits' : 'active again'}`,
       );
-      await ctx.reportAutomationChange?.({
-        automationId: run.automationId,
-        realm: run.realm,
-      });
     }
   } catch (e: any) {
     log.error(
