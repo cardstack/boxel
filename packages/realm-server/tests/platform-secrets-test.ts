@@ -215,21 +215,81 @@ module(basename(import.meta.filename), function () {
       setSecretOpenFailureSink((event) => failures.push(event));
       try {
         let lines = await logLinesDuring(['platform-secrets'], async () => {
-          await assert.rejects(
-            readPlatformSecret(dbAdapter, 'another-secret'),
-            UnreadablePlatformSecretError,
-          );
+          // A caller that reads per request (a webhook receiver, per
+          // delivery) reads the broken secret again and again.
+          for (let i = 0; i < 3; i++) {
+            await assert.rejects(
+              readPlatformSecret(dbAdapter, 'another-secret'),
+              UnreadablePlatformSecretError,
+              'every read refuses',
+            );
+          }
         });
-        assert.strictEqual(lines.length, 1, 'the refusal is logged once');
+        assert.strictEqual(
+          lines.length,
+          1,
+          'the sealed value is reported once, not once per read',
+        );
         assert.true(lines[0].message.includes('another-secret'));
         assert.false(lines[0].message.includes(VALUE));
       } finally {
         setSecretOpenFailureSink(undefined);
       }
       assert.deepEqual(
-        failures.map((event: any) => [event.field, event.reason]),
-        [[PLATFORM_SECRET_FIELD, 'not-authentic']],
+        failures.map((event: any) => [event.field, event.reason])[0],
+        [PLATFORM_SECRET_FIELD, 'not-authentic'],
       );
+    });
+
+    test('a set that a concurrent set overtakes is refused, and the newer value stays', async function (assert) {
+      await setPlatformSecret(dbAdapter, {
+        name: NAME,
+        value: VALUE,
+        note: 'setting the webhook secret',
+      });
+      // A second operator's set lands after this set has read the row and
+      // checked its note, just before this set writes.
+      let raced = false;
+      let originalExecute = dbAdapter.execute.bind(dbAdapter);
+      let execute = sinon
+        .stub(dbAdapter, 'execute')
+        .callsFake(async (sql, opts) => {
+          if (!raced && /UPDATE platform_secrets/.test(sql)) {
+            raced = true;
+            await setPlatformSecret(dbAdapter, {
+              name: NAME,
+              value: REPLACED_VALUE,
+              note: 'rotating the webhook secret',
+            });
+          }
+          return originalExecute(sql, opts);
+        });
+      try {
+        await assert.rejects(
+          setPlatformSecret(dbAdapter, {
+            name: NAME,
+            value: 'whsec-overtaken-value-5e21b0',
+            note: `noted after ${REPLACED_VALUE}`,
+          }),
+          (e: any) =>
+            e.status === 409 && !String(e.message).includes(REPLACED_VALUE),
+          'the overtaken set answers 409',
+        );
+      } finally {
+        execute.restore();
+      }
+      assert.true(raced, 'the second set landed in between');
+      assert.strictEqual(
+        await readPlatformSecret(dbAdapter, NAME),
+        REPLACED_VALUE,
+        'the newer value is kept',
+      );
+      let history = JSON.stringify(await historyRows(dbAdapter));
+      assert.false(
+        history.includes(REPLACED_VALUE),
+        'the overtaken note, which repeats the newer value, is never recorded',
+      );
+      assert.strictEqual(JSON.parse(history).length, 2);
     });
 
     test('a value, a name and a note are checked, and a note may not repeat the value', async function (assert) {
@@ -711,6 +771,10 @@ module(basename(import.meta.filename), function () {
         [
           'a data-keys operator token',
           operatorToken({ operator: 'data-keys' }),
+        ],
+        [
+          'a diagnostic-render operator token',
+          operatorToken({ operator: 'diagnostic-render' }),
         ],
         [
           'an operator token that names a user',

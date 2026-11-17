@@ -1,10 +1,8 @@
 import type Koa from 'koa';
 import {
-  BodyTooLarge,
-  MAX_SYSTEM_KEY_BODY_BYTES,
+  handle as handleOperatorRoute,
   operatorCaller,
   readJSONBody,
-  respond,
 } from './handle-system-keys.ts';
 import {
   deletePlatformSecret,
@@ -13,7 +11,6 @@ import {
   PlatformSecretError,
   setPlatformSecret,
 } from '../lib/platform-secrets.ts';
-import { SystemKeyError } from '../lib/system-keys.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 
 // The operator endpoints for platform secrets, reached with an operator token
@@ -22,27 +19,8 @@ import type { CreateRoutesArgs } from '../routes.ts';
 
 function handle(
   fn: (ctxt: Koa.Context) => Promise<{ status: number; body: unknown }>,
-): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
-  return async function (ctxt: Koa.Context) {
-    try {
-      let { status, body } = await fn(ctxt);
-      await respond(ctxt, status, body);
-    } catch (e) {
-      if (e instanceof PlatformSecretError || e instanceof SystemKeyError) {
-        await respond(ctxt, e.status, { errors: [e.message] });
-        return;
-      }
-      if (e instanceof BodyTooLarge) {
-        await respond(ctxt, 413, {
-          errors: [
-            `the body is larger than ${MAX_SYSTEM_KEY_BODY_BYTES} bytes`,
-          ],
-        });
-        return;
-      }
-      throw e;
-    }
-  };
+) {
+  return handleOperatorRoute(fn, [PlatformSecretError]);
 }
 
 export function handleListPlatformSecrets({ dbAdapter }: CreateRoutesArgs) {

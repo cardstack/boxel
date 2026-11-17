@@ -235,10 +235,13 @@ export async function setPlatformSecret(
     note,
     caller.clientAddress,
     caller.tokenIssuedAt,
+    ...(existing ? [String(existing.value_nonce)] : []),
   ];
   // A new name is inserted only while no row has it, and an existing one is
-  // updated only while its row still has the id the value was sealed under,
-  // so a concurrent set or delete makes this one refuse rather than store a
+  // updated only while its row still holds the value this set read (its id,
+  // which the new value is sealed under, and its nonce, which every set
+  // changes). So a concurrent set or delete makes this one refuse: it never
+  // overwrites a value it didn't check its note against, and never stores a
   // value that doesn't open.
   let written = existing
     ? `UPDATE platform_secrets SET
@@ -248,7 +251,7 @@ export async function setPlatformSecret(
          value_key_id = $6,
          note = $7,
          updated_at = NOW()
-       WHERE id = $1 AND name = $2`
+       WHERE id = $1 AND name = $2 AND value_nonce = decode($10, 'base64')`
     : `INSERT INTO platform_secrets (
          id, name, value_ciphertext, value_nonce, value_tag, value_key_id, note
        ) VALUES (
@@ -321,11 +324,17 @@ export async function deletePlatformSecret(
   return toPlatformSecret(row);
 }
 
+// Each sealed value that doesn't open is reported once, not on every read, so
+// a caller that reads per request (a webhook receiver, per delivery) doesn't
+// raise an event per request. A new value has a new nonce, so it is reported
+// afresh if it doesn't open either.
+const reportedUnreadable = new Set<string>();
+
 // The value of the platform secret `name`, opened for server code that uses
 // it, or undefined when no secret has that name. Call it where the secret is
 // used, keep the value no longer than that use, and never log it. A secret
-// that is set but doesn't open is logged and reported to Sentry, naming the
-// secret and never its value, and throws `UnreadablePlatformSecretError`, so
+// that is set but doesn't open is logged and reported to Sentry once, naming
+// the secret and never its value, and every read of it throws `UnreadablePlatformSecretError`, so
 // a caller refuses rather than verify against nothing.
 export async function readPlatformSecret(
   dbAdapter: DBAdapter,
@@ -347,10 +356,14 @@ export async function readPlatformSecret(
       platformSecretBinding(String(row.id), String(row.name)),
     );
   } catch (e: any) {
-    reportUnreadableSecret(
-      log,
-      `the platform secret ${name} (id ${String(row.id)}) could not be opened (${e?.message ?? e}); set it again`,
-    );
+    let unreadable = `${String(row.id)}|${String(row.value_nonce)}`;
+    if (!reportedUnreadable.has(unreadable)) {
+      reportedUnreadable.add(unreadable);
+      reportUnreadableSecret(
+        log,
+        `the platform secret ${name} (id ${String(row.id)}) could not be opened (${e?.message ?? e}); set it again`,
+      );
+    }
     throw new UnreadablePlatformSecretError(name);
   }
 }
