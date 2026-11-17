@@ -9,6 +9,7 @@ import type { Definition } from '../definitions.ts';
 import { codeRefFromInternalKey } from '../index.ts';
 import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
+import { RealmPaths } from '../paths.ts';
 import { PRERENDERED_HTML_FORMATS } from '../prerendered-html-format.ts';
 import { rri } from '../realm-identifiers.ts';
 import { chainType } from './adoption-chain.ts';
@@ -31,6 +32,10 @@ import {
   type GrantExpressionName,
 } from './grant-expressions.ts';
 import { profileRefusals, type RequestContextCall } from './policy-profile.ts';
+import {
+  moduleAccessIssues,
+  type ModuleAccessRule,
+} from './policy-module-access.ts';
 import { classifyPredicateTiers } from './policy-tiers.ts';
 import { elapsedMs, emitPolicyCompile, recordSafely } from './telemetry.ts';
 import {
@@ -1767,7 +1772,73 @@ async function compileDocument(
   })) {
     issue(found.code, found.path, found.message);
   }
+
+  // Whether the callers a `read` or `query` grant admits can load the code
+  // that renders the cards. The types the realm holds cards of under a rule's
+  // type are read only where the realm's summary of its cards holds a type the
+  // realm defines, and are an input from the moment they are read, as for a
+  // filter's misreading types.
+  let governed = new RealmPaths(new URL(env.realmURL));
+  let localModule = (key: string) => {
+    let module = heldTypeModule(key);
+    let url = module ? attempt(() => env.toURL(module)) : undefined;
+    return url && governed.inRealm(url) ? governed.local(url) : undefined;
+  };
+  let summary: Promise<string[]> | undefined;
+  let moduleRules: ModuleAccessRule[] = [];
+  for (let rule of rules) {
+    let entry = await readType(rule.targetType);
+    if (!entry) {
+      continue;
+    }
+    let { definition, types } = entry;
+    moduleRules.push({
+      rule,
+      types,
+      grants: rule.grants.map((grant) => ({
+        grant,
+        base: admittingBase(definition, grant),
+        opensToAnonymous: opensToAnonymous(grant),
+      })),
+    });
+  }
+  for (let found of await moduleAccessIssues(moduleRules, {
+    typeKey: (codeRef) => env.typeKey(codeRef),
+    heldTypesUnder: async (codeRef) => {
+      let read = subtypes.find(
+        ({ targetType }) => env.typeKey(targetType) === env.typeKey(codeRef),
+      );
+      if (read) {
+        return read.keys;
+      }
+      summary ??= env.instanceTypeKeys();
+      let held = await summary;
+      if (!held.some((key) => localModule(key) !== undefined)) {
+        return [];
+      }
+      if (!inputs.includes(env.realmURL)) {
+        inputs.push(env.realmURL);
+        onInput(env.realmURL);
+      }
+      heldTypes ??= held.join('\n');
+      let keys = await env.instanceTypesUnder(codeRef);
+      subtypes.push({ targetType: codeRef, keys });
+      return keys;
+    },
+    localModule,
+  })) {
+    issue(found.code, found.path, found.message);
+  }
   return compiled();
+}
+
+// The module a type key names: the module that defines the type, which for an
+// unexported class is the module its key names it through.
+function heldTypeModule(key: string): string | undefined {
+  let ancestor = '/ancestor';
+  return splitTypeKey(
+    key.endsWith(ancestor) ? key.slice(0, -ancestor.length) : key,
+  )?.module;
 }
 
 // How a grant hands its rows over: the document it serves under the link

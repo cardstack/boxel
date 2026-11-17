@@ -586,6 +586,14 @@ export type PolicyIssueCode =
   // under, so this is recorded independently of
   // `grant-reaches-ungranted-type`. The grant is kept, for the same reason.
   | 'render-reaches-ungranted-type'
+  // A `read` or `query` grant on cards of a type the governed realm defines,
+  // in a policy whose `readSource` grants reach none of the realm's code: no
+  // rule on `TsFileDef` or `GtsFileDef` grants it. A caller who reaches the
+  // realm only through the policy can read or find such a card, and can't load
+  // the module that renders it. Also such a grant that opens to callers who
+  // aren't signed in, where no code grant opens to them. The grant is kept: it
+  // does what it says, and this tells the author what else the callers need.
+  | 'module-not-granted'
   // A grant whose `where` names the caller who isn't signed in
   // (`"anonymous"`) on an operation whose base isn't one of
   // `ANONYMOUS_ELIGIBLE_OPERATIONS`, or on a named query. An operation a type
@@ -663,6 +671,7 @@ export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
 export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
   'grant-reaches-ungranted-type',
   'render-reaches-ungranted-type',
+  'module-not-granted',
   'anonymous-write-without-acting-user',
   'anonymous-grant-reads-actor',
   'anonymous-grant-user-key',
