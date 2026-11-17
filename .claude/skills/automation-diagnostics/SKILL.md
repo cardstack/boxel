@@ -34,7 +34,7 @@ worker lines is gigabytes for the hosted Loki to scan.
 
 ## The ids
 
-Every line about a run carries the same ids, so one id reaches the rest:
+Lines about a run carry the same ids, so one id reaches the rest:
 
 | id           | What it is                                                     | Where it lives                                                                 |
 | ------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -53,9 +53,13 @@ The log forms:
 - telemetry: `{"channel":"boxel:automation-runs","kind":"…","automation":"…","run":"…","job":…,"attempt":…}`
   and `{"channel":"boxel:automation-milestones",…,"job":…}`
 
-A run log line written before a worker claimed the run (the trigger's line)
-carries the job the trigger enqueued; a line with no `job=` belongs to a run
-that never had one.
+A run's lines carry the job of the attempt that owns it once a worker has
+claimed it. Before that, the tick's trigger line carries the job the tick
+enqueued, and a run canceled or abandoned while still pending names its
+unclaimed job on its finish line and `finished` event. A line with no `job=`
+belongs to a run whose job couldn't be found then (a slot that joined an
+earlier pending run, or a job already gone); step 4's query finds it from the
+run's key.
 
 ## "My automation didn't run last night"
 
@@ -169,14 +173,19 @@ SELECT position, name, started_at, count_done, count_total
 Platform lines are the trigger, admission, each `callApi` call (status, ms,
 bytes), each `resolve` call (model, status, ms, cost), the commit (files, ms)
 and the finish. Script lines are its console, activity, plan, milestones,
-counts, each `realm.transform` call (`kind = 'transform'`, `data.ms`) and its
-uncaught error. A log past its cap ends with how many lines were dropped.
+counts, one `transform` line for its `realm.transform` calls as the run
+settles (`data.calls`, `data.ms` together, `data.failed`) and its uncaught
+error. A log past its cap ends with how many lines were dropped.
 
-The same lines reach Loki, anchored on their tags:
+The same lines reach Loki, anchored on their tags. Whichever process stored a
+line logs it: the realm server for the tab's lines and its own calls, the
+worker for the trigger, admission and finish lines, so read both:
 
 ```bash
-packages/observability/scripts/tail-logs.sh --env staging --service realm-server \
-  --regex '\[automation-run-log\] automation=\S+ run=<run> ' --since 1h --no-follow
+for service in realm-server worker; do
+  packages/observability/scripts/tail-logs.sh --env staging --service $service \
+    --regex '\[automation-run-log\] automation=\S+ run=<run> ' --since 1h --no-follow
+done
 ```
 
 The worker's own lines for the attempt (claim, refusal, finish):
@@ -193,12 +202,12 @@ are ISO; every duration is in ms.
 
 | `kind`       | Written by                                            | Carries                                                                                                                                                                                                                                                                                                                          |
 | ------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enqueued`   | realm-server (tick, Preview, Run now)                 | `realm`, `trigger`, `triggerKind`, `dryRun`, `scheduledAt`, `enqueuedAt`, `scheduleLagMs` (how late the enqueue was)                                                                                                                                                                                                             |
+| `enqueued`   | worker (the tick); realm-server (Preview, Run now)    | `realm`, `trigger`, `triggerKind`, `dryRun`, `scheduledAt`, `enqueuedAt`, `scheduleLagMs` (how late the enqueue was)                                                                                                                                                                                                             |
 | `claimed`    | worker                                                | `claimedAt`, `queueWaitMs` (enqueue → claim, by the database clock), `lane`, `priority`                                                                                                                                                                                                                                          |
 | `admitted`   | worker                                                | `admitted`, `reason` (a refusal's code), `at`, `admissionMs` (claim → answer)                                                                                                                                                                                                                                                    |
 | `script`     | worker                                                | `tabRequestedAt`, `tabAssignedAt`, `tabAnsweredAt`, `scriptStartedAt`, `scriptEndedAt` (the tab's clock), `scriptMs`, `tabWaitMs`, `tabQueueMs`, `tabStartupMs`, `tabReused`, `tabMs` (what compute is charged on), `prerenderRequestId`, `tabJsHeapUsedMB`, `tabJsHeapTotalMB`, `tabDomMB`, `tabBuffersMB`, `outcome`, `reason` |
 | `commit`     | worker                                                | `outcome` (`committed`, `refused`, `failed`), `code`, `status`, `commitSentAt`, `answeredAt`, `ms`, `tries`                                                                                                                                                                                                                      |
-| `finished`   | whoever ended the run                                 | `state`, `errorReason`, `canceledBy`, every row timestamp, `totalMs` (created → finished), `runMs` (started → finished), `prerenderTabMs`, `callApiCalls`, `callApiResponseBytes`, `resolveCalls`, `writes`, `aiCreditsSpent`                                                                                                    |
+| `finished`   | whoever ended the run                                 | `state` (as the run ended; see below), `lateCommit`, , `errorReason`, `canceledBy`, every row timestamp, `totalMs` (created → finished), `runMs` (started → finished), `prerenderTabMs`, `callApiCalls`, `callApiResponseBytes`, `resolveCalls`, `writes`, `aiCreditsSpent`                                                      |
 | `index-pass` | worker (the last index or render job)                 | `indexJob`, `completedAt`, `workerProcessSeconds`, `prerenderTabSeconds`                                                                                                                                                                                                                                                         |
 | `charged`    | worker                                                | `chargeKind` (`run`, `run_indexing`), `result` (`charged`, `already-charged`, `nothing-to-charge`, `no-payer`, `no-prices`), `credits`, the usage it priced                                                                                                                                                                      |
 | `capacity`   | prerender server, every 30 s while it holds a run tab | `runTabs`, `runningRuns`, `queuedRuns`, `totalTabs`, `maxTabs`                                                                                                                                                                                                                                                                   |
@@ -210,6 +219,22 @@ for service in realm-server worker; do
   packages/observability/scripts/tail-logs.sh --env staging --service $service \
     --regex '"channel":"boxel:automation-runs".*"run":"<run>"' --since 1d --no-follow
 done
+```
+
+`finished.state` is the state the run ended in. A run that ended as an error
+while its claimed commit was in flight (`commit-interrupted`, or abandoned)
+becomes `complete` on its row if the batch lands afterwards, and that writes a
+second `finished` with `state: "complete"` and `lateCommit: true`. Take a run's
+last `finished` as its outcome.
+
+The worker manager prefixes every line its workers write with
+`[worker <name> priority <n>]: `, so a LogQL query over worker lines strips
+that prefix before parsing the JSON:
+
+```logql
+{service="worker", env="$env"} |= "boxel:automation-runs" | json
+  | line_format `{{ if .log }}{{ regexReplaceAll "^\\[worker [^\\]]+\\]: " .log "" }}{{ else }}{{ regexReplaceAll "^\\[worker [^\\]]+\\]: " __line__ "" }}{{ end }}`
+  | json | channel="boxel:automation-runs"
 ```
 
 Reading the gaps:
@@ -273,7 +298,8 @@ failed and nothing was written; `no-payer` means the payer has no `users` row.
 The prerender server reports its run capacity on the same channel while it
 holds any run tab. A run holds one tab of its affinity (its realm and
 identity) for its whole script, so `runningRuns` is the runs that server runs
-at once, and `queuedRuns` the runs waiting for a tab one of them holds.
+at once, and `queuedRuns` the runs waiting for a tab one of them holds (a tab being
+closed counts as neither).
 
 ```logql
 max by (instance) (max_over_time({service="prerender", env="$env"} |= "boxel:automation-runs"
@@ -285,12 +311,16 @@ Queue wait for automation runs, across runs:
 
 ```logql
 quantile_over_time(0.95, {service="worker", env="$env"} |= "boxel:automation-runs"
-  | json | line_format "{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}" | json
-  | channel="boxel:automation-runs" | kind="claimed" | unwrap queueWaitMs [15m])
+  | json
+  | line_format `{{ if .log }}{{ regexReplaceAll "^\\[worker [^\\]]+\\]: " .log "" }}{{ else }}{{ regexReplaceAll "^\\[worker [^\\]]+\\]: " __line__ "" }}{{ end }}`
+  | json | channel="boxel:automation-runs" | kind="claimed" | unwrap queueWaitMs [15m])
 ```
 
-A run's tab memory is on its `script` event (`tabJsHeapUsedMB`,
-`tabDomMB`, `tabBuffersMB`), read as its script ended. The prerender server's
+The tab's memory as a run's command ended is on its `script` event
+(`tabJsHeapUsedMB`, `tabDomMB`, `tabBuffersMB`). It is the whole tab's heap,
+the host app and whatever earlier runs on the tab left uncollected beside
+this run's own, so read it as the tab's footprint, not the run's cost; it is
+absent when the tab didn't answer the read within 200 ms. The prerender server's
 own memory lines (`prerender-heap`, `prerender-chrome-memory`) cover the
 whole task.
 

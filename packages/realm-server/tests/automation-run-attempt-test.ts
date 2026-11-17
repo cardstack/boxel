@@ -803,7 +803,7 @@ module(basename(import.meta.filename), function (hooks) {
                 events: [
                   { kind: 'plan', at, milestones: ['fetch'] },
                   { kind: 'milestone', at, name: 'fetch' },
-                  { kind: 'transform', at, ms: 12, ok: true },
+                  { kind: 'transform', at, calls: 3, ms: 12, failed: 0 },
                 ],
               }),
             },
@@ -909,8 +909,10 @@ module(basename(import.meta.filename), function (hooks) {
       );
     }
     assert.true(
-      lokiLines.some((line) => / kind=transform .*ms=12 /.test(line)),
-      "the transform's time is a line of the run's log",
+      lokiLines.some((line) =>
+        / kind=transform .*calls=3 ms=12 failed=0 /.test(line),
+      ),
+      "the run's transforms are a line of its log",
     );
     assert.true(workerLines.length > 0, 'the worker logged the attempt');
     for (let line of workerLines) {

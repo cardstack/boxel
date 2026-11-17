@@ -975,23 +975,30 @@ class RealmFsSession {
     return result;
   }
 
-  // A `realm.transform` call. It runs in this tab, so no realm server sees
-  // it: an automation run reports its time to the run's log here.
+  // `realm.transform` calls this run made, their time together, and how many
+  // failed. A transform runs in this tab, so no realm server sees it; an
+  // automation run reports these as one line of its log once it settles,
+  // rather than a line per call, so a script that transforms in a loop
+  // doesn't crowd its own lines out of the log.
+  transformCalls = 0;
+  transformMs = 0;
+  transformsFailed = 0;
+
   private timedTransform(args: unknown[]): Promise<unknown> {
     let startedAt = Date.now();
     let result = Promise.resolve().then(() =>
       this.transformer.run(transformRequest(args[0], args[1], args[2])),
     );
-    let report = (ok: boolean) =>
-      this.onProgress?.({
-        kind: 'transform',
-        at: startedAt,
-        ms: Date.now() - startedAt,
-        ok,
-      });
+    let count = (ok: boolean) => {
+      this.transformCalls++;
+      this.transformMs += Date.now() - startedAt;
+      if (!ok) {
+        this.transformsFailed++;
+      }
+    };
     result.then(
-      () => report(true),
-      () => report(false),
+      () => count(true),
+      () => count(false),
     );
     return result;
   }
@@ -1050,8 +1057,7 @@ class RealmFsSession {
   }
 
   // Called with each milestone, count and console line an automation run
-  // reports, in the order the script made them, and with each
-  // `realm.transform` call's time.
+  // reports, in the order the script made them.
   onProgress?: (event: RunProgressEvent) => void;
 
   // A one-way call: a run milestone, a count within one, or a console line.
@@ -3320,6 +3326,15 @@ export async function runAutomationScript(
       session.idle(),
       new Promise((wake) => setTimeout(wake, STOP_GRACE_MS)),
     ]);
+    if (session.transformCalls > 0) {
+      record({
+        kind: 'transform',
+        at: Date.now(),
+        calls: session.transformCalls,
+        ms: session.transformMs,
+        failed: session.transformsFailed,
+      });
+    }
     let dropped = session.progressDropped;
     if (dropped > 0) {
       record({

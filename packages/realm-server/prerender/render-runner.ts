@@ -68,10 +68,11 @@ import {
   type VisitMemory,
 } from './chrome-memory.ts';
 
-// Budget for reading an automation run's tab heap as its command ends. A tab
-// that has just answered reads in milliseconds; this only caps one that
-// hasn't.
-const RUN_TAB_HEAP_BUDGET_MS = 1000;
+// Budget for reading an automation run's tab heap as its command ends. The
+// read sits between the script's answer and the worker's commit, inside the
+// margin the run keeps for its commit, so it is held short: a tab that has
+// just answered reads in milliseconds, and one that doesn't loses the reading.
+const RUN_TAB_HEAP_BUDGET_MS = 200;
 const log = logger('prerenderer');
 const reproduceLog = logger('prerenderer-reproduce');
 const commandRequestStorageKeyPrefix = 'boxel-command-request:';
@@ -706,9 +707,10 @@ export class RenderRunner {
       // Taken before the memory reading, which is not part of the command.
       let renderMs = Date.now() - renderStart;
       if (sessionsInMemory) {
-        // An automation run holds its tab alone for the whole script, so the
-        // tab's heap as the command ends is the run's. The run's telemetry
-        // reads it from the response's diagnostics.
+        // The whole tab's heap as this run's command ended: the host app's,
+        // and whatever earlier runs on the tab left uncollected, beside the
+        // run's own. The run's telemetry reads it from the response's
+        // diagnostics.
         let tabMemory = await readTabHeapUsage(page, RUN_TAB_HEAP_BUDGET_MS);
         if (tabMemory) {
           response.meta = {

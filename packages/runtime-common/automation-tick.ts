@@ -213,8 +213,8 @@ async function tickAutomation(
   now: number,
   options: AutomationTickOptions,
 ): Promise<AutomationTickOutcome | undefined> {
-  // The runs' `enqueued` telemetry, written once the transaction that
-  // enqueued them has committed.
+  // The runs' `enqueued` telemetry, written once the tick's transaction has
+  // committed and the row records the runs it started.
   let enqueued: AutomationRunEnqueuedEvent[] = [];
   let outcome = await claimAndEnqueue(
     dbAdapter,
@@ -240,6 +240,9 @@ async function claimAndEnqueue(
   enqueued: AutomationRunEnqueuedEvent[],
 ): Promise<AutomationTickOutcome | undefined> {
   return await dbAdapter.withTransaction(async (txQuery) => {
+    // A retried transaction starts its runs again, so only the last pass's
+    // events are the runs' `enqueued` telemetry.
+    enqueued.length = 0;
     let [row] = await txQuery([
       'SELECT * FROM automations WHERE automation_id =',
       param(automationId),

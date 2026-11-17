@@ -19,7 +19,7 @@ import {
 import { readRunLog, type RunLog } from './automation-run-log.ts';
 import {
   getAutomationRun,
-  insertAutomationRun,
+  insertOrFindAutomationRun,
   type AutomationRun,
 } from './automation-runs.ts';
 import {
@@ -118,12 +118,17 @@ async function startManualRun(
   if (!isDeclarationOf(declaration, automationId, options)) {
     return { ok: false, reason: 'other-card' };
   }
+  // Whether this click created the run, rather than a resent click finding
+  // the run the first send created. Only the first send's enqueue is the
+  // run's `enqueued` telemetry.
+  let created = false;
   let started = await dbAdapter.withTransaction(
     async (txQuery): Promise<ManualRunStart> => {
+      created = false;
       if (!(await isDirectWriterOf(txQuery, realm, user, options))) {
         return { ok: false, reason: 'not-a-direct-writer' };
       }
-      let run = await insertAutomationRun(txQuery, {
+      let inserted = await insertOrFindAutomationRun(txQuery, {
         automationId,
         realm,
         trigger: MANUAL_RUN_TRIGGER,
@@ -131,6 +136,8 @@ async function startManualRun(
         actsAs: user,
         dryRun,
       });
+      let { run } = inserted;
+      created = inserted.created;
       if (run.actsAs !== user || run.dryRun !== dryRun) {
         return { ok: false, reason: 'click-reused' };
       }
@@ -157,6 +164,9 @@ async function startManualRun(
       triggerKind: 'manual',
     },
   });
+  if (!created) {
+    return { ok: true, run, job };
+  }
   let enqueuedAt = new Date().toISOString();
   emitAutomationRunEvent({
     kind: 'enqueued',

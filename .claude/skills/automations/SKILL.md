@@ -1132,9 +1132,10 @@ packages/observability/scripts/tail-logs.sh --env staging --service realm-server
   --regex '\[automation-run-log\] automation=\S+ run=\S+ job=42 ' --since 1h --no-follow
 ```
 
-Each `realm.transform` call runs in the tab, so the tab reports it as a
-script line of kind `transform` with its time (`ms=…`) and whether it
-answered (`ok=…`).
+`realm.transform` runs in the tab, so the tab reports a run's transforms
+itself, as one script line of kind `transform` once the run settles: how many
+calls (`calls=…`), their time together (`ms=…`) and how many failed
+(`failed=…`).
 
 A log that reaches its cap logs one `warn` line saying later lines are
 dropped. Lines come from whichever realm-server task took the request, so

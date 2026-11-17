@@ -1,6 +1,6 @@
 import type * as JSONTypes from 'json-typescript';
 
-import { getAutomationRun } from './automation-runs.ts';
+import { getAutomationRun, type AutomationRun } from './automation-runs.ts';
 import {
   automationRunLogTag,
   emitAutomationRunEvent,
@@ -246,6 +246,7 @@ export async function chargeRunIndexing({
   let { runId, workerProcessSeconds, prerenderTabSeconds } = runIndexing;
   let measured = `${workerProcessSeconds.toFixed(3)} worker-process seconds and ${prerenderTabSeconds.toFixed(3)} prerender-tab seconds`;
   let telemetry = await runTelemetryIds(dbAdapter, runId);
+  let readForTelemetry = telemetry?.run;
   if (telemetry) {
     emitAutomationRunEvent({
       kind: 'index-pass',
@@ -267,8 +268,9 @@ export async function chargeRunIndexing({
     await withRunIndexingRetries(async () => {
       // Deleting a realm deletes its runs, so a run can be gone by the time
       // its commit's indexing finishes. Its payer is not recorded anywhere
-      // else.
-      let run = await getAutomationRun(dbAdapter, runId);
+      // else. The first try uses the run the telemetry read.
+      let run = readForTelemetry ?? (await getAutomationRun(dbAdapter, runId));
+      readForTelemetry = undefined;
       if (!run) {
         log.warn(
           `not charging the indexing of run ${runId} (${measured}): the run no longer exists`,
@@ -317,7 +319,9 @@ export async function chargeRunIndexing({
 async function runTelemetryIds(
   dbAdapter: DBAdapter,
   runId: string,
-): Promise<{ ids: AutomationRunIds; realm: string } | undefined> {
+): Promise<
+  { ids: AutomationRunIds; realm: string; run: AutomationRun } | undefined
+> {
   try {
     let run = await getAutomationRun(dbAdapter, runId);
     if (!run) {
@@ -332,6 +336,7 @@ async function runTelemetryIds(
         ...(run.attempt != null ? { attempt: run.attempt } : {}),
       },
       realm: run.realm,
+      run,
     };
   } catch {
     return undefined;

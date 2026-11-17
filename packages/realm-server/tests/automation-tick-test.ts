@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   automationInitiatedPriority,
+  cancelAutomationRun,
   createAutomationRun,
   getAutomationRun,
   insertPermissions,
@@ -28,7 +29,14 @@ import {
   type AutomationDeclarationRead,
   type AutomationTickOutcome,
 } from '@cardstack/runtime-common/automation-tick';
-import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
+import {
+  readRunLog,
+  setRunLogLokiSink,
+} from '@cardstack/runtime-common/automation-run-log';
+import {
+  setAutomationRunTelemetrySink,
+  type AutomationRunEvent,
+} from '@cardstack/runtime-common/automation-run-telemetry';
 import {
   AUTOMATION_COMMAND,
   automationJobTimeoutSec,
@@ -189,6 +197,76 @@ module(basename(import.meta.filename), function (hooks) {
       ),
     );
   }
+
+  test("a started run's enqueue is one telemetry event carrying its job, and its trigger line carries the job too", async function (assert) {
+    await switchOn();
+    let events: AutomationRunEvent[] = [];
+    let lokiLines: string[] = [];
+    setAutomationRunTelemetrySink((event) => events.push(event));
+    setRunLogLokiSink((line) => lokiLines.push(line));
+    try {
+      await tick(NOON + 30);
+    } finally {
+      setAutomationRunTelemetrySink(undefined);
+      setRunLogLokiSink(undefined);
+    }
+    let [run] = await runs();
+    let [job] = await queuedRuns();
+    assert.deepEqual(
+      events.map((event) =>
+        event.kind === 'enqueued'
+          ? {
+              kind: event.kind,
+              automation: event.automation,
+              run: event.run,
+              job: event.job,
+              trigger: event.trigger,
+              triggerKind: event.triggerKind,
+              scheduledAt: event.scheduledAt,
+              lagged: event.scheduleLagMs >= 0,
+            }
+          : { kind: event.kind },
+      ),
+      [
+        {
+          kind: 'enqueued',
+          automation: AUTOMATION,
+          run: run.id,
+          job: job.id,
+          trigger: 'hourly',
+          triggerKind: 'cron',
+          scheduledAt: NOON_SLOT,
+          lagged: true,
+        },
+      ],
+      'one enqueued event for the run, naming its job',
+    );
+    assert.true(
+      lokiLines.some((line) =>
+        line.startsWith(
+          `[automation-run-log] automation=${AUTOMATION} run=${run.id} job=${job.id} `,
+        ),
+      ),
+      "the trigger's run log line carries the job the tick enqueued",
+    );
+
+    // Canceled before any worker claimed it, the run still names its job.
+    let finished: AutomationRunEvent[] = [];
+    setAutomationRunTelemetrySink((event) => finished.push(event));
+    try {
+      await cancelAutomationRun(dbAdapter, run.id, OWNER);
+    } finally {
+      setAutomationRunTelemetrySink(undefined);
+    }
+    assert.deepEqual(
+      finished.map((event) => ({
+        kind: event.kind,
+        job: (event as { job?: number }).job,
+      })),
+      [{ kind: 'finished', job: job.id }],
+      'a run canceled while pending names the job it was enqueued as',
+    );
+  });
 
   test('nothing is enqueued before a trigger comes due', async function (assert) {
     await switchOn();

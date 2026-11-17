@@ -413,8 +413,10 @@ async function attemptRun(
 
   let outcome: AutomationScriptOutcome;
   let tabStartedAt = Date.now();
+  let tabMs = 0;
+  let result: RunCommandResponse | undefined;
   try {
-    let result = await ctx.prerenderer.runCommand({
+    result = await ctx.prerenderer.runCommand({
       userId: run.actsAs,
       runRealm: realmURL,
       auth: JSON.stringify({ [realmURL]: token }),
@@ -423,15 +425,12 @@ async function attemptRun(
       priority: jobInfo.priority,
       timeoutMs: remainingMs + AUTOMATION_TAB_GRACE_MS,
     });
-    let tabMs = Math.max(
+    tabMs = Math.max(
       0,
       Math.min(renderTabMs(result?.meta, tabStartedAt), remainingMs),
     );
     await addTabTime(ctx, runId, tabMs);
     outcome = outcomeOf(result, redact);
-    emitAutomationRunEvent(
-      scriptEvent(ids, tabStartedAt, tabMs, outcome, result),
-    );
   } catch (e: any) {
     // A call that throws carries no measure from a prerender server, and
     // may never have reached a tab (the request found no server, or every
@@ -441,8 +440,12 @@ async function attemptRun(
       reason: 'run-failed',
       message: redact(`The run's tab failed: ${e?.message ?? e}`),
     };
-    emitAutomationRunEvent(scriptEvent(ids, tabStartedAt, 0, outcome));
   }
+  let answered = outcome;
+  let answer = result;
+  emitAutomationRunEvent(() =>
+    scriptEvent(ids, tabStartedAt, tabMs, answered, answer),
+  );
   if (outcome.state === 'error') {
     // The finish discards the overlay, so nothing the script staged lands.
     let message =
@@ -623,7 +626,7 @@ function scriptEvent(
     typeof diagnostics?.launchMs === 'number'
       ? diagnostics.launchMs
       : undefined;
-  let timing = scriptTimingOf(result);
+  let timing = scriptTimingOf(outcome);
   let tab = diagnostics?.tabMemory;
   let iso = (ms: number) => new Date(ms).toISOString();
   return {
@@ -670,28 +673,17 @@ function scriptEvent(
 }
 
 // When the script started and ended in its tab, as the automation command
-// answered them. Absent from a tab that never answered.
+// answered them on its outcome. Absent from a tab that never answered.
 function scriptTimingOf(
-  result: RunCommandResponse | undefined,
+  outcome: AutomationScriptOutcome,
 ): { startedAt: number; endedAt: number } | undefined {
-  if (result?.status !== 'ready') {
-    return undefined;
-  }
-  try {
-    let timing = JSON.parse(result.cardResultString ?? '')?.data?.attributes
-      ?.json?.timing;
-    if (
-      typeof timing?.startedAt === 'number' &&
-      typeof timing?.endedAt === 'number' &&
-      Number.isFinite(timing.startedAt) &&
-      Number.isFinite(timing.endedAt)
-    ) {
-      return { startedAt: timing.startedAt, endedAt: timing.endedAt };
-    }
-  } catch {
-    // no outcome to read
-  }
-  return undefined;
+  let timing = outcome.timing;
+  return typeof timing?.startedAt === 'number' &&
+    typeof timing?.endedAt === 'number' &&
+    Number.isFinite(timing.startedAt) &&
+    Number.isFinite(timing.endedAt)
+    ? { startedAt: timing.startedAt, endedAt: timing.endedAt }
+    : undefined;
 }
 
 // What the tab answered. The command answers a script's own failure as an

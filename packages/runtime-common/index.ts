@@ -629,10 +629,10 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
     // isn't read as warm-tab serialization.
     tabProbeMs?: number;
   };
-  // The tab's own memory as an automation run's command ended in it, read
-  // over CDP (`readTabHeapUsage`). Only a run's command reports it, since a
-  // run holds its tab alone for the whole script; absent when the tab didn't
-  // answer.
+  // The whole tab's heap as an automation run's command ended in it, read
+  // over CDP (`readTabHeapUsage`): the host app's and anything earlier runs
+  // on the tab left uncollected, beside the run's own. Only a run's command
+  // reports it; absent when the tab didn't answer the read in time.
   tabMemory?: {
     jsUsedMB: number;
     jsTotalMB: number;

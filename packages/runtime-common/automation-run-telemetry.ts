@@ -13,7 +13,9 @@
 //
 // - `enqueued`: a trigger, a click or a batch enqueued the run's job. Its
 //   `scheduledAt` is when the run was due and `scheduleLagMs` how late the
-//   enqueue was. The tick and the click write it once their work commits.
+//   enqueue was. The tick writes it once its transaction commits; a click
+//   writes it only for the run it created, not for a resent click that
+//   joined it.
 // - `claimed`: a worker claimed the job and took the run (`queueWaitMs`, the
 //   lane it was claimed in, its priority).
 // - `admitted`: admission let the run go ahead or refused it, and how long the
@@ -23,7 +25,8 @@
 //   tab took to assign, and the tab's memory as the script ended.
 // - `commit`: the worker sent the run's batch and the realm answered.
 // - `finished`: the run ended, however it ended, with every timestamp and
-//   count its row holds.
+//   count its row holds; again, as `complete`, if a commit it ended without
+//   lands afterwards.
 // - `index-pass`: the index passes the run's commit caused have finished,
 //   with the usage they measured.
 // - `charged`: a charge for the run was written (`run` for its compute and
@@ -38,7 +41,10 @@
 // Telemetry never fails the work it describes: a line that can't be built is
 // logged and dropped.
 
-import type { AutomationRunTriggerKind } from './automation-run-command.ts';
+import {
+  automationRunDedupeKey,
+  type AutomationRunTriggerKind,
+} from './automation-run-command.ts';
 import type { DBAdapter } from './db.ts';
 import { param, query } from './expression.ts';
 import { logger } from './log.ts';
@@ -131,8 +137,13 @@ export interface AutomationRunCommitEvent extends AutomationRunIds {
   tries: number;
 }
 
+// As the run ended. A run that ended as an error while its claimed commit was
+// still in flight becomes complete on its row if the batch lands afterwards;
+// that writes a second `finished` with `state: "complete"` and
+// `lateCommit: true`.
 export interface AutomationRunFinishedEvent extends AutomationRunIds {
   kind: 'finished';
+  lateCommit?: true;
   realm: string;
   trigger: string;
   dryRun: boolean;
@@ -222,8 +233,15 @@ export function setAutomationRunTelemetrySink(
 let channelLog: ReturnType<typeof logger> | undefined;
 let log: ReturnType<typeof logger> | undefined;
 
-export function emitAutomationRunEvent(event: AutomationRunEvent): void {
+// Takes the event, or a function that builds it, so a line that can't be
+// built (a timestamp no `Date` can hold, say) costs the line and never the
+// work it describes.
+export function emitAutomationRunEvent(
+  eventOrBuild: AutomationRunEvent | (() => AutomationRunEvent),
+): void {
   try {
+    let event =
+      typeof eventOrBuild === 'function' ? eventOrBuild() : eventOrBuild;
     if (telemetrySink) {
       telemetrySink(event);
       return;
@@ -233,7 +251,7 @@ export function emitAutomationRunEvent(event: AutomationRunEvent): void {
     );
   } catch (error) {
     (log ??= logger('automation-run-telemetry')).warn(
-      `could not write a ${event.kind} event: ${error instanceof Error ? error.message : String(error)}`,
+      `could not write a run telemetry event: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -254,6 +272,36 @@ export async function jobOfAttempt(
       param(attempt),
     ]);
     return row?.job_id == null ? undefined : Number(row.job_id);
+  } catch {
+    return undefined;
+  }
+}
+
+// A run's queue job: the job of its attempt once a worker has claimed it, or,
+// for a run no worker claimed (one canceled or abandoned while pending), the
+// unclaimed job its key names. Undefined when there is none, or the lookup
+// fails.
+export async function jobOfRun(
+  dbAdapter: DBAdapter,
+  run: {
+    automationId: string;
+    trigger: string;
+    slot: string;
+    attempt: number | null;
+  },
+): Promise<number | undefined> {
+  if (run.attempt != null) {
+    return await jobOfAttempt(dbAdapter, run.attempt);
+  }
+  try {
+    let [row] = await query(dbAdapter, [
+      'SELECT id FROM jobs WHERE concurrency_group =',
+      param(`automation:${run.automationId}`),
+      "AND status = 'unfulfilled' AND args->>'dedupeKey' =",
+      param(automationRunDedupeKey(run)),
+      'ORDER BY id DESC LIMIT 1',
+    ]);
+    return row?.id == null ? undefined : Number(row.id);
   } catch {
     return undefined;
   }

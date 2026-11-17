@@ -24,7 +24,6 @@ import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry.ts';
 import {
   isAffinityOfRealm,
   isRealmAuthorityAffinityKey,
-  isRunAffinityKey,
   realmAffinityKeyOf,
   renderSessionOf,
   toAffinityKey,
@@ -32,6 +31,7 @@ import {
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AffinityActivityTracker } from './affinity-activity.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
+import { runCapacityOf } from './run-capacity.ts';
 import {
   UnresponsiveTabTracker,
   type UnresponsiveTabReport,
@@ -1253,33 +1253,17 @@ export class Prerenderer {
     this.#cleanupInterval.unref?.();
   }
 
-  // This server's automation run capacity, on the `boxel:automation-runs`
-  // channel, while it holds any run tab. A run holds one tab of its run
-  // affinity for its whole script, so the run affinities' busy tabs are the
-  // runs running here at once, and their tabs' other waiters are runs queued
-  // behind them.
+  // This server's automation run capacity (`runCapacityOf`), on the
+  // `boxel:automation-runs` channel, while it holds any run tab.
   #emitRunCapacity(snap: ReturnType<PagePool['getQueueDepthSnapshot']>): void {
-    let runTabs = 0;
-    let runningRuns = 0;
-    let queuedRuns = 0;
-    for (let affinity of snap.affinities) {
-      if (!isRunAffinityKey(affinity.affinityKey)) {
-        continue;
-      }
-      runTabs += affinity.tabCount;
-      let busy = affinity.byQueue.command;
-      runningRuns += busy;
-      queuedRuns += Math.max(0, affinity.pendingTotal - busy);
-    }
-    if (runTabs === 0) {
+    let capacity = runCapacityOf(snap);
+    if (capacity.runTabs === 0) {
       return;
     }
     emitAutomationRunEvent({
       kind: 'capacity',
       at: new Date().toISOString(),
-      runTabs,
-      runningRuns,
-      queuedRuns,
+      ...capacity,
       totalTabs: snap.totalTabs,
       maxTabs: this.#pagePool.currentMaxPages,
     });

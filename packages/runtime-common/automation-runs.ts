@@ -29,7 +29,7 @@ import {
 } from './automation-run-milestones.ts';
 import {
   emitAutomationRunEvent,
-  jobOfAttempt,
+  jobOfRun,
   msBetween,
 } from './automation-run-telemetry.ts';
 import type { DBAdapter } from './db.ts';
@@ -165,6 +165,15 @@ export async function insertAutomationRun(
   querier: Querier,
   run: NewAutomationRun,
 ): Promise<AutomationRun> {
+  return (await insertOrFindAutomationRun(querier, run)).run;
+}
+
+// `insertAutomationRun`, saying whether this call created the run or found
+// the one already there for its automation, trigger and slot.
+export async function insertOrFindAutomationRun(
+  querier: Querier,
+  run: NewAutomationRun,
+): Promise<{ run: AutomationRun; created: boolean }> {
   let [created] = await querier([
     'INSERT INTO automation_runs (automation_id, realm, trigger, slot, acts_as, dry_run) VALUES (',
     param(run.automationId),
@@ -181,7 +190,7 @@ export async function insertAutomationRun(
     ') ON CONFLICT ON CONSTRAINT automation_runs_slot_key DO NOTHING RETURNING *',
   ]);
   if (created) {
-    return runFromRow(created);
+    return { run: runFromRow(created), created: true };
   }
   let [existing] = await querier([
     'SELECT * FROM automation_runs WHERE automation_id =',
@@ -191,7 +200,7 @@ export async function insertAutomationRun(
     'AND slot =',
     param(run.slot),
   ]);
-  return runFromRow(existing);
+  return { run: runFromRow(existing), created: false };
 }
 
 export async function getAutomationRun(
@@ -364,9 +373,21 @@ export async function recordAutomationRunCommitted(
     "state = CASE WHEN state = 'error' THEN 'complete' ELSE state END",
     'WHERE id =',
     param(id),
-    "AND state IN ('running', 'error') AND commit_started_at IS NOT NULL AND committed_at IS NULL RETURNING *",
+    "AND state IN ('running', 'error') AND commit_started_at IS NOT NULL AND committed_at IS NULL",
+    'RETURNING *, (SELECT state FROM automation_runs WHERE id =',
+    param(id),
+    ') AS state_before',
   ]);
-  return row ? runFromRow(row) : undefined;
+  if (!row) {
+    return undefined;
+  }
+  let run = runFromRow(row);
+  if (row.state_before === 'error') {
+    // The run's `finished` telemetry said `error`; this one says how it
+    // ended after all.
+    emitRunFinished(run, await jobOfRun(dbAdapter, run), true);
+  }
+  return run;
 }
 
 // Ends a running run that `attempt` owns. A run whose commit was claimed can
@@ -418,7 +439,7 @@ export async function logAutomationRunEnded(
   dbAdapter: DBAdapter,
   run: AutomationRun,
 ): Promise<void> {
-  let job = await jobOfAttempt(dbAdapter, run.attempt);
+  let job = await jobOfRun(dbAdapter, run);
   emitRunFinished(run, job);
   await closeRunMilestones(dbAdapter, run, job);
   await logRunPlatformLine(
@@ -441,14 +462,20 @@ export async function logAutomationRunEnded(
             message: `The run ended with an error (${run.errorReason ?? 'error'})${run.errorMessage ? `: ${run.errorMessage}` : ''}`,
             ...(run.errorReason ? { data: { reason: run.errorReason } } : {}),
           },
+    job,
   );
 }
 
 // The run's `finished` telemetry event: every timestamp and count its row
 // holds as it ends, whichever path ended it.
-function emitRunFinished(run: AutomationRun, job: number | undefined): void {
+function emitRunFinished(
+  run: AutomationRun,
+  job: number | undefined,
+  lateCommit = false,
+): void {
   emitAutomationRunEvent({
     kind: 'finished',
+    ...(lateCommit ? { lateCommit: true as const } : {}),
     automation: run.automationId,
     run: run.id,
     ...(job !== undefined ? { job } : {}),
