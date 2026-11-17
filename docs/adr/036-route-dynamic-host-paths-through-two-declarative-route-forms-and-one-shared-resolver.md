@@ -91,7 +91,9 @@ The server MUST read routes only through `validateHostRoutes`
 (`Realm.getHostRoutes`), as ADR 015 §1.2 requires. A route that fails
 validation MUST be dropped with a warning, with its child routes. A field
 match's type MUST be read only from definitions the index has already
-cached, so a request never waits on a render (ADR 015 §1.1). A type whose
+cached (`lookupCachedDefinition`). A definition that isn't cached is read by
+running the type's module in the prerender, which ADR 015 §1.1 forbids while
+a request waits. A type whose
 definition isn't cached MUST drop its routes for now, start a background
 read, and mark the validation incomplete. A path that a route dropped for
 now could answer MUST get 503, not not-found. Validation MUST drop each
