@@ -1004,7 +1004,9 @@ module(basename(import.meta.filename), function (hooks) {
         'a short run of an automation already waiting reports nothing',
       );
 
-      await fund(OWNER, 500);
+      // Enough for two runs: the first holds up to a run's ceiling, and the
+      // second still has the minimum balance left.
+      await fund(OWNER, 1500);
       let funded = await newRun(SPENDING, { trigger: 'nightly' });
       result = await attempt(funded, {
         checks: spending(),
