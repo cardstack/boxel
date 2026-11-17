@@ -349,22 +349,30 @@ A notification named `DatasourceError` with one of these rule names means
 Grafana couldn't run the query; the fault is the data source (Postgres or
 Loki), not the scheduler.
 
-| Alert                                  | Fires when                                                                                                            | Reads                                                  |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `Automation tick stopped`              | no `automation-tick` job has resolved for more than 300 s (where none ever has, counted from the oldest tick waiting) | Postgres `jobs`                                        |
-| `Automation runs made up by reconcile` | a reconcile pass made up a run in the last 10 minutes                                                                 | Loki, worker lines tagged `automation-reconcile:`      |
-| `Pricing check failed`                 | a realm-server or worker process logged `pricing check failed in` in the last 10 minutes; one alert per service       | Loki                                                   |
-| `Automation runs waiting for a worker` | the oldest automation run a worker could claim has waited more than 60 s, held for 5 minutes                          | Postgres `jobs`, `job_reservations`, `job_claim_holds` |
+| Alert                                  | Fires when                                                                                                      | Reads                                                  |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `Automation tick stopped`              | no `automation-tick` job has resolved for more than 300 s                                                       | Postgres `jobs`, `automations`                         |
+| `Automation runs made up by reconcile` | a reconcile pass made up a run in the last 10 minutes                                                           | Loki, worker lines tagged `automation-reconcile:`      |
+| `Pricing check failed`                 | a realm-server or worker process logged `pricing check failed in` in the last 10 minutes; one alert per service | Loki                                                   |
+| `Automation runs waiting for a worker` | the oldest automation run a worker could claim has waited more than 60 s, held for 5 minutes                    | Postgres `jobs`, `job_reservations`, `job_claim_holds` |
 
 ### Automation tick stopped
 
 The tick resolves several times a minute (every worker manager enqueues one;
 a waiting tick absorbs the rest), so five minutes with none resolved is the
-tick down, not a slow minute. Where no tick has ever resolved (a fresh or
-restored database), the rule counts from the oldest tick waiting, so
-ticks that are enqueued but never succeed fire it too. An environment with no
-tick job at all leaves it quiet. While the tick is down no scheduled run
-starts. Run step 2's query:
+tick down, not a slow minute. The rule looks for the newest resolved tick
+among the newest 5,000 jobs. When none is there:
+
+- **An automation is switched on** (a row in `automations`): the value counts
+  from the oldest of those jobs, or the oldest tick waiting if that is older.
+  It is then a lower bound on the outage, and the rule keeps firing however
+  long the tick stays down.
+- **None is switched on**: a stopped tick delays nothing, so only a tick that
+  is enqueued but never succeeds fires it, counted from the oldest tick
+  waiting. With no waiting tick the rule stays quiet, which is also how it
+  reads in an environment that doesn't run the scheduler.
+
+While the tick is down no scheduled run starts. Run step 2's query:
 
 - **No recent `automation-tick` rows**: no worker manager's cron is
   enqueueing them. Look for `automation-tick cron failed to enqueue job` in

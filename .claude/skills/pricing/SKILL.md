@@ -103,7 +103,8 @@ version <hash>; PRICING_…=… …`, with every value. The version is the first
 - **Failing**: one error line, `pricing check failed in <process>: …`, naming
   every bad variable and what is wrong with it, and the same message sent to
   Sentry tagged `pricingCheck: failed` and `process: <name>`. The Grafana
-  alert `Pricing check failed` fires on the line, one alert per service; the
+  alert `Pricing check failed` fires on the realm-server's and the worker's
+  line, one alert per service; the
   `automation-diagnostics` skill's _Alerts_ section covers it. One bad value
   fails the whole set:
   `currentPricing()` then returns undefined, and the process admits no new
