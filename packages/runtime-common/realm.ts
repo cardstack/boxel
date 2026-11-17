@@ -1338,6 +1338,10 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // - `_automation-status` answers an automation's server row, which only the
 //   realm's direct writers see (see `automation-status.ts`). A grant reaches
 //   a card, not the row.
+// - `_automation-webhooks` lists the incoming webhooks the realm's
+//   automations may name, which only the realm's direct writers see (see
+//   `automation-webhooks.ts`). A grant reaches a card, not the realm's
+//   webhooks.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
 // differently on some of them (see `#refusalUnderPolicy`), as does the
@@ -3949,6 +3953,15 @@ export class Realm {
         '/_automation-status',
         SupportedMimeType.JSON,
         this.automationStatus.bind(this),
+        ACL_ONLY,
+      )
+      // The incoming webhooks an automation card's webhook trigger may name,
+      // for the card's editor. Answered on the realm ACL, and then only to a
+      // direct writer (see `automation-webhooks.ts`).
+      .get(
+        '/_automation-webhooks',
+        SupportedMimeType.JSON,
+        this.automationWebhooks.bind(this),
         ACL_ONLY,
       )
       .get(
@@ -20580,6 +20593,45 @@ export class Realm {
     });
   }
 
+  private async automationWebhooks(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    // Loaded on first use, like `automation-status.ts`: only a realm server
+    // has the webhooks to list.
+    let { answerAutomationWebhooks } = await import('./automation-webhooks.ts');
+    let answer = await answerAutomationWebhooks({
+      dbAdapter: this.#dbAdapter,
+      realmURL: new URL(this.url),
+      matrixServerName: this.#matrixClient.serverName,
+      viewer: await this.#statusViewer(requestContext),
+    });
+    if (answer.status !== 200) {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [{ status: String(answer.status), detail: answer.message }],
+        }),
+        init: {
+          status: answer.status,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+        requestContext,
+      });
+    }
+    return createResponse({
+      body: JSON.stringify(answer.document),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          // Webhooks come and go, and permission rows change, without the
+          // realm hearing of it.
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
+  }
+
   private async automationStatus(
     request: Request,
     requestContext: RequestContext,
@@ -20630,7 +20682,8 @@ export class Realm {
     });
   }
 
-  // Who asks for an automation's status: the session the realm vouches for
+  // Who asks for an automation's status, or for the webhooks the realm's
+  // automations may name: the session the realm vouches for
   // (`#sessionPrincipal`), so a revoked session or one delegated to another
   // realm asks as no one. A realm-authority session is a realm rendering its
   // own cards, and a diagnostic session is an operator reading as a user;

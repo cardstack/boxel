@@ -46,7 +46,8 @@ import type {
   ChangedAutomation,
   ReportAutomationChange,
 } from '@cardstack/runtime-common/automation-change-events';
-import { setupDB } from './helpers/index.ts';
+import { insertIncomingWebhookRow, setupDB } from './helpers/index.ts';
+import type { PgAdapter } from '@cardstack/postgres';
 
 const REALM_URL = 'http://127.0.0.1:4444/payroll/';
 const REALM = ri(REALM_URL);
@@ -770,6 +771,11 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('`until` stops a trigger: no slot after it runs', async function (assert) {
+    await insertIncomingWebhookRow(dbAdapter as PgAdapter, {
+      username: OWNER,
+      webhookPath: 'hooks/push',
+      signingSecret: 'owner-secret',
+    });
     await switchOn([
       { ...HOURLY, until: at('2026-11-10T13:30:00Z') },
       { kind: 'webhook', label: 'push', webhookPath: 'hooks/push' },

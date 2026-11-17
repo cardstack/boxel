@@ -25,6 +25,7 @@ import {
 } from '@cardstack/runtime-common/automation-routes';
 import {
   automationFixture,
+  insertIncomingWebhookRow,
   realmSecretSeed,
   ROOMY_AUTOMATION_CAPS,
   setupPermissionedRealmCached,
@@ -50,6 +51,9 @@ const REALM_USER = '@node-test_realm:localhost';
 
 const DAILY = 'automation/daily';
 const NO_MONTHLY_CAP = 'automation/no-monthly-cap';
+const HOOKED = 'automation/hooked';
+const HOOK_PATH = 'whk_routes';
+const OUTSIDER = '@automation-routes-outsider:localhost';
 
 const silent: PricingReporter = { info() {}, error() {}, alert() {} };
 
@@ -117,6 +121,19 @@ module(basename(import.meta.filename), function (hooks) {
         operations: [],
         path: NO_MONTHLY_CAP,
         caps: { dailyCredits: 50, monthlyCredits: null },
+      }),
+      ...automationFixture({
+        operations: [],
+        path: HOOKED,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+          { kind: 'webhook', label: 'deliveries', webhookPath: HOOK_PATH },
+        ],
       }),
     },
     onRealmSetup(args) {
@@ -232,6 +249,25 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('the estimate says webhook triggers start no runs, for a card with one', async function (assert) {
+      let hooked = await request
+        .get(AUTOMATION_SWITCH_ON_PATH)
+        .query({ realm: realm.url, automation: cardURL(HOOKED) })
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(hooked.status, 200, hooked.text);
+      assert.deepEqual(
+        hooked.body.data.attributes.notices.map(
+          ({ code }: { code: string }) => code,
+        ),
+        ['webhook-triggers-start-no-runs'],
+      );
+      let daily = await request
+        .get(AUTOMATION_SWITCH_ON_PATH)
+        .query({ realm: realm.url, automation: cardURL() })
+        .set('Authorization', auth(OWNER));
+      assert.deepEqual(daily.body.data.attributes.notices, []);
+    });
+
     test('a caller who is not a direct writer is refused', async function (assert) {
       let response = await request
         .get(AUTOMATION_SWITCH_ON_PATH)
@@ -280,6 +316,58 @@ module(basename(import.meta.filename), function (hooks) {
         (await getAutomation(dbAdapter, automationId()))?.payer,
         OWNER,
         'and the payer stays',
+      );
+    });
+
+    test("switch-on refuses a webhook trigger naming a webhook the realm can't use, and says webhook triggers start no runs once on", async function (assert) {
+      let switchOnHooked = () =>
+        post(
+          AUTOMATION_SWITCH_ON_PATH,
+          OWNER,
+          { monthlyCredits: ROOMY_AUTOMATION_CAPS.monthlyCredits },
+          { id: cardURL(HOOKED) },
+        );
+      let unknown = await switchOnHooked();
+      assert.strictEqual(unknown.status, 422, unknown.text);
+      assert.ok(
+        unknown.text.includes(`Boxel has no incoming webhook at`),
+        unknown.text,
+      );
+
+      let id = await insertIncomingWebhookRow(dbAdapter, {
+        username: OUTSIDER,
+        webhookPath: HOOK_PATH,
+        signingSecret: 'outsider-secret',
+      });
+      let foreign = await switchOnHooked();
+      assert.strictEqual(foreign.status, 422, foreign.text);
+      assert.ok(
+        foreign.text.includes('without write access to the workspace'),
+        foreign.text,
+      );
+      assert.strictEqual(
+        await getAutomation(dbAdapter, automationId(HOOKED)),
+        undefined,
+        'nothing was switched on',
+      );
+
+      await dbAdapter.execute(`DELETE FROM incoming_webhooks WHERE id = $1`, {
+        bind: [id],
+      });
+      await insertIncomingWebhookRow(dbAdapter, {
+        username: WRITER,
+        webhookPath: HOOK_PATH,
+        signingSecret: 'writer-secret',
+      });
+      let on = await switchOnHooked();
+      assert.strictEqual(
+        on.status,
+        201,
+        `another direct writer's webhook is the realm's: ${on.text}`,
+      );
+      assert.deepEqual(
+        on.body.meta.notices.map(({ code }: { code: string }) => code),
+        ['webhook-triggers-start-no-runs'],
       );
     });
 

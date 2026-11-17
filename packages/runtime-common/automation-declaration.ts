@@ -141,6 +141,11 @@ export type AutomationProblemCode =
   | 'invalid-date-time'
   | 'invalid-count'
   | 'missing-webhook-path'
+  // A webhook trigger names a webhook the realm can't use. The reader never
+  // reports these, since it reads the card alone; switch-on and resume check
+  // the webhooks against the database (`unusableWebhookProblems`).
+  | 'unknown-webhook'
+  | 'foreign-webhook'
   | 'invalid-operation'
   | 'missing-cap'
   | 'missing-credit-cap'

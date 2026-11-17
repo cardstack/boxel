@@ -32,6 +32,7 @@ import {
   type ManualRunStart,
 } from '@cardstack/runtime-common/automation-manual-runs';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
+import { switchOnNotices } from '@cardstack/runtime-common/automation-webhooks';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   AUTOMATION_ESTIMATE_RESOURCE_TYPE,
@@ -441,6 +442,12 @@ async function answerChange(
   meta?: Record<string, unknown>,
 ) {
   if (!change.ok) {
+    if (change.reason === 'unusable-webhook') {
+      throw new AutomationRouteError(
+        422,
+        change.problems.map(({ message }) => message).join('; '),
+      );
+    }
     refuse(change.reason);
   }
   await sendJSON(ctxt, status, {
@@ -530,6 +537,7 @@ export function handleAutomationEstimate(args: CreateRoutesArgs): Handler {
           switchedOn: row !== undefined,
           monthlyCredits: declaration.caps.monthlyCredits,
           estimate,
+          notices: switchOnNotices(declaration),
         },
       },
     });
@@ -571,14 +579,10 @@ export function handleAutomationSwitchOn(args: CreateRoutesArgs): Handler {
           change.automation,
         )
       : undefined;
-    await answerChange(
-      ctxt,
-      args,
-      change,
-      caller,
-      201,
-      estimate ? { estimate } : undefined,
-    );
+    await answerChange(ctxt, args, change, caller, 201, {
+      ...(estimate ? { estimate } : {}),
+      notices: switchOnNotices(declaration),
+    });
   });
 }
 
@@ -687,7 +691,9 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
       { automationId, user: caller, declaration },
       actorOptions(args),
     );
-    await answerChange(ctxt, args, change, caller);
+    await answerChange(ctxt, args, change, caller, 200, {
+      notices: switchOnNotices(declaration),
+    });
   });
 }
 
