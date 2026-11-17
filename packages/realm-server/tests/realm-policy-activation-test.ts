@@ -85,7 +85,6 @@ const CLASSROOM_MODULE = `
 
 type Grant = { operation: string; where?: unknown };
 
-// A policy with one rule, on `Classroom`.
 // The issues a policy records that these tests are about. The types here are
 // defined in the realm the policy governs, and no policy here grants their
 // code, so compiling also records `module-not-granted` against each `read` or
@@ -95,6 +94,7 @@ function issuesOf(policy: CompiledRealmPolicy | undefined) {
   return policy?.issues.filter(({ code }) => code !== 'module-not-granted');
 }
 
+// A policy with one rule, on `Classroom`.
 function policyCard(
   grants: Grant[],
   opts: {
