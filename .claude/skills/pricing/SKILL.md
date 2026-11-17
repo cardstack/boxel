@@ -670,7 +670,7 @@ END) AS kind
 In code, `getLedgerEntries` (`packages/billing/billing-queries.ts`) applies
 it and filters by user, kind, realm, run, batch, automation and day.
 `chargeKindForCreditType` (runtime-common) is the same mapping in
-TypeScript, and the two change together.
+TypeScript, and the `credit_charge_costs` view (see "The cost coverage report") repeats it in SQL; the three change together.
 
 A row with a `run_id`, `realm` or `automation_id` always carries its kind,
 since those columns are only written with one, so a query filtered on any of
