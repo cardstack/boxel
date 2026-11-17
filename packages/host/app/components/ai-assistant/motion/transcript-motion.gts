@@ -148,6 +148,7 @@ export class TranscriptMotion extends Component<Signature> {
         @inView={{true}}
         @maxFrameStep={{MAX_FRAME_STEP}}
         {{this.wakeWhenReady @ready @roomId}}
+        data-test-transcript-motion={{if this.awake 'awake' 'idle'}}
         ...attributes
         as |c|
       >

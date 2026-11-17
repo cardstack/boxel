@@ -28,3 +28,7 @@
 
 # playwright
 /test-results/
+
+# rooms exported from real sessions for the motion replay test: they hold
+# what people wrote, so they stay on the machine that exported them
+/tests/fixtures/ai-room-replay/local/

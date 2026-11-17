@@ -6,12 +6,12 @@ The assistant is the first part of operator mode to run on this model. The motio
 
 ## Files
 
-| File                    | What it holds                                                                                                                        |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `tokens.ts`             | The curves (`EASE` out, `EASE_IN` for leavers), `DURATION` inside the ADR's ranges, `RISE`, `SETTLE_AFTER_MS`, and `motionEnabled()` |
-| `transcript-motion.gts` | `TranscriptMotion` (the conversation) and `MessageMotion` (one message's parts)                                                      |
-| `composer-motion.gts`   | `ComposerMotion`: the New Messages chip, the cap and its status                                                                      |
-| `quick-look-motion.gts` | `QuickLookMotion`: the viewport layer Quick Look opens in                                                                            |
+| File                    | What it holds                                                                                                                                             |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tokens.ts`             | The curves (`EASE` out, `EASE_IN` for leavers), `DURATION` inside the ADR's ranges, `RISE`, `SETTLE_AFTER_MS`, `motionEnabled()` and `setMotionInTests()` |
+| `transcript-motion.gts` | `TranscriptMotion` (the conversation) and `MessageMotion` (one message's parts)                                                                           |
+| `composer-motion.gts`   | `ComposerMotion`: the New Messages chip, the cap and its status                                                                                           |
+| `quick-look-motion.gts` | `QuickLookMotion`: the viewport layer Quick Look opens in                                                                                                 |
 
 ## Regions
 
@@ -81,7 +81,7 @@ Score: the inserted sheet moves `@from` the source beacon with `@size='crop'` ov
 These came up while making the panel smooth, and the ADR doesn't decide them yet.
 
 - **Scroll that a state change implies.** Settled now in the render pass: Choreo's barrier runs a SETTLE phase after mounts and before MEASURE (`registerSettle`), and the conversation registers StickToBottom's `settle()` there, so the motion layer measures the page with the reader's anchor already held. The protocol is `packages/pretui/docs/scroll-anchoring-protocol.md`; the ADR should state the rule.
-- **Motion off in tests.** The ADR says the DOM must match with motion off, and leaves how to the host. Here the regions aren't mounted when `isTesting()`. A shared helper, or a MotionConfig that skips runs, would stop each surface choosing its own.
+- **Motion off in tests.** The ADR says the DOM must match with motion off, and leaves how to the host. Here the regions aren't mounted when `isTesting()`, unless a test turns its region on (`setMotionInTests`, as the room replay does). A shared helper, or a MotionConfig that skips runs, would stop each surface choosing its own.
 - **High-frequency change inside a scene.** A streaming message is declared with a different role (`message-live`) so the score moves it but never animates its growth. It works, but the ADR could name the pattern: high-frequency change is declared, not suppressed in the engine.
 - **Nested regions and shared scrolls.** A nested region measuring in page space animates its sprites by a distance the outer region already covers. `@space='parent'` on the inner moves is the answer; it is worth stating for any nested scene inside a scroller.
 - **Transforms and the scroll extent.** A FLIP translate that reaches past the end of a scroller's content grows the scroller's height, and a scroll owner that follows the end then chases the motion. A region inside a followed scroller clips the axis it scrolls on. The ADR could make that a rule for any region inside a scroll owner.
@@ -90,8 +90,20 @@ These came up while making the panel smooth, and the ADR doesn't decide them yet
 
 - **A finished crop leaves its clip.** Choreo's `@size='crop'` ends with `clip-path: inset(0px)` inline on the element instead of removing it. On a transcript message that cut every ring and inset hanging into the gutter (framed rows, tables, card frames). The transcript's moves are translate-only until the engine releases the clip; ADR 007 §1.1's rule that the settled DOM matches motion-off would catch this if a test checked inline styles after a run.
 
+## Replaying a room
+
+A motion bug in the transcript usually depends on what the room did and when: a reply streaming in, a call's result landing, a row growing while the reader follows the end. The room replay plays a recorded room back into the real panel with motion on, so the bug can be watched, slowed down and re-run, and the room it happened in becomes a regression test.
+
+- **The test:** `tests/integration/components/ai-assistant-panel/motion-replay-test.gts`, one test per fixture under `tests/fixtures/ai-room-replay/`. Each test opens the room's history as the reader found it (read, before the transcript's motion wakes), follows the end, plays the turn on the recorded clock, and fails when the transcript probe sees a message or tool row scaled, one message painted over the next, a message on screen jump in one frame, or a move the scroll cancels out. It also asserts that no leaver is left in the orphan layer and no transform is stranded.
+- **The player:** `tests/helpers/ai-room-replay.ts`. Room events go through the mock Matrix server; the reader's prompts go through the composer, as they were sent; streamed states go over to-device, as the bot sends them. Tool calls are held as running until their recorded result arrives, so nothing runs twice.
+- **The probe:** `tests/helpers/transcript-motion-probe.ts`, one sample per painted frame: each message's painted box and translate, the scroll, and whether the scroll owner is following.
+- **Recording a room:** `node .claude/skills/inspect-ai-room/scripts/inspect-room.mjs replay <roomId>` (local, or a staging or production room with `--profile`) writes a fixture into `tests/fixtures/ai-room-replay/local/`, which git ignores. Text is replaced by filler of the same shape unless `--keep-text`; long pauses are cut, and the reply's streaming, which the room does not keep, is made up from its final edit at the bot's cadence. See the inspect-ai-room skill.
+- **Watching one:** open the test page with `?filter=<fixture name>&replaySpeed=0.25&replayHold&replayTrace`. `replaySpeed` slows the clock, `replayHold` keeps the panel up at the end until `resumeReplay()` is run in the console, and `replayTrace` logs every frame the probe saw.
+
+`follow-turn.json` is synthetic: a reply that calls a tool, its result, and a long answer streamed below it while the reader follows. Without the region's vertical clip it fails on the jump, the overlap and the cancelled glides. It does not reach the squash a translate-only move used to get from Choreo's continuation (Choreo's own continuity test covers that); a room that shows it is worth adding.
+
 ## Known gaps
 
 - A script row's steps can fold and unfold for a few frames as its checks start applying. That is the row's data changing, not motion, and is tracked separately.
 - Tool-row card pills and the turn's changed files don't open Quick Look yet.
-- No host test drives the regions with motion on. A test with `setupChoreo(hooks)` that interrupts a fold mid-flight and asserts `orphanCount() === 0` and no stranded transforms is the next step.
+- The room replay drives the transcript with motion on, but nothing yet presses inside it mid-flight: a fold opened while a reply streams, with the same orphan and stranded-transform checks, is the next fixture to write.

@@ -1,6 +1,6 @@
 ---
 name: inspect-ai-room
-description: Inspect an AI assistant room's Matrix events on local, staging, or production — token usage/cost per turn, decoded timeline (edits, tool requests/results, streaming flags), room state (LLM model, mode, skills). Use when the user hands over a room id (local, staging, or production) and wants the session analyzed, when analyzing benchmark sessions, diagnosing a stalled/stuck assistant response, or checking whether prompt caching is working.
+description: Inspect an AI assistant room's Matrix events on local, staging, or production — token usage/cost per turn, decoded timeline (edits, tool requests/results, streaming flags), room state (LLM model, mode, skills) — and export a room as a replay fixture for the host's motion replay test. Use when the user hands over a room id (local, staging, or production) and wants the session analyzed, when analyzing benchmark sessions, diagnosing a stalled/stuck assistant response, checking whether prompt caching is working, or when a motion bug in the assistant transcript (a jump, a squash, an overlap) needs re-creating from the room it happened in.
 ---
 
 # Inspect an AI assistant room
@@ -15,6 +15,7 @@ node scripts/inspect-room.mjs timeline <roomId>   # decoded event timeline
 node scripts/inspect-room.mjs usage <roomId>      # per-turn tokens/cost + session total
 node scripts/inspect-room.mjs state <roomId>      # LLM model, act/ask mode, skills
 node scripts/inspect-room.mjs raw <roomId> [str]  # full event JSON, filtered by substring
+node scripts/inspect-room.mjs replay <roomId>     # a fixture for the motion replay test
 ```
 
 (paths relative to this skill's base directory)
@@ -44,6 +45,38 @@ account boxel-cli is logged in as). If the token was revoked, `boxel profile
 add` re-authenticates. `MATRIX_URL` + `MATRIX_TOKEN` env vars are the raw
 fallback for a token from elsewhere (e.g. copied from the browser's
 `auth` localStorage entry).
+
+## Replaying a room to debug the transcript's motion
+
+`replay` turns a room into a fixture for the host's motion replay test
+(`packages/host/tests/integration/components/ai-assistant-panel/motion-replay-test.gts`;
+the assistant motion README's "Replaying a room" section has the rest),
+which plays it back into the real panel with motion on and fails on a
+scaled message, an overlap, a one-frame jump or a glide the scroll cancels.
+
+```sh
+node scripts/inspect-room.mjs replay '!abc:localhost'
+node scripts/inspect-room.mjs --profile staging replay '!abc:stack.cards' --turns 2
+```
+
+- The last `--turns` turns (default 1) play on the clock; everything before
+  is history and lands at once. Pauses over `--max-gap` (1500 ms) are cut,
+  and a reply's streaming over `--max-stream` (4000 ms).
+- The bot streams over to-device previews, which the room does not keep:
+  each reply's previews are made up from its final edit, every 250 ms.
+- Text (bodies, reasoning, string values in tool arguments) is replaced by
+  filler of the same shape, so the transcript lays out the same and nothing
+  anyone wrote leaves the room. `--keep-text` keeps it as written.
+- Attachments, tool results' output cards and fields kept in Matrix media
+  are left out; the fixture's `source.notes` say what was.
+- The fixture lands in `packages/host/tests/fixtures/ai-room-replay/local/`
+  (`--out` to choose), which git ignores. A real session's fixture stays
+  there. Commit one only filled in, after reading it (pr-privacy); never one
+  made with `--keep-text`.
+
+Then, with the host dev server and test services running, open
+`https://localhost:4200/tests?filter=<fixture name>&replaySpeed=0.25&replayHold&replayTrace`
+to watch it slowed down and log every frame the probe saw.
 
 ## Analysis procedure for a "this session is full of errors" report
 
