@@ -187,6 +187,25 @@ import {
   handleUnshareKey,
 } from './handlers/handle-key-shares.ts';
 import {
+  handleAutomationEstimate,
+  handleAutomationPause,
+  handleAutomationPreview,
+  handleAutomationRemove,
+  handleAutomationResume,
+  handleAutomationRunCancel,
+  handleAutomationRunNow,
+  handleAutomationSwitchOn,
+} from './handlers/handle-automations.ts';
+import {
+  AUTOMATION_PAUSE_PATH,
+  AUTOMATION_PREVIEW_PATH,
+  AUTOMATION_REMOVE_PATH,
+  AUTOMATION_RESUME_PATH,
+  AUTOMATION_RUN_CANCEL_PATH,
+  AUTOMATION_RUN_NOW_PATH,
+  AUTOMATION_SWITCH_ON_PATH,
+} from '@cardstack/runtime-common/automation-routes';
+import {
   handleListKeyLimitNotices,
   handleMarkKeyLimitNoticesRead,
   handleSetKeyShareLimits,
@@ -810,6 +829,31 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleArchivedRealms(args),
   );
+
+  // A direct writer switching an automation on, running it by hand, pausing,
+  // resuming or removing it, and canceling one of its runs. Each answers only
+  // a direct writer of the realm the request names, acting as the session's
+  // own user (see `handlers/handle-automations.ts`).
+  router.get(
+    AUTOMATION_SWITCH_ON_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleAutomationEstimate(args),
+  );
+  for (let [path, handler] of [
+    [AUTOMATION_SWITCH_ON_PATH, handleAutomationSwitchOn],
+    [AUTOMATION_PREVIEW_PATH, handleAutomationPreview],
+    [AUTOMATION_RUN_NOW_PATH, handleAutomationRunNow],
+    [AUTOMATION_PAUSE_PATH, handleAutomationPause],
+    [AUTOMATION_RESUME_PATH, handleAutomationResume],
+    [AUTOMATION_REMOVE_PATH, handleAutomationRemove],
+    [AUTOMATION_RUN_CANCEL_PATH, handleAutomationRunCancel],
+  ] as const) {
+    router.post(
+      path,
+      jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+      handler(args),
+    );
+  }
 
   // Rotating the data key that seals stored secrets. Only an operator token
   // signed with the realm secret seed reaches these.

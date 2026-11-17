@@ -600,6 +600,12 @@ export interface CostCoverage {
   // never offsets one that went unpaid.
   shortfallCredits: number;
   shortChargedCharges: number;
+  // The batched AI charges billed at their estimate because the provider
+  // reported no cost, and what they drew. Their cost is the estimate, the
+  // most the batch could have cost, so how much the provider actually charged
+  // for them is unknown. Always 0 for other kinds.
+  estimatedCharges: number;
+  estimatedCredits: number;
 }
 
 // Compares, for the consumption charges written from `from` (inclusive) to
@@ -620,7 +626,9 @@ export async function getCostCoverage(
     `COALESCE(SUM(cost_usd * margin), 0) AS cost_at_margin_usd,`,
     `COALESCE(SUM(full_credits), 0) AS full_credits,`,
     `COALESCE(SUM(unpaid_credits), 0) AS shortfall_credits,`,
-    `COUNT(*) FILTER (WHERE unpaid_credits > 0) AS short_charged_charges`,
+    `COUNT(*) FILTER (WHERE unpaid_credits > 0) AS short_charged_charges,`,
+    `COUNT(*) FILTER (WHERE cost_estimated) AS estimated_charges,`,
+    `COALESCE(SUM(credits) FILTER (WHERE cost_estimated), 0) AS estimated_credits`,
     `FROM credit_charge_costs WHERE created_at >=`,
     param(Math.floor(from.getTime() / 1000)),
     `AND created_at <`,
@@ -646,8 +654,53 @@ export async function getCostCoverage(
       coverage: costCredits > 0 ? pricedCredits / costCredits : null,
       shortfallCredits: Number(row.shortfall_credits),
       shortChargedCharges: Number(row.short_charged_charges),
+      estimatedCharges: Number(row.estimated_charges),
+      estimatedCredits: Number(row.estimated_credits),
     };
   });
+}
+
+// A batch the settle job billed that has no batched AI charge in the ledger
+// although its cost comes to a credit or more: its payer's balance held
+// nothing to draw on, or its payer has no `users` row. The platform paid for
+// it and recovered nothing.
+export interface UnbilledAIBatch {
+  batchId: string;
+  runId: string;
+  actsAs: string;
+  billedUsd: number;
+  billedAtEstimate: boolean;
+  settledAt: string;
+}
+
+// The batches settled from `from` (inclusive) to `to` (exclusive) that wrote
+// no charge although they cost a credit or more: the part of batched AI the
+// cost coverage report can't see in `credit_charge_costs`, which only has
+// charges that were written.
+export async function getUnbilledAIBatches(
+  dbAdapter: DBAdapter,
+  { from, to }: { from: Date; to: Date },
+): Promise<UnbilledAIBatch[]> {
+  let rows = await query(dbAdapter, [
+    `SELECT b.batch_id, b.run_id, b.acts_as, b.billed_usd, b.billed_at_estimate, b.settled_at`,
+    `FROM ai_batches b WHERE b.settled_at >=`,
+    param(from.toISOString()),
+    `AND b.settled_at <`,
+    param(to.toISOString()),
+    `AND ROUND(b.billed_usd *`,
+    param(CREDITS_PER_USD),
+    `) >= 1`,
+    `AND NOT EXISTS (SELECT 1 FROM credits_ledger l WHERE l.charge_kind = 'batched_ai' AND l.batch_id = b.batch_id)`,
+    `ORDER BY b.settled_at`,
+  ] as Expression);
+  return rows.map((row) => ({
+    batchId: String(row.batch_id),
+    runId: String(row.run_id),
+    actsAs: String(row.acts_as),
+    billedUsd: Number(row.billed_usd),
+    billedAtEstimate: Boolean(row.billed_at_estimate),
+    settledAt: new Date(row.settled_at as string).toISOString(),
+  }));
 }
 
 export async function getStripeEventById(
