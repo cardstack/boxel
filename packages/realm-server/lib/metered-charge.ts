@@ -1,9 +1,11 @@
 import {
   getUserByMatrixUserId,
+  recordPricingVersion,
   spendCredits,
 } from '@cardstack/billing/billing-queries';
 import {
   CREDITS_PER_USD,
+  logger,
   type DBAdapter,
   type SpendCharge,
 } from '@cardstack/runtime-common';
@@ -14,7 +16,14 @@ import type {
   MeteredUsage,
 } from '@cardstack/runtime-common/metered-charges';
 
-import { currentPricing, type Pricing } from './pricing.ts';
+import {
+  currentPricing,
+  PRICING_VARIABLES,
+  type Pricing,
+  type PricingValueName,
+} from './pricing.ts';
+
+const log = logger('pricing');
 
 // Prices and writes a metered charge (ADR 029 §1.1): the hosting cost of the
 // usage it measured, times the margin, at 1,000 credits to the dollar.
@@ -100,6 +109,49 @@ export async function chargeMetered(
       usage,
     ),
   );
+}
+
+// Records the prices `pricing.version` stands for (see `recordPricingVersion`),
+// so the cost coverage report can price the usage of the charges written at
+// them. Every worker records its version at startup, since workers write the
+// metered charges (through `meteredChargesFor`).
+export async function recordPricing(
+  dbAdapter: DBAdapter,
+  pricing: Pricing,
+): Promise<void> {
+  await recordPricingVersion(dbAdapter, {
+    version: pricing.version,
+    margin: pricing.values.margin,
+    values: Object.fromEntries(
+      (Object.keys(PRICING_VARIABLES) as PricingValueName[]).map((name) => [
+        PRICING_VARIABLES[name],
+        pricing.values[name],
+      ]),
+    ),
+    usdPerUnit: usdPerUnit(pricing),
+  });
+}
+
+// `recordPricing` for the prices this process checked at startup, if it has
+// any. A failure is logged and never stops the process: a version that isn't
+// recorded only leaves its charges unpriced in the report until a process
+// with the same prices records it.
+export async function recordCurrentPricing(
+  dbAdapter: DBAdapter,
+  processName: string,
+): Promise<void> {
+  let pricing = currentPricing();
+  if (!pricing) {
+    return;
+  }
+  try {
+    await recordPricing(dbAdapter, pricing);
+  } catch (error) {
+    log.error(
+      `could not record pricing version ${pricing.version} in ${processName}`,
+      error,
+    );
+  }
 }
 
 // The `MeteredCharges` a worker hands its tasks, at the prices this process

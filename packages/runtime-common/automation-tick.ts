@@ -93,7 +93,13 @@ export interface AutomationTickOptions {
   virtualNetwork: Pick<VirtualNetwork, 'toURLHref'>;
   // Unix seconds; the current time when absent.
   now?: number;
+  // Handle only rows whose next run is at least this many seconds before
+  // `now`: the ones the minute tick has missed. Reconcile passes it; the
+  // tick handles every due row.
+  overdueBy?: number;
   pageSize?: number;
+  // Called after each automation the tick handles.
+  onProgress?: () => void;
 }
 
 // What the tick did with one due trigger slot.
@@ -167,13 +173,14 @@ export async function tickAutomations(
   options: AutomationTickOptions,
 ): Promise<AutomationTickOutcome[]> {
   let now = options.now ?? currentUnixSeconds();
+  let dueBy = now - (options.overdueBy ?? 0);
   let pageSize = options.pageSize ?? AUTOMATION_TICK_PAGE_SIZE;
   let outcomes: AutomationTickOutcome[] = [];
   let after: string | undefined;
   for (;;) {
     let rows = await query(dbAdapter, [
       'SELECT automation_id FROM automations WHERE',
-      ...dueAt(now),
+      ...dueAt(dueBy),
       ...(after ? ['AND automation_id >', param(after)] : []),
       'ORDER BY automation_id LIMIT',
       param(pageSize),
@@ -185,6 +192,7 @@ export async function tickAutomations(
           dbAdapter,
           automationId,
           now,
+          dueBy,
           options,
         );
         if (outcome) {
@@ -193,6 +201,7 @@ export async function tickAutomations(
       } catch (error) {
         outcomes.push({ kind: 'failed', automationId, error });
       }
+      options.onProgress?.();
     }
     if (rows.length < pageSize) {
       return outcomes;
@@ -207,9 +216,16 @@ async function tickAutomation(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
   now: number,
+  dueBy: number,
   options: AutomationTickOptions,
 ): Promise<AutomationTickOutcome | undefined> {
-  let outcome = await claimAndEnqueue(dbAdapter, automationId, now, options);
+  let outcome = await claimAndEnqueue(
+    dbAdapter,
+    automationId,
+    now,
+    dueBy,
+    options,
+  );
   if (outcome?.kind === 'enqueued') {
     await logTriggers(dbAdapter, outcome.triggers);
   }
@@ -220,6 +236,7 @@ async function claimAndEnqueue(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
   now: number,
+  dueBy: number,
   options: AutomationTickOptions,
 ): Promise<AutomationTickOutcome | undefined> {
   return await dbAdapter.withTransaction(async (txQuery) => {
@@ -227,7 +244,7 @@ async function claimAndEnqueue(
       'SELECT * FROM automations WHERE automation_id =',
       param(automationId),
       'AND',
-      ...dueAt(now),
+      ...dueAt(dueBy),
       'FOR UPDATE SKIP LOCKED',
     ]);
     if (!row) {
@@ -428,7 +445,7 @@ async function pendingRuns(
   }));
 }
 
-// The rows the tick handles at `now`: the ones `automations_due_idx` serves.
+// The rows due by `now`: the ones `automations_due_idx` serves.
 function dueAt(now: number) {
   return [
     "state IN ('active', 'waiting-for-credits') AND next_run IS NOT NULL AND next_run <=",
