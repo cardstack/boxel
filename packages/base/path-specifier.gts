@@ -130,7 +130,7 @@ class View extends Component<typeof PathSpecifierField> {
         border-radius: var(--boxel-border-radius-xs);
         background-color: var(--muted);
         color: var(--foreground);
-        font-family: var(--boxel-monospace-font-family, monospace);
+        font-family: var(--font-mono);
         font-size: var(--boxel-font-size-sm);
         white-space: pre-wrap;
         overflow-wrap: anywhere;
