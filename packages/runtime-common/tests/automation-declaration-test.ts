@@ -1,6 +1,9 @@
 import {
-  automationRef,
   cronFrequencyError,
+  cronTriggerProblem,
+} from '../automation-cron-rule.ts';
+import {
+  automationRef,
   readAutomationDeclaration,
   type AutomationIndexEntry,
   type AutomationProblemCode,
@@ -463,6 +466,50 @@ const tests = Object.freeze({
       [['cron-too-frequent', 'triggers.0.expression']],
       'the reader checks in the trigger’s time zone',
     );
+  },
+
+  'the card editor and the reader apply one rule, cronTriggerProblem': async (
+    assert,
+  ) => {
+    // Each of these passed a separate editor rule that compared times only
+    // within an hour and across consecutive hours of one day, on the wall
+    // clock, and the reader refused it.
+    for (let [expression, timeZone, why] of [
+      ['58,1 0,23 * * *', undefined, '23:58 and the next day’s 00:01'],
+      ['1,58 2,4 * * *', 'America/New_York', 'the skipped 02:58 and 04:01'],
+      ['0,58 */2 * * *', 'Europe/London', '00:58 GMT and 02:00 BST'],
+    ] as const) {
+      let problem = cronTriggerProblem(expression, timeZone);
+      assert.strictEqual(
+        problem?.code,
+        'cron-too-frequent',
+        `"${expression}" is refused: ${why}`,
+      );
+      assert.deepEqual(
+        codes(
+          read(
+            entry({
+              attributes: {
+                triggers: [cron(expression, { timeZone: timeZone ?? 'UTC' })],
+              },
+            }),
+          ),
+        ),
+        [['cron-too-frequent', 'triggers.0.expression']],
+        `the reader refuses "${expression}" with the same code`,
+      );
+    }
+    assert.strictEqual(
+      cronTriggerProblem('every day')?.code,
+      'invalid-cron',
+      'an expression that does not parse',
+    );
+    assert.strictEqual(
+      cronTriggerProblem('1,58 2,4 * * *', 'Not/A_Zone'),
+      undefined,
+      'a time zone the runtime does not know is reported on its own, so only the wall clock is checked',
+    );
+    assert.strictEqual(cronTriggerProblem('0 7 * * MON', 'UTC'), undefined);
   },
 
   'reports an unknown or missing time zone': async (assert) => {

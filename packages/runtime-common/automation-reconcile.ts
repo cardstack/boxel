@@ -63,6 +63,8 @@ import {
   type AutomationDeclarationRead,
   type AutomationTickOutcome,
 } from './automation-tick.ts';
+import type { ReportAutomationChange } from './automation-change-events.ts';
+import type { ReportRunChange } from './automation-run-events.ts';
 import type { DBAdapter } from './db.ts';
 import { param, query } from './expression.ts';
 import { enqueueAutomationRunJob } from './jobs/run-command.ts';
@@ -113,6 +115,10 @@ export interface AutomationReconcileOptions {
   // (`heartbeatJob`). A pass after a long outage can outlast the job's
   // timeout.
   onProgress?: () => void;
+  // Told of each automation the overdue pass changes, such as one it pauses
+  // for an invalid declaration, and of each run that pause cancels.
+  reportAutomationChange?: ReportAutomationChange;
+  reportRunChange?: ReportRunChange;
 }
 
 // What reconcile did with one run whose job was gone:
@@ -198,6 +204,8 @@ export async function reconcileAutomations(
     overdueBy: graceSeconds,
     pageSize: options.pageSize,
     onProgress: options.onProgress,
+    reportAutomationChange: options.reportAutomationChange,
+    reportRunChange: options.reportRunChange,
   });
   let steps: Record<string, number> = {};
   for (let [name, step] of reconcileSteps) {

@@ -53,6 +53,7 @@ import {
   type AutomationCaps,
   type AutomationDeclaration,
   type AutomationIndexEntry,
+  type AutomationProblem,
   type AutomationTriggerDeclaration,
 } from './automation-declaration.ts';
 import {
@@ -110,13 +111,17 @@ export type AutomationState =
 // - `realm-archived`: its realm was archived.
 // - `repeated-failures`: its own runs failed `AUTOMATION_FAILURES_BEFORE_PAUSE`
 //   times in a row (see `pauseAfterRepeatedFailures`).
+// - `invalid-declaration`: its card no longer reads as a declaration, such as
+//   a cron trigger that fires more often than the minimum allows. The row's
+//   `pauseProblems` names what the declaration reader found.
 export type AutomationPauseReason =
   | 'requested'
   | 'payer-lost-access'
   | 'caps-raised'
   | 'batched-ai-enabled'
   | 'realm-archived'
-  | 'repeated-failures';
+  | 'repeated-failures'
+  | 'invalid-declaration';
 
 // How many of an automation's own runs fail in a row before it pauses itself
 // with `repeated-failures`, unless the caller of `pauseAfterRepeatedFailures`
@@ -197,6 +202,9 @@ export interface AutomationRow {
   pauseReason: AutomationPauseReason | null;
   // Who paused it, when a person did.
   pausedBy: string | null;
+  // What the declaration reader found wrong with the card, when `pauseReason`
+  // is `invalid-declaration`; null otherwise.
+  pauseProblems: AutomationProblem[] | null;
   capsSnapshot: AutomationCapsSnapshot;
   // Each trigger's run state, keyed by its label, in the shape
   // `computeAutomationSchedule` reads as `runState`, with each trigger's
@@ -370,13 +378,9 @@ export async function pauseAutomation(
     }
     return {
       ok: true,
-      automation: await pause(
-        txQuery,
-        changes,
-        automationId,
-        'requested',
-        user,
-      ),
+      automation: await pause(txQuery, changes, automationId, 'requested', {
+        pausedBy: user,
+      }),
     };
   });
 }
@@ -422,7 +426,7 @@ export async function resumeAutomation(
       param(user),
       ', state =',
       param(schedule.state),
-      ', pause_reason = NULL, paused_by = NULL, caps_snapshot =',
+      ', pause_reason = NULL, paused_by = NULL, pause_problems = NULL, caps_snapshot =',
       param(JSON.stringify(snapshotCaps(declaration))),
       '::jsonb, trigger_runs =',
       param(JSON.stringify(schedule.triggerRuns)),
@@ -811,12 +815,14 @@ export async function setAutomationWaitingForCredits(
 // - `removed`: the card is deleted (`card-deleted`), or no longer adopts from
 //   the catalog `Automation` type (`not-an-automation`), so the row is gone
 //   and its pending and running runs are canceled.
-// - `paused`: the card raised a cap or turned on `batchedAI`.
+// - `paused`: the card raised a cap or turned on `batchedAI`
+//   (`caps-raised`, `batched-ai-enabled`), or doesn't read as a declaration
+//   (`invalid-declaration`, with the problems on the row).
 // - `recomputed`: the next run, *done* and the trigger cursors follow the
 //   card as indexed.
-// - `unchanged`: the row stays as it was. It is paused, or the card failed to
-//   index or doesn't read as a declaration, so there is nothing to schedule
-//   from until a later index reads it.
+// - `unchanged`: the row stays as it was. It is paused already, or the card
+//   failed to index, so there is nothing to schedule from until a later index
+//   reads it.
 export type AutomationSync =
   | {
       kind: 'removed';
@@ -853,6 +859,10 @@ export interface AutomationSyncOptions extends AutomationReporters {
 // one with a trigger left becomes active again. Like `checkAutomationCaps`, a
 // card that asks for more than the caps snapshot pauses the automation, and a
 // paused one keeps its reason and its schedule until a resume restarts it.
+// A card that indexed but doesn't read as a declaration pauses the
+// automation with `invalid-declaration` and the reader's problems, since
+// nothing can run it until someone fixes the card; a resume then reads the
+// fixed card.
 export async function syncAutomationWithCard(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
@@ -895,7 +905,19 @@ export async function syncAutomationWithCard(
           'not-an-automation',
         );
       }
-      return { kind: 'unchanged', automation };
+      if (automation.state === 'paused') {
+        return { kind: 'unchanged', automation };
+      }
+      return {
+        kind: 'paused',
+        automation: await pause(
+          txQuery,
+          changes,
+          automationId,
+          'invalid-declaration',
+          { problems: read.problems },
+        ),
+      };
     }
     let { declaration } = read;
     if (automation.state === 'paused') {
@@ -945,6 +967,40 @@ export async function syncAutomationWithCard(
       changes.automations.push(recomputed);
     }
     return { kind: 'recomputed', automation: recomputed };
+  });
+}
+
+// Pauses the automation with `invalid-declaration` when its card, read once
+// the automation's row is locked, still doesn't read as a declaration. The
+// tick asks after a due automation's card fails to read, for a card the index
+// hook hasn't paused for: the card's last index pass ran before a rule the
+// declaration reader applies changed, say. `readProblems` reads the card's
+// problems, or undefined when the card reads, or carries nothing to read (not
+// indexed, failed to index), which is no reason to pause. An automation
+// already paused keeps its reason. Returns the row, or undefined when the
+// automation isn't switched on.
+export async function pauseForInvalidDeclaration(
+  dbAdapter: DBAdapter,
+  automationId: RealmResourceIdentifier,
+  readProblems: () => Promise<AutomationProblem[] | undefined>,
+  reporters: AutomationReporters = {},
+): Promise<AutomationRow | undefined> {
+  return await withChanges(dbAdapter, reporters, async (txQuery, changes) => {
+    let row = await selectAutomation(txQuery, automationId, { lock: true });
+    if (!row) {
+      return undefined;
+    }
+    let automation = automationFromRow(row);
+    if (automation.state === 'paused') {
+      return automation;
+    }
+    let problems = await readProblems();
+    if (!problems?.length) {
+      return automation;
+    }
+    return await pause(txQuery, changes, automationId, 'invalid-declaration', {
+      problems,
+    });
   });
 }
 
@@ -1088,14 +1144,19 @@ async function pause(
   changes: AutomationChanges,
   automationId: RealmResourceIdentifier,
   reason: AutomationPauseReason,
-  pausedBy?: string,
+  {
+    pausedBy,
+    problems,
+  }: { pausedBy?: string; problems?: AutomationProblem[] } = {},
 ): Promise<AutomationRow> {
   let [row] = await txQuery([
     "UPDATE automations SET state = 'paused', pause_reason =",
     param(reason),
     ', paused_by =',
     param(pausedBy ?? null),
-    ', updated_at = now() WHERE automation_id =',
+    ', pause_problems =',
+    param(problems ? JSON.stringify(problems) : null),
+    '::jsonb, updated_at = now() WHERE automation_id =',
     param(automationId),
     'RETURNING *',
   ]);
@@ -1270,6 +1331,10 @@ export function automationFromRow(
     state: row.state as AutomationState,
     pauseReason: (row.pause_reason as AutomationPauseReason | null) ?? null,
     pausedBy: (row.paused_by as string | null) ?? null,
+    pauseProblems:
+      row.pause_reason === 'invalid-declaration' && row.pause_problems != null
+        ? (json(row.pause_problems) as AutomationProblem[])
+        : null,
     capsSnapshot: json(row.caps_snapshot) as AutomationCapsSnapshot,
     triggerRuns: json(row.trigger_runs) as Record<
       string,

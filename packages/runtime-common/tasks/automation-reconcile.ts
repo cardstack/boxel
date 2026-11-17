@@ -6,6 +6,8 @@ import {
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
 } from '../queue.ts';
+import { taskAutomationChangeReporter } from '../automation-change-events.ts';
+import { taskRunChangeReporter } from '../automation-run-events.ts';
 import { reconcileAutomations } from '../automation-reconcile.ts';
 import { readRunDeclaration } from '../automation-run-limits.ts';
 
@@ -57,6 +59,7 @@ const automationReconcile: Task<
   meteredCharges,
   log,
   reportStatus,
+  reportRealmEvent,
 }) =>
   async function (args) {
     let { jobInfo } = args;
@@ -71,6 +74,17 @@ const automationReconcile: Task<
         // A pass after a long outage can outlast the job's timeout; each run,
         // automation and step it handles is progress.
         onProgress: () => heartbeatJob(jobInfo?.reservationId),
+        reportAutomationChange: taskAutomationChangeReporter({
+          virtualNetwork,
+          reportRealmEvent,
+          log,
+        }),
+        reportRunChange: taskRunChangeReporter({
+          dbAdapter,
+          virtualNetwork,
+          reportRealmEvent,
+          log,
+        }),
         readDeclaration: (automationId) =>
           readRunDeclaration({
             dbAdapter,
@@ -135,7 +149,7 @@ const automationReconcile: Task<
             break;
           case 'unreadable':
             log.warn(
-              `${tag}: automation ${outcome.automationId} is overdue but its card can't be read: ${outcome.message}`,
+              `${tag}: automation ${outcome.automationId} is overdue but its card can't be read${outcome.paused ? ', so it is paused with invalid-declaration' : ''}: ${outcome.message}`,
             );
             break;
           case 'caps-raised':

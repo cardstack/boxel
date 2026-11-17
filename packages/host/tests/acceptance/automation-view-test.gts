@@ -744,6 +744,60 @@ module('Acceptance | automation view', function (hooks) {
       .doesNotIncludeText('Last error', 'no streak, no last error');
   });
 
+  test('an automation paused for an invalid declaration lists each problem where the problem is on the card', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        state: 'paused',
+        pauseReason: 'invalid-declaration',
+        pauseProblems: [
+          {
+            code: 'cron-too-frequent',
+            path: 'triggers.1.expression',
+            message:
+              '"58,1 0,23 * * *" can fire twice 3 minutes apart, and Boxel runs an automation\'s cron trigger at most once every 5 minutes',
+          },
+          {
+            code: 'missing-cap',
+            path: 'caps.writes',
+            message: 'Set a limit on saves',
+          },
+        ],
+      },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-pause-problems]', { timeout: 10000 });
+    assert
+      .dom('[data-test-automation-state-sentence]')
+      .hasText(
+        'Boxel can’t read the automation’s settings, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace fixes each problem below and resumes the automation.',
+      );
+    assert
+      .dom('[data-test-automation-pause-problem="Trigger “hourly”"]')
+      .includesText('can fire twice 3 minutes apart');
+    assert
+      .dom('[data-test-automation-pause-problem="Limits"]')
+      .includesText('Set a limit on saves');
+
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    await openFormat('embedded');
+    await openIsolated();
+    await waitUntil(
+      () =>
+        text('[data-test-automation-state-sentence]')?.includes(
+          'Someone who can edit this workspace paused',
+        ),
+      { timeout: 10000 },
+    );
+    assert
+      .dom('[data-test-automation-pause-problems]')
+      .doesNotExist('another pause reason lists no problems');
+  });
+
   test('a paused, waiting and done automation each read with that state', async function (assert) {
     let cases: [Record<string, unknown>, string, string][] = [
       [

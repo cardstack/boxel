@@ -1893,7 +1893,7 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('a card that failed to index, or does not read, leaves the row as it was', async function (assert) {
+      test('a card that failed to index leaves the row as it was', async function (assert) {
         let before = await switchOn();
         let failed = await sync({ ...indexed(), instance: null });
         assert.strictEqual(failed?.kind, 'unchanged');
@@ -1906,11 +1906,54 @@ module(basename(import.meta.filename), function () {
           'unchanged',
           'a row carrying an earlier visit after a failed one is not read',
         );
-        let invalid = await sync(
+        assert.deepEqual(await getAutomation(dbAdapter, AUTOMATION), before);
+      });
+
+      test('a card that indexed but does not read as a declaration pauses the automation with the problems', async function (assert) {
+        await switchOn();
+        // The old card editor rule accepted this expression: it never
+        // compared 23:58 with the next day's 00:01.
+        let result = await sync(
+          indexed({
+            triggers: [cronTrigger({ expression: '58,1 0,23 * * *' })],
+          }),
+        );
+        assert.strictEqual(result?.kind, 'paused');
+        let automation = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(automation?.state, 'paused');
+        assert.strictEqual(automation?.pauseReason, 'invalid-declaration');
+        assert.deepEqual(
+          automation?.pauseProblems?.map(({ code, path }) => [code, path]),
+          [['cron-too-frequent', 'triggers.0.expression']],
+        );
+        assert.ok(
+          automation?.pauseProblems?.[0].message.includes('3 minutes apart'),
+          automation?.pauseProblems?.[0].message,
+        );
+
+        let again = await sync(
           indexed({ triggers: [cronTrigger({ expression: 'not cron' })] }),
         );
-        assert.strictEqual(invalid?.kind, 'unchanged');
-        assert.deepEqual(await getAutomation(dbAdapter, AUTOMATION), before);
+        assert.strictEqual(
+          again?.kind,
+          'unchanged',
+          'a paused automation keeps the problems it paused with',
+        );
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.pauseProblems?.[0].code,
+          'cron-too-frequent',
+        );
+
+        let resumed = await resumeAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER, declaration: declaration() },
+          options,
+        );
+        assert.true(resumed.ok, 'a resume with a fixed card succeeds');
+        let after = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(after?.state, 'active');
+        assert.strictEqual(after?.pauseReason, null);
+        assert.strictEqual(after?.pauseProblems, null, 'resume clears them');
       });
 
       test('a card that raises a cap pauses the automation', async function (assert) {

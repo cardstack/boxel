@@ -11,6 +11,7 @@
 import {
   readAutomationDeclaration,
   type AutomationDeclaration,
+  type AutomationProblem,
 } from './automation-declaration.ts';
 import {
   computeAutomationSchedule,
@@ -88,6 +89,11 @@ export type AutomationStatusAttributes =
       currentRun: AutomationCurrentRun | null;
       state: AutomationState;
       pauseReason: AutomationPauseReason | null;
+      // What the declaration reader found wrong with the card, when
+      // `pauseReason` is `invalid-declaration`; null otherwise. Each problem
+      // has a `path` into the card (`triggers.0.expression`) and a message
+      // for a person.
+      pauseProblems: AutomationProblem[] | null;
       // The payer's Matrix id, or null when the viewer may not see who pays.
       payer: string | null;
       viewerIsPayer: boolean;
@@ -250,6 +256,7 @@ export function automationStatusDocument({
             switchedOn: true,
             state: row.state,
             pauseReason: row.pauseReason,
+            pauseProblems: row.pauseProblems,
             payer: payerShown || row.payer === viewer ? row.payer : null,
             viewerIsPayer: row.payer === viewer,
             nextRun: isoOrNull(row.nextRun),
