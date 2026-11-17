@@ -20,6 +20,8 @@ import {
   type JobInfo,
   type Prerenderer,
   type Realm,
+  type ReportAutomationChange,
+  type ReportRunChange,
   type RunCommandArgs,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
@@ -260,6 +262,8 @@ module(basename(import.meta.filename), function (hooks) {
       realmAdmission,
       triggerKind,
       calls = [],
+      reportAutomationChange,
+      reportRunChange,
     }: {
       // The job's `triggerKind`; by default a run labeled `manual` says so,
       // and any other is its trigger's.
@@ -272,6 +276,8 @@ module(basename(import.meta.filename), function (hooks) {
       // Stands in for the realm's answer to the run's admission request.
       realmAdmission?: () => Response;
       calls?: RunCommandArgs[];
+      reportAutomationChange?: ReportAutomationChange;
+      reportRunChange?: ReportRunChange;
     } = {},
   ) {
     let prerenderer = stubTab(calls);
@@ -315,6 +321,8 @@ module(basename(import.meta.filename), function (hooks) {
         mintRunToken: buildMintRunToken(realmSecretSeed),
         matrixServerName: 'localhost',
         admissionChecks: checks ? checks(real) : real,
+        reportAutomationChange,
+        reportRunChange,
         log,
       },
       {
@@ -466,11 +474,29 @@ module(basename(import.meta.filename), function (hooks) {
     let run = await newRun(CLEAN, { trigger: 'nightly', actsAs: WRITER });
     let next = await newRun(CLEAN, { trigger: 'nightly', actsAs: WRITER });
     let calls: RunCommandArgs[] = [];
-    let result = await attempt(run, { calls });
+    let reports: string[] = [];
+    let result = await attempt(run, {
+      calls,
+      reportAutomationChange: async ({ automationId }) => {
+        reports.push(`automation ${automationId}`);
+      },
+      reportRunChange: async (runId) => {
+        reports.push(`run ${runId}`);
+      },
+    });
     await assertRefused(assert, run, result, calls, 'not-a-direct-writer');
     let automation = await getAutomation(dbAdapter, automationId(CLEAN));
     assert.strictEqual(automation?.state, 'paused');
     assert.strictEqual(automation?.pauseReason, 'payer-lost-access');
+    assert.deepEqual(
+      reports.filter((r) => r.startsWith('automation ')),
+      [`automation ${automationId(CLEAN)}`],
+      "the attempt reports the automation its admission paused, through the worker's reporter",
+    );
+    assert.true(
+      reports.includes(`run ${next.id}`),
+      'and the pending run the pause canceled',
+    );
     let pending = await getAutomationRun(dbAdapter, next.id);
     assert.strictEqual(
       pending?.state,
@@ -546,11 +572,22 @@ module(basename(import.meta.filename), function (hooks) {
       param(revoked.id),
     ]);
     let calls: RunCommandArgs[] = [];
-    let result = await attempt(revoked, { calls });
+    let paused: string[] = [];
+    let result = await attempt(revoked, {
+      calls,
+      reportAutomationChange: async ({ automationId }) => {
+        paused.push(automationId);
+      },
+    });
     await assertRefused(assert, revoked, result, calls, 'session-revoked');
     let row = await getAutomation(dbAdapter, automationId(CLEAN));
     assert.strictEqual(row?.state, 'paused');
     assert.strictEqual(row?.pauseReason, 'payer-lost-access');
+    assert.deepEqual(
+      paused,
+      [automationId(CLEAN)],
+      'pauseForPayerLostAccess reports the automation it paused',
+    );
 
     await removeAutomation(
       dbAdapter,

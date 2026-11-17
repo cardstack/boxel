@@ -220,6 +220,10 @@ import {
 } from './automation-runs.ts';
 import { readJobEvent, runChangeReporter } from './automation-run-events.ts';
 import {
+  automationChangeReporter,
+  type ChangedAutomation,
+} from './automation-change-events.ts';
+import {
   fetchDirectWriters,
   isDirectWriter,
 } from './db-queries/realm-permission-queries.ts';
@@ -670,6 +674,7 @@ import {
 } from './matrix-backend-authentication.ts';
 
 import type {
+  AutomationEventContent,
   CoalescedIndexWrite,
   FileWatcherEventContent,
   IncrementalIndexEventContent,
@@ -22221,6 +22226,10 @@ export class Realm {
       await this.broadcastJobEvent(event);
       return;
     }
+    if (event.eventName === 'automation') {
+      await this.broadcastAutomationEvent(event);
+      return;
+    }
     this.#adapter.broadcastRealmEvent(
       event,
       this.url,
@@ -22245,6 +22254,10 @@ export class Realm {
       await this.broadcastJobEvent(event);
       return;
     }
+    if (event.eventName === 'automation') {
+      await this.broadcastAutomationEvent(event);
+      return;
+    }
     await this.#adapter.broadcastRealmEvent(
       event,
       this.url,
@@ -22265,6 +22278,31 @@ export class Realm {
   // when it goes out, events go out in the order the line holds them, and a
   // writer who lost the row while the event waited doesn't receive it.
   async broadcastJobEvent(event: JobEventContent): Promise<void> {
+    await this.#broadcastToDirectWriters(event, async () => {
+      let current = await readJobEvent(
+        this.#dbAdapter,
+        event.runId,
+        this.#virtualNetwork,
+      );
+      return current ? { ...current, realmURL: this.url } : undefined;
+    });
+  }
+
+  // An automation's `automation` event goes where a `job` event goes: to the
+  // session rooms of the realm's direct writers alone, read as it is sent. It
+  // names only the automation, so its content is sent as given.
+  async broadcastAutomationEvent(event: AutomationEventContent): Promise<void> {
+    let content: AutomationEventContent = { ...event, realmURL: this.url };
+    await this.#broadcastToDirectWriters(content, async () => content);
+  }
+
+  // Sends an event to the session rooms of the realm's direct writers, with a
+  // `refresh` that reads the event (`read`) and the writers again when it is
+  // sent. A realm with no direct writer sends nothing.
+  async #broadcastToDirectWriters(
+    event: RealmEventContent,
+    read: () => Promise<RealmEventContent | undefined>,
+  ): Promise<void> {
     let directWriters = () =>
       fetchDirectWriters(
         this.#dbAdapter,
@@ -22283,18 +22321,11 @@ export class Realm {
       {
         recipients,
         refresh: async () => {
-          let current = await readJobEvent(
-            this.#dbAdapter,
-            event.runId,
-            this.#virtualNetwork,
-          );
+          let current = await read();
           if (!current) {
             return undefined;
           }
-          return {
-            event: { ...current, realmURL: this.url },
-            recipients: await directWriters(),
-          };
+          return { event: current, recipients: await directWriters() };
         },
       },
     );
@@ -22310,6 +22341,17 @@ export class Realm {
       send: (event) => this.broadcastJobEvent(event),
       log: this.#log,
     })(runId);
+  }
+
+  // Reports that one of this realm's automations changed (see
+  // `automation-change-events.ts`), for the changes a route of this realm
+  // makes to an automation's row.
+  async reportAutomationChange(automation: ChangedAutomation): Promise<void> {
+    await automationChangeReporter({
+      virtualNetwork: this.#virtualNetwork,
+      send: (event) => this.broadcastAutomationEvent(event),
+      log: this.#log,
+    })(automation);
   }
 
   // CS-11126: no memoization. `realm_permissions` is indexed by

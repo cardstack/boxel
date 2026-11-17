@@ -8,6 +8,7 @@ import {
   isAutomationJobInput,
 } from '../automation-run-command.ts';
 import { prepareRunCommand } from '../run-command-request.ts';
+import { taskAutomationChangeReporter } from '../automation-change-events.ts';
 import { taskRunChangeReporter } from '../automation-run-events.ts';
 import { runAutomationAttempt } from './run-automation.ts';
 import { isEqual } from 'lodash-es';
@@ -141,6 +142,11 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
             meteredCharges,
             reportRunChange: taskRunChangeReporter({
               dbAdapter,
+              virtualNetwork,
+              reportRealmEvent,
+              log,
+            }),
+            reportAutomationChange: taskAutomationChangeReporter({
               virtualNetwork,
               reportRealmEvent,
               log,
