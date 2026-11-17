@@ -245,6 +245,8 @@ export interface AutomationActorOptions extends AutomationReporters {
 // - `already-switched-on`: switch-on found the automation on already.
 // - `not-paused`: resume found an automation that isn't paused.
 // - `not-pausable`: pause found an automation that is already paused.
+// - `realm-archived`: switch-on or resume found the automation's realm
+//   archived. Its automations stay off until the realm is restored.
 export type AutomationRefusal =
   | {
       ok: false;
@@ -252,7 +254,8 @@ export type AutomationRefusal =
         | 'not-a-direct-writer'
         | 'missing'
         | 'outside-realm'
-        | 'other-card';
+        | 'other-card'
+        | 'realm-archived';
     }
   | {
       ok: false;
@@ -304,8 +307,12 @@ export async function switchOnAutomation(
   let now = options.now ?? currentUnixSeconds();
   let schedule = startSchedule(declaration, now, {});
   return await withChanges(dbAdapter, options, async (txQuery, changes) => {
+    await lockRealmAutomations(txQuery, realm, 'shared');
     if (!(await isDirectWriterOf(txQuery, realm, user, options))) {
       return { ok: false, reason: 'not-a-direct-writer' };
+    }
+    if (await isArchived(txQuery, realm, options)) {
+      return { ok: false, reason: 'realm-archived' };
     }
     let [inserted] = await txQuery([
       'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since, next_run) VALUES (',
@@ -405,12 +412,26 @@ export async function resumeAutomation(
   }
   let now = options.now ?? currentUnixSeconds();
   return await withChanges(dbAdapter, options, async (txQuery, changes) => {
+    // The realm's automation lock comes before the permission and automation
+    // rows, the order archiving's pause takes it in (see
+    // `lockRealmAutomations`).
+    let seen = await selectAutomation(txQuery, automationId);
+    if (seen) {
+      await lockRealmAutomations(
+        txQuery,
+        automationFromRow(seen).realm,
+        'shared',
+      );
+    }
     let found = await lockForDirectWriter(txQuery, automationId, user, options);
     if (!found.ok) {
       return found;
     }
     if (found.automation.state !== 'paused') {
       return { ok: false, reason: 'not-paused', automation: found.automation };
+    }
+    if (await isArchived(txQuery, found.automation.realm, options)) {
+      return { ok: false, reason: 'realm-archived' };
     }
     let schedule = startSchedule(
       declaration,
@@ -972,6 +993,7 @@ export async function pauseRealmAutomations(
   reporters: AutomationReporters = {},
 ): Promise<AutomationRow[]> {
   return await withChanges(dbAdapter, reporters, async (txQuery, changes) => {
+    await lockRealmAutomations(txQuery, realm, 'exclusive');
     let rows = await txQuery([
       'SELECT automation_id FROM automations WHERE realm =',
       param(realm),
@@ -1126,6 +1148,40 @@ interface AutomationChanges {
 // `reportAutomationChange`. A transaction the database rolls back and retries
 // starts its collection afresh, so only the attempt that committed is logged
 // and reported.
+// Serializes starting a realm's automations with stopping them all. Switch-on
+// and resume take it shared, so they never wait on each other;
+// `pauseRealmAutomations` takes it exclusive. Each holds it to the end of its
+// transaction, and takes it before any permission or automation row, so a
+// switch-on or resume that read the realm as not archived commits before a
+// pause of the whole realm reads which automations to pause.
+async function lockRealmAutomations(
+  txQuery: Querier,
+  realm: RealmIdentifier,
+  mode: 'shared' | 'exclusive',
+): Promise<void> {
+  await txQuery([
+    mode === 'shared'
+      ? 'SELECT pg_advisory_xact_lock_shared(hashtext('
+      : 'SELECT pg_advisory_xact_lock(hashtext(',
+    param(`automations-of-realm:${realm}`),
+    '))',
+  ]);
+}
+
+// Whether the realm is archived, as its metadata row, keyed by the served
+// URL, says.
+async function isArchived(
+  txQuery: Querier,
+  realm: RealmIdentifier,
+  { virtualNetwork }: Pick<AutomationActorOptions, 'virtualNetwork'>,
+): Promise<boolean> {
+  let [row] = await txQuery([
+    'SELECT archived_at FROM realm_metadata WHERE url =',
+    param(virtualNetwork.toURL(realm).href),
+  ]);
+  return !!row && row.archived_at != null;
+}
+
 async function withChanges<T>(
   dbAdapter: DBAdapter,
   { reportRunChange, reportAutomationChange }: AutomationReporters,
