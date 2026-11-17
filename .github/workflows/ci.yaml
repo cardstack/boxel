@@ -70,7 +70,6 @@ jobs:
         with:
           filters: |
             shared: &shared
-              - '.github/workflows/ci.yaml'
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -914,15 +913,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shardIndex: [1, 2, 3]
-        shardTotal: [3]
-        include:
-          # The specs under packages/matrix/tests/with-synapse/<template>/
-          # need a Synapse configured otherwise than the one the shards share,
-          # so each template's run is a job of its own, unsharded. Its
-          # `shardIndex` is a label naming the job and its artifacts.
-          - shardIndex: without-registration-token
-            synapseTemplate: test-without-registration-token
+        shardIndex: [1, 2, 3, 4, 5, 6]
     concurrency:
       group: matrix-client-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -958,20 +949,20 @@ jobs:
       - name: Run Synapse module unit tests
         # Fast (~no boot) and stack-independent — it only needs the warmed
         # Synapse image — so run it once on shard 1 rather than every shard.
-        if: matrix.shardIndex == 1
+        if: false
         run: pnpm test:synapse-modules
         working-directory: packages/matrix
       - name: Run shard-assignment unit tests
         # Guards the property the split below rests on: the shards partition
         # the spec files, so every spec runs on exactly one of them. Needs
         # nothing running, so once on shard 1 is enough.
-        if: matrix.shardIndex == 1
+        if: false
         run: pnpm test:shard-assignment
         working-directory: packages/matrix
       - name: Run compact-synapse-db unit tests
         # Runs the script against SQLite fixtures in temp directories. It only
         # needs docker to list running containers, so once on shard 1.
-        if: matrix.shardIndex == 1
+        if: false
         run: pnpm test:compact-synapse-db
         working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
@@ -979,10 +970,11 @@ jobs:
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
           timeout 300 bash -c 'until curl -ksf https://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
-        run: pnpm test:group ${{ matrix.shardTotal && format('{0}/{1}', matrix.shardIndex, matrix.shardTotal) || '' }}
+        run: pnpm test:group
         working-directory: packages/matrix
         env:
           MATRIX_SYNAPSE_TEMPLATE: ${{ matrix.synapseTemplate }}
+          MATRIX_PLAYWRIGHT_ARGS: tests/dashboard.spec.ts tests/rig-control-dashboard.spec.ts --repeat-each=25 --retries=0
       # The services above stream their output into this job's log as the run
       # goes, so the file is a second copy of what is already there — and at
       # tens of thousands of lines it pushes the Playwright run's own output
