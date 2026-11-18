@@ -38,6 +38,7 @@ import {
   findRedirectCycles,
   getField,
   getFieldIcon,
+  getMenuItems,
   isAbsoluteIdentifier,
   isCardInstance,
   isLocalId,
@@ -93,6 +94,11 @@ import { startCase } from 'lodash-es';
 import type { FieldsTypeFor } from './card-api';
 import { isLiveRender } from './render-context';
 import RealmApiKeys from './realm-api-keys';
+import RealmAutomations from './realm-automations';
+import type { GetMenuItemParams } from './menu-items';
+import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
+import CalendarClockIcon from '@cardstack/boxel-icons/calendar-clock';
+import OpenAutomationsConsoleTool from '@cardstack/boxel-host/tools/open-automations-console';
 
 class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
   <template>
@@ -2066,6 +2072,8 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
         @context={{@context}}
         @format='isolated'
       />
+
+      <RealmAutomations @realm={{this.realm}} @context={{@context}} />
     </article>
     <style scoped>
       .realm-config-isolated {
@@ -2193,6 +2201,35 @@ export class RealmConfig extends CardDef {
       return name ? `${name} Config` : `Untitled ${RealmConfig.displayName}`;
     },
   });
+
+  // The realm's automations console, for someone who can edit the realm.
+  // The console lists automations only to the realm's direct writers, so
+  // anyone else who opens the console reads that the console is for them.
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
+    let menuItems = super[getMenuItems](params);
+    let realm = configuredRealm(this);
+    if (
+      params.menuContext !== 'interact' ||
+      !params.canEdit ||
+      !params.toolContext ||
+      !realm
+    ) {
+      return menuItems;
+    }
+    return [
+      ...menuItems,
+      {
+        label: 'Automations Console',
+        action: async () => {
+          await new OpenAutomationsConsoleTool(params.toolContext).execute({
+            realm,
+          });
+        },
+        icon: CalendarClockIcon,
+        tags: ['automations-console'],
+      },
+    ];
+  }
 
   static embedded = RealmConfigEmbedded;
   static isolated = RealmConfigIsolated;

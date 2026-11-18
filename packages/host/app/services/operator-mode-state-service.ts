@@ -238,6 +238,8 @@ export default class OperatorModeStateService extends Service {
   @tracked profileSettingsOpen = false;
   @tracked profileSettingsSection: ProfileSettingsSection | undefined;
   @tracked createListingModalPayload?: CreateListingModalPayload;
+  // The realm whose automations console is open, if one is.
+  @tracked automationsConsole?: { realm: string };
 
   // Per-card expanded-mode intent. Keyed by stack-item instance id so the
   // user's expand intent survives bury/pop cycles within a stack:
@@ -408,6 +410,14 @@ export default class OperatorModeStateService extends Service {
     this.createListingModalPayload = undefined;
   };
 
+  showAutomationsConsole = (payload: { realm: string }) => {
+    this.automationsConsole = payload;
+  };
+
+  dismissAutomationsConsole = () => {
+    this.automationsConsole = undefined;
+  };
+
   setNewFileDropdownOpen = () => {
     this._state.newFileDropdownOpen = true;
     this.schedulePersist();
@@ -440,6 +450,7 @@ export default class OperatorModeStateService extends Service {
     this.profileSettingsOpen = false;
     this.profileSettingsSection = undefined;
     this.createListingModalPayload = undefined;
+    this.automationsConsole = undefined;
     this.expandedStackItems.clear();
     this.recordedStackItems = new WeakSet();
     this.topCardIds = new Set();
