@@ -17,6 +17,7 @@ import {
   beginRuntimeDependencyTrackingSession,
   computeContentHash,
   endRuntimeDependencyTrackingSession,
+  activeRuntimeDependencyTrackingSessionKey,
   formattedError,
   loadCardDef,
   snapshotRuntimeDependencies,
@@ -168,12 +169,18 @@ export default class RenderRoute extends Route<Model> {
   // beforeModel entry — the error-path fallback of last resort for deps
   // derivation (see beforeModel).
   #lastAttemptedCardId: string | undefined;
-  // The card id the runtime dependency tracking session was begun for, by
-  // this route's model hook. The tracker is module-global and keeps the last
-  // session's dependencies until another session begins, so an error raised
-  // before this card's model hook (a pre-model failure) must not take the
-  // tracker's contents as its own — they are the previous card's.
-  #runtimeDepsCardId: string | undefined;
+  // The nonce of the most recent transition into this route, recorded with
+  // #lastAttemptedCardId. Undefined when the transition does not carry one.
+  #lastAttemptedNonce: string | undefined;
+  // The runtime dependency tracking session this route's model hook began,
+  // and the visit (card id + nonce) it records. The tracker is module-global
+  // and keeps a session's dependencies until another session begins, so an
+  // error takes the tracker's contents as its own only while that session is
+  // still the live one and belongs to the visit that failed (see
+  // #appendRuntimeDeps).
+  #runtimeDepsSession:
+    | { key: string; cardId: string; nonce: string }
+    | undefined;
   private lastRenderErrorSignature: string | undefined;
   #windowListenersAttached = false;
   #cardTypeTracker = new RenderCardTypeTracker();
@@ -281,7 +288,8 @@ export default class RenderRoute extends Route<Model> {
     this.#restoreRenderTimers = undefined;
     this.#releaseTimerBlock?.();
     this.#releaseTimerBlock = undefined;
-    this.#runtimeDepsCardId = undefined;
+    this.#lastAttemptedNonce = undefined;
+    this.#runtimeDepsSession = undefined;
     endRuntimeDependencyTrackingSession();
   }
 
@@ -299,6 +307,7 @@ export default class RenderRoute extends Route<Model> {
     if (attemptedCardId) {
       this.#lastAttemptedCardId = attemptedCardId;
     }
+    this.#lastAttemptedNonce = this.#transitionNonce(transition);
     await super.beforeModel?.(transition);
     resetRenderTimerStats();
     if (!isTesting()) {
@@ -453,7 +462,11 @@ export default class RenderRoute extends Route<Model> {
     if (existing) {
       return await existing;
     }
-    this.#runtimeDepsCardId = this.#normalizeCardId(id);
+    this.#runtimeDepsSession = {
+      key,
+      cardId: this.#normalizeCardId(id),
+      nonce,
+    };
     beginRuntimeDependencyTrackingSession({
       sessionKey: key,
       // Canonicalized to the same form the tracked consumers carry. The route's
@@ -1846,18 +1859,23 @@ export default class RenderRoute extends Route<Model> {
     renderError: RenderError,
     fallbackDeps: string[],
   ): RenderError {
-    // The tracker's contents belong to this error only when this route began
-    // the session for the card the failing transition was rendering. A
-    // failure before that card's model hook finds either no session from this
-    // route or the previous card's, whose dependencies would be attributed to
-    // this card's error row.
+    // The tracker's contents belong to this error only while the session this
+    // route's model hook began is still the tracker's live one, and that
+    // session records the visit that failed. A failure before the visit's
+    // model hook finds the session of an earlier visit (another card, or this
+    // card at an earlier nonce); a separate session begun since (the file
+    // extract render.meta runs) has replaced the visit's nodes. Either way the
+    // nodes are not this visit's, and the error keeps its own card's deps.
+    let session = this.#runtimeDepsSession;
     let attemptedCardId = this.#lastAttemptedCardId
       ? this.#normalizeCardId(this.#lastAttemptedCardId)
       : undefined;
     let sessionIsThisCards =
-      this.#runtimeDepsCardId !== undefined &&
-      (attemptedCardId === undefined ||
-        attemptedCardId === this.#runtimeDepsCardId);
+      session !== undefined &&
+      activeRuntimeDependencyTrackingSessionKey() === session.key &&
+      (attemptedCardId === undefined || attemptedCardId === session.cardId) &&
+      (this.#lastAttemptedNonce === undefined ||
+        this.#lastAttemptedNonce === session.nonce);
     let runtimeDeps = sessionIsThisCards
       ? snapshotRuntimeDependencies({
           excludeQueryOnly: true,
@@ -2292,6 +2310,29 @@ export default class RenderRoute extends Route<Model> {
       ?.intent?.url;
     if (intentUrl) {
       let match = /\/render\/([^/]+)\//.exec(intentUrl);
+      if (match?.[1]) {
+        return decodeURIComponent(match[1]);
+      }
+    }
+    return undefined;
+  }
+
+  // The nonce the transition is rendering, from the same sources
+  // #transitionCardId reads: a RouteInfo's params, else the `/render/:id/:nonce/`
+  // URL the transition is heading to.
+  #transitionNonce(transition?: Transition): string | undefined {
+    let current: Transition['to'] | null | undefined = transition?.to;
+    while (current) {
+      let nonce = current.params?.nonce;
+      if (typeof nonce === 'string') {
+        return nonce;
+      }
+      current = current.parent;
+    }
+    let intentUrl = (transition as { intent?: { url?: string } } | undefined)
+      ?.intent?.url;
+    if (intentUrl) {
+      let match = /\/render\/[^/]+\/([^/]+)\//.exec(intentUrl);
       if (match?.[1]) {
         return decodeURIComponent(match[1]);
       }

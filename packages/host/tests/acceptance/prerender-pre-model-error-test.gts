@@ -166,12 +166,17 @@ module('Acceptance | prerender | pre-model error', function (hooks) {
     );
   });
 
-  // A prerender tab renders card after card without leaving the render route,
-  // so when the next card fails before its model hook, the runtime dependency
-  // tracker still holds the previous card's session. The error row is the
-  // failing card's: its deps name that card and nothing the previous render
-  // loaded.
-  test('pre-model error after a completed render names only the failing card in deps', async function (assert) {
+  // A prerender tab renders visit after visit without leaving the render
+  // route, so when a visit fails before its model hook, the runtime dependency
+  // tracker still holds an earlier visit's session. The error row is the
+  // failing visit's: its deps name the failing card and nothing an earlier
+  // render loaded. Renders the first card at nonce 0, then fails `failingURL`
+  // at nonce 1 before its model hook, and returns the error payload.
+  async function renderThenFailBeforeModel(
+    assert: Assert,
+    owner: any,
+    failingURL: string,
+  ) {
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
@@ -193,9 +198,8 @@ module('Acceptance | prerender | pre-model error', function (hooks) {
     let options = serializeRenderRouteOptions({
       cardRender: true,
     } as RenderRouteOptions);
-    let mangoURL = `${testRealmURL}Pet/mango.json`;
     await visit(
-      `/render/${encodeURIComponent(mangoURL)}/0/${encodeURIComponent(
+      `/render/${encodeURIComponent(`${testRealmURL}Pet/mango.json`)}/0/${encodeURIComponent(
         options,
       )}/html/isolated/0`,
     );
@@ -206,7 +210,7 @@ module('Acceptance | prerender | pre-model error', function (hooks) {
       { timeout: 10000, timeoutMessage: 'first card rendered' },
     );
 
-    failNextBeforeModel(this.owner);
+    failNextBeforeModel(owner);
     let boxelTransitionTo = (globalThis as any).boxelTransitionTo as (
       routeName: string,
       ...params: string[]
@@ -216,7 +220,6 @@ module('Acceptance | prerender | pre-model error', function (hooks) {
       'function',
       'render route registered boxelTransitionTo',
     );
-    let failingURL = `${testRealmURL}Pet/failing.json`;
     try {
       boxelTransitionTo(
         'render.html',
@@ -231,9 +234,15 @@ module('Acceptance | prerender | pre-model error', function (hooks) {
     }
 
     await waitForErrorPayload();
+    return readErrorPayload();
+  }
 
+  function assertOnlyOwnDeps(
+    assert: Assert,
+    failingURL: string,
+    { deps, message }: { deps: string[]; message?: string },
+  ) {
     let ownDeps = [failingURL, failingURL.replace(/\.json$/, '')];
-    let { deps, message } = readErrorPayload();
     assert.true(
       message?.includes('boom before model'),
       `error message captured (got: ${message})`,
@@ -245,7 +254,27 @@ module('Acceptance | prerender | pre-model error', function (hooks) {
     assert.deepEqual(
       deps.filter((dep) => !ownDeps.includes(dep)),
       [],
-      'deps carry nothing from the previously rendered card',
+      'deps carry nothing from the earlier render',
     );
+  }
+
+  test('pre-model error after a completed render names only the failing card in deps', async function (assert) {
+    let failingURL = `${testRealmURL}Pet/failing.json`;
+    let payload = await renderThenFailBeforeModel(
+      assert,
+      this.owner,
+      failingURL,
+    );
+    assertOnlyOwnDeps(assert, failingURL, payload);
+  });
+
+  test("pre-model error on a later visit to the same card does not take the earlier visit's deps", async function (assert) {
+    let failingURL = `${testRealmURL}Pet/mango.json`;
+    let payload = await renderThenFailBeforeModel(
+      assert,
+      this.owner,
+      failingURL,
+    );
+    assertOnlyOwnDeps(assert, failingURL, payload);
   });
 });
