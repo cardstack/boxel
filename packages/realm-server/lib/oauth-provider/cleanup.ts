@@ -24,6 +24,7 @@ import type {
   DBAdapter,
   OAuthProviderCleanupResult,
 } from '@cardstack/runtime-common';
+import { RENEWING_GRANT_TTL_SECONDS } from './grants.ts';
 
 const DAY_SECONDS = 24 * 60 * 60;
 
@@ -113,8 +114,9 @@ async function deleteEndedGrants(dbAdapter: DBAdapter): Promise<number> {
 //
 // A client that never connected has no `last_connected_at`, and no exchanged
 // grant. A connected client's last connection ended when its latest
-// exchanged grant ended, or when it was last marked connected if its grants
-// have since been deleted (with their user, say).
+// exchanged grant ended. Once its grants have been deleted (with their user,
+// say), it is taken to have ended as late as it could have: as long after
+// the client was last marked connected as a renewing grant lasts.
 //
 // `markGrantExchanged` marks a client connected in the statement that marks
 // the exchange. A delete that reaches the client's row after that update
@@ -163,7 +165,7 @@ async function deleteUnusedDynamicClients(
                         FROM oauth_provider_grants AS g
                        WHERE g.client_id = c.client_id
                          AND ${EXCHANGED_GRANT}),
-                     c.last_connected_at
+                     c.last_connected_at + make_interval(secs => $3)
                    ) <= now() - make_interval(secs => $2))
             )
       RETURNING 1`,
@@ -171,6 +173,7 @@ async function deleteUnusedDynamicClients(
       bind: [
         UNCONNECTED_CLIENT_RETENTION_SECONDS,
         DISCONNECTED_CLIENT_RETENTION_SECONDS,
+        RENEWING_GRANT_TTL_SECONDS,
       ],
     },
   );

@@ -1,11 +1,7 @@
 import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index.ts';
 import { jobIdentity } from '../index.ts';
-import {
-  registerQueueJobDefinition,
-  type QueueCoalesceContext,
-  type QueueCoalesceDecision,
-} from '../queue.ts';
+import { joinAnyJobOfSameType, registerQueueJobDefinition } from '../queue.ts';
 
 // The cron enqueues this job with no arguments; it cleans the whole provider.
 type OAuthProviderCleanupArgs = JSONTypes.Object;
@@ -29,24 +25,9 @@ export { oauthProviderCleanup };
 
 // A tick that finds a run already queued or running joins it: the run that
 // is there covers it, since the job has no arguments.
-function chooseOAuthProviderCleanupCoalesceDecision(
-  context: QueueCoalesceContext,
-): QueueCoalesceDecision {
-  let { incoming, candidates, inFlightCandidates } = context;
-  let twin =
-    candidates.find((candidate) => candidate.jobType === incoming.jobType) ??
-    inFlightCandidates.find(
-      (candidate) => candidate.jobType === incoming.jobType,
-    );
-  if (!twin) {
-    return { type: 'insert' };
-  }
-  return { type: 'join', jobId: twin.id };
-}
-
 registerQueueJobDefinition({
   jobType: 'oauth-provider-cleanup',
-  coalesce: chooseOAuthProviderCleanupCoalesceDecision,
+  coalesce: joinAnyJobOfSameType,
 });
 
 // The daily cleanup of the OAuth provider's tables. A failure fails the job,

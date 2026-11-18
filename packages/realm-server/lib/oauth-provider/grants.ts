@@ -75,8 +75,8 @@ export async function createGrant(
   return rows.length > 0 ? id : undefined;
 }
 
-// Records that a grant connected its app: the first time a token is stored
-// for it, which is when its code is exchanged (`exchanged_at`). A client
+// Records that a grant connected its app: when a token its code exchange
+// issued is stored (`exchanged_at`). A client
 // registered by dynamic client registration is marked connected then too
 // (`last_connected_at`), in the same statement, which the daily cleanup reads
 // (`cleanup.ts`). A cleanup that reaches the client's row after that update

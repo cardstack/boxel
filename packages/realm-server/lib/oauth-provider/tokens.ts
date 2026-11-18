@@ -29,6 +29,10 @@ const log = logger('boxel:oauth-provider');
 
 export const REFRESH_GRACE_SECONDS = 30;
 
+// The library's grant type for a refresh, which it appends to the `gty` of
+// every token a refresh issues.
+const REFRESH_GTY = 'refresh_token';
+
 // Expired rows are deleted on roughly one store in this many, at most
 // `EXPIRED_SWEEP_LIMIT` at a time. A row past its expiry already reads as
 // missing, so this only keeps a grant that runs to its expiry, refreshing
@@ -169,7 +173,20 @@ export class TokenAdapter extends OAuthProviderAdapter {
       log.info(`token not stored: grant ended`);
       throw new errors.InvalidGrant('grant has ended');
     }
-    await markGrantExchanged(this.#dbAdapter, payload.grantId);
+    // A code exchange connects the grant's app. A token a refresh issued
+    // (`gty` ends in `refresh_token`) comes from a grant whose exchange was
+    // already marked, so it costs no second statement. Failing to mark it
+    // doesn't fail the store: the token is already stored, and the daily
+    // cleanup counts a grant with tokens as exchanged too.
+    if (
+      !(typeof payload.gty === 'string' && payload.gty.endsWith(REFRESH_GTY))
+    ) {
+      try {
+        await markGrantExchanged(this.#dbAdapter, payload.grantId);
+      } catch (error) {
+        log.error(`failed to mark a grant exchanged: ${String(error)}`);
+      }
+    }
     if (Math.random() * EXPIRED_SWEEP_ONE_IN < 1) {
       // Rows another request is deleting are skipped, not waited for.
       await this.#dbAdapter.execute(

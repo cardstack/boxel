@@ -20,6 +20,7 @@ import {
   deleteExpiredOAuthProviderRows,
 } from '../lib/oauth-provider/cleanup.ts';
 import { newDynamicClientId } from '../lib/oauth-provider/dynamic-client-id.ts';
+import { RENEWING_GRANT_TTL_SECONDS } from '../lib/oauth-provider/grants.ts';
 
 const MINUTE = 60;
 const DAY = 24 * 60 * 60;
@@ -367,19 +368,32 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(await clients(), [marked, unmarked].sort());
     });
 
-    test('a client whose grants are all gone is deleted 30 days after it last connected', async function (assert) {
-      // Its grants were deleted with their user, say.
+    test('a client whose grants are all gone is deleted 30 days after its last connection could have ended', async function (assert) {
+      // Its grants were deleted with their user, say. A renewing grant
+      // exchanged when it last connected could have lasted until
+      // `RENEWING_GRANT_TTL_SECONDS` later.
       let gone = await insertClient({
-        registered: 90 * DAY,
-        lastConnected: DISCONNECTED + MINUTE,
+        registered: 120 * DAY,
+        lastConnected: RENEWING_GRANT_TTL_SECONDS + DISCONNECTED + MINUTE,
       });
       let kept = await insertClient({
-        registered: 90 * DAY,
-        lastConnected: DISCONNECTED - MINUTE,
+        registered: 120 * DAY,
+        lastConnected: RENEWING_GRANT_TTL_SECONDS + DISCONNECTED - MINUTE,
       });
       await cleanup();
       assert.deepEqual(await clients(), [kept]);
       assert.notOk((await clients()).includes(gone));
+    });
+
+    test('a client whose grants are all gone is kept while a grant from its last connection could still be live', async function (assert) {
+      // It last exchanged a code 31 days ago, and that renewing grant would
+      // have expired tomorrow, but was deleted with its user today.
+      let kept = await insertClient({
+        registered: 90 * DAY,
+        lastConnected: RENEWING_GRANT_TTL_SECONDS + DAY,
+      });
+      await cleanup();
+      assert.deepEqual(await clients(), [kept]);
     });
 
     test('a client with a grant but no mark has connected, and follows the 30-day rule', async function (assert) {
