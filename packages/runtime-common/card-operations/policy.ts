@@ -1232,18 +1232,10 @@ async function compileDocument(
       if (body === false) {
         continue;
       }
-      if (cardIndependent && body !== true) {
-        let everyCard = await compileFor(true);
-        if ('filter' in everyCard) {
-          if (caller === 'anonymous') {
-            compiled.anonymousSettledFilter = everyCard.filter;
-          } else {
-            compiled.settledFilter = everyCard.filter;
-          }
-        }
-        continue;
-      }
-      let outcome = await compileFor(body);
+      // A reading a search settles admits, where it holds, every card of the
+      // rule's type, the filter a grant with no condition compiles to.
+      let settled = cardIndependent && body !== true;
+      let outcome = await compileFor(settled ? true : body);
       if ('problem' in outcome) {
         issue(
           'policy-not-filterable',
@@ -1258,7 +1250,13 @@ async function compileDocument(
         );
         continue;
       }
-      if (caller === 'anonymous') {
+      if (settled) {
+        if (caller === 'anonymous') {
+          compiled.anonymousSettledFilter = outcome.filter;
+        } else {
+          compiled.settledFilter = outcome.filter;
+        }
+      } else if (caller === 'anonymous') {
         compiled.anonymousFilter = outcome.filter;
       } else {
         compiled.filter = outcome.filter;
