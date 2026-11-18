@@ -4,6 +4,7 @@ import { merge } from 'lodash-es';
 import type {
   DBAdapter,
   HostRoute,
+  HostRoutesValidation,
   HostRoutingRule,
   PrerenderedHtmlFormat,
   Realm,
@@ -40,7 +41,6 @@ import {
   getPublishedRealmInfo,
   droppedRouteMayAnswer,
   hasDynamicHostRoutes,
-  hasExtensionlessSourceModule,
   hasPublicPermissions,
   isIndexedCardInstance,
   isRealmFilePath,
@@ -405,6 +405,25 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           visitorHeaders: ctxt.req.headers,
         }),
       ));
+    // The realm's host routes for this request, read at most once. Only a
+    // browser's request for a path that a route dropped for now could answer
+    // waits for the definitions of the route types, which may need a module
+    // visit. A fixed route needs no type. Any other request gets the routes
+    // as they are: the prerender server imports a route type's module with
+    // a generic Accept header, and that import must not wait for the
+    // validation that is visiting the module.
+    let requestHostRoutes: Promise<HostRoutesValidation> | undefined;
+    let hostRoutesFor = (realm: Realm, waitForTypes: boolean) =>
+      (requestHostRoutes ??= (async () => {
+        let validation = await realm.getHostRoutesWithoutTypeReads();
+        if (
+          waitForTypes &&
+          droppedRouteMayAnswer(requestURL, realm, validation)
+        ) {
+          return await realm.getHostRoutes();
+        }
+        return validation;
+      })());
     // For a generic-Accept request of a path that is no card's own and no
     // fixed route's: whether a dynamic route answers it, with a card, a
     // redirect or an error, so it gets what a browser gets. A path that
@@ -415,7 +434,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       if (!realm || !(await hasPublicPermissions(realm, routingDeps))) {
         return false;
       }
-      let validation = await realm.getHostRoutes();
+      let validation = await hostRoutesFor(realm, false);
       let { routes, complete } = validation;
       // A path only a route dropped for now matches gets the 503 a browser
       // gets.
@@ -502,14 +521,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         let cardURL = requestURL;
         let isCardInstance = await isIndexedCardInstance(cardURL, routingDeps);
         if (!isCardInstance) {
-          // A module import is left to the realm before any host route is
-          // read: on a cold definitions cache, the validation of the routes
-          // renders a route type's module, and the prerender imports that
-          // module through this gate. Waiting here for the routes would wait
-          // for itself.
-          if (await hasExtensionlessSourceModule(requestURL, routingDeps)) {
-            return next();
-          }
           // A bare routed sub-path (e.g. /pricing) is not itself an indexed
           // card instance — its host routing rule maps it to a card that
           // lives elsewhere (e.g. /pages/pricing). Only fall through to the
@@ -714,7 +725,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // The lookups run as the visitor, against the live realm, so a route
     // resolves only to a card the visitor's own card request would get.
     let hostRoutesValidation = routedRealm
-      ? await routedRealm.getHostRoutes()
+      ? await hostRoutesFor(
+          routedRealm,
+          includesHtmlMimeType && !fixedRouteMatched,
+        )
       : undefined;
     let hostRoutes: readonly HostRoute[] = hostRoutesValidation?.routes ?? [];
     // False while a route is dropped because its type's definition couldn't
@@ -722,6 +736,8 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     let hostRoutesComplete = hostRoutesValidation?.complete ?? true;
     let dynamicRoutes = hasDynamicHostRoutes(hostRoutes);
     let notFound = false;
+    // Whether a dynamic route matched the path and it resolved to nothing.
+    let matchedNothing = false;
     // The serve rule for a path a dynamic route resolved, added to the
     // routing map this response injects. The host app resolves its first
     // render from that map synchronously, so without it the app would load
@@ -799,50 +815,38 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           status === 429 ? 'Too Many Requests' : 'Service Unavailable';
         return;
       }
-      // A path some route matched that resolved to nothing answers 404,
-      // unless it is a card's own path or names a file of the realm, which
-      // are still served there. While a route is dropped for a type whose
-      // definition couldn't be read, the dropped route might have answered the path,
-      // so it answers 503 rather than not found. A path no route matched at
-      // all is served as it was before routes.
-      if (
-        resolution?.kind === 'nothing' &&
-        resolution.trace.length > 0 &&
-        !(await isIndexedCardInstance(cardURL, routingDeps)) &&
-        !(await isRealmFilePath(requestURL, routingDeps))
-      ) {
-        if (!hostRoutesComplete) {
-          hostRoutesLog.warn(
-            `${requestURL.href} resolved to nothing while a host route is dropped for a type whose definition couldn't be read`,
-          );
-          ctxt.status = 503;
-          ctxt.type = 'text';
-          ctxt.body = 'Service Unavailable';
-          return;
-        }
-        notFound = true;
+      if (resolution?.kind === 'nothing' && resolution.trace.length > 0) {
+        matchedNothing = true;
       }
     }
-    // A path that only a route dropped for now matches: the resolver had no
-    // route to try, but the dropped route may answer the path once its type
-    // can be read, so it answers 503 rather than not found.
-    if (
+    // A path some route matched that resolved to nothing answers 404, unless
+    // it is a card's own path or names a file of the realm, which are still
+    // served there. While a route is dropped because its type's definition
+    // couldn't be read, it answers 503 rather than not found: the dropped
+    // route might have answered the path. So does a path that only a
+    // dropped route matches. A path no route matched at all is served as it
+    // was before routes.
+    let droppedMayAnswer =
       !fixedRouteMatched &&
       !dynamicServeRule &&
-      !notFound &&
-      routedRealm &&
-      hostRoutesValidation &&
-      droppedRouteMayAnswer(requestURL, routedRealm, hostRoutesValidation) &&
+      !!routedRealm &&
+      !!hostRoutesValidation &&
+      droppedRouteMayAnswer(requestURL, routedRealm, hostRoutesValidation);
+    if (
+      (matchedNothing || droppedMayAnswer) &&
       !(await isIndexedCardInstance(cardURL, routingDeps)) &&
       !(await isRealmFilePath(requestURL, routingDeps))
     ) {
-      hostRoutesLog.warn(
-        `${requestURL.href} matches only a host route dropped for a type whose definition couldn't be read`,
-      );
-      ctxt.status = 503;
-      ctxt.type = 'text';
-      ctxt.body = 'Service Unavailable';
-      return;
+      if (!hostRoutesComplete) {
+        hostRoutesLog.warn(
+          `${requestURL.href} resolved to nothing while a host route is dropped for a type whose definition couldn't be read`,
+        );
+        ctxt.status = 503;
+        ctxt.type = 'text';
+        ctxt.body = 'Service Unavailable';
+        return;
+      }
+      notFound = true;
     }
 
     headLog.debug(`Fetching head HTML for ${cardURL.href}`);

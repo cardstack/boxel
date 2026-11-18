@@ -2,10 +2,11 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import { rri } from '@cardstack/runtime-common';
+import { parseRoutePathPattern, rri } from '@cardstack/runtime-common';
 import type {
   CachingDefinitionLookup,
   HostRoute,
+  HostRoutesValidation,
   LooseSingleCardDocument,
   Realm,
 } from '@cardstack/runtime-common';
@@ -213,25 +214,35 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       return JSON.parse(decodeURIComponent(match[1]));
     }
 
+    // Answers the realm's host routes, with or without their type reads, as
+    // `change` makes them from the realm's own validation.
+    function withHostRoutes(
+      change: (validation: HostRoutesValidation) => HostRoutesValidation,
+    ) {
+      let { getHostRoutes, getHostRoutesWithoutTypeReads } = testRealm;
+      let changed = async function (this: Realm) {
+        return change(await getHostRoutes.call(this));
+      };
+      testRealm.getHostRoutes = changed;
+      testRealm.getHostRoutesWithoutTypeReads = changed;
+      return () => {
+        testRealm.getHostRoutes = getHostRoutes;
+        testRealm.getHostRoutesWithoutTypeReads = getHostRoutesWithoutTypeReads;
+      };
+    }
+
     // Answers the realm's host routes as an incomplete validation, as it is
-    // while a field-match route's type isn't cached yet: the routes `keep`
+    // while a field-match route's type can't be read: the routes `keep`
     // rejects are dropped, by default the `/posts/:slug` route.
     function withIncompleteHostRoutes(
       keep: (route: HostRoute) => boolean = (route) =>
         route.fullPath !== '/posts/:slug',
     ) {
-      let getHostRoutes = testRealm.getHostRoutes;
-      testRealm.getHostRoutes = async function (this: Realm) {
-        let validation = await getHostRoutes.call(this);
-        return {
-          ...validation,
-          routes: validation.routes.filter(keep),
-          complete: false,
-        };
-      };
-      return () => {
-        testRealm.getHostRoutes = getHostRoutes;
-      };
+      return withHostRoutes((validation) => ({
+        ...validation,
+        routes: validation.routes.filter(keep),
+        complete: false,
+      }));
     }
 
     hooks.beforeEach(async function () {
@@ -546,9 +557,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     });
 
     test('a path that only a route dropped for an unreadable type matches answers 503', async function (assert) {
-      let getHostRoutes = testRealm.getHostRoutes;
-      testRealm.getHostRoutes = async function (this: Realm) {
-        let validation = await getHostRoutes.call(this);
+      let pattern = parseRoutePathPattern('/posts/:slug');
+      if (!pattern.ok) {
+        throw new Error('the pattern does not parse');
+      }
+      let restore = withHostRoutes((validation) => {
         let posts = validation.routes.find(
           (route) => route.fullPath === '/posts/:slug',
         )!;
@@ -566,8 +579,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             },
           ],
           complete: false,
+          unavailableRoutePatterns: [pattern.pattern],
         };
-      };
+      });
       try {
         let response = await page('posts/hello');
         assert.strictEqual(response.status, 503, 'not a 404');
@@ -578,7 +592,53 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'a path the dropped route does not match is served as before',
         );
       } finally {
-        testRealm.getHostRoutes = getHostRoutes;
+        restore();
+      }
+    });
+
+    test('while a route type is read, only a page a field-match route could answer waits for it', async function (assert) {
+      await markRealmPublished();
+      testRealm.clearRealmIndexCaches();
+      let release!: () => void;
+      let held = new Promise<void>((resolve) => (release = resolve));
+      let lookup = definitionLookup.lookupDefinitionEntryForRealm;
+      definitionLookup.lookupDefinitionEntryForRealm = async function (
+        this: CachingDefinitionLookup,
+        ...args: Parameters<
+          CachingDefinitionLookup['lookupDefinitionEntryForRealm']
+        >
+      ) {
+        await held;
+        return await lookup.apply(this, args);
+      };
+      let generic = (path: string) =>
+        request.get(`${realmPath}${path}`).set('Accept', '*/*');
+      try {
+        let fixed = await page('fixed');
+        assert.strictEqual(fixed.status, 200, 'a fixed route does not wait');
+
+        let module = await generic('site');
+        assert.strictEqual(module.status, 200, 'a module import does not wait');
+        assert.false(
+          module.text.includes('<meta name="@cardstack'),
+          'and gets the module',
+        );
+
+        let crawler = await generic('posts/hello');
+        assert.strictEqual(
+          crawler.status,
+          503,
+          'a generic-Accept request does not wait for the type',
+        );
+
+        let waiting = page('posts/hello').then((response) => response);
+        release();
+        let served = await waiting;
+        assert.strictEqual(served.status, 200, 'a browser waits for the type');
+        assert.true(served.text.includes('Served Post A'), 'serves Post A');
+      } finally {
+        release();
+        definitionLookup.lookupDefinitionEntryForRealm = lookup;
       }
     });
 

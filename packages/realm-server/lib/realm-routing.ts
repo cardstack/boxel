@@ -20,7 +20,6 @@ import {
   logger,
   matchRoutePathPattern,
   param,
-  parseRoutePathPattern,
   query,
   RealmPaths,
 } from '@cardstack/runtime-common';
@@ -296,28 +295,16 @@ export function droppedRouteMayAnswer(
   realm: Realm,
   validation: HostRoutesValidation,
 ): boolean {
-  if (validation.complete) {
+  if (validation.unavailableRoutePatterns.length === 0) {
     return false;
   }
   let path = pathInRealm(requestURL, realm);
-  if (path === undefined) {
-    return false;
-  }
-  let unavailable = validation.warnings
-    .filter((w) => w.code === 'type-unavailable')
-    .map((w) => w.position);
-  return validation.warnings.some((warning) => {
-    let underUnavailable = unavailable.some((position) =>
-      position.every((index, i) => warning.position[i] === index),
-    );
-    if (!warning.dropped || !underUnavailable) {
-      return false;
-    }
-    let parsed = parseRoutePathPattern(warning.path);
-    return (
-      parsed.ok && matchRoutePathPattern(parsed.pattern, path) !== undefined
-    );
-  });
+  return (
+    path !== undefined &&
+    validation.unavailableRoutePatterns.some(
+      (pattern) => matchRoutePathPattern(pattern, path) !== undefined,
+    )
+  );
 }
 
 export async function getPublishedRealmInfo(

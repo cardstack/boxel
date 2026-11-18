@@ -620,7 +620,7 @@ module(basename(import.meta.filename), function () {
         await testRealm.indexing();
       });
 
-      test('drops the route for now, and keeps the validation until a type may be available', async function (assert) {
+      test('drops the route for now, and keeps the validation until the retry time', async function (assert) {
         let first = await testRealm.getHostRoutes();
         assert.false(first.complete, 'the validation is incomplete');
         assert.deepEqual(
@@ -641,6 +641,16 @@ module(basename(import.meta.filename), function () {
           await testRealm.getHostRoutingMap(),
           map,
           'the fixed routing map is cached with it',
+        );
+        assert.strictEqual(
+          await testRealm.getHostRoutes(),
+          first,
+          'the incomplete validation is kept until the retry time',
+        );
+        assert.strictEqual(
+          await testRealm.getHostRoutesWithoutTypeReads(),
+          first,
+          'the routes without type reads are the cached validation',
         );
 
         // Once the retry time passes, the routes and their types are read again.
