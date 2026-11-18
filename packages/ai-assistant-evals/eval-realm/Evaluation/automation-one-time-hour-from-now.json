@@ -8,7 +8,7 @@
       "cardInfo": {
         "name": "Automation: end a sale an hour from now",
         "summary": "A flash sale card is open with its status active. The prompt, from a user in New York, asks to end the sale an hour from now by setting its status to ended. This eval tests whether the assistant writes a catalog Automation card with a one-time trigger at the right date and wall-clock time in New York and a script that ends the sale when the run comes, leaving the sale active now and without claiming the automation is switched on.",
-        "notes": null,
+        "notes": "Known gap: Claude models show the Automation card from the same run-realm-code call that writes it. A fresh workspace can take longer to index its first Automation card than the host waits for a card to show (about 20 seconds against 10 on an environment-mode stack), so the runner finds no rendered card and grades the run model-failure, which scores 0 whatever the other criteria say. When the room shows the show failed with \"has not finished indexing\" and the card is in the workspace snapshot, judge the other criteria as usual and say in the analysis which failures are this gap and which are the model's.",
         "cardThumbnailURL": null
       },
       "skillFeatures": [],
