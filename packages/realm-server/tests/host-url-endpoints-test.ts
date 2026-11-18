@@ -310,6 +310,77 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a mounted site name’s claim can’t be released until the site name is unmounted', async function (assert) {
+      await claimSiteName(OWNER, 'kept.localhost');
+      let mounted = (await mount('http://kept.localhost/')).body.data;
+      let [claim] = (await query(dbAdapter, [
+        `SELECT id FROM claimed_domains_for_sites WHERE hostname = 'kept.localhost'`,
+      ])) as { id: string }[];
+
+      let refused = await request
+        .delete(`/_boxel-claimed-domains/${claim.id}`)
+        .set('Authorization', auth(OWNER));
+      assert.strictEqual(refused.status, 409, 'HTTP 409 status');
+      assert.true(refused.body.errors[0].includes('Unmount'));
+      assert.strictEqual(
+        (await claimOf('kept.localhost')).removed_at,
+        null,
+        'the claim stays',
+      );
+      let served = await getOnHost('kept.localhost', '/hello.txt');
+      assert.strictEqual(served.status, 200, 'the site name still serves');
+
+      assert.strictEqual((await unmount(mounted.id)).status, 204);
+      assert.notStrictEqual(
+        (await claimOf('kept.localhost')).removed_at,
+        null,
+        'unmounting frees the site name',
+      );
+    });
+
+    test('unmounting a site name releases only the claim bound to the realm', async function (assert) {
+      // A host URL whose site name is claimed by another user for another
+      // realm.
+      await claimSiteName(OTHER, 'stale.localhost');
+      let [row] = (await query(dbAdapter, [
+        `INSERT INTO realm_host_urls (realm_id, kind, host, path_prefix, is_canonical, created_by) VALUES (`,
+        param(realmId),
+        `, 'site-name', 'stale.localhost', '/', true,`,
+        param(OWNER),
+        `) RETURNING id`,
+      ])) as { id: string }[];
+
+      assert.strictEqual((await unmount(row.id)).status, 204);
+      assert.strictEqual(
+        (await claimOf('stale.localhost')).removed_at,
+        null,
+        'the other user’s claim stays',
+      );
+    });
+
+    test('a mount that loses to another realm’s host URL leaves the claim unbound', async function (assert) {
+      let otherId = await register(
+        new URL('mango/taken/', testRealmURL).href,
+        'taken-realm',
+      );
+      await query(dbAdapter, [
+        `INSERT INTO realm_host_urls (realm_id, kind, host, path_prefix, is_canonical, created_by) VALUES (`,
+        param(otherId),
+        `, 'site-name', 'taken.localhost', '/', true,`,
+        param(OWNER),
+        `)`,
+      ]);
+      await claimSiteName(OWNER, 'taken.localhost');
+
+      let response = await mount('http://taken.localhost/');
+      assert.strictEqual(response.status, 409, 'HTTP 409 status');
+      assert.strictEqual(
+        (await claimOf('taken.localhost')).realm_id,
+        null,
+        'the claim is not bound to the realm that lost',
+      );
+    });
+
     test('refuses a site name nobody claimed, or another user claimed', async function (assert) {
       let unclaimed = await mount('http://nobody.localhost/');
       assert.strictEqual(unclaimed.status, 422, 'HTTP 422 status');
