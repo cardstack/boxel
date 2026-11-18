@@ -88,6 +88,11 @@ const LINK_SHAPE_VARY = [X_BOXEL_LINK_SHAPE_HEADER];
 // couldn't be read are kept before they are read again, with those types. A failed render's
 // cached error row expires after the same interval.
 const HOST_ROUTES_RETRY_MS = 30_000;
+// What the host routes endpoint tells a reader to wait before it asks again
+// for routes that weren't all available. Shorter than the interval above: a
+// type's definition is usually read within seconds, and an answer that comes
+// before the routes are read again is the cached one.
+const HOST_ROUTES_RETRY_AFTER_SECONDS = 5;
 
 // The host routes when the routing rules can't be read.
 const NO_HOST_ROUTES: HostRoutesValidation = {
@@ -1351,6 +1356,8 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   the whole realm at once: every type it holds, every file's modification
 //   time, and every card's indexing state. A grant reaches a card, not the
 //   realm.
+// - `_host-routes` answers the realm's whole validated route tree, which is
+//   as visible as the realm and names no one card.
 // - `_dependencies`, `_card-dependencies` and `_lint` analyze the realm's
 //   modules for code mode, which a caller works in only with the realm's own
 //   read.
@@ -3965,6 +3972,14 @@ export class Realm {
         '/_indexing-errors',
         SupportedMimeType.JSONAPI,
         this.indexingErrors.bind(this),
+        ACL_ONLY,
+      )
+      // The realm's validated host routes, which answer for the whole realm
+      // at once, so they are answered on the realm ACL alone too.
+      .get(
+        '/_host-routes',
+        SupportedMimeType.JSON,
+        this.hostRoutes.bind(this),
         ACL_ONLY,
       )
       .get(
@@ -20778,6 +20793,41 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
+  // The realm's validated host route tree, as `getHostRoutes` gives it and
+  // as a host page gets it in `hostDynamicRoutes`, so a reader resolves a
+  // path or works out an address without validating anything again. It is
+  // the whole tree or an error: while a route is dropped because its type's
+  // definition can't be read yet, a reader that kept the short tree would
+  // keep addresses worked out without that route, so the answer is a 503 that
+  // says when to ask again. The validation's warnings are for the server's
+  // log, not for a reader.
+  private async hostRoutes(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let { routes, complete } = await this.getHostRoutes();
+    if (!complete) {
+      return systemError({
+        requestContext,
+        status: 503,
+        message: `The host routes of ${this.url} are not all available yet`,
+        meta: { retryAfterSeconds: HOST_ROUTES_RETRY_AFTER_SECONDS },
+      });
+    }
+    return createResponse({
+      body: JSON.stringify({ routes }),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          // The tree changes when the realm is indexed, and carries no
+          // validator a cache could ask with.
+          'cache-control': 'no-store',
+        },
       },
       requestContext,
     });
