@@ -1,5 +1,7 @@
 import {
   automationRunForCall,
+  endAutomationRunNotADirectWriter,
+  runActsAsDirectWriter,
   isSessionRevoked,
   logger,
   type DBAdapter,
@@ -69,12 +71,14 @@ export async function admitRunForward(
     definitionLookup,
     virtualNetwork,
     realmSecretSeed,
+    matrixServerName,
     reportRunChange,
   }: {
     dbAdapter: DBAdapter;
     definitionLookup: DefinitionLookup;
     virtualNetwork: VirtualNetwork;
     realmSecretSeed: string;
+    matrixServerName: string;
     // Told when the request ends the run at a cap.
     reportRunChange?: ReportRunChange;
   },
@@ -134,6 +138,27 @@ export async function admitRunForward(
       401,
       'Invalid token',
       `run ${context.runId} acts as ${call.run.actsAs}, but the token names ${context.actsAs}`,
+    );
+  }
+  if (
+    !(await runActsAsDirectWriter(
+      { dbAdapter, virtualNetwork, matrixServerName },
+      call.run,
+    ))
+  ) {
+    if (
+      await endAutomationRunNotADirectWriter(
+        dbAdapter,
+        context.runId,
+        context.attempt,
+      )
+    ) {
+      await reportRunChange?.(context.runId);
+    }
+    return refuse(
+      403,
+      "The person this run acts as is not a direct writer of the automation's workspace, so the run has ended",
+      `${context.actsAs}, whom run ${context.runId} acts as, is not a direct writer of ${call.run.realm}; the run ends`,
     );
   }
   let run = {

@@ -2106,9 +2106,12 @@ The job ids lead to everything else in this skill: the rows each pass wrote (`bo
 
 The worker logs every outcome on the `worker` channel:
 
-- `charged the indexing of run <id> …: charged` / `already-charged`: written, or written by an earlier attempt of the job.
-- `… nothing-to-charge`: the payer's balance held nothing to draw on, so no row was written.
-- `could not charge the indexing of run <id> …: no-prices`: the worker's pricing check failed (see the `pricing` skill); `no-payer`: the run's `acts_as` has no `users` row.
+Each line starts with the run's tag, `[automation-run] automation=<id> run=<id> …` (just `run <id>` when the run's row couldn't be read for it), and ends with the realm, the payer and the measured seconds:
+
+- `<tag> indexing charged in <realm> for <payer> (…): charged` / `already-charged`: written, or written by an earlier attempt of the job.
+- `<tag> indexing charged … : nothing-to-charge`: the payer's balance held nothing to draw on, so no row was written.
+- `<tag> indexing could not be charged … : no-prices`: the worker's pricing check failed (see the `pricing` skill); `… : no-payer`: the run's `acts_as` has no `users` row.
+- `not charging the indexing of run <id> …: this worker writes no metered charges`: the worker was started without metered charges, so it charges no run.
 - `not charging the indexing of run <id> …: the run no longer exists`: the run row was deleted, with its realm, before the commit's indexing finished.
 - `failed to charge the indexing of run <id>`: the charge kept throwing through its retries. The index pass is not run again for it. The job's `charged` result still holds the usage, so the run can be charged by hand at the pricing version the worker logged.
 - `failed to enqueue deferred prerender_html job … which would have charged the indexing of run <id>` (realm server, `realm` channel): a commit whose index passes left nothing to render couldn't queue the job that charges the run. The line carries the run's measurement.

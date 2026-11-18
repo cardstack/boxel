@@ -267,7 +267,7 @@ FROM automation_runs WHERE id = '<run id>';
 
 ## The indexing a run's writes cause
 
-A run's writes land as one commit (`WriteOptions.runId` on the realm's write),
+A run's writes land as one commit (`WriteOptions.automationRun` on the realm's write),
 and the indexing that commit causes is one `run_indexing` charge, to the run's
 identity (`automation_runs.acts_as`), referencing the run:
 
