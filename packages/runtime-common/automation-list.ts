@@ -124,11 +124,13 @@ export interface AutomationListAnswer {
 // Answers `GET <realm>/_automations` for `viewer`. Only a direct writer of
 // the realm is listed its automations, since direct writers are who switch
 // automations on, pause them and pay for them. Any other caller the realm ACL
-// lets read, a reader or one a `*`, `users` or policy grant admits, is told
-// it isn't a direct writer and listed nothing, and the realm config shows no
-// Automations section. The answer isn't an HTTP refusal: the host takes a 401
-// or 403 as an auth failure of whatever it is rendering at the time, and the
-// realm config asks while it renders.
+// lets read, a reader or one a `*` or `users` row admits, is told it isn't a
+// direct writer and listed nothing, and the realm config shows no Automations
+// section. The answer isn't an HTTP refusal: the host takes a 401 or 403 as an
+// auth failure of whatever it is rendering at the time, and the realm config
+// asks while it renders. A caller only a policy grant admits gets the ACL's
+// refusal, since the route is `ACL_ONLY` and the ACL refuses before the route
+// runs.
 export async function answerAutomationList({
   dbAdapter,
   realmURL,
