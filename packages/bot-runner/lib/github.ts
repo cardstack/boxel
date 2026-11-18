@@ -89,6 +89,9 @@ const DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;
 // A wait longer than this (a spent primary quota can reset up to an hour
 // away) fails the step instead, so the user can retry later.
 const MAX_RATE_LIMIT_WAIT_MS = 5 * 60_000;
+// Added to a wait until `x-ratelimit-reset`, so that a retry does not arrive
+// before GitHub's clock reaches the reset time.
+const RATE_LIMIT_RESET_MARGIN_MS = 1_000;
 
 export interface OctokitGitHubClientOptions {
   sleep?: (ms: number) => Promise<void>;
@@ -582,8 +585,11 @@ function rateLimitWaitMs(
   }
   if (response.headers.get('x-ratelimit-remaining') === '0') {
     let resetSeconds = Number(response.headers.get('x-ratelimit-reset') ?? NaN);
-    if (Number.isFinite(resetSeconds)) {
-      return Math.max(0, resetSeconds * 1000 - nowMs);
+    let untilReset = resetSeconds * 1000 - nowMs;
+    // A reset time that has already passed (clock skew, or a limit that
+    // outlasts it) says nothing about how long to wait: back off instead.
+    if (Number.isFinite(untilReset) && untilReset > 0) {
+      return untilReset + RATE_LIMIT_RESET_MARGIN_MS;
     }
   }
   return DEFAULT_RATE_LIMIT_WAIT_MS * 2 ** attempt;

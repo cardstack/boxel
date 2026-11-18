@@ -463,7 +463,45 @@ module('github client', (hooks) => {
         message: 'add listing',
       });
 
-      assert.deepEqual(waits, [10_000], 'waits until the reset time');
+      assert.deepEqual(
+        waits,
+        [11_000],
+        'waits until the reset time, plus a margin',
+      );
+    });
+
+    test('backs off when the reset time has already passed', async (assert) => {
+      stubWrite([
+        secondaryRateLimit({
+          'x-ratelimit-remaining': '0',
+          'x-ratelimit-reset': '1000',
+        }),
+        secondaryRateLimit({
+          'x-ratelimit-remaining': '0',
+          'x-ratelimit-reset': '1000',
+        }),
+      ]);
+      let waits: number[] = [];
+      let client = new OctokitGitHubClient('test-token', {
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+        now: () => 1_000_000,
+      });
+
+      await client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'listing',
+        files,
+        message: 'add listing',
+      });
+
+      assert.deepEqual(
+        waits,
+        [60_000, 120_000],
+        'does not retry immediately at the reset boundary',
+      );
     });
 
     test('backs off without headers, then gives up', async (assert) => {
