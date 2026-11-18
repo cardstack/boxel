@@ -21529,16 +21529,32 @@ export class Realm {
       // moves it past this value.
       let generation = this.#definitionLookup.definitionGeneration?.();
       let rules = this.#readRawHostRoutingRules();
+      // Rules that name no type need no read: that validation is the whole
+      // one, cached as soon as the rules are read.
+      let withoutTypes = rules.then(
+        (rules) =>
+          hostRouteTypeRefs(rules).length === 0
+            ? this.#finishHostRoutesValidation(
+                rules,
+                [],
+                new Map(),
+                epoch,
+                generation,
+              )
+            : validateHostRoutes(rules, {
+                realmURL: new URL(this.url),
+                lookupType: () => 'unavailable',
+              }),
+        () => undefined,
+      );
       let started = {
-        withoutTypes: rules.then(
-          (rules) =>
-            validateHostRoutes(rules, {
-              realmURL: new URL(this.url),
-              lookupType: () => 'unavailable',
-            }),
-          () => undefined,
+        withoutTypes,
+        full: this.#readAndValidateHostRoutes(
+          rules,
+          withoutTypes,
+          epoch,
+          generation,
         ),
-        full: this.#readAndValidateHostRoutes(rules, epoch, generation),
       };
       inFlight = started;
       this.#hostRoutesInFlight = started;
@@ -21592,6 +21608,7 @@ export class Realm {
 
   async #readAndValidateHostRoutes(
     rulesRead: Promise<RawHostRoutingRule[]>,
+    withoutTypes: Promise<HostRoutesValidation | undefined>,
     epoch: number,
     generation: number | undefined,
   ): Promise<HostRoutesValidation | undefined> {
@@ -21600,6 +21617,9 @@ export class Realm {
       // The types field-match routes name, read before validating so the
       // validation itself stays synchronous.
       let refs = hostRouteTypeRefs(rules);
+      if (refs.length === 0) {
+        return await withoutTypes;
+      }
       let types = new Map(
         await Promise.all(
           refs.map(
@@ -21608,37 +21628,13 @@ export class Realm {
           ),
         ),
       );
-      let usesOtherRealmTypes = refs.some(
-        (ref) => !this.paths.inRealm(ref.module),
+      return this.#finishHostRoutesValidation(
+        rules,
+        refs,
+        types,
+        epoch,
+        generation,
       );
-      let validation = validateHostRoutes(rules, {
-        realmURL: new URL(this.url),
-        lookupType: (ref) => types.get(typeLookupKey(ref)),
-      });
-      this.#logHostRouteWarnings(validation);
-      if (epoch !== this.#hostRoutesEpoch) {
-        return validation;
-      }
-      if (!validation.complete) {
-        // Kept until the retry time, when the types that couldn't be read
-        // are read again: a failed render's error row expires by then, and
-        // a failed read is tried again.
-        this.#cachedHostRoutes = validation;
-        this.#cachedHostRoutesRetryAt = Date.now() + HOST_ROUTES_RETRY_MS;
-        this.#cachedHostRoutesGeneration = usesOtherRealmTypes
-          ? generation
-          : undefined;
-      } else if (!usesOtherRealmTypes || generation !== undefined) {
-        // A validation that uses another realm's types is kept only while
-        // the definition generation holds, and not at all by a lookup
-        // without one.
-        this.#cachedHostRoutes = validation;
-        this.#cachedHostRoutesRetryAt = undefined;
-        this.#cachedHostRoutesGeneration = usesOtherRealmTypes
-          ? generation
-          : undefined;
-      }
-      return validation;
     } catch (e) {
       this.#log.warn(
         `failed to read host routing rules from RealmConfig card: ${e}`,
@@ -21647,6 +21643,48 @@ export class Realm {
       // call retries the index query.
       return undefined;
     }
+  }
+
+  // Validates the rules with the types that were read, logs the warnings,
+  // and caches the result unless an index ran since `epoch` was taken.
+  #finishHostRoutesValidation(
+    rules: RawHostRoutingRule[],
+    refs: ResolvedCodeRef[],
+    types: Map<string, HostRouteTypeInfo | 'unavailable' | undefined>,
+    epoch: number,
+    generation: number | undefined,
+  ): HostRoutesValidation {
+    let usesOtherRealmTypes = refs.some(
+      (ref) => !this.paths.inRealm(ref.module),
+    );
+    let validation = validateHostRoutes(rules, {
+      realmURL: new URL(this.url),
+      lookupType: (ref) => types.get(typeLookupKey(ref)),
+    });
+    this.#logHostRouteWarnings(validation);
+    if (epoch !== this.#hostRoutesEpoch) {
+      return validation;
+    }
+    if (!validation.complete) {
+      // Kept until the retry time, when the types that couldn't be read
+      // are read again: a failed render's error row expires by then, and
+      // a failed read is tried again.
+      this.#cachedHostRoutes = validation;
+      this.#cachedHostRoutesRetryAt = Date.now() + HOST_ROUTES_RETRY_MS;
+      this.#cachedHostRoutesGeneration = usesOtherRealmTypes
+        ? generation
+        : undefined;
+    } else if (!usesOtherRealmTypes || generation !== undefined) {
+      // A validation that uses another realm's types is kept only while
+      // the definition generation holds, and not at all by a lookup
+      // without one.
+      this.#cachedHostRoutes = validation;
+      this.#cachedHostRoutesRetryAt = undefined;
+      this.#cachedHostRoutesGeneration = usesOtherRealmTypes
+        ? generation
+        : undefined;
+    }
+    return validation;
   }
 
   // Logs the warnings of a validation, unless the last validation logged
