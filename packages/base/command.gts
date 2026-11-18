@@ -277,11 +277,6 @@ export class RealmKeySharesInput extends CardDef {
   @field realm = contains(StringField);
 }
 
-// The realm whose automations console to open, by its URL.
-export class AutomationsConsoleInput extends CardDef {
-  @field realm = contains(StringField);
-}
-
 // An operation one of a realm's shares is approved for there: one binding,
 // naming the operation by the type it is invoked through (`module`, in RRI
 // form, and `name`), the card it was approved for when it is approved per

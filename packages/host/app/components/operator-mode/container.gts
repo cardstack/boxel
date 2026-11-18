@@ -49,7 +49,6 @@ import MarkdownEmbedChooserModal from '../markdown-embed-chooser/modal';
 import CardContextSearchResults from '../search/card-context-search-results';
 import { Submodes } from '../submode-switcher';
 
-import AutomationsConsoleModal from './automations-console-modal';
 import CreateListingModal from './create-listing-modal';
 import PolicyAuditConfirmationModal from './policy-audit-confirmation-modal';
 
@@ -223,7 +222,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       <FileChooserModal />
       <PolicyAuditConfirmationModal />
       <CreateListingModal />
-      <AutomationsConsoleModal />
       <CardChooserModal />
       <MarkdownEmbedChooserModal />
       <FromElseWhere @name='modal-elsewhere' />

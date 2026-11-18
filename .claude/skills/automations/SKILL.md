@@ -107,13 +107,13 @@ description: >-
   and how to watch it from the host or a card. Use when a console or card
   should follow a run live, when adding code that moves a run, or when a
   direct writer isn't seeing a run's events.
-  Also covers where the automations console lives: the realm config's
-  Automations entry (`packages/base/realm-automations.gts`), the console
-  modal the realm config's "…" menu and the entry open (the host's
-  `open-automations-console` tool), and the realm's `_automations` list
-  route (`automation-list.ts`) both read, with each automation's state,
-  triggers, next run, payer, monthly cap, spend this month, last result and
-  current run milestone.
+  Also covers the automations console, the realm config's Automations
+  section (`packages/base/realm-automations.gts`): each automation as the
+  Automation card's fitted view, New automation through the card's
+  `newAutomation` operation, and the realm's `_automations` list route
+  (`automation-list.ts`) it reads, with each automation's state, triggers,
+  next run, payer, monthly cap, spend this month, last result and current
+  run milestone.
 ---
 
 # Automations
@@ -1571,12 +1571,13 @@ Synapse for `app.boxel.realm-event` with `content.eventName = "automation"`.
 
 ## The automations console
 
-The console is where a realm's direct writers see every automation in the realm. It lives in the app, in two places that read the same route and render from the same base file, `packages/base/realm-automations.gts`:
+The automations console is the realm config's **Automations** section, where a realm's direct writers see every automation in the realm. There is no separate console surface: "the console" means this section. It lives in `packages/base/realm-automations.gts` (`RealmAutomations`, the default export), which the realm config card's isolated view (`packages/base/realm-config.gts`) renders last.
 
-- **The realm config's Automations entry.** The realm config card's isolated view (`packages/base/realm-config.gts`) ends with a distilled list, `RealmAutomations`: each automation's name, a state chip (Running, On, Paused, Waiting for credits, Done, Off), and one line under the name: the next run in the viewer's own time, the milestone a run is in, or why Boxel paused the automation. The section and its **Open console** button render only once the route answers; a viewer the route refuses sees no section at all.
-- **The console itself**, a host modal (`packages/host/app/components/operator-mode/automations-console-modal.gts`, mounted in the operator-mode container) around base's `AutomationsConsole`: each automation in full, with its triggers, next run, payer, the monthly cap and this month's spend, its last result, and the milestone a running automation is in. The host tool `open-automations-console` (`{ realm }`, `OpenAutomationsConsoleTool`) opens the modal through `OperatorModeStateService.showAutomationsConsole`. The realm config card's "…" menu offers **Automations Console** to anyone who can edit the realm (`canEdit`); the console tells a viewer who isn't a direct writer that only workspace administrators see automations.
+- **Each automation is the Automation card's own fitted view** (the catalog's `automation/automation.gts`), loaded through the card context's `getCard` and rendered in a slot as wide as the section and 105px tall (the height of the `wide-strip` fitted size). At that size the fitted view shows the state chip, the first trigger, the next run in the viewer's own time, the last result, the run's milestones as a vertical timeline that fits the space, the payer, this month's spend against the monthly cap, and any limit the automation is near or at. A card that doesn't load (a switched-on automation whose card the index lacks, say) falls back to a one-line summary from the route: name, state chip, and the next run, the milestone a run is in, or why Boxel paused the automation.
+- **A click on an automation**, or Enter on its row, opens the card's isolated view (`ShowCardTool`).
+- **New automation** asks for a name, then invokes the Automation type's `newAutomation` operation (`InvokeCardOperationTool` with the type, the realm and `{ name }`; the operation fills the name and the default caps) and opens the new card in its edit view.
 
-Both read `GET <realm>/_automations` through the host's `authed-fetch` tool, and read the route again on every `job`, `automation` and `index` realm event for the realm (a burst reads the route once), since a run moving, a change to a row and a card edit each change the list.
+The section renders only once the route answers; a viewer the route refuses sees no section at all. It reads `GET <realm>/_automations` through the host's `authed-fetch` tool, and reads the route again on every `job`, `automation` and `index` realm event for the realm (a burst reads the route once), since a run moving, a change to a row and a card edit each change the list.
 
 ### The list route
 
@@ -1591,7 +1592,7 @@ Both read `GET <realm>/_automations` through the host's `authed-fetch` tool, and
 | `payer`, `viewerIsPayer`             | the payer's Matrix id only when the viewer is the payer or shares a realm grant with the payer (ADR 011 §1.2), else null                                                                                                                             |
 | `monthlyCredits`                     | the monthly cap the payer agreed to (the caps snapshot) when switched on, the card's otherwise                                                                                                                                                       |
 | `spentThisMonth`                     | what the automation was charged this UTC month across every charge kind that names it: `automationCreditsSince` in `automation-spend.ts`, the sum the monthly cap's admission check compares, so the figure a viewer reads is the one the cap counts |
-| `lastResult`, `lastFinishedAt`       | the row's last result when switched on; otherwise the automation's last run that started and ended, leaving out Previews                                                                                                                             |
+| `lastResult`, `lastFinishedAt`       | the automation's last run that started and ended, leaving out Previews                                                                                                                                                                               |
 | `currentRun`                         | the run in progress, leaving out a Preview: `runId`, `startedAt`, `milestone` (the run milestone the script last reported, or null before the first) and `done` / `total` when the script counts inside the milestone; null when nothing runs        |
 
 Host tests mount a virtual-network handler that answers the route (`tests/acceptance/realm-automations-test.gts`), since an in-browser test realm has no `automations` table.

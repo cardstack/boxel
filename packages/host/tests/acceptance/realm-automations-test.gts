@@ -186,7 +186,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
       assert
         .dom('[data-test-realm-automations-empty]')
         .containsText('No automations');
-      assert.dom('[data-test-open-automations-console]').exists();
+      assert.dom('[data-test-new-automation-start]').exists();
     });
 
     test('a job or automation event updates the list live', async function (assert) {
@@ -228,47 +228,24 @@ module('Acceptance | realm config | Automations', function (hooks) {
       assert.dom(`[data-test-realm-automation="${NIGHTLY}"]`).doesNotExist();
     });
 
-    test('opens the console from the entry and from the "…" menu', async function (assert) {
-      answer = { status: 200, data: [ACTIVE, PAUSED] };
+    test('New automation asks for a name, and Cancel puts the button back', async function (assert) {
+      answer = { status: 200, data: [ACTIVE] };
       await visitConfig();
       await waitFor('[data-test-realm-automation]');
 
-      await click('[data-test-open-automations-console]');
-      await waitFor('[data-test-automations-console-automation]');
-      let nightly = `[data-test-automations-console-automation="${NIGHTLY}"]`;
-      assert.dom(nightly).containsText('Nightly import');
+      await click('[data-test-new-automation-start]');
+      assert.dom('[data-test-new-automation-form]').exists();
+      assert.dom('[data-test-new-automation-start]').doesNotExist();
       assert
-        .dom(`${nightly} [data-test-automations-console-triggers]`)
-        .containsText('nightly');
+        .dom('[data-test-new-automation-create]')
+        .isDisabled('a nameless automation is not made');
       assert
-        .dom(`${nightly} [data-test-automations-console-triggers]`)
-        .containsText('30 2 * * *');
-      assert
-        .dom(`${nightly} [data-test-automations-console-value="payer"]`)
-        .hasText('You');
-      assert
-        .dom(`${nightly} [data-test-automations-console-value="spend"]`)
-        .hasText('42 of 500 credits this month');
-      assert
-        .dom(`${nightly} [data-test-automations-console-last-result]`)
-        .hasText('Completed');
-      let weekly = `[data-test-automations-console-automation="${WEEKLY}"]`;
-      assert
-        .dom(`${weekly} [data-test-automations-console-value="payer"]`)
-        .hasText('A person who shares no workspace with you');
+        .dom('[data-test-realm-automation]')
+        .exists('the list stays under the form');
 
-      getService('operator-mode-state-service').dismissAutomationsConsole();
-      await settled();
-      assert.dom('[data-test-automations-console]').doesNotExist();
-
-      await click(
-        `[data-test-stack-card="${testRealmURL}realm"] [data-test-more-options-button]`,
-      );
-      await click('[data-test-boxel-menu-item-text="Automations Console"]');
-      await waitFor('[data-test-automations-console-automation]');
-      assert
-        .dom('[data-test-automations-console-modal]')
-        .containsText('Automations in Research Notes');
+      await click('[data-test-new-automation-cancel]');
+      assert.dom('[data-test-new-automation-form]').doesNotExist();
+      assert.dom('[data-test-new-automation-start]').exists();
     });
   });
 
@@ -277,7 +254,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
       await setupRealm(['read']);
     });
 
-    test("doesn't see the entry or the menu item", async function (assert) {
+    test("doesn't see the section", async function (assert) {
       answer = { status: 403 };
       await visitConfig();
       await waitUntil(() => asked > 0);
@@ -285,14 +262,8 @@ module('Acceptance | realm config | Automations', function (hooks) {
 
       assert.dom('[data-test-realm-automations] h2').doesNotExist();
       assert.dom('[data-test-realm-automation]').doesNotExist();
+      assert.dom('[data-test-new-automation-start]').doesNotExist();
       assert.dom('[data-test-realm-config-policy]').exists();
-
-      await click(
-        `[data-test-stack-card="${testRealmURL}realm"] [data-test-more-options-button]`,
-      );
-      assert
-        .dom('[data-test-boxel-menu-item-text="Automations Console"]')
-        .doesNotExist();
     });
   });
 });

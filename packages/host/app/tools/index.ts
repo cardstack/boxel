@@ -55,7 +55,6 @@ import * as ListingBuildToolModule from './listing-action-build';
 import * as MigrateSkillToolModule from './migrate-skill';
 import * as OneShotLlmRequestToolModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomToolModule from './open-ai-assistant-room';
-import * as OpenAutomationsConsoleToolModule from './open-automations-console';
 import * as OpenCreateListingModalToolModule from './open-create-listing-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
 import * as OpenSecureWindowToolModule from './open-secure-window';
@@ -302,11 +301,6 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
     virtualNetwork,
     'open-ai-assistant-room',
     OpenAiAssistantRoomToolModule,
-  );
-  shimHostToolModule(
-    virtualNetwork,
-    'open-automations-console',
-    OpenAutomationsConsoleToolModule,
   );
   shimHostToolModule(
     virtualNetwork,
@@ -561,7 +555,6 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   CreateListingPRRequestToolModule.default,
   OneShotLlmRequestToolModule.default,
   OpenAiAssistantRoomToolModule.default,
-  OpenAutomationsConsoleToolModule.default,
   OpenCreateListingModalToolModule.default,
   CreateAndOpenSubmissionWorkflowCard.default,
   CreateSubmissionWorkflowToolModule.default,

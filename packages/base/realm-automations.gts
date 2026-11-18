@@ -1,34 +1,35 @@
-import type { CardContext } from './card-api';
+import { getComponent, type CardContext } from './card-api';
 import { isLiveRender } from './render-context';
 import { subscribeToRealm } from '@cardstack/runtime-common';
 import type {
   AutomationListDocument,
   AutomationSummaryResource,
-  AutomationSummaryTrigger,
 } from '@cardstack/runtime-common/automation-list';
 import { Alert } from '@cardstack/pretui/components/alert';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
-import { Descriptions } from '@cardstack/pretui/components/descriptions';
 import { EmptyState } from '@cardstack/pretui/components/empty-state';
+import { Form } from '@cardstack/pretui/components/form';
+import { FormField } from '@cardstack/pretui/components/form-field';
+import { Input } from '@cardstack/pretui/components/input';
 import { FormatDate } from '@cardstack/pretui/components/format-date';
 import { Item } from '@cardstack/pretui/components/item';
 import { List } from '@cardstack/pretui/components/list';
 import { Spinner } from '@cardstack/pretui/components/spinner';
-import { Token } from '@cardstack/pretui/components/token';
+import PlusIcon from '@cardstack/boxel-icons/plus';
 import AuthedFetchTool from '@cardstack/boxel-host/tools/authed-fetch';
-import OpenAutomationsConsoleTool from '@cardstack/boxel-host/tools/open-automations-console';
+import InvokeCardOperationTool from '@cardstack/boxel-host/tools/invoke-card-operation';
+import ShowCardTool from '@cardstack/boxel-host/tools/show-card';
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, task, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
-// Every automation in a realm at a glance, for the realm's direct writers.
-// The realm config shows a distilled list (`RealmAutomations`), and the
-// automations console shows the full one (`AutomationsConsole`). Both read
-// the realm's `_automations` route, which answers only a direct writer, and
-// read it again on each `job` and `automation` realm event, which reach only
+// The automations console: the realm config's Automations section, every
+// automation in the realm for the realm's direct writers. It reads the
+// realm's `_automations` route, which answers only a direct writer, and reads
+// it again on each `job` and `automation` realm event, which reach only
 // direct writers too, and on each index event, since a card edit changes the
 // triggers and an added card adds an automation.
 
@@ -39,6 +40,15 @@ type Tone = 'neutral' | 'success' | 'warning' | 'info';
 // `automation-list.ts` names it. That module reads the database, so the card
 // imports its types alone.
 const AUTOMATION_LIST_PATH = '_automations';
+
+// The catalog's Automation type, as `automationRef` in runtime-common's
+// `automation-declaration.ts` names it, and the operation the type declares
+// for a new automation, which takes the automation's name.
+const AUTOMATION_TYPE = {
+  module: '@cardstack/catalog/automation/automation',
+  name: 'Automation',
+};
+const NEW_AUTOMATION_OPERATION = 'newAutomation';
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -89,7 +99,7 @@ export function automationStateLook(automation: Automation): StateLook {
 
 // Why Boxel paused the automation, by the reason the server records.
 const PAUSED_BECAUSE: Record<string, string> = {
-  requested: 'A workspace administrator paused the automation.',
+  requested: 'A person who edits this workspace paused the automation.',
   'caps-raised':
     'Boxel paused the automation because someone raised a limit above what the payer agreed to pay for.',
   'batched-ai-enabled':
@@ -110,7 +120,7 @@ export function pausedBecause(automation: Automation): string {
   let reason = automation.attributes.pauseReason;
   return (
     (reason && PAUSED_BECAUSE[reason]) ??
-    'A workspace administrator paused the automation.'
+    'A person who edits this workspace paused the automation.'
   );
 }
 
@@ -131,38 +141,8 @@ export function runningText(automation: Automation): string | undefined {
   return `Running “${run.milestone}”${progress}`;
 }
 
-export function payerText(automation: Automation): string {
-  let { attributes } = automation;
-  if (!attributes.switchedOn) {
-    return 'Nobody yet';
-  }
-  if (attributes.viewerIsPayer) {
-    return 'You';
-  }
-  return attributes.payer ?? 'A person who shares no workspace with you';
-}
-
-export function lastResultText(automation: Automation): string {
-  switch (automation.attributes.lastResult) {
-    case 'complete':
-      return 'Completed';
-    case 'error':
-      return 'Failed';
-    case 'canceled':
-      return 'Stopped';
-    default:
-      return 'No runs yet';
-  }
-}
-
-export function spendText(automation: Automation): string {
-  let { monthlyCredits, spentThisMonth } = automation.attributes;
-  return monthlyCredits === null
-    ? `${count(spentThisMonth)} credits this month, with no monthly limit`
-    : `${count(spentThisMonth)} of ${count(monthlyCredits)} credits this month`;
-}
-
-// What the realm config's distilled row says under the automation's name.
+// What a row says under the automation's name when the automation's card
+// doesn't load.
 function glanceText(automation: Automation): string | undefined {
   let { attributes } = automation;
   let running = runningText(automation);
@@ -184,20 +164,7 @@ function glanceText(automation: Automation): string | undefined {
   }
 }
 
-function triggerKindText(trigger: AutomationSummaryTrigger): string {
-  switch (trigger.kind) {
-    case 'cron':
-      return 'Schedule';
-    case 'once':
-      return 'Once';
-    case 'webhook':
-      return 'Incoming webhook';
-    default:
-      return 'Trigger';
-  }
-}
-
-interface ReaderSignature {
+interface RealmAutomationsSignature {
   Args: {
     // The realm's URL.
     realm: string | undefined;
@@ -205,23 +172,24 @@ interface ReaderSignature {
   };
 }
 
-// Reads the realm's automations and follows them live, for the two lists
-// below. `visible` is false until the realm answers, and stays false for a
-// viewer who isn't a direct writer of the realm, so neither list shows that
-// viewer anything.
-class AutomationsReader<
-  S extends ReaderSignature = ReaderSignature,
-> extends GlimmerComponent<S> {
-  @tracked protected known = false;
-  @tracked protected visible = false;
-  @tracked protected automations: Automation[] = [];
-  @tracked protected loadError: string | undefined;
+// The realm config's Automations section, the automations console: each
+// automation as the Automation card's fitted view, which shows its state,
+// triggers, next run in the viewer's own time, last result, the milestone a
+// running automation is in, its payer, and its limits against what it spent,
+// with a button that makes a new automation. The section stays empty until
+// the realm answers, and stays empty for a viewer who isn't a direct writer
+// of the realm.
+export default class RealmAutomations extends GlimmerComponent<RealmAutomationsSignature> {
+  @tracked private visible = false;
+  @tracked private automations: Automation[] = [];
+  @tracked private loadError: string | undefined;
+  @tracked private creating = false;
 
-  protected get toolContext() {
+  private get toolContext() {
     return this.args.context?.toolContext;
   }
 
-  protected follow = modifier((element, [realm]: [string | undefined]) => {
+  private follow = modifier((element, [realm]: [string | undefined]) => {
     if (!realm || !isLiveRender(element)) {
       return;
     }
@@ -242,7 +210,6 @@ class AutomationsReader<
     async (realm: string, { settle = false }: { settle?: boolean } = {}) => {
       let toolContext = this.toolContext;
       if (!toolContext) {
-        this.known = true;
         return;
       }
       if (settle) {
@@ -273,40 +240,32 @@ class AutomationsReader<
         this.visible = true;
         this.loadError = errorText(err);
       }
-      this.known = true;
     },
   );
-}
 
-interface RealmAutomationsSignature {
-  Args: ReaderSignature['Args'];
-}
+  private startCreating = () => {
+    this.creating = true;
+  };
 
-// The realm config's Automations entry: each automation's name and state,
-// with when it runs next, where its run is, or why it is paused, and a button
-// that opens the full console. Shown only to the realm's direct writers.
-export default class RealmAutomations extends AutomationsReader<RealmAutomationsSignature> {
-  @tracked private openError: string | undefined;
-
-  private openConsole = task(async () => {
-    let toolContext = this.toolContext;
-    let realm = this.args.realm;
-    if (!toolContext || !realm) {
-      return;
-    }
-    this.openError = undefined;
-    try {
-      await new OpenAutomationsConsoleTool(toolContext).execute({ realm });
-    } catch (err) {
-      this.openError = errorText(err);
-    }
-  });
-
-  private openConsoleNow = () => {
-    this.openConsole.perform();
+  private stopCreating = () => {
+    this.creating = false;
   };
 
   private rowLabel = (automation: Automation) => automationTitle(automation);
+
+  // A click on an automation, or Enter on its row, opens the automation's
+  // card in its isolated view.
+  private openAutomation = (automation: Automation) => {
+    this.openCard.perform(automation.id);
+  };
+
+  private openCard = task(async (cardId: string) => {
+    let toolContext = this.toolContext;
+    if (!toolContext) {
+      return;
+    }
+    await new ShowCardTool(toolContext).execute({ cardId, format: 'isolated' });
+  });
 
   <template>
     <section
@@ -317,17 +276,28 @@ export default class RealmAutomations extends AutomationsReader<RealmAutomations
       {{#if this.visible}}
         <header class='header'>
           <h2 class='section-title'>Automations</h2>
-          <Button
-            @tone='neutral'
-            @appearance='outlined'
-            @size='s'
-            @busy={{this.openConsole.isRunning}}
-            {{on 'click' this.openConsoleNow}}
-            data-test-open-automations-console
-          >
-            Open console
-          </Button>
+          {{#unless this.creating}}
+            {{! Styled like the realm config's other section actions, such as
+                "Share one of my keys". }}
+            <Button
+              @tone='primary'
+              @appearance='accent'
+              @size='s'
+              @icon={{PlusIcon}}
+              {{on 'click' this.startCreating}}
+              data-test-new-automation-start
+            >
+              New automation
+            </Button>
+          {{/unless}}
         </header>
+        {{#if this.creating}}
+          <NewAutomationForm
+            @realm={{@realm}}
+            @context={{@context}}
+            @onDone={{this.stopCreating}}
+          />
+        {{/if}}
         {{#if this.loadError}}
           <Alert
             @tone='danger'
@@ -340,13 +310,16 @@ export default class RealmAutomations extends AutomationsReader<RealmAutomations
           <List
             @items={{this.automations}}
             @label='Automations'
-            @size='s'
-            @bordered={{true}}
             @rowLabel={{this.rowLabel}}
+            @divided={{false}}
+            @onActivate={{this.openAutomation}}
             data-test-realm-automations-list
           >
             <:item as |automation|>
-              <AutomationGlance @automation={{automation}} />
+              <AutomationSlot
+                @automation={{automation}}
+                @context={{@context}}
+              />
             </:item>
           </List>
         {{else}}
@@ -355,14 +328,10 @@ export default class RealmAutomations extends AutomationsReader<RealmAutomations
             @size='s'
             data-test-realm-automations-empty
           >
-            This workspace has no automation cards. Ask the AI assistant to
-            write an automation, and Boxel lists the automation here.
+            This workspace has no automation cards. Make an automation with New
+            automation, or ask the AI assistant to write an automation, and
+            Boxel lists the automation here.
           </EmptyState>
-        {{/if}}
-        {{#if this.openError}}
-          <Alert @tone='danger' data-test-open-automations-console-error>
-            {{this.openError}}
-          </Alert>
         {{/if}}
       {{/if}}
     </section>
@@ -393,8 +362,8 @@ interface AutomationGlanceSignature {
   Args: { automation: Automation };
 }
 
-// One automation in the realm config's list: name, state, and one line on
-// what happens next.
+// One automation whose card doesn't load: name, state, and one line on what
+// happens next.
 class AutomationGlance extends GlimmerComponent<AutomationGlanceSignature> {
   private get look() {
     return automationStateLook(this.args.automation);
@@ -448,243 +417,183 @@ class AutomationGlance extends GlimmerComponent<AutomationGlanceSignature> {
   </template>
 }
 
-interface AutomationsConsoleSignature {
-  Args: ReaderSignature['Args'];
+interface AutomationSlotSignature {
+  Args: {
+    automation: Automation;
+    context: CardContext | undefined;
+  };
 }
 
-// The automations console's list: each automation in full, with its
-// triggers, next run in the viewer's own time, payer, monthly cap and this
-// month's spend, last result, and the milestone a running automation is in.
-export class AutomationsConsole extends AutomationsReader<AutomationsConsoleSignature> {
-  private rowLabel = (automation: Automation) => automationTitle(automation);
+// One automation as the Automation card's own fitted view. A card that
+// doesn't load (a switched-on automation whose card the index lacks, say)
+// shows a one-line summary from the realm's list instead.
+class AutomationSlot extends GlimmerComponent<AutomationSlotSignature> {
+  private cardResource = this.args.context?.getCard(
+    this,
+    () => this.args.automation.id,
+  );
+
+  private get card() {
+    return this.cardResource?.card;
+  }
 
   <template>
-    <div
-      class='automations-console'
-      data-test-automations-console
-      {{this.follow @realm}}
-    >
-      {{#if this.visible}}
-        {{#if this.loadError}}
-          <Alert
-            @tone='danger'
-            @title='Boxel couldn’t read the automations'
-            data-test-automations-console-error
-          >
-            {{this.loadError}}
-          </Alert>
-        {{else if this.automations.length}}
-          <List
-            @items={{this.automations}}
-            @label='Automations'
-            @rowLabel={{this.rowLabel}}
-            data-test-automations-console-list
-          >
-            <:item as |automation|>
-              <AutomationDetail @automation={{automation}} />
-            </:item>
-          </List>
-        {{else}}
-          <EmptyState
-            @title='No automations'
-            data-test-automations-console-empty
-          >
-            This workspace has no automation cards. Ask the AI assistant to
-            write an automation, and Boxel lists the automation here.
-          </EmptyState>
-        {{/if}}
-      {{else if this.known}}
-        <Alert
-          @tone='info'
-          @title='Only workspace administrators see automations'
-          data-test-automations-console-not-visible
-        >
-          A person who directly edits this workspace sees each automation, who
-          pays for the automation, and the automation’s runs.
-        </Alert>
+    <div class='slot' data-test-automation-slot={{@automation.id}}>
+      {{#if this.card}}
+        {{#let (getComponent this.card) as |Card|}}
+          <Card
+            class='fitted'
+            @format='fitted'
+            @displayContainer={{true}}
+            data-test-automation-slot-fitted
+          />
+        {{/let}}
       {{else}}
-        <Spinner aria-label='Reading the automations' />
+        <AutomationGlance @automation={{@automation}} />
       {{/if}}
     </div>
     <style scoped>
-      .automations-console {
-        display: grid;
-        gap: var(--boxel-sp);
+      .slot {
+        container-type: inline-size;
+      }
+      /* The section's slot: as wide as the section, and tall enough for the
+         card's state, first trigger, milestones, payer, spend and limits. */
+      .fitted {
+        inline-size: 100%;
+        block-size: 6.5625rem;
       }
     </style>
   </template>
 }
 
-interface AutomationDetailSignature {
-  Args: { automation: Automation };
+interface NewAutomationFormSignature {
+  Args: {
+    realm: string | undefined;
+    context: CardContext | undefined;
+    // Called when the person cancels, or once the new card opens.
+    onDone: () => void;
+  };
 }
 
-class AutomationDetail extends GlimmerComponent<AutomationDetailSignature> {
-  private get look() {
-    return automationStateLook(this.args.automation);
+// Makes a new automation in the realm through the Automation type's
+// `newAutomation` operation, which takes only the automation's name, then
+// opens the new card in its edit view, where the person writes the script,
+// the triggers and the limits.
+class NewAutomationForm extends GlimmerComponent<NewAutomationFormSignature> {
+  @tracked private name = '';
+  @tracked private error: string | undefined;
+
+  private get nameMissing() {
+    return !this.name.trim();
   }
 
-  private get attributes() {
-    return this.args.automation.attributes;
-  }
+  private cancel = () => {
+    this.args.onDone();
+  };
 
-  private get statusText() {
-    let running = runningText(this.args.automation);
-    if (running) {
-      return running;
+  private setName = (value: string) => {
+    this.name = value;
+  };
+
+  private create = task(async () => {
+    let toolContext = this.args.context?.toolContext;
+    let realm = this.args.realm;
+    let name = this.name.trim();
+    if (!toolContext || !realm || !name) {
+      return;
     }
-    return this.attributes.switchedOn && this.attributes.state === 'paused'
-      ? pausedBecause(this.args.automation)
-      : undefined;
-  }
-
-  private get nextRun() {
-    return this.attributes.nextRun ?? undefined;
-  }
-
-  private get nextRunText() {
-    if (!this.attributes.switchedOn) {
-      return 'None while the automation is off';
+    this.error = undefined;
+    try {
+      let result = await new InvokeCardOperationTool(toolContext).execute({
+        type: AUTOMATION_TYPE,
+        operation: NEW_AUTOMATION_OPERATION,
+        realm,
+        payload: { name },
+      });
+      if (!result.cardId) {
+        throw new Error('The workspace made no automation card');
+      }
+      await new ShowCardTool(toolContext).execute({
+        cardId: result.cardId,
+        format: 'edit',
+      });
+      this.args.onDone();
+    } catch (err) {
+      this.error = errorText(err);
     }
-    if (this.attributes.state === 'paused') {
-      return 'None while paused';
-    }
-    return this.attributes.nextRun ? undefined : 'None';
-  }
+  });
 
-  private get items() {
-    return [
-      { key: 'triggers', label: 'Triggers', span: 'fill' as const },
-      { key: 'next-run', label: 'Next run' },
-      { key: 'payer', label: 'Payer', value: payerText(this.args.automation) },
-      {
-        key: 'spend',
-        label: 'Spending',
-        value: spendText(this.args.automation),
-      },
-      { key: 'last-run', label: 'Last run' },
-    ];
-  }
+  private submit = (event: Event) => {
+    event.preventDefault();
+    this.create.perform();
+  };
 
   <template>
-    <div
-      class='automation'
-      data-test-automations-console-automation={{@automation.id}}
-    >
-      <Item
-        @title={{automationTitle @automation}}
-        @wrap={{true}}
-        @alignStart={{true}}
+    <div class='new-automation' data-test-new-automation>
+      <Form
+        @label='New automation'
+        @busy={{this.create.isRunning}}
+        @onSubmit={{this.submit}}
+        data-test-new-automation-form
       >
-        <:description>
-          {{#if this.statusText}}
-            <span
-              data-test-automations-console-status
-            >{{this.statusText}}</span>
-          {{/if}}
-        </:description>
-        <:trailing>
-          <Chip
-            @tone={{this.look.tone}}
-            @dot={{this.look.dot}}
-            data-test-automations-console-state={{this.look.label}}
+        <:default>
+          <FormField
+            @label='Name'
+            @required={{true}}
+            @description='Boxel makes the automation card, then opens the card so you can write the script, the triggers and the limits.'
           >
-            {{#if this.attributes.currentRun}}
-              <Spinner @size='xs' aria-hidden='true' />
-            {{/if}}
-            {{this.look.label}}
-          </Chip>
-        </:trailing>
-      </Item>
-      <Descriptions @items={{this.items}} @columns={{2}} @size='s'>
-        <:value as |item|>
-          {{#if (isKey item 'triggers')}}
-            {{#if this.attributes.triggers.length}}
-              <ul class='triggers' data-test-automations-console-triggers>
-                {{#each this.attributes.triggers as |trigger|}}
-                  <li class='trigger'>
-                    <span class='trigger-label'>{{trigger.label}}</span>
-                    <span class='trigger-kind'>{{triggerKindText
-                        trigger
-                      }}</span>
-                    {{#if trigger.expression}}
-                      <Token @value={{trigger.expression}} />
-                    {{/if}}
-                    {{#if trigger.date}}
-                      <span>{{trigger.date}}
-                        {{trigger.time}}</span>
-                    {{/if}}
-                    {{#if trigger.timeZone}}
-                      <span class='trigger-zone'>{{trigger.timeZone}}</span>
-                    {{/if}}
-                    {{#if trigger.webhookPath}}
-                      <Token @value={{trigger.webhookPath}} />
-                    {{/if}}
-                  </li>
-                {{/each}}
-              </ul>
-            {{else}}
-              No triggers
-            {{/if}}
-          {{else if (isKey item 'next-run')}}
-            {{#if this.nextRunText}}
-              {{this.nextRunText}}
-            {{else}}
-              <FormatDate
-                @date={{this.nextRun}}
-                @dateStyle='medium'
-                @timeStyle='short'
-                data-test-automations-console-next-run
+            <:control as |ctx|>
+              <Input
+                @controlId={{ctx.id}}
+                @describedBy={{ctx.describedBy}}
+                @value={{this.name}}
+                @onInput={{this.setName}}
+                placeholder='Weekly digest'
+                data-test-new-automation-name
               />
-            {{/if}}
-          {{else if (isKey item 'last-run')}}
-            <span data-test-automations-console-last-result>
-              {{lastResultText @automation}}
-            </span>
-            {{#if this.attributes.lastFinishedAt}}
-              <FormatDate
-                @date={{this.attributes.lastFinishedAt}}
-                @dateStyle='medium'
-                @timeStyle='short'
-              />
-            {{/if}}
-          {{else}}
-            <span data-test-automations-console-value={{item.key}}>
-              {{item.value}}
-            </span>
+            </:control>
+          </FormField>
+          {{#if this.error}}
+            <Alert
+              @tone='danger'
+              @title='Boxel couldn’t make the automation'
+              data-test-new-automation-error
+            >
+              {{this.error}}
+            </Alert>
           {{/if}}
-        </:value>
-      </Descriptions>
+        </:default>
+        <:footer>
+          <div class='actions'>
+            <Button
+              @variant='secondary'
+              {{on 'click' this.cancel}}
+              data-test-new-automation-cancel
+            >
+              Cancel
+            </Button>
+            <Button
+              @variant='primary'
+              type='submit'
+              @busy={{this.create.isRunning}}
+              @disabled={{this.nameMissing}}
+              data-test-new-automation-create
+            >
+              Create automation
+            </Button>
+          </div>
+        </:footer>
+      </Form>
     </div>
     <style scoped>
-      .automation {
+      .new-automation {
         display: grid;
-        gap: var(--boxel-sp-xs);
       }
-      .triggers {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: var(--boxel-sp-5xs);
-      }
-      .trigger {
+      .actions {
         display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: var(--boxel-sp-4xs);
-      }
-      .trigger-label {
-        font-weight: 600;
-      }
-      .trigger-kind,
-      .trigger-zone {
-        color: var(--muted-foreground);
+        justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
       }
     </style>
   </template>
-}
-
-function isKey(item: { key?: string }, key: string): boolean {
-  return item.key === key;
 }
