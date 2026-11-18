@@ -168,6 +168,12 @@ export default class RenderRoute extends Route<Model> {
   // beforeModel entry — the error-path fallback of last resort for deps
   // derivation (see beforeModel).
   #lastAttemptedCardId: string | undefined;
+  // The card id the runtime dependency tracking session was begun for, by
+  // this route's model hook. The tracker is module-global and keeps the last
+  // session's dependencies until another session begins, so an error raised
+  // before this card's model hook (a pre-model failure) must not take the
+  // tracker's contents as its own — they are the previous card's.
+  #runtimeDepsCardId: string | undefined;
   private lastRenderErrorSignature: string | undefined;
   #windowListenersAttached = false;
   #cardTypeTracker = new RenderCardTypeTracker();
@@ -275,6 +281,7 @@ export default class RenderRoute extends Route<Model> {
     this.#restoreRenderTimers = undefined;
     this.#releaseTimerBlock?.();
     this.#releaseTimerBlock = undefined;
+    this.#runtimeDepsCardId = undefined;
     endRuntimeDependencyTrackingSession();
   }
 
@@ -446,6 +453,7 @@ export default class RenderRoute extends Route<Model> {
     if (existing) {
       return await existing;
     }
+    this.#runtimeDepsCardId = this.#normalizeCardId(id);
     beginRuntimeDependencyTrackingSession({
       sessionKey: key,
       // Canonicalized to the same form the tracked consumers carry. The route's
@@ -1838,9 +1846,23 @@ export default class RenderRoute extends Route<Model> {
     renderError: RenderError,
     fallbackDeps: string[],
   ): RenderError {
-    let runtimeDeps = snapshotRuntimeDependencies({
-      excludeQueryOnly: true,
-    }).deps;
+    // The tracker's contents belong to this error only when this route began
+    // the session for the card the failing transition was rendering. A
+    // failure before that card's model hook finds either no session from this
+    // route or the previous card's, whose dependencies would be attributed to
+    // this card's error row.
+    let attemptedCardId = this.#lastAttemptedCardId
+      ? this.#normalizeCardId(this.#lastAttemptedCardId)
+      : undefined;
+    let sessionIsThisCards =
+      this.#runtimeDepsCardId !== undefined &&
+      (attemptedCardId === undefined ||
+        attemptedCardId === this.#runtimeDepsCardId);
+    let runtimeDeps = sessionIsThisCards
+      ? snapshotRuntimeDependencies({
+          excludeQueryOnly: true,
+        }).deps
+      : [];
     let mergedDeps = [
       ...new Set([...(renderError.error.deps ?? []), ...runtimeDeps]),
     ];
