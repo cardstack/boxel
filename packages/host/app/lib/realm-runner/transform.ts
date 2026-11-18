@@ -1,3 +1,4 @@
+import { SKILLS_REALM_PREFIX } from '@cardstack/runtime-common';
 import { isPlainObject } from '@cardstack/runtime-common/is-plain-object';
 
 import { jsonBytes } from './research';
@@ -156,6 +157,10 @@ export function transformRequest(
   };
 }
 
+// The skill that teaches the dialect. A program that fails is most often
+// written without it, so each error the program itself caused names it.
+const TRANSFORM_SKILL_HINT = `Before the next program, read the realm.transform section of ${SKILLS_REALM_PREFIX}source-code-editing/SKILL.md: it has the spelling, what a transform may not do, and the limits.`;
+
 function transformError(
   message: string,
   phase: 'parse' | 'profile' | 'evaluate' | undefined,
@@ -164,17 +169,17 @@ function transformError(
   switch (phase) {
     case 'parse':
       return new SyntaxError(
-        `realm.transform: the program does not parse: ${message}`,
+        `realm.transform: the program does not parse: ${message}\n${TRANSFORM_SKILL_HINT}`,
       );
     case 'profile':
       return new Error(
-        `realm.transform: the program uses what a transform may not:\n${message}`,
+        `realm.transform: the program uses what a transform may not:\n${message}\n${TRANSFORM_SKILL_HINT}`,
       );
     case 'evaluate':
       // The evaluator's message names the operation, not the value it met,
       // so the error says what the input was.
       return new Error(
-        `realm.transform: the program failed: ${message.replace(/\.$/, '')}. The input is ${inputShape}.`,
+        `realm.transform: the program failed: ${message.replace(/\.$/, '')}. The input is ${inputShape}.\n${TRANSFORM_SKILL_HINT}`,
       );
     default:
       return new Error(`realm.transform failed: ${message}`);
