@@ -105,18 +105,24 @@ const ESCAPED_COLON = /%3A/i;
  */
 export function parsePathPrefix(source: string): ParsePathPrefixResult {
   if (source === '') {
-    return fail(
-      source,
-      'empty-prefix',
-      'A path prefix can\'t be empty. Write "/" for the whole realm.',
-    );
+    return {
+      ok: false,
+      error: failure(
+        source,
+        'empty-prefix',
+        'A path prefix can\'t be empty. Write "/" for the whole realm.',
+      ),
+    };
   }
   if (source.trim() !== source) {
-    return fail(
-      source,
-      'surrounding-whitespace',
-      `Path prefix "${source}" starts or ends with whitespace.`,
-    );
+    return {
+      ok: false,
+      error: failure(
+        source,
+        'surrounding-whitespace',
+        `Path prefix "${source}" starts or ends with whitespace.`,
+      ),
+    };
   }
   let rest = source.startsWith('/') ? source.slice(1) : source;
   if (rest === '') {
@@ -345,12 +351,4 @@ function failure(
     source,
     ...(segmentIndex === undefined ? {} : { segmentIndex }),
   };
-}
-
-function fail(
-  source: string,
-  code: PathPrefixErrorCode,
-  message: string,
-): { ok: false; error: PathPrefixError } {
-  return { ok: false, error: failure(source, code, message) };
 }
