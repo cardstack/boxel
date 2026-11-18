@@ -1359,6 +1359,8 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 //   the whole realm at once: every type it holds, every file's modification
 //   time, and every card's indexing state. A grant reaches a card, not the
 //   realm.
+// - `_host-routes` answers the realm's whole validated route tree, which is
+//   as visible as the realm and names no one card.
 // - `_dependencies`, `_card-dependencies` and `_lint` analyze the realm's
 //   modules for code mode, which a caller works in only with the realm's own
 //   read.
@@ -3980,6 +3982,14 @@ export class Realm {
         '/_indexing-errors',
         SupportedMimeType.JSONAPI,
         this.indexingErrors.bind(this),
+        ACL_ONLY,
+      )
+      // The realm's validated host routes, which answer for the whole realm
+      // at once, so they are answered on the realm ACL alone too.
+      .get(
+        '/_host-routes',
+        SupportedMimeType.JSON,
+        this.hostRoutes.bind(this),
         ACL_ONLY,
       )
       .get(
@@ -21322,6 +21332,33 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
+  // The realm's validated host route tree, as `getHostRoutes` gives it and
+  // as a host page gets it in `hostDynamicRoutes`, so a reader resolves a
+  // path or works out an address without validating anything again. It is
+  // always the whole tree: a route whose type can't be read now is in it as
+  // an unavailable route, which a reader resolves to an error and at which
+  // the address walk stops. The validation's warnings are for the server's
+  // log, not for a reader.
+  private async hostRoutes(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let { routes } = await this.getHostRoutes();
+    return createResponse({
+      body: JSON.stringify({ routes }),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          // The tree changes when the realm is indexed, and when an
+          // unavailable route's type can be read again, and carries no
+          // validator a cache could ask with.
+          'cache-control': 'no-store',
+        },
       },
       requestContext,
     });
