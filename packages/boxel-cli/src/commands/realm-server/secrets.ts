@@ -4,7 +4,11 @@ import { FG_GREEN, RESET } from '../../lib/colors.ts';
 import { readKeyValue } from '../../lib/key-value.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import { operatorRequest } from '../../lib/seed-auth.ts';
-import { readNote, type SystemKeysOptions } from './keys.ts';
+import {
+  checkChangeSources,
+  readNote,
+  type SystemKeysOptions,
+} from './keys.ts';
 
 // `boxel realm-server secrets`: the realm server's platform secrets, the
 // secrets the platform keeps and only reads, such as the secret that verifies
@@ -130,6 +134,8 @@ function output(json: boolean | undefined, value: unknown, print: () => void) {
   }
 }
 
+const SECRET_NOUN = 'secret value';
+
 /**
  * The secret's value for `set`, from `--key-file`, `--stdin`, or a masked
  * prompt that reveals nothing of it after Enter: a platform secret is never
@@ -139,7 +145,7 @@ export async function readSecretValue(
   source: { stdin?: boolean; keyFile?: string },
   io: { input?: NodeJS.ReadStream; output?: NodeJS.WritableStream } = {},
 ): Promise<string> {
-  return readKeyValue(source, { ...io, revealLast: 0, noun: 'secret value' });
+  return readKeyValue(source, { ...io, revealLast: 0, noun: SECRET_NOUN });
 }
 
 const NOTE_HELP =
@@ -205,6 +211,7 @@ export function registerSecretsCommand(realmServer: Command): void {
     .option('--json', 'Output JSON')
     .action(async (options: SecretsCliOptions) =>
       run(async () => {
+        checkChangeSources(options, { value: true, noun: SECRET_NOUN });
         let seed = await seedOptions(options);
         let value = await readSecretValue(options);
         let note = await readNote(options.note, {
@@ -232,6 +239,7 @@ export function registerSecretsCommand(realmServer: Command): void {
     .option('--json', 'Output JSON')
     .action(async (options: SecretsCliOptions) =>
       run(async () => {
+        checkChangeSources(options, { value: false });
         let seed = await seedOptions(options);
         let note = await readNote(options.note, { stdinUsed: false });
         let secret = await deletePlatformSecret(seed, options.name!, { note });
