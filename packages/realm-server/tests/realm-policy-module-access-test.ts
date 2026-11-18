@@ -320,6 +320,34 @@ module(basename(import.meta.filename), function () {
     );
   });
 
+  test("the realm's first card of a type it defines brings the warning to a cached policy, and a card of another realm's type does not recompile it", async function (assert) {
+    let held: Held = [SHARED_NOTE];
+    let { cache } = setup(
+      [{ on: CARD_DEF, grants: [{ operation: 'read', where: READERS }] }],
+      held,
+    );
+    assert.deepEqual(moduleIssues((await cache.get())!), []);
+
+    held.push(FILE_DEF);
+    cache.indexMoved(GOVERNED);
+    assert.deepEqual(moduleIssues((await cache.get())!), []);
+    assert.strictEqual(
+      cache.stats.compiles,
+      1,
+      'a card of a type the realm does not define is revalidated, not compiled',
+    );
+
+    held.push(NOTE);
+    cache.indexMoved(GOVERNED);
+    let policy = (await cache.get())!;
+    assert.strictEqual(cache.stats.compiles, 2, 'compiled again');
+    assert.deepEqual(
+      moduleIssues(policy).map(({ path }) => path),
+      ['rules[0].grants[0]'],
+    );
+    assert.ok(moduleIssues(policy)[0].message.includes('`notes/note`'));
+  });
+
   test('a policy whose code grant covers every caller reads no card', async function (assert) {
     let { cache, state } = setup([
       { on: CARD_DEF, grants: [{ operation: 'read', where: READERS }] },

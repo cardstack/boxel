@@ -27,9 +27,9 @@ import type { CompiledOperationGrant, CompiledPolicyRule } from './policy.ts';
 // another realm defines, `CardDef` say, reaches the governed realm's code
 // through the cards it holds of types under that one, so those are read too,
 // and only for a policy no code grant covers. They are read only where the
-// realm's summary of its cards holds a type the realm defines. A realm that
-// holds none yet has its first such card noticed when the policy next
-// compiles, which a `validate` always does.
+// realm's summary of its cards holds a type the realm defines. A policy
+// compiled while the realm holds none is compiled again once it holds one, so
+// the warning arrives with the realm's first such card.
 //
 // It is a diagnostic, and it doesn't evaluate a code grant's `where`: a live
 // `readSource` grant on a code type counts as covering the realm's modules for

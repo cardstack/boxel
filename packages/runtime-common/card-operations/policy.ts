@@ -788,6 +788,11 @@ interface Compilation {
   // and one that reads it again and finds it unchanged records the keys it
   // read.
   heldTypes?: string;
+  // Set where the code check would have judged a rule by the realm's own
+  // types under it, and the realm's `instanceTypeKeys` held no type it
+  // defines, so nothing under the rule was read. A revalidation that finds
+  // the realm holding a card of a type it defines compiles again.
+  awaitingLocalType?: true;
 }
 
 interface DefinitionInput {
@@ -861,6 +866,14 @@ async function stillCurrent(
     if (current !== fingerprint) {
       return false;
     }
+  }
+  if (
+    compilation.awaitingLocalType &&
+    (await env.instanceTypeKeys()).some(
+      (key) => localModuleOf(key, env) !== undefined,
+    )
+  ) {
+    return false;
   }
   if (compilation.subtypes.length > 0) {
     // Read before the types under each rule, so a card of a new type landing
@@ -1055,6 +1068,7 @@ async function compileDocument(
   let inputs = [card];
   let subtypes: Compilation['subtypes'] = [];
   let heldTypes: string | undefined;
+  let awaitingLocalType: true | undefined;
   let rules: CompiledPolicyRule[] = [];
   // The paths of the grants whose `where` can never hold for a signed-in
   // caller, as `actor() == "anonymous"` can't.
@@ -1079,6 +1093,7 @@ async function compileDocument(
     inputs,
     subtypes,
     heldTypes,
+    ...(awaitingLocalType ? { awaitingLocalType } : {}),
   });
   // The policy as a whole did not compile, for the reason recorded. It has no
   // rules.
@@ -1821,13 +1836,10 @@ async function compileDocument(
   // that renders the cards. The types the realm holds cards of under a rule's
   // type are read only where the realm's summary of its cards holds a type the
   // realm defines, and are an input from the moment they are read, as for a
-  // filter's misreading types.
-  let governed = new RealmPaths(new URL(env.realmURL));
-  let localModule = (key: string) => {
-    let module = heldTypeModule(key);
-    let url = module ? attempt(() => env.toURL(module)) : undefined;
-    return url && governed.inRealm(url) ? governed.local(url) : undefined;
-  };
+  // filter's misreading types. A summary holding none is recorded instead, and
+  // the realm is an input either way, so the realm's first card of a type it
+  // defines compiles the policy again.
+  let localModule = (key: string) => localModuleOf(key, env);
   let summary: Promise<string[]> | undefined;
   let moduleRules: ModuleAccessRule[] = [];
   for (let rule of rules) {
@@ -1856,14 +1868,15 @@ async function compileDocument(
       if (read) {
         return read.keys;
       }
-      summary ??= env.instanceTypeKeys();
-      let held = await summary;
-      if (!held.some((key) => localModule(key) !== undefined)) {
-        return [];
-      }
       if (!inputs.includes(env.realmURL)) {
         inputs.push(env.realmURL);
         onInput(env.realmURL);
+      }
+      summary ??= env.instanceTypeKeys();
+      let held = await summary;
+      if (!held.some((key) => localModule(key) !== undefined)) {
+        awaitingLocalType = true;
+        return [];
       }
       heldTypes ??= held.join('\n');
       let keys = await env.instanceTypesUnder(codeRef);
@@ -1875,6 +1888,18 @@ async function compileDocument(
     issue(found.code, found.path, found.message);
   }
   return compiled();
+}
+
+// The module a type key names, as a path in the governed realm, where that
+// realm defines it. Undefined for a module another realm serves.
+function localModuleOf(
+  key: string,
+  env: Pick<PolicyCompileEnvironment, 'toURL' | 'realmURL'>,
+): string | undefined {
+  let module = heldTypeModule(key);
+  let url = module ? attempt(() => env.toURL(module)) : undefined;
+  let governed = new RealmPaths(new URL(env.realmURL));
+  return url && governed.inRealm(url) ? governed.local(url) : undefined;
 }
 
 // The module a type key names: the module that defines the type, which for an
