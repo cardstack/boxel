@@ -30,7 +30,7 @@ the module exposes rather than parse the strings again. A lowering MUST match
 a prefix's `path` literally: an SQL lowering MUST escape `LIKE`'s `%`, `_` and
 `\` and compare against the form the index stores a path in, and a `git`
 lowering MUST pass literal pathspecs (`--literal-pathspecs`), since a valid
-`path` can hold `%`, `_`, `*`, `[` and `]`. A `.gitignore` file
+`path` can hold `%`, `_`, `*`, `:`, `[` and `]`. A `.gitignore` file
 keeps git's own pattern syntax: it says which files a realm leaves out, not
 which paths a grant, a search or a read covers.
 
@@ -52,21 +52,21 @@ A prefix MUST be literal: matching it MUST NOT read the caller, a target or the
 realm's settings, or evaluate anything. `*` and `:` MUST be refused as written,
 so that a pattern form can be added later without changing what any existing
 specifier means. A later pattern form MAY match path shapes, but MUST NOT bind
-values. `%2A` names a literal `*`, but `:` has no escape: `%3A` stays encoded,
-as it does in a resolved path. So a file whose name holds `:` can be covered
-only by a prefix for a directory above it.
+values. Their escapes name them literally, `%2A` a `*` and `%3A` a `:`, so a
+prefix can name a file whose name holds either one.
 
 ### 1.4. Matching
 
 A specifier MUST be matched against the path as the realm resolves it
 (`RealmPaths.local`), never as a caller spelled it. A prefix's percent-escapes
-MUST be decoded once, with `decodeURI`, which leaves the escapes of URL
-delimiters such as `%3A` encoded, as they are in a resolved path. Matching MUST
-compare whole decoded segments, case-sensitively and with no Unicode
-normalization, so `blog/` never matches `blog-old/` or `blog.json`. It MUST
-run in time linear in the lengths of the path and the prefixes, and MUST NOT
-compile an authored string into a regular expression, as ADR 015 §1.3 requires
-for routes.
+MUST be decoded once, as `decodeURI` decodes them, so a prefix names the path a
+URL spelled the same way resolves to, except that `%3A` MUST decode to `:`. The
+escapes of the other URL delimiters, such as `%2F` and `%3F`, stay encoded, as
+they are in a resolved path. Matching MUST compare whole decoded segments,
+case-sensitively and with no Unicode normalization, so `blog/` never matches
+`blog-old/` or `blog.json`. It MUST run in time linear in the lengths of the
+path and the prefixes, and MUST NOT compile an authored string into a regular
+expression, as ADR 015 §1.3 requires for routes.
 
 ### 1.5. Validation
 
@@ -131,9 +131,12 @@ that remains after dropping it means everywhere.
 - **Matching the caller's spelling of a path, or folding case.** Either one
   lets a prefix admit paths its author didn't name.
 - **Decoding every escape, `decodeURIComponent`-style.** The realm leaves the
-  escapes of URL delimiters such as `%3A` encoded when it resolves a file path,
-  so a prefix decoded that way could name a different file than a URL with the
-  same path.
+  escapes of URL delimiters such as `%2F` and `%3F` encoded when it resolves a
+  file path, so a prefix decoded that way could name a different file than a
+  URL with the same path.
+- **Leaving `%3A` encoded, as `decodeURI` does.** A realm stores a `:` in a
+  file name as is, as in `notes re: budget.m4a`, and resolves it from a URL as
+  is. With `:` as written reserved, no prefix could name that file.
 - **Storing the prefixes as `containsMany(StringField)`.** Its default editor
   accepts an empty or invalid entry without a warning, its empty view hides that
   the specifier then means everywhere, and nothing refuses a malformed value.

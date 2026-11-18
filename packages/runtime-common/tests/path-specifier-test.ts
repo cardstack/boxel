@@ -91,18 +91,27 @@ const tests: SharedTests<unknown> = Object.freeze({
       assert.strictEqual(prefix('/blog').path, 'blog');
     },
 
-  'parsePathPrefix: decodes percent-escapes once, with decodeURI': async (
-    assert,
-  ) => {
+  'parsePathPrefix: decodes percent-escapes once': async (assert) => {
     assert.deepEqual(prefix('My%20Posts/').segments, ['My Posts']);
     assert.deepEqual(prefix('My Posts/').segments, ['My Posts']);
     assert.deepEqual(prefix('caf%C3%A9/').segments, ['café']);
     assert.deepEqual(prefix('café/').segments, ['café']);
     assert.deepEqual(prefix('100%25.json').segments, ['100%.json']);
-    // `decodeURI` leaves the escapes of URL delimiters as they are, as it
-    // does for the path of a file the realm stores.
+    // The escapes of URL delimiters stay as they are, as they do in the path
+    // of a file the realm stores.
     assert.deepEqual(prefix('a%2Fb/').segments, ['a%2Fb']);
     assert.deepEqual(prefix('a%3Fb/').segments, ['a%3Fb']);
+    // `:` as written is reserved, so its escape names it.
+    assert.deepEqual(prefix('notes re%3A budget.m4a').segments, [
+      'notes re: budget.m4a',
+    ]);
+    assert.deepEqual(prefix('a%3ab/').segments, ['a:b']);
+    assert.strictEqual(prefix('notes/a%3Ab.json').path, 'notes/a:b.json');
+    assert.deepEqual(
+      prefix('a%253Ab/').segments,
+      ['a%3Ab'],
+      'an escaped % before 3A is decoded once',
+    );
     assert.strictEqual(prefix('My%20Posts/').source, 'My%20Posts/');
   },
 
@@ -262,8 +271,21 @@ const tests: SharedTests<unknown> = Object.freeze({
         isFile(specifier('My Posts/'), local('My%20Posts/Post/1.json')),
       );
       assert.true(
-        isFile(specifier('a%3Ab/'), local('a%3Ab/x.json')),
+        isFile(specifier('a%2Fb/'), local('a%2Fb/x.json')),
         'a delimiter escape stays encoded on both sides',
+      );
+      // A realm resolves a `:` in a URL's path as is, and a prefix names it
+      // with `%3A`.
+      assert.strictEqual(local('notes/a:b.json'), 'notes/a:b.json');
+      assert.true(
+        isFile(specifier('notes/a%3Ab.json'), local('notes/a:b.json')),
+      );
+      assert.false(
+        isFile(specifier('notes/a%3Ab.json'), local('notes/a%3Ab.json')),
+        'a URL that escapes the colon resolves to a different path',
+      );
+      assert.true(
+        isFile(specifier('notes/a%253Ab.json'), local('notes/a%3Ab.json')),
       );
     },
 

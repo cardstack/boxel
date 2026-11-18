@@ -13,9 +13,13 @@
 //
 // A prefix is relative to the root of the realm it is applied to. A leading
 // `/` is optional, and a trailing `/` makes it a directory. Its
-// percent-escapes are decoded once, with `decodeURI`, which leaves the escapes
-// of URL delimiters such as `%3A` and `%2F` encoded, as they are in a path
-// `RealmPaths.local` resolves. `%2E%2E` is therefore `..`, and is refused like
+// percent-escapes are decoded once, as `decodeURI` decodes them, so a prefix
+// names the path that a URL spelled the same way resolves to: `%20` is a
+// space, and the escapes of URL delimiters such as `%2F` and `%3F` stay
+// encoded, as they are in a path `RealmPaths.local` resolves. The exception is
+// `%3A`, which decodes to `:`. A realm stores a `:` in a file name as is
+// (`notes re: budget.m4a`), and `:` as written is reserved, so `%3A` is how a
+// prefix names it, as `%2A` names a `*`. `%2E%2E` is `..`, and is refused like
 // `..`.
 //
 // Matching compares decoded segments one at a time, case-sensitively and with
@@ -35,7 +39,7 @@ export interface PathPrefix {
   // The decoded realm-relative path: `blog/drafts/` for a directory,
   // `blog/post-1.json` for a file, and `''` for the whole realm. Search and
   // history lower a prefix from this rather than from `source`, and must
-  // match it literally: it can hold `%`, `_`, `*`, `[` and `]`. An SQL
+  // match it literally: it can hold `%`, `_`, `*`, `:`, `[` and `]`. An SQL
   // lowering escapes `LIKE`'s `%`, `_` and `\` and compares against the form
   // the index stores a path in; a `git` lowering passes literal pathspecs.
   path: string;
@@ -55,7 +59,7 @@ export type PathPrefixErrorCode =
   | 'empty-segment'
   // A `.` or `..` segment, as written or percent-encoded.
   | 'dot-segment'
-  // `*` or `:`, which are reserved for a pattern form.
+  // `*` or `:` as written, which are reserved for a pattern form.
   | 'reserved-character'
   // A backslash (as written or percent-encoded), `?`, `#`, a control
   // character, or a lone UTF-16 surrogate.
@@ -90,6 +94,7 @@ export type ParsePathSpecifierResult =
 const CONTROL_CHARACTER = /[\u0000-\u001F\u007F]/;
 const LONE_SURROGATE =
   /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+const ESCAPED_COLON = /%3A/i;
 
 /**
  * Parses one prefix of a path specifier, such as `blog/`, `/blog/post-1.json`
@@ -276,7 +281,7 @@ function parseSegment(
   if (raw.includes('*') || raw.includes(':')) {
     return error(
       'reserved-character',
-      `Path prefix "${source}" uses * or :, which are reserved for path patterns.`,
+      `Path prefix "${source}" uses * or :, which are reserved for path patterns. Write %2A for a literal * and %3A for a literal :.`,
     );
   }
   if (raw.includes('?') || raw.includes('#')) {
@@ -293,7 +298,13 @@ function parseSegment(
   }
   let decoded: string;
   try {
-    decoded = decodeURI(raw);
+    // `decodeURI` keeps `%3A` encoded, so it is decoded here, in the same
+    // pass. Each `%` in a valid segment starts an escape, so `%3A` is only
+    // ever a whole escape, and `%253A` still decodes to `%3A`.
+    decoded = raw
+      .split(ESCAPED_COLON)
+      .map((part) => decodeURI(part))
+      .join(':');
   } catch {
     return error(
       'invalid-escape',
