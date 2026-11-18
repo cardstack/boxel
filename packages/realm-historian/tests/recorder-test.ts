@@ -1032,6 +1032,43 @@ module('recorder', (hooks) => {
     );
   });
 
+  test('two supersessions of a path that writes changing nothing have each settled stay settled across a restart', async (assert) => {
+    let first = recorder();
+    await recordInitial(first);
+    // Bob puts the first content back before each AI patch is captured: each
+    // patch is superseded, and each of Bob's writes changes nothing at HEAD,
+    // so it records no revision and settles the patch before it.
+    let firstPatch = await aiPatch('tool-call-1', '{"v":"ai-1"}', 0);
+    let firstRestore = await event({
+      author: BOB,
+      changes: [await put(PATH, '{"v":"initial"}')],
+      occurredAt: at(300),
+    });
+    await feed(first, [firstPatch, firstRestore], T0 + 300 + quietPeriodMs);
+    let secondPatch = await aiPatch('tool-call-2', '{"v":"ai-2"}', 600);
+    let secondRestore = await event({
+      author: BOB,
+      changes: [await put(PATH, '{"v":"initial"}')],
+      occurredAt: at(900),
+    });
+    await feed(first, [secondPatch, secondRestore], T0 + 900 + quietPeriodMs);
+    await first.stop();
+    let restarted = recorder();
+    let thirdPatch = await aiPatch('tool-call-3', '{"v":"ai-3"}', 1200);
+    await feed(restarted, [thirdPatch], T0 + 1200 + quietPeriodMs);
+
+    let revisions = await history();
+    assert.strictEqual(revisions.length, 4, "Bob's writes record no revision");
+    let [, firstRevision, secondRevision, thirdRevision] = revisions;
+    assert.deepEqual(firstRevision.trailers.superseded, [PATH]);
+    assert.deepEqual(secondRevision.trailers.superseded, [PATH]);
+    assert.strictEqual(
+      thirdRevision.trailers.includesSuperseded,
+      undefined,
+      "each AI patch was settled by Bob's write after it, so neither is named",
+    );
+  });
+
   test("a failure in the realm's own files stalls the realm without ending the task", async (assert) => {
     let target = recorder();
     let bad = await event({
