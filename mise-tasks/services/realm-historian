@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+#MISE description="Start realm-historian, which records the history of the dev realms"
+#MISE depends=["infra:ensure-pg"]
+#MISE dir="packages/realm-server"
+
+# realm-historian runs from the realm server's directory so that the realms
+# root resolves exactly as the realm server's `--realmsRootPath` does: a
+# source realm's directory is its `disk_id` under that root. The history
+# root sits beside it (REALM_HISTORY_ROOT, from lib/env-vars.sh), and no
+# realm is recorded until its recording is turned on with
+# `packages/realm-historian/scripts/enable.ts`.
+#
+# The dev stacks start this in their second phase, once the realm server
+# answers: realm-historian exits on its first failed query, and on a fresh
+# database its tables exist only after the realm server's `--migrateDB`.
+
+# Propagate the exit status through the trailing `| dev-log-tee.sh`, as
+# services/worker does; bash, because dash rejects `pipefail`.
+set -o pipefail
+
+# A SIGTERM/SIGINT from the stack's shutdown is a clean exit, not a failure.
+# See services/worker.
+trap 'exit 0' INT TERM
+
+LOG_TEE="../observability/scripts/dev-log-tee.sh"
+
+NODE_NO_WARNINGS=1 \
+  PGPORT="${PGPORT}" \
+  PGDATABASE="${PGDATABASE}" \
+  LOG_LEVELS="${LOG_LEVELS:-*=info}" \
+  node ../realm-historian/main.ts \
+  --historyRoot="${REALM_HISTORY_ROOT}" \
+  --realmsRoot="${REALMS_ROOT}" \
+  --port="${REALM_HISTORIAN_PORT}" \
+  2>&1 | "$LOG_TEE" realm-historian

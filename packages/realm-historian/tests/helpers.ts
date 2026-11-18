@@ -83,7 +83,9 @@ export interface TestRealm {
   url: string;
 }
 
-// A source realm with recording on, unless `enabled` says otherwise.
+// A source realm with recording on, unless `enabled` says otherwise. With
+// `stateRow: false` the realm has no `realm_history_state` row, as a realm
+// whose recording was never turned on.
 export async function insertRealm(
   db: DBAdapter,
   {
@@ -92,12 +94,14 @@ export async function insertRealm(
     diskId = 'test-user/test-realm',
     enabled = true,
     cursor = JOURNAL_START,
+    stateRow = true,
   }: {
     url: string;
     kind?: 'source' | 'published' | 'bootstrap';
     diskId?: string;
     enabled?: boolean;
     cursor?: ReadPosition;
+    stateRow?: boolean;
   },
 ): Promise<TestRealm> {
   let [{ id }] = await db.execute(
@@ -112,11 +116,13 @@ export async function insertRealm(
       ],
     },
   );
-  await db.execute(
-    `INSERT INTO realm_history_state (realm_id, enabled, cursor_xid, cursor_seq)
-     VALUES ($1, $2, $3::xid8, $4)`,
-    { bind: [id, enabled, cursor.xid, cursor.seq] },
-  );
+  if (stateRow) {
+    await db.execute(
+      `INSERT INTO realm_history_state (realm_id, enabled, cursor_xid, cursor_seq)
+       VALUES ($1, $2, $3::xid8, $4)`,
+      { bind: [id, enabled, cursor.xid, cursor.seq] },
+    );
+  }
   return { id: id as string, url };
 }
 

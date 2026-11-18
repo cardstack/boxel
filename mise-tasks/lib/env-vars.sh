@@ -174,10 +174,14 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export PRERENDER_MGR_PORT=0
   export ICONS_PORT=0
   export SECURE_PORT=0
+  export REALM_HISTORIAN_PORT=0
 
-  # Paths
+  # Paths. The history root holds realm-historian's repos, beside the realms
+  # it records (see services/realm-historian). A slug has no underscores, so
+  # the suffix can't name another environment's realms.
   export REALMS_ROOT="./realms/${ENV_SLUG}"
   export REALMS_TEST_ROOT="./realms/${ENV_SLUG}_test"
+  export REALM_HISTORY_ROOT="${REALMS_ROOT}_history"
 else
   # Capture previous ENV_MODE before resetting it, so we can detect transitions
   _PREV_ENV_MODE="${ENV_MODE:-}"
@@ -215,10 +219,12 @@ else
     export PRERENDER_MGR_PORT=4222
     export ICONS_PORT=4206
     export SECURE_PORT=4208
+    export REALM_HISTORIAN_PORT=4214
 
     # Paths
     export REALMS_ROOT="./realms/localhost_4201"
     export REALMS_TEST_ROOT="./realms/localhost_4202"
+    export REALM_HISTORY_ROOT="${REALMS_ROOT}_history"
   else
     # Fresh standard mode or non-env-mode shell:
     # use :- so production/staging env vars are not clobbered.
@@ -250,10 +256,12 @@ else
     export PRERENDER_MGR_PORT="${PRERENDER_MGR_PORT:-4222}"
     export ICONS_PORT="${ICONS_PORT:-4206}"
     export SECURE_PORT="${SECURE_PORT:-4208}"
+    export REALM_HISTORIAN_PORT="${REALM_HISTORIAN_PORT:-4214}"
 
     # Paths
     export REALMS_ROOT="${REALMS_ROOT:-./realms/localhost_4201}"
     export REALMS_TEST_ROOT="${REALMS_TEST_ROOT:-./realms/localhost_4202}"
+    export REALM_HISTORY_ROOT="${REALM_HISTORY_ROOT:-${REALMS_ROOT}_history}"
   fi
 
   unset _PREV_ENV_MODE
