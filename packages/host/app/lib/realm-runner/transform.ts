@@ -49,6 +49,7 @@ export interface TransformRequest {
 }
 
 const SHAPE_KEYS = 8;
+const SHAPE_KEY_CHARS = 40;
 
 // A value's kind in a few words: "an array of 420 items", "an object", "a
 // string".
@@ -71,11 +72,21 @@ function kindOf(value: unknown): string {
 export function describeTransformInput(input: unknown): string {
   let more = (count: number) =>
     count > SHAPE_KEYS ? `, and ${count - SHAPE_KEYS} more` : '';
+  // Keys are quoted, so an empty key or one holding ", " still reads as one,
+  // and a long one is cut so the error stays short.
+  let key = (name: string) =>
+    JSON.stringify(
+      name.length > SHAPE_KEY_CHARS
+        ? `${name.slice(0, SHAPE_KEY_CHARS)}…`
+        : name,
+    );
   if (Array.isArray(input)) {
     let first = input[0];
     if (isPlainObject(first)) {
       let keys = Object.keys(first);
-      return `${kindOf(input)}; the first is an object with keys ${keys.slice(0, SHAPE_KEYS).join(', ')}${more(keys.length)}`;
+      return keys.length === 0
+        ? `${kindOf(input)}; the first is an empty object`
+        : `${kindOf(input)}; the first is an object with keys ${keys.slice(0, SHAPE_KEYS).map(key).join(', ')}${more(keys.length)}`;
     }
     return input.length > 0
       ? `${kindOf(input)}; the first is ${kindOf(first)}`
@@ -88,7 +99,7 @@ export function describeTransformInput(input: unknown): string {
     }
     let keys = entries
       .slice(0, SHAPE_KEYS)
-      .map(([key, value]) => `${key} (${kindOf(value)})`);
+      .map(([name, value]) => `${key(name)} (${kindOf(value)})`);
     return `an object with keys ${keys.join(', ')}${more(entries.length)}`;
   }
   return kindOf(input);
