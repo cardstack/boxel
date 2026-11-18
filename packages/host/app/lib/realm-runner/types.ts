@@ -72,7 +72,7 @@ export interface AutomationRunContext {
   scheduledAt: string;
   // When the automation's last complete run started, if it has had one.
   lastSuccessAt?: string;
-  // The card's params with the trigger's own merged over them.
+  // The automation card's params. A trigger carries none of its own.
   params: Record<string, string>;
   // The delivery's JSON body, for a run a webhook started.
   webhookPayload?: unknown;
