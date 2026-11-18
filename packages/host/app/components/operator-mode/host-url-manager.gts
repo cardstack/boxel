@@ -9,7 +9,7 @@ import { tracked } from '@glimmer/tracking';
 import { Alert } from '@cardstack/pretui/components/alert';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
-import { Input } from '@cardstack/pretui/components/input';
+import { Input as PretInput } from '@cardstack/pretui/components/input';
 import { RadioGroup } from '@cardstack/pretui/components/radio-group';
 import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -543,7 +543,7 @@ export default class HostURLManager extends Component<Signature> {
                     <label class='target-label' for='host-url-site-name'>Site
                       name</label>
                     <div class='site-name'>
-                      <Input
+                      <PretInput
                         @controlId='host-url-site-name'
                         @value={{this.siteName}}
                         placeholder='your-site'
