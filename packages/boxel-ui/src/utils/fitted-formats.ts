@@ -14,7 +14,9 @@ export type FittedFormatId =
   | 'small-tile'
   | 'tall-tile'
   | 'triple-strip'
-  | 'triple-wide-strip';
+  | 'triple-wide-strip'
+  | 'wide-card'
+  | 'wide-strip';
 
 export type FittedFormatSpec = {
   height: number;
@@ -85,6 +87,12 @@ export const FITTED_FORMATS: FittedFormatGallery = [
         width: 400,
         height: 105,
       },
+      {
+        id: 'wide-strip',
+        title: 'Wide Strip',
+        width: 720,
+        height: 105,
+      },
     ],
   },
   {
@@ -142,6 +150,12 @@ export const FITTED_FORMATS: FittedFormatGallery = [
         title: 'Expanded Card',
         width: 400,
         height: 445,
+      },
+      {
+        id: 'wide-card',
+        title: 'Wide Card',
+        width: 720,
+        height: 240,
       },
     ],
   },
