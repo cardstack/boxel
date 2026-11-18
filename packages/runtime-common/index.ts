@@ -2060,6 +2060,7 @@ export * from './host-routing-validation.ts';
 export * from './host-routes.ts';
 export * from './host-route-resolver.ts';
 export * from './host-route-address.ts';
+export * from './host-route-link.ts';
 export * from './host-route-lookups.ts';
 export * from './host-route-canonical-address.ts';
 export * from './route-pattern.ts';
