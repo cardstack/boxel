@@ -11,8 +11,10 @@
 // checks the flag on every append, and realm-historian loads a realm it
 // doesn't know when that realm's first event arrives.
 //
-// A published realm is refused, since its source realm's history covers it,
-// and so is a URL no realm is registered at. The database comes from the
+// The script says when the realm is stalled, since a stalled realm records
+// nothing whatever its setting. A published realm is refused, since its
+// source realm's history covers it, and so is a URL no realm is registered
+// at. The database comes from the
 // `PG*` environment variables. The script exits 0 when the realm's recording
 // is as asked, 1 when the realm is refused or the database fails, and 2 on a
 // usage error.
@@ -63,7 +65,8 @@ let failed = false;
 
 try {
   let [realm] = await db.execute(
-    `SELECT registry.id, registry.kind, registry.source_url, state.enabled
+    `SELECT registry.id, registry.kind, registry.source_url, state.enabled,
+            state.status, state.stalled_reason
      FROM realm_registry registry
      LEFT JOIN realm_history_state state ON state.realm_id = registry.id
      WHERE registry.url = $1`,
@@ -104,6 +107,15 @@ try {
         ? `recording for ${realmURL} (${id}) is already ${describe(after)}`
         : `recording for ${realmURL} (${id}) was ${describe(before)}, now ${describe(after)}`,
     );
+    if (realm.status === 'stalled') {
+      console.warn(
+        `${realmURL} is stalled, so nothing is recorded` +
+          (realm.stalled_reason ? `: ${realm.stalled_reason}` : '') +
+          `. Setting its realm_history_state.status back to 'ok' resumes ` +
+          `recording when a realm-historian task next starts or takes over ` +
+          `its shard.`,
+      );
+    }
   }
 } catch (error: unknown) {
   failed = true;

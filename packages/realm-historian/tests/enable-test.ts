@@ -126,6 +126,31 @@ module('enable', (hooks) => {
     });
   });
 
+  test('a stalled realm is reported as stalled, and stays stalled', async (assert) => {
+    let realm = await insertRealm(database.db, { url: REALM_URL });
+    await database.db.execute(
+      `UPDATE realm_history_state
+       SET status = 'stalled', stalled_reason = 'HEAD abc123 is missing'
+       WHERE realm_id = $1`,
+      { bind: [realm.id] },
+    );
+
+    let run = await enable(REALM_URL, 'on');
+
+    assert.strictEqual(run.code, 0, `the script succeeds (log: ${run.log})`);
+    assert.true(
+      run.log.includes(
+        `${REALM_URL} is stalled, so nothing is recorded: HEAD abc123 is missing`,
+      ),
+      `it says the realm is stalled, and why (log: ${run.log})`,
+    );
+    assert.strictEqual(
+      (await stateOf(realm.id))?.status,
+      'stalled',
+      'the script leaves the status to the operator',
+    );
+  });
+
   test('off on a realm with no state row creates none', async (assert) => {
     let realm = await insertRealm(database.db, {
       url: REALM_URL,

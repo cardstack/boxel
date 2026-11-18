@@ -308,9 +308,9 @@ node scripts/enable.ts <realm url> on|off
 `on` sets the realm's `realm_history_state.enabled`, creating its row from
 `realm_registry` when it has none. `off` clears the flag and keeps the row, so
 turning recording back on carries on in the same repo. The script prints the
-realm's recording before and after. It refuses a published realm, whose
-source realm's history covers it, and a URL no realm is registered at; both
-exit 1. It is how recording is turned on locally and in each deployed
+realm's recording before and after, and says when the realm is stalled. It
+refuses a published realm, whose source realm's history covers it, and a URL
+no realm is registered at; both exit 1. It is how recording is turned on locally and in each deployed
 environment.
 
 ## Tests
