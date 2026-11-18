@@ -176,7 +176,9 @@ function orders(): ApiOrder[] {
       });
     }
     let day = 1 + Math.floor((i * 31) / ORDER_COUNT);
-    let minute = hash(`time-${n}`) % (24 * 60);
+    // Before 19:00 at -05:00, so every order falls in October 2026 in UTC
+    // as well as in the shop's own time zone.
+    let minute = hash(`time-${n}`) % (19 * 60);
     let createdAt = `2026-10-${String(day).padStart(2, '0')}T${String(
       Math.floor(minute / 60),
     ).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}:00-05:00`;
