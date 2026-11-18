@@ -139,7 +139,7 @@ export async function readSecretValue(
   source: { stdin?: boolean; keyFile?: string },
   io: { input?: NodeJS.ReadStream; output?: NodeJS.WritableStream } = {},
 ): Promise<string> {
-  return readKeyValue(source, { ...io, revealLast: 0 });
+  return readKeyValue(source, { ...io, revealLast: 0, noun: 'secret value' });
 }
 
 const NOTE_HELP =
