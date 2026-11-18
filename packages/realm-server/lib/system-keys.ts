@@ -162,26 +162,31 @@ export function normalizeDestination(destination: string): string {
 // Checks a value and its note together, so a note that repeats the value is
 // refused before the note reaches the history or the log.
 export function validateValueAndNote(value: unknown, note: unknown): void {
+  let refusal = operatorValueRefusal(value);
+  if (refusal) {
+    throw new SystemKeyError(400, refusal);
+  }
+  validateNote(note);
+  if ((note as string).includes(value as string)) {
+    throw new SystemKeyError(400, 'the note must not contain the value');
+  }
+}
+
+// Why a value an operator sends is refused, or undefined for one that may be
+// stored. The message never repeats the value. Platform secrets take their
+// values by the same rules.
+export function operatorValueRefusal(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.length === 0) {
-    throw new SystemKeyError(400, 'a value is required');
+    return 'a value is required';
   }
   if (value.length > MAX_SYSTEM_KEY_VALUE_LENGTH) {
-    throw new SystemKeyError(
-      400,
-      `the value is longer than ${MAX_SYSTEM_KEY_VALUE_LENGTH} characters`,
-    );
+    return `the value is longer than ${MAX_SYSTEM_KEY_VALUE_LENGTH} characters`;
   }
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f]/.test(value) || value.trim() !== value) {
-    throw new SystemKeyError(
-      400,
-      'the value must not contain control characters or surrounding whitespace',
-    );
+    return 'the value must not contain control characters or surrounding whitespace';
   }
-  validateNote(note);
-  if ((note as string).includes(value)) {
-    throw new SystemKeyError(400, 'the note must not contain the value');
-  }
+  return undefined;
 }
 
 export function validateNote(note: unknown): void {

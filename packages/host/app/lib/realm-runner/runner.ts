@@ -82,6 +82,10 @@ export class RealmScriptError extends Error {
   }
 }
 
+// What a run rejects with when a realm call failed and the script let its
+// error through: the message is the call's.
+export class RealmCallFailure extends Error {}
+
 const scriptLocations = new WeakMap<Error, RealmScriptLocation>();
 
 // Where in the script the error a run rejected with came from, when the
@@ -238,7 +242,9 @@ export default function runRealmCode(
         if (message.type === 'error') {
           let error = message.scriptError
             ? new RealmScriptError(message.error, message.scriptError)
-            : new Error(message.error);
+            : message.realmCallFailed
+              ? new RealmCallFailure(message.error)
+              : new Error(message.error);
           if (message.scriptLocation) {
             scriptLocations.set(error, message.scriptLocation);
           }

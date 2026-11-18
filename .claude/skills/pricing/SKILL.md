@@ -1,6 +1,6 @@
 ---
 name: pricing
-description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens), the record of each pricing version's values and unit rates (`pricing_versions`), and the cost coverage report that compares, for a period, the credits each charge kind drew with the hosting cost of the usage it priced, by pricing version (`getCostCoverage` and the `credit_charge_costs` view). Use when asking whether the margin covers our cost, which charge kind under-charges, or what prices a pricing version stands for, when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when an automation run was refused for its balance or a credit cap (`insufficient-credits`, `daily-credit-cap-reached`, `monthly-credit-cap-reached`, `pricing-unavailable`), when asking how a run's minimum balance is computed, what runs in flight hold against a balance, or which charges count toward an automation's daily and monthly caps, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), how and when the settle job bills a batch that has ended (its reported cost, or its estimate for an expired batch with no reported cost), why a batch's cost reads as pending, why a late batch's results are discarded, or what an `unrecorded_ai_batches` row means, when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a run, realm or automation was charged or how much it used or why a charge didn't write twice, when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/automation-spending.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/realm-server/lib/ai-batch-settle.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
+description: The cost model metered usage is charged by (hosting unit cost times one margin, at 1,000 credits to the dollar, ADR 029), the `PRICING_*` environment variables that carry the unit rates, task shapes, margin and minimum-balance floor to the realm-server, worker and prerender processes, the startup check and pricing version each process logs on the `pricing` log channel, how to change a price (an SSM edit under `/${env}/boxel/` and a redeploy), and how to read the credits ledger by charge kind (run, run indexing, storage, AI, batched AI, grant, purchase, expiry) and reference (realm, run, batch, automation and day), including entries with no kind and the write-once rule for a charge, auditing the usage each charge priced (tab-seconds, worker-seconds, GB downloaded, GB-months, AI cost and tokens), the record of each pricing version's values and unit rates (`pricing_versions`), and the cost coverage report that compares, for a period, the credits each charge kind drew with the hosting cost of the usage it priced, by pricing version (`getCostCoverage` and the `credit_charge_costs` view). Use when asking whether the margin covers our cost, which charge kind under-charges, or what prices a pricing version stands for, when changing a price, the margin or the floor, when a process logs `pricing check failed`, when a pricing alert fires, when asking which prices a charge used or why two processes report different pricing versions, when adding a pricing value, when working on the monthly estimate the switch-on screen shows (the per-run ceiling under an automation's caps times the runs its triggers start in a month), when asking why that ceiling and the minimum balance leave out the indexing a run's writes cause or how much of a run's indexing went unpaid, when an automation run was refused for its balance or a credit cap (`insufficient-credits`, `daily-credit-cap-reached`, `monthly-credit-cap-reached`, `pricing-unavailable`), when asking how a run's minimum balance is computed, what runs in flight hold against a balance, or which charges count toward an automation's daily and monthly caps, when asking how a run's AI requests (its `resolve` calls) are billed, to whom and against which cap, when asking how a batch of AI requests is recorded before it is billed (the `ai_batches` row, its estimate at the model's listed batch price, and the batch path that writes it), how and when the settle job bills a batch that has ended (its reported cost, or its estimate for an expired batch with no reported cost), why a batch's cost reads as pending, why a late batch's results are discarded, or what an `unrecorded_ai_batches` row means, when asking how a run's own compute (its prerender tab time) and network (the bytes its `callApi` calls downloaded) are charged, to whom and when, including failed and canceled runs, when asking what a user, run, realm or automation was charged or how much it used or why a charge didn't write twice, or where an operator sees a user's or realm's charges and automations (the Grafana Users and Realms dashboards), when asking why an automation's storage was or wasn't charged, which files it counts or how big they are, or when changing `packages/realm-server/lib/pricing.ts`, `packages/realm-server/lib/automation-estimate.ts`, `packages/realm-server/lib/automation-spending.ts`, `packages/realm-server/lib/ai-batch-estimate.ts`, `packages/realm-server/lib/ai-batch-settle.ts`, `packages/runtime-common/automation-files.ts`, `packages/runtime-common/automation-storage-charge.ts`, `packages/runtime-common/automation-run-charge.ts` or the ledger functions in `packages/billing/billing-queries.ts`.
 ---
 
 # Pricing (operators and boxel developers)
@@ -102,8 +102,11 @@ version <hash>; PRICING_…=… …`, with every value. The version is the first
   give the same version. Every metered charge records it (ADR 029 §1.4).
 - **Failing**: one error line, `pricing check failed in <process>: …`, naming
   every bad variable and what is wrong with it, and the same message sent to
-  Sentry tagged `pricingCheck: failed` and `process: <name>`. That is the
-  signal pricing alerts fire on. One bad value fails the whole set:
+  Sentry tagged `pricingCheck: failed` and `process: <name>`. The Grafana
+  alert `Pricing check failed` fires on the realm-server's and the worker's
+  line, one alert per service; the
+  `automation-diagnostics` skill's _Alerts_ section covers it. One bad value
+  fails the whole set:
   `currentPricing()` then returns undefined, and the process admits no new
   run and submits no new batch until it restarts with good values (ADR 029
   §1.3). Interactive work and runs already going are unaffected.
@@ -264,7 +267,7 @@ FROM automation_runs WHERE id = '<run id>';
 
 ## The indexing a run's writes cause
 
-A run's writes land as one commit (`WriteOptions.runId` on the realm's write),
+A run's writes land as one commit (`WriteOptions.automationRun` on the realm's write),
 and the indexing that commit causes is one `run_indexing` charge, to the run's
 identity (`automation_runs.acts_as`), referencing the run:
 
@@ -852,7 +855,7 @@ END) AS kind
 In code, `getLedgerEntries` (`packages/billing/billing-queries.ts`) applies
 it and filters by user, kind, realm, run, batch, automation and day.
 `chargeKindForCreditType` (runtime-common) is the same mapping in
-TypeScript, and the `credit_charge_costs` view (see "The cost coverage report") repeats it in SQL; the three change together.
+TypeScript, the `credit_charge_costs` view (see "The cost coverage report") repeats it in SQL, and so do the Users dashboard's _Credits by charge kind_ and _Credit ledger_ panels (see "Where to see a user's charges"); all of them change together.
 
 A row with a `run_id`, `realm` or `automation_id` always carries its kind,
 since those columns are only written with one, so a query filtered on any of
@@ -919,6 +922,45 @@ which names the run for a run's request (see [A run's AI requests](#a-runs-ai-re
 Stripe handlers record purchases, plan allowances and expiries without naming
 a kind. An operator's top-up (`handle-add-credit`) and the daily grant task
 are grants.
+
+## Where to see a user's charges
+
+Grafana's Users and Realms dashboards (Boxel Status folder, operators only)
+read the ledger above for the dashboard's time range. An operator answers
+"what did Boxel charge this user for, and why" there without SQL:
+
+- **Users** (`/d/boxelusers0001`, pick the user's Matrix id):
+  - _Automations paid by_ the user: each automation's state now, and the
+    runs the automation started and the credits the automation's charges
+    drew from the user in the time range. State reads "switched off" when
+    someone has since switched the automation off, and "paid by" another
+    user when that user pays for the automation now.
+  - _Credits by charge kind_: the credits each kind charged to the user's
+    balance and the credits each kind added. The panel reads an entry with
+    no kind through the mapping in "Rows without a kind".
+  - _Credit ledger_: every charge, newest first, one row per charge however
+    many credit buckets the charge drew on. Each row shows the credits the
+    charge charged or added, the bucket split, the reference (realm,
+    automation and trigger, run, batch or storage day, pricing version),
+    and the usage the charge priced, from `credit_charge_usage`.
+- **Realms** (`/d/boxelrealms001`, pick the realm): the same three panels
+  for the charges that name the realm, with the payer of each charge. Only
+  consumption charges name a realm, so grants, purchases, expiries and AI
+  calls that named no realm appear only on the Users dashboard.
+
+The panels show every amount as a positive number. The ledger stores a
+charge as a negative `credit_amount`, and the panels show the amount under
+Credits charged; grants and purchases appear under Credits added. A realm or payer cell
+links to the realm's or user's dashboard with the same time range. Each
+table shows at most 500 rows, so widen or move the time range to find older
+charges.
+
+The ledger and `automations` name a prefix-mapped system realm (catalog,
+skills, openrouter) by the realm's prefix form, `@cardstack/<name>/`, while
+the Realms dashboard picks realms by served URL from `realm_registry`. The
+panels match a bootstrap realm under both spellings, taking the prefix form
+from the URL's last path segment, the same convention the dev stack's
+`--fromUrl` / `--toUrl` mappings follow.
 
 ## Auditing usage, not only cost
 

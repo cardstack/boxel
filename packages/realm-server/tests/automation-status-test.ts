@@ -551,6 +551,42 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
+    test('an automation paused for an invalid declaration reads with the problems the reader found', async function (assert) {
+      await writeAutomation();
+      await switchOn();
+      let active = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      assert.strictEqual(
+        active.switchedOn ? active.pauseProblems : undefined,
+        null,
+        'an active automation has no problems',
+      );
+      let problems = [
+        {
+          code: 'cron-too-frequent',
+          path: 'triggers.0.expression',
+          message:
+            '"58,1 0,23 * * *" can fire twice 3 minutes apart, and Boxel runs an automation\'s cron trigger at most once every 5 minutes',
+        },
+      ];
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'paused', pause_reason = 'invalid-declaration', pause_problems =`,
+        param(JSON.stringify(problems)),
+        `::jsonb WHERE automation_id =`,
+        param(automationURL()),
+      ]);
+      let status = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      assert.deepEqual(
+        status.switchedOn
+          ? [status.state, status.pauseReason, status.pauseProblems]
+          : [],
+        ['paused', 'invalid-declaration', problems],
+      );
+    });
+
     test("a switched-on automation reads with its failure streak and the streak's last error", async function (assert) {
       await writeAutomation();
       await switchOn();

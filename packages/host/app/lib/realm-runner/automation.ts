@@ -29,6 +29,21 @@ export class AutomationRunStoppedError extends Error {
   }
 }
 
+// Whether a request an automation run made failed because of the platform
+// rather than because of what it asked: it got a server error, the server
+// shed it under load (429), or it got no answer, or its body failed while it
+// was read. A request aborted because the run stopped is none of these.
+export function isPlatformFailure(
+  result: { response: Response } | { error: unknown },
+): boolean {
+  if ('error' in result) {
+    return !(
+      result.error instanceof DOMException && result.error.name === 'AbortError'
+    );
+  }
+  return result.response.status >= 500 || result.response.status === 429;
+}
+
 export type ConsoleLevel = 'log' | 'info' | 'warn' | 'error';
 
 // What an automation run reports while it runs, in the order it happens.

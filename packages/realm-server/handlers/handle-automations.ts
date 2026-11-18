@@ -39,6 +39,11 @@ import {
 } from '@cardstack/runtime-common/automation-manual-runs';
 import { BYTES_PER_GB } from '@cardstack/runtime-common/metered-charges';
 import { readRunDeclaration } from '@cardstack/runtime-common/automation-run-limits';
+import {
+  readRunLogPage,
+  RUN_LOG_LEVELS,
+  type RunLogLevel,
+} from '@cardstack/runtime-common/automation-run-log';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   AUTOMATION_ESTIMATE_RESOURCE_TYPE,
@@ -47,9 +52,17 @@ import {
   AUTOMATION_ROUTE_PATH_PARAM,
   AUTOMATION_ROUTE_REALM_PARAM,
   AUTOMATION_ROUTE_RUN_PARAM,
+  AUTOMATION_RUN_LOG_AFTER_PARAM,
+  AUTOMATION_RUN_LOG_DEFAULT_LIMIT,
+  AUTOMATION_RUN_LOG_LEVEL_PARAM,
+  AUTOMATION_RUN_LOG_LIMIT_PARAM,
+  AUTOMATION_RUN_LOG_MAX_LIMIT,
+  AUTOMATION_RUN_LOG_RESOURCE_TYPE,
+  AUTOMATION_RUN_LOG_RUN_PARAM,
   AUTOMATION_RUN_REPORT_RESOURCE_TYPE,
   AUTOMATION_RUN_RESOURCE_TYPE,
   AUTOMATION_STORAGE_RESOURCE_TYPE,
+  type AutomationRunLogDocument,
 } from '@cardstack/runtime-common/automation-routes';
 import {
   sendResponseForError,
@@ -716,6 +729,123 @@ export function handleAutomationRemove(args: CreateRoutesArgs): Handler {
     );
     await answerChange(ctxt, args, change, caller);
   });
+}
+
+// `GET /_automation-run-log?realm=<realm>&run=<id>`: one page of the run's
+// log, for the console. The caller's direct write on the realm is checked
+// before the run is looked up, so a caller who isn't a direct writer is
+// refused the same way whether or not the run exists, and a run of another
+// realm is no run of this one. The query's `after`, `limit` and `level`
+// choose the page (see `automation-routes.ts`).
+export function handleAutomationRunLog(args: CreateRoutesArgs): Handler {
+  return automationHandler(async (ctxt) => {
+    let caller = callerOf(ctxt);
+    let params = ctxt.URL.searchParams;
+    let realmURL = await directlyWrittenRealm(
+      args.dbAdapter,
+      args.matrixClient.serverName,
+      caller,
+      params.get(AUTOMATION_ROUTE_REALM_PARAM),
+    );
+    let runId = params.get(AUTOMATION_RUN_LOG_RUN_PARAM) ?? '';
+    let after = integerParam(params, AUTOMATION_RUN_LOG_AFTER_PARAM, -1, -1);
+    let limit = integerParam(
+      params,
+      AUTOMATION_RUN_LOG_LIMIT_PARAM,
+      AUTOMATION_RUN_LOG_DEFAULT_LIMIT,
+      1,
+    );
+    if (limit > AUTOMATION_RUN_LOG_MAX_LIMIT) {
+      throw new AutomationRouteError(
+        400,
+        `"${AUTOMATION_RUN_LOG_LIMIT_PARAM}" is at most ${AUTOMATION_RUN_LOG_MAX_LIMIT}`,
+      );
+    }
+    let levels = levelsParam(params.get(AUTOMATION_RUN_LOG_LEVEL_PARAM));
+    let seen = RUN_ID.test(runId)
+      ? await getAutomationRun(args.dbAdapter, runId)
+      : undefined;
+    if (!seen || args.virtualNetwork.toURLHref(seen.realm) !== realmURL.href) {
+      throw new AutomationRouteError(
+        404,
+        `no run ${runId} in ${realmURL.href}`,
+      );
+    }
+    let page = await readRunLogPage(args.dbAdapter, runId, {
+      after,
+      limit,
+      levels,
+    });
+    if (!page) {
+      throw new AutomationRouteError(
+        404,
+        `no run ${runId} in ${realmURL.href}`,
+      );
+    }
+    let document: AutomationRunLogDocument = {
+      data: {
+        type: AUTOMATION_RUN_LOG_RESOURCE_TYPE,
+        id: runId,
+        attributes: {
+          state:
+            page.state as AutomationRunLogDocument['data']['attributes']['state'],
+          lines: page.lines,
+          next: page.next,
+          more: page.more,
+          total: page.total,
+          dropped: page.dropped,
+        },
+      },
+    };
+    await sendJSON(ctxt, 200, document);
+  });
+}
+
+// The largest `seq` a run's log holds, Postgres's `integer`.
+const MAX_SEQ = 2 ** 31 - 1;
+
+// An integer query parameter, `fallback` when absent, refused when it isn't
+// a whole number from `min` to `MAX_SEQ`.
+function integerParam(
+  params: URLSearchParams,
+  name: string,
+  fallback: number,
+  min: number,
+): number {
+  let value = params.get(name);
+  if (value === null || value === '') {
+    return fallback;
+  }
+  let number = Number(value);
+  if (!Number.isInteger(number) || number < min || number > MAX_SEQ) {
+    throw new AutomationRouteError(
+      400,
+      `"${name}" must be a whole number from ${min} to ${MAX_SEQ}`,
+    );
+  }
+  return number;
+}
+
+// The `level` query parameter: the levels to keep, comma-separated, or
+// every level when absent.
+function levelsParam(value: string | null): RunLogLevel[] | undefined {
+  if (value === null || value === '') {
+    return undefined;
+  }
+  let levels: RunLogLevel[] = [];
+  for (let name of value.split(',')) {
+    let level = RUN_LOG_LEVELS.find((l) => l === name.trim());
+    if (!level) {
+      throw new AutomationRouteError(
+        400,
+        `"${AUTOMATION_RUN_LOG_LEVEL_PARAM}" takes ${RUN_LOG_LEVELS.join(', ')}, comma-separated, not "${name}"`,
+      );
+    }
+    if (!levels.includes(level)) {
+      levels.push(level);
+    }
+  }
+  return levels;
 }
 
 // `POST /_automation-run-cancel`: cancels one of the realm's pending or

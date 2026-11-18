@@ -118,6 +118,7 @@ import {
 } from '../lib/realm-runner/room-actions';
 import runRealmCode, {
   DeadlineExtension,
+  RealmCallFailure,
   RealmScriptError,
   scriptLocationOf,
 } from '../lib/realm-runner/runner';
@@ -3325,8 +3326,17 @@ export async function runAutomationScript(
     );
     await settle();
     // The card updates the script made are saved after it finishes, still
-    // inside the run's time limit.
-    await withinTimeLimit(session.saveCardUpdates(), endsAt, signal);
+    // inside the run's time limit. A save that fails is the script's
+    // `realm.cards.update` call failing, after the script let go of it.
+    await withinTimeLimit(
+      session.saveCardUpdates().catch((error: unknown) => {
+        throw new RealmCallFailure(
+          error instanceof Error ? error.message : String(error),
+        );
+      }),
+      endsAt,
+      signal,
+    );
   } catch (error) {
     if (!session.isClosed) {
       await settle();
@@ -3407,6 +3417,9 @@ function redactedError(error: unknown, secrets: readonly string[]): unknown {
   }
   if (error instanceof AutomationRunStoppedError) {
     return new AutomationRunStoppedError(redactSecrets(error.message, secrets));
+  }
+  if (error instanceof RealmCallFailure) {
+    return new RealmCallFailure(redactSecrets(error.message, secrets));
   }
   if (error instanceof Error) {
     return new Error(redactSecrets(error.message, secrets));

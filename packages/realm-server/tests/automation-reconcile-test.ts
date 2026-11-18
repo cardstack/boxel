@@ -4,6 +4,7 @@ import { basename } from 'path';
 import {
   claimAutomationRunCommit,
   createAutomationRun,
+  finishAutomationRun,
   getAutomationRun,
   insertPermissions,
   query,
@@ -17,6 +18,7 @@ import {
   type QueuePublisher,
 } from '@cardstack/runtime-common';
 import {
+  AUTOMATION_FAILURES_BEFORE_PAUSE,
   getAutomation,
   switchOnAutomation,
   type AutomationRow,
@@ -142,14 +144,49 @@ module(basename(import.meta.filename), function (hooks) {
     return result.automation;
   }
 
-  async function reconcile(now: number): Promise<AutomationReconcileResult> {
+  async function reconcile(
+    now: number,
+    options: Partial<Parameters<typeof reconcileAutomations>[1]> = {},
+  ): Promise<AutomationReconcileResult> {
     return await reconcileAutomations(dbAdapter, {
       queue: publisher,
       virtualNetwork,
       readDeclaration: async () => card,
       log: silentLog,
       now,
+      ...options,
     });
+  }
+
+  // Runs of the automation's own trigger that ended because a realm call the
+  // script made failed, with no check for repeated failures after them.
+  async function callsFailed(n: number) {
+    for (let i = 0; i < n; i++) {
+      let run = await createAutomationRun(dbAdapter, {
+        automationId: AUTOMATION,
+        realm: REALM,
+        trigger: 'hourly',
+        slot: `failed-${i}`,
+        actsAs: OWNER,
+      });
+      await startAutomationRunAttempt(dbAdapter, run.id, 1);
+      await finishAutomationRun(dbAdapter, run.id, 1, {
+        state: 'error',
+        reason: 'call-failed',
+        message: 'File not found: notes/missing.md',
+      });
+    }
+  }
+
+  // A running run whose job the queue gave up on, made long enough ago for
+  // reconcile to end it.
+  async function lostRunningRun(): Promise<AutomationRun> {
+    await tick(NOON + 30);
+    let [run] = (await runs()).filter(({ state }) => state === 'pending');
+    await startAutomationRunAttempt(dbAdapter, run.id, 1);
+    await loseJobs();
+    await madeAt(NOON + 30);
+    return run;
   }
 
   async function tick(now: number) {
@@ -396,6 +433,51 @@ module(basename(import.meta.filename), function (hooks) {
         { slot: '2026-11-10T13:00:00.000Z', state: 'pending' },
       ],
       "the trigger's next slot starts its own run",
+    );
+  });
+
+  test('a streak of failed runs that ends in a run reconcile closed pauses the automation', async function (assert) {
+    await switchOn();
+    let lost = await lostRunningRun();
+    // The attempts that ended these runs never got to ask whether the streak
+    // pauses the automation.
+    await callsFailed(AUTOMATION_FAILURES_BEFORE_PAUSE);
+    assert.strictEqual((await row()).state, 'active');
+
+    let reported: string[] = [];
+    let [outcome] = (
+      await reconcile(NOON + 10 * 60, {
+        reportAutomationChange: async ({ automationId }) => {
+          let automation = await getAutomation(dbAdapter, automationId);
+          reported.push(`${automationId} ${automation?.state}`);
+        },
+      })
+    ).lostRuns;
+    assert.strictEqual(outcome.kind, 'ended');
+    assert.strictEqual(
+      (await getAutomationRun(dbAdapter, lost.id))?.errorReason,
+      JOB_LOST_REASON,
+    );
+    let automation = await row();
+    assert.strictEqual(automation.state, 'paused');
+    assert.strictEqual(automation.pauseReason, 'repeated-failures');
+    assert.deepEqual(
+      reported,
+      [`${AUTOMATION} paused`],
+      'the pause is reported once it commits',
+    );
+  });
+
+  test('a run reconcile closed neither extends a streak nor breaks it', async function (assert) {
+    await switchOn();
+    await lostRunningRun();
+    await callsFailed(AUTOMATION_FAILURES_BEFORE_PAUSE - 1);
+    let [outcome] = (await reconcile(NOON + 10 * 60)).lostRuns;
+    assert.strictEqual(outcome.kind, 'ended');
+    assert.strictEqual(
+      (await row()).state,
+      'active',
+      'a lost job is the platform failing the run, so it is not counted',
     );
   });
 

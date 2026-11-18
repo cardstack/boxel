@@ -1,8 +1,8 @@
 // The realm server's routes for a direct writer to switch an automation on,
 // start a Preview or a Run now, pause, resume or remove it, cancel one of its
-// runs, and read what the console shows: a run's report, a Preview's staged
-// file and the automation's storage. Each is an authenticated realm-server
-// route: it acts as the
+// runs, read a run's log, and read what the console shows: a run's report, a
+// Preview's staged file and the automation's storage. Each is an
+// authenticated realm-server route: it acts as the
 // session's own user, never as a user a header names (ADR 006), and answers
 // only a direct writer of the realm the request names.
 //
@@ -11,6 +11,8 @@
 // anything else, so a caller who isn't a direct writer learns nothing about
 // the realm's automations or runs.
 
+import type { StoredRunLogLine } from './automation-run-log.ts';
+
 export const AUTOMATION_SWITCH_ON_PATH = '/_automation-switch-on';
 export const AUTOMATION_PREVIEW_PATH = '/_automation-preview';
 export const AUTOMATION_RUN_NOW_PATH = '/_automation-run-now';
@@ -18,13 +20,14 @@ export const AUTOMATION_PAUSE_PATH = '/_automation-pause';
 export const AUTOMATION_RESUME_PATH = '/_automation-resume';
 export const AUTOMATION_REMOVE_PATH = '/_automation-remove';
 export const AUTOMATION_RUN_CANCEL_PATH = '/_automation-run-cancel';
+export const AUTOMATION_RUN_LOG_PATH = '/_automation-run-log';
 
 // What the console reads, each a GET a direct writer of the realm makes:
 //
 // - `/_automation-run-report?realm=&run=`: one run's timings, milestones, a
 //   count of its log's lines, its `callApi` and `resolve` calls, the files
 //   it staged or saved, and its cost by kind. The log's lines themselves are
-//   read from the log's own route.
+//   read from `/_automation-run-log`.
 // - `/_automation-preview-file?realm=&run=&path=`: the bytes of one file a
 //   complete Preview staged, by its realm-local path.
 // - `/_automation-storage?realm=&automation=`: every file the automation's
@@ -50,6 +53,23 @@ export const AUTOMATION_RUN_RESOURCE_TYPE = 'automation-run';
 export const AUTOMATION_ESTIMATE_RESOURCE_TYPE = 'automation-estimate';
 export const AUTOMATION_RUN_REPORT_RESOURCE_TYPE = 'automation-run-report';
 export const AUTOMATION_STORAGE_RESOURCE_TYPE = 'automation-storage';
+export const AUTOMATION_RUN_LOG_RESOURCE_TYPE = 'automation-run-log';
+
+// The query parameters of `GET /_automation-run-log`, besides `realm`:
+//
+// - `run`: the run's id.
+// - `after`: the `seq` the page starts past; absent or -1 reads from the
+//   start. A page's `next` is the `after` that reads on from it.
+// - `limit`: the most lines a page holds, `AUTOMATION_RUN_LOG_DEFAULT_LIMIT`
+//   when absent, and at most `AUTOMATION_RUN_LOG_MAX_LIMIT`.
+// - `level`: the levels to keep, comma-separated (`log`, `info`, `warn`,
+//   `error`); absent keeps every line. A line with no level is `info` here.
+export const AUTOMATION_RUN_LOG_RUN_PARAM = 'run';
+export const AUTOMATION_RUN_LOG_AFTER_PARAM = 'after';
+export const AUTOMATION_RUN_LOG_LIMIT_PARAM = 'limit';
+export const AUTOMATION_RUN_LOG_LEVEL_PARAM = 'level';
+export const AUTOMATION_RUN_LOG_DEFAULT_LIMIT = 500;
+export const AUTOMATION_RUN_LOG_MAX_LIMIT = 1000;
 
 // The body of a request about an automation: the card by its URL, in the
 // realm named by `attributes.realm`.
@@ -86,3 +106,24 @@ export interface AutomationRunCancelBody {
     attributes: { realm: string };
   };
 }
+
+// The answer to `GET /_automation-run-log`: one page of a run's log, with the
+// run's state as the page was read. `dropped` counts the lines the run's cap
+// refused, which the console shows beside the log; no line of the page
+// stands for them.
+export interface AutomationRunLogDocument {
+  data: {
+    type: typeof AUTOMATION_RUN_LOG_RESOURCE_TYPE;
+    id: string;
+    attributes: {
+      state: 'pending' | 'running' | 'complete' | 'error' | 'canceled';
+      lines: AutomationRunLogLine[];
+      next: number;
+      more: boolean;
+      total: number;
+      dropped: number;
+    };
+  };
+}
+
+export type AutomationRunLogLine = StoredRunLogLine;

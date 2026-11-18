@@ -129,6 +129,25 @@ export const SEALED_COLUMNS: SealedColumn[] = [
       destination: String(row.token_url),
     }),
   },
+  // The secrets the platform keeps and only reads, bound to their row and
+  // their name, with no destination (`platformSecretBinding` in
+  // `lib/platform-secrets.ts`).
+  {
+    field: 'platform_secrets.value',
+    table: 'platform_secrets',
+    idColumn: 'id',
+    keyIdColumn: 'value_key_id',
+    nonceColumn: 'value_nonce',
+    ciphertextColumn: 'value_ciphertext',
+    tagColumn: 'value_tag',
+    bindingColumns: ['name'],
+    binding: (row) => ({
+      field: 'platform_secrets.value',
+      owner: PLATFORM_SECRET_OWNER,
+      id: String(row.id),
+      name: String(row.name),
+    }),
+  },
 ];
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;

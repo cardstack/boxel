@@ -74,6 +74,7 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
           reportRealmEvent,
           log,
         }),
+        reportRunChange,
         readDeclaration: (automationId) =>
           readRunDeclaration({
             dbAdapter,
@@ -116,7 +117,7 @@ const automationTick: Task<AutomationTickArgs, AutomationTickResult> = ({
           case 'unreadable':
             result.unreadable++;
             log.warn(
-              `${tag}: automation ${outcome.automationId} is due but its card can't be read, so nothing was enqueued: ${outcome.message}`,
+              `${tag}: automation ${outcome.automationId} is due but its card can't be read, so nothing was enqueued${outcome.paused ? ' and it is paused with invalid-declaration' : ''}: ${outcome.message}`,
             );
             break;
           case 'caps-raised':
