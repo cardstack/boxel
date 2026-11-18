@@ -49,7 +49,8 @@ function routesFor(rules: RawHostRoutingRule[]): readonly HostRoute[] {
 function link(
   target: HostRouteAddressTarget,
   unresolved: UnresolvedHostRouteLink[] = [],
-  rules: RawHostRoutingRule[] | undefined = RULES,
+  // `null` for routes that are not known.
+  rules: RawHostRoutingRule[] | null = RULES,
 ): string | undefined {
   return hostRouteLink(target, {
     routes: rules
@@ -140,7 +141,7 @@ const tests: SharedTests<unknown> = Object.freeze({
         'no routes',
       );
       assert.strictEqual(
-        link(cards(`${REALM}Person/robin`), unresolved, undefined),
+        link(cards(`${REALM}Person/robin`), unresolved, null),
         `${REALM}Person/robin`,
         'routes not known',
       );
@@ -148,7 +149,7 @@ const tests: SharedTests<unknown> = Object.freeze({
         link(
           { kind: 'route-name', name: 'people', args: ['robin'] },
           unresolved,
-          undefined,
+          null,
         ),
         undefined,
         'a route name with routes not known has no URL',

@@ -12,6 +12,8 @@ import {
   type RawHostRoutingRule,
 } from '@cardstack/runtime-common';
 
+import type { Realm } from '@cardstack/runtime-common/realm';
+
 import ENV from '@cardstack/host/config/environment';
 
 import {
@@ -81,6 +83,25 @@ function validatedRoutes(): readonly HostRoute[] {
   return routes;
 }
 
+// A realm config card with one card id route for authors at `path`.
+function realmConfig(path: string) {
+  return {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: { name: 'Routed Realm' },
+        hostRoutingRules: [{ path, name: 'people', card: './Author/:id' }],
+      },
+      meta: {
+        adoptsFrom: {
+          module: '@cardstack/base/realm-config',
+          name: 'RealmConfig',
+        },
+      },
+    },
+  };
+}
+
 // The page config the realm server writes for a page served on a host URL.
 type PageConfig = { hostDynamicRoutes?: unknown };
 
@@ -95,6 +116,7 @@ module('Integration | hrefTo', function (hooks) {
   });
 
   let hrefTo: (typeof HrefToModule)['hrefTo'];
+  let realm: Realm;
 
   setupCardLogs(
     hooks,
@@ -105,9 +127,10 @@ module('Integration | hrefTo', function (hooks) {
   );
 
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
+    ({ realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        'realm.json': realmConfig('/people/:id'),
         'test-cards.gts': { Author, Post },
         'Author/jane.json': {
           data: {
@@ -129,7 +152,7 @@ module('Integration | hrefTo', function (hooks) {
           },
         },
       },
-    });
+    }));
     // The app starts this service at boot; a rendering test has no boot.
     getService('host-route-links');
     ({ hrefTo } = await getService('loader-service').loader.import<
@@ -229,22 +252,50 @@ module('Integration | hrefTo', function (hooks) {
     );
   });
 
-  test('without routes a link keeps the card URL', async function (assert) {
+  test('in the app a link reads the routes of the open realm from its endpoint, and again after the realm is indexed', async function (assert) {
     let store = getService('store');
     let author = (await store.get(`${testRealmURL}Author/jane`)) as Author;
+    let post = (await store.get(`${testRealmURL}Post/hello`)) as Post;
 
     await render(
       <template>
         <a data-test-author href={{hrefTo author}}>author</a>
         <a data-test-route href={{hrefTo author route='people'}}>route</a>
+        <a data-test-post href={{hrefTo post}}>post</a>
       </template>,
+    );
+    await waitUntil(
+      () => href('[data-test-author]') === `${testRealmURL}people/jane`,
     );
 
     assert.strictEqual(
       href('[data-test-author]'),
-      `${testRealmURL}Author/jane`,
-      'the card URL',
+      `${testRealmURL}people/jane`,
+      'a card the routes serve',
     );
-    assert.strictEqual(href('[data-test-route]'), null, 'no href');
+    assert.strictEqual(
+      href('[data-test-route]'),
+      `${testRealmURL}people/jane`,
+      'a route name',
+    );
+    assert.strictEqual(
+      href('[data-test-post]'),
+      `${testRealmURL}Post/hello`,
+      'a card no route fits keeps its own URL',
+    );
+
+    await realm.write(
+      'realm.json',
+      JSON.stringify(realmConfig('/authors/:id')),
+    );
+    await waitUntil(
+      () => href('[data-test-author]') === `${testRealmURL}authors/jane`,
+      { timeout: 10000 },
+    );
+    assert.strictEqual(
+      href('[data-test-author]'),
+      `${testRealmURL}authors/jane`,
+      'the link follows the routes read after the realm was indexed',
+    );
   });
 });
