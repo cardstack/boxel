@@ -86,6 +86,22 @@ module('Pretui | ThemeFrame', function (hooks) {
       .hasAttribute('data-theme', 'light', 'light mode stamps light');
   });
 
+  test('the active theme cssImports render as @import inside the frame', async function (assert) {
+    let url = 'https://fonts.googleapis.com/css2?family=Lora:wght@400;700';
+    let themed = { ...THEME, cssImports: [url] };
+    await render(<template><ThemeFrame @theme={{themed}} /></template>);
+
+    let css = Array.from(
+      document.querySelectorAll('[data-test-pretui-theme-frame] style'),
+    )
+      .map((s) => s.textContent)
+      .join('\n');
+    assert.ok(
+      css.includes(`@import url('${url}');`),
+      'the font import is emitted inside the frame',
+    );
+  });
+
   test('frame without a theme still flips boxel-ui ambient tokens', async function (assert) {
     await render(<template>
       <ThemeFrame>
