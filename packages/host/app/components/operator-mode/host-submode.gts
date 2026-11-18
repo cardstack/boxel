@@ -139,8 +139,13 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return !this.isHostModeV2 && this.realm.isPublishing(this.realmURL);
   }
 
+  // The unpublish command reports a failure in its result rather than
+  // throwing, so the failure is thrown here for the host URL manager to show.
   removeV1Site = async (publishedRealmURL: string) => {
-    await this.handleUnpublish.perform(publishedRealmURL);
+    let result = await this.handleUnpublish.perform(publishedRealmURL);
+    if (result?.status === 'error') {
+      throw new Error(result.error || `Could not remove ${publishedRealmURL}`);
+    }
   };
 
   // Shown on request while a publish runs, and gone with the publish,
@@ -225,7 +230,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     // Unpublish through the same command exposed to boxel-cli so the UI and
     // headless callers share one path.
     let command = new UnpublishRealmTool(this.toolService.toolContext);
-    await command.execute({ realmURL: this.realmURL, publishedRealmURL });
+    return await command.execute({
+      realmURL: this.realmURL,
+      publishedRealmURL,
+    });
   });
 
   get defaultPublishedSiteURL(): string | undefined {

@@ -297,6 +297,25 @@ module('Acceptance | host URL manager', function (hooks) {
     }
   });
 
+  test('when the realm’s root redirects, says so and offers no public-read grant', async function (assert) {
+    fake.homePage = {
+      homeCardId: `${testRealmURL}index`,
+      homeCardReadable: true,
+      homeCardStatus: 200,
+      unloadableModules: [],
+      anonymousCanView: false,
+      redirectTo: 'https://example.test/elsewhere',
+    };
+    await openManager();
+    assert
+      .dom('[data-test-home-page-not-viewable]')
+      .containsText('https://example.test/elsewhere');
+    assert.dom('[data-test-mount="boxel-space"]').isDisabled();
+    assert
+      .dom('[data-test-grant-public-read]')
+      .doesNotExist('a public-read grant would not stop the redirect');
+  });
+
   test('lists the sites published with v1, each with Remove only', async function (assert) {
     let v1URL = `https://testuser.${spaceDomain}/old-copy/`;
     let realmService = getService('realm') as RealmService;
@@ -318,6 +337,35 @@ module('Acceptance | host URL manager', function (hooks) {
       await waitFor(`[data-test-v1-site="${v1URL}"]`, { count: 0 });
       assert.deepEqual(fake.calls, [`unpublish ${v1URL}`]);
     } finally {
+      resource.info = previousInfo;
+    }
+  });
+
+  test('shows why a site published with v1 could not be removed, and keeps it listed', async function (assert) {
+    let v1URL = `https://testuser.${spaceDomain}/old-copy/`;
+    let realmServer = getService('realm-server') as any;
+    let originalUnpublish = realmServer.unpublishRealm;
+    realmServer.unpublishRealm = async () => {
+      throw new Error('The realm server could not remove the site');
+    };
+    let realmService = getService('realm') as RealmService;
+    await realmService.ensureRealmMeta(testRealmURL);
+    let resource = (realmService as any).realms.get(testRealmURL);
+    let previousInfo = resource.info;
+    resource.info = new TrackedObject({
+      ...previousInfo,
+      lastPublishedAt: { [v1URL]: String(TEST_CLOCK_INSTANT) },
+    });
+    try {
+      await openManager();
+      await click(`[data-test-remove-v1-site="${v1URL}"]`);
+      await waitFor(`[data-test-v1-site-error="${v1URL}"]`);
+      assert
+        .dom(`[data-test-v1-site-error="${v1URL}"]`)
+        .containsText('could not remove the site');
+      assert.dom(`[data-test-v1-site="${v1URL}"]`).exists();
+    } finally {
+      realmServer.unpublishRealm = originalUnpublish;
       resource.info = previousInfo;
     }
   });

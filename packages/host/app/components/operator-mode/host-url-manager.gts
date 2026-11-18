@@ -103,8 +103,12 @@ export default class HostURLManager extends Component<Signature> {
     return this.homePage?.anonymousCanView ?? false;
   }
 
+  // A public-read grant fixes a home page that visitors can't read. A root
+  // that redirects serves no home page, and a grant leaves it redirecting.
   private get canGrantPublicRead() {
-    return this.realm.canWrite(this.args.realmURL);
+    return (
+      !this.homePage?.redirectTo && this.realm.canWrite(this.args.realmURL)
+    );
   }
 
   private get spaceURL(): string {
@@ -607,7 +611,11 @@ export default class HostURLManager extends Component<Signature> {
                     </div>
                     {{#let (this.errorFor url) as |error|}}
                       {{#if error}}
-                        <p class='row-error' role='alert'>{{error}}</p>
+                        <p
+                          class='row-error'
+                          role='alert'
+                          data-test-v1-site-error={{url}}
+                        >{{error}}</p>
                       {{/if}}
                     {{/let}}
                   </li>
