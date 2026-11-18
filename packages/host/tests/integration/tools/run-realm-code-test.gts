@@ -5892,11 +5892,19 @@ return reasons;`);
       run(
         `await realm.transform({ orders: [{ id: 1 }], page_info: {} }, 'map(.id)');`,
       ),
-      /realm\.transform: the program failed: .*\. The input is an object with keys orders \(an array of 1 item\), page_info \(an object\)\.\nBefore the next program, read the realm\.transform section of @cardstack\/skills\/source-code-editing\/SKILL\.md/,
+      /realm\.transform: the program failed: .*\. The input is an object with keys "orders" \(an array of 1 item\), "page_info" \(an object\)\.\nBefore the next program, read the realm\.transform section of @cardstack\/skills\/source-code-editing\/SKILL\.md/,
     );
     await assert.rejects(
       run(`await realm.transform([{ id: 1, tags: [] }], '.id');`),
-      /The input is an array of 1 item; the first is an object with keys id, tags\./,
+      /The input is an array of 1 item; the first is an object with keys "id", "tags"\./,
+    );
+    await assert.rejects(
+      run(`await realm.transform([{}], '.id');`),
+      /The input is an array of 1 item; the first is an empty object\./,
+    );
+    await assert.rejects(
+      run(`await realm.transform({ ['k'.repeat(500)]: 1 }, '.[0]');`),
+      /The input is an object with keys "k{40}…" \(a number\)\./,
     );
   });
 
