@@ -21,8 +21,9 @@
 // inside the change's transaction, so a change to the person's permission row
 // waits for the change to commit. Whoever switches it on or resumes it becomes its
 // payer, and their caps are snapshotted. Two changes pause it without a
-// person asking: a card edit that raises a cap above the snapshot or turns on
-// `batchedAI` (`checkAutomationCaps`), and the payer no longer being a direct
+// person asking: a card edit that raises a cap above the snapshot, turns on
+// `batchedAI` (`checkAutomationCaps`) or names an incoming webhook the
+// snapshot doesn't (`webhooksChangedFrom`), and the payer no longer being a direct
 // writer (`checkAutomationPayer`). Archiving the automation's realm pauses it
 // too, and so does a streak of its own runs failing
 // (`pauseAfterRepeatedFailures`). Each ends only through a resume, which makes
@@ -77,6 +78,10 @@ import {
   type AutomationSchedule,
   type TriggerRunState,
 } from './automation-schedule.ts';
+import {
+  declaredWebhookPaths,
+  unusableWebhookProblems,
+} from './automation-webhooks.ts';
 import type { DBAdapter } from './db.ts';
 import { isDirectWriterLocked } from './db-queries/realm-permission-queries.ts';
 import {
@@ -108,6 +113,9 @@ export type AutomationState =
 // - `caps-raised`: its card raised a cap above the snapshot.
 // - `batched-ai-enabled`: its card turned on `batchedAI`, which the snapshot
 //   had off.
+// - `webhook-changed`: its card names an incoming webhook the snapshot
+//   doesn't, either a trigger pointed at another webhook or a new webhook
+//   trigger. Deliveries to that webhook would start runs the payer pays for.
 // - `realm-archived`: its realm was archived.
 // - `repeated-failures`: its own runs failed `AUTOMATION_FAILURES_BEFORE_PAUSE`
 //   times in a row (see `pauseAfterRepeatedFailures`).
@@ -121,6 +129,7 @@ export type AutomationPauseReason =
   | 'payer-lost-access'
   | 'caps-raised'
   | 'batched-ai-enabled'
+  | 'webhook-changed'
   | 'realm-archived'
   | 'repeated-failures'
   | 'invalid-declaration';
@@ -168,8 +177,13 @@ const UNCOUNTED_FAILURE_REASONS: readonly string[] = [
 ];
 
 // The caps the payer agreed to pay for when they switched the automation on
-// or resumed it, and whether it used batched AI then.
-export type AutomationCapsSnapshot = AutomationCaps & { batchedAI: boolean };
+// or resumed it, whether it used batched AI then, and the incoming webhooks
+// its triggers named (`declaredWebhookPaths`). A snapshot taken before the
+// webhooks were recorded has no `webhookPaths`, and limits no webhook.
+export type AutomationCapsSnapshot = AutomationCaps & {
+  batchedAI: boolean;
+  webhookPaths?: string[];
+};
 
 // A trigger's run state as the row keeps it: what the schedule reads, plus
 // what the index hook compares to tell when a trigger starts afresh and its
@@ -259,6 +273,9 @@ export interface AutomationActorOptions extends AutomationReporters {
 // - `not-pausable`: pause found an automation that is already paused.
 // - `realm-archived`: switch-on or resume found the automation's realm
 //   archived. Its automations stay off until the realm is restored.
+// - `unusable-webhook`: switch-on or resume found a webhook trigger naming a
+//   webhook the realm can't use (see `automation-webhooks.ts`). `problems`
+//   says which trigger and why.
 export type AutomationRefusal =
   | {
       ok: false;
@@ -273,6 +290,11 @@ export type AutomationRefusal =
       ok: false;
       reason: 'already-switched-on' | 'not-paused' | 'not-pausable';
       automation: AutomationRow;
+    }
+  | {
+      ok: false;
+      reason: 'unusable-webhook';
+      problems: AutomationProblem[];
     };
 
 export type AutomationChange =
@@ -325,6 +347,10 @@ export async function switchOnAutomation(
     }
     if (await isArchived(txQuery, realm, options)) {
       return { ok: false, reason: 'realm-archived' };
+    }
+    let problems = await webhookProblems(txQuery, realm, declaration, options);
+    if (problems.length) {
+      return { ok: false, reason: 'unusable-webhook', problems };
     }
     let [inserted] = await txQuery([
       'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since, next_run) VALUES (',
@@ -431,6 +457,17 @@ export async function resumeAutomation(
         'shared',
       );
     }
+    // The webhooks' owners' permission rows lock before the automation's row,
+    // the order every change takes a permission row and an automation row in.
+    // The problems are reported only to a direct writer, below.
+    let problems = seen
+      ? await webhookProblems(
+          txQuery,
+          automationFromRow(seen).realm,
+          declaration,
+          options,
+        )
+      : [];
     let found = await lockForDirectWriter(txQuery, automationId, user, options);
     if (!found.ok) {
       return found;
@@ -440,6 +477,9 @@ export async function resumeAutomation(
     }
     if (await isArchived(txQuery, found.automation.realm, options)) {
       return { ok: false, reason: 'realm-archived' };
+    }
+    if (problems.length) {
+      return { ok: false, reason: 'unusable-webhook', problems };
     }
     let schedule = startSchedule(
       declaration,
@@ -585,15 +625,53 @@ export function capsRaisedAbove(
   return undefined;
 }
 
+// Whether the card names an incoming webhook the snapshot doesn't, and so
+// pauses with `webhook-changed`. Removing a webhook trigger asks for nothing
+// more. A snapshot without `webhookPaths` predates the record, and limits no
+// webhook. Such an automation's webhooks were never checked against the
+// ownership rule at switch-on, so whatever starts a run from a delivery checks
+// the delivery's webhook against `unusableWebhookProblems` itself rather than
+// trusting the snapshot.
+export function webhooksChangedFrom(
+  snapshot: AutomationCapsSnapshot,
+  card: Pick<AutomationDeclaration, 'triggers'>,
+): boolean {
+  if (!snapshot.webhookPaths) {
+    return false;
+  }
+  let agreed = new Set(snapshot.webhookPaths);
+  return declaredWebhookPaths(card).some((path) => !agreed.has(path));
+}
+
+// The reason a switched-on automation pauses for a card that asks for more
+// than its payer agreed to (`capsRaisedAbove`, `webhooksChangedFrom`), or
+// undefined when the card asks for no more.
+function agreementExceededBy(
+  snapshot: AutomationCapsSnapshot,
+  declaration: Pick<AutomationDeclaration, 'caps' | 'batchedAI' | 'triggers'>,
+):
+  | Extract<
+      AutomationPauseReason,
+      'caps-raised' | 'batched-ai-enabled' | 'webhook-changed'
+    >
+  | undefined {
+  return (
+    capsRaisedAbove(snapshot, declaration) ??
+    (webhooksChangedFrom(snapshot, declaration) ? 'webhook-changed' : undefined)
+  );
+}
+
 // Checks the automation's card, as just indexed, against its caps snapshot,
-// and pauses it when the card asks for more (`capsRaisedAbove`). An
+// and pauses it when the card asks for more (`capsRaisedAbove`, and
+// `webhooksChangedFrom` when `card` carries its triggers). An
 // automation already paused keeps the reason it has: a resume takes a new
 // snapshot whatever paused it. Returns the row, or undefined when the
 // automation isn't switched on.
 export async function checkAutomationCaps(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
-  card: Pick<AutomationDeclaration, 'caps' | 'batchedAI'>,
+  card: Pick<AutomationDeclaration, 'caps' | 'batchedAI'> &
+    Partial<Pick<AutomationDeclaration, 'triggers'>>,
   reporters: AutomationReporters = {},
 ): Promise<AutomationRow | undefined> {
   return await withChanges(dbAdapter, reporters, async (txQuery, changes) => {
@@ -605,7 +683,10 @@ export async function checkAutomationCaps(
     if (automation.state === 'paused') {
       return automation;
     }
-    let reason = capsRaisedAbove(automation.capsSnapshot, card);
+    let reason = agreementExceededBy(automation.capsSnapshot, {
+      ...card,
+      triggers: card.triggers ?? [],
+    });
     if (!reason) {
       return automation;
     }
@@ -893,7 +974,9 @@ export interface AutomationSyncOptions extends AutomationReporters {
 // comes back after being removed or spent has its cursor moved up to now, so
 // a slot that passed before the edit never comes due. An automation whose triggers are all spent becomes *done*, and a *done*
 // one with a trigger left becomes active again. Like `checkAutomationCaps`, a
-// card that asks for more than the caps snapshot pauses the automation, and a
+// card that asks for more than the caps snapshot pauses the automation, as
+// does a card that names an incoming webhook the snapshot doesn't
+// (`webhooksChangedFrom`), and a
 // paused one keeps its reason and its schedule until a resume restarts it.
 //
 // A card that doesn't read as a declaration leaves the row as it is: the card
@@ -967,7 +1050,7 @@ export async function syncAutomationWithCard(
     }
     let { declaration } = read;
     if (automation.pauseReason === 'invalid-declaration') {
-      let raised = capsRaisedAbove(automation.capsSnapshot, declaration);
+      let raised = agreementExceededBy(automation.capsSnapshot, declaration);
       if (raised) {
         return {
           kind: 'paused',
@@ -995,7 +1078,7 @@ export async function syncAutomationWithCard(
     if (automation.state === 'paused') {
       return { kind: 'unchanged', automation };
     }
-    let reason = capsRaisedAbove(automation.capsSnapshot, declaration);
+    let reason = agreementExceededBy(automation.capsSnapshot, declaration);
     if (reason) {
       return {
         kind: 'paused',
@@ -1442,17 +1525,37 @@ function startSchedule(
   };
 }
 
-// The card's caps, keyed by name, and its `batchedAI`. Only the caps the
-// declaration names are kept.
+// The card's caps, keyed by name, its `batchedAI`, and the incoming webhooks
+// its triggers name. Only the caps the declaration names are kept.
 function snapshotCaps(
-  declaration: Pick<AutomationDeclaration, 'caps' | 'batchedAI'>,
+  declaration: Pick<AutomationDeclaration, 'caps' | 'batchedAI' | 'triggers'>,
 ): AutomationCapsSnapshot {
   return {
     ...Object.fromEntries(
       AUTOMATION_CAP_NAMES.map((name) => [name, declaration.caps[name]]),
     ),
     batchedAI: declaration.batchedAI,
+    webhookPaths: declaredWebhookPaths(declaration),
   } as AutomationCapsSnapshot;
+}
+
+// `unusableWebhookProblems` for the automation's realm, asked of the served
+// URL its permission rows are keyed by.
+async function webhookProblems(
+  txQuery: Querier,
+  realm: RealmIdentifier,
+  declaration: AutomationDeclaration,
+  {
+    matrixServerName,
+    virtualNetwork,
+  }: Pick<AutomationActorOptions, 'matrixServerName' | 'virtualNetwork'>,
+): Promise<AutomationProblem[]> {
+  return await unusableWebhookProblems(
+    txQuery,
+    virtualNetwork.toURL(realm),
+    declaration,
+    matrixServerName,
+  );
 }
 
 export function automationFromRow(

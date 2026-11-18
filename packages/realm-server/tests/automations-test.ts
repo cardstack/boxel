@@ -60,7 +60,13 @@ import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-
 import type { DefinitionLookup } from '@cardstack/runtime-common';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
 import type { ChangedAutomation } from '@cardstack/runtime-common/automation-change-events';
-import { createVirtualNetwork, setupDB } from './helpers/index.ts';
+import {
+  createVirtualNetwork,
+  insertIncomingWebhookRow,
+  setupDB,
+  setupSecretsKeyring,
+} from './helpers/index.ts';
+import type { PgAdapter } from '@cardstack/postgres';
 import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
 
 const REALM_URL = 'http://127.0.0.1:4444/payroll/';
@@ -69,6 +75,33 @@ const AUTOMATION = rri(`${REALM_URL}Automation/nightly-sync`);
 const OWNER = '@owner:localhost';
 const ADMIN = '@admin:localhost';
 const READER = '@reader:localhost';
+const OUTSIDER = '@outsider:localhost';
+
+// Incoming webhooks: two the realm's direct writers made, one a reader of the
+// realm made, and one a person with no row in the realm made.
+const OWNER_WEBHOOK = 'whk_owner';
+const ADMIN_WEBHOOK = 'whk_admin';
+const READER_WEBHOOK = 'whk_reader';
+const OUTSIDER_WEBHOOK = 'whk_outsider';
+
+async function insertWebhooks(dbAdapter: DBAdapter) {
+  for (let [username, webhookPath] of [
+    [OWNER, OWNER_WEBHOOK],
+    [ADMIN, ADMIN_WEBHOOK],
+    [READER, READER_WEBHOOK],
+    [OUTSIDER, OUTSIDER_WEBHOOK],
+  ]) {
+    await insertIncomingWebhookRow(dbAdapter as PgAdapter, {
+      username,
+      webhookPath,
+      signingSecret: `secret-${webhookPath}`,
+    });
+  }
+}
+
+function webhookTrigger(webhookPath: string, label = 'deliveries') {
+  return { kind: 'webhook' as const, label, webhookPath };
+}
 
 // 2026-11-10 12:00 in Chicago. The automation's daily 05:30 Chicago run
 // comes next on the 11th.
@@ -164,6 +197,7 @@ function rollsBackFirstTransaction(db: DBAdapter): DBAdapter {
 
 module(basename(import.meta.filename), function () {
   module('the automation row', function (hooks) {
+    setupSecretsKeyring(hooks);
     let dbAdapter: DBAdapter;
     let options: AutomationActorOptions;
 
@@ -840,6 +874,7 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(automation.capsSnapshot, {
           ...CAPS,
           batchedAI: false,
+          webhookPaths: [],
         });
         assert.deepEqual(
           runCounts(automation),
@@ -877,17 +912,10 @@ module(basename(import.meta.filename), function () {
       });
 
       test('an automation with only a webhook trigger is active with no next run', async function (assert) {
+        await insertWebhooks(dbAdapter);
         let automation = await switchOn(
           OWNER,
-          declaration({
-            triggers: [
-              {
-                kind: 'webhook',
-                label: 'stripe',
-                webhookPath: 'stripe-events',
-              },
-            ],
-          }),
+          declaration({ triggers: [webhookTrigger(OWNER_WEBHOOK, 'stripe')] }),
         );
         assert.strictEqual(automation.state, 'active');
         assert.strictEqual(automation.nextRun, null);
@@ -1213,6 +1241,7 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(automation.capsSnapshot, {
           ...lowered,
           batchedAI: true,
+          webhookPaths: [],
         });
         assert.strictEqual(
           automation.scheduledSince,
@@ -1839,7 +1868,16 @@ module(basename(import.meta.filename), function () {
       });
 
       test('a trigger the card removes and later adds back starts at the re-add, keeping its count', async function (assert) {
-        await switchOn();
+        await insertWebhooks(dbAdapter);
+        await switchOn(
+          OWNER,
+          declaration({
+            triggers: [
+              ...declaration().triggers,
+              webhookTrigger(OWNER_WEBHOOK, 'push'),
+            ],
+          }),
+        );
         await setRuns('daily', 2, NEXT_DAILY - 86400);
         let removed = await sync(
           indexed({
@@ -1850,7 +1888,7 @@ module(basename(import.meta.filename), function () {
                 label: 'push',
                 expression: null,
                 timeZone: null,
-                webhookPath: 'github-push',
+                webhookPath: OWNER_WEBHOOK,
               },
             ],
           }),
@@ -2109,6 +2147,235 @@ module(basename(import.meta.filename), function () {
       test('a card whose automation is not switched on is left alone', async function (assert) {
         assert.strictEqual(await sync(indexed()), undefined);
         assert.strictEqual(await sync(undefined), undefined);
+      });
+
+      module('webhook triggers', function (hooks) {
+        hooks.beforeEach(async function () {
+          await insertWebhooks(dbAdapter);
+        });
+
+        function webhookCard(...paths: string[]): Record<string, unknown>[] {
+          return paths.map((webhookPath, index) => ({
+            ...cronTrigger(),
+            kind: 'webhook',
+            label: `deliveries-${index}`,
+            expression: null,
+            timeZone: null,
+            webhookPath,
+          }));
+        }
+
+        function webhookDeclaration(...paths: string[]) {
+          return declaration({
+            triggers: paths.map((path, index) =>
+              webhookTrigger(path, `deliveries-${index}`),
+            ),
+          });
+        }
+
+        test('switch-on accepts a webhook any direct writer of the realm made, and snapshots it', async function (assert) {
+          let automation = await switchOn(
+            OWNER,
+            webhookDeclaration(ADMIN_WEBHOOK, OWNER_WEBHOOK),
+          );
+          assert.deepEqual(
+            automation.capsSnapshot.webhookPaths,
+            [ADMIN_WEBHOOK, OWNER_WEBHOOK],
+            'the snapshot holds each webhook the payer agreed to',
+          );
+        });
+
+        test('switch-on refuses a foreign webhook, a reader’s webhook and an unknown one, naming each trigger', async function (assert) {
+          let result = await switchOnAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              realm: REALM,
+              user: OWNER,
+              declaration: webhookDeclaration(
+                OUTSIDER_WEBHOOK,
+                OWNER_WEBHOOK,
+                READER_WEBHOOK,
+                'whk_nowhere',
+              ),
+            },
+            options,
+          );
+          assert.false(result.ok);
+          let refusal = result as { reason: string; problems: unknown[] };
+          assert.strictEqual(refusal.reason, 'unusable-webhook');
+          assert.deepEqual(
+            (refusal.problems as { code: string; path: string }[]).map(
+              ({ code, path }) => ({ code, path }),
+            ),
+            [
+              { code: 'foreign-webhook', path: 'triggers.0.webhookPath' },
+              { code: 'foreign-webhook', path: 'triggers.2.webhookPath' },
+              { code: 'unknown-webhook', path: 'triggers.3.webhookPath' },
+            ],
+          );
+          assert.strictEqual(
+            await getAutomation(dbAdapter, AUTOMATION),
+            undefined,
+            'nothing is switched on',
+          );
+        });
+
+        test('a webhook stops being the realm’s once its owner loses write', async function (assert) {
+          await insertPermissions(dbAdapter, new URL(REALM_URL), {
+            [ADMIN]: ['read'],
+          });
+          let result = await switchOnAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              realm: REALM,
+              user: OWNER,
+              declaration: webhookDeclaration(ADMIN_WEBHOOK),
+            },
+            options,
+          );
+          assert.strictEqual(
+            (result as { reason: string }).reason,
+            'unusable-webhook',
+          );
+        });
+
+        test('pointing a switched-on automation’s webhook trigger at another webhook pauses it until a resume', async function (assert) {
+          await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
+          let pending = await createAutomationRun(dbAdapter, {
+            automationId: AUTOMATION,
+            realm: REALM,
+            trigger: 'deliveries-0',
+            slot: 'delivery-1',
+            actsAs: OWNER,
+          });
+
+          let result = await sync(
+            indexed({ triggers: webhookCard(OUTSIDER_WEBHOOK) }),
+          );
+          assert.strictEqual(result?.kind, 'paused');
+          assert.strictEqual(result?.automation.pauseReason, 'webhook-changed');
+          assert.deepEqual(
+            result?.automation.capsSnapshot.webhookPaths,
+            [OWNER_WEBHOOK],
+            'the snapshot keeps the webhook the payer agreed to',
+          );
+          let canceled = await getAutomationRun(dbAdapter, pending.id);
+          assert.strictEqual(canceled?.state, 'canceled');
+          assert.strictEqual(canceled?.errorReason, 'webhook-changed');
+
+          let refused = await resumeAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              user: OWNER,
+              declaration: webhookDeclaration(OUTSIDER_WEBHOOK),
+            },
+            options,
+          );
+          assert.strictEqual(
+            (refused as { reason: string }).reason,
+            'unusable-webhook',
+            'the payer cannot confirm a foreign webhook',
+          );
+
+          let confirmed = await resumeAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              user: ADMIN,
+              declaration: webhookDeclaration(ADMIN_WEBHOOK),
+            },
+            options,
+          );
+          assert.true(confirmed.ok);
+          let automation = (confirmed as { automation: AutomationRow })
+            .automation;
+          assert.strictEqual(automation.state, 'active');
+          assert.strictEqual(automation.payer, ADMIN);
+          assert.deepEqual(automation.capsSnapshot.webhookPaths, [
+            ADMIN_WEBHOOK,
+          ]);
+          let after = await sync(
+            indexed({ triggers: webhookCard(ADMIN_WEBHOOK) }),
+          );
+          assert.strictEqual(
+            after?.kind,
+            'recomputed',
+            'the confirmed webhook doesn’t pause it again',
+          );
+        });
+
+        test('adding a webhook trigger pauses a switched-on automation, and removing one does not', async function (assert) {
+          await switchOn(
+            OWNER,
+            webhookDeclaration(OWNER_WEBHOOK, ADMIN_WEBHOOK),
+          );
+          let removed = await sync(
+            indexed({ triggers: webhookCard(OWNER_WEBHOOK) }),
+          );
+          assert.strictEqual(removed?.kind, 'recomputed');
+          assert.strictEqual(removed?.automation.state, 'active');
+
+          await removeAutomation(
+            dbAdapter,
+            { automationId: AUTOMATION, user: OWNER },
+            options,
+          );
+          await switchOn();
+          let added = await sync(
+            indexed({
+              triggers: [cronTrigger(), ...webhookCard(OWNER_WEBHOOK)],
+            }),
+          );
+          assert.strictEqual(added?.kind, 'paused');
+          assert.strictEqual(added?.automation.pauseReason, 'webhook-changed');
+        });
+
+        test('checkAutomationCaps pauses for a new webhook when the card it is given carries its triggers', async function (assert) {
+          await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
+          let capsOnly = await checkAutomationCaps(dbAdapter, AUTOMATION, {
+            caps: CAPS,
+            batchedAI: false,
+          });
+          assert.strictEqual(capsOnly?.state, 'active');
+          let paused = await checkAutomationCaps(dbAdapter, AUTOMATION, {
+            caps: CAPS,
+            batchedAI: false,
+            triggers: webhookDeclaration(ADMIN_WEBHOOK).triggers,
+          });
+          assert.strictEqual(paused?.pauseReason, 'webhook-changed');
+        });
+
+        test('a snapshot that predates the webhook record pauses for no webhook', async function (assert) {
+          await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
+          await dbAdapter.execute(
+            `UPDATE automations SET caps_snapshot = caps_snapshot - 'webhookPaths'`,
+          );
+          let result = await sync(
+            indexed({ triggers: webhookCard(OUTSIDER_WEBHOOK) }),
+          );
+          assert.strictEqual(result?.kind, 'recomputed');
+          assert.strictEqual(result?.automation.state, 'active');
+        });
+
+        test('an automation paused for an invalid declaration whose fixed card names another webhook pauses for the webhook', async function (assert) {
+          await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
+          await pauseForInvalidDeclaration(dbAdapter, AUTOMATION, async () => [
+            {
+              code: 'missing-webhook-path',
+              path: 'triggers.0.webhookPath',
+              message: 'x',
+            },
+          ]);
+          let result = await sync(
+            indexed({ triggers: webhookCard(ADMIN_WEBHOOK) }),
+          );
+          assert.strictEqual(result?.kind, 'paused');
+          assert.strictEqual(result?.automation.pauseReason, 'webhook-changed');
+          assert.strictEqual(result?.automation.pauseProblems, null);
+        });
       });
     });
 
