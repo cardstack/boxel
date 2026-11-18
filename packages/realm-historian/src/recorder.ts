@@ -701,18 +701,23 @@ export class Recorder implements ManagedRecorder {
     }
   }
 
-  // Runs a job outside the queue. The recorder waits for it when it stops.
-  async #runOutsideQueue(job: BackgroundJob): Promise<BackgroundOutcome> {
+  // Runs a job outside the queue. The recorder waits for it when it stops,
+  // and for the stall its failure can make.
+  #runOutsideQueue(job: BackgroundJob): Promise<BackgroundOutcome> {
+    let outcome = this.#outsideJob(job);
+    this.#track(outcome);
+    return outcome;
+  }
+
+  async #outsideJob(job: BackgroundJob): Promise<BackgroundOutcome> {
     let signal = this.#outsideAbort.signal;
-    let run = job.run({
-      gitDir: this.#gitDir,
-      head: this.#head,
-      signal,
-      sweep: () => this.#sweepForJob(),
-    });
-    this.#track(run);
     try {
-      await run;
+      await job.run({
+        gitDir: this.#gitDir,
+        head: this.#head,
+        signal,
+        sweep: () => this.#sweepForJob(),
+      });
       return signal.aborted ? 'unavailable' : 'ran';
     } catch (error) {
       let fatal =

@@ -2132,6 +2132,26 @@ module('recorder', (hooks) => {
       elsewhere();
     });
 
+    test('a job outside the queue that fails stalls the realm when its kind says so', async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      await assert.rejects(
+        target.runBackground({
+          kind: 'failing',
+          outsideQueue: true,
+          stallOnFailure: true,
+          run: async () => {
+            throw new Error('the job failed');
+          },
+        }),
+        /the job failed/,
+      );
+      assert.strictEqual(target.state, 'stalled');
+      assert.strictEqual(await statusOf(), 'stalled');
+      assert.strictEqual(target.idleSince(), undefined);
+      assert.deepEqual(fatals, []);
+    });
+
     test('stopping a recorder ends its walks and drops the sweeps waiting to commit', async (assert) => {
       let target = recorder();
       await recordInitial(target);
