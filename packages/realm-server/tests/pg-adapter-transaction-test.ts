@@ -278,6 +278,49 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('a held connection that dies while the hold waits on its own nested work lets that work run', async function (assert) {
+      // With no overflow, nested work waiting on its own hold's connection is
+      // waiting on a connection nothing will give back.
+      let { adapter, pool } = stubbedAdapter({
+        PG_POOL_MAX: '1',
+        PG_POOL_OVERFLOW: '0',
+      });
+      try {
+        let nestedRan = false;
+        let opened = new Deferred<void>();
+        let hold = adapter.withConnection(async (query) => {
+          await query(['SELECT 1']);
+          opened.fulfill();
+          // nested work that needs a turn of its own, as a lock section's
+          // write does
+          await adapter.execute('SELECT 2');
+          nestedRan = true;
+          return await query(['SELECT 3']);
+        });
+        await opened.promise;
+        await new Promise((r) => setTimeout(r, 20));
+        assert.deepEqual(idle(adapter), { inUse: 1, holds: 1, waiting: 1 });
+
+        pool.clients[0].lose();
+        let settled = await Promise.race([
+          hold.then(
+            () => 'resolved',
+            (e: Error) => e.message,
+          ),
+          new Promise<'stuck'>((r) => setTimeout(() => r('stuck'), 2_000)),
+        ]);
+        assert.true(nestedRan, "the hold's nested work got a connection");
+        assert.strictEqual(
+          settled,
+          'Client has encountered a connection error',
+          "the hold's own next statement fails",
+        );
+        assert.deepEqual(idle(adapter), { inUse: 0, holds: 0, waiting: 0 });
+      } finally {
+        await adapter.close();
+      }
+    });
+
     test('a hold whose connection died waits its turn behind earlier callers', async function (assert) {
       // Nested work is served ahead of everything because its hold pins a
       // connection until it finishes; a hold whose connection is gone pins
@@ -317,6 +360,63 @@ module(basename(import.meta.filename), function () {
       } finally {
         await adapter.close();
       }
+    });
+  });
+
+  // The stand-in pool above assumes `pg` reports a checked-out connection's
+  // death as an `error` event on the client even when no query is running.
+  // This holds it to that against Postgres itself.
+  module('PgAdapter when Postgres ends a held connection', function (hooks) {
+    let dbAdapter: PgAdapter;
+    setupDB(hooks, {
+      beforeEach: async (adapter) => {
+        dbAdapter = adapter;
+      },
+    });
+
+    test("the hold's turn comes back while the hold is still open", async function (assert) {
+      let { holds: holdsBefore, inUse: inUseBefore } =
+        dbAdapter.connectionStats;
+      let resume!: () => void;
+      let gate = new Promise<void>((r) => (resume = r));
+      let opened = new Deferred<void>();
+      let hold = dbAdapter.withConnection(async (query) => {
+        // Set for this session only, which Postgres then ends.
+        await query([`SET idle_in_transaction_session_timeout = '200ms'`]);
+        await query(['BEGIN']);
+        await query(['SELECT 1']);
+        opened.fulfill();
+        await gate;
+        return await query(['SELECT 2']);
+      });
+      try {
+        await opened.promise;
+        assert.strictEqual(dbAdapter.connectionStats.holds, holdsBefore + 1);
+
+        let deadline = Date.now() + 5_000;
+        while (
+          dbAdapter.connectionStats.holds > holdsBefore &&
+          Date.now() < deadline
+        ) {
+          await new Promise((r) => setTimeout(r, 25));
+        }
+        assert.deepEqual(
+          {
+            holds: dbAdapter.connectionStats.holds,
+            inUse: dbAdapter.connectionStats.inUse,
+          },
+          { holds: holdsBefore, inUse: inUseBefore },
+          'the dead connection stopped counting before the hold finished',
+        );
+      } finally {
+        resume();
+      }
+      await assert.rejects(hold, /not queryable/);
+      assert.deepEqual(
+        await dbAdapter.execute('SELECT 1 AS one'),
+        [{ one: 1 }],
+        'the pool still serves',
+      );
     });
   });
 });
