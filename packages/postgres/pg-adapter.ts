@@ -284,7 +284,10 @@ const NOTIFICATION_HEARTBEAT_TIMEOUT_MS = 10_000;
 // lifecycle this module owns carries one, whether it lives for a query or for
 // the life of a subscription. A short-lived client is no less exposed: its
 // in-flight query rejects into the caller that can handle it, and the socket's
-// closing event arrives afterwards with nobody left to hear it.
+// closing event arrives afterwards. A client this module opens itself has only
+// this listener to hear that event. A pooled checkout also has its own, which
+// gives the dead connection back (see `#checkout`), so recording one is for
+// the log.
 //
 // The migration runner is the deliberate exception. `migrate()` is given a
 // connection config rather than a client, so node-pg-migrate opens and owns
@@ -819,10 +822,7 @@ export class PgAdapter implements DBAdapter {
   ): Promise<Record<string, PgPrimitive>[]> {
     await this.started;
     let { client, release } = await this.#checkout();
-    // A checked-out client's death is nobody's event: the pool removes its
-    // own idle listener for the duration of the checkout, so the in-flight
-    // query rejects into the caller that handles it and the socket's closing
-    // event lands unheard.
+    // The checkout gives this connection back if it dies; recording logs why.
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     log.debug(
       `executing sql: ${sql}, with bindings: ${loggableBindings(opts)}`,
@@ -863,10 +863,10 @@ export class PgAdapter implements DBAdapter {
   // transaction, an administrator terminating the backend, a failover) is
   // given back as soon as the client reports it, not when the caller is done.
   // The caller may be a hold waiting on other work, and that work may be what
-  // is waiting for a turn: counting the dead connection until the hold ended
-  // kept the scheduler's count above what Postgres had, with every waiter
-  // queued behind it. The caller's own statements on the client fail, and its
-  // later `release` does nothing.
+  // is waiting for a turn. Counted until the hold ends, a dead connection
+  // would keep the scheduler's count above what Postgres has, with every
+  // waiter queued behind it. The caller's own statements on the client fail,
+  // and its later `release` does nothing.
   async #checkout(opts?: { hold?: ConnectionHold }): Promise<{
     client: PoolClient;
     release: (destroy?: boolean | Error) => void;
