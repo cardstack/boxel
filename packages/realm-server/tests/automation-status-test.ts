@@ -300,6 +300,7 @@ module(basename(import.meta.filename), function (hooks) {
             webhookDeliveriesStartRuns: false,
             lastRun: null,
             currentRun: null,
+            lastRunUsage: null,
           },
         },
       });
@@ -1037,6 +1038,13 @@ module(basename(import.meta.filename), function (hooks) {
         assert.true(nightly.attributes.viewerIsPayer);
         assert.strictEqual(nightly.attributes.monthlyCredits, 500);
         assert.strictEqual(nightly.attributes.spentThisMonth, 42);
+        assert.deepEqual(
+          status.switchedOn
+            ? [status.monthlyCredits, status.spentThisMonth]
+            : [],
+          [500, 42],
+          "the card's status reads the same cap and spend",
+        );
       });
 
       test('a paused, waiting or done automation lists that state, and a running one the milestone its run is in', async function (assert) {
@@ -1112,7 +1120,7 @@ module(basename(import.meta.filename), function (hooks) {
         assert.ok(entry.attributes.currentRun?.startedAt, 'with its start');
       });
 
-      test('an automation that is not switched on lists how its last run ended', async function (assert) {
+      test('an automation lists how its last run ended, switched on or not, and the status reads the same', async function (assert) {
         await writeAutomation();
         let run = await createAutomationRun(dbAdapter, {
           automationId: rri(automationURL()),
@@ -1131,6 +1139,24 @@ module(basename(import.meta.filename), function (hooks) {
         assert.false(entry.attributes.switchedOn);
         assert.strictEqual(entry.attributes.lastResult, 'error');
         assert.ok(entry.attributes.lastFinishedAt, 'with when it ended');
+
+        await switchOn();
+        [entry] = await entries();
+        assert.true(entry.attributes.switchedOn);
+        assert.strictEqual(
+          entry.attributes.lastResult,
+          'error',
+          'a switched-on automation lists its last run too',
+        );
+        let status = (
+          (await statusOf(ADMIN, ['read', 'write']))
+            .body as AutomationStatusDocument
+        ).data.attributes;
+        assert.deepEqual(
+          status.switchedOn ? [status.lastResult, status.lastFinishedAt] : [],
+          ['error', entry.attributes.lastFinishedAt],
+          "the card's status reads the same last run",
+        );
       });
 
       test('a direct writer who shares no realm grant with the payer learns that someone pays, not who', async function (assert) {

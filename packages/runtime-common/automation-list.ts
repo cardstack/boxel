@@ -5,17 +5,16 @@
 // a row whose runs go on is never hidden.
 //
 // The card is the definition and the row is the state (ADR 028 §1.3): each
-// entry reads its title and triggers from the card as indexed, and its state,
-// next run, payer and last result from the automation's row. The payer is a
+// entry reads its title and triggers from the card as indexed, its state,
+// next run and payer from the automation's row, and its last result and run
+// in progress from the automation's runs. The payer is a
 // Matrix id, so an entry names the payer only to a viewer who is the payer or
 // shares a realm grant with them (ADR 011 §1.2).
 
 import {
-  readCurrentRunMilestones,
-  readLastRunMilestones,
-  type RunMilestones,
-} from './automation-run-milestones.ts';
-import { automationCreditsSince, utcMonthStart } from './automation-spend.ts';
+  automationCreditsSinceFor,
+  utcMonthStart,
+} from './automation-spend.ts';
 import {
   automationsInRealm,
   type AutomationPauseReason,
@@ -29,7 +28,14 @@ import {
   isDirectWriter,
   shareARealmGrant,
 } from './db-queries/realm-permission-queries.ts';
-import { dbAdapterQuerier } from './expression.ts';
+import {
+  addExplicitParens,
+  dbAdapterQuerier,
+  param,
+  separatedByCommas,
+  type Expression,
+  type Querier,
+} from './expression.ts';
 import type { IndexedInstanceSource } from './index-query-engine.ts';
 import { ri, rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -86,9 +92,8 @@ export interface AutomationSummaryAttributes {
   // What the automation was charged this UTC month, the month the monthly
   // cap counts, across every charge kind that names it.
   spentThisMonth: number;
-  // How the automation's last run ended, and when. For a switched-on
-  // automation, the row's; otherwise the automation's last run that started
-  // and ended (a Run now), leaving out Previews.
+  // How the automation's last run that started and ended finished, and when,
+  // leaving out Previews: a run its triggers started, or a Run now.
   lastResult: AutomationRunResult | null;
   lastFinishedAt: string | null;
   // The automation's run in progress, leaving out a Preview, or null.
@@ -175,19 +180,21 @@ export async function answerAutomationList({
   }
 
   let querier = dbAdapterQuerier(dbAdapter);
-  let monthStart = utcMonthStart(now);
+  let ids = [...entries.keys()];
+  // Each read below covers every listed automation at once, so a realm's
+  // list costs the same handful of queries however many automations it has.
+  let [lastRuns, currentRuns, spent] = await Promise.all([
+    readLastRunsOf(querier, ids),
+    readCurrentRunsOf(querier, ids),
+    automationCreditsSinceFor(querier, ids, utcMonthStart(now)),
+  ]);
   let payerShown = new Map<string, boolean>();
   let data: AutomationSummaryResource[] = [];
   for (let [automationId, entry] of entries) {
     let row = rows.get(automationId);
     let instance = entry?.instance ?? undefined;
     let attributes = (instance?.attributes ?? {}) as Record<string, unknown>;
-    let lastRun = row
-      ? undefined
-      : await readLastRunMilestones(dbAdapter, automationId);
-    let currentRun = await readCurrentRunMilestones(dbAdapter, automationId, {
-      now: now * 1000,
-    });
+    let lastRun = lastRuns.get(automationId);
     let shown = false;
     if (row) {
       if (row.payer === viewer) {
@@ -223,18 +230,10 @@ export async function answerAutomationList({
         payer: row && shown ? row.payer : null,
         viewerIsPayer: row?.payer === viewer,
         monthlyCredits: monthlyCap(row, attributes),
-        spentThisMonth: await automationCreditsSince(
-          querier,
-          automationId,
-          monthStart,
-        ),
-        lastResult: row ? row.lastResult : lastRunResult(lastRun),
-        lastFinishedAt: row
-          ? row.lastFinishedAt
-          : lastRun
-            ? lastRun.finishedAt
-            : null,
-        currentRun: currentRun ? summarizeCurrentRun(currentRun) : null,
+        spentThisMonth: spent.get(automationId) ?? 0,
+        lastResult: lastRun?.result ?? null,
+        lastFinishedAt: lastRun?.finishedAt ?? null,
+        currentRun: currentRuns.get(automationId) ?? null,
       },
     });
   }
@@ -300,34 +299,102 @@ function monthlyCap(
   return typeof declared === 'number' ? declared : null;
 }
 
-function lastRunResult(
-  run: RunMilestones | undefined,
-): AutomationRunResult | null {
-  if (
-    run &&
-    (run.state === 'complete' ||
-      run.state === 'error' ||
-      run.state === 'canceled')
-  ) {
-    return run.state;
-  }
-  return null;
+function inList(ids: string[]): Expression {
+  return addExplicitParens(
+    separatedByCommas(ids.map((id) => [param(id)])),
+  ) as Expression;
 }
 
-function summarizeCurrentRun(run: RunMilestones): AutomationSummaryCurrentRun {
-  let summary: AutomationSummaryCurrentRun = {
-    runId: run.runId,
-    startedAt: run.startedAt,
-    milestone: run.current,
-  };
-  let reached = run.milestones[run.milestones.length - 1];
-  if (run.current && reached?.name === run.current) {
-    if (reached.done !== undefined) {
-      summary.done = reached.done;
-    }
-    if (reached.total !== undefined) {
-      summary.total = reached.total;
+function iso(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  let date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+// Each automation's last run that started and has ended, leaving out
+// Previews, as `readLastRunMilestones` picks it: how it ended and when.
+async function readLastRunsOf(
+  querier: Querier,
+  ids: string[],
+): Promise<
+  Map<string, { result: AutomationRunResult; finishedAt: string | null }>
+> {
+  let lastRuns = new Map<
+    string,
+    { result: AutomationRunResult; finishedAt: string | null }
+  >();
+  if (ids.length === 0) {
+    return lastRuns;
+  }
+  let rows = (await querier([
+    'SELECT DISTINCT ON (automation_id) automation_id, state, finished_at',
+    'FROM automation_runs WHERE automation_id IN',
+    ...inList(ids),
+    'AND finished_at IS NOT NULL AND started_at IS NOT NULL AND NOT dry_run',
+    'ORDER BY automation_id, finished_at DESC, id',
+  ] as Expression)) as {
+    automation_id: string;
+    state: string;
+    finished_at: unknown;
+  }[];
+  for (let row of rows) {
+    if (
+      row.state === 'complete' ||
+      row.state === 'error' ||
+      row.state === 'canceled'
+    ) {
+      lastRuns.set(row.automation_id, {
+        result: row.state,
+        finishedAt: iso(row.finished_at),
+      });
     }
   }
-  return summary;
+  return lastRuns;
+}
+
+// Each automation's run in progress, leaving out Previews, as
+// `readCurrentRunMilestones` picks it, with the milestone its script last
+// reported and the count inside that milestone.
+async function readCurrentRunsOf(
+  querier: Querier,
+  ids: string[],
+): Promise<Map<string, AutomationSummaryCurrentRun>> {
+  let currentRuns = new Map<string, AutomationSummaryCurrentRun>();
+  if (ids.length === 0) {
+    return currentRuns;
+  }
+  let rows = (await querier([
+    'SELECT DISTINCT ON (r.automation_id) r.automation_id, r.id, r.started_at,',
+    'm.name, m.count_done, m.count_total',
+    'FROM automation_runs r LEFT JOIN LATERAL (',
+    'SELECT name, count_done, count_total FROM automation_run_milestones',
+    'WHERE run_id = r.id ORDER BY position DESC LIMIT 1',
+    ') m ON TRUE',
+    'WHERE r.automation_id IN',
+    ...inList(ids),
+    "AND r.state = 'running' AND NOT r.dry_run",
+    'ORDER BY r.automation_id, r.started_at DESC NULLS LAST, r.id',
+  ] as Expression)) as {
+    automation_id: string;
+    id: string;
+    started_at: unknown;
+    name: string | null;
+    count_done: number | null;
+    count_total: number | null;
+  }[];
+  for (let row of rows) {
+    let run: AutomationSummaryCurrentRun = {
+      runId: row.id,
+      startedAt: iso(row.started_at),
+      milestone: row.name ?? null,
+    };
+    if (row.name && row.count_done !== null && row.count_total !== null) {
+      run.done = Number(row.count_done);
+      run.total = Number(row.count_total);
+    }
+    currentRuns.set(row.automation_id, run);
+  }
+  return currentRuns;
 }

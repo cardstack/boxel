@@ -32,10 +32,15 @@ import {
   readLastRunMilestones,
   type RunMilestones,
 } from './automation-run-milestones.ts';
+import {
+  automationCreditsSince,
+  utcDayStart,
+  utcMonthStart,
+} from './automation-spend.ts';
 import { WEBHOOK_DELIVERIES_START_RUNS } from './automation-webhooks.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
-import { dbAdapterQuerier } from './expression.ts';
+import { dbAdapterQuerier, param, type Querier } from './expression.ts';
 import {
   isDirectWriter,
   shareARealmGrant,
@@ -78,6 +83,18 @@ export type AutomationLastRun = RunMilestones;
 // reported so far: the card shows the one it is in as running.
 export type AutomationCurrentRun = RunMilestones;
 
+// What the automation's last ended run used of each per-run cap, read from
+// the run's row: the counts the realm holds the run to, and the run's wall
+// time, which the `seconds` cap bounds.
+export interface AutomationRunUsage {
+  callApiCalls: number;
+  responseBytes: number;
+  resolveCalls: number;
+  aiCredits: number;
+  writes: number;
+  seconds: number | null;
+}
+
 export type AutomationStatusAttributes =
   | {
       switchedOn: false;
@@ -86,12 +103,15 @@ export type AutomationStatusAttributes =
       webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
+      // What `lastRun` used of each per-run cap, or null without a last run.
+      lastRunUsage: AutomationRunUsage | null;
     }
   | {
       switchedOn: true;
       webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
+      lastRunUsage: AutomationRunUsage | null;
       state: AutomationState;
       pauseReason: AutomationPauseReason | null;
       // What the declaration reader found wrong with the card, when
@@ -114,6 +134,15 @@ export type AutomationStatusAttributes =
       // why its last run failed.
       failuresInARow: number;
       lastFailure: AutomationFailure | null;
+      // The monthly credit cap the payer agreed to (the caps snapshot), or
+      // null when the snapshot sets none, and what the automation was
+      // charged this UTC month, the month that cap counts.
+      monthlyCredits: number | null;
+      spentThisMonth: number;
+      // The daily credit cap the payer agreed to, or null when the snapshot
+      // sets none, and what the automation was charged this UTC day.
+      dailyCredits: number | null;
+      spentToday: number;
       triggers: AutomationTriggerStatus[];
     };
 
@@ -193,7 +222,22 @@ export async function answerAutomationStatus({
   let declaration: AutomationDeclaration | undefined;
   let payerShown = false;
   let failures: AutomationFailures | undefined;
+  let spentThisMonth = 0;
+  let spentToday = 0;
+  let lastRunUsage = lastRun
+    ? await readRunUsage(dbAdapterQuerier(dbAdapter), lastRun.runId)
+    : null;
   if (row) {
+    spentThisMonth = await automationCreditsSince(
+      dbAdapterQuerier(dbAdapter),
+      automationId,
+      utcMonthStart(now),
+    );
+    spentToday = await automationCreditsSince(
+      dbAdapterQuerier(dbAdapter),
+      automationId,
+      utcDayStart(now),
+    );
     failures = await readAutomationFailures(
       dbAdapterQuerier(dbAdapter),
       automationId,
@@ -219,6 +263,9 @@ export async function answerAutomationStatus({
       lastRun,
       currentRun,
       failures,
+      spentThisMonth,
+      spentToday,
+      lastRunUsage,
     }),
   };
 }
@@ -228,7 +275,8 @@ export async function answerAutomationStatus({
 // card as indexed, absent when the card doesn't read as one; then each
 // trigger reports only its run count. `payerShown` says whether the viewer
 // may see the payer's Matrix id. `lastRun` is the automation's last ended
-// run, if it has one, and `failures` its failure streak.
+// run, if it has one, `failures` its failure streak, and `spentThisMonth`
+// what it was charged this UTC month.
 export function automationStatusDocument({
   url,
   row,
@@ -239,6 +287,9 @@ export function automationStatusDocument({
   lastRun = null,
   currentRun = null,
   failures,
+  spentThisMonth = 0,
+  spentToday = 0,
+  lastRunUsage = null,
 }: {
   url: string;
   row: AutomationRow | undefined;
@@ -251,6 +302,9 @@ export function automationStatusDocument({
   currentRun?: AutomationCurrentRun | null;
   // Read only for a switched-on automation, so absent when `row` is.
   failures: AutomationFailures | undefined;
+  spentThisMonth?: number;
+  spentToday?: number;
+  lastRunUsage?: AutomationRunUsage | null;
 }): AutomationStatusDocument {
   return {
     data: {
@@ -266,22 +320,78 @@ export function automationStatusDocument({
             payer: payerShown || row.payer === viewer ? row.payer : null,
             viewerIsPayer: row.payer === viewer,
             nextRun: isoOrNull(row.nextRun),
-            lastResult: row.lastResult,
-            lastFinishedAt: row.lastFinishedAt,
+            lastResult: lastRunResult(lastRun),
+            lastFinishedAt: lastRun?.finishedAt ?? null,
             failuresInARow: failures?.inARow ?? 0,
             lastFailure: failures?.last ?? null,
+            monthlyCredits:
+              typeof row.capsSnapshot.monthlyCredits === 'number'
+                ? row.capsSnapshot.monthlyCredits
+                : null,
+            spentThisMonth,
+            dailyCredits:
+              typeof row.capsSnapshot.dailyCredits === 'number'
+                ? row.capsSnapshot.dailyCredits
+                : null,
+            spentToday,
             triggers: triggerStatuses(row, declaration, now),
             lastRun,
             currentRun,
+            lastRunUsage,
           }
         : {
             switchedOn: false,
             webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
             lastRun,
             currentRun,
+            lastRunUsage,
           },
     },
   };
+}
+
+// What a run used of each per-run cap, from its row.
+async function readRunUsage(
+  querier: Querier,
+  runId: string,
+): Promise<AutomationRunUsage | null> {
+  let [run] = (await querier([
+    'SELECT call_api_calls, call_api_response_bytes, resolve_calls, ai_credits_spent, writes,',
+    'EXTRACT(EPOCH FROM finished_at - started_at) AS seconds',
+    'FROM automation_runs WHERE id =',
+    param(runId),
+  ])) as {
+    call_api_calls: number;
+    call_api_response_bytes: number | string;
+    resolve_calls: number;
+    ai_credits_spent: number | string;
+    writes: number;
+    seconds: number | string | null;
+  }[];
+  if (!run) {
+    return null;
+  }
+  return {
+    callApiCalls: Number(run.call_api_calls),
+    responseBytes: Number(run.call_api_response_bytes),
+    resolveCalls: Number(run.resolve_calls),
+    aiCredits: Number(run.ai_credits_spent),
+    writes: Number(run.writes),
+    seconds: run.seconds === null ? null : Math.round(Number(run.seconds)),
+  };
+}
+
+// How the automation's last run ended, read from the run itself, which every
+// path that ends a run writes.
+function lastRunResult(
+  run: AutomationLastRun | null,
+): AutomationRunResult | null {
+  return run &&
+    (run.state === 'complete' ||
+      run.state === 'error' ||
+      run.state === 'canceled')
+    ? run.state
+    : null;
 }
 
 // How long one answer may spend counting runs left, in milliseconds. A
