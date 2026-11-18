@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "f44b0c4e6f891d39730a98feb2a56e427af4b08e",
+  "revision": "ede7c95c8a51a3117422b4c401ccaf4079aa4530",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -31,7 +31,8 @@
       "Integration | realm policy",
       "Integration | realm config policy standing",
       "Integration | policy-scoped search",
-      "Integration | a realm that checks permissions"
+      "Integration | a realm that checks permissions",
+      "Acceptance | realm config | Automations"
     ],
     "realmServer": [
       "anonymous-home-page-test",

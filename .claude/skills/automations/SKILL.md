@@ -109,8 +109,8 @@ description: >-
   direct writer isn't seeing a run's events.
   Also covers the automations console, the realm config's Automations
   section (`packages/base/realm-automations.gts`): each automation as the
-  Automation card's fitted view, New automation through the card's
-  `newAutomation` operation, and the realm's `_automations` list route
+  Automation card's fitted view, New automation through the stack's
+  `createCard`, and the realm's `_automations` list route
   (`automation-list.ts`) it reads, with each automation's state, triggers,
   next run, payer, monthly cap, spend this month, last result and current
   run milestone.
@@ -1575,7 +1575,7 @@ The automations console is the realm config's **Automations** section, where a r
 
 - **Each automation is the Automation card's own fitted view** (the catalog's `automation/automation.gts`), loaded through the card context's `getCard` and rendered in a slot as wide as the section and 105px tall (the height of the `wide-strip` fitted size). At that size the fitted view shows the state chip, the first trigger, the next run in the viewer's own time, the last result, the run's milestones as a vertical timeline that fits the space, the payer, this month's spend against the monthly cap, and any limit the automation is near or at. A card that doesn't load (a switched-on automation whose card the index lacks, say) falls back to a one-line summary from the route: name, state chip, and the next run, the milestone a run is in, or why Boxel paused the automation.
 - **A click on an automation**, or Enter on its row, opens the card's isolated view (`ShowCardTool`).
-- **New automation** asks for a name, then invokes the Automation type's `newAutomation` operation (`InvokeCardOperationTool` with the type, the realm and `{ name }`; the operation fills the name and the default caps) and opens the new card in its edit view.
+- **New automation** calls the stack's `createCard` (the realm config passes its `@createCard` down), which makes the Automation in the store, with no round trip through the realm's index, and opens it in its edit view in the realm config's own stack. The edit view fills the default caps on a card that has none, and the person names the automation there. The button shows only where the realm config has a `createCard`.
 
 The section renders only once the route answers, and only when it answers that the viewer is a direct writer; anyone else sees no section at all. It reads `GET <realm>/_automations` through the host's `authed-fetch` tool, and reads the route again on every `job`, `automation` and `index` realm event for the realm (a burst reads the route once), since a run moving, a change to a row and a card edit each change the list.
 

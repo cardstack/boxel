@@ -2068,7 +2068,11 @@ class RealmConfigIsolated extends Component<typeof RealmConfig> {
         @format='isolated'
       />
 
-      <RealmAutomations @realm={{this.realm}} @context={{@context}} />
+      <RealmAutomations
+        @realm={{this.realm}}
+        @context={{@context}}
+        @createCard={{@createCard}}
+      />
     </article>
     <style scoped>
       .realm-config-isolated {

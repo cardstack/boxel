@@ -1,4 +1,4 @@
-import { getComponent, type CardContext } from './card-api';
+import { getComponent, type CardContext, type CreateCardFn } from './card-api';
 import { isLiveRender } from './render-context';
 import {
   rri,
@@ -13,16 +13,12 @@ import { Alert } from '@cardstack/pretui/components/alert';
 import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
 import { EmptyState } from '@cardstack/pretui/components/empty-state';
-import { Form } from '@cardstack/pretui/components/form';
-import { FormField } from '@cardstack/pretui/components/form-field';
-import { Input } from '@cardstack/pretui/components/input';
 import { FormatDate } from '@cardstack/pretui/components/format-date';
 import { Item } from '@cardstack/pretui/components/item';
 import { List } from '@cardstack/pretui/components/list';
 import { Spinner } from '@cardstack/pretui/components/spinner';
 import PlusIcon from '@cardstack/boxel-icons/plus';
 import AuthedFetchTool from '@cardstack/boxel-host/tools/authed-fetch';
-import InvokeCardOperationTool from '@cardstack/boxel-host/tools/invoke-card-operation';
 import ShowCardTool from '@cardstack/boxel-host/tools/show-card';
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
@@ -46,13 +42,11 @@ type Tone = 'neutral' | 'success' | 'warning' | 'info';
 const AUTOMATION_LIST_PATH = '_automations';
 
 // The catalog's Automation type, as `automationRef` in runtime-common's
-// `automation-declaration.ts` names it, and the operation the type declares
-// for a new automation, which takes the automation's name.
+// `automation-declaration.ts` names it.
 const AUTOMATION_TYPE: ResolvedCodeRef = {
   module: rri('@cardstack/catalog/automation/automation'),
   name: 'Automation',
 };
-const NEW_AUTOMATION_OPERATION = 'newAutomation';
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -173,6 +167,10 @@ interface RealmAutomationsSignature {
     // The realm's URL.
     realm: string | undefined;
     context: CardContext | undefined;
+    // The stack's `createCard`, which makes a card in the store and opens it
+    // in the stack the realm config is in. Without one, there's no New
+    // automation button.
+    createCard?: CreateCardFn;
   };
 }
 
@@ -187,7 +185,7 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
   @tracked private visible = false;
   @tracked private automations: Automation[] = [];
   @tracked private loadError: string | undefined;
-  @tracked private creating = false;
+  @tracked private createError: string | undefined;
 
   private get toolContext() {
     return this.args.context?.toolContext;
@@ -249,12 +247,29 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
     },
   );
 
-  private startCreating = () => {
-    this.creating = true;
-  };
+  // Makes a new automation in the realm through the store, with no round
+  // trip through the realm's index, and opens it in its edit view in the
+  // realm config's own stack. The edit view fills the limits a new automation
+  // starts with, and the person names it and writes its script and triggers
+  // there.
+  private createAutomation = task(async () => {
+    let realm = this.args.realm;
+    if (!realm || !this.args.createCard) {
+      return;
+    }
+    this.createError = undefined;
+    try {
+      await this.args.createCard(AUTOMATION_TYPE, undefined, {
+        realmURL: new URL(realm),
+        cardModeAfterCreation: 'edit',
+      });
+    } catch (err) {
+      this.createError = errorText(err);
+    }
+  });
 
-  private stopCreating = () => {
-    this.creating = false;
+  private newAutomation = () => {
+    this.createAutomation.perform();
   };
 
   private rowLabel = (automation: Automation) => automationTitle(automation);
@@ -282,7 +297,7 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
       {{#if this.visible}}
         <header class='header'>
           <h2 class='section-title'>Automations</h2>
-          {{#unless this.creating}}
+          {{#if @createCard}}
             {{! Styled like the realm config's other section actions, such as
                 "Share one of my keys". }}
             <Button
@@ -290,19 +305,22 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
               @appearance='accent'
               @size='s'
               @icon={{PlusIcon}}
-              {{on 'click' this.startCreating}}
-              data-test-new-automation-start
+              @busy={{this.createAutomation.isRunning}}
+              {{on 'click' this.newAutomation}}
+              data-test-new-automation
             >
               New automation
             </Button>
-          {{/unless}}
+          {{/if}}
         </header>
-        {{#if this.creating}}
-          <NewAutomationForm
-            @realm={{@realm}}
-            @context={{@context}}
-            @onDone={{this.stopCreating}}
-          />
+        {{#if this.createError}}
+          <Alert
+            @tone='danger'
+            @title='Boxel couldn’t make the automation'
+            data-test-new-automation-error
+          >
+            {{this.createError}}
+          </Alert>
         {{/if}}
         {{#if this.loadError}}
           <Alert
@@ -467,138 +485,6 @@ class AutomationSlot extends GlimmerComponent<AutomationSlotSignature> {
       .fitted {
         inline-size: 100%;
         block-size: 6.5625rem;
-      }
-    </style>
-  </template>
-}
-
-interface NewAutomationFormSignature {
-  Args: {
-    realm: string | undefined;
-    context: CardContext | undefined;
-    // Called when the person cancels, or once the new card opens.
-    onDone: () => void;
-  };
-}
-
-// Makes a new automation in the realm through the Automation type's
-// `newAutomation` operation, which takes only the automation's name, then
-// opens the new card in its edit view, where the person writes the script,
-// the triggers and the limits.
-class NewAutomationForm extends GlimmerComponent<NewAutomationFormSignature> {
-  @tracked private name = '';
-  @tracked private error: string | undefined;
-
-  private get nameMissing() {
-    return !this.name.trim();
-  }
-
-  private cancel = () => {
-    this.args.onDone();
-  };
-
-  private setName = (value: string) => {
-    this.name = value;
-  };
-
-  private create = task(async () => {
-    let toolContext = this.args.context?.toolContext;
-    let realm = this.args.realm;
-    let name = this.name.trim();
-    if (!toolContext || !realm || !name) {
-      return;
-    }
-    this.error = undefined;
-    try {
-      let result = await new InvokeCardOperationTool(toolContext).execute({
-        type: AUTOMATION_TYPE,
-        operation: NEW_AUTOMATION_OPERATION,
-        realm,
-        payload: { name },
-      });
-      if (!result.cardId) {
-        throw new Error('The workspace made no automation card');
-      }
-      await new ShowCardTool(toolContext).execute({
-        cardId: result.cardId,
-        format: 'edit',
-      });
-      this.args.onDone();
-    } catch (err) {
-      this.error = errorText(err);
-    }
-  });
-
-  private submit = (event: Event) => {
-    event.preventDefault();
-    this.create.perform();
-  };
-
-  <template>
-    <div class='new-automation' data-test-new-automation>
-      <Form
-        @label='New automation'
-        @busy={{this.create.isRunning}}
-        @onSubmit={{this.submit}}
-        data-test-new-automation-form
-      >
-        <:default>
-          <FormField
-            @label='Name'
-            @required={{true}}
-            @description='Boxel makes the automation card, then opens the card so you can write the script, the triggers and the limits.'
-          >
-            <:control as |ctx|>
-              <Input
-                @controlId={{ctx.id}}
-                @describedBy={{ctx.describedBy}}
-                @value={{this.name}}
-                @onInput={{this.setName}}
-                placeholder='Weekly digest'
-                data-test-new-automation-name
-              />
-            </:control>
-          </FormField>
-          {{#if this.error}}
-            <Alert
-              @tone='danger'
-              @title='Boxel couldn’t make the automation'
-              data-test-new-automation-error
-            >
-              {{this.error}}
-            </Alert>
-          {{/if}}
-        </:default>
-        <:footer>
-          <div class='actions'>
-            <Button
-              @variant='secondary'
-              {{on 'click' this.cancel}}
-              data-test-new-automation-cancel
-            >
-              Cancel
-            </Button>
-            <Button
-              @variant='primary'
-              type='submit'
-              @busy={{this.create.isRunning}}
-              @disabled={{this.nameMissing}}
-              data-test-new-automation-create
-            >
-              Create automation
-            </Button>
-          </div>
-        </:footer>
-      </Form>
-    </div>
-    <style scoped>
-      .new-automation {
-        display: grid;
-      }
-      .actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: var(--boxel-sp-xs);
       }
     </style>
   </template>
