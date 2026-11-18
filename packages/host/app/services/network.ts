@@ -14,7 +14,9 @@ import {
 import config from '@cardstack/host/config/environment';
 
 import { shimBundledBase } from '../lib/bundled-base';
+import { isRenderContext } from '../lib/client-telemetry-env';
 import { shimExternals } from '../lib/externals';
+import { RequestLimiter } from '../lib/request-limiter';
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 import { scheduleNativeTimeout } from '../utils/render-timer-stub';
 
@@ -193,16 +195,41 @@ export default class NetworkService extends Service {
   }
 
   private makeVirtualNetwork() {
-    let virtualNetwork = new VirtualNetwork(globalThis.fetch, {
-      // Native (un-stubbed) timer so the fetch retry path's header-timeout
-      // abort and retry backoff still fire during prerender, where
-      // render-timer-stub disables the global setTimeout — otherwise a stalled
-      // fetch there can neither abort nor retry and hangs the render. Outside
-      // prerender this is the global setTimeout, so behavior is unchanged.
-      scheduleFetchTimer: (callback, ms) => scheduleNativeTimeout(callback, ms),
-    });
+    let virtualNetwork = new VirtualNetwork(
+      this.limitedFetch(globalThis.fetch),
+      {
+        // Native (un-stubbed) timer so the fetch retry path's header-timeout
+        // abort and retry backoff still fire during prerender, where
+        // render-timer-stub disables the global setTimeout — otherwise a stalled
+        // fetch there can neither abort nor retry and hangs the render. Outside
+        // prerender this is the global setTimeout, so behavior is unchanged.
+        scheduleFetchTimer: (callback, ms) =>
+          scheduleNativeTimeout(callback, ms),
+      },
+    );
     this.configureVirtualNetwork(virtualNetwork);
     return virtualNetwork;
+  }
+
+  // The fetch the virtual network sends real requests through. With the
+  // LIMIT_REQUESTS_IN_FLIGHT flag on, an interactive tab holds its requests
+  // to each origin to a fixed number in flight and sends writes and auth
+  // first (see lib/request-limiter.ts). A prerender tab is left alone: the
+  // order this queue chooses is for a person waiting on a write or a sign-in,
+  // and a render has no such request. The flag is read for each request, so a
+  // test that turns it on reaches a network built before it did.
+  private limitedFetch(
+    nativeFetch: typeof globalThis.fetch,
+  ): typeof globalThis.fetch {
+    let limiter = new RequestLimiter((request) => nativeFetch(request));
+    return (input, init) => {
+      if (!config.featureFlags?.LIMIT_REQUESTS_IN_FLIGHT || isRenderContext()) {
+        return nativeFetch(input, init);
+      }
+      return limiter.fetch(
+        input instanceof Request && !init ? input : new Request(input, init),
+      );
+    };
   }
 
   // Returns this service's network to its just-booted configuration without
