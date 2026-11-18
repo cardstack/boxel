@@ -13,10 +13,10 @@
 // commits. A realm with no recorder gets one, and the task drops that
 // recorder again once it is idle.
 //
-// A job that is skipped, because the realm had events in hand, or that was
-// cut short because the realm's events filled the queue behind it, stays
-// due and is tried again a moment later, from the beginning: a kind ends
-// promptly once its signal fires, and is safe to start again. A job that
+// A job that is skipped, because the realm had events or a sweep in hand, or
+// that was cut short because the realm's events filled the queue behind it,
+// stays due and is tried again a moment later, from the beginning: a kind
+// ends promptly once its signal fires, and is safe to start again. A job that
 // fails, or that its recorder can't run because the realm stalled or the
 // recorder stopped, is logged and tried again after the kind's retry delay.
 // A kind skipped on a realm for an hour on end logs a warning, once an hour.
@@ -439,11 +439,11 @@ export class BackgroundScheduler {
         ) {
           due.skipWarnedAt = now;
           log.warn(
-            `${kind.name} on ${realm.url} has been skipped for ${Math.floor((now - due.skippedSince) / 60_000)} minutes: the realm has had events in hand every time it came due`,
+            `${kind.name} on ${realm.url} has been skipped for ${Math.floor((now - due.skippedSince) / 60_000)} minutes: the realm has had events or a sweep in hand every time it came due`,
           );
         } else {
           log.debug(
-            `${kind.name} on ${realm.url} was skipped: the realm has events in hand`,
+            `${kind.name} on ${realm.url} was skipped: the realm has events or a sweep in hand`,
           );
         }
         return;

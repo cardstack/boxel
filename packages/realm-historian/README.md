@@ -137,9 +137,11 @@ Each job runs in its realm's recorder queue, so it never runs between a commit
 and its cursor update. It runs only when the realm has no events in hand. A job
 asked for while the realm has events captured, being handled or queued is
 skipped at once, and one that reaches the front of the queue with events queued
-behind it is skipped then. A skipped job is tried again a moment later, and a
-kind skipped on a realm for an hour on end logs a warning, once an hour. A job
-holds no recording permit.
+behind it is skipped then. So is a job asked for while a sweep is walking or
+waiting to commit, since maintenance would prune the objects the sweep has
+written and not yet committed. A skipped job is tried again a moment later,
+and a kind skipped on a realm for an hour on end logs a warning, once an hour.
+A job holds no recording permit.
 
 A kind can run outside the queue instead (`outsideQueue`), as sweeps and
 backfill do. It is never skipped: it runs alongside the realm's events, and

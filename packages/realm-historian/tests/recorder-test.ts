@@ -2080,6 +2080,25 @@ module('recorder', (hooks) => {
       assert.deepEqual(fatals, []);
     });
 
+    test('a job in the queue is skipped while a sweep waits to commit, so maintenance never prunes its objects', async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      await onDisk('fixed.json', '{}');
+      assert.strictEqual(await target.runBackground(sweepJob), 'ran');
+      let ran = 0;
+      let maintenance = { kind: 'maintain', run: async () => void ran++ };
+      assert.strictEqual(await target.runBackground(maintenance), 'skipped');
+
+      target.tick(past());
+      await target.settled();
+      assert.strictEqual(
+        subjectOf((await history())[1]),
+        'Unattributed external changes',
+      );
+      assert.strictEqual(await target.runBackground(maintenance), 'ran');
+      assert.strictEqual(ran, 1);
+    });
+
     test('stopping a recorder ends its walks and drops the sweeps waiting to commit', async (assert) => {
       let target = recorder();
       await recordInitial(target);

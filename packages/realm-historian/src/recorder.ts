@@ -110,9 +110,12 @@
 // a long job doesn't take a permit recording needs. Its signal fires when the
 // recorder stops, and when the realm's events fill the queue behind it,
 // since a full queue holds up every realm the task records; either way the
-// job counts as not having run. A job can run outside the queue instead
-// (`BackgroundJob.outsideQueue`): it runs whether or not the realm has
-// events in hand, and reaches the queue only through a sweep it asks for.
+// job counts as not having run. A job in the queue is skipped the same way
+// while a sweep is under way: the sweep's objects are loose and no revision
+// reaches them until it commits, so maintenance would prune them. A job can
+// run outside the queue instead (`BackgroundJob.outsideQueue`): it runs
+// whether or not the realm has events in hand, and reaches the queue only
+// through a sweep it asks for.
 
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -256,8 +259,8 @@ export interface BackgroundJob {
 }
 
 // How a background job ended, when it didn't throw: it ran; it was skipped,
-// because the realm had events in hand, or cut short because its queue
-// filled, and is for a later turn; or the recorder couldn't run it, or
+// because the realm had events or a sweep in hand, or cut short because its
+// queue filled, and is for a later turn; or the recorder couldn't run it, or
 // stopped it, because it had stalled or stopped.
 export type BackgroundOutcome = 'ran' | 'skipped' | 'unavailable';
 
@@ -574,7 +577,7 @@ export class Recorder implements ManagedRecorder {
     // A job queued behind the realm's events would be skipped once they are
     // handled, so it is skipped now, rather than hold its place in the
     // task's background work while it waits for them.
-    if (this.#hasEventsInHand()) {
+    if (this.#hasWorkInHand()) {
       return Promise.resolve('skipped');
     }
     return new Promise((resolve, reject) => {
@@ -659,7 +662,7 @@ export class Recorder implements ManagedRecorder {
     }
     let work = this.#queue.shift() as BackgroundWork;
     this.#wakeSpaceWaiters();
-    if (this.#hasEventsInHand()) {
+    if (this.#hasWorkInHand()) {
       work.resolve('skipped');
       return;
     }
@@ -735,12 +738,13 @@ export class Recorder implements ManagedRecorder {
   }
 
   // Whether the realm has events captured and not yet committed, being
-  // handled, or queued.
-  #hasEventsInHand(): boolean {
+  // handled, or queued, or a sweep walking or waiting to commit.
+  #hasWorkInHand(): boolean {
     return (
       this.#handlingEvent ||
       this.#captured.length > 0 ||
-      this.#queue.some((work) => work.kind === 'event')
+      this.#queue.some((work) => work.kind === 'event') ||
+      this.#sweep !== undefined
     );
   }
 
