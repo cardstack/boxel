@@ -128,9 +128,12 @@ export default class ErrorPage extends Component<Signature> {
     state: { name: 'loading' },
     closeTried: false,
   });
+  // The lookup in flight, stopped when another starts or the page goes.
+  private lookup: AbortController | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    window.addEventListener('pageshow', this.shown);
     if (this.param.kind === 'ref') {
       this.load(this.param.ref);
       return;
@@ -144,13 +147,35 @@ export default class ErrorPage extends Component<Signature> {
     this.args.visit.loaded();
   }
 
+  willDestroy() {
+    super.willDestroy();
+    window.removeEventListener('pageshow', this.shown);
+    this.lookup?.abort();
+  }
+
+  // Back from the app can bring this page back as it was left, from the
+  // browser's cache, with "Return" spent. The reference is looked up again,
+  // so a spent one shows as expired.
+  private shown = (event: PageTransitionEvent) => {
+    if (event.persisted && this.param.kind === 'ref') {
+      this.load(this.param.ref);
+    }
+  };
+
   private async load(ref: string) {
+    this.lookup?.abort();
+    let lookup = new AbortController();
+    this.lookup = lookup;
     this.page.state = { name: 'loading' };
     try {
       let details = await readAuthorizationError(
         this.args.config.realmServerURL,
         ref,
+        { signal: lookup.signal },
       );
+      if (lookup.signal.aborted) {
+        return;
+      }
       this.page.state = {
         name: 'shown',
         state: details.state,
@@ -161,6 +186,9 @@ export default class ErrorPage extends Component<Signature> {
       };
       this.args.visit.loaded();
     } catch (e) {
+      if (lookup.signal.aborted) {
+        return;
+      }
       this.page.state = {
         name: 'failed',
         retryable: e instanceof ErrorDetailsFailure && e.retryable,

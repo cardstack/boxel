@@ -339,12 +339,28 @@ module(basename(import.meta.filename), function () {
           claimedName: 'Claude',
         },
       );
-      assert.strictEqual(
+      assert.deepEqual(
         appName({
           clientId: 'generated-id',
           redirectUri: 'http://localhost:51234/callback',
-        }).shown,
-        'an app on this computer',
+        }),
+        {
+          kind: 'dynamic',
+          shown: 'an app on this computer',
+          verified: false,
+          standIn: 'loopback',
+        },
+        'a page tells a stand-in by its marker, not its words',
+      );
+      assert.deepEqual(
+        appName({ clientId: 'generated-id', clientName: 'Claude' }),
+        {
+          kind: 'dynamic',
+          shown: 'an unknown app',
+          verified: false,
+          claimedName: 'Claude',
+          standIn: 'unknown',
+        },
       );
     });
 
@@ -620,6 +636,16 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(badRedirectDetails.body.reason, 'bad-redirect-uri');
       assert.false(badRedirectDetails.body.returnOffered);
 
+      // Refused by the library, which stores nothing to return to.
+      let { client_id: _clientId, ...noClient } = validParams(clientId);
+      let library = await server.authorize(noClient);
+      assert.strictEqual(library.status, 303, library.text);
+      let libraryDetails = await details(
+        errorReference(assert, library.headers.location),
+      );
+      assert.strictEqual(libraryDetails.body.reason, 'library');
+      assert.false(libraryDetails.body.returnOffered);
+
       // Refused by Boxel's checks, with a redirect URI the client didn't
       // register.
       let refused = await server.authorize(
@@ -663,6 +689,7 @@ module(basename(import.meta.filename), function () {
           shown: 'an app on this computer',
           verified: false,
           claimedName: 'Test App',
+          standIn: 'loopback',
         },
         returnOffered: true,
       });

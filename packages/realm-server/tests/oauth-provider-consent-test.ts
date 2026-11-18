@@ -394,6 +394,7 @@ module(basename(import.meta.filename), function (hooks) {
         shown: 'an app on this computer',
         verified: false,
         claimedName: 'Test App',
+        standIn: 'loopback',
       });
     });
 

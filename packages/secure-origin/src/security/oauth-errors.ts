@@ -14,7 +14,6 @@ import {
   ERROR_REFERENCE,
   ERROR_STATE_BY_REASON,
   FIXED_ERRORS,
-  UNKNOWN_APP_NAME,
   UNKNOWN_REASON_STATE,
 } from './oauth-error-states.js';
 import { timedFetch } from './session.js';
@@ -42,8 +41,11 @@ export type ErrorParam =
 // The app, as the page names it: by the name Boxel can check, which is all
 // that is kept of the server's answer. A name a self-registered app gave
 // itself is never shown here, so the page has nothing to mark unverified.
+// `onThisComputer` marks `shown` as the realm server's phrase for an app on
+// the user's own computer, which the page words as a phrase, not a name.
 export interface ErrorApp {
   shown: string;
+  onThisComputer: boolean;
 }
 
 export interface ErrorDetails {
@@ -52,7 +54,10 @@ export interface ErrorDetails {
   returnOffered: boolean;
 }
 
-// A lookup that didn't answer. `status` is 0 when no response came.
+// A lookup that didn't give a usable answer. `status` is 0 when no response
+// came. Only a lookup that may answer differently later is `retryable`: one
+// that got no response, or a server error, a timeout or a rate limit. A
+// response the page can't use comes back the same, so it isn't.
 export class ErrorDetailsFailure extends Error {
   status: number;
   retryable: boolean;
@@ -66,14 +71,6 @@ export class ErrorDetailsFailure extends Error {
 // How long a lookup may take before the page says it couldn't load.
 export const ERROR_DETAILS_TIMEOUT_MS = 15_000;
 
-// The states "Return" may be shown in. The realm server never offers it for
-// the others, and the page doesn't draw it there whatever it's told.
-const RETURNABLE_STATES: ReadonlySet<ErrorState> = new Set([
-  'not-offered',
-  'not-allowed',
-  'unsupported',
-]);
-
 export function parseErrorParam(search: string | URLSearchParams): ErrorParam {
   let params =
     typeof search === 'string' ? new URLSearchParams(search) : search;
@@ -82,11 +79,9 @@ export function parseErrorParam(search: string | URLSearchParams): ErrorParam {
     return { kind: 'invalid' };
   }
   let [value] = values as [string];
-  if (Object.hasOwn(FIXED_ERRORS, value)) {
-    return {
-      kind: 'fixed',
-      state: FIXED_ERRORS[value as keyof typeof FIXED_ERRORS] as ErrorState,
-    };
+  let fixed = fixedState(value);
+  if (fixed) {
+    return { kind: 'fixed', state: fixed };
   }
   if (ERROR_REFERENCE.test(value)) {
     return { kind: 'ref', ref: value };
@@ -117,8 +112,10 @@ export function errorReturnURL(realmServerURL: URL, ref: string): string {
 }
 
 // Looks an error up by its reference. A reference the server doesn't know
-// (spent, expired or never issued) reads as an expired request. Throws an
-// `ErrorDetailsFailure` for anything else that isn't a usable answer.
+// (spent, expired or never issued) reads as an expired request: the server
+// answers it with a 404 saying so. Throws an `ErrorDetailsFailure` for
+// anything else that isn't a usable answer, a 404 without that body included,
+// so a missing route reads as a failed load rather than an expired request.
 export async function readAuthorizationError(
   realmServerURL: URL,
   ref: string,
@@ -142,7 +139,11 @@ export async function readAuthorizationError(
     throw new ErrorDetailsFailure(0, true);
   }
   if (response.status === 404) {
-    return { state: 'expired', returnOffered: false };
+    let body = await response.json().catch(() => undefined);
+    if (isRecord(body) && fixedState(body.error) === 'expired') {
+      return { state: 'expired', returnOffered: false };
+    }
+    throw new ErrorDetailsFailure(response.status, false);
   }
   if (!response.ok) {
     throw new ErrorDetailsFailure(
@@ -156,14 +157,14 @@ export async function readAuthorizationError(
   try {
     body = await response.json();
   } catch {
-    throw new ErrorDetailsFailure(response.status, true);
+    throw new ErrorDetailsFailure(response.status, false);
   }
   return toErrorDetails(body, response.status);
 }
 
 function toErrorDetails(body: unknown, status: number): ErrorDetails {
   if (!isRecord(body) || typeof body.reason !== 'string') {
-    throw new ErrorDetailsFailure(status, true);
+    throw new ErrorDetailsFailure(status, false);
   }
   let state = errorStateForReason(body.reason);
   let app: ErrorApp | undefined;
@@ -172,18 +173,28 @@ function toErrorDetails(body: unknown, status: number): ErrorDetails {
     typeof body.app.shown === 'string' &&
     body.app.shown !== '' &&
     // An app the server can't name is worded as no app at all.
-    body.app.shown !== UNKNOWN_APP_NAME
+    body.app.standIn !== 'unknown'
   ) {
-    app = { shown: body.app.shown };
+    app = {
+      shown: body.app.shown,
+      onThisComputer: body.app.standIn === 'loopback',
+    };
   }
+  // Whether "Return" is offered is the realm server's to decide: its return
+  // route checks the client and the redirect URI again whatever the page
+  // draws. The page needs a name for the label.
   return {
     state,
     ...(app ? { app } : {}),
-    returnOffered:
-      body.returnOffered === true &&
-      app !== undefined &&
-      RETURNABLE_STATES.has(state),
+    returnOffered: body.returnOffered === true && app !== undefined,
   };
+}
+
+// The state a fixed `error` value names, if `value` is one.
+function fixedState(value: unknown): ErrorState | undefined {
+  return typeof value === 'string' && Object.hasOwn(FIXED_ERRORS, value)
+    ? (FIXED_ERRORS[value as keyof typeof FIXED_ERRORS] as ErrorState)
+    : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

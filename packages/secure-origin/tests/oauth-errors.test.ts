@@ -73,7 +73,7 @@ describe('the states', () => {
   });
 
   test('each state words itself with the app, or with "the app"', () => {
-    let app = { shown: 'example.com' };
+    let app = { shown: 'example.com', onThisComputer: false };
     for (let state of [
       'bad-redirect',
       'not-offered',
@@ -86,12 +86,19 @@ describe('the states', () => {
     }
     assert.match(
       errorCopy('unsupported', {
-        app: { shown: 'an app on this computer' },
+        app: { shown: 'an app on this computer', onThisComputer: true },
       }).info,
       /^An app on this computer asked/,
     );
+    assert.match(
+      errorCopy('unsupported', {
+        app: { shown: 'my app', onThisComputer: false },
+      }).info,
+      /^my app asked/,
+      'only the phrase for an app on this computer is capitalized',
+    );
     assert.equal(
-      returnLabel({ shown: 'example.com' }),
+      returnLabel({ shown: 'example.com', onThisComputer: false }),
       'Return to example.com',
     );
   });
@@ -144,7 +151,7 @@ describe('looking an error up', () => {
     let details = await readAuthorizationError(REALM_SERVER, REF);
     assert.deepEqual(details, {
       state: 'not-offered',
-      app: { shown: 'example.com' },
+      app: { shown: 'example.com', onThisComputer: false },
       returnOffered: true,
     });
     assert.equal(sent.length, 1);
@@ -171,8 +178,39 @@ describe('looking an error up', () => {
       }),
     );
     let details = await readAuthorizationError(REALM_SERVER, REF);
-    assert.deepEqual(details.app, { shown: 'example.com' });
+    assert.deepEqual(details.app, {
+      shown: 'example.com',
+      onThisComputer: false,
+    });
     assert.doesNotMatch(JSON.stringify(details), /Totally Boxel/);
+  });
+
+  test('knows a stand-in for an app by its marker, not its words', async () => {
+    let read = async (app: unknown) => {
+      answer(() =>
+        Response.json({ reason: 'prompt-none', app, returnOffered: true }),
+      );
+      return readAuthorizationError(REALM_SERVER, REF);
+    };
+    assert.deepEqual(
+      (
+        await read({
+          kind: 'dynamic',
+          shown: 'an app on this computer',
+          verified: false,
+          standIn: 'loopback',
+        })
+      ).app,
+      { shown: 'an app on this computer', onThisComputer: true },
+    );
+    let unknown = await read({
+      kind: 'dynamic',
+      shown: 'an unknown app',
+      verified: false,
+      standIn: 'unknown',
+    });
+    assert.equal(unknown.app, undefined, 'an app with no name is no app');
+    assert.equal(unknown.returnOffered, false);
   });
 
   test('an unknown reference is an expired request', async () => {
@@ -183,22 +221,37 @@ describe('looking an error up', () => {
     });
   });
 
-  test('"Return" is offered only with an app, in a state that allows it', async () => {
+  test("a 404 that doesn't say the reference expired is a failure", async () => {
+    for (let respond of [
+      () => new Response('Not Found', { status: 404 }),
+      () => Response.json({ error: 'not_found' }, { status: 404 }),
+      () => Response.json({}, { status: 404 }),
+    ]) {
+      answer(respond);
+      await assert.rejects(
+        readAuthorizationError(REALM_SERVER, REF),
+        (e: unknown) =>
+          e instanceof ErrorDetailsFailure && e.status === 404 && !e.retryable,
+      );
+    }
+  });
+
+  test('"Return" is offered as the realm server says, when there is a name for it', async () => {
     let cases: [unknown, boolean][] = [
       [{ reason: 'prompt-none', returnOffered: true }, false],
       [
         {
           reason: 'prompt-none',
-          app: { shown: 'an unknown app', verified: false },
+          app: { shown: 'an unknown app', standIn: 'unknown' },
           returnOffered: true,
         },
         false,
       ],
       [
         {
-          reason: 'unknown-client',
+          reason: 'prompt-none',
           app: { shown: 'example.com' },
-          returnOffered: true,
+          returnOffered: false,
         },
         false,
       ],
@@ -208,7 +261,7 @@ describe('looking an error up', () => {
           app: { shown: 'example.com' },
           returnOffered: true,
         },
-        false,
+        true,
       ],
       [
         {
@@ -234,7 +287,7 @@ describe('looking an error up', () => {
     }
   });
 
-  test('a refusal, a server error or no answer is a failure', async () => {
+  test('a refusal, a server error, an unusable answer or no answer is a failure', async () => {
     let cases: [() => Response, number, boolean][] = [
       [
         () => Response.json({ error: 'forbidden' }, { status: 403 }),
@@ -243,8 +296,8 @@ describe('looking an error up', () => {
       ],
       [() => new Response('', { status: 500 }), 500, true],
       [() => new Response('', { status: 429 }), 429, true],
-      [() => new Response('not json'), 200, true],
-      [() => Response.json({ error: 'x' }), 200, true],
+      [() => new Response('<html>Sign in to the Wi-Fi</html>'), 200, false],
+      [() => Response.json({ error: 'x' }), 200, false],
       [
         () => {
           throw new TypeError('Failed to fetch');

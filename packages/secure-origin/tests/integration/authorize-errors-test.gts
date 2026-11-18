@@ -1,4 +1,11 @@
-import { click, find, render, settled } from '@ember/test-helpers';
+import {
+  clearRender,
+  click,
+  find,
+  render,
+  settled,
+  waitFor,
+} from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 
@@ -78,7 +85,7 @@ module('Integration | authorize errors', function (hooks) {
     DESCRIPTION,
   ]);
 
-  function answers(answer: () => Answer) {
+  function answers(answer: () => Answer | Promise<Answer>) {
     servers.realmServer(`GET ${DETAILS}`, answer);
   }
 
@@ -90,7 +97,7 @@ module('Integration | authorize errors', function (hooks) {
 
   function shows(assert: QUnitAssert, state: string, app?: string) {
     let copy = errorCopy(state as Parameters<typeof errorCopy>[0], {
-      ...(app ? { app: { shown: app } } : {}),
+      ...(app ? { app: { shown: app, onThisComputer: false } } : {}),
     });
     assert.dom(`[data-test-oauth-error="${state}"]`).exists(state);
     assert.dom('[data-test-secure-title]').hasText(copy.heading);
@@ -122,11 +129,40 @@ module('Integration | authorize errors', function (hooks) {
       assert.dom('[data-test-secure-info]').includesText('The app asked');
 
       answers(() =>
-        details({ app: { kind: 'dynamic', shown: 'an unknown app' } }),
+        details({
+          app: {
+            kind: 'dynamic',
+            shown: 'an unknown app',
+            verified: false,
+            standIn: 'unknown',
+          },
+        }),
       );
       await open();
       shows(assert, 'unsupported');
       assert.dom('[data-test-oauth-error-return]').doesNotExist();
+    });
+
+    test('an app on this computer is named as one', async function (assert) {
+      answers(() =>
+        details({
+          app: {
+            kind: 'dynamic',
+            shown: 'an app on this computer',
+            verified: false,
+            standIn: 'loopback',
+          },
+        }),
+      );
+      await open();
+      assert
+        .dom('[data-test-secure-info]')
+        .hasText(
+          'An app on this computer asked to connect in a way Boxel doesn’t support. Nothing was shared.',
+        );
+      assert
+        .dom('[data-test-oauth-error-return]')
+        .hasText('Return to an app on this computer');
     });
 
     test('"Return" goes through the realm server, only where it is offered', async function (assert) {
@@ -143,12 +179,11 @@ module('Integration | authorize errors', function (hooks) {
       assert.deepEqual(moves, [], 'the page sends the browser nowhere');
     });
 
-    test('"Return" is never drawn where the server can\'t offer it', async function (assert) {
-      for (let reason of ['unknown-client', 'bad-redirect-uri', 'library']) {
-        answers(() => details({ reason, returnOffered: true }));
-        await open();
-        assert.dom('[data-test-oauth-error-return]').doesNotExist(reason);
-      }
+    test('"Return" is drawn wherever the server offers it', async function (assert) {
+      answers(() => details({ reason: 'library', returnOffered: true }));
+      await open();
+      shows(assert, 'cant-continue', APP);
+      assert.dom('[data-test-oauth-error-return]').hasAttribute('href', RETURN);
     });
 
     test('a reference the server no longer knows is an expired request', async function (assert) {
@@ -156,6 +191,41 @@ module('Integration | authorize errors', function (hooks) {
       await open();
       shows(assert, 'expired');
       assert.dom('[data-test-oauth-error-return]').doesNotExist();
+    });
+
+    test("a 404 that isn't the realm server's own is a failed load", async function (assert) {
+      answers(() => ({ status: 404, body: { message: 'Not Found' } }));
+      await open();
+      assert.dom('[data-test-oauth-error="load-failed"]').exists();
+      assert.dom('[data-test-oauth-error-retry]').doesNotExist();
+    });
+
+    test('a page brought back from the browser cache looks its error up again', async function (assert) {
+      answers(() => details({ reason: 'openid' }));
+      await open();
+      assert.dom('[data-test-oauth-error-return]').exists();
+      // "Return" spends the reference.
+      answers(() => ({ status: 404, body: { error: 'expired' } }));
+      window.dispatchEvent(
+        new PageTransitionEvent('pageshow', { persisted: true }),
+      );
+      await settled();
+      shows(assert, 'expired');
+      assert.dom('[data-test-oauth-error-return]').doesNotExist();
+      assert.strictEqual(
+        servers.requests('realm-server', `GET ${DETAILS}`).length,
+        2,
+      );
+    });
+
+    test('a lookup still waiting when the page goes is stopped', async function (assert) {
+      answers(() => new Promise<Answer>(() => {}));
+      history.replaceState(null, '', `/secure/authorize?error=${REF}`);
+      render(AuthorizePage);
+      await waitFor('[data-test-oauth-error-loading]');
+      await clearRender();
+      let [lookup] = servers.requests('realm-server', `GET ${DETAILS}`);
+      assert.true(lookup?.signal?.aborted);
     });
 
     test("a lookup that fails says the page couldn't load, and offers Try again only when it could help", async function (assert) {
@@ -169,6 +239,16 @@ module('Integration | authorize errors', function (hooks) {
       await open();
       assert.dom('[data-test-oauth-error="load-failed"]').exists();
       assert.dom('[data-test-oauth-error-retry]').exists();
+
+      answers(() => ({
+        status: 200,
+        body: '<html>Sign in to the Wi-Fi</html>',
+      }));
+      await open();
+      assert.dom('[data-test-oauth-error="load-failed"]').exists();
+      assert
+        .dom('[data-test-oauth-error-retry]')
+        .doesNotExist("an answer the page can't use comes back the same");
 
       answers(() => ({ status: 500, body: {} }));
       await open();

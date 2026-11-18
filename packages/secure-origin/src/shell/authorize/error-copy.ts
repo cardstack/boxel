@@ -3,7 +3,6 @@
 // is the app's name, and a state words itself with "the app" when it has
 // none.
 
-import { LOOPBACK_APP_NAME } from '../../security/oauth-error-states.js';
 import type { ErrorApp, ErrorState } from '../../security/oauth-errors.ts';
 
 export type ErrorPageState = ErrorState | 'load-failed';
@@ -16,17 +15,17 @@ export interface ErrorCopy {
 // An app's name at the start of a sentence. A domain or a client's own name
 // is written as it is; the phrase standing in for an app on the user's
 // computer starts with a capital.
-function sentenceStart(name: string): string {
-  return name === LOOPBACK_APP_NAME
-    ? name[0]!.toUpperCase() + name.slice(1)
-    : name;
+function sentenceStart(app: ErrorApp): string {
+  return app.onThisComputer
+    ? app.shown[0]!.toUpperCase() + app.shown.slice(1)
+    : app.shown;
 }
 
 export function errorCopy(
   state: ErrorPageState,
   { app, retryable = false }: { app?: ErrorApp; retryable?: boolean } = {},
 ): ErrorCopy {
-  let subject = app ? sentenceStart(app.shown) : 'The app';
+  let subject = app ? sentenceStart(app) : 'The app';
   let from = app ? app.shown : 'the app';
   switch (state) {
     case 'invalid-client':
