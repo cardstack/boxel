@@ -1,6 +1,10 @@
 import { getComponent, type CardContext } from './card-api';
 import { isLiveRender } from './render-context';
-import { subscribeToRealm } from '@cardstack/runtime-common';
+import {
+  rri,
+  subscribeToRealm,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import type {
   AutomationListDocument,
   AutomationSummaryResource,
@@ -44,8 +48,8 @@ const AUTOMATION_LIST_PATH = '_automations';
 // The catalog's Automation type, as `automationRef` in runtime-common's
 // `automation-declaration.ts` names it, and the operation the type declares
 // for a new automation, which takes the automation's name.
-const AUTOMATION_TYPE = {
-  module: '@cardstack/catalog/automation/automation',
+const AUTOMATION_TYPE: ResolvedCodeRef = {
+  module: rri('@cardstack/catalog/automation/automation'),
   name: 'Automation',
 };
 const NEW_AUTOMATION_OPERATION = 'newAutomation';
