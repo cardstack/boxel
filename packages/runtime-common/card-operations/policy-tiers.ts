@@ -97,8 +97,8 @@ export async function classifyPredicateTiers(
 
 type Place = CardPlace | OpaquePlace | BuiltPlace | ForeignPlace;
 
-// A value that is not the card's: a literal, the caller, a realm setting, or
-// anything computed from those alone.
+// A value that is not the card's: a literal, the caller, a realm setting, a
+// field of the policy card, or anything computed from those alone.
 interface ForeignPlace {
   kind: 'foreign';
 }
@@ -652,9 +652,11 @@ class TierWalk {
     switch (key) {
       case 'actor/0':
       case 'realmConfig/0':
+      case 'policy/0':
       case 'params/0':
         return [FOREIGN];
       case 'realmConfig/1':
+      case 'policy/1':
       case 'params/1':
         await this.readWhole(await this.evaluate(args[0], input, variables));
         return [FOREIGN];

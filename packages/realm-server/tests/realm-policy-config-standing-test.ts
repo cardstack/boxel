@@ -229,8 +229,8 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(validation.card, POLICY_CARD);
       assert.deepEqual(
         validation.realms,
-        [ORG],
-        'the realm holding the policy card is the one served realm compiling read',
+        [ORG, EDUCATION],
+        'compiling reads the realm holding the policy card, and the governed realm’s summary of its cards, which the code check reads for a read grant on a type another realm defines',
       );
       assert.notOk(validation.uncompilable, 'the policy is in force');
       assert.deepEqual(

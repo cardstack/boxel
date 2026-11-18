@@ -9,6 +9,7 @@ import type { Definition } from '../definitions.ts';
 import { codeRefFromInternalKey } from '../index.ts';
 import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
+import { RealmPaths } from '../paths.ts';
 import { PRERENDERED_HTML_FORMATS } from '../prerendered-html-format.ts';
 import { rri } from '../realm-identifiers.ts';
 import { chainType } from './adoption-chain.ts';
@@ -31,6 +32,11 @@ import {
   type GrantExpressionName,
 } from './grant-expressions.ts';
 import { profileRefusals, type RequestContextCall } from './policy-profile.ts';
+import { readsNothingOfTheCard } from './policy-card-independent.ts';
+import {
+  moduleAccessIssues,
+  type ModuleAccessRule,
+} from './policy-module-access.ts';
 import { classifyPredicateTiers } from './policy-tiers.ts';
 import { elapsedMs, emitPolicyCompile, recordSafely } from './telemetry.ts';
 import {
@@ -133,7 +139,9 @@ export interface CompiledOperationGrant {
   // whose id you were given and enumerating every card of a type are
   // different powers. Absent too on a query grant whose predicate has no
   // filter, which is recorded as a `policy-not-filterable` issue. That grant
-  // admits no search, and its predicate is kept as it is.
+  // admits no search, and its predicate is kept as it is. And absent on a
+  // query grant whose predicate a search settles, which carries
+  // `settledFilter` instead.
   filter?: OperationQueryFilterTemplate;
   // For a query grant whose `where` names the caller who isn't signed in, the
   // filter it admits such a caller's search with: its predicate as it reads
@@ -143,6 +151,20 @@ export interface CompiledOperationGrant {
   // predicate can never hold for that caller, and the grant admits no search by
   // them.
   anonymousFilter?: OperationQueryFilterTemplate;
+  // For a query grant whose `where` reads nothing of the card it judges (see
+  // `readsNothingOfTheCard`), the filter it admits a search with where that
+  // `where` holds for the search's caller: every card of the rule's type. The
+  // predicate holds or fails for every card alike, so a search settles it
+  // once, for its caller, before it composes anything, and composes this only
+  // where it holds. Such a grant carries no `filter`, so nothing that composes
+  // a grant without settling it first can widen a search with this one.
+  // `anonymousSettledFilter` is the same for a caller who isn't signed in, on
+  // a grant whose `where` names them. Either is absent where the predicate as
+  // it reads for that caller is settled when the policy compiles, as
+  // `actor() != "anonymous"` is, and the grant then carries `filter` or
+  // `anonymousFilter`, or nothing, as any grant does.
+  settledFilter?: OperationQueryFilterTemplate;
+  anonymousSettledFilter?: OperationQueryFilterTemplate;
   // For a grant carrying a filter, each path it compares that some card of
   // the governed realm reads differently from the rule's type, with the types
   // of those cards: descendants of the rule's type whose own declarations
@@ -755,14 +777,22 @@ interface Compilation {
   definitions: Map<string, DefinitionInput>;
   // URLs whose realm's index moving could change what this compiles to.
   inputs: string[];
-  // What the governed realm held under each rule type whose grants' filters
-  // read a field: the types a grant's `misreadingTypes` were chosen from.
+  // What the governed realm held under each rule type compiling read it for:
+  // a type whose grants' filters read a field, which a grant's
+  // `misreadingTypes` were chosen from, and a type the realm doesn't define
+  // whose `read` or `query` grants the code check judged by the realm's own
+  // types under it (`module-not-granted`).
   subtypes: { targetType: ResolvedCodeRef; keys: string[] }[];
   // The realm's `instanceTypeKeys`, read before `subtypes` was. A
   // revalidation that finds them unchanged skips reading `subtypes` again,
   // and one that reads it again and finds it unchanged records the keys it
   // read.
   heldTypes?: string;
+  // Set where the code check would have judged a rule by the realm's own
+  // types under it, and the realm's `instanceTypeKeys` held no type it
+  // defines, so nothing under the rule was read. A revalidation that finds
+  // the realm holding a card of a type it defines compiles again.
+  awaitingLocalType?: true;
 }
 
 interface DefinitionInput {
@@ -836,6 +866,14 @@ async function stillCurrent(
     if (current !== fingerprint) {
       return false;
     }
+  }
+  if (
+    compilation.awaitingLocalType &&
+    (await env.instanceTypeKeys()).some(
+      (key) => localModuleOf(key, env) !== undefined,
+    )
+  ) {
+    return false;
   }
   if (compilation.subtypes.length > 0) {
     // Read before the types under each rule, so a card of a new type landing
@@ -1030,7 +1068,11 @@ async function compileDocument(
   let inputs = [card];
   let subtypes: Compilation['subtypes'] = [];
   let heldTypes: string | undefined;
+  let awaitingLocalType: true | undefined;
   let rules: CompiledPolicyRule[] = [];
+  // The paths of the grants whose `where` can never hold for a signed-in
+  // caller, as `actor() == "anonymous"` can't.
+  let neverSignedIn = new Set<string>();
   let cardURL = new URL(card);
   // An issue's message is read on the policy card and in a `validate` answer.
   // It marks identifiers as code with backticks, separates one idea from the
@@ -1051,6 +1093,7 @@ async function compileDocument(
     inputs,
     subtypes,
     heldTypes,
+    ...(awaitingLocalType ? { awaitingLocalType } : {}),
   });
   // The policy as a whole did not compile, for the reason recorded. It has no
   // rules.
@@ -1144,7 +1187,10 @@ async function compileDocument(
     return read;
   };
   // A grant on a query carries the search filter its predicate compiles to,
-  // or has none and records why. No other grant carries one.
+  // or has none and records why. A grant whose predicate reads nothing of the
+  // card carries, for each kind of caller it can hold for, the filter a search
+  // composes once it has settled the predicate for its caller. No other grant
+  // carries one.
   let withFilter = async (
     grant: CompiledOperationGrant,
     base: BaseOperation,
@@ -1193,12 +1239,21 @@ async function compileDocument(
               : []),
           ]
         : [{ caller: 'signed-in', body: true }];
+    // A predicate that reads nothing of the card has no field to compile a
+    // filter over, and needs none: it holds or fails for every card alike. A
+    // search settles it for its caller by running the predicate as written,
+    // which for each kind of caller answers as that caller's reading does.
+    let cardIndependent =
+      predicate !== undefined && readsNothingOfTheCard(predicate.body);
     let compiled = { ...grant };
     for (let { caller, body } of readings) {
       if (body === false) {
         continue;
       }
-      let outcome = await compileFor(body);
+      // A reading a search settles admits, where it holds, every card of the
+      // rule's type, the filter a grant with no condition compiles to.
+      let settled = cardIndependent && body !== true;
+      let outcome = await compileFor(settled ? true : body);
       if ('problem' in outcome) {
         issue(
           'policy-not-filterable',
@@ -1213,7 +1268,13 @@ async function compileDocument(
         );
         continue;
       }
-      if (caller === 'anonymous') {
+      if (settled) {
+        if (caller === 'anonymous') {
+          compiled.anonymousSettledFilter = outcome.filter;
+        } else {
+          compiled.settledFilter = outcome.filter;
+        }
+      } else if (caller === 'anonymous') {
         compiled.anonymousFilter = outcome.filter;
       } else {
         compiled.filter = outcome.filter;
@@ -1599,6 +1660,9 @@ async function compileDocument(
         );
         continue;
       }
+      if (settleActor(outcome.body, 'signed-in') === false) {
+        neverSignedIn.add(grantPath);
+      }
       grants.push(
         await withFilter(
           {
@@ -1767,7 +1831,84 @@ async function compileDocument(
   })) {
     issue(found.code, found.path, found.message);
   }
+
+  // Whether the callers a `read` or `query` grant admits can load the code
+  // that renders the cards. The types the realm holds cards of under a rule's
+  // type are read only where the realm's summary of its cards holds a type the
+  // realm defines, and are an input from the moment they are read, as for a
+  // filter's misreading types. A summary holding none is recorded instead, and
+  // the realm is an input either way, so the realm's first card of a type it
+  // defines compiles the policy again.
+  let localModule = (key: string) => localModuleOf(key, env);
+  let summary: Promise<string[]> | undefined;
+  let moduleRules: ModuleAccessRule[] = [];
+  for (let rule of rules) {
+    let entry = await readType(rule.targetType);
+    if (!entry) {
+      continue;
+    }
+    let { definition, types } = entry;
+    moduleRules.push({
+      rule,
+      types,
+      grants: rule.grants.map((grant) => ({
+        grant,
+        base: admittingBase(definition, grant),
+        opensToSignedIn: !neverSignedIn.has(grant.path),
+        opensToAnonymous: opensToAnonymous(grant),
+      })),
+    });
+  }
+  for (let found of await moduleAccessIssues(moduleRules, {
+    typeKey: (codeRef) => env.typeKey(codeRef),
+    heldTypesUnder: async (codeRef) => {
+      let read = subtypes.find(
+        ({ targetType }) => env.typeKey(targetType) === env.typeKey(codeRef),
+      );
+      if (read) {
+        return read.keys;
+      }
+      if (!inputs.includes(env.realmURL)) {
+        inputs.push(env.realmURL);
+        onInput(env.realmURL);
+      }
+      summary ??= env.instanceTypeKeys();
+      let held = await summary;
+      if (!held.some((key) => localModule(key) !== undefined)) {
+        awaitingLocalType = true;
+        return [];
+      }
+      heldTypes ??= held.join('\n');
+      let keys = await env.instanceTypesUnder(codeRef);
+      subtypes.push({ targetType: codeRef, keys });
+      return keys;
+    },
+    localModule,
+  })) {
+    issue(found.code, found.path, found.message);
+  }
   return compiled();
+}
+
+// The module a type key names, as a path in the governed realm, where that
+// realm defines it. Undefined for a module another realm serves.
+function localModuleOf(
+  key: string,
+  env: Pick<PolicyCompileEnvironment, 'toURL' | 'realmURL'>,
+): string | undefined {
+  let module = heldTypeModule(key);
+  let url = module ? attempt(() => env.toURL(module)) : undefined;
+  let governed = new RealmPaths(new URL(env.realmURL));
+  return url && governed.inRealm(url) ? governed.local(url) : undefined;
+}
+
+// The module a type key names: the module that defines the type, which for an
+// unexported class is the module its key names it through.
+function heldTypeModule(key: string): string | undefined {
+  let ancestor = '/ancestor';
+  return splitTypeKey(
+    key.endsWith(ancestor) ? key.slice(0, -ancestor.length) : key,
+  )?.module;
 }
 
 // How a grant hands its rows over: the document it serves under the link
@@ -1825,7 +1966,8 @@ function letsCallerRead(
 
 // The base a kept grant runs on, where the grant can admit anything at all.
 // A query grant admits only through the filter it compiled to, since the gate
-// grants no query.
+// grants no query: one a search composes as it is, or one it composes where
+// the grant's predicate holds for its caller.
 function admittingBase(
   definition: Definition,
   grant: CompiledOperationGrant,
@@ -1835,7 +1977,9 @@ function admittingBase(
     return undefined;
   }
   if (granted.base === 'query') {
-    return grant.filter ? granted.base : undefined;
+    return grant.filter !== undefined || grant.settledFilter !== undefined
+      ? granted.base
+      : undefined;
   }
   return granted.base;
 }
@@ -1974,13 +2118,16 @@ function safeURL(
 }
 
 // Whether a compiled grant admits any caller who isn't signed in: its `where`
-// names them, a search grant has a filter for them, and a write grant says who
-// their writes are made as.
+// names them, a search grant has a filter for them, composed as it is or once
+// its predicate holds for them, and a write grant says who their writes are
+// made as.
 export function opensToAnonymous(grant: CompiledOperationGrant): boolean {
   let anonymous = grant.anonymous;
   return (
     anonymous !== undefined &&
-    (grant.operation !== 'query' || grant.anonymousFilter !== undefined) &&
+    (grant.operation !== 'query' ||
+      grant.anonymousFilter !== undefined ||
+      grant.anonymousSettledFilter !== undefined) &&
     (!anonymous.writes || anonymous.actingUser !== undefined)
   );
 }

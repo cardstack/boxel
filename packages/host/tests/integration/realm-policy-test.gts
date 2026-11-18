@@ -989,6 +989,16 @@ module('Integration | realm policy', function (hooks) {
   // so a grant on a query with it compiles no search filter.
   const UNFILTERABLE = '(.title | tonumber) > 0';
 
+  // The test realm defines every type these policies grant, so a caller a
+  // `read` or `query` grant admits also needs a grant on the realm's code, or
+  // compiling records `module-not-granted` against the grant. Each policy
+  // rendered here grants it in a last rule of its own, so what compiling
+  // records is about the rules under test, at the positions they are written.
+  const codeRule = {
+    targetType: { module: '@cardstack/base/ts-file-def', name: 'TsFileDef' },
+    grants: [{ operation: 'readSource' }],
+  };
+
   async function renderPolicyNamed(
     path: string,
     rules: Record<string, unknown>[],
@@ -999,7 +1009,7 @@ module('Integration | realm policy', function (hooks) {
       contents: {
         'classroom.gts': classroomModule,
         ...modules,
-        [`${path}.json`]: policyDocument(rules),
+        [`${path}.json`]: policyDocument([...rules, codeRule]),
       },
     });
     // Looking the service up arms the transport the card's own
@@ -1010,12 +1020,21 @@ module('Integration | realm policy', function (hooks) {
     return realm;
   }
 
-  // What the card says of each grant once the realm has answered, in order.
+  // What the card says of each grant of the rules under test once the realm
+  // has answered, in order. The code rule each policy ends with is left out.
   async function grantStatuses() {
     await waitFor('[data-test-policy-grant-status]', { timeout: 10_000 });
-    return [
-      ...document.querySelectorAll('[data-test-policy-grant-status]'),
-    ].map((el) => el.getAttribute('data-test-policy-grant-status'));
+    return [...document.querySelectorAll('[data-test-policy-rule]')]
+      .filter(
+        (rule) =>
+          rule
+            .querySelector('[data-test-policy-rule-type-name]')
+            ?.textContent?.trim() !== codeRule.targetType.name,
+      )
+      .flatMap((rule) => [
+        ...rule.querySelectorAll('[data-test-policy-grant-status]'),
+      ])
+      .map((el) => el.getAttribute('data-test-policy-grant-status'));
   }
 
   test('a grant that does not compile is marked inactive among the live ones, and its issue names its rule and grant', async function (assert) {
@@ -1393,6 +1412,7 @@ module('Integration | realm policy', function (hooks) {
               { operation: 'delete', where: MISTYPED },
             ],
           },
+          codeRule,
         ]),
       },
     });
@@ -1428,7 +1448,10 @@ module('Integration | realm policy', function (hooks) {
       }
       assert
         .dom('[data-test-policy-rule]')
-        .exists({ count: 1 }, 'the index render lists the rules');
+        .exists(
+          { count: 2 },
+          'the index render lists the rules, the code rule among them',
+        );
       assert
         .dom('[data-test-policy-grant-status]')
         .doesNotExist('with no grant marked');
