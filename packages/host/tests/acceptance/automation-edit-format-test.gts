@@ -445,14 +445,21 @@ module('Acceptance | automation edit format', function (hooks) {
     await fillIn(inputOf('Cron expression', item), '* * * * *');
     assert.strictEqual(
       messageOf('Cron expression', item),
-      'It can run at most once every 5 minutes',
-      'a schedule more often than every 5 minutes is refused',
+      '"* * * * *" can fire twice 1 minute apart, and Boxel runs an automation\'s cron trigger at most once every 5 minutes',
+      'a schedule more often than every 5 minutes is refused, in the words the server uses',
+    );
+    // The server refuses this expression, since 23:58 and the next day's
+    // 00:01 are 3 minutes apart, so the editor refuses it too.
+    await fillIn(inputOf('Cron expression', item), '58,1 0,23 * * *');
+    assert.ok(
+      messageOf('Cron expression', item).includes(
+        'can fire twice 3 minutes apart',
+      ),
+      'a schedule too frequent across midnight is refused',
     );
     await fillIn(inputOf('Cron expression', item), 'not cron');
     assert.ok(
-      messageOf('Cron expression', item).startsWith(
-        'A cron expression has five fields',
-      ),
+      messageOf('Cron expression', item).includes('a cron expression has five'),
       'a malformed expression is explained',
     );
 

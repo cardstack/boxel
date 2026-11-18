@@ -50,8 +50,13 @@
 // follows an edit the card's index hook hasn't applied yet the same way the
 // hook does (`withEditCursors`), so a slot that passed before the edit never
 // comes due. A card that raises a cap above the snapshot is left for the index
-// hook to pause, and a card that doesn't read as a declaration leaves the row
-// due and unchanged until it does.
+// hook to pause. A card that indexed but doesn't read as a declaration pauses
+// the automation with `invalid-declaration` (`pauseForInvalidDeclaration`):
+// a run is due and nothing can start it, so the automation says why rather
+// than skipping its runs in silence. The index hook leaves such a card alone,
+// since the card saves itself mid-edit, and lifts the pause once the card
+// reads again. A card with nothing indexed to read leaves the row due and
+// unchanged until it does.
 //
 // The tick reports each run it starts (`job` events, from the task), and each
 // automation whose state or next run it moves without starting a run
@@ -64,13 +69,18 @@ import type {
 import { ensureTrailingSlash } from './paths.ts';
 import type { QueuePublisher } from './queue.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
-import type { AutomationDeclaration } from './automation-declaration.ts';
+import type {
+  AutomationDeclaration,
+  AutomationProblem,
+} from './automation-declaration.ts';
+import type { ReportRunChange } from './automation-run-events.ts';
 import { createAutomationRun } from './automation-runs.ts';
 import { logRunPlatformLine } from './automation-run-log.ts';
 import { computeAutomationSchedule } from './automation-schedule.ts';
 import {
   automationFromRow,
   capsRaisedAbove,
+  pauseForInvalidDeclaration,
   recordTriggers,
   withEditCursors,
   type AutomationPauseReason,
@@ -90,10 +100,12 @@ import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 // is left, so this bounds a query, not a tick.
 export const AUTOMATION_TICK_PAGE_SIZE = 100;
 
-// The card's declaration as the index holds it, or why it can't be read.
+// The card's declaration as the index holds it, or why it can't be read: a
+// card that indexed but doesn't read as a declaration carries the reader's
+// `problems` too.
 export type AutomationDeclarationRead =
   | { ok: true; declaration: AutomationDeclaration }
-  | { ok: false; message: string };
+  | { ok: false; message: string; problems?: AutomationProblem[] };
 
 export interface AutomationTickOptions {
   queue: QueuePublisher;
@@ -113,6 +125,8 @@ export interface AutomationTickOptions {
   // Told of each automation whose state the tick changed, or whose next run
   // it moved without starting a run, once its transaction has committed.
   reportAutomationChange?: ReportAutomationChange;
+  // Told of each run a pause for an invalid declaration cancels.
+  reportRunChange?: ReportRunChange;
   // Called after each automation the tick handles.
   onProgress?: () => void;
 }
@@ -142,7 +156,8 @@ export type AutomationTickTrigger =
 // - `not-due`: the card as indexed has nothing due, so the row's next run was
 //   recomputed with nothing enqueued.
 // - `unreadable`: the card doesn't read as a declaration (`message` says
-//   why). The row stays due and unchanged.
+//   why). When the card indexed, the automation is `paused` with
+//   `invalid-declaration`; otherwise the row stays due and unchanged.
 // - `caps-raised`: the card asks for more than the caps snapshot. Nothing is
 //   enqueued; the index hook pauses the automation.
 // - `failed`: handling the automation threw. A run or job the tick wrote
@@ -165,6 +180,7 @@ export type AutomationTickOutcome =
       kind: 'unreadable';
       automationId: RealmResourceIdentifier;
       message: string;
+      paused: boolean;
     }
   | {
       kind: 'caps-raised';
@@ -256,6 +272,33 @@ async function tickAutomation(
   if (changed.automation) {
     await options.reportAutomationChange?.(changed.automation);
   }
+  if (outcome?.kind === 'unreadable') {
+    // The claim is over, so the pause locks the row afresh and reads the card
+    // again under the lock: an edit that fixed the card meanwhile is no
+    // reason to pause.
+    let automation = await pauseForInvalidDeclaration(
+      dbAdapter,
+      automationId,
+      async () => {
+        let read = await options.readDeclaration(automationId);
+        if (
+          read.ok ||
+          read.problems?.some(({ code }) => code === 'not-an-automation')
+        ) {
+          return undefined;
+        }
+        return read.problems;
+      },
+      {
+        reportAutomationChange: options.reportAutomationChange,
+        reportRunChange: options.reportRunChange,
+      },
+    );
+    return {
+      ...outcome,
+      paused: automation?.pauseReason === 'invalid-declaration',
+    };
+  }
   return outcome;
 }
 
@@ -287,7 +330,12 @@ async function claimAndEnqueue(
     let automation = automationFromRow(row);
     let read = await options.readDeclaration(automationId);
     if (!read.ok) {
-      return { kind: 'unreadable', automationId, message: read.message };
+      return {
+        kind: 'unreadable',
+        automationId,
+        message: read.message,
+        paused: false,
+      };
     }
     let { declaration } = read;
     let raised = capsRaisedAbove(automation.capsSnapshot, declaration);

@@ -149,7 +149,7 @@ const automationReconcile: Task<
             break;
           case 'unreadable':
             log.warn(
-              `${tag}: automation ${outcome.automationId} is overdue but its card can't be read: ${outcome.message}`,
+              `${tag}: automation ${outcome.automationId} is overdue but its card can't be read${outcome.paused ? ', so it is paused with invalid-declaration' : ''}: ${outcome.message}`,
             );
             break;
           case 'caps-raised':

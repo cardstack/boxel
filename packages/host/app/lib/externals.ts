@@ -64,6 +64,7 @@ import * as boxelUiModifiers from '@cardstack/boxel-ui/modifiers';
 
 import * as runtime from '@cardstack/runtime-common';
 import type { VirtualNetwork } from '@cardstack/runtime-common';
+import * as automationCronRule from '@cardstack/runtime-common/automation-cron-rule';
 import {
   PACKAGES_FAKE_ORIGIN,
   fallbackShim,
@@ -88,6 +89,12 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   );
 
   virtualNetwork.shimModule('@cardstack/runtime-common', runtime);
+  // The automation card's editor checks each cron trigger with the rule the
+  // server reads its declaration with.
+  virtualNetwork.shimModule(
+    '@cardstack/runtime-common/automation-cron-rule',
+    automationCronRule,
+  );
   virtualNetwork.shimModule(
     '@cardstack/boxel-ui/components',
     boxelUiComponents,

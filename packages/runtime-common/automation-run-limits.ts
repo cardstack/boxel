@@ -21,6 +21,7 @@ import {
   type AutomationCaps,
   type AutomationDeclaration,
   type AutomationOperationDeclaration,
+  type AutomationProblem,
 } from './automation-declaration.ts';
 import type { ReportRunChange } from './automation-run-events.ts';
 import { getAutomation, type AutomationCapsSnapshot } from './automations.ts';
@@ -64,9 +65,11 @@ export interface LimitedRun {
   automationId: RealmResourceIdentifier;
 }
 
+// A card that indexed but doesn't read as a declaration carries the reader's
+// `problems` too; a card with nothing indexed to read carries none.
 export type RunDeclarationRead =
   | { ok: true; declaration: AutomationDeclaration }
-  | { ok: false; message: string };
+  | { ok: false; message: string; problems?: AutomationProblem[] };
 
 // The automation's declaration, read from its card's live index row. A card
 // that isn't indexed, failed to index, or doesn't read as an automation
@@ -117,6 +120,7 @@ export async function readRunDeclaration({
       message: `the automation card ${automationId} doesn't read as an automation: ${read.problems
         .map(({ path, message }) => (path ? `${path}: ${message}` : message))
         .join('; ')}`,
+      problems: read.problems,
     };
   }
   return { ok: true, declaration: read.declaration };

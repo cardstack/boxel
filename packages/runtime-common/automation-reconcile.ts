@@ -118,8 +118,9 @@ export interface AutomationReconcileOptions {
   // (`heartbeatJob`). A pass after a long outage can outlast the job's
   // timeout.
   onProgress?: () => void;
-  // Told of the automation and the runs a pause for repeated failures
-  // changes, once the pause commits.
+  // Told of each automation the overdue pass or a pause for repeated
+  // failures changes, such as one paused for an invalid declaration, and of
+  // each run such a pause cancels, once the change commits.
   reportRunChange?: ReportRunChange;
   reportAutomationChange?: ReportAutomationChange;
 }
@@ -207,6 +208,8 @@ export async function reconcileAutomations(
     overdueBy: graceSeconds,
     pageSize: options.pageSize,
     onProgress: options.onProgress,
+    reportAutomationChange: options.reportAutomationChange,
+    reportRunChange: options.reportRunChange,
   });
   let steps: Record<string, number> = {};
   for (let [name, step] of reconcileSteps) {
