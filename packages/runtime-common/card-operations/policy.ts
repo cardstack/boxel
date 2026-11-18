@@ -1056,6 +1056,9 @@ async function compileDocument(
   let subtypes: Compilation['subtypes'] = [];
   let heldTypes: string | undefined;
   let rules: CompiledPolicyRule[] = [];
+  // The paths of the grants whose `where` can never hold for a signed-in
+  // caller, as `actor() == "anonymous"` can't.
+  let neverSignedIn = new Set<string>();
   let cardURL = new URL(card);
   // An issue's message is read on the policy card and in a `validate` answer.
   // It marks identifiers as code with backticks, separates one idea from the
@@ -1642,6 +1645,9 @@ async function compileDocument(
         );
         continue;
       }
+      if (settleActor(outcome.body, 'signed-in') === false) {
+        neverSignedIn.add(grantPath);
+      }
       grants.push(
         await withFilter(
           {
@@ -1836,6 +1842,7 @@ async function compileDocument(
       grants: rule.grants.map((grant) => ({
         grant,
         base: admittingBase(definition, grant),
+        opensToSignedIn: !neverSignedIn.has(grant.path),
         opensToAnonymous: opensToAnonymous(grant),
       })),
     });

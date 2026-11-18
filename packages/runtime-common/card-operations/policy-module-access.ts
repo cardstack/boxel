@@ -31,11 +31,15 @@ import type { CompiledOperationGrant, CompiledPolicyRule } from './policy.ts';
 // holds none yet has its first such card noticed when the policy next
 // compiles, which a `validate` always does.
 //
-// It is a diagnostic, and it reads no code grant's `where`: any live
-// `readSource` grant on a code type counts as covering the realm's modules. Nor
-// can it tell a module's extension from its identifier, so a `GtsFileDef` grant
-// counts as covering a `.ts` module too. A caller a `where` leaves out, or a
-// card defined in a `.ts` module, can still meet a module no grant reaches.
+// It is a diagnostic, and it doesn't evaluate a code grant's `where`: a live
+// `readSource` grant on a code type counts as covering the realm's modules for
+// every kind of caller it can admit. One whose `where` can never hold for a
+// signed-in caller, as `actor() == "anonymous"` can't, covers only callers who
+// aren't signed in, and one that doesn't name them covers only signed-in
+// callers. Nor can it tell a module's extension from its identifier, so a
+// `GtsFileDef` grant counts as covering a `.ts` module too. A caller a `where`
+// leaves out, or a card defined in a `.ts` module, can still meet a module no
+// grant reaches.
 // ============================================================================
 
 // The code types, which a rule must name for its `readSource` grant to reach
@@ -46,8 +50,8 @@ const CODE_TYPES: ResolvedCodeRef[] = [
 ];
 
 // A rule as compiled, with the adoption chain of its type and, for each of
-// its grants, the base it admits through and whether it opens to callers who
-// aren't signed in.
+// its grants, the base it admits through and which kinds of caller it can
+// admit.
 export interface ModuleAccessRule {
   rule: CompiledPolicyRule;
   // The keys of the rule's type and of every type it descends from, the
@@ -58,6 +62,8 @@ export interface ModuleAccessRule {
     // The base the grant admits through, or undefined for one that admits
     // nothing.
     base: BaseOperation | undefined;
+    // False for a grant whose `where` can never hold for a signed-in caller.
+    opensToSignedIn: boolean;
     opensToAnonymous: boolean;
   }[];
 }
@@ -95,11 +101,11 @@ export async function moduleAccessIssues(
     if (!onCode) {
       continue;
     }
-    for (let { base, opensToAnonymous } of grants) {
+    for (let { base, opensToSignedIn, opensToAnonymous } of grants) {
       if (base !== 'readSource') {
         continue;
       }
-      signedInCovered = true;
+      signedInCovered ||= opensToSignedIn;
       anonymousCovered ||= opensToAnonymous;
     }
   }
@@ -107,13 +113,35 @@ export async function moduleAccessIssues(
     return [];
   }
 
+  // The callers a grant admits that no code grant covers, as the message
+  // names them. It names one kind where a code grant covers the other, so the
+  // fix is to open code to that kind too, and otherwise all of them.
+  let uncovered = ({
+    opensToSignedIn,
+    opensToAnonymous,
+  }: ModuleAccessRule['grants'][number]): Callers | undefined => {
+    let signedIn = opensToSignedIn && !signedInCovered;
+    let anonymous = opensToAnonymous && !anonymousCovered;
+    if (signedIn && anonymous) {
+      return 'any';
+    }
+    if (anonymous) {
+      return signedInCovered ? 'anonymous' : 'any';
+    }
+    if (signedIn) {
+      return anonymousCovered ? 'signed-in' : 'any';
+    }
+    return undefined;
+  };
   let issues: ModuleAccessIssue[] = [];
   for (let { rule, types, grants } of rules) {
-    let reading = grants.filter(
-      ({ base, opensToAnonymous }) =>
-        (base === 'read' || base === 'query') &&
-        (!signedInCovered || (opensToAnonymous && !anonymousCovered)),
-    );
+    let reading = grants.flatMap((entry) => {
+      let callers =
+        entry.base === 'read' || entry.base === 'query'
+          ? uncovered(entry)
+          : undefined;
+      return callers ? [{ ...entry, callers }] : [];
+    });
     if (reading.length === 0) {
       continue;
     }
@@ -121,14 +149,14 @@ export async function moduleAccessIssues(
     if (modules.length === 0) {
       continue;
     }
-    for (let { grant, base, opensToAnonymous } of reading) {
+    for (let { grant, base, callers } of reading) {
       issues.push({
         code: 'module-not-granted',
         path: grant.path,
         message: message(
           rule,
           base === 'query' ? 'find' : 'read',
-          signedInCovered && opensToAnonymous ? 'anonymous' : 'any',
+          callers,
           modules,
         ),
       });
@@ -163,14 +191,22 @@ function localModules(keys: string[], env: ModuleAccessEnvironment): string[] {
   return [...modules];
 }
 
+// Which of a grant's callers a message is about: all of them, or the one kind
+// no code grant covers where a code grant covers the other.
+type Callers = 'any' | 'signed-in' | 'anonymous';
+
 function message(
   rule: CompiledPolicyRule,
   lets: 'read' | 'find',
-  callers: 'any' | 'anonymous',
+  callers: Callers,
   modules: string[],
 ): string {
   let who =
-    callers === 'anonymous' ? "callers who aren't signed in" : 'its callers';
+    callers === 'anonymous'
+      ? "callers who aren't signed in"
+      : callers === 'signed-in'
+        ? 'signed-in callers'
+        : 'its callers';
   let named = modules
     .slice(0, NAMED_MODULES)
     .map((module) => `\`${module}\``)
@@ -182,7 +218,9 @@ function message(
   let fix =
     callers === 'anonymous'
       ? `Open a \`readSource\` grant on \`TsFileDef\` (\`@cardstack/base/ts-file-def\`) to them too, by naming them in its \`where\` (\`actor() == "anonymous"\`).`
-      : `Add a rule on \`TsFileDef\` (\`@cardstack/base/ts-file-def\`) that grants \`readSource\` to the same callers. A rule on \`FileDef\` doesn't reach code.`;
+      : callers === 'signed-in'
+        ? `The policy's \`readSource\` grants on code admit only callers who aren't signed in. Add one on \`TsFileDef\` (\`@cardstack/base/ts-file-def\`) that admits signed-in callers too.`
+        : `Add a rule on \`TsFileDef\` (\`@cardstack/base/ts-file-def\`) that grants \`readSource\` to the same callers. A rule on \`FileDef\` doesn't reach code.`;
   return (
     `this grant lets ${who} ${lets} \`${rule.targetType.name}\` cards, and no grant in this policy lets them load the code those cards are defined in: ${named}${rest}. ` +
     `A caller who reaches the realm only through its policy can ${lets} such a card but can't render it.\n\n${fix}`

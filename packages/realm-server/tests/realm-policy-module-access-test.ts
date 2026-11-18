@@ -371,5 +371,42 @@ module(basename(import.meta.filename), function () {
       ]);
       assert.deepEqual(moduleIssues(policy), []);
     });
+
+    test('a code grant opened only to them leaves the warning on a grant for signed-in callers, naming them', async function (assert) {
+      let policy = await compile([
+        {
+          on: NOTE,
+          grants: [
+            { operation: 'read', where: READERS },
+            { operation: 'query', where: `${OPEN} or (${READERS})` },
+          ],
+        },
+        { on: TS_FILE_DEF, grants: [{ operation: 'readSource', where: OPEN }] },
+      ]);
+      let issues = moduleIssues(policy);
+      assert.deepEqual(
+        issues.map(({ path }) => path),
+        ['rules[0].grants[0]', 'rules[0].grants[1]'],
+        'each grant that admits signed-in callers is warned about',
+      );
+      assert.ok(
+        issues[1].message.includes('lets signed-in callers find `Note` cards'),
+        'a grant that admits both kinds says which kind the code grant leaves out',
+      );
+      assert.ok(
+        issues[1].message.includes(
+          "The policy's `readSource` grants on code admit only callers who aren't signed in.",
+        ),
+        'says why the code grant does not cover them',
+      );
+    });
+
+    test('a code grant opened only to them clears the warning on a grant opened only to them', async function (assert) {
+      let policy = await compile([
+        { on: NOTE, grants: [{ operation: 'read', where: OPEN }] },
+        { on: TS_FILE_DEF, grants: [{ operation: 'readSource', where: OPEN }] },
+      ]);
+      assert.deepEqual(moduleIssues(policy), []);
+    });
   });
 });
