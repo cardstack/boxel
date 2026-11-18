@@ -7,8 +7,9 @@
 // and answer only for the signed-in user's own live grants: those that pass
 // the grant checks (`GRANT_USABLE`). The list shows the live grants whose code
 // has been exchanged; the disconnect ends any live grant, which also stops a
-// code not yet exchanged. A grant ID naming anyone else's grant, or one that
-// isn't live, is answered as unknown.
+// code not yet exchanged. A disconnect of the user's own grant that is no
+// longer live is answered as done, and changes nothing; a grant ID naming
+// anyone else's grant, or none, is answered as unknown.
 //
 // What the access means comes from the registry, and the app's name from
 // `appName`, as consent named it for a client identified by a metadata
@@ -20,7 +21,7 @@ import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
 import { appName, type AppName } from './app-name.ts';
-import { endGrant, GRANT_USABLE } from './grants.ts';
+import { endGrant, GRANT_USABLE, isUsersGrant } from './grants.ts';
 import type { OAuthResource } from './registry.ts';
 import {
   respond,
@@ -176,8 +177,10 @@ export function connectionsListHandler(deps: ConnectionsDeps): Koa.Middleware {
 
 // `DELETE /_oauth-provider/connections/:grantId`: ends the grant, with reason
 // `user`, and deletes its tokens, so the app's next request with any of them
-// is refused. Answers 204, or 404 when the ID names no live grant of the
-// user's, whoever's it is.
+// is refused. Answers 204 once the grant is no longer live, so a repeated
+// disconnect, or one of a connection that has ended or expired since the page
+// listed it, is answered as done and changes nothing. Answers 404 when the ID
+// names no grant of the user's, whoever's it is.
 export function connectionsDisconnectHandler(
   deps: ConnectionsDeps,
 ): Koa.Middleware {
@@ -186,10 +189,11 @@ export function connectionsDisconnectHandler(
     if (!user) {
       return;
     }
-    let ended = await endGrant(deps.dbAdapter, ctxt.params.grantId, 'user', {
+    let { grantId } = ctxt.params;
+    let ended = await endGrant(deps.dbAdapter, grantId, 'user', {
       owner: user,
     });
-    if (!ended) {
+    if (!ended && !(await isUsersGrant(deps.dbAdapter, grantId, user))) {
       return respond(ctxt, 404, { error: 'not-found' });
     }
     respond(ctxt, 204, undefined);

@@ -36,7 +36,7 @@ import { secureSessionAuth } from './helpers/secure-session.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import { appName } from '../lib/oauth-provider/app-name.ts';
 import type { Connection } from '../lib/oauth-provider/connections.ts';
-import { createGrant } from '../lib/oauth-provider/grants.ts';
+import { createGrant, endGrant } from '../lib/oauth-provider/grants.ts';
 import { sha256Hex } from '../lib/oauth-provider/objects.ts';
 import type { OAuthResourceDefinition } from '../lib/oauth-provider/registry.ts';
 import { withOAuthProviderSecretsLabeled } from '../lib/request-telemetry.ts';
@@ -337,6 +337,23 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
+    test('names an app by its one registered redirect URI when the flow left it out', async function (assert) {
+      let who = await user();
+      let clientId = await registerOAuthClient(server!, {
+        redirectUri: 'https://app.only-home.example/callback',
+      });
+      let code = await codeForOAuthClient(server!, clientId, who.session, {
+        resources: [RESOURCE],
+        redirectUri: null,
+      });
+      let exchanged = await exchangeOAuthCode(server!, clientId, code, {
+        redirectUri: 'https://app.only-home.example/callback',
+      });
+      assert.strictEqual(exchanged.status, 200, exchanged.text);
+      let [connection] = await listed(who);
+      assert.strictEqual(connection.app.shown, 'only-home.example');
+    });
+
     test('names a client by its metadata document as consent does, without fetching it', async function (assert) {
       let who = await user();
       let clientId = 'https://apps.document-client.example/oauth/client.json';
@@ -566,12 +583,18 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(await listed(who), [], 'and it is never listed');
     });
 
-    test('answers a connection that is not live as not found', async function (assert) {
+    test("answers a disconnect of the user's own connection that is no longer live as done, and changes nothing", async function (assert) {
       let who = await user();
-      let ended = await connect(who);
+      let disconnected = await connect(who);
+      let endedByClient = await connect(who);
       let expired = await connect(who);
       let revoked = await connect(who);
-      await disconnect(ended.grantId, { authorization: who.session });
+      assert.strictEqual(
+        (await disconnect(disconnected.grantId, { authorization: who.session }))
+          .status,
+        204,
+      );
+      await endGrant(db, endedByClient.grantId, 'client');
       await db.execute(
         `UPDATE oauth_provider_grants SET expires_at = now() - interval '1 second'
           WHERE id = $1`,
@@ -583,21 +606,29 @@ module(basename(import.meta.filename), function (hooks) {
           WHERE id = $1`,
         { bind: [who.id] },
       );
+      let before = new Map<string, Awaited<ReturnType<typeof grantRow>>>();
+      for (let { grantId } of [disconnected, endedByClient, expired, revoked]) {
+        before.set(grantId, await grantRow(grantId));
+      }
       for (let [name, grantId] of [
-        ['ended', ended.grantId],
+        ['disconnected again', disconnected.grantId],
+        ['ended by its client', endedByClient.grantId],
         ['expired', expired.grantId],
         ['revoked', revoked.grantId],
-        ['unknown', randomBytes(32).toString('base64url')],
       ]) {
         let response = await disconnect(grantId, {
           authorization: who.session,
         });
-        assert.strictEqual(response.status, 404, name);
-        assert.deepEqual(response.body, { error: 'not-found' }, name);
+        assert.strictEqual(response.status, 204, name);
+        assert.deepEqual(
+          await grantRow(grantId),
+          before.get(grantId),
+          `${name}: unchanged`,
+        );
       }
       assert.strictEqual(
-        (await grantRow(ended.grantId)).ended_reason,
-        'user',
+        (await grantRow(endedByClient.grantId)).ended_reason,
+        'client',
         'an ended connection keeps its first reason',
       );
       assert.strictEqual(
@@ -605,6 +636,15 @@ module(basename(import.meta.filename), function (hooks) {
         null,
         'a revoked one is not recorded as ended by the user',
       );
+    });
+
+    test('answers a grant ID that names no grant as not found', async function (assert) {
+      let who = await user();
+      let response = await disconnect(randomBytes(32).toString('base64url'), {
+        authorization: who.session,
+      });
+      assert.strictEqual(response.status, 404);
+      assert.deepEqual(response.body, { error: 'not-found' });
     });
 
     test('records the disconnect without the grant, the user or a token', async function (assert) {

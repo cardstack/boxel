@@ -106,33 +106,28 @@ export async function readGrantTerms(
 // updated, so that it sees a token whose store held the row while the update
 // waited for it; one statement would read the tokens as they were when it
 // began. Without an owner they are deleted whether or not this call ended the
-// grant, since a grant someone else ended has none to keep.
+// grant, since a grant someone else ended has none to keep. Both paths are one
+// statement; an owner only narrows which grant it may end.
 export async function endGrant(
   dbAdapter: DBAdapter,
   grantId: string,
   reason: GrantEndReason,
   { owner }: { owner?: string } = {},
 ): Promise<boolean> {
-  let rows = (
-    owner === undefined
-      ? await dbAdapter.execute(
-          `UPDATE oauth_provider_grants
-              SET ended_at = now(), ended_reason = $2
-            WHERE id = $1 AND ended_at IS NULL
-            RETURNING client_id`,
-          { bind: [grantId, reason] },
-        )
-      : await dbAdapter.execute(
-          `UPDATE oauth_provider_grants AS g
-              SET ended_at = now(), ended_reason = $2
-             FROM users AS u
-            WHERE g.id = $1 AND u.id = g.user_id AND u.matrix_user_id = $3
-              AND ${GRANT_USABLE}
-            RETURNING g.client_id`,
-          { bind: [grantId, reason, owner] },
-        )
-  ) as { client_id: string }[];
+  let rows = (await dbAdapter.execute(
+    `UPDATE oauth_provider_grants AS g
+        SET ended_at = now(), ended_reason = $2
+       FROM users AS u
+      WHERE g.id = $1 AND u.id = g.user_id AND g.ended_at IS NULL
+        ${owner === undefined ? '' : `AND u.matrix_user_id = $3 AND ${GRANT_USABLE}`}
+      RETURNING g.client_id`,
+    {
+      bind: owner === undefined ? [grantId, reason] : [grantId, reason, owner],
+    },
+  )) as { client_id: string }[];
   let ended = rows.length > 0;
+  // An owner's request that ended nothing leaves the tokens too: the grant
+  // may be someone else's.
   if (ended || owner === undefined) {
     await dbAdapter.execute(
       `DELETE FROM oauth_provider_tokens WHERE grant_id = $1`,
@@ -145,6 +140,21 @@ export async function endGrant(
     );
   }
   return ended;
+}
+
+// Whether a grant, live or not, is the user's (by their Matrix ID).
+export async function isUsersGrant(
+  dbAdapter: DBAdapter,
+  grantId: string,
+  matrixUserId: string,
+): Promise<boolean> {
+  let rows = await dbAdapter.execute(
+    `SELECT 1 FROM oauth_provider_grants AS g
+       JOIN users AS u ON u.id = g.user_id
+      WHERE g.id = $1 AND u.matrix_user_id = $2`,
+    { bind: [grantId, matrixUserId] },
+  );
+  return rows.length > 0;
 }
 
 // Revokes a user's OAuth grants (ADR 021 §1.9): records the cutoff, so that

@@ -155,7 +155,8 @@ export async function startOAuthFlow(
     resources = [OAUTH_TEST_MCP],
     codeChallenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
   }: {
-    redirectUri?: string;
+    // null leaves `redirect_uri` out, as a client with one registered may.
+    redirectUri?: string | null;
     scope?: string;
     resources?: string[];
     codeChallenge?: string;
@@ -164,7 +165,7 @@ export async function startOAuthFlow(
   let query = new URLSearchParams({
     client_id: clientId,
     response_type: 'code',
-    redirect_uri: redirectUri,
+    ...(redirectUri === null ? {} : { redirect_uri: redirectUri }),
     scope,
     state: OAUTH_TEST_STATE,
     code_challenge: codeChallenge,
@@ -274,7 +275,8 @@ export async function codeForOAuthClient(
     renew?: boolean;
     scope?: string;
     resources?: string[];
-    redirectUri?: string;
+    // null leaves `redirect_uri` out of the authorization request.
+    redirectUri?: string | null;
   } = {},
 ): Promise<string> {
   let browser = supertest.agent(server);
@@ -282,7 +284,7 @@ export async function codeForOAuthClient(
     scope,
     codeChallenge: OAUTH_TEST_CODE_CHALLENGE,
     ...(resources ? { resources } : {}),
-    ...(redirectUri ? { redirectUri } : {}),
+    ...(redirectUri !== undefined ? { redirectUri } : {}),
   });
   let ticket = await decideOAuthFlow(server, uid, session, { renew });
   return await finishOAuthFlow(browser, uid, ticket);

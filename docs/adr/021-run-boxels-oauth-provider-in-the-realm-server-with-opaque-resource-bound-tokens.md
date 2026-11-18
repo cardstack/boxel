@@ -257,7 +257,9 @@ their live grants, from the secure origin's Connected apps page. The routes
 that list and end them MUST answer only a request whose `Origin` is the secure
 origin's, under the secure window's own session, as consent's routes do
 (§1.7). Ending one grant MUST NOT end another, including another grant of the
-same client. A grant ID that doesn't name a live grant of the signed-in user's
+same client. Ending a grant of the signed-in user's that is no longer live
+SHOULD be answered as done, so that a repeated request succeeds, and MUST
+change nothing. A grant ID that doesn't name a grant of the signed-in user's
 MUST be answered as unknown, and MUST change nothing.
 
 ## 2. Rationale
