@@ -18,9 +18,10 @@ import { assertNoSecureSessionClaim } from '../utils/jwt.ts';
 // the run. A realm accepts it only
 // through `Realm.handleAutomation`, which checks the run's row on every call.
 // A realm-server route that serves run tokens verifies one with
-// `verifyRunToken` and checks the run's row itself with
-// `automationRunForCall`, since the signature says only that the realm server
-// minted it, not that the run is still going.
+// `verifyRunToken`, checks the run's row itself with `automationRunForCall`,
+// since the signature says only that the realm server minted it, not that
+// the run is still going, and checks `runActsAsDirectWriter`, as
+// `Realm.handleAutomation` does on each call.
 
 export interface MintRunTokenOptions {
   realmSecretSeed: string;
