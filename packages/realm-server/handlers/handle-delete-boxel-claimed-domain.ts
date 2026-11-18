@@ -1,7 +1,8 @@
 import type Koa from 'koa';
-import { asExpressions, param, query, update } from '@cardstack/runtime-common';
+import { asExpressions, param, update } from '@cardstack/runtime-common';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import {
+  sendResponseForError,
   sendResponseForNotFound,
   sendResponseForSystemError,
   sendResponseForUnprocessableEntity,
@@ -40,45 +41,74 @@ export default function handleDeleteBoxelClaimedDomainRequest({
         return;
       }
 
-      // Check if the user owns this claim
-      const claims = await query(dbAdapter, [
-        `SELECT id, user_id FROM claimed_domains_for_sites WHERE id = `,
-        param(claimedDomainId),
-        ` AND removed_at IS NULL`,
-      ]);
+      // The claim is read and released in one transaction, holding the
+      // claim's row, so a mount at its site name can't slip in between the
+      // check and the release.
+      const refusal = await dbAdapter.withTransaction(
+        async (q): Promise<{ status: 409 | 422; message: string } | null> => {
+          const [claim] = (await q([
+            `SELECT id, user_id, hostname FROM claimed_domains_for_sites WHERE id = `,
+            param(claimedDomainId),
+            ` AND removed_at IS NULL FOR UPDATE`,
+          ])) as { id: string; user_id: string; hostname: string }[];
 
-      if (claims.length === 0) {
-        await sendResponseForUnprocessableEntity(
-          ctxt,
-          'No active hostname claim found for this claimed domain ID',
-        );
+          if (!claim) {
+            return {
+              status: 422,
+              message:
+                'No active hostname claim found for this claimed domain ID',
+            };
+          }
+
+          if (claim.user_id !== user.id) {
+            return {
+              status: 422,
+              message:
+                'You do not have permission to delete this hostname claim',
+            };
+          }
+
+          // A site name a realm is mounted at belongs to that realm until
+          // the realm's administrators unmount it (ADR 033 §1.6), which also
+          // frees the name. Releasing the claim here would leave the host
+          // URL serving a name anyone could claim.
+          const mounted = await q([
+            `SELECT 1 AS found FROM realm_host_urls WHERE kind = 'site-name' AND split_part(host, ':', 1) = `,
+            param(claim.hostname),
+            ` LIMIT 1`,
+          ]);
+          if (mounted.length > 0) {
+            return {
+              status: 409,
+              message: `A realm is mounted at ${claim.hostname}. Unmount it from the realm before you release the site name.`,
+            };
+          }
+
+          // Soft delete by setting removed_at
+          const { valueExpressions, nameExpressions } = asExpressions({
+            removed_at: Math.floor(Date.now() / 1000),
+          });
+          await q([
+            ...update(
+              'claimed_domains_for_sites',
+              nameExpressions,
+              valueExpressions,
+            ),
+            ` WHERE id = `,
+            param(claim.id),
+          ]);
+          return null;
+        },
+      );
+
+      if (refusal?.status === 409) {
+        await sendResponseForError(ctxt, 409, 'Conflict', refusal.message);
         return;
       }
-
-      const claim = claims[0];
-
-      // Verify the user owns this claim
-      if (claim.user_id !== user.id) {
-        await sendResponseForUnprocessableEntity(
-          ctxt,
-          'You do not have permission to delete this hostname claim',
-        );
+      if (refusal) {
+        await sendResponseForUnprocessableEntity(ctxt, refusal.message);
         return;
       }
-
-      // Soft delete by setting removed_at
-      const { valueExpressions, nameExpressions } = asExpressions({
-        removed_at: Math.floor(Date.now() / 1000),
-      });
-      await query(dbAdapter, [
-        ...update(
-          'claimed_domains_for_sites',
-          nameExpressions,
-          valueExpressions,
-        ),
-        ` WHERE id = `,
-        param(claim.id),
-      ]);
 
       // Return 204 No Content
       await setContextResponse(
