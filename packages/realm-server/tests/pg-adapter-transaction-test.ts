@@ -106,7 +106,9 @@ module(basename(import.meta.filename), function () {
       processID = 1;
       lost = false;
       releasedWith: unknown[] = [];
-      async query() {
+      queries: string[] = [];
+      async query(q: string | { text: string }) {
+        this.queries.push(typeof q === 'string' ? q : q.text);
         await new Promise((r) => setTimeout(r, 1));
         if (this.lost) {
           throw new Error('Client has encountered a connection error');
@@ -272,6 +274,10 @@ module(basename(import.meta.filename), function () {
           pool.clients[0].releasedWith.length,
           1,
           "the hold's own release does not release the client again",
+        );
+        assert.notOk(
+          pool.clients[0].queries.includes('ROLLBACK'),
+          'no ROLLBACK is sent on a connection Postgres already ended',
         );
       } finally {
         await adapter.close();

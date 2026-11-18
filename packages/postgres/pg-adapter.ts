@@ -866,10 +866,11 @@ export class PgAdapter implements DBAdapter {
   // is waiting for a turn. Counted until the hold ends, a dead connection
   // would keep the scheduler's count above what Postgres has, with every
   // waiter queued behind it. The caller's own statements on the client fail,
-  // and its later `release` does nothing.
+  // its later `release` does nothing, and `isLost` tells it why.
   async #checkout(opts?: { hold?: ConnectionHold }): Promise<{
     client: PoolClient;
     release: (destroy?: boolean | Error) => void;
+    isLost: () => boolean;
   }> {
     let releaseTurn = await this.#scheduler.acquire(opts);
     let client: PoolClient;
@@ -894,12 +895,14 @@ export class PgAdapter implements DBAdapter {
     };
     // A hold whose connection is gone holds nothing a waiter could be
     // deadlocked behind, so the rest of its work stops counting as nested.
+    let lost = false;
     let onLost = (e: Error) => {
+      lost = true;
       opts?.hold?.end();
       release(e);
     };
     client.on('error', onLost);
-    return { client, release };
+    return { client, release, isLost: () => lost };
   }
 
   async notify(channel: string, payload: string): Promise<void> {
@@ -1594,7 +1597,9 @@ export class PgAdapter implements DBAdapter {
     // the adapter is one it needs before it can give this one back. The hold
     // is made before the checkout so the scheduler knows it as a hold.
     let holding = markConnectionHeld();
-    let { client, release } = await this.#checkout({ hold: holding });
+    let { client, release, isLost } = await this.#checkout({
+      hold: holding,
+    });
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     let query = async (expression: Expression) => {
       let sql = expressionToSql(this.kind, expression);
@@ -1605,6 +1610,11 @@ export class PgAdapter implements DBAdapter {
     try {
       return await holding.run(() => fn(query));
     } catch (e) {
+      // A lost connection has nothing to clean up: Postgres ended its
+      // transaction with the session, and the pool has discarded the client.
+      if (isLost()) {
+        throw e;
+      }
       // Clean up any in-progress transaction before returning the client to
       // the pool. Without this, a connection left in a dirty transaction
       // state will cause "SET TRANSACTION ISOLATION LEVEL must be called
