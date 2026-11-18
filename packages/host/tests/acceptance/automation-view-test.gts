@@ -777,7 +777,7 @@ module('Acceptance | automation view', function (hooks) {
     }
   });
 
-  test('a viewer the route refuses still sees the milestones the script declares', async function (assert) {
+  test("a viewer who isn't a direct writer still sees the milestones the script declares", async function (assert) {
     await openIsolated(PLANNED);
     await waitFor('[data-test-automation-who-pays]', { timeout: 10000 });
     await waitFor(
@@ -818,7 +818,7 @@ module('Acceptance | automation view', function (hooks) {
       );
   });
 
-  test('a viewer the route refuses is told who sees the milestones', async function (assert) {
+  test("a viewer who isn't a direct writer is told who sees the milestones", async function (assert) {
     await openIsolated();
     await waitFor('[data-test-automation-who-pays]', { timeout: 10000 });
     assert
@@ -1213,7 +1213,7 @@ module('Acceptance | automation view', function (hooks) {
       .includesText('0 of 3');
   });
 
-  test('a viewer the route refuses sees the declared milestones but no runs in the fitted and embedded views', async function (assert) {
+  test("a viewer who isn't a direct writer sees the declared milestones but no runs in the fitted and embedded views", async function (assert) {
     await openFormat('embedded', PLANNED);
     await waitFor('[data-test-automation-embedded-milestones="planned"]', {
       timeout: 10000,
