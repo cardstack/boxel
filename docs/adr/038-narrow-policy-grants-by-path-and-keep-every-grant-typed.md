@@ -9,6 +9,7 @@ scope:
   - packages/runtime-common/card-operations/dispatch.ts
   - packages/runtime-common/card-operations/executors.ts
   - packages/runtime-common/realm.ts
+  - packages/runtime-common/realm-history.ts
   - packages/base/operations.ts
   - packages/base/realm-path.gts
 ---
@@ -27,8 +28,10 @@ extends ADR 024 §1.4, §1.5 and §1.7, and supersedes none of it.
 
 ### 1.1. A path narrows a type
 
-A policy rule and a grant MAY each carry a path specifier. Every policy rule
-MUST still name a `targetType`, and a path MUST NOT stand in for it. A grant
+A policy rule and a grant MAY each carry a path specifier, in a field on the
+`PolicyRule` and `OperationGrant` definitions. Those live in boxel-catalog
+(`realm-policy/realm-policy.gts`), which no `scope` glob here reaches. Every
+policy rule MUST still name a `targetType`, and a path MUST NOT stand in for it. A grant
 MUST admit a target only when the target's type is its rule's `targetType` or
 descends from it, the target's path matches both its rule's specifier and its
 own, and the grant names the operation and its `where` holds (ADR 024 §1.4).
@@ -40,8 +43,8 @@ config card or a policy card (ADR 024 §1.5), or a path the realm ignores.
 A grant or policy rule whose specifier is invalid (ADR 037 §1.5) MUST be left
 out whole, with a recorded issue (ADR 024 §1.6). The compile MUST record an
 issue for a grant whose specifier can't overlap its rule's, and MUST keep the
-grant. Two specifiers overlap when a prefix of one contains a prefix of the
-other, or when either is absent or empty.
+grant. Two specifiers overlap when some path matches both (ADR 037 §1.4), or
+when either is absent or empty.
 
 ### 1.3. Match the path first
 
@@ -55,17 +58,20 @@ the path of its stored file, and a file by its own path.
 
 A create MUST be judged at the path its card will be stored at: the creation
 path when the create names one, and the default path
-(`<directory>/<TypeName>/<id>.json`) otherwise. A grant MUST NOT admit creating
-a file.
+(`<directory>/<type directory>/<id>.json`) otherwise. The type directory is the
+one the realm names after the type it resolves (ADR 024 §1.4), and can span
+more than one segment. A grant MUST NOT admit creating a file.
 
 A declared create MAY name a directory for its cards, as a realm setting and a
 default for when the realm doesn't set it. The realm MUST use that directory
 whenever the caller names neither a directory nor a creation path. A setting
-that isn't a valid directory MUST refuse the create, with an error that names
-the setting, and MUST NOT fall back to the default. Unless the declaration
-allows creation paths, the compile MUST record an issue for a grant on such a
-create whose paths, with its rule's, don't cover the directory as the realm
-resolves it. The grant MUST be kept.
+that isn't a valid directory (a prefix that ends in `/` and that ADR 037 §1.5
+accepts), or that names a path the realm ignores, MUST refuse the create, with
+an error that names the setting, and MUST NOT fall back to the default. Unless
+the declaration allows creation paths, the compile MUST record an issue for a
+grant on such a create whose paths, with its rule's, don't cover the directory
+as the realm resolves it. The grant MUST be kept. A change to the realm's
+settings MUST make the compile run again, so the issue follows the setting.
 
 For a caller the realm's permissions don't let read the realm, the realm MUST
 pick the new card's id, and MUST store the card at the root or in its declared
@@ -83,12 +89,16 @@ filters, so explain shows it, and MUST be lowered as ADR 037 §1.1 requires.
 ### 1.6. Operations on a path
 
 An operation whose target is a path, such as reading history, MUST be matched
-under `RealmPath`, which a policy rule names as its `targetType` and a
-specifier narrows. A rule on any other type MUST NOT grant such an operation.
+under `RealmPath` (`packages/base/realm-path.gts`), which a policy rule names as
+its `targetType` and a specifier narrows. A rule on any other type MUST NOT grant such an operation.
 A `RealmPath` grant's `where` MUST read only `actor()`, `realmConfig()` and
 `policy()`. A `RealmPath` grant whose `where` reads the target MUST be left
-out, with a recorded issue. A restore MUST check every file it writes against
-the write grants on that file's own type, as well as against its own grant.
+out, with a recorded issue. Besides its own grant, a restore MUST judge each
+file it writes as that write would be judged on its own: an update or a delete
+of what is stored, or, where nothing is stored, a create of the card it brings
+back, at that card's path (§1.4). So no grant restores a deleted file that
+isn't a card, and a caller the realm's permissions don't let read the realm
+can't bring back a deleted card.
 
 ### 1.7. The reach check and granted paths
 
@@ -119,11 +129,17 @@ taken, so only a declaration that accepts that may allow one. A creation path
 isn't one of the "predicates over params" that ADR 024 §3 rejects: it says
 where the write lands, not who may make it. A specifier is literal
 (ADR 037 §1.3), so it can't follow the setting, and the compile reports the
-drift instead.
+drift instead, each time the setting changes. A create grant whose paths miss
+where such a caller's card lands, such as one on `blog/` for a create that
+declares no directory, admits only callers who can read the realm. The compile
+reports that only against a declared directory, because a grant for editors who
+read the realm is often written that way on purpose.
 
 An operation on a path has no stored target to type or to read, so `RealmPath`
 gives its grants a type, and their `where` reads no target. A restore writes
-files, so the grants that judge any other write still judge each one.
+files, so each one is judged as the same write made any other way. Bringing
+back a deleted card names the path it lands at, which would tell a caller who
+can't read the realm whether that path is taken, so §1.4 refuses it.
 
 A path limits which targets a grant admits, not the linked cards a granted
 answer carries (ADR 024 §1.5). So a path-scoped grant can hand over cards
@@ -160,6 +176,12 @@ writer commits an automation run (ADR 026 §1.5), so no grant's path judges it
 - **A BXL expression for the directory.** A setting name and a default are
   enough.
 - **A grant path that reads the setting.** Specifiers are literal.
+- **An issue for every create grant whose paths miss where a caller who can't
+  read the realm would get the card.** It fires on grants meant only for
+  callers who read the realm, such as editors of one section.
+- **Checking a declared directory's coverage only when a create runs.** The
+  administrator who changes the setting wouldn't see the mismatch until a
+  caller is refused.
 - **Matching history by each changed file's type.** A deleted file has nothing
   stored to type, a card's type can change between revisions, `git log` can't
   filter by type, and a filter applied after the query breaks `limit`.
