@@ -176,12 +176,16 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export SECURE_PORT=0
   export REALM_HISTORIAN_PORT=0
 
-  # Paths. The history root holds realm-historian's repos, beside the realms
-  # it records (see services/realm-historian). A slug has no underscores, so
-  # the suffix can't name another environment's realms.
+  # Paths. The history root holds realm-historian's repos (see
+  # services/realm-historian), and it pairs with the database rather than the
+  # checkout: realm_history_state holds each recorded realm's HEAD, a commit
+  # in this root, so a stack that records into another root stalls the realm.
+  # Each slug has its own database and so its own root. Standard-mode
+  # checkouts all share the `boxel` database, so they share
+  # `localhost_4201`, which no slug can name, since a slug has no underscores.
   export REALMS_ROOT="./realms/${ENV_SLUG}"
   export REALMS_TEST_ROOT="./realms/${ENV_SLUG}_test"
-  export REALM_HISTORY_ROOT="${REALMS_ROOT}_history"
+  export REALM_HISTORY_ROOT="$HOME/.local/share/boxel/realm-history/${ENV_SLUG}"
 else
   # Capture previous ENV_MODE before resetting it, so we can detect transitions
   _PREV_ENV_MODE="${ENV_MODE:-}"
@@ -224,7 +228,7 @@ else
     # Paths
     export REALMS_ROOT="./realms/localhost_4201"
     export REALMS_TEST_ROOT="./realms/localhost_4202"
-    export REALM_HISTORY_ROOT="${REALMS_ROOT}_history"
+    export REALM_HISTORY_ROOT="$HOME/.local/share/boxel/realm-history/localhost_4201"
   else
     # Fresh standard mode or non-env-mode shell:
     # use :- so production/staging env vars are not clobbered.
@@ -261,7 +265,7 @@ else
     # Paths
     export REALMS_ROOT="${REALMS_ROOT:-./realms/localhost_4201}"
     export REALMS_TEST_ROOT="${REALMS_TEST_ROOT:-./realms/localhost_4202}"
-    export REALM_HISTORY_ROOT="${REALM_HISTORY_ROOT:-${REALMS_ROOT}_history}"
+    export REALM_HISTORY_ROOT="${REALM_HISTORY_ROOT:-$HOME/.local/share/boxel/realm-history/localhost_4201}"
   fi
 
   unset _PREV_ENV_MODE

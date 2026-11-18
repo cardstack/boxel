@@ -41,9 +41,12 @@ from `packages/realm-server` with:
 
 - the realms root the realm server uses, `realms/localhost_4201`
   (`realms/<slug>` in environment mode);
-- the history root beside it, `realms/localhost_4201_history`
-  (`realms/<slug>_history`), which is `REALM_HISTORY_ROOT` in
-  `mise-tasks/lib/env-vars.sh`;
+- the history root `~/.local/share/boxel/realm-history/localhost_4201`
+  (`…/realm-history/<slug>`), which is `REALM_HISTORY_ROOT` in
+  `mise-tasks/lib/env-vars.sh`. It belongs to the database, not the checkout:
+  every standard-mode checkout records the one `boxel` database, so they all
+  record into this root, and running the stack from another checkout doesn't
+  stall a recorded realm;
 - its health check on port 4214, which the stack waits on before it reports
   ready. In environment mode the port is dynamic and isn't waited on.
 
@@ -66,7 +69,7 @@ after recording is turned on, and a revision closes 2 s after the last write
 in a burst. The script prints the realm's id, which names its repo:
 
 ```
-git --git-dir=packages/realm-server/realms/localhost_4201_history/<realm id>.git log --stat
+git --git-dir="$HOME/.local/share/boxel/realm-history/localhost_4201/<realm id>.git" log --stat
 ```
 
 ## Recording

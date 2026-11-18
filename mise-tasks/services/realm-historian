@@ -6,9 +6,9 @@
 # realm-historian runs from the realm server's directory so that the realms
 # root resolves exactly as the realm server's `--realmsRootPath` does: a
 # source realm's directory is its `disk_id` under that root. The history
-# root sits beside it (REALM_HISTORY_ROOT, from lib/env-vars.sh), and no
-# realm is recorded until its recording is turned on with
-# `packages/realm-historian/scripts/enable.ts`.
+# root (REALM_HISTORY_ROOT, from lib/env-vars.sh) pairs with the database
+# rather than the checkout, and no realm is recorded until its recording is
+# turned on with `packages/realm-historian/scripts/enable.ts`.
 #
 # The dev stacks start this in their second phase, once the realm server
 # answers: realm-historian exits on its first failed query, and on a fresh
