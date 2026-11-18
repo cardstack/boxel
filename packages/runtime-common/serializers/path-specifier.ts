@@ -9,12 +9,17 @@ import type {
 //
 // The prefixes are never parsed, trimmed or otherwise canonicalized here;
 // what the author wrote is what reads back. Whether each prefix is valid is
-// decided where the specifier is used, so a card holding an invalid prefix
-// still loads and can be corrected in its editor.
+// decided where the specifier is used, so a card holding an invalid prefix,
+// such as `["blog/*"]`, still loads and can be corrected in its editor.
 //
-// An unset specifier is `null`, and an empty list means no path limit, so a
-// value that is present but malformed must not collapse to either. Anything
-// other than an array of strings is refused rather than read as absent.
+// The value's shape is checked here. An unset specifier is `null`, and an
+// empty list means no path limit, so a value that is present but malformed
+// must not collapse to either. Anything other than an array of strings, such
+// as the bare string `"blog/"`, is refused rather than read as absent: the
+// card holding it doesn't load or index until its JSON is corrected. It isn't
+// wrapped into a list either: until the card was saved again, its stored JSON
+// would still hold a string where every other reader expects a list (ADR 037
+// §1.6).
 export type SerializedPathSpecifier = string[];
 
 export function queryableValue(value: unknown): string[] | null {
