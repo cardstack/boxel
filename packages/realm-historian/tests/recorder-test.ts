@@ -2037,6 +2037,22 @@ module('recorder', (hooks) => {
       assert.strictEqual(await show(revision.id, PATH), '{"v":"first edit"}');
     });
 
+    test('a realm deletion on a realm with no HEAD takes no initial snapshot', async (assert) => {
+      await onDisk('a.json', '{"a":1}');
+      let target = recorder();
+      let deletion = await event({
+        author: ALICE,
+        channel: 'system',
+        intent: { kind: 'delete-realm' },
+        changes: [],
+        occurredAt: at(0),
+      });
+      await feed(target, [deletion], past());
+      assert.strictEqual(await readMain(gitDir), undefined);
+      assert.deepEqual(await state(), { cursorSeq: deletion.seq, head: null });
+      assert.strictEqual((await sweepTimes()).sweepRequestedAt, null);
+    });
+
     test('a backfill records an initial snapshot by boxel-system without moving the cursor', async (assert) => {
       await onDisk('a.json', '{"a":1}');
       await onDisk('dir/b.json', '{"b":1}');

@@ -1163,10 +1163,10 @@ export class Recorder implements ManagedRecorder {
     if (first.intent?.kind === 'scan') {
       return await this.#commitScan(group);
     }
-    if (!this.#head && !this.#snapshotTried) {
+    if (!this.#head && !this.#snapshotTried && !first.intent) {
       // The realm's first revision is a snapshot of all of it, which leaves
       // out the paths this group and later ones change. A sweep background
-      // work already started serves.
+      // work already started serves. A realm deletion takes none.
       this.#sweep ??= this.#startWalk({ forJob: false });
       return 'waiting';
     }
