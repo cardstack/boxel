@@ -24,12 +24,46 @@ trap 'exit 0' INT TERM
 
 LOG_TEE="../observability/scripts/dev-log-tee.sh"
 
-NODE_NO_WARNINGS=1 \
-  PGPORT="${PGPORT}" \
-  PGDATABASE="${PGDATABASE}" \
-  LOG_LEVELS="${LOG_LEVELS:-*=info}" \
-  node ../realm-historian/main.ts \
-  --historyRoot="${REALM_HISTORY_ROOT}" \
-  --realmsRoot="${REALMS_ROOT}" \
-  --port="${REALM_HISTORIAN_PORT}" \
-  2>&1 | "$LOG_TEE" realm-historian
+# realm-historian exits on any failed query and leaves restarting it to its
+# supervisor, which is ECS when deployed and this loop here. Without it, an
+# exit would take the rest of the stack's second phase down too (the test
+# realm server and the test worker), since run-p stops its group when one
+# task fails. Restarting stops on:
+# - a clean exit, after SIGTERM or SIGINT;
+# - a usage error (exit 2), which a restart can't fix;
+# - the 12th failure in a row that came within a minute of its start, so a
+#   historian that can't start fails the stack instead of retrying until the
+#   stack's wait on its health check gives up. A restart of the database is
+#   over well before then;
+# - the exit of the process that started this one.
+QUICK_FAILURE_SECONDS=60
+MAX_QUICK_FAILURES=12
+quick_failures=0
+while true; do
+  started=$SECONDS
+  NODE_NO_WARNINGS=1 \
+    PGPORT="${PGPORT}" \
+    PGDATABASE="${PGDATABASE}" \
+    LOG_LEVELS="${LOG_LEVELS:-*=info}" \
+    node ../realm-historian/main.ts \
+    --historyRoot="${REALM_HISTORY_ROOT}" \
+    --realmsRoot="${REALMS_ROOT}" \
+    --port="${REALM_HISTORIAN_PORT}" \
+    2>&1 | "$LOG_TEE" realm-historian && exit 0
+  status=$?
+  if [ "$status" -eq 2 ] || ! kill -0 "$PPID" 2>/dev/null; then
+    exit "$status"
+  fi
+  if [ $((SECONDS - started)) -ge "$QUICK_FAILURE_SECONDS" ]; then
+    quick_failures=0
+  fi
+  quick_failures=$((quick_failures + 1))
+  if [ "$quick_failures" -ge "$MAX_QUICK_FAILURES" ]; then
+    echo "realm-historian failed ${quick_failures} times in a row; not restarting it" |
+      "$LOG_TEE" realm-historian
+    exit "$status"
+  fi
+  echo "realm-historian exited with status ${status}; restarting it in 5 s" |
+    "$LOG_TEE" realm-historian
+  sleep 5
+done
