@@ -44,6 +44,9 @@ interface Signature {
     interaction?: string;
     // Cancel, offered only when given.
     onCancel?: () => void;
+    // Whether the heading takes focus in place of the first field: for a
+    // page that falls back to a sign-in from something the user was in.
+    focusTitle?: boolean;
   };
   // What signing in grants, under the heading, in place of the line
   // inviting a new user to start with Google.
@@ -115,6 +118,7 @@ export default class SignInForm extends Component<Signature> {
         @onForgotPassword={{unless @interaction this.forgotPassword}}
         @onRegister={{unless @interaction this.register}}
         @onCancel={{@onCancel}}
+        @focusTitle={{@focusTitle}}
       >
         <:intro>{{yield to='intro'}}</:intro>
         <:default>
@@ -142,6 +146,7 @@ export default class SignInForm extends Component<Signature> {
         @onForgotPassword={{unless @interaction this.forgotPassword}}
         @onRegister={{unless @interaction this.register}}
         @onCancel={{@onCancel}}
+        @focusTitle={{@focusTitle}}
       >
         <Fields
           @username={{this.state.username}}
@@ -166,7 +171,7 @@ export default class SignInForm extends Component<Signature> {
 
   // The username the CLI suggested is filled in, so the password is what's
   // left to type.
-  private focusUsername = !this.args.username;
+  private focusUsername = !this.args.username && !this.args.focusTitle;
   private focusPassword = Boolean(this.args.username);
 
   constructor(owner: Owner, args: Signature['Args']) {

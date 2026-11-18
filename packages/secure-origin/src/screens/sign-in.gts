@@ -7,7 +7,9 @@
 // offer Cancel (`@onCancel`). A page that signs in for something other than
 // the app, such as the CLI's, names itself with `@title` and says what
 // signing in grants in its `intro` block, in place of the Google subtitle; the
-// screen sets the intro's type and the space around it. It holds no state and
+// screen sets the intro's type and the space around it. A page that falls
+// back to signing in from something the user was working in (`@focusTitle`)
+// moves focus to the title, so a screen reader reads why. It holds no state and
 // sends nothing; the caller decides what each control does. On the secure
 // origin the fields are its own inputs; in the app they are the credential
 // frame.
@@ -19,14 +21,16 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
 import AuthButton from '../components/auth-button.gts';
-import cn from '../helpers/cn.ts';
 import { Button } from '@cardstack/pretui/components/button';
+import { focusWhen } from '@cardstack/pretui/focus';
 import GoogleColor from '../components/icons/google-color.gts';
 
 interface Signature {
   Args: {
     // The screen's heading; "Sign in to your Boxel Account" when not given.
     title?: string;
+    // Whether the heading takes focus as the screen is drawn.
+    focusTitle?: boolean;
     // Whether the Google button shows.
     google?: boolean;
     // Whether the subtitle inviting a new user to start with Google shows,
@@ -47,11 +51,13 @@ interface Signature {
 }
 
 const SignInScreen: TemplateOnlyComponent<Signature> = <template>
-  <h1 class='title' data-test-secure-title data-test-secure-sign-in-title>{{if
-      @title
-      @title
-      'Sign in to your Boxel Account'
-    }}</h1>
+  <h1
+    class='title'
+    tabindex={{if @focusTitle '-1'}}
+    {{focusWhen (if @focusTitle true false)}}
+    data-test-secure-title
+    data-test-secure-sign-in-title
+  >{{if @title @title 'Sign in to your Boxel Account'}}</h1>
   {{#if (has-block 'intro')}}
     <div class='intro'>{{yield to='intro'}}</div>
   {{else if @googleSubtitle}}
@@ -97,7 +103,7 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
     {{/if}}
     <AuthButton
       type='submit'
-      class={{cn after-fields=(if @onForgotPassword false true)}}
+      class={{unless @onForgotPassword 'after-fields'}}
       @variant='primary'
       @disabled={{@submitDisabled}}
       @loading={{@submitting}}
@@ -151,6 +157,13 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       color: var(--foreground);
       margin: 0 0 var(--boxel-sp-sm);
       padding: 0;
+    }
+    .title:focus {
+      outline: none;
+    }
+    .title:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
     }
     .subtitle {
       margin: 0 0 var(--boxel-sp-lg);

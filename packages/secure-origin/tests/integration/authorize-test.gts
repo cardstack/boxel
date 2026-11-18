@@ -519,20 +519,27 @@ module('Integration | authorize', function (hooks) {
       assert.strictEqual(decisions().length, 1);
     });
 
-    test("an answer that isn't recorded can be given again", async function (assert) {
+    test("an answer that isn't confirmed can be given again, and then finishes the flow", async function (assert) {
       signedIn();
       shows(cimdDetails());
-      servers.realmServer(`POST ${CONSENT}`, () => ({
-        status: 500,
-        body: { error: 'whatever' },
-      }));
+      let sent = 0;
+      servers.realmServer(`POST ${CONSENT}`, () =>
+        sent++ === 0
+          ? { status: 500, body: { error: 'whatever' } }
+          : { status: 201, body: { ticket: TICKET } },
+      );
       await open();
       await allow();
       assert
         .dom('[data-test-authorize-error]')
-        .includesText('Boxel couldn’t record your answer.');
+        .includesText('Boxel couldn’t confirm your answer. Try again.');
       assert.dom('[data-test-authorize-allow]').isNotDisabled();
       assert.deepEqual(moves, []);
+      await allow();
+      assert.strictEqual(decisions().length, 2);
+      assert.deepEqual(moves, [
+        { how: 'replace', url: `${FINISH}?ticket=${TICKET}` },
+      ]);
     });
 
     test('a flow answered meanwhile ends without finishing', async function (assert) {
@@ -574,7 +581,7 @@ module('Integration | authorize', function (hooks) {
       );
     });
 
-    test('an answer refused as signed out asks for a sign-in, and finishes nothing', async function (assert) {
+    test('an answer refused as signed out asks for a sign-in, says why, and finishes nothing', async function (assert) {
       signedIn();
       shows(cimdDetails());
       servers.realmServer(`POST ${CONSENT}`, () => ({
@@ -585,8 +592,47 @@ module('Integration | authorize', function (hooks) {
       await allow();
       assert
         .dom('[data-test-secure-sign-in-title]')
-        .hasText('Sign in to Boxel to connect an app');
+        .hasText('Sign in to Boxel to connect an app')
+        .isFocused('the heading of what replaced consent takes focus');
+      assert
+        .dom('[data-test-authorize-session-ended]')
+        .hasText(
+          'Your sign-in ended before your answer was recorded. Sign in again to answer.',
+        );
       assert.deepEqual(moves, []);
+    });
+
+    test('an answer refused under a session the server ended is sent again under its renewal', async function (assert) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(SESSION));
+      let checks = 0;
+      servers.realmServer('GET _secure-session', () =>
+        checks++ === 0 ? {} : { status: 401, body: {} },
+      );
+      servers.realmServer('POST _secure-session/renewal', () => ({
+        data: {
+          attributes: {
+            token: 'renewed-window-session',
+            user: SESSION.user,
+            expiresAt: SESSION.expiresAt,
+          },
+        },
+      }));
+      shows(cimdDetails());
+      let sent = 0;
+      servers.realmServer(`POST ${CONSENT}`, () =>
+        sent++ === 0
+          ? { status: 401, body: { error: 'signed-out' } }
+          : { status: 201, body: { ticket: TICKET } },
+      );
+      await open();
+      await allow();
+      assert.deepEqual(
+        decisions().map((r) => r.authorization),
+        [`Bearer ${SESSION.token}`, 'Bearer renewed-window-session'],
+      );
+      assert.deepEqual(moves, [
+        { how: 'replace', url: `${FINISH}?ticket=${TICKET}` },
+      ]);
     });
 
     test('"Not you?" waits while an answer is being recorded', async function (assert) {
@@ -616,7 +662,8 @@ module('Integration | authorize', function (hooks) {
       await click('[data-test-authorize-sign-out]');
       assert
         .dom('[data-test-secure-sign-in-title]')
-        .hasText('Sign in to Boxel to connect an app');
+        .hasText('Sign in to Boxel to connect an app')
+        .isFocused('the heading of what replaced consent takes focus');
       assert.strictEqual(
         localStorage.getItem(STORAGE_KEY),
         null,
@@ -625,6 +672,32 @@ module('Integration | authorize', function (hooks) {
       assert.strictEqual(
         servers.requests('realm-server', 'DELETE _secure-session').length,
         1,
+      );
+    });
+
+    test('"Not you?" ends the session consent was shown under, not one another window stored since', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      servers.realmServer('DELETE _secure-session', () => ({}));
+      await open();
+      let another = {
+        ...SESSION,
+        token: 'another-window-session',
+        user: '@someone-else:example.test',
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(another));
+      await click('[data-test-authorize-sign-out]');
+      await settled();
+      assert.deepEqual(
+        servers
+          .requests('realm-server', 'DELETE _secure-session')
+          .map((r) => r.authorization),
+        [`Bearer ${SESSION.token}`],
+      );
+      assert.deepEqual(
+        JSON.parse(localStorage.getItem(STORAGE_KEY)!),
+        another,
+        "the other window's session is kept",
       );
     });
   });
@@ -718,6 +791,32 @@ module('Integration | authorize', function (hooks) {
       assert
         .dom('[data-test-secure-sign-in-title]')
         .hasText('Sign in to Boxel to connect an app');
+    });
+
+    test('a load overtaken by a newer one changes nothing', async function (assert) {
+      signedIn();
+      shows(cimdDetails());
+      await open();
+      let slow!: (value: Answer) => void;
+      let reads = 0;
+      servers.realmServer(`GET ${CONSENT}`, () =>
+        reads++ === 0
+          ? new Promise<Answer>((resolve) => (slow = resolve))
+          : { status: 409, body: { error: 'decided' } },
+      );
+      let restore = () =>
+        window.dispatchEvent(
+          new PageTransitionEvent('pageshow', { persisted: true }),
+        );
+      restore();
+      await waitFor('[data-test-authorize-loading]');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      restore();
+      await waitFor('[data-test-authorize-ended]');
+      slow(cimdDetails());
+      await settled();
+      assert.dom('[data-test-authorize-ended]').exists();
+      assert.dom('[data-test-authorize-consent]').doesNotExist();
     });
 
     test('a page brought back from the browser cache asks again', async function (assert) {

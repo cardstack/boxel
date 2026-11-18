@@ -60,7 +60,9 @@ interface ConsentState {
 // Each state is replaced whole, never changed in place, so the page redraws.
 type State =
   | { name: 'checking' }
-  | { name: 'sign-in' }
+  // `returned`: back to a sign-in from consent, so the heading takes focus,
+  // and `ended` says the session ended before the answer was recorded.
+  | { name: 'sign-in'; returned?: 'not-you' | 'ended' }
   | { name: 'loading' }
   | { name: 'unavailable' }
   | ConsentState
@@ -69,6 +71,8 @@ type State =
 
 // A refusal that means the flow can't be answered here any more: it expired,
 // was already answered, or the request was never one the provider would take.
+// The page tells the app nothing then: an expired flow can't be finished, and
+// one answered elsewhere is finished by the window that answered it.
 const ENDED = new Set([400, 403, 404, 409]);
 
 export default class AuthorizePage extends Component {
@@ -82,10 +86,19 @@ export default class AuthorizePage extends Component {
           @interaction={{this.interaction}}
           @onSignedIn={{this.signedIn}}
           @onCancel={{this.cancel}}
+          @focusTitle={{this.signInReturned}}
         >
           <:intro>
-            <p data-test-authorize-sign-in-intro>You’ll see which app and what
-              it can do on the next step.</p>
+            {{#if this.sessionEnded}}
+              <p
+                data-test-authorize-sign-in-intro
+                data-test-authorize-session-ended
+              >Your sign-in ended before your answer was recorded. Sign in again
+                to answer.</p>
+            {{else}}
+              <p data-test-authorize-sign-in-intro>You’ll see which app and what
+                it can do on the next step.</p>
+            {{/if}}
           </:intro>
         </SignInForm>
       </AuthContainer>
@@ -144,6 +157,10 @@ export default class AuthorizePage extends Component {
   private page = trackedObject<{ state: State }>({
     state: { name: 'checking' },
   });
+  // Which of the page's runs may still change its state. Each start, sign-in
+  // and "Not you?" begins a new run, so a load or an answer that a newer one
+  // overtook writes nothing.
+  private run = 0;
 
   constructor(owner: Owner, args: object) {
     super(owner, args);
@@ -174,6 +191,16 @@ export default class AuthorizePage extends Component {
     return state.name === 'consent' ? state : undefined;
   }
 
+  private get signInReturned(): boolean {
+    let state = this.page.state;
+    return state.name === 'sign-in' && Boolean(state.returned);
+  }
+
+  private get sessionEnded(): boolean {
+    let state = this.page.state;
+    return state.name === 'sign-in' && state.returned === 'ended';
+  }
+
   private get leaving() {
     let state = this.page.state;
     return state.name === 'leaving' ? state : undefined;
@@ -193,29 +220,39 @@ export default class AuthorizePage extends Component {
   };
 
   private async start() {
+    let run = ++this.run;
     this.page.state = { name: 'checking' };
     let session = await liveSession(this.config);
+    if (run !== this.run) {
+      return;
+    }
     if (!session) {
       this.page.state = { name: 'sign-in' };
       this.visit.signedOut();
       return;
     }
-    await this.load(session);
+    await this.load(session, run);
   }
 
-  private async load(session: Session, retried = false) {
+  private async load(session: Session, run: number, retried = false) {
     let interaction = this.interaction!;
     this.page.state = { name: 'loading' };
     let details: ConsentDetails;
     try {
       details = await consentDetails(this.config, session, interaction);
     } catch (e: any) {
+      if (run !== this.run) {
+        return;
+      }
       if (e.status === 401) {
         // The server's clock can end the session before this window's does;
         // one bound to the app's session is renewed then, once.
         let renewed = retried ? undefined : await liveSession(this.config);
+        if (run !== this.run) {
+          return;
+        }
         if (renewed && renewed.token !== session.token) {
-          await this.load(renewed, true);
+          await this.load(renewed, run, true);
           return;
         }
         this.page.state = { name: 'sign-in' };
@@ -226,6 +263,9 @@ export default class AuthorizePage extends Component {
         ? { name: 'ended' }
         : { name: 'unavailable' };
       this.visit.loadFailed(e);
+      return;
+    }
+    if (run !== this.run) {
       return;
     }
     this.page.state = {
@@ -245,17 +285,20 @@ export default class AuthorizePage extends Component {
 
   private signedIn = (session: Session) => {
     storeSession(session);
-    this.load(session);
+    this.load(session, ++this.run);
   };
 
-  // "Not you?": the window's session ends, here and on the server, and the
-  // same flow asks for a sign-in again at once. Consent goes first, so nothing
-  // can be answered as the account just disowned while the server ends its
-  // session. The session is forgotten here before the request goes, and a
-  // sign-in meanwhile is a session of its own.
+  // "Not you?": the session consent was shown under ends, here and on the
+  // server, and the same flow asks for a sign-in again at once. Consent goes
+  // first, and an answer still being sent goes no further, so nothing can be
+  // answered as the account just disowned while the server ends its session.
+  // It is the session shown that ends, even when another of the origin's
+  // windows has stored a newer one since.
   private notYou = () => {
-    this.page.state = { name: 'sign-in' };
-    signOut(this.config).catch(() => {
+    let consent = this.consent;
+    this.run++;
+    this.page.state = { name: 'sign-in', returned: 'not-you' };
+    signOut(this.config, consent?.session).catch(() => {
       // Forgotten here whatever the server answers.
     });
   };
@@ -281,43 +324,63 @@ export default class AuthorizePage extends Component {
 
   // The answer is recorded once. Allow and Deny wait while it is, so a second
   // click sends nothing. The session that loaded the details answers for
-  // them, so an answer is never given as someone who signed in since.
+  // them, so an answer is never given as someone who signed in since; when
+  // the server's clock has ended it, it is renewed once, as a load does.
+  //
+  // The provider answers the same decision sent again with a new ticket, so
+  // Try again after a reply that never arrived still finishes the flow.
   private async decide(decision: 'allow' | 'deny') {
     let consent = this.consent;
     if (!consent || consent.deciding) {
       return;
     }
+    let run = this.run;
     this.updateConsent({ deciding: decision, error: undefined });
-    let ticket: string;
-    try {
-      ticket = await decideConsent(
-        this.config,
-        consent.session,
-        this.interaction!,
-        { decision, renew: decision === 'allow' && consent.renew },
-      );
-    } catch (e: any) {
-      if (this.consent?.session !== consent.session) {
+    let answer = { decision, renew: decision === 'allow' && consent.renew };
+    let session = consent.session;
+    let ticket: string | undefined;
+    for (let retried = false; !ticket; retried = true) {
+      try {
+        ticket = await decideConsent(
+          this.config,
+          session,
+          this.interaction!,
+          answer,
+        );
+      } catch (e: any) {
+        if (run !== this.run) {
+          return;
+        }
+        if (e.status === 401 && !retried) {
+          let renewed = await liveSession(this.config);
+          if (run !== this.run) {
+            return;
+          }
+          if (renewed && renewed.token !== session.token) {
+            session = renewed;
+            this.updateConsent({ session });
+            continue;
+          }
+        }
+        if (e.status === 401) {
+          this.run++;
+          this.page.state = { name: 'sign-in', returned: 'ended' };
+          return;
+        }
+        if (ENDED.has(e.status)) {
+          this.page.state = { name: 'ended' };
+          return;
+        }
+        this.updateConsent({
+          deciding: undefined,
+          error: 'Boxel couldn’t confirm your answer. Try again.',
+        });
         return;
       }
-      if (e.status === 401) {
-        this.page.state = { name: 'sign-in' };
-        return;
-      }
-      if (ENDED.has(e.status)) {
-        this.page.state = { name: 'ended' };
-        return;
-      }
-      this.updateConsent({
-        deciding: undefined,
-        error:
-          'Boxel couldn’t record your answer. Nothing was shared. Try again.',
-      });
-      return;
     }
-    // Signed out meanwhile: the page has moved on, and the answer goes no
-    // further. The flow is decided, so a fresh sign-in finds it ended.
-    if (this.consent?.session !== consent.session) {
+    // Signed out, or started again, meanwhile: the page has moved on, and the
+    // answer goes no further.
+    if (run !== this.run) {
       return;
     }
     this.page.state = {

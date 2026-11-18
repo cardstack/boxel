@@ -151,7 +151,9 @@ export function consentDetailsHandler(deps: ConsentDeps): Koa.Middleware {
 // `POST /_oauth-provider/consent/:uid`: Allow or Deny, and whether to renew.
 // Answers a ticket that finishes the flow. A flow is decided once, and the
 // decision and its ticket are stored together or not at all, so a failure
-// leaves the flow open to decide again.
+// leaves the flow open to decide again. The same user sending the same
+// decision again gets a new ticket (`decideFlow`); any other decision is
+// refused with 409 `decided`.
 export function consentDecisionHandler(deps: ConsentDeps): Koa.Middleware {
   return async function handleConsentDecision(ctxt) {
     let user = await secureWindowUser(ctxt, deps);
