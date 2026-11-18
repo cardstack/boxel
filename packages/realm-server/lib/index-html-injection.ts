@@ -14,7 +14,7 @@ export interface RetrievedMarkup {
 
 // A card's row is keyed by its `.json` source and the card is read without
 // the extension; a file is read by its own URL, extension and all.
-function matchedReadURL(
+export function matchedReadURL(
   row: { url?: string; type?: string } | undefined,
 ): URL | null {
   if (!row?.url) {

@@ -945,8 +945,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // On a host URL, a card's stored markup was rendered with its owner's
     // authority and goes to every visitor, so it is served only where a
     // visitor who isn't signed in may read the card. Otherwise the page
-    // renders in the browser, as the visitor. The card's scoped CSS goes
-    // with its markup.
+    // renders in the browser, as the visitor. The card's scoped CSS is
+    // judged by the card its row was read from, on its own, since a row can
+    // hold scoped CSS where it holds no isolated markup.
     let readableFor = new Map<string, Promise<boolean>>();
     let unreadable = async (markup: {
       html: string | null;
@@ -968,17 +969,24 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       }
       return !(await readable);
     };
-    let [headWithheld, isolatedWithheld, headUnreadable, isolatedUnreadable] =
-      await Promise.all([
-        withheld(headMarkup, 'head'),
-        withheld(isolatedMarkup, 'isolated'),
-        unreadable(headMarkup),
-        unreadable(isolatedMarkup),
-      ]);
+    let [
+      headWithheld,
+      isolatedWithheld,
+      headUnreadable,
+      isolatedUnreadable,
+      scopedCSSUnreadable,
+    ] = await Promise.all([
+      withheld(headMarkup, 'head'),
+      withheld(isolatedMarkup, 'isolated'),
+      unreadable(headMarkup),
+      unreadable(isolatedMarkup),
+      unreadable({ html: scopedCSS.css, readURL: scopedCSS.readURL }),
+    ]);
     let headHTML = headWithheld || headUnreadable ? null : headMarkup.html;
     let isolatedHTML =
       isolatedWithheld || isolatedUnreadable ? null : isolatedMarkup.html;
-    let pageScopedCSS = isolatedUnreadable ? null : scopedCSS;
+    let pageScopedCSS =
+      isolatedUnreadable || scopedCSSUnreadable ? null : scopedCSS.css;
     if (
       hostURL &&
       isolatedHTML != null &&

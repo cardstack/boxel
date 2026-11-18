@@ -302,6 +302,47 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("a card's scoped CSS is served on a host URL only where a visitor may read the card, whether or not its row holds isolated markup", async function (assert) {
+    let cssDep = (card: string, css: string) =>
+      `${GOVERNED}${card}.gts.${Buffer.from(css, 'utf8').toString('base64')}.glimmer-scoped.css`;
+    // The Secret card's row holds scoped CSS and no isolated markup, as a row
+    // can after a failed render. The Home card's row holds both.
+    await db.execute(
+      `UPDATE prerendered_html SET isolated_html = NULL, deps = $1::jsonb
+       WHERE url = $2 AND type = 'instance'`,
+      {
+        bind: [
+          JSON.stringify([cssDep('secret', '.secret-marker { top: 0; }')]),
+          `${GOVERNED}secret.json`,
+        ],
+      },
+    );
+    await db.execute(
+      `UPDATE prerendered_html SET deps = $1::jsonb
+       WHERE url = $2 AND type = 'instance'`,
+      {
+        bind: [
+          JSON.stringify([cssDep('home', '.home-marker { top: 0; }')]),
+          `${GOVERNED}index.json`,
+        ],
+      },
+    );
+
+    let refused = await page('/secret', GOVERNED_HOST);
+    assert.strictEqual(refused.status, 200, refused.text.slice(0, 300));
+    assert.false(
+      refused.text.includes('secret-marker'),
+      'the scoped CSS of a card visitors may not read is not served',
+    );
+
+    let admitted = await page('/', GOVERNED_HOST);
+    assert.strictEqual(admitted.status, 200, admitted.text.slice(0, 300));
+    assert.true(
+      admitted.text.includes('home-marker'),
+      'the scoped CSS of a card visitors may read is served',
+    );
+  });
+
   test("the realm's own URL serves the bare shell to visitors when the realm has no public read", async function (assert) {
     let response = await request
       .get(new URL(GOVERNED).pathname)
