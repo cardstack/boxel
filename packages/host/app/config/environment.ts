@@ -57,7 +57,11 @@ export default config as {
   sqlSchema: string;
   assetsURL: string;
   stripePaymentLink: string;
-  featureFlags?: {};
+  featureFlags?: {
+    // Host Mode v2: the publish dialog manages the realm's host URLs, in
+    // place of v1 publishing.
+    hostModeV2?: boolean;
+  };
   publishedRealmDomainOverrides: string;
   publishedRealmBoxelSpaceDomain: string;
   publishedRealmBoxelSiteDomain: string;

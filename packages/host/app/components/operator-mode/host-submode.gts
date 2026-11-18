@@ -22,7 +22,9 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common';
 
 import OpenSitePopover from '@cardstack/host/components/operator-mode/host-submode/open-site-popover';
 import PublishingRealmPopover from '@cardstack/host/components/operator-mode/host-submode/publishing-realm-popover';
+import HostURLManager from '@cardstack/host/components/operator-mode/host-url-manager';
 import PublishRealmModal from '@cardstack/host/components/operator-mode/publish-realm-modal';
+import ENV from '@cardstack/host/config/environment';
 import {
   ifConnected,
   modalFocusTrapOptions,
@@ -127,9 +129,19 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
     return this.hostModeService.realmURL;
   }
 
-  get isPublishing() {
-    return this.realm.isPublishing(this.realmURL);
+  // Host Mode v2: the dialog manages the realm's host URLs. A host URL serves
+  // the realm live, so there is no publish to wait for.
+  get isHostModeV2() {
+    return Boolean(ENV.featureFlags?.hostModeV2);
   }
+
+  get isPublishing() {
+    return !this.isHostModeV2 && this.realm.isPublishing(this.realmURL);
+  }
+
+  removeV1Site = async (publishedRealmURL: string) => {
+    await this.handleUnpublish.perform(publishedRealmURL);
+  };
 
   // Shown on request while a publish runs, and gone with the publish,
   // whether it succeeds or fails.
@@ -146,6 +158,9 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   get publishButtonLabel() {
+    if (this.isHostModeV2) {
+      return 'Publish Site';
+    }
     return this.hasPublishedSites ? 'Republish Site' : 'Publish Site';
   }
 
@@ -285,9 +300,11 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               >{{this.publishButtonLabel}}</span>
             </BoxelButton>
           {{/if}}
-          <PublishingRealmPopover
-            @isOpen={{this.showsPublishingRealmPopover}}
-          />
+          {{#unless this.isHostModeV2}}
+            <PublishingRealmPopover
+              @isOpen={{this.showsPublishingRealmPopover}}
+            />
+          {{/unless}}
         </div>
         {{#if this.hasPublishedSites}}
 
@@ -338,18 +355,32 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
 
     {{! Keyed by the realm, so another workspace gets a new dialog: it loads
         a workspace's unlisted link and domains when it's made. }}
-    {{#each this.publishDialogRealms key='@identity' as |_realmURL|}}
-      <PublishRealmModal
-        @isOpen={{this.isPublishRealmModalOpen}}
-        @onClose={{this.closePublishRealmModal}}
-        @handlePublish={{this.handlePublish}}
-        @publishError={{this.handlePublishError}}
-        @handleUnpublish={{perform this.handleUnpublish}}
-        aria-label={{this.publishDialogLabel}}
-        id={{this.publishDialogId}}
-        tabindex='-1'
-        {{focusTrap focusTrapOptions=this.publishFocusTrapOptions}}
-      />
+    {{#each this.publishDialogRealms key='@identity' as |realmURL|}}
+      {{#if this.isHostModeV2}}
+        <HostURLManager
+          @isOpen={{this.isPublishRealmModalOpen}}
+          @onClose={{this.closePublishRealmModal}}
+          @realmURL={{realmURL}}
+          @v1SiteURLs={{this.publishedRealmURLs}}
+          @removeV1Site={{this.removeV1Site}}
+          aria-label={{this.publishDialogLabel}}
+          id={{this.publishDialogId}}
+          tabindex='-1'
+          {{focusTrap focusTrapOptions=this.publishFocusTrapOptions}}
+        />
+      {{else}}
+        <PublishRealmModal
+          @isOpen={{this.isPublishRealmModalOpen}}
+          @onClose={{this.closePublishRealmModal}}
+          @handlePublish={{this.handlePublish}}
+          @publishError={{this.handlePublishError}}
+          @handleUnpublish={{perform this.handleUnpublish}}
+          aria-label={{this.publishDialogLabel}}
+          id={{this.publishDialogId}}
+          tabindex='-1'
+          {{focusTrap focusTrapOptions=this.publishFocusTrapOptions}}
+        />
+      {{/if}}
     {{/each}}
 
     <style scoped>

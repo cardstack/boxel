@@ -217,7 +217,11 @@ module.exports = function (environment) {
         ? `${normalized}/`
         : `${normalized}/test/`;
     })(),
-    featureFlags: {},
+    featureFlags: {
+      // On in the staging build only (`config/staging.env`). Set
+      // HOST_MODE_V2=true to turn it on in a local build.
+      hostModeV2: process.env.HOST_MODE_V2 === 'true',
+    },
   };
 
   // Where each `@cardstack/…` prefix realm is served. This answers a different
