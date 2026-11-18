@@ -87,8 +87,11 @@ module('Pretui | ThemeFrame', function (hooks) {
   });
 
   test('the active theme cssImports render as @import inside the frame', async function (assert) {
-    let url = 'https://fonts.googleapis.com/css2?family=Lora:wght@400;700';
-    let themed = { ...THEME, cssImports: [url] };
+    let urls = [
+      'https://fonts.googleapis.com/css2?family=Lora:wght@400;700',
+      'https://fonts.googleapis.com/css2?family=Poppins:wght@400;700',
+    ];
+    let themed = { ...THEME, cssImports: urls };
     await render(<template><ThemeFrame @theme={{themed}} /></template>);
 
     let css = Array.from(
@@ -96,10 +99,12 @@ module('Pretui | ThemeFrame', function (hooks) {
     )
       .map((s) => s.textContent)
       .join('\n');
-    assert.ok(
-      css.includes(`@import url('${url}');`),
-      'the font import is emitted inside the frame',
-    );
+    for (let url of urls) {
+      assert.ok(
+        css.includes(`@import url('${url}');`),
+        `${url} is imported inside the frame`,
+      );
+    }
   });
 
   test('frame without a theme still flips boxel-ui ambient tokens', async function (assert) {
