@@ -77,7 +77,13 @@ documents and files (ADR 002). Prerendered HTML MUST carry the realm's URL
 too. The canonical host URL MUST be put into it when the response leaves the
 server, so that a change to the canonical host URL needs no re-render. Code
 MUST translate between a host URL and the realm's URL only where a request
-enters the realm server or a response leaves it.
+enters the realm server or a response leaves it. A response on a host URL
+MUST name that host URL wherever it would name the realm's URL or its
+canonical host URL, except as §1.4 says. A response that serves a file's
+stored bytes, as a card-source read does, MUST NOT be translated, so that a
+client that writes the file back writes what the realm holds. A validator on
+a host URL MUST change when the translation changes, so that a change to the
+canonical host URL is never answered with a 304.
 
 ### 1.6. The realm's administrators manage its host URLs
 

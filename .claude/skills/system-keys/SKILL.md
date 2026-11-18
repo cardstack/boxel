@@ -1,6 +1,6 @@
 ---
 name: system-keys
-description: Operate the realm server's system keys — the platform's own vendor keys (OpenRouter's among them) in `proxy_endpoints` that `_request-forward` and the OpenRouter passthrough attach — with `boxel realm-server keys list | show | add | replace | delete`. Covers the realm secret seed and the operator token it signs, masked entry and the `--stdin` / `--key-file` alternatives, the operator note, the `proxy_endpoint_history` audit table and the `system-keys` log channel, what the `/_system-keys` endpoints accept and refuse, and how a change reaches the proxy. Points to the secrets-at-rest procedures (sealing, the census, data-key rotation) that apply to these keys. Use when adding, rotating, replacing or removing a system key in any environment, when auditing who changed one, when a proxy destination stops getting its key, or when someone reaches for a hand-written `INSERT INTO proxy_endpoints`. Not for user-owned keys, and not for boxel-skills.
+description: Operate the realm server's system keys — the platform's own vendor keys (OpenRouter's among them) in `proxy_endpoints` that `_request-forward` and the OpenRouter passthrough attach — with `boxel realm-server keys list | show | add | replace | delete`, and its platform secrets — secrets the platform keeps and only reads, such as a webhook signing secret, in `platform_secrets` — with `boxel realm-server secrets list | show | set | delete` (write-only once set; setting, rotating, removing and auditing them). Covers the realm secret seed and the operator token it signs, masked entry and the `--stdin` / `--key-file` alternatives, the operator note, the `proxy_endpoint_history` audit table and the `system-keys` log channel, what the `/_system-keys` endpoints accept and refuse, and how a change reaches the proxy. Points to the secrets-at-rest procedures (sealing, the census, data-key rotation) that apply to these keys. Use when adding, rotating, replacing or removing a system key in any environment, when auditing who changed one, when a proxy destination stops getting its key, or when someone reaches for a hand-written `INSERT INTO proxy_endpoints`. Not for user-owned keys, and not for boxel-skills.
 ---
 
 # System keys (operators)
@@ -206,6 +206,101 @@ else about these keys is in the `secrets-at-rest` skill:
   other `boxel realm-server` family;
 - what a `SecretDecryptionError` or the `the sealed key for proxy endpoint …`
   error means, and why `keys replace` is the fix.
+
+## Platform secrets
+
+A **platform secret** is a secret the platform keeps and only ever reads, such
+as the secret that verifies OpenRouter's signed batch webhook. It is not a
+system key: it has no destination, nothing attaches it to a request, and the
+proxy never reads its table. Each one is a named row in `platform_secrets`,
+its value sealed with the secrets-at-rest helper (see the secrets-at-rest
+subsection below). Server code reads one by name
+where it uses it, with `readPlatformSecret(dbAdapter, '<name>')` in
+`packages/realm-server/lib/platform-secrets.ts`.
+
+```sh
+boxel realm-server secrets list   --realm-server <url>
+boxel realm-server secrets show   --realm-server <url> --name <name>
+boxel realm-server secrets set    --realm-server <url> --name <name> \
+                                  [--stdin | --key-file <path>] [--note <text>]
+boxel realm-server secrets delete --realm-server <url> --name <name> [--note <text>]
+```
+
+Every command takes `--json`. A name is lower-case letters, digits and dashes
+(`openrouter-batch-webhook-signing`).
+
+- **Write-only once set.** No command, endpoint, response, error, log line or
+  history row returns or shows a value, not even masked or in part. The masked
+  prompt echoes `*` while you type and, unlike `keys`, prints nothing of the
+  value after Enter. `list` and `show` give the name, the data key the value is
+  sealed under, and the note of whoever last set it and when. Nobody reads a
+  value back: to change one, run `set` again.
+- **Setting.** `set` adds the secret, or replaces the value of one that is set,
+  keeping its row. The value rules and the operator note are those of
+  `keys add`: the server refuses a note that contains the new value or the
+  value the secret holds now. Server code reads the new value on its next
+  read; nothing caches it.
+- **Removing.** `delete` takes a note. From then on `readPlatformSecret`
+  answers that no secret has the name, and code that needs it refuses (a
+  webhook receiver verifies nothing).
+- **Rotating.** A secret a vendor issued is rotated at the vendor, then given
+  to Boxel with `set`. A signature made with the old secret stops verifying as
+  soon as `set` answers. Data-key rotation covers platform secrets like every
+  sealed column (see the `secrets-at-rest` skill).
+
+### Authorization
+
+The commands sign an operator token for `platform-secrets`, by the same rules
+as `system-keys` above: no user, this server's origin as audience, at most 15
+minutes, signed with the seed. `/_platform-secrets` accepts only that token: a
+`system-keys`, `data-keys` or `diagnostic-render` token answers 401, and a
+`platform-secrets` token reaches no other endpoint.
+
+| Route                             | Does                                                                        |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| `GET /_platform-secrets`          | Every secret's name, data key, last note and when it was set                |
+| `GET /_platform-secrets/:name`    | The same for one secret                                                     |
+| `PUT /_platform-secrets/:name`    | Set: `value`, `note`. 201 when it added the secret, 200 when it replaced it |
+| `DELETE /_platform-secrets/:name` | Delete: `note`                                                              |
+
+Sentry events raised during these routes keep only the method and path, and
+the request log lists header names only, as for the system-key routes.
+
+### Auditing
+
+Each change writes its row and a `platform_secret_history` row in one
+statement: `secret_id` (kept after a delete), `name`, `action` (`set` or
+`delete`), `note`, `key_id`, `changed_at`, `client_address` and
+`token_issued_at`, with the same meaning as in `proxy_endpoint_history`. It
+never holds a value, so the read-only role may read it.
+
+```sql
+SELECT changed_at, action, name, note, client_address,
+  to_timestamp(token_issued_at) AS token_signed
+FROM platform_secret_history
+ORDER BY changed_at DESC;
+```
+
+Each change is also logged on the `platform-secrets` channel:
+
+```
+platform secret set: openrouter-batch-webhook-signing (id …, data key kms-…) from 203.0.113.7, token signed 2026-01-01T00:00:00.000Z. Note: "rotating after the vendor's notice — <your name>"
+```
+
+A secret that is set but doesn't open is logged on the same channel and
+reported to Sentry, naming the secret and never its value
+(`the platform secret <name> (id …) could not be opened …; set it again`), and
+`readPlatformSecret` throws rather than answer with nothing. Setting it again
+is the fix.
+
+### Secrets at rest
+
+The value is sealed bound to field `platform_secrets.value`, owner
+`boxel-platform`, the row's id and the secret's name. A value moved to another
+row or another name doesn't open. `readonly_role` and its members have no
+`SELECT` on `platform_secrets`, and both tables are left out of the schema
+dump. The column is registered in `SEALED_COLUMNS`, so the sealed census and
+the data-key re-seal pass cover it.
 
 ## Troubleshooting
 

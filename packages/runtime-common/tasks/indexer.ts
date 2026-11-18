@@ -40,6 +40,8 @@ import {
   type RunIndexing,
 } from '../run-indexing.ts';
 import { syncAutomationsAfterIndex } from '../automation-index-hook.ts';
+import { taskAutomationChangeReporter } from '../automation-change-events.ts';
+import { taskRunChangeReporter } from '../automation-run-events.ts';
 
 export { fromScratchIndex, incrementalIndex };
 const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
@@ -693,6 +695,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   queuePublisher,
   createPrerenderAuth,
   skipPrerenderHtmlRealms,
+  reportRealmEvent,
 }) =>
   async function (args) {
     let { jobInfo, realmUsername, realmURL } = args;
@@ -830,6 +833,17 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       definitionLookup,
       virtualNetwork,
       realmURL,
+      reportRunChange: taskRunChangeReporter({
+        dbAdapter,
+        virtualNetwork,
+        reportRealmEvent,
+        log,
+      }),
+      reportAutomationChange: taskAutomationChangeReporter({
+        virtualNetwork,
+        reportRealmEvent,
+        log,
+      }),
     });
     reportStatus(args.jobInfo, 'finish');
     let queueClaim = queueClaimOf(jobInfo);
@@ -1062,6 +1076,17 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       virtualNetwork,
       realmURL,
       touched: [...invalidations, ...changes.map(({ url }) => url)],
+      reportRunChange: taskRunChangeReporter({
+        dbAdapter,
+        virtualNetwork,
+        reportRealmEvent,
+        log,
+      }),
+      reportAutomationChange: taskAutomationChangeReporter({
+        virtualNetwork,
+        reportRealmEvent,
+        log,
+      }),
     });
     let chargedRunIndexing: RunIndexing | undefined;
     if (runIndexing) {
@@ -1115,6 +1140,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
             dbAdapter,
             meteredCharges,
             runIndexing: measured,
+            indexJob: jobInfo?.jobId,
             log,
           });
         }

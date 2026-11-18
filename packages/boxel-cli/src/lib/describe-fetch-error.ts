@@ -17,9 +17,35 @@
 export function describeFetchError(error: unknown): string {
   let msg = error instanceof Error ? error.message : String(error);
   if (error instanceof Error && error.cause != null) {
-    let cause = error.cause;
-    let causeMsg = cause instanceof Error ? cause.message : String(cause);
-    return `${msg} (caused by: ${causeMsg})`;
+    return `${msg} (caused by: ${describeCause(error.cause)})`;
   }
   return msg;
+}
+
+// A refused connection to a host name with several addresses (`localhost`
+// resolving to both `::1` and `127.0.0.1`) rejects with an `AggregateError`
+// whose message is empty: the reason is its `code` and the per-address errors
+// it carries. Fall back to the code when there is no message, and list the
+// inner errors, so that case doesn't print as an empty cause.
+function describeCause(cause: unknown): string {
+  if (!(cause instanceof Error)) {
+    return String(cause);
+  }
+  let code = (cause as { code?: unknown }).code;
+  let parts: string[] = [];
+  if (cause.message) {
+    parts.push(cause.message);
+  } else if (typeof code === 'string') {
+    parts.push(code);
+  }
+  if (cause instanceof AggregateError && cause.errors.length > 0) {
+    parts.push(
+      cause.errors
+        .map((inner) =>
+          inner instanceof Error ? inner.message : String(inner),
+        )
+        .join('; '),
+    );
+  }
+  return parts.join(': ');
 }

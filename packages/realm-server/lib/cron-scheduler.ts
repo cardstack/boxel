@@ -45,6 +45,12 @@ import {
   createAutomationTickCronJob,
 } from './automation-tick-config.ts';
 import { enqueueAutomationReconcile } from '../scripts/automation-reconcile.ts';
+import { enqueueAIBatchSettle } from '../scripts/ai-batch-settle.ts';
+import {
+  AI_BATCH_SETTLE_CRON_SCHEDULE,
+  AI_BATCH_SETTLE_CRON_TZ,
+  createAIBatchSettleCronJob,
+} from './ai-batch-settle-config.ts';
 import {
   AUTOMATION_RECONCILE_CRON_SCHEDULE,
   AUTOMATION_RECONCILE_CRON_TZ,
@@ -93,6 +99,8 @@ export function startCronJobs(): void {
   jobs.push(startAutomationTickCron());
 
   jobs.push(startAutomationReconcileCron());
+
+  jobs.push(startAIBatchSettleCron());
 }
 
 export function stopCronJobs(): void {
@@ -252,6 +260,26 @@ function startAutomationStorageChargeCron(): CronJob {
   job.start();
   log.info(
     `automation-storage-charge cron scheduled for ${AUTOMATION_STORAGE_CHARGE_CRON_SCHEDULE} ${AUTOMATION_STORAGE_CHARGE_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startAIBatchSettleCron(): CronJob {
+  let job = createAIBatchSettleCronJob(
+    async () => {
+      try {
+        await enqueueAIBatchSettle();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('ai-batch-settle cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `ai-batch-settle cron scheduled for ${AI_BATCH_SETTLE_CRON_SCHEDULE} ${AI_BATCH_SETTLE_CRON_TZ}`,
   );
   return job;
 }

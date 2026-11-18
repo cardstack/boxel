@@ -16,6 +16,7 @@ import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { MintRunToken } from './run-automation.ts';
 import type { AutomationAdmissionChecks } from '../automation-admission.ts';
 import type { OAuthProviderCleanup } from './oauth-provider-cleanup.ts';
+import type { AIBatchSettlement } from '../ai-batches.ts';
 export type * from './lint.ts';
 export * from '#lint-task';
 export * from './full-reindex.ts';
@@ -23,6 +24,7 @@ export * from './daily-credit-grant.ts';
 export * from './automation-storage-charge.ts';
 export * from './automation-tick.ts';
 export * from './automation-reconcile.ts';
+export * from './ai-batch-settle.ts';
 export * from './indexer.ts';
 export * from './media-cache-gc.ts';
 export * from './oauth-provider-cleanup.ts';
@@ -89,6 +91,9 @@ export interface TaskArgs {
   // Deletes the OAuth provider's expired and unused rows. Optional: a worker
   // without it, such as a test harness's, deletes nothing.
   oauthProviderCleanup?: OAuthProviderCleanup;
+  // Bills batches of AI requests once they end. Optional: a worker without
+  // it, such as a test harness's, settles no batch.
+  aiBatchSettlement?: AIBatchSettlement;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
   reportProgress?(event: IndexingProgressEvent): void;
   // Request that a realm event be broadcast to subscribed hosts. A task runs

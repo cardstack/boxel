@@ -29,6 +29,7 @@ import { MatrixClient } from './matrix-client.ts';
 import type { MediaCacheAdapter } from './media-cache.ts';
 import type { MeteredCharges } from './metered-charges.ts';
 import type { OAuthProviderCleanup } from './tasks/oauth-provider-cleanup.ts';
+import type { AIBatchSettlement } from './ai-batches.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs, MintRunToken } from './tasks/index.ts';
 import type { AutomationAdmissionChecks } from './automation-admission.ts';
@@ -236,6 +237,7 @@ export class Worker {
   #automationAdmissionChecks: AutomationAdmissionChecks | undefined;
   #meteredCharges: MeteredCharges | undefined;
   #oauthProviderCleanup: OAuthProviderCleanup | undefined;
+  #aiBatchSettlement: AIBatchSettlement | undefined;
 
   constructor({
     indexWriter,
@@ -259,6 +261,7 @@ export class Worker {
     mediaCacheAdapter,
     meteredCharges,
     oauthProviderCleanup,
+    aiBatchSettlement,
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
@@ -291,6 +294,8 @@ export class Worker {
     meteredCharges?: MeteredCharges;
     // See `TaskArgs.oauthProviderCleanup`.
     oauthProviderCleanup?: OAuthProviderCleanup;
+    // See `TaskArgs.aiBatchSettlement`.
+    aiBatchSettlement?: AIBatchSettlement;
   }) {
     this.#queue = queue;
     this.#indexWriter = indexWriter;
@@ -313,6 +318,7 @@ export class Worker {
     this.#mediaCacheAdapter = mediaCacheAdapter;
     this.#meteredCharges = meteredCharges;
     this.#oauthProviderCleanup = oauthProviderCleanup;
+    this.#aiBatchSettlement = aiBatchSettlement;
   }
 
   async run() {
@@ -344,6 +350,7 @@ export class Worker {
       skipPrerenderHtmlRealms: this.#skipPrerenderHtmlRealms,
       meteredCharges: this.#meteredCharges,
       oauthProviderCleanup: this.#oauthProviderCleanup,
+      aiBatchSettlement: this.#aiBatchSettlement,
     };
 
     let registrations: Record<string, () => Promise<unknown> | unknown> = {
@@ -399,6 +406,11 @@ export class Worker {
         this.#queue.register(
           `automation-reconcile`,
           Tasks['automationReconcile'](taskArgs),
+        ),
+      'ai-batch-settle': () =>
+        this.#queue.register(
+          `ai-batch-settle`,
+          Tasks['aiBatchSettle'](taskArgs),
         ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),

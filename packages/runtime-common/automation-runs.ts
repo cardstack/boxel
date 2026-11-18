@@ -22,12 +22,19 @@
 
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
+import { MANUAL_RUN_TRIGGER } from './automation-declaration.ts';
 import { logRunPlatformLine } from './automation-run-log.ts';
 import {
   clearRunMilestones,
   closeRunMilestones,
 } from './automation-run-milestones.ts';
+import {
+  emitAutomationRunEvent,
+  jobOfRun,
+  msBetween,
+} from './automation-run-telemetry.ts';
 import type { DBAdapter } from './db.ts';
+import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import {
   dbAdapterQuerier,
   param,
@@ -40,6 +47,7 @@ import type {
   RealmIdentifier,
   RealmResourceIdentifier,
 } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 export type AutomationRunState =
   | 'pending'
@@ -97,11 +105,18 @@ export interface AutomationRun extends AutomationRunCounts {
   // Milliseconds of prerender tab time the run's script took, summed over
   // the attempts that ran it (see `addAutomationRunTabTime`).
   prerenderTabMs: number;
+  // The most the run can cost, in whole credits, which its admission held
+  // against its identity's balance (see `holdAutomationRunCredits`). Null
+  // until the spending check admits it.
+  costCeilingCredits: number | null;
+  // When that hold stopped counting (`releaseAutomationRunCreditHold`).
+  creditHoldReleasedAt: string | null;
   createdAt: string;
   startedAt: string | null;
   // When the attempt that owns the run admitted it (see
   // `automation-admission.ts`). Each attempt admits the run again before it
-  // runs the script, so this is the latest admission.
+  // runs the script, so this is the latest admission; an attempt that takes
+  // the run over from another clears it until that attempt admits the run.
   admittedAt: string | null;
   commitStartedAt: string | null;
   committedAt: string | null;
@@ -184,6 +199,15 @@ export async function insertAutomationRun(
   querier: Querier,
   run: NewAutomationRun,
 ): Promise<AutomationRun> {
+  return (await insertOrFindAutomationRun(querier, run)).run;
+}
+
+// `insertAutomationRun`, saying whether this call created the run or found
+// the one already there for its automation, trigger and slot.
+export async function insertOrFindAutomationRun(
+  querier: Querier,
+  run: NewAutomationRun,
+): Promise<{ run: AutomationRun; created: boolean }> {
   let [created] = await querier([
     'INSERT INTO automation_runs (automation_id, realm, trigger, slot, acts_as, dry_run) VALUES (',
     param(run.automationId),
@@ -200,7 +224,7 @@ export async function insertAutomationRun(
     ') ON CONFLICT ON CONSTRAINT automation_runs_slot_key DO NOTHING RETURNING *',
   ]);
   if (created) {
-    return runFromRow(created);
+    return { run: runFromRow(created), created: true };
   }
   let [existing] = await querier([
     'SELECT * FROM automation_runs WHERE automation_id =',
@@ -210,7 +234,7 @@ export async function insertAutomationRun(
     'AND slot =',
     param(run.slot),
   ]);
-  return runFromRow(existing);
+  return { run: runFromRow(existing), created: false };
 }
 
 export async function getAutomationRun(
@@ -270,9 +294,10 @@ export async function startAutomationRunAttempt(
   // run's row, since the takeover waited on that lock. A run whose commit was
   // already claimed keeps its files: the claiming attempt may still be
   // reading them to send its batch. An attempt that takes the run from
-  // another also clears the run's milestones, since the script runs again
-  // from its start and reports them afresh. The run's row is locked first,
-  // the order `appendRunLog` takes the locks in.
+  // another also clears the run's admission and milestones, since it admits
+  // the run again and the script runs again from its start and reports them
+  // afresh. The run's row is locked first, the order `appendRunLog` takes the
+  // locks in.
   let row = await dbAdapter.withTransaction(async (txQuery) => {
     let [owner] = await txQuery([
       'SELECT attempt FROM automation_runs WHERE id =',
@@ -297,6 +322,14 @@ export async function startAutomationRunAttempt(
       ]);
       if (owner?.attempt != null && Number(owner.attempt) !== attempt) {
         await clearRunMilestones(txQuery, id);
+        if (started.admitted_at != null) {
+          let [readmitting] = await txQuery([
+            'UPDATE automation_runs SET admitted_at = NULL WHERE id =',
+            param(id),
+            'RETURNING *',
+          ]);
+          return readmitting;
+        }
       }
     }
     return started;
@@ -349,6 +382,94 @@ export async function recordAutomationRunAdmitted(
   return await updateOwned(dbAdapter, id, attempt, ['admitted_at = now()']);
 }
 
+// Holds `credits`, the most the run can cost, against its identity's balance
+// and its automation's credit caps while it is in flight (see
+// `creditsHeldByRunsInFlight`). Refused unless the run is running and
+// `attempt` owns it. A retry's admission holds again, replacing what the
+// earlier attempt held.
+export async function holdAutomationRunCredits(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+  credits: number,
+): Promise<AutomationRun | undefined> {
+  if (!Number.isInteger(credits) || credits < 0) {
+    throw new Error(
+      `a run's credit hold must be a whole number of credits, got ${credits}`,
+    );
+  }
+  return await updateOwned(dbAdapter, id, attempt, [
+    'cost_ceiling_credits =',
+    param(credits),
+    ', credit_hold_released_at = NULL',
+  ]);
+}
+
+// Stops the run's hold counting, once the run has ended and its `run` charge
+// is written or it had nothing to charge (`chargeAutomationRun`). A run that
+// is still pending or running keeps its hold, so a run canceled while its tab
+// still runs holds until the attempt has charged what the tab used. Returns
+// whether a hold was released.
+export async function releaseAutomationRunCreditHold(
+  dbAdapter: DBAdapter,
+  id: string,
+): Promise<boolean> {
+  let rows = await query(dbAdapter, [
+    'UPDATE automation_runs SET credit_hold_released_at = now() WHERE id =',
+    param(id),
+    "AND state IN ('complete', 'error', 'canceled')",
+    'AND cost_ceiling_credits IS NOT NULL AND credit_hold_released_at IS NULL',
+    'RETURNING id',
+  ]);
+  return rows.length > 0;
+}
+
+// How long an ended run's hold keeps counting when nothing releases it: its
+// charge couldn't be written, or the run was closed without an attempt. The
+// attempt releases the hold just after the run ends, so this only bounds a
+// hold that release never reaches.
+export const UNRELEASED_RUN_HOLD_SECONDS = 60 * 60;
+
+// The credits held by admitted runs whose holds haven't been released, other
+// than `excludeRunId`: those of `actsAs` (the balance check), or those of
+// `automationId`'s runs that aren't Previews or Run nows (the credit caps).
+//
+// A run holds its cost ceiling, less what the ledger has charged it for AI
+// (each AI request is charged as it finishes, so the balance already shows
+// it). Only ledger charges count: a request whose cost couldn't be learned
+// adds its reservation to `ai_credits_spent` but charges nothing, so the
+// hold keeps covering it. A run holds from its admission until its hold is
+// released (`releaseAutomationRunCreditHold`), or for at most
+// `UNRELEASED_RUN_HOLD_SECONDS` after it ends.
+export async function creditsHeldByRunsInFlight(
+  querier: Querier,
+  filter: (
+    | { actsAs: string; automationId?: undefined }
+    | { automationId: RealmResourceIdentifier; actsAs?: undefined }
+  ) & { excludeRunId: string },
+): Promise<number> {
+  let [row] = await querier([
+    'SELECT COALESCE(SUM(GREATEST(r.cost_ceiling_credits - COALESCE(ai.charged, 0), 0)), 0) AS held',
+    'FROM automation_runs r LEFT JOIN LATERAL (',
+    "SELECT -SUM(l.credit_amount) AS charged FROM credits_ledger l WHERE l.run_id = r.id AND l.charge_kind = 'ai'",
+    ') ai ON true',
+    'WHERE r.cost_ceiling_credits IS NOT NULL AND r.credit_hold_released_at IS NULL',
+    ...((filter.actsAs !== undefined
+      ? ['AND r.acts_as =', param(filter.actsAs)]
+      : [
+          'AND r.automation_id =',
+          param(filter.automationId),
+          'AND r.trigger <>',
+          param(MANUAL_RUN_TRIGGER),
+        ]) as Expression),
+    'AND (r.finished_at IS NULL OR r.finished_at > now() - make_interval(secs =>',
+    param(UNRELEASED_RUN_HOLD_SECONDS),
+    ')) AND r.id <>',
+    param(filter.excludeRunId),
+  ] as Expression);
+  return Number(row?.held ?? 0);
+}
+
 // Claims the run's one commit for `attempt`. The claim is refused unless the
 // run is running, `attempt` owns it, and no commit was claimed before, so a
 // caller sends the batch only when this returns the run.
@@ -383,9 +504,21 @@ export async function recordAutomationRunCommitted(
     "state = CASE WHEN state = 'error' THEN 'complete' ELSE state END",
     'WHERE id =',
     param(id),
-    "AND state IN ('running', 'error') AND commit_started_at IS NOT NULL AND committed_at IS NULL RETURNING *",
+    "AND state IN ('running', 'error') AND commit_started_at IS NOT NULL AND committed_at IS NULL",
+    'RETURNING *, (SELECT state FROM automation_runs WHERE id =',
+    param(id),
+    ') AS state_before',
   ]);
-  return row ? runFromRow(row) : undefined;
+  if (!row) {
+    return undefined;
+  }
+  let run = runFromRow(row);
+  if (row.state_before === 'error') {
+    // The run's `finished` telemetry said `error`; this one says how it
+    // ended after all.
+    emitRunFinished(run, await jobOfRun(dbAdapter, run), true);
+  }
+  return run;
 }
 
 // Ends a running run that `attempt` owns. A run whose commit was claimed can
@@ -472,7 +605,9 @@ export async function logAutomationRunEnded(
   dbAdapter: DBAdapter,
   run: AutomationRun,
 ): Promise<void> {
-  await closeRunMilestones(dbAdapter, run);
+  let job = await jobOfRun(dbAdapter, run);
+  emitRunFinished(run, job);
+  await closeRunMilestones(dbAdapter, run, job);
   await logRunPlatformLine(
     dbAdapter,
     run.id,
@@ -493,7 +628,52 @@ export async function logAutomationRunEnded(
             message: `The run ended with an error (${run.errorReason ?? 'error'})${run.errorMessage ? `: ${run.errorMessage}` : ''}`,
             ...(run.errorReason ? { data: { reason: run.errorReason } } : {}),
           },
+    job,
   );
+}
+
+// The run's `finished` telemetry event: every timestamp and count its row
+// holds as it ends, whichever path ended it.
+function emitRunFinished(
+  run: AutomationRun,
+  job: number | undefined,
+  lateCommit = false,
+): void {
+  emitAutomationRunEvent({
+    kind: 'finished',
+    ...(lateCommit ? { lateCommit: true as const } : {}),
+    automation: run.automationId,
+    run: run.id,
+    ...(job !== undefined ? { job } : {}),
+    ...(run.attempt != null ? { attempt: run.attempt } : {}),
+    realm: run.realm,
+    trigger: run.trigger,
+    dryRun: run.dryRun,
+    state: run.state,
+    ...(run.errorReason ? { errorReason: run.errorReason } : {}),
+    ...(run.canceledBy ? { canceledBy: run.canceledBy } : {}),
+    createdAt: run.createdAt,
+    ...(run.startedAt ? { startedAt: run.startedAt } : {}),
+    ...(run.admittedAt ? { admittedAt: run.admittedAt } : {}),
+    ...(run.commitStartedAt ? { commitStartedAt: run.commitStartedAt } : {}),
+    ...(run.committedAt ? { committedAt: run.committedAt } : {}),
+    ...(run.finishedAt ? { finishedAt: run.finishedAt } : {}),
+    ...optionalMs('totalMs', msBetween(run.createdAt, run.finishedAt)),
+    ...optionalMs('runMs', msBetween(run.startedAt, run.finishedAt)),
+    prerenderTabMs: run.prerenderTabMs,
+    callApiCalls: run.callApiCalls,
+    callApiResponseBytes: run.callApiResponseBytes,
+    resolveCalls: run.resolveCalls,
+    writes: run.writes,
+    aiCreditsSpent: run.aiCreditsSpent,
+  });
+}
+
+function optionalMs<K extends string>(
+  name: K,
+  ms: number | undefined,
+): Partial<Record<K, number>> {
+  return ms === undefined ? {} : ({ [name]: ms } as Record<K, number>);
 }
 
 // Closes a pending or running run whose job is gone, such as one whose job ran
@@ -571,13 +751,15 @@ export async function cancelAutomationRunIn(
 // run whose commit was claimed is left to finish, since its writes may
 // already be landing. A person's pause or remove names them in
 // `canceled_by`. A pause no person asked for names no one, and records its
-// reason (such as `caps-raised`) in `error_reason`. The caller writes each
-// canceled run's last log line with `logAutomationRunEnded` once its
-// transaction commits.
+// reason (such as `caps-raised`) in `error_reason`. With `pendingOnly`, a
+// running run is left to finish and only pending runs are canceled. The caller
+// writes each canceled run's last log line with `logAutomationRunEnded` once
+// its transaction commits.
 export async function cancelUnfinishedAutomationRuns(
   querier: Querier,
   automationId: RealmResourceIdentifier,
   by: { canceledBy: string } | { reason: string },
+  { pendingOnly = false }: { pendingOnly?: boolean } = {},
 ): Promise<AutomationRun[]> {
   let rows = await querier([
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
@@ -586,7 +768,9 @@ export async function cancelUnfinishedAutomationRuns(
     param('reason' in by ? by.reason : null),
     'WHERE automation_id =',
     param(automationId),
-    "AND (state = 'pending' OR (state = 'running' AND commit_started_at IS NULL))",
+    pendingOnly
+      ? "AND state = 'pending'"
+      : "AND (state = 'pending' OR (state = 'running' AND commit_started_at IS NULL))",
     'RETURNING *',
   ]);
   await discardOverlays(
@@ -728,6 +912,63 @@ export async function endAutomationRunAtCap(
     state: 'error',
     reason: HIT_A_CAP_REASON,
     message: `The run hit its ${cap} cap`,
+  });
+}
+
+// Whether the person a run acts as is a direct writer of the run's realm,
+// which the run's admission and every one of its calls must find (ADR 026
+// §1.5): the realm's calls (`Realm.handleAutomation`), the realm server's
+// routes that take run tokens, and the worker's admission all ask it here.
+// Permission rows are keyed by served URL, so the realm is resolved to the URL
+// it is served at; a realm that resolves to none has no direct writer. One
+// primary-key read of the person's permission row, read fresh on each call.
+export async function runActsAsDirectWriter(
+  {
+    dbAdapter,
+    virtualNetwork,
+    matrixServerName,
+  }: {
+    dbAdapter: DBAdapter;
+    virtualNetwork: VirtualNetwork;
+    matrixServerName: string;
+  },
+  run: { realm: RealmIdentifier; actsAs: string },
+): Promise<boolean> {
+  let realmURL: URL;
+  try {
+    realmURL = virtualNetwork.toURL(run.realm);
+  } catch {
+    return false;
+  }
+  return await isDirectWriter(
+    dbAdapter,
+    realmURL,
+    run.actsAs,
+    matrixServerName,
+  );
+}
+
+// The error reason of a run whose person was not a direct writer of its
+// realm at one of its calls, or at its commit (ADR 026 §1.5).
+export const NOT_A_DIRECT_WRITER_REASON = 'not-a-direct-writer';
+
+// Ends a run that a call refused because the person it acts as is not a
+// direct writer of its realm: an error with reason `not-a-direct-writer`.
+// Ending the run, rather than refusing the call alone, makes every later call
+// answer that the run is not running, which is what stops the script in its
+// tab, so a run that catches the refusal can't keep its tab busy until its
+// time limit. Owner only, like any finish; a run that already finished, or
+// that another attempt took over, is left as it is.
+export async function endAutomationRunNotADirectWriter(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+): Promise<AutomationRun | undefined> {
+  return await finishAutomationRun(dbAdapter, id, attempt, {
+    state: 'error',
+    reason: NOT_A_DIRECT_WRITER_REASON,
+    message:
+      "The person this run acts as stopped being a direct writer of the automation's workspace, so the run was stopped and its writes were not saved",
   });
 }
 
@@ -1004,6 +1245,11 @@ function runFromRow(row: Record<string, PgPrimitive>): AutomationRun {
     aiCreditsSpent: Number(row.ai_credits_spent ?? 0),
     aiCreditsReserved: Number(row.ai_credits_reserved ?? 0),
     prerenderTabMs: Number(row.prerender_tab_ms ?? 0),
+    costCeilingCredits:
+      row.cost_ceiling_credits == null
+        ? null
+        : Number(row.cost_ceiling_credits),
+    creditHoldReleasedAt: iso(row.credit_hold_released_at),
     createdAt: iso(row.created_at)!,
     startedAt: iso(row.started_at),
     admittedAt: iso(row.admitted_at),

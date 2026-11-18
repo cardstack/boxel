@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   automationInitiatedPriority,
+  cancelAutomationRun,
   createAutomationRun,
   getAutomationRun,
   insertPermissions,
@@ -28,13 +29,29 @@ import {
   type AutomationDeclarationRead,
   type AutomationTickOutcome,
 } from '@cardstack/runtime-common/automation-tick';
-import { readRunLog } from '@cardstack/runtime-common/automation-run-log';
+import {
+  readRunLog,
+  setRunLogLokiSink,
+} from '@cardstack/runtime-common/automation-run-log';
+import {
+  setAutomationRunTelemetrySink,
+  type AutomationRunEvent,
+} from '@cardstack/runtime-common/automation-run-telemetry';
 import {
   AUTOMATION_COMMAND,
   automationJobTimeoutSec,
 } from '@cardstack/runtime-common/automation-run-command';
 import { enqueueAutomationRunJob } from '@cardstack/runtime-common/jobs/run-command';
-import { setupDB } from './helpers/index.ts';
+import type {
+  ChangedAutomation,
+  ReportAutomationChange,
+} from '@cardstack/runtime-common/automation-change-events';
+import {
+  insertIncomingWebhookRow,
+  setupDB,
+  setupSecretsKeyring,
+} from './helpers/index.ts';
+import type { PgAdapter } from '@cardstack/postgres';
 
 const REALM_URL = 'http://127.0.0.1:4444/payroll/';
 const REALM = ri(REALM_URL);
@@ -100,6 +117,7 @@ interface QueuedRun {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupSecretsKeyring(hooks);
   let dbAdapter: DBAdapter;
   let publisher: QueuePublisher;
   let virtualNetwork: VirtualNetwork;
@@ -138,12 +156,16 @@ module(basename(import.meta.filename), function (hooks) {
     return result.automation;
   }
 
-  async function tick(now: number): Promise<AutomationTickOutcome[]> {
+  async function tick(
+    now: number,
+    reportAutomationChange?: ReportAutomationChange,
+  ): Promise<AutomationTickOutcome[]> {
     return await tickAutomations(dbAdapter, {
       queue: publisher,
       virtualNetwork,
       readDeclaration: async () => card,
       now,
+      reportAutomationChange,
     });
   }
 
@@ -189,6 +211,76 @@ module(basename(import.meta.filename), function (hooks) {
       ),
     );
   }
+
+  test("a started run's enqueue is one telemetry event carrying its job, and its trigger line carries the job too", async function (assert) {
+    await switchOn();
+    let events: AutomationRunEvent[] = [];
+    let lokiLines: string[] = [];
+    setAutomationRunTelemetrySink((event) => events.push(event));
+    setRunLogLokiSink((line) => lokiLines.push(line));
+    try {
+      await tick(NOON + 30);
+    } finally {
+      setAutomationRunTelemetrySink(undefined);
+      setRunLogLokiSink(undefined);
+    }
+    let [run] = await runs();
+    let [job] = await queuedRuns();
+    assert.deepEqual(
+      events.map((event) =>
+        event.kind === 'enqueued'
+          ? {
+              kind: event.kind,
+              automation: event.automation,
+              run: event.run,
+              job: event.job,
+              trigger: event.trigger,
+              triggerKind: event.triggerKind,
+              scheduledAt: event.scheduledAt,
+              lagged: event.scheduleLagMs >= 0,
+            }
+          : { kind: event.kind },
+      ),
+      [
+        {
+          kind: 'enqueued',
+          automation: AUTOMATION,
+          run: run.id,
+          job: job.id,
+          trigger: 'hourly',
+          triggerKind: 'cron',
+          scheduledAt: NOON_SLOT,
+          lagged: true,
+        },
+      ],
+      'one enqueued event for the run, naming its job',
+    );
+    assert.true(
+      lokiLines.some((line) =>
+        line.startsWith(
+          `[automation-run-log] automation=${AUTOMATION} run=${run.id} job=${job.id} `,
+        ),
+      ),
+      "the trigger's run log line carries the job the tick enqueued",
+    );
+
+    // Canceled before any worker claimed it, the run still names its job.
+    let finished: AutomationRunEvent[] = [];
+    setAutomationRunTelemetrySink((event) => finished.push(event));
+    try {
+      await cancelAutomationRun(dbAdapter, run.id, OWNER);
+    } finally {
+      setAutomationRunTelemetrySink(undefined);
+    }
+    assert.deepEqual(
+      finished.map((event) => ({
+        kind: event.kind,
+        job: (event as { job?: number }).job,
+      })),
+      [{ kind: 'finished', job: job.id }],
+      'a run canceled while pending names the job it was enqueued as',
+    );
+  });
 
   test('nothing is enqueued before a trigger comes due', async function (assert) {
     await switchOn();
@@ -635,7 +727,60 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual((await runs()).length, 2, 'two runs in all');
   });
 
+  test('a tick that makes an automation done reports the automation, and a tick that leaves its state reports nothing', async function (assert) {
+    await switchOn([{ ...HOURLY, count: 2 }]);
+    let reported: ChangedAutomation[] = [];
+    let report: ReportAutomationChange = async (automation) => {
+      reported.push(automation);
+    };
+    await tick(NOON + 30, report);
+    assert.deepEqual(
+      reported,
+      [],
+      'the first run leaves the automation active',
+    );
+    await query(dbAdapter, [
+      `UPDATE automation_runs SET state = 'complete', finished_at = now()`,
+    ]);
+    await tick(ONE + 30, report);
+    assert.strictEqual((await row()).state, 'done');
+    assert.deepEqual(
+      reported.map(({ automationId, realm }) => [automationId, realm]),
+      [[AUTOMATION, REALM]],
+      'the last run makes it done, which is reported',
+    );
+  });
+
+  test('a tick whose due slot joins a pending run reports the automation, since its next run moved with no run to announce it', async function (assert) {
+    await switchOn();
+    let reported: string[] = [];
+    let report: ReportAutomationChange = async ({ automationId }) => {
+      reported.push(automationId);
+    };
+    await tick(NOON + 30, report);
+    assert.deepEqual(
+      reported,
+      [],
+      'the tick that starts a run leaves it to the run',
+    );
+    // The noon run is still pending, so the 13:00 slot joins it.
+    let [outcome] = await tick(ONE + 30, report);
+    assert.deepEqual(
+      outcome.kind === 'enqueued'
+        ? outcome.triggers.map(({ kind }) => kind)
+        : outcome.kind,
+      ['skipped'],
+    );
+    assert.strictEqual((await row()).nextRun, at('2026-11-10T14:00:00Z'));
+    assert.deepEqual(reported, [AUTOMATION]);
+  });
+
   test('`until` stops a trigger: no slot after it runs', async function (assert) {
+    await insertIncomingWebhookRow(dbAdapter as PgAdapter, {
+      username: OWNER,
+      webhookPath: 'hooks/push',
+      signingSecret: 'owner-secret',
+    });
     await switchOn([
       { ...HOURLY, until: at('2026-11-10T13:30:00Z') },
       { kind: 'webhook', label: 'push', webhookPath: 'hooks/push' },
@@ -728,21 +873,112 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a card that does not read as a declaration leaves the row due and unchanged', async function (assert) {
+  test('a card with nothing indexed to read leaves the row due and unchanged', async function (assert) {
     let before = await switchOn();
-    card = { ok: false, message: 'triggers.0.expression: not a cron' };
+    card = {
+      ok: false,
+      message: 'the automation card has no indexed document',
+    };
     let outcomes = await tick(NOON + 30);
     assert.deepEqual(outcomes, [
       {
         kind: 'unreadable',
         automationId: AUTOMATION,
-        message: 'triggers.0.expression: not a cron',
+        message: 'the automation card has no indexed document',
+        paused: false,
       },
     ]);
     assert.deepEqual(await runs(), []);
     let after = await row();
+    assert.strictEqual(after.state, 'active');
     assert.strictEqual(after.nextRun, before.nextRun);
     assert.deepEqual(after.triggerRuns, before.triggerRuns);
+  });
+
+  test('a card that indexed but does not read as a declaration pauses the automation with the problems, and reports it', async function (assert) {
+    await switchOn();
+    let problems = [
+      {
+        code: 'cron-too-frequent' as const,
+        path: 'triggers.0.expression',
+        message:
+          '"58,1 0,23 * * *" can fire twice 3 minutes apart, and Boxel runs an automation\'s cron trigger at most once every 5 minutes',
+      },
+    ];
+    card = { ok: false, message: 'too frequent', problems };
+    let reported: ChangedAutomation[] = [];
+    let outcomes = await tick(NOON + 30, async (automation) => {
+      reported.push(automation);
+    });
+    assert.deepEqual(outcomes, [
+      {
+        kind: 'unreadable',
+        automationId: AUTOMATION,
+        message: 'too frequent',
+        paused: true,
+      },
+    ]);
+    assert.deepEqual(await runs(), [], 'nothing is enqueued');
+    let after = await row();
+    assert.strictEqual(after.state, 'paused');
+    assert.strictEqual(after.pauseReason, 'invalid-declaration');
+    assert.deepEqual(after.pauseProblems, problems);
+    assert.deepEqual(
+      reported.map(({ automationId }) => automationId),
+      [AUTOMATION],
+      'the pause is reported, so the automation event fires',
+    );
+    assert.deepEqual(
+      await tick(NOON + 90),
+      [],
+      'a paused automation is not due',
+    );
+  });
+
+  test('a card fixed before the tick re-reads it under the lock does not pause the automation', async function (assert) {
+    await switchOn();
+    let reads = 0;
+    let outcomes = await tickAutomations(dbAdapter, {
+      queue: publisher,
+      virtualNetwork,
+      now: NOON + 30,
+      readDeclaration: async () =>
+        reads++ === 0
+          ? {
+              ok: false,
+              message: 'too frequent',
+              problems: [
+                {
+                  code: 'cron-too-frequent',
+                  path: 'triggers.0.expression',
+                  message: 'too frequent',
+                },
+              ],
+            }
+          : { ok: true, declaration: declaration() },
+    });
+    assert.deepEqual(
+      outcomes.map((o) => [o.kind, o.kind === 'unreadable' && o.paused]),
+      [['unreadable', false]],
+    );
+    assert.strictEqual((await row()).state, 'active');
+  });
+
+  test('a card that no longer adopts from Automation is left for the index hook to remove', async function (assert) {
+    await switchOn();
+    card = {
+      ok: false,
+      message: 'not an automation',
+      problems: [
+        { code: 'not-an-automation', path: '', message: 'not an automation' },
+      ],
+    };
+    let [outcome] = await tick(NOON + 30);
+    assert.deepEqual(
+      [outcome.kind, outcome.kind === 'unreadable' && outcome.paused],
+      ['unreadable', false],
+    );
+    assert.strictEqual((await row()).state, 'active');
   });
 
   test('a card that raises a cap above the snapshot enqueues nothing', async function (assert) {

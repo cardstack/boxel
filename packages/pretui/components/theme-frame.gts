@@ -6,6 +6,7 @@ import { guidFor } from '@ember/object/internals';
 import Moon from '@cardstack/boxel-icons/moon';
 import Sun from '@cardstack/boxel-icons/sun';
 import { realmURL } from '@cardstack/base/card-api';
+import { sanitizeHtml } from '@cardstack/runtime-common';
 import { themeScope, themeScopedCss } from '../theme-scoped-css';
 import { Select } from './select';
 import { Switch } from './switch';
@@ -37,6 +38,7 @@ interface ThemeLike {
   id?: string;
   [realmURL]?: URL;
   cssVariables?: string | null;
+  cssImports?: string[] | null;
   // `cardTitle`, not `title` — CardDef exposes no `title`, so reading `.title`
   // silently yields undefined and every theme labels itself "Untitled theme".
   cardTitle?: string;
@@ -212,6 +214,9 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
   get dataTheme() {
     return this.isDarkMode ? 'dark' : 'light';
   }
+  get themeImports(): string[] {
+    return this.activeTheme?.cssImports ?? [];
+  }
   get themeCss() {
     return this.activeTheme?.cssVariables ?? undefined;
   }
@@ -246,6 +251,17 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
         class='pretui-theme-surface'
         data-boxel-theme-scope={{if this.themeCss this.themeScopeId}}
       >
+        {{! font imports of the ACTIVE theme, so a theme picked in the frame
+            loads its own fonts; same block boxel-ui CardContainer emits }}
+        {{#if this.themeImports.length}}
+          {{! template-lint-disable require-scoped-style }}
+          <style>
+            {{#each this.themeImports as |url|}}
+              @import url('{{sanitizeHtml url}}');
+            {{/each}}
+          </style>
+          {{! template-lint-enable require-scoped-style }}
+        {{/if}}
         {{#if this.themeCss}}
           {{! template-lint-disable require-scoped-style }}
           <style data-boxel-theme-style>

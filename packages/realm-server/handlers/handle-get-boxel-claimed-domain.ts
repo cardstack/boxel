@@ -9,6 +9,7 @@ import {
 } from '../middleware/index.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 
 export default function handleGetBoxelClaimedDomainRequest({
   dbAdapter,
@@ -38,9 +39,11 @@ export default function handleGetBoxelClaimedDomainRequest({
         return;
       }
 
-      const sourceRealmURL = ctxt.query.source_realm_url as string | undefined;
+      const rawSourceRealmURL = ctxt.query.source_realm_url as
+        | string
+        | undefined;
 
-      if (!sourceRealmURL) {
+      if (!rawSourceRealmURL) {
         await sendResponseForBadRequest(
           ctxt,
           'source_realm_url query parameter is required',
@@ -48,12 +51,28 @@ export default function handleGetBoxelClaimedDomainRequest({
         return;
       }
 
+      const parsedSourceRealmURL = normalizeRealmURL(rawSourceRealmURL);
+      if (!parsedSourceRealmURL) {
+        await sendResponseForBadRequest(
+          ctxt,
+          'source_realm_url query parameter must be a valid URL',
+        );
+        return;
+      }
+      const sourceRealmURL = parsedSourceRealmURL.href;
+
+      // The request names the realm by its URL. The claim names it by its
+      // registry id, so the URL is resolved to the id through the registry,
+      // and the response carries the realm's URL as the registry has it.
       const claims = await query(dbAdapter, [
-        `SELECT id, hostname, source_realm_url, claimed_at FROM claimed_domains_for_sites WHERE user_id = `,
+        `SELECT c.id, c.hostname, r.url AS realm_url, c.claimed_at
+         FROM claimed_domains_for_sites c
+         JOIN realm_registry r ON r.id = c.realm_id
+         WHERE c.user_id = `,
         param(user.id),
-        ` AND source_realm_url = `,
+        ` AND r.url = `,
         param(sourceRealmURL),
-        ` AND removed_at IS NULL`,
+        ` AND c.removed_at IS NULL`,
       ]);
 
       if (claims.length === 0) {
@@ -80,7 +99,7 @@ export default function handleGetBoxelClaimedDomainRequest({
                 attributes: {
                   hostname,
                   subdomain,
-                  sourceRealmURL: String(claim.source_realm_url),
+                  sourceRealmURL: String(claim.realm_url),
                 },
               },
             },

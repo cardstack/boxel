@@ -6,6 +6,7 @@ scope:
   - packages/realm-server/lib/billable-call.ts
   - packages/realm-server/**/*pricing*
   - packages/realm-server/lib/automation-estimate.ts
+  - packages/realm-server/lib/automation-spending.ts
   - packages/realm-server/lib/metered-charge.ts
   - packages/runtime-common/metered-charges.ts
   - packages/runtime-common/run-indexing.ts
@@ -122,7 +123,9 @@ present MUST write nothing.
 
 A consumption charge MUST record how much of each unit it priced: the
 metered units the pricing variables price (§1.2), or for AI the cost the
-provider reported. The usage MUST be written with the charge's ledger rows,
+provider reported. A batch billed at its estimate because the provider
+reported no cost (ADR 030 §1.4) MUST record that estimate as a unit of its
+own, so it is never read as a reported cost. The usage MUST be written with the charge's ledger rows,
 under an id they share, so it lands exactly when they do.
 
 ## 2. Rationale

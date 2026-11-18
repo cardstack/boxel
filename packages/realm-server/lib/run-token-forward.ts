@@ -1,10 +1,13 @@
 import {
   automationRunForCall,
+  endAutomationRunNotADirectWriter,
+  runActsAsDirectWriter,
   isSessionRevoked,
   logger,
   type DBAdapter,
   type DefinitionLookup,
   type RealmIdentifier,
+  type ReportRunChange,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -68,11 +71,16 @@ export async function admitRunForward(
     definitionLookup,
     virtualNetwork,
     realmSecretSeed,
+    matrixServerName,
+    reportRunChange,
   }: {
     dbAdapter: DBAdapter;
     definitionLookup: DefinitionLookup;
     virtualNetwork: VirtualNetwork;
     realmSecretSeed: string;
+    matrixServerName: string;
+    // Told when the request ends the run at a cap.
+    reportRunChange?: ReportRunChange;
   },
   {
     token,
@@ -130,6 +138,27 @@ export async function admitRunForward(
       401,
       'Invalid token',
       `run ${context.runId} acts as ${call.run.actsAs}, but the token names ${context.actsAs}`,
+    );
+  }
+  if (
+    !(await runActsAsDirectWriter(
+      { dbAdapter, virtualNetwork, matrixServerName },
+      call.run,
+    ))
+  ) {
+    if (
+      await endAutomationRunNotADirectWriter(
+        dbAdapter,
+        context.runId,
+        context.attempt,
+      )
+    ) {
+      await reportRunChange?.(context.runId);
+    }
+    return refuse(
+      403,
+      "The person this run acts as is not a direct writer of the automation's workspace, so the run has ended",
+      `${context.actsAs}, whom run ${context.runId} acts as, is not a direct writer of ${call.run.realm}; the run ends`,
     );
   }
   let run = {
@@ -195,7 +224,7 @@ export async function admitRunForward(
   if (admission.kind === 'refused') {
     switch (admission.reason) {
       case 'over-cap':
-        await endRunAtCap(dbAdapter, run, 'aiCredits');
+        await endRunAtCap(dbAdapter, run, 'aiCredits', reportRunChange);
         return refuse(
           403,
           `The automation run hit its aiCredits cap, so the run has ended. ${admission.message}`,
@@ -228,6 +257,7 @@ export async function admitRunForward(
         run,
         'resolveCalls',
         caps.resolveCalls,
+        reportRunChange,
       );
     } catch (error) {
       await settle(0);

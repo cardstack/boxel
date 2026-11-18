@@ -376,6 +376,14 @@ module(basename(import.meta.filename), function (hooks) {
     return policy.issues.filter((issue) => REACH_CODES.includes(issue.code));
   }
 
+  // Every issue but `module-not-granted`. The types here are defined in the
+  // realm the policy governs, and no policy here grants their code, so
+  // compiling records that warning against each `read` or `query` grant.
+  // `realm-policy-module-access-test` covers it.
+  function issuesOf(policy: CompiledRealmPolicy): Issue[] {
+    return policy.issues.filter(({ code }) => code !== 'module-not-granted');
+  }
+
   // Each reach issue as the code, the grant it is on, and the type it names,
   // which is the last type the message mentions before its fix.
   function reached(policy: CompiledRealmPolicy) {
@@ -454,7 +462,7 @@ module(basename(import.meta.filename), function (hooks) {
       rule(STUDENT, 'read'),
       rule(GUARDIAN, 'read'),
     ]);
-    assert.deepEqual(policy.issues, [], 'the policy compiles cleanly');
+    assert.deepEqual(issuesOf(policy), [], 'the policy compiles cleanly');
   });
 
   test('a reached type is granted by a rule on a type it descends from', async function (assert) {
@@ -814,7 +822,7 @@ module(basename(import.meta.filename), function (hooks) {
       rule(CLASSROOM, 'read'),
       { targetType: CLASSROOM, grants: [{ operation: 'rename' }] },
     ]);
-    let issues = policy.issues.map(({ code, path, severity }) => ({
+    let issues = issuesOf(policy).map(({ code, path, severity }) => ({
       code,
       path,
       severity,

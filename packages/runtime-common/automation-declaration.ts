@@ -1,9 +1,7 @@
+import { cronTriggerProblem } from './automation-cron-rule.ts';
 import {
-  cronExpressionError,
   isValidTimeZone,
-  parseCronExpression,
   zonedDateTimeToUnixSeconds,
-  type CronSchedule,
   type CronTrigger,
   type OnceTrigger,
   type WebhookTrigger,
@@ -25,11 +23,6 @@ export const automationRef: ResolvedCodeRef = {
   module: rri('@cardstack/catalog/automation/automation'),
   name: 'Automation',
 };
-
-const DAY_MINUTES = 24 * 60;
-
-// A cron trigger may fire at most once every this many minutes.
-export const MIN_CRON_INTERVAL_MINUTES = 5;
 
 // The most a run's `seconds` cap may be: 20 minutes.
 export const MAX_RUN_SECONDS = 20 * 60;
@@ -104,6 +97,18 @@ export const AUTOMATION_CAP_NAMES: readonly (keyof AutomationCaps)[] = [
   'monthlyCredits',
 ];
 
+// Each limit as the automation card labels it, for messages a person reads.
+const CAP_LABELS: Record<keyof AutomationCaps, string> = {
+  callApiCalls: 'Outside calls',
+  responseBytes: 'Data received',
+  resolveCalls: 'AI requests',
+  aiCredits: 'AI spending',
+  writes: 'Saves',
+  seconds: 'Run time',
+  dailyCredits: 'Credits a day',
+  monthlyCredits: 'Credits a month',
+};
+
 export interface AutomationDeclaration {
   url: string;
   realmURL: string;
@@ -136,6 +141,11 @@ export type AutomationProblemCode =
   | 'invalid-date-time'
   | 'invalid-count'
   | 'missing-webhook-path'
+  // A webhook trigger names a webhook the realm can't use. The reader never
+  // reports these, since it reads the card alone; switch-on and resume check
+  // the webhooks against the database (`unusableWebhookProblems`).
+  | 'unknown-webhook'
+  | 'foreign-webhook'
   | 'invalid-operation'
   | 'missing-cap'
   | 'missing-credit-cap'
@@ -215,298 +225,6 @@ export function readAutomationDeclaration(
   };
 }
 
-// Whether a cron expression, in a time zone, can fire more often than once
-// every `MIN_CRON_INTERVAL_MINUTES`, as a message, or undefined when it can't.
-// Expects an expression `parseCronExpression` accepts and, when given, a time
-// zone `isValidTimeZone` accepts.
-//
-// It reads the parsed minute, hour and day sets rather than sampling fire
-// times. Two times on the same day are as far apart as their wall-clock
-// minutes. The last time of one day and the first of the next are compared
-// only when two consecutive days can both match.
-//
-// A daylight-saving change can bring two times closer, so each change the
-// zone makes is applied to the days around it that the schedule matches, the
-// way `automation-schedule.ts` fires them:
-// - the clocks skip wall times, so the times either side of the gap are the
-//   gap's length closer than on the wall clock. A wall-clock expression fires
-//   a skipped time as far past the change as it was into the gap (02:58 fires
-//   at 03:58, 3 minutes before 04:01, on a day 02:00 jumps to 03:00); an
-//   expression that follows elapsed time doesn't fire it (00:58 and 02:00 are
-//   2 minutes apart on a day 01:00 jumps to 02:00).
-// - the clocks repeat wall times, and an expression that follows elapsed time
-//   fires them twice, so the last of the first pass and the first of the
-//   second can be close (02:58 and the repeated 02:01 are 3 minutes apart on a
-//   day 03:00 falls back to 02:00).
-// A change's window can cross midnight, so the next day's times are placed
-// around it too, when the schedule matches that day.
-// Without a time zone only the wall-clock spacing is checked.
-export function cronFrequencyError(
-  expression: string,
-  timeZone?: string,
-): string | undefined {
-  let schedule = parseCronExpression(expression);
-  let times: number[] = [];
-  for (let hour of schedule.hours) {
-    for (let minute of schedule.minutes) {
-      times.push(hour * 60 + minute);
-    }
-  }
-  times.sort((a, b) => a - b);
-  let closest = closestGap(times);
-  let acrossMidnight = times[0] + DAY_MINUTES - times[times.length - 1];
-  if (
-    acrossMidnight < MIN_CRON_INTERVAL_MINUTES &&
-    consecutiveDaysCanMatch(schedule)
-  ) {
-    closest = Math.min(closest, acrossMidnight);
-  }
-  if (timeZone !== undefined && closest >= MIN_CRON_INTERVAL_MINUTES) {
-    // A change's effect depends only on its shape and on which days around it
-    // the schedule matches, which most of a zone's changes share.
-    let checked = new Set<string>();
-    for (let change of clockChanges(timeZone)) {
-      let days = [-1, 0, 1, 2].map((offset) =>
-        dayNumberMatches(schedule, change.day + offset) ? 1 : 0,
-      );
-      let key = `${change.kind}:${change.start}:${change.length}:${days.join('')}`;
-      if (!checked.has(key)) {
-        checked.add(key);
-        closest = Math.min(closest, closestGapAround(schedule, times, change));
-      }
-    }
-  }
-  if (closest < MIN_CRON_INTERVAL_MINUTES) {
-    return `"${expression}" can fire ${closest} minute${closest === 1 ? '' : 's'} apart; an automation's cron trigger fires at most once every ${MIN_CRON_INTERVAL_MINUTES} minutes`;
-  }
-  return undefined;
-}
-
-// The smallest gap between distinct times in a sorted list. Two times at the
-// same instant fire once, so a gap of 0 is no gap.
-function closestGap(sorted: number[]): number {
-  let closest = Infinity;
-  for (let i = 1; i < sorted.length; i++) {
-    let gap = sorted[i] - sorted[i - 1];
-    if (gap > 0) {
-      closest = Math.min(closest, gap);
-    }
-  }
-  return closest;
-}
-
-// The closest two fire times on the days around a clock change, from the day
-// before it starts to the day after it ends. Each matching day's times are
-// placed in elapsed minutes from the start of the change's day, on its clock
-// before the change.
-function closestGapAround(
-  schedule: CronSchedule,
-  times: number[],
-  change: ClockChange,
-): number {
-  let gapEnd = change.start + change.length;
-  // The change touches only its own day's times and, when its window crosses
-  // midnight, the next day's. A schedule that matches neither isn't moved.
-  let touched = gapEnd > DAY_MINUTES ? [0, 1] : [0];
-  if (
-    !touched.some((offset) => dayNumberMatches(schedule, change.day + offset))
-  ) {
-    return Infinity;
-  }
-  let fires: number[] = [];
-  for (let offset = -1; offset <= 2; offset++) {
-    if (!dayNumberMatches(schedule, change.day + offset)) {
-      continue;
-    }
-    for (let t of times) {
-      let wall = offset * DAY_MINUTES + t;
-      if (wall < change.start) {
-        fires.push(wall);
-      } else if (wall >= gapEnd) {
-        fires.push(
-          change.kind === 'skip' ? wall - change.length : wall + change.length,
-        );
-      } else if (change.kind === 'skip') {
-        // A skipped time fires as far past the change as it was into the gap,
-        // which is the same instant on the clock before it; an expression that
-        // follows elapsed time doesn't fire it.
-        if (!schedule.followsElapsedTime) {
-          fires.push(wall);
-        }
-      } else {
-        // A repeated time fires on its first pass, and an expression that
-        // follows elapsed time fires it again on the second.
-        fires.push(wall);
-        if (schedule.followsElapsedTime) {
-          fires.push(wall + change.length);
-        }
-      }
-    }
-  }
-  return closestGap(fires.sort((a, b) => a - b));
-}
-
-interface ClockChange {
-  // `skip`: the clocks jump forward over these wall times. `repeat`: the
-  // clocks fall back and these wall times happen twice.
-  kind: 'skip' | 'repeat';
-  // The local day the affected wall times start on, as days since
-  // 1970-01-01.
-  day: number;
-  // Minute of that day the affected wall times start at.
-  start: number;
-  // Minutes.
-  length: number;
-}
-
-// The window the zone's clock changes are read from. Rules change rarely, and
-// a zone's recent and coming changes are the ones an automation meets.
-const CLOCK_CHANGE_FROM = Date.UTC(2020, 0, 1);
-const CLOCK_CHANGE_TO = Date.UTC(2060, 0, 1);
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const MINUTE_MS = 60 * 1000;
-const DAY_MS = DAY_MINUTES * MINUTE_MS;
-const clockChangeCache = new Map<string, ClockChange[]>();
-const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
-
-// The daylight-saving (or other offset) changes a zone makes, each with the
-// local day it falls on and the wall times it skips or repeats. A zone changes
-// its offset at most a few times a year, so weekly samples find every change,
-// and a search to the minute finds when it happens.
-function clockChanges(timeZone: string): ClockChange[] {
-  let cached = clockChangeCache.get(timeZone);
-  if (cached) {
-    return cached;
-  }
-  let changes: ClockChange[] = [];
-  let previousMs = CLOCK_CHANGE_FROM;
-  let previousOffset = offsetMinutes(timeZone, previousMs);
-  for (let ms = previousMs + WEEK_MS; ms <= CLOCK_CHANGE_TO; ms += WEEK_MS) {
-    let offset = offsetMinutes(timeZone, ms);
-    if (offset !== previousOffset) {
-      let low = previousMs;
-      let high = ms;
-      while (high - low > MINUTE_MS) {
-        let mid = low + Math.floor((high - low) / 2 / MINUTE_MS) * MINUTE_MS;
-        if (offsetMinutes(timeZone, mid) === previousOffset) {
-          low = mid;
-        } else {
-          high = mid;
-        }
-      }
-      let before = offsetMinutes(timeZone, low);
-      let after = offsetMinutes(timeZone, high);
-      let kind: ClockChange['kind'] = after > before ? 'skip' : 'repeat';
-      // Skipped wall times start at the old offset's wall clock; repeated ones
-      // at the new offset's.
-      let wallStart = high + (kind === 'skip' ? before : after) * MINUTE_MS;
-      changes.push({
-        kind,
-        day: Math.floor(wallStart / DAY_MS),
-        start: Math.floor(wallStart / MINUTE_MS) % DAY_MINUTES,
-        length: Math.abs(after - before),
-      });
-    }
-    previousMs = ms;
-    previousOffset = offset;
-  }
-  clockChangeCache.set(timeZone, changes);
-  return changes;
-}
-
-// The zone's offset from UTC at an instant, in minutes.
-function offsetMinutes(timeZone: string, ms: number): number {
-  let formatter = offsetFormatters.get(timeZone);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-    });
-    offsetFormatters.set(timeZone, formatter);
-  }
-  let parts: Record<string, number> = {};
-  for (let part of formatter.formatToParts(new Date(ms))) {
-    if (part.type !== 'literal') {
-      parts[part.type] = Number(part.value);
-    }
-  }
-  let wall = Date.UTC(
-    parts.year,
-    parts.month - 1,
-    parts.day,
-    parts.hour,
-    parts.minute,
-  );
-  return Math.round((wall - (ms - (ms % MINUTE_MS))) / MINUTE_MS);
-}
-
-// Whether two consecutive days can both match depends only on the parsed day
-// and month sets, and `parseCronExpression` caches the parsed schedule, so the
-// answer is kept per schedule.
-const consecutiveDaysCache = new WeakMap<CronSchedule, boolean>();
-
-// The Gregorian calendar repeats every 400 years, so whether any two
-// consecutive days both match is settled by one 400-year cycle. Unrestricted
-// day fields match every day of an allowed month, and every month has
-// consecutive days, which settles it without the scan.
-function consecutiveDaysCanMatch(schedule: CronSchedule): boolean {
-  if (!schedule.daysOfMonthRestricted && !schedule.daysOfWeekRestricted) {
-    return true;
-  }
-  let cached = consecutiveDaysCache.get(schedule);
-  if (cached !== undefined) {
-    return cached;
-  }
-  let start = Date.UTC(2000, 0, 1) / DAY_MS;
-  let end = Date.UTC(2400, 0, 2) / DAY_MS;
-  let previous = false;
-  let result = false;
-  for (let day = start; day < end; day++) {
-    let matches = dayNumberMatches(schedule, day);
-    if (matches && previous) {
-      result = true;
-      break;
-    }
-    previous = matches;
-  }
-  consecutiveDaysCache.set(schedule, result);
-  return result;
-}
-
-// Whether the schedule matches a calendar day, given as days since
-// 1970-01-01.
-function dayNumberMatches(schedule: CronSchedule, day: number): boolean {
-  let date = new Date(day * DAY_MS);
-  return dayMatches(
-    schedule,
-    date.getUTCMonth() + 1,
-    date.getUTCDate(),
-    date.getUTCDay(),
-  );
-}
-
-function dayMatches(
-  schedule: CronSchedule,
-  month: number,
-  dayOfMonth: number,
-  dayOfWeek: number,
-): boolean {
-  if (!schedule.months.has(month)) {
-    return false;
-  }
-  let domMatches = schedule.daysOfMonth.has(dayOfMonth);
-  let dowMatches = schedule.daysOfWeek.has(dayOfWeek);
-  if (schedule.daysOfMonthRestricted && schedule.daysOfWeekRestricted) {
-    return domMatches || dowMatches;
-  }
-  return domMatches && dowMatches;
-}
-
 type Report = (
   code: AutomationProblemCode,
   path: string,
@@ -546,7 +264,7 @@ function readScript(
     report(
       'script-outside-realm',
       'script',
-      `The script link "${self}" doesn't name a file in the automation's realm`,
+      `The script link "${self}" doesn't name a file in the automation's workspace; link a script file from the automation's workspace`,
     );
     return undefined;
   }
@@ -554,7 +272,7 @@ function readScript(
     report(
       'script-outside-realm',
       'script',
-      `The script ${script} is outside the automation's realm ${entry.realmURL}`,
+      `The script ${script} is outside the automation's workspace; link a script file from the automation's workspace`,
     );
     return undefined;
   }
@@ -588,7 +306,7 @@ function readTriggers(
       report(
         'duplicate-label',
         `${path}.label`,
-        `The label "${label}" names more than one trigger; each trigger's label must be unique within its automation`,
+        `More than one trigger has the label "${label}"; give each trigger a different label`,
       );
     } else {
       labels.add(label);
@@ -610,7 +328,7 @@ function readTriggers(
         report(
           'missing-webhook-path',
           `${path}.webhookPath`,
-          'A webhook trigger names one of the realm’s incoming webhooks by its path',
+          'A webhook trigger needs the path of one of the workspace’s incoming webhooks',
         );
       } else if (label !== undefined) {
         triggers.push({ kind, label, webhookPath });
@@ -619,7 +337,7 @@ function readTriggers(
       report(
         'invalid-trigger-kind',
         `${path}.kind`,
-        `A trigger's kind is "cron", "once" or "webhook", not ${JSON.stringify(kind ?? null)}`,
+        `A trigger runs on a schedule ("cron"), once ("once") or from a webhook ("webhook"), not ${JSON.stringify(kind ?? null)}; pick one of those kinds`,
       );
     }
   }
@@ -636,7 +354,7 @@ function readTimeZone(
     report(
       'missing-time-zone',
       `${path}.timeZone`,
-      'This trigger needs a time zone, such as America/Chicago',
+      'A trigger needs a time zone, such as America/Chicago',
     );
     return undefined;
   }
@@ -644,7 +362,7 @@ function readTimeZone(
     report(
       'invalid-time-zone',
       `${path}.timeZone`,
-      `"${timeZone}" is not a time zone this server knows; use an IANA name such as America/Chicago`,
+      `"${timeZone}" isn't a time zone Boxel knows; pick a name such as America/Chicago`,
     );
     return undefined;
   }
@@ -659,26 +377,18 @@ function readCron(
   let ok = true;
   let expression = text(trigger.expression);
   let zone = text(trigger.timeZone);
-  let knownZone =
-    zone !== undefined && isValidTimeZone(zone) ? zone : undefined;
   if (expression === undefined) {
     report(
       'invalid-cron',
       `${path}.expression`,
-      'A cron trigger needs a cron expression',
+      'A schedule trigger needs a cron expression',
     );
     ok = false;
   } else {
-    let error = cronExpressionError(expression);
-    if (error) {
-      report('invalid-cron', `${path}.expression`, error);
+    let problem = cronTriggerProblem(expression, zone);
+    if (problem) {
+      report(problem.code, `${path}.expression`, problem.message);
       ok = false;
-    } else {
-      let frequency = cronFrequencyError(expression, knownZone);
-      if (frequency) {
-        report('cron-too-frequent', `${path}.expression`, frequency);
-        ok = false;
-      }
     }
   }
   let timeZone = readTimeZone(trigger, path, report);
@@ -802,7 +512,7 @@ function readOperations(
       report(
         'invalid-operation',
         `${path}.targetType`,
-        'An operation names the card type that declares it, by module and name',
+        'An outside service needs the card type that declares the service, by module and name',
       );
       continue;
     }
@@ -810,7 +520,7 @@ function readOperations(
       report(
         'invalid-operation',
         `${path}.operation`,
-        'An operation needs the name of a callApi operation on its card type',
+        'An outside service needs the name of an operation on the card type',
       );
       continue;
     }
@@ -845,7 +555,7 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
         caps[name] = null;
         continue;
       }
-      report('missing-cap', path, `An automation must set its ${name} cap`);
+      report('missing-cap', path, `Set the "${CAP_LABELS[name]}" limit`);
       ok = false;
       continue;
     }
@@ -854,7 +564,7 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
       report(
         'invalid-cap',
         path,
-        `The ${name} cap is a whole number, 0 or more, not ${JSON.stringify(stored[name])}`,
+        `"${CAP_LABELS[name]}" is a whole number, 0 or more, not ${JSON.stringify(stored[name])}`,
       );
       ok = false;
       continue;
@@ -863,7 +573,7 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
       report(
         'seconds-cap-too-high',
         path,
-        `A run may last at most ${MAX_RUN_SECONDS} seconds (20 minutes), not ${value}`,
+        `"Run time" is at most 20 minutes (${MAX_RUN_SECONDS} seconds), not ${value} seconds`,
       );
       ok = false;
       continue;
@@ -875,7 +585,7 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
     report(
       'missing-credit-cap',
       'caps.monthlyCredits',
-      'An automation must set a daily or a monthly credit cap, or both',
+      'Set "Credits a day", "Credits a month", or both',
     );
     ok = false;
   }
@@ -887,7 +597,7 @@ function readCaps(raw: unknown, report: Report): AutomationCaps | undefined {
     report(
       'daily-credits-above-monthly',
       'caps.dailyCredits',
-      `The daily credit cap (${caps.dailyCredits}) can't be more than the monthly one (${caps.monthlyCredits})`,
+      `"Credits a day" (${caps.dailyCredits}) can't be more than "Credits a month" (${caps.monthlyCredits})`,
     );
     ok = false;
   }

@@ -1,9 +1,10 @@
-import { click, waitFor, waitUntil } from '@ember/test-helpers';
+import { click, settled, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, rri } from '@cardstack/runtime-common';
+import { baseRealm, rri, testRealmInfo } from '@cardstack/runtime-common';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import {
   setupLocalIndexing,
@@ -94,6 +95,8 @@ const ACTIVE = {
   nextRun: '2030-01-01T10:00:00.000Z',
   lastResult: 'complete',
   lastFinishedAt: '2030-01-01T09:00:00.000Z',
+  failuresInARow: 0,
+  lastFailure: null,
   triggers: [
     {
       label: 'nightly',
@@ -209,10 +212,10 @@ module('Acceptance | automation view', function (hooks) {
   }
 
   // The automation in one format, as code mode previews it.
-  async function openFormat(format: 'embedded' | 'fitted') {
+  async function openFormat(format: 'embedded' | 'fitted', id = AUTOMATION) {
     await visitOperatorMode({
       submode: 'code',
-      codePath: `${AUTOMATION}.json`,
+      codePath: `${id}.json`,
     });
     await click(`[data-test-format-chooser="${format}"]`);
     await waitFor(`[data-test-automation-${format}]`, { timeout: 10000 });
@@ -244,6 +247,11 @@ module('Acceptance | automation view', function (hooks) {
         'This trigger stops after 30 runs or at the end of Jan 15, 2030, whichever comes first.',
         "the card's own bounds still read",
       );
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .doesNotExist(
+        'without the server status, the card says nothing about webhook runs',
+      );
 
     await openFormat('embedded');
     assert.dom('[data-test-automation-embedded-state]').doesNotExist();
@@ -261,6 +269,11 @@ module('Acceptance | automation view', function (hooks) {
     };
     await openIsolated();
     await waitForStatus();
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .doesNotExist(
+        'a server that starts runs from webhooks, or says nothing, gets no warning',
+      );
     assert.dom('[data-test-automation-state="Off"]').exists();
     assert.dom('[data-test-automation-header-state="Off"]').exists();
     assert
@@ -272,6 +285,27 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-trigger-progress]').doesNotExist();
   });
 
+  test('each webhook trigger warns that the trigger can’t fire while the server starts no runs from webhooks', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        switchedOn: false,
+        webhookDeliveriesStartRuns: false,
+        lastRun: null,
+        currentRun: null,
+      },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-webhook-notice]', { timeout: 10000 });
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .exists({ count: 1 }, 'the webhook trigger, and no other, warns');
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .hasText(
+        'This trigger can’t fire, Boxel doesn’t run automations from webhooks.',
+      );
+  });
   test("an active automation shows its payer, next run and each trigger's progress", async function (assert) {
     answer = { status: 200, attributes: ACTIVE };
     await openIsolated();
@@ -310,6 +344,119 @@ module('Acceptance | automation view', function (hooks) {
       timeout: 10000,
     });
     assert.dom('[data-test-automation-fitted-state="On"]').exists();
+  });
+
+  test("a job event naming the automation makes the view ask its status again, and one naming another automation doesn't", async function (assert) {
+    // A run moving changes the automation's row and not its card, so the
+    // realm tells its direct writers with a `job` event, the way the realm
+    // server sends one into a writer's session room.
+    function simulateJob(automation: string) {
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(
+          testRealmURL,
+          '@testuser:localhost',
+        ),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'job',
+          runId: 'run-live',
+          automation,
+          state: 'running',
+          step: 'script',
+          milestone: null,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+    }
+
+    answer = { status: 200, attributes: ACTIVE };
+    await openIsolated();
+    await waitFor('[data-test-automation-state="On"]', { timeout: 10000 });
+    await settled();
+    let askedBefore = asked.length;
+
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    simulateJob(PLANNED);
+    await settled();
+    assert.strictEqual(
+      asked.length,
+      askedBefore,
+      'a job event naming another automation asks nothing',
+    );
+    assert.dom('[data-test-automation-state="On"]').exists();
+
+    simulateJob(AUTOMATION);
+    await waitFor('[data-test-automation-state="Paused"]', { timeout: 10000 });
+    await settled();
+    // One read per event: an ask the other automation's event had set off,
+    // however late it landed, would show here as a second.
+    assert.deepEqual(
+      asked.slice(askedBefore),
+      [AUTOMATION],
+      'a job event naming the automation asks its status route once',
+    );
+    assert
+      .dom('[data-test-automation-status]')
+      .includesText('Next run None while paused');
+  });
+
+  test("an automation event naming the automation makes the view ask its status again, and one naming another automation doesn't", async function (assert) {
+    // Switching an automation on, pausing, resuming or removing it changes
+    // its row and not its card, so the realm tells its direct writers with an
+    // `automation` event, the way the realm server sends one into a writer's
+    // session room.
+    function simulateAutomationChange(automation: string) {
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(
+          testRealmURL,
+          '@testuser:localhost',
+        ),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'automation',
+          automation,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+    }
+
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-state="Paused"]', { timeout: 10000 });
+    await settled();
+    let askedBefore = asked.length;
+
+    answer = { status: 200, attributes: ACTIVE };
+    simulateAutomationChange(PLANNED);
+    await settled();
+    assert.strictEqual(
+      asked.length,
+      askedBefore,
+      'an automation event naming another automation asks nothing',
+    );
+    assert.dom('[data-test-automation-state="Paused"]').exists();
+
+    simulateAutomationChange(AUTOMATION);
+    await waitFor('[data-test-automation-state="On"]', { timeout: 10000 });
+    await settled();
+    // One read per event: an ask the other automation's event had set off,
+    // however late it landed, would show here as a second.
+    assert.deepEqual(
+      asked.slice(askedBefore),
+      [AUTOMATION],
+      'an automation event naming the automation asks its status route once',
+    );
+    assert
+      .dom('[data-test-automation-status]')
+      .doesNotIncludeText('Next run None');
   });
 
   test("the card lists the milestones of the automation's last run from the run", async function (assert) {
@@ -632,6 +779,111 @@ module('Acceptance | automation view', function (hooks) {
       .includesText('Payer A person who shares no workspace with you');
   });
 
+  test("an automation whose runs keep failing shows the streak's last error, as stored, until a run completes", async function (assert) {
+    let failing = {
+      ...ACTIVE,
+      lastResult: 'error',
+      failuresInARow: 3,
+      lastFailure: {
+        runId: 'run-3',
+        reason: 'script-error',
+        message: 'line 3: Error: upstream said no...',
+        finishedAt: '2030-01-01T09:00:00.000Z',
+      },
+    };
+    answer = { status: 200, attributes: failing };
+    await openIsolated();
+    await waitForStatus();
+    assert
+      .dom('[data-test-automation-status]')
+      .includesText('Last error line 3: Error: upstream said no...');
+
+    answer = {
+      status: 200,
+      attributes: {
+        ...failing,
+        lastFailure: { ...failing.lastFailure, message: null },
+      },
+    };
+    await openFormat('embedded');
+    await openIsolated();
+    await waitUntil(() =>
+      text('[data-test-automation-status]')?.includes(
+        'Last error script-error',
+      ),
+    );
+    assert
+      .dom('[data-test-automation-status]')
+      .includesText(
+        'Last error script-error',
+        'a failure with no message shows its code',
+      );
+
+    answer = { status: 200, attributes: ACTIVE };
+    await openFormat('embedded');
+    await openIsolated();
+    await waitUntil(() =>
+      text('[data-test-automation-status]')?.includes('Last run: Completed'),
+    );
+    assert
+      .dom('[data-test-automation-status]')
+      .doesNotIncludeText('Last error', 'no streak, no last error');
+  });
+
+  test('an automation paused for an invalid declaration lists each problem where the problem is on the card', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        state: 'paused',
+        pauseReason: 'invalid-declaration',
+        pauseProblems: [
+          {
+            code: 'cron-too-frequent',
+            path: 'triggers.1.expression',
+            message:
+              '"58,1 0,23 * * *" can fire twice 3 minutes apart, and Boxel runs an automation\'s cron trigger at most once every 5 minutes',
+          },
+          {
+            code: 'missing-cap',
+            path: 'caps.writes',
+            message: 'Set the "Saves" limit',
+          },
+        ],
+      },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-pause-problems]', { timeout: 10000 });
+    assert
+      .dom('[data-test-automation-state-sentence]')
+      .hasText(
+        'Boxel paused the automation because the automation’s settings have problems. Boxel will resume the automation once someone who can edit this workspace fixes each problem below.',
+      );
+    assert
+      .dom('[data-test-automation-pause-problem="Trigger “hourly”"]')
+      .includesText('can fire twice 3 minutes apart');
+    assert
+      .dom('[data-test-automation-pause-problem="Limits"]')
+      .includesText('Set the "Saves" limit');
+
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    await openFormat('embedded');
+    await openIsolated();
+    await waitUntil(
+      () =>
+        text('[data-test-automation-state-sentence]')?.includes(
+          'Someone who can edit this workspace paused',
+        ),
+      { timeout: 10000 },
+    );
+    assert
+      .dom('[data-test-automation-pause-problems]')
+      .doesNotExist('another pause reason lists no problems');
+  });
+
   test('a paused, waiting and done automation each read with that state', async function (assert) {
     let cases: [Record<string, unknown>, string, string][] = [
       [
@@ -645,9 +897,41 @@ module('Acceptance | automation view', function (hooks) {
         'Someone raised a limit above what the payer agreed to pay for, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and agrees to the new limits.',
       ],
       [
+        { state: 'paused', pauseReason: 'webhook-changed' },
+        'Paused',
+        'A workspace administrator pointed a trigger at an incoming webhook the payer didn’t agree to, so Boxel paused the automation. Boxel runs nothing until a workspace administrator resumes the automation and agrees to the new webhook.',
+      ],
+      [
         { state: 'paused', pauseReason: 'payer-lost-access' },
         'Paused',
         'The payer can no longer edit this workspace, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and becomes the new payer.',
+      ],
+      [
+        {
+          state: 'paused',
+          pauseReason: 'repeated-failures',
+          lastResult: 'error',
+          failuresInARow: 5,
+          lastFailure: {
+            runId: 'run-5',
+            reason: 'script-error',
+            message: 'line 3: Error: upstream said no',
+            finishedAt: '2030-01-01T09:00:00.000Z',
+          },
+        },
+        'Paused',
+        'Boxel paused the automation after 5 runs in a row failed. Boxel runs nothing until someone who can edit this workspace fixes what the runs fail on and resumes the automation.',
+      ],
+      [
+        {
+          state: 'paused',
+          pauseReason: 'repeated-failures',
+          lastResult: 'error',
+          failuresInARow: 0,
+          lastFailure: null,
+        },
+        'Paused',
+        'Boxel paused the automation after several runs in a row failed. Boxel runs nothing until someone who can edit this workspace fixes what the runs fail on and resumes the automation.',
       ],
       [
         { state: 'waiting-for-credits', pauseReason: null },
@@ -699,5 +983,206 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-status]')
       .includesText('Next run None', 'a done automation has no next run');
+  });
+  // A run that ended with an error in its second planned milestone, after a
+  // milestone the plan didn't list.
+  const FAILED_RUN = {
+    runId: 'run-1',
+    state: 'error',
+    startedAt: '2030-01-01T08:59:00.000Z',
+    finishedAt: '2030-01-01T09:00:00.000Z',
+    plan: ['Fetch issues', 'Group by label', 'Write digest'],
+    milestones: [
+      {
+        name: 'Fetch issues',
+        planned: true,
+        startedAt: '2030-01-01T08:59:00.000Z',
+        endedAt: '2030-01-01T08:59:04.000Z',
+        ms: 4_000,
+      },
+      {
+        name: 'Retry',
+        planned: false,
+        startedAt: '2030-01-01T08:59:04.000Z',
+        endedAt: '2030-01-01T08:59:05.000Z',
+        ms: 1_000,
+      },
+      {
+        name: 'Group by label',
+        planned: true,
+        startedAt: '2030-01-01T08:59:05.000Z',
+        endedAt: '2030-01-01T09:00:00.000Z',
+        ms: 55_000,
+        done: 12,
+        total: 40,
+      },
+    ],
+    ahead: ['Write digest'],
+    failedIn: 'Group by label',
+    dropped: 0,
+  };
+
+  test('the fitted and embedded views show where the last run failed, from the run', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, lastResult: 'error', lastRun: FAILED_RUN },
+    };
+    await openFormat('embedded');
+    await waitFor('[data-test-automation-embedded-milestones="failed"]', {
+      timeout: 10000,
+    });
+    let embedded = text('[data-test-automation-embedded-milestones]') ?? '';
+    assert.true(
+      embedded.includes('Failed in Group by label'),
+      'names the milestone the run failed in',
+    );
+    assert.true(
+      /(^|\D)2 of 4(\D|$)/.test(embedded),
+      "counts the run's milestones, the one the plan didn't list included",
+    );
+    assert.dom('[data-test-automation-embedded-last="error"]').exists();
+    assert.dom('[data-test-automation-embedded-next]').exists();
+
+    await openFormat('fitted');
+    await waitFor('[data-test-automation-fitted-milestones="failed"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-fitted-milestones]')
+      .includesText('Failed in Group by label');
+    assert
+      .dom('[data-test-automation-fitted-milestones]')
+      .includesText(
+        '2 of 4',
+        'the fitted lists name the milestones without their counts, so this is the run count',
+      );
+    assert
+      .dom('[data-test-automation-fitted-focus]')
+      .hasText(
+        'Failed in Group by label',
+        'the two-line sizes lead with the failure, not the schedule',
+      );
+    assert.dom('[data-test-automation-fitted-last="error"]').exists();
+    assert
+      .dom('[data-test-automation-fitted-next]')
+      .exists('an active automation shows its next run');
+  });
+
+  test('the fitted and embedded views show the milestone a run is in', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        currentRun: {
+          ...FAILED_RUN,
+          runId: 'run-2',
+          state: 'running',
+          current: 'Group by label',
+          finishedAt: null,
+          // The milestone the run is in hasn't ended.
+          milestones: FAILED_RUN.milestones.map((milestone, index) =>
+            index === FAILED_RUN.milestones.length - 1
+              ? { ...milestone, endedAt: null }
+              : milestone,
+          ),
+          failedIn: null,
+        },
+      },
+    };
+    await openFormat('embedded');
+    await waitFor('[data-test-automation-embedded-milestones="running"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-embedded-milestones]')
+      .includesText('Running Group by label');
+    await openFormat('fitted');
+    await waitFor('[data-test-automation-fitted-milestones="running"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-fitted-focus]')
+      .hasText('Running Group by label');
+  });
+
+  test('a run that has reached no milestone yet reads as running', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        currentRun: {
+          ...FAILED_RUN,
+          runId: 'run-3',
+          state: 'running',
+          current: null,
+          finishedAt: null,
+          milestones: [],
+          ahead: FAILED_RUN.plan,
+          failedIn: null,
+        },
+      },
+    };
+    await openFormat('embedded');
+    await waitFor('[data-test-automation-embedded-milestones="running"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-embedded-milestones]')
+      .includesText('Running, before the first milestone');
+    assert
+      .dom('[data-test-automation-embedded-milestones]')
+      .includesText('0 of 3');
+  });
+
+  test('before any run, the fitted and embedded views count the milestones the script declares', async function (assert) {
+    answer = { status: 200, attributes: { ...ACTIVE, lastRun: null } };
+    await openFormat('embedded', PLANNED);
+    await waitFor('[data-test-automation-embedded-milestones="planned"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-embedded-milestones]')
+      .includesText('3 milestones planned');
+    await openFormat('fitted', PLANNED);
+    await waitFor('[data-test-automation-fitted-milestones="planned"]', {
+      timeout: 10000,
+    });
+    assert
+      .dom('[data-test-automation-fitted-milestones]')
+      .includesText('0 of 3');
+  });
+
+  test('a viewer the route refuses sees the declared milestones but no runs in the fitted and embedded views', async function (assert) {
+    await openFormat('embedded', PLANNED);
+    await waitFor('[data-test-automation-embedded-milestones="planned"]', {
+      timeout: 10000,
+    });
+    assert.dom('[data-test-automation-embedded-next]').doesNotExist();
+    assert.dom('[data-test-automation-embedded-last]').doesNotExist();
+    await openFormat('fitted', PLANNED);
+    await waitFor('[data-test-automation-fitted-milestones="planned"]', {
+      timeout: 10000,
+    });
+    assert.dom('[data-test-automation-fitted-state]').doesNotExist();
+    assert.dom('[data-test-automation-fitted-next]').doesNotExist();
+    assert.dom('[data-test-automation-fitted-last]').doesNotExist();
+  });
+
+  test('a paused automation shows no next run in the fitted and embedded views', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    await openFormat('embedded');
+    await waitFor('[data-test-automation-embedded-state="Paused"]', {
+      timeout: 10000,
+    });
+    assert.dom('[data-test-automation-embedded-next]').doesNotExist();
+    assert.dom('[data-test-automation-embedded-last="complete"]').exists();
+    await openFormat('fitted');
+    await waitFor('[data-test-automation-fitted-state="Paused"]', {
+      timeout: 10000,
+    });
+    assert.dom('[data-test-automation-fitted-next]').doesNotExist();
   });
 });

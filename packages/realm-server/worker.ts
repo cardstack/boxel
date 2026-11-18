@@ -65,6 +65,7 @@ import {
 } from './lib/metered-charge.ts';
 import { deleteExpiredOAuthProviderRows } from './lib/oauth-provider/cleanup.ts';
 import { buildMintRunToken } from './lib/run-token.ts';
+import { aiBatchSettlementFor } from './lib/ai-batch-settle.ts';
 import { buildAutomationAdmissionChecks } from './lib/automation-admission-checks.ts';
 
 let log = logger('worker');
@@ -287,8 +288,10 @@ let autoMigrate = migrateDB || undefined;
     mintRunToken: buildMintRunToken(REALM_SECRET_SEED),
     // An automation run's admission asks the Matrix server whether the
     // account the run acts as can still sign in, with the admin credentials
-    // the realm server also holds.
+    // the realm server also holds, and checks the run's spending at this
+    // process's prices.
     automationAdmissionChecks: buildAutomationAdmissionChecks({
+      dbAdapter,
       matrixURL: new URL(matrixURL),
       matrixAdminUsername: process.env.MATRIX_ADMIN_USERNAME,
       matrixAdminPassword: process.env.MATRIX_ADMIN_PASSWORD,
@@ -298,6 +301,7 @@ let autoMigrate = migrateDB || undefined;
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
     meteredCharges: meteredChargesFor(dbAdapter),
     oauthProviderCleanup: () => deleteExpiredOAuthProviderRows(dbAdapter),
+    aiBatchSettlement: aiBatchSettlementFor(dbAdapter),
   });
 
   await worker.run();

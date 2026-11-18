@@ -11,6 +11,7 @@
 import {
   readAutomationDeclaration,
   type AutomationDeclaration,
+  type AutomationProblem,
 } from './automation-declaration.ts';
 import {
   computeAutomationSchedule,
@@ -18,6 +19,9 @@ import {
 } from './automation-schedule.ts';
 import {
   getAutomation,
+  readAutomationFailures,
+  type AutomationFailure,
+  type AutomationFailures,
   type AutomationPauseReason,
   type AutomationRow,
   type AutomationRunResult,
@@ -28,8 +32,10 @@ import {
   readLastRunMilestones,
   type RunMilestones,
 } from './automation-run-milestones.ts';
+import { WEBHOOK_DELIVERIES_START_RUNS } from './automation-webhooks.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
+import { dbAdapterQuerier } from './expression.ts';
 import {
   isDirectWriter,
   shareARealmGrant,
@@ -75,15 +81,24 @@ export type AutomationCurrentRun = RunMilestones;
 export type AutomationStatusAttributes =
   | {
       switchedOn: false;
+      // Whether Boxel starts runs from webhook deliveries; the card warns
+      // under each webhook trigger while it is false.
+      webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
     }
   | {
       switchedOn: true;
+      webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
       state: AutomationState;
       pauseReason: AutomationPauseReason | null;
+      // What the declaration reader found wrong with the card, when
+      // `pauseReason` is `invalid-declaration`; null otherwise. Each problem
+      // has a `path` into the card (`triggers.0.expression`) and a message
+      // for a person.
+      pauseProblems: AutomationProblem[] | null;
       // The payer's Matrix id, or null when the viewer may not see who pays.
       payer: string | null;
       viewerIsPayer: boolean;
@@ -91,6 +106,14 @@ export type AutomationStatusAttributes =
       nextRun: string | null;
       lastResult: AutomationRunResult | null;
       lastFinishedAt: string | null;
+      // How many of the automation's own runs (not a Preview or a Run now)
+      // have failed since its last complete one, counting from its
+      // switch-on or last resume, and the latest of them. An automation
+      // pauses itself with `repeated-failures` once the count reaches
+      // `AUTOMATION_FAILURES_BEFORE_PAUSE`, and `lastFailure` then says
+      // why its last run failed.
+      failuresInARow: number;
+      lastFailure: AutomationFailure | null;
       triggers: AutomationTriggerStatus[];
     };
 
@@ -169,7 +192,12 @@ export async function answerAutomationStatus({
     (await readCurrentRunMilestones(dbAdapter, automationId)) ?? null;
   let declaration: AutomationDeclaration | undefined;
   let payerShown = false;
+  let failures: AutomationFailures | undefined;
   if (row) {
+    failures = await readAutomationFailures(
+      dbAdapterQuerier(dbAdapter),
+      automationId,
+    );
     let entry = await readInstance(url);
     let read = entry
       ? readAutomationDeclaration(entry, { automationTypeKey, virtualNetwork })
@@ -190,6 +218,7 @@ export async function answerAutomationStatus({
       now,
       lastRun,
       currentRun,
+      failures,
     }),
   };
 }
@@ -199,7 +228,7 @@ export async function answerAutomationStatus({
 // card as indexed, absent when the card doesn't read as one; then each
 // trigger reports only its run count. `payerShown` says whether the viewer
 // may see the payer's Matrix id. `lastRun` is the automation's last ended
-// run, if it has one.
+// run, if it has one, and `failures` its failure streak.
 export function automationStatusDocument({
   url,
   row,
@@ -209,6 +238,7 @@ export function automationStatusDocument({
   now,
   lastRun = null,
   currentRun = null,
+  failures,
 }: {
   url: string;
   row: AutomationRow | undefined;
@@ -219,6 +249,8 @@ export function automationStatusDocument({
   now: number;
   lastRun?: AutomationLastRun | null;
   currentRun?: AutomationCurrentRun | null;
+  // Read only for a switched-on automation, so absent when `row` is.
+  failures: AutomationFailures | undefined;
 }): AutomationStatusDocument {
   return {
     data: {
@@ -227,18 +259,27 @@ export function automationStatusDocument({
       attributes: row
         ? {
             switchedOn: true,
+            webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
             state: row.state,
             pauseReason: row.pauseReason,
+            pauseProblems: row.pauseProblems,
             payer: payerShown || row.payer === viewer ? row.payer : null,
             viewerIsPayer: row.payer === viewer,
             nextRun: isoOrNull(row.nextRun),
             lastResult: row.lastResult,
             lastFinishedAt: row.lastFinishedAt,
+            failuresInARow: failures?.inARow ?? 0,
+            lastFailure: failures?.last ?? null,
             triggers: triggerStatuses(row, declaration, now),
             lastRun,
             currentRun,
           }
-        : { switchedOn: false, lastRun, currentRun },
+        : {
+            switchedOn: false,
+            webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
+            lastRun,
+            currentRun,
+          },
     },
   };
 }

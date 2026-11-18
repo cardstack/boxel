@@ -5,6 +5,7 @@ import {
   type Frame,
   type FrameLocator,
   type Page,
+  type Request,
 } from '@playwright/test';
 import type { Credentials } from '../support/synapse/index.ts';
 import {
@@ -415,13 +416,53 @@ export async function createRealm(
   }
 }
 
+// The page being left can still start a navigation of its own while the
+// `goto` is pending (a signed-out app sends itself to the secure origin's
+// sign-in after it boots, for example), and Chromium then aborts the `goto`
+// with `net::ERR_ABORTED`. The competing navigation can commit only after the
+// `goto` has failed, so on a failure this waits for the page to settle, then
+// adds to the error the page the `goto` started from, the main-frame
+// navigation requests and commits seen from the start of the `goto` until
+// then, and the page it settled on.
 export async function openRoot(page: Page, url = testHost) {
-  await page.goto(url);
-}
-
-export async function clearLocalStorage(page: Page, appURL = testHost) {
-  await openRoot(page, appURL);
-  await page.evaluate(() => window.localStorage.clear());
+  let startedAt = Date.now();
+  let from = page.url();
+  let events: string[] = [];
+  let onRequest = (request: Request) => {
+    try {
+      if (
+        request.isNavigationRequest() &&
+        request.frame() === page.mainFrame()
+      ) {
+        events.push(`+${Date.now() - startedAt}ms request ${request.url()}`);
+      }
+    } catch {
+      // A service worker's request has no frame.
+    }
+  };
+  let onNavigated = (frame: Frame) => {
+    if (frame === page.mainFrame()) {
+      events.push(`+${Date.now() - startedAt}ms commit ${frame.url()}`);
+    }
+  };
+  page.on('request', onRequest);
+  page.on('framenavigated', onNavigated);
+  try {
+    await page.goto(url);
+  } catch (e) {
+    let failedAfter = Date.now() - startedAt;
+    await page.waitForLoadState('load', { timeout: 5_000 }).catch(() => {});
+    if (e instanceof Error) {
+      e.message +=
+        `\n[openRoot] started from ${from}; failed after ${failedAfter}ms; ` +
+        `settled on ${page.url()}. Main-frame navigations: ` +
+        `${events.join(' → ') || '(none)'}`;
+    }
+    throw e;
+  } finally {
+    page.off('request', onRequest);
+    page.off('framenavigated', onNavigated);
+  }
 }
 
 // The model shown in the editor. An older model can still be in the list

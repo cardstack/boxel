@@ -629,6 +629,16 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
     // isn't read as warm-tab serialization.
     tabProbeMs?: number;
   };
+  // The whole tab's heap as an automation run's command ended in it, read
+  // over CDP (`readTabHeapUsage`): the host app's and anything earlier runs
+  // on the tab left uncollected, beside the run's own. Only a run's command
+  // reports it; absent when the tab didn't answer the read in time.
+  tabMemory?: {
+    jsUsedMB: number;
+    jsTotalMB: number;
+    domMB: number;
+    buffersMB: number;
+  };
   // Elapsed between render start and the timeout. If ~= timeoutMs the
   // render itself stalled; if << timeoutMs the launch dominated.
   renderElapsedMs?: number;
@@ -2052,6 +2062,7 @@ export * from './host-route-resolver.ts';
 export * from './host-route-address.ts';
 export * from './host-route-lookups.ts';
 export * from './route-pattern.ts';
+export * from './path-specifier.ts';
 
 export type {
   CardDocument,
@@ -2598,8 +2609,11 @@ export {
 export * from './policy-share-audit.ts';
 export * from './realm-history.ts';
 export * from './automation-runs.ts';
+export * from './automation-change-events.ts';
+export * from './automation-run-events.ts';
 export * from './automation-run-charge.ts';
 export * from './automation-run-command.ts';
+export * from './automation-run-telemetry.ts';
 export * from './ai-batches.ts';
 export * from './automation-files.ts';
 export * from './automation-storage-charge.ts';

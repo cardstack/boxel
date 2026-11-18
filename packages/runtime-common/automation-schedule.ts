@@ -422,7 +422,7 @@ function parseUncached(expression: string): CronSchedule {
   }
   if (!someDayMatches) {
     throw new CronExpressionError(
-      `"${expression}" names no day that ever happens, so it never fires`,
+      `"${expression}" names no day that ever happens, so the trigger never fires`,
     );
   }
   return schedule;

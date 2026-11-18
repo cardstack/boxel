@@ -3,7 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { User } from '@cardstack/runtime-common';
-import { query, insert, asExpressions } from '@cardstack/runtime-common';
+import { query, param, insert, asExpressions } from '@cardstack/runtime-common';
 import {
   setupDB,
   setupSimpleRealmServerTemplate,
@@ -79,6 +79,19 @@ module(basename(import.meta.filename), function () {
       return await requestBuilder;
     }
 
+    // A registry row for a realm URL, so a claim can name the realm. Returns
+    // the row's id.
+    async function register(url: string): Promise<string> {
+      let rows = (await query(dbAdapter, [
+        `INSERT INTO realm_registry (url, kind, disk_id, owner_username) VALUES (`,
+        param(url),
+        `, 'source', `,
+        param(`test/${url}`),
+        `, 'test-user') RETURNING id`,
+      ])) as { id: string }[];
+      return rows[0].id;
+    }
+
     function assertErrorIncludes(response: any, message: string) {
       return response.body.errors && response.body.errors[0].includes(message);
     }
@@ -118,11 +131,13 @@ module(basename(import.meta.filename), function () {
 
     test('should successfully get a claimed hostname', async function (assert) {
       const hostname = 'my-site.boxel.site';
-      const sourceRealmURL = 'https://test-realm.com';
+      const sourceRealmURL = 'https://test-realm.com/';
+      const realmId = await register(sourceRealmURL);
 
       // Insert a claim
       let { valueExpressions, nameExpressions } = asExpressions({
         user_id: user.id,
+        realm_id: realmId,
         source_realm_url: sourceRealmURL,
         hostname: hostname,
         claimed_at: Math.floor(Date.now() / 1000),
@@ -169,11 +184,13 @@ module(basename(import.meta.filename), function () {
 
     test('should not return removed claims', async function (assert) {
       const hostname = 'removed-site.boxel.site';
-      const sourceRealmURL = 'https://test-realm.com';
+      const sourceRealmURL = 'https://test-realm.com/';
+      const realmId = await register(sourceRealmURL);
 
       // Insert a removed claim
       let { valueExpressions, nameExpressions } = asExpressions({
         user_id: user.id,
+        realm_id: realmId,
         source_realm_url: sourceRealmURL,
         hostname: hostname,
         claimed_at: Math.floor(Date.now() / 1000) - 86400,
@@ -201,7 +218,8 @@ module(basename(import.meta.filename), function () {
 
     test('should only return claims for the authenticated user', async function (assert) {
       const hostname = 'other-user-site.boxel.site';
-      const sourceRealmURL = 'https://test-realm.com';
+      const sourceRealmURL = 'https://test-realm.com/';
+      const realmId = await register(sourceRealmURL);
 
       // Create another user
       const otherUser = await insertUser(
@@ -214,6 +232,7 @@ module(basename(import.meta.filename), function () {
       // Insert a claim for the other user
       let { valueExpressions, nameExpressions } = asExpressions({
         user_id: otherUser.id,
+        realm_id: realmId,
         source_realm_url: sourceRealmURL,
         hostname: hostname,
         claimed_at: Math.floor(Date.now() / 1000),
@@ -236,6 +255,122 @@ module(basename(import.meta.filename), function () {
       assert.ok(
         assertErrorIncludes(response, 'No hostname claim found for this realm'),
         'Should have error message about no claim found',
+      );
+    });
+
+    test('should find a claim by the realm it names after the realm URL changes', async function (assert) {
+      const hostname = 'moved-site.boxel.site';
+      const oldRealmURL = 'https://test-realm.com/old-name/';
+      const newRealmURL = 'https://test-realm.com/new-name/';
+      const realmId = await register(oldRealmURL);
+
+      let { valueExpressions, nameExpressions } = asExpressions({
+        user_id: user.id,
+        realm_id: realmId,
+        source_realm_url: oldRealmURL,
+        hostname: hostname,
+        claimed_at: Math.floor(Date.now() / 1000),
+      });
+      await query(
+        dbAdapter,
+        insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
+      );
+
+      await query(dbAdapter, [
+        `UPDATE realm_registry SET url = `,
+        param(newRealmURL),
+        ` WHERE id = `,
+        param(realmId),
+      ]);
+
+      const response = await makeGetRequest(defaultToken, {
+        source_realm_url: newRealmURL,
+      });
+      assert.strictEqual(
+        response.status,
+        200,
+        'Should find the claim by the realm new URL',
+      );
+      assert.strictEqual(
+        response.body.data.attributes.hostname,
+        hostname,
+        'Should return the claimed hostname',
+      );
+      assert.strictEqual(
+        response.body.data.attributes.sourceRealmURL,
+        newRealmURL,
+        'Should return the realm URL from the registry',
+      );
+
+      const oldURLResponse = await makeGetRequest(defaultToken, {
+        source_realm_url: oldRealmURL,
+      });
+      assert.strictEqual(
+        oldURLResponse.status,
+        404,
+        'Should not find the claim by the realm old URL',
+      );
+    });
+
+    test('should find a claim by a realm URL without its trailing slash', async function (assert) {
+      const realmId = await register('https://slashless-realm.com/');
+
+      let { valueExpressions, nameExpressions } = asExpressions({
+        user_id: user.id,
+        realm_id: realmId,
+        source_realm_url: 'https://slashless-realm.com/',
+        hostname: 'slashless.boxel.site',
+        claimed_at: Math.floor(Date.now() / 1000),
+      });
+      await query(
+        dbAdapter,
+        insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
+      );
+
+      const response = await makeGetRequest(defaultToken, {
+        source_realm_url: 'https://slashless-realm.com',
+      });
+      assert.strictEqual(response.status, 200, 'Should find the claim');
+      assert.strictEqual(
+        response.body.data.attributes.hostname,
+        'slashless.boxel.site',
+        'Should return the claimed hostname',
+      );
+    });
+
+    test('should find a claim written with only its realm URL', async function (assert) {
+      // The previous code revision writes a claim with source_realm_url only,
+      // stored as the caller sent it. The database fills in realm_id.
+      const realmId = await register('https://url-only-realm.com/');
+
+      let { valueExpressions, nameExpressions } = asExpressions({
+        user_id: user.id,
+        source_realm_url: 'https://url-only-realm.com',
+        hostname: 'url-only.boxel.site',
+        claimed_at: Math.floor(Date.now() / 1000),
+      });
+      await query(
+        dbAdapter,
+        insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
+      );
+
+      const claims = await query(dbAdapter, [
+        `SELECT realm_id FROM claimed_domains_for_sites WHERE hostname = 'url-only.boxel.site'`,
+      ]);
+      assert.strictEqual(
+        claims[0].realm_id,
+        realmId,
+        'Should fill in the realm registry id',
+      );
+
+      const response = await makeGetRequest(defaultToken, {
+        source_realm_url: 'https://url-only-realm.com/',
+      });
+      assert.strictEqual(response.status, 200, 'Should find the claim');
+      assert.strictEqual(
+        response.body.data.attributes.hostname,
+        'url-only.boxel.site',
+        'Should return the claimed hostname',
       );
     });
   });

@@ -1,6 +1,6 @@
 {
   "repository": "cardstack/boxel-catalog",
-  "revision": "d0d28d607e28cd2cb585be364c26d2a6108f86d0",
+  "revision": "9b1a245d00ce17d26a83a8f878927eb72618cedb",
   "files": [
     {
       "path": "realm-policy/realm-policy.gts",
@@ -39,6 +39,7 @@
       "automation-admission-test",
       "automation-card-test",
       "automation-manual-runs-test",
+      "automation-routes-test",
       "automation-run-attempt-test",
       "automation-run-command-test",
       "automation-run-limits-test",
@@ -92,7 +93,6 @@
       "realm-policy-source-read-test",
       "realm-policy-validate-test",
       "realm-policy-write-lock-test",
-      "run-overlay-policy-test",
       "server-endpoints/delegated-session-federated-endpoints-test",
       "server-endpoints/policy-scoped-search-test"
     ]

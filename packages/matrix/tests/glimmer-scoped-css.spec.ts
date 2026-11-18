@@ -1,7 +1,6 @@
 import { test, expect } from './fixtures.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 import {
-  clearLocalStorage,
   createRealm,
   postCardSource,
   postNewCard,
@@ -15,7 +14,6 @@ test.describe('glimmer-scoped-css', () => {
 
   test(':global is ignored and does not affect styles', async ({ page }) => {
     const realmName = 'realm1';
-    await clearLocalStorage(page, serverIndexUrl);
     let { username } = await createSubscribedUserAndLogin(
       page,
       'glimmer-css-user',
@@ -72,7 +70,6 @@ test.describe('glimmer-scoped-css', () => {
     page,
   }) => {
     const realmName = 'realm2';
-    await clearLocalStorage(page, serverIndexUrl);
     let { username, password } = await createSubscribedUserAndLogin(
       page,
       'glimmer-css-relogin-user',

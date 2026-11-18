@@ -8,6 +8,7 @@ import { expect, test } from './fixtures.ts';
 
 import { buildServerToken } from '@cardstack/realm-test-harness';
 import { buildTestClient } from './helpers/test-client.ts';
+import { writeRealmFile } from './helpers/write-realm-file.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -74,7 +75,7 @@ test.describe('evaluate-module command', () => {
     });
 
     try {
-      await client.write(realmUrl, 'valid-test.gts', VALID_MODULE);
+      await writeRealmFile(client, realmUrl, 'valid-test.gts', VALID_MODULE);
       await client.waitForFile(realmUrl, 'valid-test.gts', {
         pollMs: 300,
         timeoutMs: 30_000,
@@ -123,7 +124,8 @@ test.describe('evaluate-module command', () => {
     });
 
     try {
-      await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'broken-import-test.gts',
         BROKEN_IMPORT_MODULE,
@@ -181,7 +183,12 @@ test.describe('evaluate-module command', () => {
     });
 
     try {
-      await client.write(realmUrl, 'broken-eval-test.gts', BROKEN_EVAL_MODULE);
+      await writeRealmFile(
+        client,
+        realmUrl,
+        'broken-eval-test.gts',
+        BROKEN_EVAL_MODULE,
+      );
       await client.waitForFile(realmUrl, 'broken-eval-test.gts', {
         pollMs: 300,
         timeoutMs: 30_000,
@@ -264,7 +271,12 @@ test.describe('evaluate-module command', () => {
     });
 
     try {
-      await client.write(realmUrl, 'broken-cmd-test.gts', BROKEN_IMPORT_MODULE);
+      await writeRealmFile(
+        client,
+        realmUrl,
+        'broken-cmd-test.gts',
+        BROKEN_IMPORT_MODULE,
+      );
       await client.waitForFile(realmUrl, 'broken-cmd-test.gts', {
         pollMs: 300,
         timeoutMs: 30_000,

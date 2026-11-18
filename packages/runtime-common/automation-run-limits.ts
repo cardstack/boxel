@@ -21,7 +21,9 @@ import {
   type AutomationCaps,
   type AutomationDeclaration,
   type AutomationOperationDeclaration,
+  type AutomationProblem,
 } from './automation-declaration.ts';
+import type { ReportRunChange } from './automation-run-events.ts';
 import { getAutomation, type AutomationCapsSnapshot } from './automations.ts';
 import {
   addAutomationRunCounts,
@@ -63,9 +65,11 @@ export interface LimitedRun {
   automationId: RealmResourceIdentifier;
 }
 
+// A card that indexed but doesn't read as a declaration carries the reader's
+// `problems` too; a card with nothing indexed to read carries none.
 export type RunDeclarationRead =
   | { ok: true; declaration: AutomationDeclaration }
-  | { ok: false; message: string };
+  | { ok: false; message: string; problems?: AutomationProblem[] };
 
 // The automation's declaration, read from its card's live index row. A card
 // that isn't indexed, failed to index, or doesn't read as an automation
@@ -116,6 +120,7 @@ export async function readRunDeclaration({
       message: `the automation card ${automationId} doesn't read as an automation: ${read.problems
         .map(({ path, message }) => (path ? `${path}: ${message}` : message))
         .join('; ')}`,
+      problems: read.problems,
     };
   }
   return { ok: true, declaration: read.declaration };
@@ -208,13 +213,14 @@ export function runCapReached(cap: string): OperationError {
 }
 
 // Counts one call of a run against its cap on `counter`. A call past the cap
-// ends the run and is refused with `runCapReached`; a run that is no longer
-// running is refused as one.
+// ends the run, which `reportRunChange` is told, and is refused with
+// `runCapReached`; a run that is no longer running is refused as one.
 export async function countRunCall(
   dbAdapter: DBAdapter,
   run: LimitedRun,
   counter: AutomationRunCallCounter,
   cap: number,
+  reportRunChange?: ReportRunChange,
 ): Promise<{ ok: true } | { ok: false; error: OperationError }> {
   let count = await countAutomationRunCall(
     dbAdapter,
@@ -227,7 +233,7 @@ export async function countRunCall(
     case 'counted':
       return { ok: true };
     case 'over-cap':
-      await endRunAtCap(dbAdapter, run, counter);
+      await endRunAtCap(dbAdapter, run, counter, reportRunChange);
       return { ok: false, error: runCapReached(counter) };
     case 'not-running':
     case 'missing':
@@ -235,10 +241,12 @@ export async function countRunCall(
   }
 }
 
+// Ends a run at its `cap`, and tells `reportRunChange` when it did.
 export async function endRunAtCap(
   dbAdapter: DBAdapter,
   run: LimitedRun,
   cap: string,
+  reportRunChange?: ReportRunChange,
 ): Promise<void> {
   let ended = await endAutomationRunAtCap(
     dbAdapter,
@@ -246,6 +254,9 @@ export async function endRunAtCap(
     run.attempt,
     cap,
   );
+  if (ended) {
+    await reportRunChange?.(run.runId);
+  }
   log.info(
     ended
       ? `run ${run.runId} attempt ${run.attempt} of ${run.automationId} hit its ${cap} cap and ended`
@@ -296,11 +307,14 @@ export function automationRunCallApiMeter({
   definitionLookup,
   virtualNetwork,
   run,
+  reportRunChange,
 }: {
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   run: LimitedRun;
+  // Told when a call ends the run at a cap.
+  reportRunChange?: ReportRunChange;
 }): CallApiRunMeter {
   let limits: Promise<RunLimitsRead> | undefined;
   let declared = async (): Promise<RunLimits> => {
@@ -346,7 +360,7 @@ export function automationRunCallApiMeter({
       // a run with none left is stopped before its call counts.
       let current = await getAutomationRun(dbAdapter, run.runId);
       if (current && current.callApiResponseBytes >= caps.responseBytes) {
-        await endRunAtCap(dbAdapter, run, 'responseBytes');
+        await endRunAtCap(dbAdapter, run, 'responseBytes', reportRunChange);
         throw new OperationFailure(runCapReached('responseBytes'));
       }
       let counted = await countRunCall(
@@ -354,6 +368,7 @@ export function automationRunCallApiMeter({
         run,
         'callApiCalls',
         caps.callApiCalls,
+        reportRunChange,
       );
       if (!counted.ok) {
         throw new OperationFailure(counted.error);
@@ -372,7 +387,7 @@ export function automationRunCallApiMeter({
         });
       }
       if (budgetReached) {
-        await endRunAtCap(dbAdapter, run, 'responseBytes');
+        await endRunAtCap(dbAdapter, run, 'responseBytes', reportRunChange);
         return runCapReached('responseBytes');
       }
       return undefined;

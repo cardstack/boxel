@@ -75,6 +75,7 @@ import {
   hostURLDomainFilter,
   resolveHostURLs,
 } from './lib/realm-host-urls.ts';
+import { translateAtHostURLs } from './lib/realm-host-urls-boundary.ts';
 import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
 
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
@@ -1039,6 +1040,9 @@ export class RealmServer {
           }),
         ),
       )
+      // Then the rest of the request is translated to the realm's URL, and
+      // its response back to the host URL it came in on (ADR 033 §1.5).
+      .use(translateAtHostURLs())
       .use(
         leaveCORSToOAuthProvider(
           cors({

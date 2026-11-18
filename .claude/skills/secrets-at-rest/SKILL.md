@@ -1,6 +1,6 @@
 ---
 name: secrets-at-rest
-description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census and the drop of the plain-text columns, the sealed proxy endpoint (system) keys in `proxy_endpoints` and incoming webhook signing secrets in `incoming_webhooks`, what a read does with a sealed value that won't open, why a webhook's signing secret is shown only once, and the post-deploy audit that checks, as the read-only AWS role, that a deployed environment seals with KMS, holds no plain-text secrets, lets only the task roles decrypt and withholds the secret tables from the read-only database role. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, when a proxy endpoint is refused or a webhook's deliveries can't be verified, or after a deploy that changes any of this, to audit the deployed environment.
+description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census and the drop of the plain-text columns, the sealed proxy endpoint (system) keys in `proxy_endpoints`, incoming webhook signing secrets in `incoming_webhooks` and platform secrets in `platform_secrets`, what a read does with a sealed value that won't open, why a webhook's signing secret is shown only once, and the post-deploy audit that checks, as the read-only AWS role, that a deployed environment seals with KMS, holds no plain-text secrets, lets only the task roles decrypt and withholds the secret tables from the read-only database role. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, when a proxy endpoint is refused or a webhook's deliveries can't be verified, or after a deploy that changes any of this, to audit the deployed environment.
 ---
 
 # Secrets at rest (operators)
@@ -71,9 +71,12 @@ value. The "Stored secret failed to open" alert fires on any of them, and the
   parent is laid out under its own label in the additional data, so a value
   sealed without one never opens as a copy, nor a copy without its parent.
 - `secretEncryptionContext(binding)` is the context a value is bound to:
-  `field`, `owner`, `id`, `parent_id` and `destination_sha256`. The destination appears only as its
+  `field`, `owner`, `id`, `parent_id`, `name` and `destination_sha256`. The destination appears only as its
   SHA-256, so the context is safe to log or to hand to a service that records
   it.
+- A secret looked up by name rather than by its row, such as a platform
+  secret, names it as `name`. A binding with a name is laid out under its own
+  label too, so a value sealed with a name opens only under that name.
 - Destinations are compared exactly as given. A caller passes the same
   normalized form when sealing and opening.
 
@@ -214,6 +217,7 @@ and warns when rows reference a data key it hasn't loaded:
 ```
 sealed census: proxy_endpoints.api_key rowsByKeyId=kms-3f9c0a1b2c4d5e6f=12
 sealed census: incoming_webhooks.signing_secret rowsByKeyId=kms-3f9c0a1b2c4d5e6f=40
+sealed census: platform_secrets.value rowsByKeyId=kms-3f9c0a1b2c4d5e6f=1
 ```
 
 ### The `boxel realm-server` commands
@@ -387,6 +391,37 @@ and `signing_secret_key_id`
   issues a secret bound to them.
 - **Data-key rotation.** The column is registered in `SEALED_COLUMNS`
   (binding columns `id` and `username`), so the re-seal pass and the sealed
+  census cover it.
+
+## Platform secrets
+
+`platform_secrets` holds secrets the platform keeps and only ever reads, such
+as the secret that verifies OpenRouter's signed batch webhook. Each is a named
+row, its value sealed into `value_ciphertext`, `value_nonce`, `value_tag` and
+`value_key_id` (`packages/realm-server/lib/platform-secrets.ts`), bound to:
+
+| Binding       | Value                                                           |
+| ------------- | --------------------------------------------------------------- |
+| `field`       | `platform_secrets.value`                                        |
+| `owner`       | `boxel-platform` (`PLATFORM_SECRET_OWNER`)                      |
+| `id`          | the row's `id`                                                  |
+| `name`        | the row's `name`, which server code reads the secret by         |
+| `destination` | none: the table has no destination, and nothing sends the value |
+
+`readonly_role` and its members have no `SELECT` on the table.
+
+- **Write-only.** Operators set and delete them with
+  `boxel realm-server secrets` (see the `system-keys` skill). Nothing returns
+  a value once set; `list` and `show` give the name, the data key and who
+  last set it and when.
+- **Reads.** Only server code calling `readPlatformSecret(dbAdapter, name)`,
+  where it uses the secret. Nothing on the outbound path reads the table:
+  `AllowedProxyDestinations`, `_request-forward` and the OpenRouter
+  passthrough load `proxy_endpoints` only. A secret that doesn't open is
+  logged on the `platform-secrets` channel and reported to Sentry, and the
+  read throws, so its caller refuses. `secrets set` gives it its value again.
+- **Data-key rotation.** The column is registered in `SEALED_COLUMNS`
+  (binding columns `id` and `name`), so the re-seal pass and the sealed
   census cover it.
 
 ## Post-deploy audit
@@ -656,6 +691,7 @@ PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
   -c "SELECT * FROM secure_sessions LIMIT 0" \
   -c "SELECT * FROM oauth_clients LIMIT 0" \
   -c "SELECT * FROM platform_oauth_clients LIMIT 0" \
+  -c "SELECT * FROM platform_secrets LIMIT 0" \
   -c "SELECT * FROM oauth_connections LIMIT 0" \
   -c "SELECT * FROM oauth_connect_requests LIMIT 0" \
   -c "WITH RECURSIVE reader (oid) AS (
@@ -670,7 +706,8 @@ PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
                       to_regclass('user_keys'), to_regclass('key_write_tickets'),
                       to_regclass('user_key_grants'), to_regclass('secure_sessions'),
                       to_regclass('oauth_clients'), to_regclass('platform_oauth_clients'),
-                      to_regclass('oauth_connections'), to_regclass('oauth_connect_requests'))
+                      to_regclass('oauth_connections'), to_regclass('oauth_connect_requests'),
+                      to_regclass('platform_secrets'))
         AND reader.oid <> t.relowner AND c.attnum > 0 AND NOT c.attisdropped
         AND has_column_privilege(reader.oid, t.oid, c.attnum, 'SELECT')" \
   -c "SELECT attrelid::regclass, attname FROM pg_attribute
@@ -699,8 +736,8 @@ exist` instead. Check that against the revision from step 0 before taking it
 
 The list of tables is the one that migration
 (`check-readonly-role-cant-read-withheld-tables`) checks, plus
-`user_key_grants`, `secure_sessions` and the four OAuth tables, whose own
-migrations check them. A table added to either one
+`user_key_grants`, `secure_sessions`, the four OAuth tables and
+`platform_secrets`, whose own migrations check them. A table added to either one
 goes here too.
 
 The role is also denied the wrapped data key itself. Expect
