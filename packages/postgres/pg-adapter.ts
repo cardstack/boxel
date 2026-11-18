@@ -363,6 +363,10 @@ export class PgAdapter implements DBAdapter {
     // How long a writer may wait for its write locks; see
     // DEFAULT_WRITE_LOCK_WAIT_MS.
     writeLockWaitMs?: number;
+    // A pool to check connections out of instead of one this adapter opens,
+    // for tests that stand in for Postgres. It gets the same wiring, and must
+    // allow the scheduler's ceiling of connections like the one it replaces.
+    testOnlyPool?: Pool;
   }) {
     this.#writeLockWaitMs =
       opts?.writeLockWaitMs ?? configuredWriteLockWaitMs();
@@ -380,17 +384,19 @@ export class PgAdapter implements DBAdapter {
       overflow: configuredPoolOverflow(),
     });
     log.debug(`connecting to DB ${this.url}`);
-    this.pool = new Pool({
-      user,
-      host,
-      database,
-      password,
-      port,
-      // Room for the overflow the scheduler grants past `max` once every
-      // connection is held by a hold waiting on nested work. It never grants
-      // more than this, so the pool's own queue still never forms.
-      max: this.#scheduler.ceiling,
-    });
+    this.pool =
+      opts?.testOnlyPool ??
+      new Pool({
+        user,
+        host,
+        database,
+        password,
+        port,
+        // Room for the overflow the scheduler grants past `max` once every
+        // connection is held by a hold waiting on nested work. It never
+        // grants more than this, so the pool's own queue still never forms.
+        max: this.#scheduler.ceiling,
+      });
     // An idle client whose connection dies — a failover, a restart, an
     // administrator terminating the backend — emits `error` on the pool, and
     // an `error` event nobody listens for is an uncaught exception. The pool

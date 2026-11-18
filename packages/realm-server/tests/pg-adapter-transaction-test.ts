@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { EventEmitter } from 'events';
+import type { Pool } from 'pg';
 import { PgAdapter } from '@cardstack/postgres';
 import { Deferred, param } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
@@ -129,17 +130,41 @@ module(basename(import.meta.filename), function () {
       }
     }
 
+    class StubPool extends EventEmitter {
+      failuresLeft = 0;
+      clients: StubClient[] = [];
+      async connect() {
+        await new Promise((r) => setTimeout(r, 1));
+        if (this.failuresLeft > 0) {
+          this.failuresLeft--;
+          throw Object.assign(
+            new Error(
+              'remaining connection slots are reserved for roles with the SUPERUSER attribute',
+            ),
+            { code: '53300' },
+          );
+        }
+        let client = new StubClient();
+        this.clients.push(client);
+        return client;
+      }
+      async end() {}
+    }
+
     function stubbedAdapter(env: Record<string, string>): {
       adapter: PgAdapter;
-      pool: { failuresLeft: number; clients: StubClient[] };
+      pool: StubPool;
     } {
       let previous = Object.fromEntries(
         Object.keys(env).map((k) => [k, process.env[k]]),
       );
       Object.assign(process.env, env);
+      let pool = new StubPool();
       let adapter: PgAdapter;
       try {
-        adapter = new PgAdapter();
+        adapter = new PgAdapter({
+          testOnlyPool: pool as unknown as Pool,
+        });
       } finally {
         for (let [k, v] of Object.entries(previous)) {
           if (v === undefined) {
@@ -149,27 +174,6 @@ module(basename(import.meta.filename), function () {
           }
         }
       }
-      let pool = {
-        failuresLeft: 0,
-        clients: [] as StubClient[],
-        async connect() {
-          await new Promise((r) => setTimeout(r, 1));
-          if (pool.failuresLeft > 0) {
-            pool.failuresLeft--;
-            throw Object.assign(
-              new Error(
-                'remaining connection slots are reserved for roles with the SUPERUSER attribute',
-              ),
-              { code: '53300' },
-            );
-          }
-          let client = new StubClient();
-          pool.clients.push(client);
-          return client;
-        },
-        async end() {},
-      };
-      (adapter as unknown as { pool: unknown }).pool = pool;
       return { adapter, pool };
     }
 
