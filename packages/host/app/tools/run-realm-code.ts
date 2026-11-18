@@ -3795,8 +3795,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'field path. Neither has the ' +
     ".data of a card's .json file. realm.cards.get throws when it cannot " +
     'read the card, with the reason, so a card it answers was found. ' +
-    'To filter, group, sum or sort JSON a script holds (an API response, a ' +
-    'JSON file, the cards a search found), use realm.transform, not a ' +
+    'To filter, group, sum or sort a list of more than a few dozen items a ' +
+    'script holds (an API response, a JSON file, the cards a search found), ' +
+    'use realm.transform, not a ' +
     'JavaScript loop: pass it the array itself, not the response around ' +
     'it, and return only the result, never the raw data. Before the first ' +
     `program, read the realm.transform section of ${SKILLS_REALM_PREFIX}source-code-editing/SKILL.md. ` +
