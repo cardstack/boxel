@@ -525,6 +525,13 @@ async function grantFilters(
 // where that predicate holds for this search's caller. Undefined where it
 // doesn't hold, where it throws, and where the grant carries no settled filter
 // for such a caller.
+//
+// Loading the evaluator and reading the realm's settings are the realm's own
+// work, and a failure of either propagates, as it does from the gate (see
+// `evaluate`). The realm's own search fails with a server error, as any
+// operation does when the gate can't judge it, and a federated search answers
+// without this realm's rows and is marked incomplete. Composing nothing instead would answer a
+// caller the predicate holds for with an empty search that reports no fault.
 async function settledFilter(
   core: OperationCore,
   matched: MatchedGrant,
