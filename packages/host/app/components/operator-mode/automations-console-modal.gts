@@ -1,7 +1,10 @@
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { AutomationsConsole } from '@cardstack/base/realm-automations';
+
+import { Button } from '@cardstack/pretui/components/button';
 import { Dialog } from '@cardstack/pretui/components/dialog';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -55,6 +58,15 @@ export default class AutomationsConsoleModal extends Component {
             @context={{this.context}}
           />
         </:default>
+        <:footer>
+          <Button
+            @variant='secondary'
+            {{on 'click' this.close}}
+            data-test-close-automations-console
+          >
+            Close
+          </Button>
+        </:footer>
       </Dialog>
     {{/if}}
   </template>

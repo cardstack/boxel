@@ -61,6 +61,8 @@ export function automationTitle(automation: Automation): string {
 interface StateLook {
   label: string;
   tone: Tone;
+  // A running automation's chip shows a spinner in place of the dot.
+  dot: boolean;
 }
 
 // The automation's state as a chip. A run in progress reads as Running
@@ -68,20 +70,20 @@ interface StateLook {
 export function automationStateLook(automation: Automation): StateLook {
   let { attributes } = automation;
   if (attributes.currentRun) {
-    return { label: 'Running', tone: 'info' };
+    return { label: 'Running', tone: 'info', dot: false };
   }
   if (!attributes.switchedOn) {
-    return { label: 'Off', tone: 'neutral' };
+    return { label: 'Off', tone: 'neutral', dot: true };
   }
   switch (attributes.state) {
     case 'paused':
-      return { label: 'Paused', tone: 'warning' };
+      return { label: 'Paused', tone: 'warning', dot: true };
     case 'waiting-for-credits':
-      return { label: 'Waiting for credits', tone: 'warning' };
+      return { label: 'Waiting for credits', tone: 'warning', dot: true };
     case 'done':
-      return { label: 'Done', tone: 'neutral' };
+      return { label: 'Done', tone: 'neutral', dot: true };
     default:
-      return { label: 'On', tone: 'success' };
+      return { label: 'On', tone: 'success', dot: true };
   }
 }
 
@@ -406,8 +408,7 @@ class AutomationGlance extends GlimmerComponent<AutomationGlanceSignature> {
     let { attributes } = this.args.automation;
     return !attributes.currentRun &&
       attributes.switchedOn &&
-      attributes.state !== 'paused' &&
-      attributes.state !== 'done'
+      attributes.state === 'active'
       ? (attributes.nextRun ?? undefined)
       : undefined;
   }
@@ -434,6 +435,7 @@ class AutomationGlance extends GlimmerComponent<AutomationGlanceSignature> {
       <:trailing>
         <Chip
           @tone={{this.look.tone}}
+          @dot={{this.look.dot}}
           data-test-realm-automation-state={{this.look.label}}
         >
           {{#if @automation.attributes.currentRun}}
@@ -565,91 +567,100 @@ class AutomationDetail extends GlimmerComponent<AutomationDetailSignature> {
   }
 
   <template>
-    <Item
-      @title={{automationTitle @automation}}
-      @wrap={{true}}
-      @alignStart={{true}}
+    <div
+      class='automation'
       data-test-automations-console-automation={{@automation.id}}
     >
-      <:description>
-        {{#if this.statusText}}
-          <span data-test-automations-console-status>{{this.statusText}}</span>
-        {{/if}}
-      </:description>
-      <:trailing>
-        <Chip
-          @tone={{this.look.tone}}
-          data-test-automations-console-state={{this.look.label}}
-        >
-          {{#if this.attributes.currentRun}}
-            <Spinner @size='xs' aria-hidden='true' />
+      <Item
+        @title={{automationTitle @automation}}
+        @wrap={{true}}
+        @alignStart={{true}}
+      >
+        <:description>
+          {{#if this.statusText}}
+            <span
+              data-test-automations-console-status
+            >{{this.statusText}}</span>
           {{/if}}
-          {{this.look.label}}
-        </Chip>
-      </:trailing>
-      <:default>
-        <Descriptions @items={{this.items}} @columns={{2}} @size='s'>
-          <:value as |item|>
-            {{#if (isKey item 'triggers')}}
-              {{#if this.attributes.triggers.length}}
-                <ul class='triggers' data-test-automations-console-triggers>
-                  {{#each this.attributes.triggers as |trigger|}}
-                    <li class='trigger'>
-                      <span class='trigger-label'>{{trigger.label}}</span>
-                      <span class='trigger-kind'>{{triggerKindText
-                          trigger
-                        }}</span>
-                      {{#if trigger.expression}}
-                        <Token @value={{trigger.expression}} />
-                      {{/if}}
-                      {{#if trigger.date}}
-                        <span>{{trigger.date}}
-                          {{trigger.time}}</span>
-                      {{/if}}
-                      {{#if trigger.timeZone}}
-                        <span class='trigger-zone'>{{trigger.timeZone}}</span>
-                      {{/if}}
-                      {{#if trigger.webhookPath}}
-                        <Token @value={{trigger.webhookPath}} />
-                      {{/if}}
-                    </li>
-                  {{/each}}
-                </ul>
-              {{else}}
-                No triggers
-              {{/if}}
-            {{else if (isKey item 'next-run')}}
-              {{#if this.nextRunText}}
-                {{this.nextRunText}}
-              {{else}}
-                <FormatDate
-                  @date={{this.nextRun}}
-                  @dateStyle='medium'
-                  @timeStyle='short'
-                  data-test-automations-console-next-run
-                />
-              {{/if}}
-            {{else if (isKey item 'last-run')}}
-              <span data-test-automations-console-last-result>
-                {{lastResultText @automation}}
-              </span>
-              {{#if this.attributes.lastFinishedAt}}
-                <FormatDate
-                  @date={{this.attributes.lastFinishedAt}}
-                  @dateStyle='medium'
-                  @timeStyle='short'
-                />
-              {{/if}}
-            {{else}}
-              <span data-test-automations-console-value={{item.key}}>
-                {{item.value}}
-              </span>
+        </:description>
+        <:trailing>
+          <Chip
+            @tone={{this.look.tone}}
+            @dot={{this.look.dot}}
+            data-test-automations-console-state={{this.look.label}}
+          >
+            {{#if this.attributes.currentRun}}
+              <Spinner @size='xs' aria-hidden='true' />
             {{/if}}
-          </:value>
-        </Descriptions>
-      </:default>
-    </Item>
+            {{this.look.label}}
+          </Chip>
+        </:trailing>
+      </Item>
+      <Descriptions @items={{this.items}} @columns={{2}} @size='s'>
+        <:value as |item|>
+          {{#if (isKey item 'triggers')}}
+            {{#if this.attributes.triggers.length}}
+              <ul class='triggers' data-test-automations-console-triggers>
+                {{#each this.attributes.triggers as |trigger|}}
+                  <li class='trigger'>
+                    <span class='trigger-label'>{{trigger.label}}</span>
+                    <span class='trigger-kind'>{{triggerKindText
+                        trigger
+                      }}</span>
+                    {{#if trigger.expression}}
+                      <Token @value={{trigger.expression}} />
+                    {{/if}}
+                    {{#if trigger.date}}
+                      <span>{{trigger.date}}
+                        {{trigger.time}}</span>
+                    {{/if}}
+                    {{#if trigger.timeZone}}
+                      <span class='trigger-zone'>{{trigger.timeZone}}</span>
+                    {{/if}}
+                    {{#if trigger.webhookPath}}
+                      <Token @value={{trigger.webhookPath}} />
+                    {{/if}}
+                  </li>
+                {{/each}}
+              </ul>
+            {{else}}
+              No triggers
+            {{/if}}
+          {{else if (isKey item 'next-run')}}
+            {{#if this.nextRunText}}
+              {{this.nextRunText}}
+            {{else}}
+              <FormatDate
+                @date={{this.nextRun}}
+                @dateStyle='medium'
+                @timeStyle='short'
+                data-test-automations-console-next-run
+              />
+            {{/if}}
+          {{else if (isKey item 'last-run')}}
+            <span data-test-automations-console-last-result>
+              {{lastResultText @automation}}
+            </span>
+            {{#if this.attributes.lastFinishedAt}}
+              <FormatDate
+                @date={{this.attributes.lastFinishedAt}}
+                @dateStyle='medium'
+                @timeStyle='short'
+              />
+            {{/if}}
+          {{else}}
+            <span data-test-automations-console-value={{item.key}}>
+              {{item.value}}
+            </span>
+          {{/if}}
+        </:value>
+      </Descriptions>
+    </div>
     <style scoped>
+      .automation {
+        display: grid;
+        gap: var(--boxel-sp-xs);
+      }
       .triggers {
         list-style: none;
         margin: 0;
