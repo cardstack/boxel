@@ -29,6 +29,7 @@ import {
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import { resolveOAuthAccessToken } from '../lib/oauth-provider/lookup.ts';
 import { sha256Hex } from '../lib/oauth-provider/objects.ts';
+import { REVOCATION_GRANT_LIMIT } from '../lib/oauth-provider/revocation.ts';
 import type { TokenLimit } from '../lib/oauth-provider/token-limit.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
@@ -595,6 +596,26 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a body too large to read counts as a failed attempt', async function (assert) {
+      let connection = await connect();
+      let body = `token=${encodeURIComponent(
+        connection.tokens.refresh_token!,
+      )}&client_id=${encodeURIComponent(connection.clientId)}&pad=${'x'.repeat(
+        9 * 1024,
+      )}`;
+      for (let i = 0; i < 3; i++) {
+        let response = await revokeWithBody(body);
+        assert.strictEqual(response.status, 400, `too large ${i + 1}`);
+        assert.strictEqual(response.body.error, 'invalid_request');
+      }
+      let limited = await revokeWithBody(body);
+      assert.strictEqual(limited.status, 429, 'the address is limited');
+      assert.false(
+        (await grant(connection.grantId)).ended,
+        'the live token in it was never revoked',
+      );
+    });
+
     test("a client's own revocation goes through from a limited address", async function (assert) {
       let connection = await connect();
       for (let i = 0; i < 3; i++) {
@@ -618,10 +639,10 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module('with a tight grant limit', function (hooks) {
+  module('with a raised grant limit', function (hooks) {
     let state = setupProvider(hooks, {
       tokenLimit: {
-        perGrant: { requests: 3, windowSeconds: 3600 },
+        perGrant: { requests: 1000, windowSeconds: 3600 },
         failures: {
           perAddress: { requests: 1000, windowSeconds: 600 },
           perNetwork: { requests: 1000, windowSeconds: 600 },
@@ -632,10 +653,10 @@ module(basename(import.meta.filename), function () {
     });
     let { server, connect, grant, refreshes } = helpers(state);
 
-    test("a live token sent in requests the library refuses counts against its grant's revocations, apart from its refreshes", async function (assert) {
+    test("a live token sent in requests the library refuses counts against its grant's own revocation limit, which the grant limit doesn't raise", async function (assert) {
       let connection = await connect();
       let other = await connect();
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < REVOCATION_GRANT_LIMIT.requests; i++) {
         let refused = await revokeOAuthToken(
           server(),
           {

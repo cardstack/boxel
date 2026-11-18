@@ -213,25 +213,17 @@ export function tokenHandler({
           'token',
         );
       }
-    } else {
-      let address = ctxt.req.headers[CLIENT_IP_HEADER];
-      let admitted = await takeFromCallerLimit(
+    } else if (
+      !(await chargeFailure({
+        ctxt,
+        answer,
         rateLimitStore,
-        'oauth-token-failure',
-        typeof address === 'string' ? address : undefined,
-        limit.failures,
-      );
-      alert.note(admitted);
-      if (!admitted.admitted) {
-        if (admitted.reason === 'unknown-address') {
-          log.info('token request refused: unknown address');
-          return answer(403, {
-            error: 'access_denied',
-            error_description: 'token requests are refused from this address',
-          });
-        }
-        return refuse(answer, ctxt, admitted, 'failures', 'token');
-      }
+        limit,
+        alert,
+        endpoint: 'token',
+      }))
+    ) {
+      return;
     }
     if (body !== undefined) {
       // The library reads `req.body` when the request stream has been read,
@@ -245,7 +237,8 @@ export function tokenHandler({
 // The answers Boxel writes itself on the token and revocation routes go out
 // before the library's CORS runs, so they carry the same CORS the library would give:
 // a page on an origin the client may call from can read them, `Retry-After`
-// included.
+// included. The one answer without it is to a body too large to read, which
+// names no client to check the origin against; no client sends one.
 export async function allowClientOrigin(
   ctxt: Koa.Context,
   provider: Provider,
@@ -331,12 +324,58 @@ function pkceCanPass(
   return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
+// Writes an error answer of Boxel's own, with the CORS its request allows.
+export type Answer = (
+  status: number,
+  error: { error: string; error_description: string },
+) => Promise<void>;
+
+// Counts a request that can never succeed against the failure limits, per
+// address, per network and overall, shared by the token and revocation
+// endpoints. Answers whether it was admitted; one that wasn't has been
+// answered already, with 403 when its address can't be worked out, since it
+// can't be counted.
+export async function chargeFailure({
+  ctxt,
+  answer,
+  rateLimitStore,
+  limit,
+  alert,
+  endpoint,
+}: {
+  ctxt: Koa.Context;
+  answer: Answer;
+  rateLimitStore: RateLimitStore;
+  limit: TokenLimit;
+  alert: CallerLimitAlert;
+  endpoint: 'token' | 'revocation';
+}): Promise<boolean> {
+  let address = ctxt.req.headers[CLIENT_IP_HEADER];
+  let admitted = await takeFromCallerLimit(
+    rateLimitStore,
+    'oauth-token-failure',
+    typeof address === 'string' ? address : undefined,
+    limit.failures,
+  );
+  alert.note(admitted);
+  if (admitted.admitted) {
+    return true;
+  }
+  if (admitted.reason === 'unknown-address') {
+    log.info(`${endpoint} request refused: unknown address`);
+    await answer(403, {
+      error: 'access_denied',
+      error_description: `${endpoint} requests are refused from this address`,
+    });
+  } else {
+    await refuse(answer, ctxt, admitted, 'failures', endpoint);
+  }
+  return false;
+}
+
 // Refuses a request a limit didn't admit, naming the endpoint it was sent to.
 export async function refuse(
-  answer: (
-    status: number,
-    error: { error: string; error_description: string },
-  ) => Promise<void>,
+  answer: Answer,
   ctxt: Koa.Context,
   outcome:
     | { reason: 'unavailable' }

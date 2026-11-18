@@ -10,22 +10,30 @@
 // grant (§1.9), which deletes the grant's tokens. Such a request isn't
 // counted as a failure, so a client can always end its own connection,
 // whatever its address has used up. It counts against a bucket of the
-// token's grant instead, kept apart from the grant's refreshes so that a
-// grant whose refreshes are used up can still be revoked. That bucket bounds
-// a request that names a live token of its own client and still fails in the
+// token's grant instead, `REVOCATION_GRANT_LIMIT`. That bucket bounds a
+// request that names a live token of its own client and still fails in the
 // library (a stray `Authorization` header, or an origin the client may not be
 // called from), which revokes nothing and could otherwise be sent without
-// limit.
+// limit. It is fixed, apart from the grant's refreshes and from the
+// `grant` part of `BOXEL_OAUTH_TOKEN_RATE_LIMIT`: a grant whose refreshes
+// are used up can still be revoked, and raising a busy client's refreshes
+// doesn't raise how many refused revocations one token can drive.
+//
+// Telling the two apart takes a lookup of the token before any limit is
+// checked, so a caller whose address is over its limit still costs that
+// lookup, one read by an indexed hash, as the token endpoint's lookup of a
+// code or refresh token does. Checking the failure buckets first would cost a
+// read of the rate-limit store all the same.
 //
 // Any other request can never revoke anything, so it counts as a failure, in
 // the token endpoint's failure buckets (`token-limit.ts`): per address, per
 // network and overall. That covers a token the provider doesn't hold (never
-// issued, expired, or already revoked), another client's token, and a
-// request that names no token or no client. One whose address can't be worked
-// out is refused, since it can't be counted. The library answers an admitted
-// one: 200 for a known client and an opaque token, revoking nothing, as RFC
-// 7009 requires, and an error for a missing or unknown client or a malformed
-// request.
+// issued, expired, or already revoked), another client's token, a request
+// that names no token or no client, and a body too large to read. One whose
+// address can't be worked out is refused, since it can't be counted. The
+// library answers an admitted one: 200 for a known client and an opaque
+// token, revoking nothing, as RFC 7009 requires, and an error for a missing
+// or unknown client or a malformed request.
 //
 // A client is named by the `client_id` in the body, the only way a public
 // client authenticates here. A client identified by a metadata document is
@@ -37,29 +45,31 @@ import { parse as parseQuery } from 'node:querystring';
 import type Koa from 'koa';
 import type Provider from 'oidc-provider';
 import {
-  CLIENT_IP_HEADER,
   counterKey,
   isRateLimitUnavailable,
-  logger,
+  type AnonymousRateLimit,
   type DBAdapter,
   type RateLimitStore,
 } from '@cardstack/runtime-common';
-import {
-  takeFromCallerLimit,
-  tokenBucket,
-  type CallerLimitAlert,
-} from './caller-limit.ts';
+import { tokenBucket, type CallerLimitAlert } from './caller-limit.ts';
 import { sha256Hex } from './objects.ts';
 import {
   allowClientOrigin,
+  chargeFailure,
   MAX_BODY_BYTES,
   readBody,
   refuse,
   respond,
+  type Answer,
   type TokenLimit,
 } from './token-limit.ts';
 
-const log = logger('boxel:oauth-provider');
+// Refused revocations one live token can drive against its grant. A client
+// needs one revocation to end a grant, and a few more to cover retries.
+export const REVOCATION_GRANT_LIMIT: AnonymousRateLimit = Object.freeze({
+  requests: 10,
+  windowSeconds: 3600,
+});
 
 // The handler for `POST` on the revocation endpoint. `next` hands the
 // request to the library, which reads the body Boxel left on `req.body`.
@@ -76,7 +86,16 @@ export function revocationHandler({
   limit: TokenLimit;
   alert: CallerLimitAlert;
 }): Koa.Middleware {
-  let perGrant = tokenBucket(limit.perGrant);
+  let perGrant = tokenBucket(REVOCATION_GRANT_LIMIT);
+  let charge = (ctxt: Koa.Context, answer: Answer) =>
+    chargeFailure({
+      ctxt,
+      answer,
+      rateLimitStore,
+      limit,
+      alert,
+      endpoint: 'revocation',
+    });
 
   return async function handleRevocation(ctxt, next) {
     let body: string | undefined;
@@ -84,6 +103,12 @@ export function revocationHandler({
       try {
         body = await readBody(ctxt.req);
       } catch {
+        // It names no client, so its answers carry no CORS.
+        let answer: Answer = async (status, error) =>
+          respond(ctxt, status, error);
+        if (!(await charge(ctxt, answer))) {
+          return;
+        }
         return respond(ctxt, 400, {
           error: 'invalid_request',
           error_description: `a revocation request must be at most ${MAX_BODY_BYTES} bytes`,
@@ -92,10 +117,7 @@ export function revocationHandler({
     }
     let params = parseQuery(body ?? '');
     let clientId = single(params.client_id);
-    let answer = async (
-      status: number,
-      error: { error: string; error_description: string },
-    ) => {
+    let answer: Answer = async (status, error) => {
       await allowClientOrigin(ctxt, provider, clientId ?? null);
       respond(ctxt, status, error);
     };
@@ -121,26 +143,8 @@ export function revocationHandler({
           'revocation',
         );
       }
-    } else {
-      let address = ctxt.req.headers[CLIENT_IP_HEADER];
-      let admitted = await takeFromCallerLimit(
-        rateLimitStore,
-        'oauth-token-failure',
-        typeof address === 'string' ? address : undefined,
-        limit.failures,
-      );
-      alert.note(admitted);
-      if (!admitted.admitted) {
-        if (admitted.reason === 'unknown-address') {
-          log.info('revocation request refused: unknown address');
-          return answer(403, {
-            error: 'access_denied',
-            error_description:
-              'revocation requests are refused from this address',
-          });
-        }
-        return refuse(answer, ctxt, admitted, 'failures', 'revocation');
-      }
+    } else if (!(await charge(ctxt, answer))) {
+      return;
     }
     if (body !== undefined) {
       // The library reads `req.body` when the request stream has been read,
