@@ -5,7 +5,10 @@ export const DEBUG_COMMAND_PREFIX = 'boxel-debug';
 // `<!-- /feature:<name> -->`, left out of the prompt unless the room enabled
 // it. A name added to a skill file must be added here too, or no room can
 // enable it.
-export const SKILL_FEATURES = {} as const satisfies Record<string, string>;
+export const SKILL_FEATURES = {
+  'source-code-editing':
+    'Points the assistant at realm.transform for reshaping JSON a script holds (an API response, a JSON file, search results), instead of a JavaScript loop.',
+} as const satisfies Record<string, string>;
 
 // The realms a feature's skill sections send the assistant to search, by
 // realm prefix. In a room that has not enabled the feature, the host leaves

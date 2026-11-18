@@ -11682,8 +11682,9 @@ module('absolutizeSkillLinks', () => {
 });
 
 module('skill feature sections', (hooks) => {
-  // No feature is registered, so the tests register a stand-in one, and put
-  // back what the registries held for it. They are read-only by type.
+  // The tests register a stand-in feature of their own, so they hold whatever
+  // features are registered, and put back what the registries held for it.
+  // They are read-only by type.
   const FEATURE = 'stand-in-feature';
   let features = SKILL_FEATURES as Record<string, string>;
   let featureRealms = SKILL_FEATURE_REALMS as Record<string, string[]>;
