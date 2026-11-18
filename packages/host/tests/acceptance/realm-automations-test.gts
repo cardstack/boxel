@@ -78,7 +78,11 @@ const PAUSED = summary(WEEKLY, {
   monthlyCredits: 80,
 });
 
-type Answer = { status: number; data?: Record<string, unknown>[] };
+type Answer = {
+  status: number;
+  data?: Record<string, unknown>[];
+  directWriter?: boolean;
+};
 
 module('Acceptance | realm config | Automations', function (hooks) {
   let answer: Answer;
@@ -103,7 +107,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
     // The realm's automation list answers from the server's automation rows,
     // which an in-browser test realm doesn't have. Each test says what the
     // route answers.
-    answer = { status: 403 };
+    answer = { status: 200, directWriter: false };
     asked = 0;
     getService('network').virtualNetwork.mount(
       async (request: Request) => {
@@ -118,10 +122,17 @@ module('Acceptance | realm config | Automations', function (hooks) {
             headers: { 'content-type': 'application/json' },
           });
         }
-        return new Response(JSON.stringify({ data: answer.data ?? [] }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
+        let directWriter = answer.directWriter ?? true;
+        return new Response(
+          JSON.stringify({
+            data: directWriter ? (answer.data ?? []) : [],
+            meta: { directWriter },
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
       },
       { prepend: true },
     );
@@ -255,7 +266,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
     });
 
     test("doesn't see the section", async function (assert) {
-      answer = { status: 403 };
+      answer = { status: 200, directWriter: false };
       await visitConfig();
       await waitUntil(() => asked > 0);
       await settled();

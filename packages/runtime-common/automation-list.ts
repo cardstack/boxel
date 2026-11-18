@@ -109,17 +109,26 @@ export interface AutomationSummaryResource {
 
 export interface AutomationListDocument {
   data: AutomationSummaryResource[];
+  meta: {
+    // Whether the viewer is a direct writer of the realm. Only a direct
+    // writer is listed any automation.
+    directWriter: boolean;
+  };
 }
 
-export type AutomationListAnswer =
-  | { status: 200; document: AutomationListDocument }
-  | { status: 403; message: string };
+export interface AutomationListAnswer {
+  status: 200;
+  document: AutomationListDocument;
+}
 
 // Answers `GET <realm>/_automations` for `viewer`. Only a direct writer of
-// the realm gets an answer, since direct writers are who switch automations
-// on, pause them and pay for them. Any other caller, a reader or one a `*`,
-// `users` or policy grant admits, is refused, and the realm config shows no
-// Automations entry.
+// the realm is listed its automations, since direct writers are who switch
+// automations on, pause them and pay for them. Any other caller the realm ACL
+// lets read, a reader or one a `*`, `users` or policy grant admits, is told
+// it isn't a direct writer and listed nothing, and the realm config shows no
+// Automations section. The answer isn't an HTTP refusal: the host takes a 401
+// or 403 as an auth failure of whatever it is rendering at the time, and the
+// realm config asks while it renders.
 export async function answerAutomationList({
   dbAdapter,
   realmURL,
@@ -149,8 +158,8 @@ export async function answerAutomationList({
     !(await isDirectWriter(dbAdapter, realmURL, viewer, matrixServerName))
   ) {
     return {
-      status: 403,
-      message: `only a direct writer of ${realmURL.href} can list its automations`,
+      status: 200,
+      document: { data: [], meta: { directWriter: false } },
     };
   }
   let realm = ri(virtualNetwork.unresolveURL(realmURL.href));
@@ -243,7 +252,7 @@ export async function answerAutomationList({
         sensitivity: 'base',
       }) || a.id.localeCompare(b.id),
   );
-  return { status: 200, document: { data } };
+  return { status: 200, document: { data, meta: { directWriter: true } } };
 }
 
 function cardTitle(attributes: Record<string, unknown>): string | null {

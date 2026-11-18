@@ -3979,8 +3979,9 @@ export class Realm {
       )
       // Every automation in the realm, with its state, next run, payer, cap,
       // spend this month and last result, for the realm config's Automations
-      // entry and the automations console. Answered on the realm ACL, and
-      // then only to a direct writer (see `automation-list.ts`).
+      // section, the automations console. Answered on the realm ACL; a caller
+      // who isn't a direct writer is listed nothing (see
+      // `automation-list.ts`).
       .get(
         '/_automations',
         SupportedMimeType.JSON,
@@ -20962,18 +20963,6 @@ export class Realm {
       listInstances: (typeKey) =>
         this.#realmIndexQueryEngine.instanceSourcesOfType(typeKey),
     });
-    if (answer.status !== 200) {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [{ status: String(answer.status), detail: answer.message }],
-        }),
-        init: {
-          status: answer.status,
-          headers: { 'content-type': SupportedMimeType.JSON },
-        },
-        requestContext,
-      });
-    }
     return createResponse({
       body: JSON.stringify(answer.document),
       init: {

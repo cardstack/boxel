@@ -956,7 +956,10 @@ module(basename(import.meta.filename), function (hooks) {
         let response = await list(ADMIN, ['read', 'write']);
         assert.strictEqual(response.status, 200, 'HTTP 200');
         assert.strictEqual(response.headers['cache-control'], 'no-store');
-        assert.deepEqual(response.body, { data: [] });
+        assert.deepEqual(response.body, {
+          data: [],
+          meta: { directWriter: true },
+        });
       });
 
       test('every automation card is listed by name, switched on or not, with its triggers and monthly cap', async function (assert) {
@@ -1197,14 +1200,19 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
-      test('a reader and an anonymous caller are refused', async function (assert) {
+      test('a reader is listed nothing, and an anonymous caller is refused', async function (assert) {
         await writeAutomation();
         await switchOn();
         let reader = await list(READER, ['read']);
-        assert.strictEqual(reader.status, 403, 'a reader gets HTTP 403');
-        assert.notOk(
-          JSON.stringify(reader.body).includes(PAYER),
-          "a reader's refusal doesn't name the payer",
+        assert.strictEqual(
+          reader.status,
+          200,
+          "a reader isn't refused, since the host takes a refusal as an auth failure of what it renders",
+        );
+        assert.deepEqual(
+          reader.body,
+          { data: [], meta: { directWriter: false } },
+          'a reader is told it is not a direct writer, and listed nothing',
         );
         let anonymous = await request
           .get('/_automations')
@@ -1259,7 +1267,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(response.status, 403, 'HTTP 403');
     });
 
-    test('a writer the users grant admits is refused the automation list', async function (assert) {
+    test('a writer the users grant admits is listed no automations', async function (assert) {
       await ensureTestUser(usersDB, STRANGER);
       let response = await usersRequest
         .get('/_automations')
@@ -1268,7 +1276,12 @@ module(basename(import.meta.filename), function (hooks) {
           'Authorization',
           `Bearer ${createJWT(usersRealm, STRANGER, ['read', 'write'])}`,
         );
-      assert.strictEqual(response.status, 403, 'HTTP 403');
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      assert.deepEqual(
+        response.body,
+        { data: [], meta: { directWriter: false } },
+        'the grant names no one, so the writer is not a direct writer',
+      );
     });
   });
 

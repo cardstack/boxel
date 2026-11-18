@@ -228,8 +228,10 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
         });
         if (result.ok) {
           let document = result.body as AutomationListDocument;
-          this.automations = [...(document?.data ?? [])];
-          this.visible = true;
+          // The route lists nothing to a viewer who isn't a direct writer,
+          // and says so, so that viewer sees no section.
+          this.visible = document?.meta?.directWriter === true;
+          this.automations = this.visible ? [...(document?.data ?? [])] : [];
           this.loadError = undefined;
         } else if (result.status === 401 || result.status === 403) {
           this.visible = false;
