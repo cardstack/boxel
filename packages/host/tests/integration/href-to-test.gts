@@ -1,0 +1,250 @@
+import { render, waitUntil } from '@ember/test-helpers';
+
+import { CardDef, contains, field, linksTo } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import { getService } from '@universal-ember/test-support';
+import { module, test } from 'qunit';
+
+import {
+  validateHostRoutes,
+  type HostRoute,
+  type HostRouteTypeInfo,
+  type RawHostRoutingRule,
+} from '@cardstack/runtime-common';
+
+import ENV from '@cardstack/host/config/environment';
+
+import {
+  setupCardLogs,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  testRealmURL,
+  testRRI,
+} from '../helpers';
+import { setupMockMatrix } from '../helpers/mock-matrix';
+import { setupRenderingTest } from '../helpers/setup';
+
+import type * as HrefToModule from '@cardstack/base/href-to';
+
+class Author extends CardDef {
+  @field name = contains(StringField);
+}
+class Post extends CardDef {
+  @field slug = contains(StringField);
+  @field author = linksTo(Author);
+}
+
+const AUTHOR_KEY = `${testRealmURL}test-cards/Author`;
+const POST_KEY = `${testRealmURL}test-cards/Post`;
+const contained = { type: 'contains' as const, isPrimitive: true };
+const TYPES: Record<string, HostRouteTypeInfo> = {
+  Author: {
+    key: AUTHOR_KEY,
+    types: [AUTHOR_KEY],
+    isCardType: true,
+    fields: { name: contained },
+  },
+  Post: {
+    key: POST_KEY,
+    types: [POST_KEY],
+    isCardType: true,
+    fields: {
+      slug: contained,
+      author: { type: 'linksTo', isPrimitive: false, target: AUTHOR_KEY },
+    },
+  },
+};
+
+const RULES: RawHostRoutingRule[] = [
+  { path: '/people/:id', name: 'people', card: './Author/:id' },
+  {
+    path: '/posts/:slug',
+    type: { module: testRRI('test-cards'), name: 'Post' },
+    match: { slug: ':slug' },
+  },
+  {
+    path: '/by-name/:name',
+    type: { module: testRRI('test-cards'), name: 'Author' },
+    match: { name: ':name' },
+  },
+];
+
+function validatedRoutes(): readonly HostRoute[] {
+  let { routes, warnings } = validateHostRoutes(RULES, {
+    realmURL: new URL(testRealmURL),
+    lookupType: (type) => TYPES[type.name],
+  });
+  let dropped = warnings.filter((w) => w.dropped);
+  if (dropped.length > 0) {
+    throw new Error(`test routes were dropped: ${JSON.stringify(dropped)}`);
+  }
+  return routes;
+}
+
+// The page config the realm server writes for a page served on a host URL.
+type PageConfig = { hostDynamicRoutes?: unknown };
+
+module('Integration | hrefTo', function (hooks) {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+
+  let hrefTo: (typeof HrefToModule)['hrefTo'];
+
+  setupCardLogs(
+    hooks,
+    async () =>
+      await getService('loader-service').loader.import(
+        '@cardstack/base/card-api',
+      ),
+  );
+
+  hooks.beforeEach(async function () {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Author, Post },
+        'Author/jane.json': {
+          data: {
+            attributes: { name: 'jane' },
+            meta: {
+              adoptsFrom: { module: testRRI('test-cards'), name: 'Author' },
+            },
+          },
+        },
+        'Post/hello.json': {
+          data: {
+            attributes: { slug: 'hello-world' },
+            relationships: {
+              author: { links: { self: '../Author/jane' } },
+            },
+            meta: {
+              adoptsFrom: { module: testRRI('test-cards'), name: 'Post' },
+            },
+          },
+        },
+      },
+    });
+    // The app starts this service at boot; a rendering test has no boot.
+    getService('host-route-links');
+    ({ hrefTo } = await getService('loader-service').loader.import<
+      typeof HrefToModule
+    >('@cardstack/base/href-to'));
+  });
+
+  hooks.afterEach(function () {
+    delete (ENV as PageConfig).hostDynamicRoutes;
+  });
+
+  function servePageWithRoutes() {
+    (ENV as PageConfig).hostDynamicRoutes = {
+      realmURL: testRealmURL,
+      routes: validatedRoutes(),
+    };
+  }
+
+  function href(selector: string): string | null | undefined {
+    return document.querySelector(selector)?.getAttribute('href');
+  }
+
+  test('a link gets the address the realm routes serve its target at', async function (assert) {
+    servePageWithRoutes();
+    let store = getService('store');
+    let post = (await store.get(`${testRealmURL}Post/hello`)) as Post;
+    let author = (await store.get(`${testRealmURL}Author/jane`)) as Author;
+    let AuthorType = author.constructor as typeof CardDef;
+
+    await render(
+      <template>
+        <a data-test-post href={{hrefTo post}}>post</a>
+        <a data-test-author href={{hrefTo author}}>author</a>
+        <a data-test-author-id href={{hrefTo author.id}}>author id</a>
+        <a data-test-type href={{hrefTo AuthorType name='jane'}}>type</a>
+        <a data-test-route href={{hrefTo author route='people'}}>route</a>
+        <a data-test-no-type href={{hrefTo AuthorType slug='x'}}>no type</a>
+        <a data-test-no-route href={{hrefTo author route='team'}}>no route</a>
+        <a data-test-empty href={{hrefTo undefined}}>empty</a>
+      </template>,
+    );
+
+    assert.strictEqual(
+      href('[data-test-post]'),
+      `${testRealmURL}posts/hello-world`,
+      'a card that a field match serves',
+    );
+    assert.strictEqual(
+      href('[data-test-author]'),
+      `${testRealmURL}people/jane`,
+      'a card that a card id template serves',
+    );
+    assert.strictEqual(
+      href('[data-test-author-id]'),
+      `${testRealmURL}people/jane`,
+      'a card id',
+    );
+    assert.strictEqual(
+      href('[data-test-type]'),
+      `${testRealmURL}by-name/jane`,
+      'a card type with field values',
+    );
+    assert.strictEqual(
+      href('[data-test-route]'),
+      `${testRealmURL}people/jane`,
+      'a route name',
+    );
+    assert.strictEqual(
+      href('[data-test-no-type]'),
+      null,
+      'no route on the type with these fields: no href',
+    );
+    assert.strictEqual(
+      href('[data-test-no-route]'),
+      null,
+      'no route with the name: no href',
+    );
+    assert.strictEqual(href('[data-test-empty]'), null, 'an empty link');
+  });
+
+  test('a link given the id of a card that is not loaded loads it through the store', async function (assert) {
+    servePageWithRoutes();
+    let postId = `${testRealmURL}Post/hello`;
+
+    await render(
+      <template>
+        <a data-test-post-id href={{hrefTo postId}}>post</a>
+      </template>,
+    );
+    await waitUntil(
+      () => href('[data-test-post-id]') === `${testRealmURL}posts/hello-world`,
+    );
+    assert.strictEqual(
+      href('[data-test-post-id]'),
+      `${testRealmURL}posts/hello-world`,
+      'the link has the address once the card is loaded',
+    );
+  });
+
+  test('without routes a link keeps the card URL', async function (assert) {
+    let store = getService('store');
+    let author = (await store.get(`${testRealmURL}Author/jane`)) as Author;
+
+    await render(
+      <template>
+        <a data-test-author href={{hrefTo author}}>author</a>
+        <a data-test-route href={{hrefTo author route='people'}}>route</a>
+      </template>,
+    );
+
+    assert.strictEqual(
+      href('[data-test-author]'),
+      `${testRealmURL}Author/jane`,
+      'the card URL',
+    );
+    assert.strictEqual(href('[data-test-route]'), null, 'no href');
+  });
+});
