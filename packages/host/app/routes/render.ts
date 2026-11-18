@@ -1866,6 +1866,11 @@ export default class RenderRoute extends Route<Model> {
     // card at an earlier nonce); a separate session begun since (the file
     // extract render.meta runs) has replaced the visit's nodes. Either way the
     // nodes are not this visit's, and the error keeps its own card's deps.
+    // The host acceptance tests reach only the first check: there, a
+    // pre-model rejection enters Ember's error substate, which exits this
+    // route (clearing #runtimeDepsSession in deactivate) before the error is
+    // written. The live-key, card and nonce checks have no test; they cover
+    // an error written while the earlier visit's session is still recorded.
     let session = this.#runtimeDepsSession;
     let attemptedCardId = this.#lastAttemptedCardId
       ? this.#normalizeCardId(this.#lastAttemptedCardId)

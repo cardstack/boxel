@@ -171,7 +171,11 @@ module('Acceptance | prerender | pre-model error', function (hooks) {
   // tracker still holds an earlier visit's session. The error row is the
   // failing visit's: its deps name the failing card and nothing an earlier
   // render loaded. Renders the first card at nonce 0, then fails `failingURL`
-  // at nonce 1 before its model hook, and returns the error payload.
+  // at nonce 1 before its model hook, and returns the error payload. The
+  // rejection enters Ember's error substate, which exits the render route
+  // before the error is written, so these tests cover the tracker's nodes
+  // being left out once the route's session record is gone — not the card
+  // and nonce checks in the route's deps gate.
   async function renderThenFailBeforeModel(
     assert: Assert,
     owner: any,
