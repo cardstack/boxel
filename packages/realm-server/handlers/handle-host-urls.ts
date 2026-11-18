@@ -241,10 +241,10 @@ export function handleMountHostURL(
       }
 
       let token = ctxt.state.token as RealmServerTokenClaim;
-      let outcome = await dbAdapter.withWriteLock(
-        hostURLsLockKey(realm.id),
-        async (txQuerier): Promise<Outcome<HostURLRow>> => {
-          let q = txQuerier ?? dbAdapterQuerier(dbAdapter);
+      let outcome = await changeHostURLs(
+        dbAdapter,
+        realm.id,
+        async (q): Promise<Outcome<HostURLRow>> => {
           if (accepted.kind === 'site-name') {
             let bound = await bindSiteName(
               q,
@@ -336,10 +336,10 @@ export function handleSetCanonicalHostURL(
         return;
       }
       let { realm, hostURL } = target;
-      let outcome = await dbAdapter.withWriteLock(
-        hostURLsLockKey(realm.id),
-        async (txQuerier): Promise<Outcome<HostURLRow[]>> => {
-          let q = txQuerier ?? dbAdapterQuerier(dbAdapter);
+      let outcome = await changeHostURLs(
+        dbAdapter,
+        realm.id,
+        async (q): Promise<Outcome<HostURLRow[]>> => {
           await q([
             `UPDATE realm_host_urls SET is_canonical = false WHERE is_canonical AND realm_id =`,
             param(realm.id),
@@ -390,10 +390,10 @@ export function handleUnmountHostURL(
         return;
       }
       let { realm, hostURL } = target;
-      let outcome = await dbAdapter.withWriteLock(
-        hostURLsLockKey(realm.id),
-        async (txQuerier): Promise<Outcome<HostURLRow>> => {
-          let q = txQuerier ?? dbAdapterQuerier(dbAdapter);
+      let outcome = await changeHostURLs(
+        dbAdapter,
+        realm.id,
+        async (q): Promise<Outcome<HostURLRow>> => {
           let rows = await hostURLsOf(q, realm.id);
           let row = rows.find(({ id }) => id === hostURL.id);
           if (!row) {
@@ -408,12 +408,16 @@ export function handleUnmountHostURL(
             };
           }
           await q([`DELETE FROM realm_host_urls WHERE id =`, param(row.id)]);
-          // A removed site name is free for anyone to claim.
+          // A removed site name is free for anyone to claim. Only the claim
+          // bound to this realm is released, never another user's claim on
+          // the same name.
           if (row.kind === 'site-name') {
             await q([
               `UPDATE claimed_domains_for_sites SET removed_at =`,
               param(Math.floor(Date.now() / 1000)),
-              `WHERE removed_at IS NULL AND hostname IN (`,
+              `WHERE removed_at IS NULL AND realm_id =`,
+              param(row.realm_id),
+              `AND hostname IN (`,
               param(row.host),
               `,`,
               param(domainHostFromKey(row.host).hostname),
@@ -449,6 +453,43 @@ export function handleUnmountHostURL(
 // the registry makes a mount that races it fail.
 function hostURLsLockKey(realmId: string): string {
   return `host-urls:${realmId}`;
+}
+
+class RefusedChange<T> extends Error {
+  readonly outcome: Outcome<T>;
+  constructor(outcome: Outcome<T>) {
+    super('The host URL change was refused');
+    this.outcome = outcome;
+  }
+}
+
+// Runs `fn` in one transaction, holding the realm's host-URL lock. A refused
+// outcome rolls the transaction back, so a refusal never commits a write `fn`
+// made before it refused: a site name bound before a mount at it lost to a
+// conflict, or the canonical mark cleared before its target turned out to be
+// gone.
+async function changeHostURLs<T>(
+  dbAdapter: DBAdapter,
+  realmId: string,
+  fn: (q: Querier) => Promise<Outcome<T>>,
+): Promise<Outcome<T>> {
+  try {
+    return await dbAdapter.withWriteLock(
+      hostURLsLockKey(realmId),
+      async (txQuerier) => {
+        let outcome = await fn(txQuerier ?? dbAdapterQuerier(dbAdapter));
+        if ('status' in outcome) {
+          throw new RefusedChange(outcome);
+        }
+        return outcome;
+      },
+    );
+  } catch (error) {
+    if (error instanceof RefusedChange) {
+      return error.outcome as Outcome<T>;
+    }
+    throw error;
+  }
 }
 
 // The realm at `realmURL`, when the caller administers it. Otherwise answers
@@ -554,7 +595,9 @@ async function boxelSpaceRefusal(
 
 // A site name must be claimed by the caller, or already bound to this realm
 // (ADR 033 §1.6). Mounting at a site name the caller claimed binds the claim
-// to this realm.
+// to this realm. The claims are locked until the transaction ends, so a claim
+// released while the mount runs is either seen as released here, or waits for
+// the mount and then sees its host URL.
 async function bindSiteName(
   q: Querier,
   dbAdapter: DBAdapter,
@@ -567,7 +610,7 @@ async function bindSiteName(
     param(host),
     `,`,
     param(domainHostFromKey(host).hostname),
-    `)`,
+    `) FOR UPDATE`,
   ])) as { id: string; user_id: string; realm_id: string | null }[];
   if (claims.some((claim) => claim.realm_id === realm.id)) {
     return { ok: true };
