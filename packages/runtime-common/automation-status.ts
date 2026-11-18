@@ -11,6 +11,7 @@
 import {
   readAutomationDeclaration,
   type AutomationDeclaration,
+  type AutomationProblem,
 } from './automation-declaration.ts';
 import {
   computeAutomationSchedule,
@@ -31,6 +32,7 @@ import {
   readLastRunMilestones,
   type RunMilestones,
 } from './automation-run-milestones.ts';
+import { WEBHOOK_DELIVERIES_START_RUNS } from './automation-webhooks.ts';
 import { now as clockNow } from './clock.ts';
 import type { DBAdapter } from './db.ts';
 import { dbAdapterQuerier } from './expression.ts';
@@ -79,15 +81,24 @@ export type AutomationCurrentRun = RunMilestones;
 export type AutomationStatusAttributes =
   | {
       switchedOn: false;
+      // Whether Boxel starts runs from webhook deliveries; the card warns
+      // under each webhook trigger while it is false.
+      webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
     }
   | {
       switchedOn: true;
+      webhookDeliveriesStartRuns: boolean;
       lastRun: AutomationLastRun | null;
       currentRun: AutomationCurrentRun | null;
       state: AutomationState;
       pauseReason: AutomationPauseReason | null;
+      // What the declaration reader found wrong with the card, when
+      // `pauseReason` is `invalid-declaration`; null otherwise. Each problem
+      // has a `path` into the card (`triggers.0.expression`) and a message
+      // for a person.
+      pauseProblems: AutomationProblem[] | null;
       // The payer's Matrix id, or null when the viewer may not see who pays.
       payer: string | null;
       viewerIsPayer: boolean;
@@ -248,8 +259,10 @@ export function automationStatusDocument({
       attributes: row
         ? {
             switchedOn: true,
+            webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
             state: row.state,
             pauseReason: row.pauseReason,
+            pauseProblems: row.pauseProblems,
             payer: payerShown || row.payer === viewer ? row.payer : null,
             viewerIsPayer: row.payer === viewer,
             nextRun: isoOrNull(row.nextRun),
@@ -261,7 +274,12 @@ export function automationStatusDocument({
             lastRun,
             currentRun,
           }
-        : { switchedOn: false, lastRun, currentRun },
+        : {
+            switchedOn: false,
+            webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
+            lastRun,
+            currentRun,
+          },
     },
   };
 }

@@ -72,7 +72,7 @@ export interface AutomationRunContext {
   scheduledAt: string;
   // When the automation's last complete run started, if it has had one.
   lastSuccessAt?: string;
-  // The card's params with the trigger's own merged over them.
+  // The automation card's params. A trigger carries none of its own.
   params: Record<string, string>;
   // The delivery's JSON body, for a run a webhook started.
   webhookPayload?: unknown;
@@ -152,6 +152,8 @@ export type RealmRunnerResponse =
       // error: its line and its stack, each frame mapped to the script's
       // own lines.
       scriptLocation?: RealmScriptLocation;
+      // The error is a realm call's that the script let through.
+      realmCallFailed?: boolean;
     };
 
 // A user's Stop, as a stopped run's error begins: the transcript reads it as

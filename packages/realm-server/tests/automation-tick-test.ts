@@ -46,7 +46,12 @@ import type {
   ChangedAutomation,
   ReportAutomationChange,
 } from '@cardstack/runtime-common/automation-change-events';
-import { setupDB } from './helpers/index.ts';
+import {
+  insertIncomingWebhookRow,
+  setupDB,
+  setupSecretsKeyring,
+} from './helpers/index.ts';
+import type { PgAdapter } from '@cardstack/postgres';
 
 const REALM_URL = 'http://127.0.0.1:4444/payroll/';
 const REALM = ri(REALM_URL);
@@ -112,6 +117,7 @@ interface QueuedRun {
 }
 
 module(basename(import.meta.filename), function (hooks) {
+  setupSecretsKeyring(hooks);
   let dbAdapter: DBAdapter;
   let publisher: QueuePublisher;
   let virtualNetwork: VirtualNetwork;
@@ -770,6 +776,11 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test('`until` stops a trigger: no slot after it runs', async function (assert) {
+    await insertIncomingWebhookRow(dbAdapter as PgAdapter, {
+      username: OWNER,
+      webhookPath: 'hooks/push',
+      signingSecret: 'owner-secret',
+    });
     await switchOn([
       { ...HOURLY, until: at('2026-11-10T13:30:00Z') },
       { kind: 'webhook', label: 'push', webhookPath: 'hooks/push' },
@@ -862,21 +873,112 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a card that does not read as a declaration leaves the row due and unchanged', async function (assert) {
+  test('a card with nothing indexed to read leaves the row due and unchanged', async function (assert) {
     let before = await switchOn();
-    card = { ok: false, message: 'triggers.0.expression: not a cron' };
+    card = {
+      ok: false,
+      message: 'the automation card has no indexed document',
+    };
     let outcomes = await tick(NOON + 30);
     assert.deepEqual(outcomes, [
       {
         kind: 'unreadable',
         automationId: AUTOMATION,
-        message: 'triggers.0.expression: not a cron',
+        message: 'the automation card has no indexed document',
+        paused: false,
       },
     ]);
     assert.deepEqual(await runs(), []);
     let after = await row();
+    assert.strictEqual(after.state, 'active');
     assert.strictEqual(after.nextRun, before.nextRun);
     assert.deepEqual(after.triggerRuns, before.triggerRuns);
+  });
+
+  test('a card that indexed but does not read as a declaration pauses the automation with the problems, and reports it', async function (assert) {
+    await switchOn();
+    let problems = [
+      {
+        code: 'cron-too-frequent' as const,
+        path: 'triggers.0.expression',
+        message:
+          '"58,1 0,23 * * *" can fire twice 3 minutes apart, and Boxel runs an automation\'s cron trigger at most once every 5 minutes',
+      },
+    ];
+    card = { ok: false, message: 'too frequent', problems };
+    let reported: ChangedAutomation[] = [];
+    let outcomes = await tick(NOON + 30, async (automation) => {
+      reported.push(automation);
+    });
+    assert.deepEqual(outcomes, [
+      {
+        kind: 'unreadable',
+        automationId: AUTOMATION,
+        message: 'too frequent',
+        paused: true,
+      },
+    ]);
+    assert.deepEqual(await runs(), [], 'nothing is enqueued');
+    let after = await row();
+    assert.strictEqual(after.state, 'paused');
+    assert.strictEqual(after.pauseReason, 'invalid-declaration');
+    assert.deepEqual(after.pauseProblems, problems);
+    assert.deepEqual(
+      reported.map(({ automationId }) => automationId),
+      [AUTOMATION],
+      'the pause is reported, so the automation event fires',
+    );
+    assert.deepEqual(
+      await tick(NOON + 90),
+      [],
+      'a paused automation is not due',
+    );
+  });
+
+  test('a card fixed before the tick re-reads it under the lock does not pause the automation', async function (assert) {
+    await switchOn();
+    let reads = 0;
+    let outcomes = await tickAutomations(dbAdapter, {
+      queue: publisher,
+      virtualNetwork,
+      now: NOON + 30,
+      readDeclaration: async () =>
+        reads++ === 0
+          ? {
+              ok: false,
+              message: 'too frequent',
+              problems: [
+                {
+                  code: 'cron-too-frequent',
+                  path: 'triggers.0.expression',
+                  message: 'too frequent',
+                },
+              ],
+            }
+          : { ok: true, declaration: declaration() },
+    });
+    assert.deepEqual(
+      outcomes.map((o) => [o.kind, o.kind === 'unreadable' && o.paused]),
+      [['unreadable', false]],
+    );
+    assert.strictEqual((await row()).state, 'active');
+  });
+
+  test('a card that no longer adopts from Automation is left for the index hook to remove', async function (assert) {
+    await switchOn();
+    card = {
+      ok: false,
+      message: 'not an automation',
+      problems: [
+        { code: 'not-an-automation', path: '', message: 'not an automation' },
+      ],
+    };
+    let [outcome] = await tick(NOON + 30);
+    assert.deepEqual(
+      [outcome.kind, outcome.kind === 'unreadable' && outcome.paused],
+      ['unreadable', false],
+    );
+    assert.strictEqual((await row()).state, 'active');
   });
 
   test('a card that raises a cap above the snapshot enqueues nothing', async function (assert) {

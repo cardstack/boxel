@@ -165,8 +165,14 @@ export interface AutomationScriptTiming extends JSONTypes.Object {
 
 // `script-error`: the script threw an error of its own or didn't compile.
 // `timed-out`: the run reached its time limit.
-// `run-failed`: a realm call whose error the script didn't catch, or the
-// runner itself, failed the run.
+// `call-failed`: a realm call failed and the script didn't catch its error,
+// while no request the run made was failed by the platform. The call itself
+// was refused or couldn't do what the script asked (a missing file, a
+// refused write, a query the realm rejects), so the run fails the same way
+// every time the script runs.
+// `run-failed`: the runner failed the run, or a realm call failed while the
+// platform was failing the run's requests (a realm or model answered with a
+// server error, or never answered).
 // `stopped`: the run stopped running while its script ran: a person canceled
 // it, a pause or remove canceled it, it ended at a cap, or a newer attempt
 // took it over. The tab stopped the script. The run's row already says how
@@ -174,6 +180,7 @@ export interface AutomationScriptTiming extends JSONTypes.Object {
 export type AutomationScriptErrorReason =
   | 'script-error'
   | 'timed-out'
+  | 'call-failed'
   | 'run-failed'
   | 'stopped';
 
@@ -191,6 +198,7 @@ export function isAutomationScriptOutcome(
     outcome.state === 'error' &&
     (outcome.reason === 'script-error' ||
       outcome.reason === 'timed-out' ||
+      outcome.reason === 'call-failed' ||
       outcome.reason === 'run-failed' ||
       outcome.reason === 'stopped') &&
     typeof outcome.message === 'string' &&

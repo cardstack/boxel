@@ -64,6 +64,7 @@ import {
   recordCurrentPricing,
 } from './lib/metered-charge.ts';
 import { buildMintRunToken } from './lib/run-token.ts';
+import { aiBatchSettlementFor } from './lib/ai-batch-settle.ts';
 import { buildAutomationAdmissionChecks } from './lib/automation-admission-checks.ts';
 
 let log = logger('worker');
@@ -298,6 +299,7 @@ let autoMigrate = migrateDB || undefined;
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
     meteredCharges: meteredChargesFor(dbAdapter),
+    aiBatchSettlement: aiBatchSettlementFor(dbAdapter),
   });
 
   await worker.run();

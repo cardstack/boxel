@@ -6,6 +6,7 @@ import { expect, test } from './fixtures.ts';
 
 import { runEvaluateInMemory } from '../src/eval-execution.ts';
 import { buildTestClient } from './helpers/test-client.ts';
+import { writeRealmFile } from './helpers/write-realm-file.ts';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -106,12 +107,12 @@ test.describe('runEvaluateInMemory e2e', () => {
     });
 
     try {
-      let writeResult = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'broken-module.gts',
         BROKEN_MODULE_GTS,
       );
-      expect(writeResult.ok).toBe(true);
       let indexed = await client.waitForFile(realmUrl, 'broken-module.gts', {
         pollMs: 300,
         timeoutMs: 30_000,
@@ -167,6 +168,14 @@ test.describe('runEvaluateInMemory e2e', () => {
     try {
       // Delete every ESM module shipped with the fixture realm.
       let listingBefore = await client.listFiles(realmUrl);
+      expect(
+        listingBefore.error,
+        `list ${realmUrl} failed: ${listingBefore.error}`,
+      ).toBeUndefined();
+      expect(
+        listingBefore.error,
+        `list ${realmUrl} failed: ${listingBefore.error}`,
+      ).toBeUndefined();
       let esmPattern = /\.(gts|gjs|ts|js)$/;
       for (let filename of listingBefore.filenames ?? []) {
         if (esmPattern.test(filename)) {
@@ -234,12 +243,12 @@ test.describe('runEvaluateInMemory e2e', () => {
       // hello.gts. Targeting just the broken file should fail; targeting
       // the clean file should pass even though the broken module is still
       // present in the realm.
-      let writeClean = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'valid-card.gts',
         VALID_MODULE_GTS,
       );
-      expect(writeClean.ok).toBe(true);
       expect(
         await client.waitForFile(realmUrl, 'valid-card.gts', {
           pollMs: 300,
@@ -247,12 +256,12 @@ test.describe('runEvaluateInMemory e2e', () => {
         }),
       ).toBe(true);
 
-      let writeBroken = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'broken-module.gts',
         BROKEN_MODULE_GTS,
       );
-      expect(writeBroken.ok).toBe(true);
       expect(
         await client.waitForFile(realmUrl, 'broken-module.gts', {
           pollMs: 300,

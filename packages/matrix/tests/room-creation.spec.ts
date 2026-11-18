@@ -9,7 +9,6 @@ import {
   openRenameMenu,
   reloadAndOpenAiAssistant,
   openAiAssistant,
-  clearLocalStorage,
   sendMessage,
   getRoomId,
   createRoomWithMessage,
@@ -27,9 +26,7 @@ test.describe('Room creation', () => {
   let secondUser: { username: string; password: string; credentials: any };
   let xUser: { username: string; password: string; credentials: any };
 
-  test.beforeEach(async ({ page }) => {
-    await clearLocalStorage(page, appURL);
-
+  test.beforeEach(async () => {
     firstUser = await createSubscribedUser('user-1');
     secondUser = await createSubscribedUser('user-2');
     xUser = await createSubscribedUser('xuser');

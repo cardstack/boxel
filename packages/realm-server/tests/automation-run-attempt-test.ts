@@ -47,6 +47,7 @@ import {
   setAutomationMilestoneSink,
   type AutomationMilestoneEvent,
 } from '@cardstack/runtime-common/automation-run-milestones';
+import { AUTOMATION_FAILURES_BEFORE_PAUSE } from '@cardstack/runtime-common/automations';
 import { runOverlayFiles } from '@cardstack/runtime-common/run-overlay';
 import type { MeteredCharges } from '@cardstack/runtime-common/metered-charges';
 import {
@@ -662,6 +663,51 @@ module(basename(import.meta.filename), function (hooks) {
       'error',
       'the run that tripped the pause keeps its own error, not a cancel',
     );
+  });
+
+  test("five runs in a row that end on a realm call the script didn't catch pause the automation", async function (assert) {
+    let automationId = rri(`${realm.url}${TEST_AUTOMATION_PATH}`);
+    await query(dbAdapter, [
+      'INSERT INTO automations (automation_id, realm, payer, state, caps_snapshot, trigger_runs, scheduled_since) VALUES (',
+      param(automationId),
+      ',',
+      param(ri(realm.url)),
+      ',',
+      param(OWNER),
+      ", 'active', '{}'::jsonb, '{}'::jsonb, now())",
+    ]);
+    let callFailed: AutomationScriptOutcome = {
+      state: 'error',
+      reason: 'call-failed',
+      message: 'File not found: notes/missing.md',
+    };
+    let states: string[] = [];
+    let last: AutomationRun | undefined;
+    for (let i = 0; i < AUTOMATION_FAILURES_BEFORE_PAUSE; i++) {
+      last = await newRun({ trigger: 'nightly' });
+      await attempt(last, stubTab([], { answer: callFailed }), {
+        input: { triggerKind: undefined },
+      });
+      let [row] = await query(dbAdapter, [
+        'SELECT state, pause_reason FROM automations WHERE automation_id =',
+        param(automationId),
+      ]);
+      states.push(
+        row?.pause_reason
+          ? `${row.state} ${row.pause_reason}`
+          : `${row?.state}`,
+      );
+    }
+    assert.deepEqual(states, [
+      'active',
+      'active',
+      'active',
+      'active',
+      'paused repeated-failures',
+    ]);
+    let after = await getAutomationRun(dbAdapter, last!.id);
+    assert.strictEqual(after?.errorReason, 'call-failed');
+    assert.strictEqual(after?.errorMessage, 'File not found: notes/missing.md');
   });
 
   test('a job that disagrees with its row about being a Preview runs nothing', async function (assert) {
