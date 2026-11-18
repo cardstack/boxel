@@ -14,6 +14,7 @@ import {
   testRealmURL,
   visitOperatorMode,
 } from '../helpers';
+import { setupCatalogTestSubset } from '../helpers/catalog-test-subset';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
@@ -89,6 +90,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
   let asked: number;
 
   setupApplicationTest(hooks);
+  setupCatalogTestSubset(hooks);
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: ME,
@@ -197,7 +199,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
       assert
         .dom('[data-test-realm-automations-empty]')
         .containsText('No automations');
-      assert.dom('[data-test-new-automation-start]').exists();
+      assert.dom('[data-test-new-automation]').exists();
     });
 
     test('a job or automation event updates the list live', async function (assert) {
@@ -239,24 +241,24 @@ module('Acceptance | realm config | Automations', function (hooks) {
       assert.dom(`[data-test-realm-automation="${NIGHTLY}"]`).doesNotExist();
     });
 
-    test('New automation asks for a name, and Cancel puts the button back', async function (assert) {
+    test("New automation opens a new automation in its edit view, in the config card's own stack", async function (assert) {
       answer = { status: 200, data: [ACTIVE] };
       await visitConfig();
       await waitFor('[data-test-realm-automation]');
 
-      await click('[data-test-new-automation-start]');
-      assert.dom('[data-test-new-automation-form]').exists();
-      assert.dom('[data-test-new-automation-start]').doesNotExist();
+      await click('[data-test-new-automation]');
+      let opened =
+        '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]';
+      await waitFor(`${opened} [data-test-card-format="edit"]`);
       assert
-        .dom('[data-test-new-automation-create]')
-        .isDisabled('a nameless automation is not made');
+        .dom(`${opened} [data-test-card-format="edit"]`)
+        .exists('the new automation opens in its edit view');
       assert
-        .dom('[data-test-realm-automation]')
-        .exists('the list stays under the form');
-
-      await click('[data-test-new-automation-cancel]');
-      assert.dom('[data-test-new-automation-form]').doesNotExist();
-      assert.dom('[data-test-new-automation-start]').exists();
+        .dom(opened)
+        .containsText('Automation', 'the new card is an Automation');
+      assert
+        .dom('[data-test-operator-mode-stack="1"]')
+        .doesNotExist('the new automation opens beside nothing');
     });
   });
 
@@ -273,7 +275,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
 
       assert.dom('[data-test-realm-automations] h2').doesNotExist();
       assert.dom('[data-test-realm-automation]').doesNotExist();
-      assert.dom('[data-test-new-automation-start]').doesNotExist();
+      assert.dom('[data-test-new-automation]').doesNotExist();
       assert.dom('[data-test-realm-config-policy]').exists();
     });
   });
