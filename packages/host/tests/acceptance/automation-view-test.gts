@@ -3,7 +3,12 @@ import { click, settled, waitFor, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, rri, testRealmInfo } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  rri,
+  testRealmInfo,
+  type Realm,
+} from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -124,11 +129,28 @@ const ACTIVE = {
   ],
 };
 
+// A card module the realm indexes after the automation's status was asked.
+const NOTE_MODULE = `
+  import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+  export class Note extends CardDef {
+    static displayName = 'Note';
+    @field body = contains(StringField);
+    static isolated = class Isolated extends Component<typeof this> {
+      <template><p data-test-note><@fields.body /></p></template>
+    };
+  }
+`;
+
+// What the status route answers: a direct writer the automation's
+// attributes, and any other viewer the realm lets read that it isn't a
+// direct writer.
 type Answer = { status: number; attributes?: Record<string, unknown> };
 
 module('Acceptance | automation view', function (hooks) {
   let answer: Answer;
   let asked: string[];
+  let realm: Realm;
 
   setupApplicationTest(hooks);
   setupCatalogTestSubset(hooks);
@@ -146,7 +168,7 @@ module('Acceptance | automation view', function (hooks) {
     });
     setupUserSubscription();
     setupAuthEndpoints();
-    await setupAcceptanceTestRealm({
+    ({ realm } = await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -167,12 +189,12 @@ module('Acceptance | automation view', function (hooks) {
           },
         },
       },
-    });
+    }));
 
     // The realm's status route answers from the server's automation row,
     // which an in-browser test realm doesn't have. Each test says what the
-    // route answers.
-    answer = { status: 403 };
+    // route answers; by default, that the viewer isn't a direct writer.
+    answer = { status: 200 };
     asked = [];
     getService('network').virtualNetwork.mount(
       async (request: Request) => {
@@ -188,13 +210,18 @@ module('Acceptance | automation view', function (hooks) {
           });
         }
         return new Response(
-          JSON.stringify({
-            data: {
-              type: 'automation-status',
-              id: AUTOMATION,
-              attributes: answer.attributes,
-            },
-          }),
+          JSON.stringify(
+            answer.attributes
+              ? {
+                  data: {
+                    type: 'automation-status',
+                    id: AUTOMATION,
+                    attributes: answer.attributes,
+                  },
+                  meta: { directWriter: true },
+                }
+              : { data: null, meta: { directWriter: false } },
+          ),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       },
@@ -229,7 +256,7 @@ module('Acceptance | automation view', function (hooks) {
     await waitFor('[data-test-automation-status]', { timeout: 10000 });
   }
 
-  test('a viewer the route refuses sees the card alone, with who turns the automation on and who pays', async function (assert) {
+  test("a viewer who isn't a direct writer sees the card alone, with who turns the automation on and who pays", async function (assert) {
     await openIsolated();
     await waitUntil(() => asked.length > 0, { timeout: 10000 });
     assert.deepEqual(
@@ -260,6 +287,40 @@ module('Acceptance | automation view', function (hooks) {
       .exists({ count: 4 }, 'the embedded view lists each trigger in words');
     await openFormat('fitted');
     assert.dom('[data-test-automation-fitted-state]').doesNotExist();
+  });
+
+  // The host takes a 401 or 403 from a realm as an auth failure of whatever
+  // it renders or indexes at the time. The status route's answer to a viewer
+  // who isn't a direct writer is no such refusal, so a card module the realm
+  // indexes after that viewer opens an automation still loads.
+  test("a card the realm indexes after a viewer who isn't a direct writer opens an automation still loads", async function (assert) {
+    await openIsolated();
+    await waitUntil(() => asked.length > 0, { timeout: 10000 });
+    await settled();
+    assert.dom('[data-test-automation-status]').doesNotExist();
+
+    await realm.write('note.gts', NOTE_MODULE);
+    await realm.write(
+      'notes/first.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { body: 'Loaded beside the automation' },
+          meta: { adoptsFrom: { module: '../note', name: 'Note' } },
+        },
+      }),
+    );
+    await visitOperatorMode({
+      stacks: [
+        [{ id: AUTOMATION, format: 'isolated' }],
+        [{ id: `${testRealmURL}notes/first`, format: 'isolated' }],
+      ],
+    });
+    await waitFor('[data-test-note]', { timeout: 10000 });
+    assert
+      .dom('[data-test-note]')
+      .hasText('Loaded beside the automation', 'the other card loads');
+    assert.dom('[data-test-automation]').exists();
   });
 
   test('an automation nobody has switched on reads as off', async function (assert) {

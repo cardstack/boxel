@@ -303,6 +303,7 @@ module(basename(import.meta.filename), function (hooks) {
             lastRunUsage: null,
           },
         },
+        meta: { directWriter: true },
       });
     });
 
@@ -386,7 +387,11 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(on.lastRun?.runId, runId);
 
       let reader = await statusOf(READER, ['read']);
-      assert.strictEqual(reader.status, 403, 'a reader never sees a run');
+      assert.deepEqual(
+        reader.body,
+        { data: null, meta: { directWriter: false } },
+        'a reader never sees a run',
+      );
     });
 
     test('a Preview never reads as the last run or the run in progress', async function (assert) {
@@ -705,14 +710,19 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(status.switchedOn ? status.payer : undefined, PAYER);
     });
 
-    test('a reader and an anonymous caller are refused', async function (assert) {
+    test('a reader is shown nothing, and an anonymous caller is refused', async function (assert) {
       await writeAutomation();
       await switchOn();
       let reader = await statusOf(READER, ['read']);
-      assert.strictEqual(reader.status, 403, 'a reader gets HTTP 403');
-      assert.notOk(
-        JSON.stringify(reader.body).includes(PAYER),
-        "a reader's refusal doesn't name the payer",
+      assert.strictEqual(
+        reader.status,
+        200,
+        "a reader isn't refused, since the host takes a refusal as an auth failure of what it renders",
+      );
+      assert.deepEqual(
+        reader.body,
+        { data: null, meta: { directWriter: false } },
+        'a reader is told it is not a direct writer, and shown nothing',
       );
 
       let anonymous = await request
@@ -846,6 +856,7 @@ module(basename(import.meta.filename), function (hooks) {
           },
         ]);
         assert.deepEqual(response.body.meta, {
+          directWriter: true,
           webhookDeliveriesStartRuns: false,
         });
         assert.notOk(
@@ -854,13 +865,18 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
-      test('a reader and an anonymous caller are refused the list', async function (assert) {
+      test('a reader is listed no webhooks, and an anonymous caller is refused', async function (assert) {
         await insertPayerWebhook();
         let reader = await webhooksOf(READER, ['read']);
-        assert.strictEqual(reader.status, 403, 'a reader gets HTTP 403');
-        assert.notOk(
-          JSON.stringify(reader.body).includes('github-push'),
-          "a reader's refusal names no webhook",
+        assert.strictEqual(
+          reader.status,
+          200,
+          "a reader isn't refused, since the host takes a refusal as an auth failure of what it renders",
+        );
+        assert.deepEqual(
+          reader.body,
+          { data: [], meta: { directWriter: false } },
+          'a reader is told it is not a direct writer, and listed no webhook',
         );
         let anonymous = await request
           .get('/_automation-webhooks')
@@ -1250,7 +1266,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
     });
 
-    test('a writer the users grant admits is refused, since the grant names no one', async function (assert) {
+    test("a writer the users grant admits is shown no automation's status, since the grant names no one", async function (assert) {
       // The users row covers people with a Boxel account.
       await insertUser(usersDB, STRANGER, 'cus_stranger', null);
       let response = await usersRequest
@@ -1264,7 +1280,34 @@ module(basename(import.meta.filename), function (hooks) {
           'Authorization',
           `Bearer ${createJWT(usersRealm, STRANGER, ['read', 'write'])}`,
         );
-      assert.strictEqual(response.status, 403, 'HTTP 403');
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      assert.deepEqual(
+        response.body,
+        { data: null, meta: { directWriter: false } },
+        'the grant names no one, so the writer is not a direct writer',
+      );
+    });
+
+    test('a writer the users grant admits is listed no webhooks', async function (assert) {
+      await ensureTestUser(usersDB, STRANGER);
+      await insertIncomingWebhookRow(usersDB, {
+        username: STRANGER,
+        webhookPath: 'users-grant-hook',
+        signingSecret: 'users-grant-secret',
+      });
+      let response = await usersRequest
+        .get('/_automation-webhooks')
+        .set('Accept', SupportedMimeType.JSON)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(usersRealm, STRANGER, ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      assert.deepEqual(
+        response.body,
+        { data: [], meta: { directWriter: false } },
+        'the grant names no one, so the writer is not a direct writer',
+      );
     });
 
     test('a writer the users grant admits is listed no automations', async function (assert) {
@@ -1341,8 +1384,13 @@ module(basename(import.meta.filename), function (hooks) {
         : request;
     }
 
-    test('an anonymous reader is refused', async function (assert) {
-      assert.strictEqual((await status()).status, 403);
+    test('an anonymous reader is shown nothing', async function (assert) {
+      let response = await status();
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      assert.deepEqual(response.body, {
+        data: null,
+        meta: { directWriter: false },
+      });
     });
 
     test("a direct writer's revoked session asks as no one", async function (assert) {
@@ -1353,10 +1401,10 @@ module(basename(import.meta.filename), function (hooks) {
         'the session answers before it is revoked',
       );
       await revokeUserSessions(publicDB, ADMIN);
-      assert.strictEqual(
-        (await status(`Bearer ${session}`)).status,
-        403,
-        'the revoked session is refused',
+      assert.deepEqual(
+        (await status(`Bearer ${session}`)).body,
+        { data: null, meta: { directWriter: false } },
+        'the revoked session asks as no one, and is shown nothing',
       );
     });
   });

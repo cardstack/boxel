@@ -2,7 +2,8 @@
 // automation is switched on, its state, its payer, and how far each trigger
 // has got. The card is the definition and the row is the state (ADR 028
 // §1.3), so the view reads the row through the realm's
-// `_automation-status` route, which answers only the realm's direct writers.
+// `_automation-status` route, which shows the row only to the realm's direct
+// writers.
 //
 // The payer is a Matrix id, so the route names the payer only to a viewer
 // who shares a realm grant with them (ADR 011 §1.2), or who is the payer.
@@ -146,23 +147,41 @@ export type AutomationStatusAttributes =
       triggers: AutomationTriggerStatus[];
     };
 
+// The answer to a direct writer of the realm.
 export interface AutomationStatusDocument {
   data: {
     type: typeof AUTOMATION_STATUS_TYPE;
     id: string;
     attributes: AutomationStatusAttributes;
   };
+  meta: { directWriter: true };
+}
+
+// The answer to any other caller the realm ACL lets read: it says the caller
+// isn't a direct writer, and carries nothing about the automation.
+export interface AutomationStatusNotDirectWriterDocument {
+  data: null;
+  meta: { directWriter: false };
 }
 
 export type AutomationStatusAnswer =
-  | { status: 200; document: AutomationStatusDocument }
-  | { status: 400 | 403; message: string };
+  | {
+      status: 200;
+      document:
+        | AutomationStatusDocument
+        | AutomationStatusNotDirectWriterDocument;
+    }
+  | { status: 400; message: string };
 
 // Answers `GET <realm>/_automation-status?automation=<card URL>` for
-// `viewer`. Only a direct writer of the realm gets an answer, since direct
-// writers are who switch automations on, pause them and pay for them. Any
-// other caller, a reader or one a `*`, `users` or policy grant admits, is
-// refused, and the card's view shows the card's own fields alone.
+// `viewer`. Only a direct writer of the realm is shown the automation's row,
+// since direct writers are who switch automations on, pause them and pay for
+// them. Any other caller the realm ACL lets read, a reader or one a `*`,
+// `users` or policy grant admits, is told it isn't a direct writer and shown
+// nothing, and the card's view shows the card's own fields alone. The answer
+// isn't an HTTP refusal: the host takes a 401 or 403 as an auth failure of
+// whatever it is rendering at the time, and the card's view asks while it
+// renders.
 export async function answerAutomationStatus({
   dbAdapter,
   realmURL,
@@ -193,8 +212,8 @@ export async function answerAutomationStatus({
     !(await isDirectWriter(dbAdapter, realmURL, viewer, matrixServerName))
   ) {
     return {
-      status: 403,
-      message: `only a direct writer of ${realmURL.href} can read an automation's status`,
+      status: 200,
+      document: { data: null, meta: { directWriter: false } },
     };
   }
   let url: URL;
@@ -347,6 +366,7 @@ export function automationStatusDocument({
             lastRunUsage,
           },
     },
+    meta: { directWriter: true },
   };
 }
 

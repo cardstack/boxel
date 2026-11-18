@@ -1339,14 +1339,14 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // - `_sign-capture-urls` signs the URLs of the capture serve, which the ACL
 //   alone admits a caller to.
 // - `_automation-status` answers an automation's server row, which only the
-//   realm's direct writers see (see `automation-status.ts`). A grant reaches
-//   a card, not the row.
+//   realm's direct writers are shown (see `automation-status.ts`). A grant
+//   reaches a card, not the row.
 // - `_automations` lists every automation in the realm with its row's state,
 //   payer and spend, which only the realm's direct writers see (see
 //   `automation-list.ts`). A grant reaches a card, not the rows.
 // - `_automation-webhooks` lists the incoming webhooks the realm's
-//   automations may name, which only the realm's direct writers see (see
-//   `automation-webhooks.ts`). A grant reaches a card, not the realm's
+//   automations may name, which only the realm's direct writers are listed
+//   (see `automation-webhooks.ts`). A grant reaches a card, not the realm's
 //   webhooks.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
@@ -3969,8 +3969,8 @@ export class Realm {
         ACL_ONLY,
       )
       // An automation card's switched-on state, payer and each trigger's runs
-      // left, for the card's view. Answered on the realm ACL, and then only
-      // to a direct writer (see `automation-status.ts`).
+      // left, for the card's view. Answered on the realm ACL; a caller who
+      // isn't a direct writer is shown nothing (see `automation-status.ts`).
       .get(
         '/_automation-status',
         SupportedMimeType.JSON,
@@ -3989,8 +3989,8 @@ export class Realm {
         ACL_ONLY,
       )
       // The incoming webhooks an automation card's webhook trigger may name,
-      // for the card's editor. Answered on the realm ACL, and then only to a
-      // direct writer (see `automation-webhooks.ts`).
+      // for the card's editor. Answered on the realm ACL; a caller who isn't
+      // a direct writer is listed nothing (see `automation-webhooks.ts`).
       .get(
         '/_automation-webhooks',
         SupportedMimeType.JSON,
@@ -20913,18 +20913,6 @@ export class Realm {
       matrixServerName: this.#matrixClient.serverName,
       viewer: await this.#statusViewer(requestContext),
     });
-    if (answer.status !== 200) {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [{ status: String(answer.status), detail: answer.message }],
-        }),
-        init: {
-          status: answer.status,
-          headers: { 'content-type': SupportedMimeType.JSON },
-        },
-        requestContext,
-      });
-    }
     return createResponse({
       body: JSON.stringify(answer.document),
       init: {
