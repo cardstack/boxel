@@ -176,12 +176,14 @@ export type AutomationStatusAnswer =
 // Answers `GET <realm>/_automation-status?automation=<card URL>` for
 // `viewer`. Only a direct writer of the realm is shown the automation's row,
 // since direct writers are who switch automations on, pause them and pay for
-// them. Any other caller the realm ACL lets read, a reader or one a `*`,
-// `users` or policy grant admits, is told it isn't a direct writer and shown
+// them. Any other caller the realm ACL lets read, a reader or a writer by
+// the `*` or `users` row, is told it isn't a direct writer and shown
 // nothing, and the card's view shows the card's own fields alone. The answer
 // isn't an HTTP refusal: the host takes a 401 or 403 as an auth failure of
 // whatever it is rendering at the time, and the card's view asks while it
-// renders.
+// renders. The route answers on the realm ACL alone, so a caller only a
+// policy grant admits gets the ACL's refusal: a grant reaches a card, not
+// the row.
 export async function answerAutomationStatus({
   dbAdapter,
   realmURL,

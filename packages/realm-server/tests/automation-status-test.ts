@@ -724,6 +724,16 @@ module(basename(import.meta.filename), function (hooks) {
         { data: null, meta: { directWriter: false } },
         'a reader is told it is not a direct writer, and shown nothing',
       );
+      // The route checks the `automation` parameter only for a direct
+      // writer, so a reader learns nothing from it either.
+      for (let automation of [null, `${ELSEWHERE}automations/nightly`]) {
+        let unchecked = await statusOf(READER, ['read'], automation);
+        assert.deepEqual(
+          [unchecked.status, unchecked.body],
+          [200, { data: null, meta: { directWriter: false } }],
+          `a reader naming ${automation ?? 'no card'} is told the same`,
+        );
+      }
 
       let anonymous = await request
         .get(

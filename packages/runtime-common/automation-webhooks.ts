@@ -172,12 +172,14 @@ export interface AutomationWebhooksAnswer {
 // webhook the realm can use, oldest first. Only a direct writer of the realm
 // is listed the webhooks, since direct writers are who switch automations on
 // and own the webhooks a trigger may name. Any other caller the realm ACL
-// lets read, a reader or one a `*`, `users` or policy grant admits, is told
-// it isn't a direct writer and listed nothing, and the card's editor takes a
+// lets read, a reader or a writer by the `*` or `users` row, is told it
+// isn't a direct writer and listed nothing, and the card's editor takes a
 // typed path. The answer isn't an HTTP refusal: the host takes a 401 or 403
-// as an auth failure of whatever it is rendering at the time. A webhook's
-// signing secret is never part of the answer; its path alone lets no one
-// send a delivery that verifies.
+// as an auth failure of whatever it is rendering at the time. The route
+// answers on the realm ACL alone, so a caller only a policy grant admits
+// gets the ACL's refusal: a grant reaches a card, not the realm's webhooks.
+// A webhook's signing secret is never part of the answer; its path alone
+// lets no one send a delivery that verifies.
 export async function answerAutomationWebhooks({
   dbAdapter,
   realmURL,
