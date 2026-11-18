@@ -13,6 +13,7 @@ import {
 } from './helpers/parse-test-fixtures.ts';
 import { seedFilesAndWaitForIndex } from './helpers/seed-and-wait-for-index.ts';
 import { buildTestClient } from './helpers/test-client.ts';
+import { writeRealmFile } from './helpers/write-realm-file.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
@@ -37,6 +38,10 @@ async function clearParseableFixtures(
   realmUrl: string,
 ): Promise<void> {
   let listingBefore = await client.listFiles(realmUrl);
+  expect(
+    listingBefore.error,
+    `list ${realmUrl} failed: ${listingBefore.error}`,
+  ).toBeUndefined();
   let parseablePattern = /\.(gts|gjs|ts|json)$/;
   for (let filename of listingBefore.filenames ?? []) {
     if (!parseablePattern.test(filename)) continue;
@@ -162,12 +167,12 @@ test.describe('runParseInMemory e2e', () => {
     try {
       await clearParseableFixtures(client, realmUrl);
 
-      let writeResult = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'broken-card.gts',
         BROKEN_TEMPLATE_GTS,
       );
-      expect(writeResult.ok).toBe(true);
       expect(
         await client.waitForFile(realmUrl, 'broken-card.gts', {
           pollMs: 300,
@@ -280,12 +285,12 @@ test.describe('runParseInMemory e2e', () => {
       await clearParseableFixtures(client, realmUrl);
 
       // Seed both a clean and a broken GTS file.
-      let writeClean = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'parse-test-card.gts',
         VALID_MODULE_GTS,
       );
-      expect(writeClean.ok).toBe(true);
       expect(
         await client.waitForFile(realmUrl, 'parse-test-card.gts', {
           pollMs: 300,
@@ -293,12 +298,12 @@ test.describe('runParseInMemory e2e', () => {
         }),
       ).toBe(true);
 
-      let writeBroken = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'broken-card.gts',
         BROKEN_TEMPLATE_GTS,
       );
-      expect(writeBroken.ok).toBe(true);
       expect(
         await client.waitForFile(realmUrl, 'broken-card.gts', {
           pollMs: 300,
@@ -365,12 +370,12 @@ test.describe('runParseInMemory e2e', () => {
       await clearParseableFixtures(client, realmUrl);
 
       // Need a module so the valid example card can adopt from it.
-      let writeModule = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'parse-test-card.gts',
         VALID_MODULE_GTS,
       );
-      expect(writeModule.ok).toBe(true);
       expect(
         await client.waitForFile(realmUrl, 'parse-test-card.gts', {
           pollMs: 300,
@@ -378,12 +383,12 @@ test.describe('runParseInMemory e2e', () => {
         }),
       ).toBe(true);
 
-      let writeValid = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'ParseTestCard/example-1.json',
         VALID_EXAMPLE_JSON,
       );
-      expect(writeValid.ok).toBe(true);
       expect(
         await client.waitForFile(realmUrl, 'ParseTestCard/example-1.json', {
           pollMs: 300,
@@ -391,12 +396,12 @@ test.describe('runParseInMemory e2e', () => {
         }),
       ).toBe(true);
 
-      let writeBroken = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'ParseTestCard/broken-example.json',
         BROKEN_EXAMPLE_JSON,
       );
-      expect(writeBroken.ok).toBe(true);
       expect(
         await client.waitForFile(
           realmUrl,

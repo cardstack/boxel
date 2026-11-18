@@ -196,6 +196,13 @@ export const MAX_RUN_NOTIFICATION_CHARS = 2_000_000;
 export const MAX_MILESTONES = 50;
 export const MAX_MILESTONE_CHARS = 80;
 
+// The shape of a card `realm.cards.get` answers and of each card
+// `realm.cards.search` finds, as the tool description and the sandbox's error
+// for reading `.data` from one name it. `type` is there only when the card's
+// `adoptsFrom` is a resolved code ref, `{ module, name }`.
+export const FOUND_CARD_SHAPE =
+  '{ id, path, type?, attributes, relationships }';
+
 export function surfaceMethods(
   surface: RealmRunnerSurface,
 ): ReadonlySet<RealmRunnerCallMethod> {

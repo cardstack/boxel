@@ -9,6 +9,8 @@ import {
   getAutomationRun,
   insertPermissions,
   internalKeyFor,
+  param,
+  query,
   ri,
   rri,
   recordAutomationRunCommitted,
@@ -24,6 +26,7 @@ import {
   getAutomation,
   pauseAfterRepeatedFailures,
   pauseAutomation,
+  pauseForInvalidDeclaration,
   pauseForPayerLostAccess,
   PLATFORM_FAILURE_REASONS,
   SPENDING_REFUSAL_REASONS,
@@ -41,6 +44,7 @@ import {
 import {
   automationRef,
   MANUAL_RUN_TRIGGER,
+  readAutomationDeclaration,
   type AutomationCaps,
   type AutomationDeclaration,
   type AutomationIndexEntry,
@@ -56,7 +60,13 @@ import { syncAutomationsAfterIndex } from '@cardstack/runtime-common/automation-
 import type { DefinitionLookup } from '@cardstack/runtime-common';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
 import type { ChangedAutomation } from '@cardstack/runtime-common/automation-change-events';
-import { createVirtualNetwork, setupDB } from './helpers/index.ts';
+import {
+  createVirtualNetwork,
+  insertIncomingWebhookRow,
+  setupDB,
+  setupSecretsKeyring,
+} from './helpers/index.ts';
+import type { PgAdapter } from '@cardstack/postgres';
 import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
 
 const REALM_URL = 'http://127.0.0.1:4444/payroll/';
@@ -65,6 +75,33 @@ const AUTOMATION = rri(`${REALM_URL}Automation/nightly-sync`);
 const OWNER = '@owner:localhost';
 const ADMIN = '@admin:localhost';
 const READER = '@reader:localhost';
+const OUTSIDER = '@outsider:localhost';
+
+// Incoming webhooks: two the realm's direct writers made, one a reader of the
+// realm made, and one a person with no row in the realm made.
+const OWNER_WEBHOOK = 'whk_owner';
+const ADMIN_WEBHOOK = 'whk_admin';
+const READER_WEBHOOK = 'whk_reader';
+const OUTSIDER_WEBHOOK = 'whk_outsider';
+
+async function insertWebhooks(dbAdapter: DBAdapter) {
+  for (let [username, webhookPath] of [
+    [OWNER, OWNER_WEBHOOK],
+    [ADMIN, ADMIN_WEBHOOK],
+    [READER, READER_WEBHOOK],
+    [OUTSIDER, OUTSIDER_WEBHOOK],
+  ]) {
+    await insertIncomingWebhookRow(dbAdapter as PgAdapter, {
+      username,
+      webhookPath,
+      signingSecret: `secret-${webhookPath}`,
+    });
+  }
+}
+
+function webhookTrigger(webhookPath: string, label = 'deliveries') {
+  return { kind: 'webhook' as const, label, webhookPath };
+}
 
 // 2026-11-10 12:00 in Chicago. The automation's daily 05:30 Chicago run
 // comes next on the 11th.
@@ -160,6 +197,7 @@ function rollsBackFirstTransaction(db: DBAdapter): DBAdapter {
 
 module(basename(import.meta.filename), function () {
   module('the automation row', function (hooks) {
+    setupSecretsKeyring(hooks);
     let dbAdapter: DBAdapter;
     let options: AutomationActorOptions;
 
@@ -344,6 +382,31 @@ module(basename(import.meta.filename), function () {
           'the pause cancels the pending run',
         );
         assert.strictEqual(canceled?.errorReason, 'repeated-failures');
+      });
+
+      test("five runs in a row that a realm call of the script's failed pause the automation, while runs the platform failed don't count", async function (assert) {
+        await switchOn();
+        for (let i = 0; i < 4; i++) {
+          await endedRun('error', {
+            reason: 'call-failed',
+            message: 'File not found: notes/missing.md',
+          });
+          await endedRun('error', { reason: 'run-failed' });
+          await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION);
+        }
+        assert.strictEqual(
+          (await getAutomation(dbAdapter, AUTOMATION))?.state,
+          'active',
+        );
+        assert.strictEqual((await failures()).inARow, 4);
+        await endedRun('error', {
+          reason: 'call-failed',
+          message: 'File not found: notes/missing.md',
+        });
+        let result = await pauseAfterRepeatedFailures(dbAdapter, AUTOMATION);
+        assert.true(result?.paused);
+        assert.strictEqual(result?.automation.pauseReason, 'repeated-failures');
+        assert.strictEqual((await failures()).last?.reason, 'call-failed');
       });
 
       test('a complete run in between resets the streak', async function (assert) {
@@ -811,6 +874,7 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(automation.capsSnapshot, {
           ...CAPS,
           batchedAI: false,
+          webhookPaths: [],
         });
         assert.deepEqual(
           runCounts(automation),
@@ -848,17 +912,10 @@ module(basename(import.meta.filename), function () {
       });
 
       test('an automation with only a webhook trigger is active with no next run', async function (assert) {
+        await insertWebhooks(dbAdapter);
         let automation = await switchOn(
           OWNER,
-          declaration({
-            triggers: [
-              {
-                kind: 'webhook',
-                label: 'stripe',
-                webhookPath: 'stripe-events',
-              },
-            ],
-          }),
+          declaration({ triggers: [webhookTrigger(OWNER_WEBHOOK, 'stripe')] }),
         );
         assert.strictEqual(automation.state, 'active');
         assert.strictEqual(automation.nextRun, null);
@@ -1184,6 +1241,7 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(automation.capsSnapshot, {
           ...lowered,
           batchedAI: true,
+          webhookPaths: [],
         });
         assert.strictEqual(
           automation.scheduledSince,
@@ -1810,7 +1868,16 @@ module(basename(import.meta.filename), function () {
       });
 
       test('a trigger the card removes and later adds back starts at the re-add, keeping its count', async function (assert) {
-        await switchOn();
+        await insertWebhooks(dbAdapter);
+        await switchOn(
+          OWNER,
+          declaration({
+            triggers: [
+              ...declaration().triggers,
+              webhookTrigger(OWNER_WEBHOOK, 'push'),
+            ],
+          }),
+        );
         await setRuns('daily', 2, NEXT_DAILY - 86400);
         let removed = await sync(
           indexed({
@@ -1821,7 +1888,7 @@ module(basename(import.meta.filename), function () {
                 label: 'push',
                 expression: null,
                 timeZone: null,
-                webhookPath: 'github-push',
+                webhookPath: OWNER_WEBHOOK,
               },
             ],
           }),
@@ -1893,7 +1960,7 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('a card that failed to index, or does not read, leaves the row as it was', async function (assert) {
+      test('a card that failed to index leaves the row as it was', async function (assert) {
         let before = await switchOn();
         let failed = await sync({ ...indexed(), instance: null });
         assert.strictEqual(failed?.kind, 'unchanged');
@@ -1906,11 +1973,151 @@ module(basename(import.meta.filename), function () {
           'unchanged',
           'a row carrying an earlier visit after a failed one is not read',
         );
-        let invalid = await sync(
+        assert.deepEqual(await getAutomation(dbAdapter, AUTOMATION), before);
+      });
+
+      test('a card that indexed but does not read as a declaration leaves the row as it was', async function (assert) {
+        let before = await switchOn();
+        // The card saves itself mid-edit: a trigger just added has no label
+        // or kind yet, and an expression can be half typed.
+        for (let triggers of [
+          [cronTrigger(), { kind: null, label: null }],
+          [cronTrigger({ expression: '58,1 0,23 * * *' })],
+        ]) {
+          let result = await sync(indexed({ triggers }));
+          assert.strictEqual(result?.kind, 'unchanged');
+        }
+        assert.deepEqual(await getAutomation(dbAdapter, AUTOMATION), before);
+      });
+
+      test('an automation paused for an invalid declaration follows the card: its problems update, and it resumes once the card reads', async function (assert) {
+        await switchOn();
+        let pending = await pendingRun();
+        let running = await pendingRun('2026-11-11T11:00:00.000Z');
+        await query(dbAdapter, [
+          "UPDATE automation_runs SET state = 'running', started_at = now() WHERE id =",
+          param(running.id),
+        ]);
+        let reported: string[] = [];
+        // 23:58 and the next day's 00:01 are 3 minutes apart, which a check
+        // of times within one day misses.
+        let tooFrequent = indexed({
+          triggers: [cronTrigger({ expression: '58,1 0,23 * * *' })],
+        });
+        let paused = await pauseForInvalidDeclaration(
+          dbAdapter,
+          AUTOMATION,
+          async () => {
+            let read = readAutomationDeclaration(
+              { ...tooFrequent, url: AUTOMATION },
+              {
+                automationTypeKey: automationTypeKey(),
+                virtualNetwork: options.virtualNetwork,
+              },
+            );
+            return read.ok ? undefined : read.problems;
+          },
+          {
+            reportAutomationChange: async ({ automationId }) => {
+              reported.push(automationId);
+            },
+          },
+        );
+        assert.strictEqual(paused?.state, 'paused');
+        assert.strictEqual(paused?.pauseReason, 'invalid-declaration');
+        assert.deepEqual(
+          paused?.pauseProblems?.map(({ code, path }) => [code, path]),
+          [['cron-too-frequent', 'triggers.0.expression']],
+        );
+        assert.deepEqual(reported, [AUTOMATION], 'the pause is reported');
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, pending.id))?.state,
+          'canceled',
+          'a pending run is canceled',
+        );
+        assert.strictEqual(
+          (await getAutomationRun(dbAdapter, running.id))?.state,
+          'running',
+          'a running run is left to finish',
+        );
+
+        let followed = await sync(
           indexed({ triggers: [cronTrigger({ expression: 'not cron' })] }),
         );
-        assert.strictEqual(invalid?.kind, 'unchanged');
-        assert.deepEqual(await getAutomation(dbAdapter, AUTOMATION), before);
+        assert.strictEqual(followed?.kind, 'recomputed');
+        assert.deepEqual(
+          followed?.automation.pauseProblems?.map(({ code }) => code),
+          ['invalid-cron'],
+          'the problems follow the card',
+        );
+        assert.strictEqual(followed?.automation.state, 'paused');
+        assert.strictEqual(
+          (
+            await sync(
+              indexed({ triggers: [cronTrigger({ expression: 'not cron' })] }),
+            )
+          )?.kind,
+          'unchanged',
+          'the same problems change nothing',
+        );
+
+        let resumed = await sync(indexed(), NOW + 3600);
+        assert.strictEqual(resumed?.kind, 'resumed');
+        let after = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(after?.state, 'active');
+        assert.strictEqual(after?.pauseReason, null);
+        assert.strictEqual(after?.pauseProblems, null);
+        assert.strictEqual(after?.payer, OWNER, 'the payer stays');
+        assert.strictEqual(
+          after?.scheduledSince,
+          NOW + 3600,
+          'the schedule restarts at the resume, so no slot from the pause runs',
+        );
+      });
+
+      test('an automation paused for an invalid declaration whose fixed card raises a cap pauses for the cap', async function (assert) {
+        await switchOn();
+        await pauseForInvalidDeclaration(dbAdapter, AUTOMATION, async () => [
+          { code: 'invalid-cron', path: 'triggers.0.expression', message: 'x' },
+        ]);
+        let result = await sync(indexed({ caps: { ...CAPS, writes: 500 } }));
+        assert.strictEqual(result?.kind, 'paused');
+        assert.strictEqual(result?.automation.pauseReason, 'caps-raised');
+        assert.strictEqual(result?.automation.pauseProblems, null);
+      });
+
+      test('a paused automation is not paused again for an invalid declaration, and a readable card does not pause', async function (assert) {
+        await switchOn();
+        let fine = await pauseForInvalidDeclaration(
+          dbAdapter,
+          AUTOMATION,
+          async () => undefined,
+        );
+        assert.strictEqual(fine?.state, 'active');
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        let kept = await pauseForInvalidDeclaration(
+          dbAdapter,
+          AUTOMATION,
+          async () => [
+            {
+              code: 'invalid-cron',
+              path: 'triggers.0.expression',
+              message: 'x',
+            },
+          ],
+        );
+        assert.strictEqual(kept?.pauseReason, 'requested');
+        assert.strictEqual(kept?.pauseProblems, null);
+        let stillPaused = await sync(indexed());
+        assert.strictEqual(
+          stillPaused?.kind,
+          'unchanged',
+          'a person’s pause is not lifted when the card reads',
+        );
       });
 
       test('a card that raises a cap pauses the automation', async function (assert) {
@@ -1940,6 +2147,235 @@ module(basename(import.meta.filename), function () {
       test('a card whose automation is not switched on is left alone', async function (assert) {
         assert.strictEqual(await sync(indexed()), undefined);
         assert.strictEqual(await sync(undefined), undefined);
+      });
+
+      module('webhook triggers', function (hooks) {
+        hooks.beforeEach(async function () {
+          await insertWebhooks(dbAdapter);
+        });
+
+        function webhookCard(...paths: string[]): Record<string, unknown>[] {
+          return paths.map((webhookPath, index) => ({
+            ...cronTrigger(),
+            kind: 'webhook',
+            label: `deliveries-${index}`,
+            expression: null,
+            timeZone: null,
+            webhookPath,
+          }));
+        }
+
+        function webhookDeclaration(...paths: string[]) {
+          return declaration({
+            triggers: paths.map((path, index) =>
+              webhookTrigger(path, `deliveries-${index}`),
+            ),
+          });
+        }
+
+        test('switch-on accepts a webhook any direct writer of the realm made, and snapshots it', async function (assert) {
+          let automation = await switchOn(
+            OWNER,
+            webhookDeclaration(ADMIN_WEBHOOK, OWNER_WEBHOOK),
+          );
+          assert.deepEqual(
+            automation.capsSnapshot.webhookPaths,
+            [ADMIN_WEBHOOK, OWNER_WEBHOOK],
+            'the snapshot holds each webhook the payer agreed to',
+          );
+        });
+
+        test('switch-on refuses a foreign webhook, a reader’s webhook and an unknown one, naming each trigger', async function (assert) {
+          let result = await switchOnAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              realm: REALM,
+              user: OWNER,
+              declaration: webhookDeclaration(
+                OUTSIDER_WEBHOOK,
+                OWNER_WEBHOOK,
+                READER_WEBHOOK,
+                'whk_nowhere',
+              ),
+            },
+            options,
+          );
+          assert.false(result.ok);
+          let refusal = result as { reason: string; problems: unknown[] };
+          assert.strictEqual(refusal.reason, 'unusable-webhook');
+          assert.deepEqual(
+            (refusal.problems as { code: string; path: string }[]).map(
+              ({ code, path }) => ({ code, path }),
+            ),
+            [
+              { code: 'foreign-webhook', path: 'triggers.0.webhookPath' },
+              { code: 'foreign-webhook', path: 'triggers.2.webhookPath' },
+              { code: 'unknown-webhook', path: 'triggers.3.webhookPath' },
+            ],
+          );
+          assert.strictEqual(
+            await getAutomation(dbAdapter, AUTOMATION),
+            undefined,
+            'nothing is switched on',
+          );
+        });
+
+        test('a webhook stops being the realm’s once its owner loses write', async function (assert) {
+          await insertPermissions(dbAdapter, new URL(REALM_URL), {
+            [ADMIN]: ['read'],
+          });
+          let result = await switchOnAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              realm: REALM,
+              user: OWNER,
+              declaration: webhookDeclaration(ADMIN_WEBHOOK),
+            },
+            options,
+          );
+          assert.strictEqual(
+            (result as { reason: string }).reason,
+            'unusable-webhook',
+          );
+        });
+
+        test('pointing a switched-on automation’s webhook trigger at another webhook pauses it until a resume', async function (assert) {
+          await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
+          let pending = await createAutomationRun(dbAdapter, {
+            automationId: AUTOMATION,
+            realm: REALM,
+            trigger: 'deliveries-0',
+            slot: 'delivery-1',
+            actsAs: OWNER,
+          });
+
+          let result = await sync(
+            indexed({ triggers: webhookCard(OUTSIDER_WEBHOOK) }),
+          );
+          assert.strictEqual(result?.kind, 'paused');
+          assert.strictEqual(result?.automation.pauseReason, 'webhook-changed');
+          assert.deepEqual(
+            result?.automation.capsSnapshot.webhookPaths,
+            [OWNER_WEBHOOK],
+            'the snapshot keeps the webhook the payer agreed to',
+          );
+          let canceled = await getAutomationRun(dbAdapter, pending.id);
+          assert.strictEqual(canceled?.state, 'canceled');
+          assert.strictEqual(canceled?.errorReason, 'webhook-changed');
+
+          let refused = await resumeAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              user: OWNER,
+              declaration: webhookDeclaration(OUTSIDER_WEBHOOK),
+            },
+            options,
+          );
+          assert.strictEqual(
+            (refused as { reason: string }).reason,
+            'unusable-webhook',
+            'the payer cannot confirm a foreign webhook',
+          );
+
+          let confirmed = await resumeAutomation(
+            dbAdapter,
+            {
+              automationId: AUTOMATION,
+              user: ADMIN,
+              declaration: webhookDeclaration(ADMIN_WEBHOOK),
+            },
+            options,
+          );
+          assert.true(confirmed.ok);
+          let automation = (confirmed as { automation: AutomationRow })
+            .automation;
+          assert.strictEqual(automation.state, 'active');
+          assert.strictEqual(automation.payer, ADMIN);
+          assert.deepEqual(automation.capsSnapshot.webhookPaths, [
+            ADMIN_WEBHOOK,
+          ]);
+          let after = await sync(
+            indexed({ triggers: webhookCard(ADMIN_WEBHOOK) }),
+          );
+          assert.strictEqual(
+            after?.kind,
+            'recomputed',
+            'the confirmed webhook doesn’t pause it again',
+          );
+        });
+
+        test('adding a webhook trigger pauses a switched-on automation, and removing one does not', async function (assert) {
+          await switchOn(
+            OWNER,
+            webhookDeclaration(OWNER_WEBHOOK, ADMIN_WEBHOOK),
+          );
+          let removed = await sync(
+            indexed({ triggers: webhookCard(OWNER_WEBHOOK) }),
+          );
+          assert.strictEqual(removed?.kind, 'recomputed');
+          assert.strictEqual(removed?.automation.state, 'active');
+
+          await removeAutomation(
+            dbAdapter,
+            { automationId: AUTOMATION, user: OWNER },
+            options,
+          );
+          await switchOn();
+          let added = await sync(
+            indexed({
+              triggers: [cronTrigger(), ...webhookCard(OWNER_WEBHOOK)],
+            }),
+          );
+          assert.strictEqual(added?.kind, 'paused');
+          assert.strictEqual(added?.automation.pauseReason, 'webhook-changed');
+        });
+
+        test('checkAutomationCaps pauses for a new webhook when the card it is given carries its triggers', async function (assert) {
+          await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
+          let capsOnly = await checkAutomationCaps(dbAdapter, AUTOMATION, {
+            caps: CAPS,
+            batchedAI: false,
+          });
+          assert.strictEqual(capsOnly?.state, 'active');
+          let paused = await checkAutomationCaps(dbAdapter, AUTOMATION, {
+            caps: CAPS,
+            batchedAI: false,
+            triggers: webhookDeclaration(ADMIN_WEBHOOK).triggers,
+          });
+          assert.strictEqual(paused?.pauseReason, 'webhook-changed');
+        });
+
+        test('a snapshot that predates the webhook record pauses for no webhook', async function (assert) {
+          await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
+          await dbAdapter.execute(
+            `UPDATE automations SET caps_snapshot = caps_snapshot - 'webhookPaths'`,
+          );
+          let result = await sync(
+            indexed({ triggers: webhookCard(OUTSIDER_WEBHOOK) }),
+          );
+          assert.strictEqual(result?.kind, 'recomputed');
+          assert.strictEqual(result?.automation.state, 'active');
+        });
+
+        test('an automation paused for an invalid declaration whose fixed card names another webhook pauses for the webhook', async function (assert) {
+          await switchOn(OWNER, webhookDeclaration(OWNER_WEBHOOK));
+          await pauseForInvalidDeclaration(dbAdapter, AUTOMATION, async () => [
+            {
+              code: 'missing-webhook-path',
+              path: 'triggers.0.webhookPath',
+              message: 'x',
+            },
+          ]);
+          let result = await sync(
+            indexed({ triggers: webhookCard(ADMIN_WEBHOOK) }),
+          );
+          assert.strictEqual(result?.kind, 'paused');
+          assert.strictEqual(result?.automation.pauseReason, 'webhook-changed');
+          assert.strictEqual(result?.automation.pauseProblems, null);
+        });
       });
     });
 

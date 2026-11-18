@@ -34,6 +34,7 @@ import {
   msBetween,
 } from './automation-run-telemetry.ts';
 import type { DBAdapter } from './db.ts';
+import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import {
   dbAdapterQuerier,
   param,
@@ -46,6 +47,7 @@ import type {
   RealmIdentifier,
   RealmResourceIdentifier,
 } from './realm-identifiers.ts';
+import type { VirtualNetwork } from './virtual-network.ts';
 
 export type AutomationRunState =
   | 'pending'
@@ -749,13 +751,15 @@ export async function cancelAutomationRunIn(
 // run whose commit was claimed is left to finish, since its writes may
 // already be landing. A person's pause or remove names them in
 // `canceled_by`. A pause no person asked for names no one, and records its
-// reason (such as `caps-raised`) in `error_reason`. The caller writes each
-// canceled run's last log line with `logAutomationRunEnded` once its
-// transaction commits.
+// reason (such as `caps-raised`) in `error_reason`. With `pendingOnly`, a
+// running run is left to finish and only pending runs are canceled. The caller
+// writes each canceled run's last log line with `logAutomationRunEnded` once
+// its transaction commits.
 export async function cancelUnfinishedAutomationRuns(
   querier: Querier,
   automationId: RealmResourceIdentifier,
   by: { canceledBy: string } | { reason: string },
+  { pendingOnly = false }: { pendingOnly?: boolean } = {},
 ): Promise<AutomationRun[]> {
   let rows = await querier([
     "UPDATE automation_runs SET state = 'canceled', finished_at = now(), canceled_by =",
@@ -764,7 +768,9 @@ export async function cancelUnfinishedAutomationRuns(
     param('reason' in by ? by.reason : null),
     'WHERE automation_id =',
     param(automationId),
-    "AND (state = 'pending' OR (state = 'running' AND commit_started_at IS NULL))",
+    pendingOnly
+      ? "AND state = 'pending'"
+      : "AND (state = 'pending' OR (state = 'running' AND commit_started_at IS NULL))",
     'RETURNING *',
   ]);
   await discardOverlays(
@@ -906,6 +912,63 @@ export async function endAutomationRunAtCap(
     state: 'error',
     reason: HIT_A_CAP_REASON,
     message: `The run hit its ${cap} cap`,
+  });
+}
+
+// Whether the person a run acts as is a direct writer of the run's realm,
+// which the run's admission and every one of its calls must find (ADR 026
+// §1.5): the realm's calls (`Realm.handleAutomation`), the realm server's
+// routes that take run tokens, and the worker's admission all ask it here.
+// Permission rows are keyed by served URL, so the realm is resolved to the URL
+// it is served at; a realm that resolves to none has no direct writer. One
+// primary-key read of the person's permission row, read fresh on each call.
+export async function runActsAsDirectWriter(
+  {
+    dbAdapter,
+    virtualNetwork,
+    matrixServerName,
+  }: {
+    dbAdapter: DBAdapter;
+    virtualNetwork: VirtualNetwork;
+    matrixServerName: string;
+  },
+  run: { realm: RealmIdentifier; actsAs: string },
+): Promise<boolean> {
+  let realmURL: URL;
+  try {
+    realmURL = virtualNetwork.toURL(run.realm);
+  } catch {
+    return false;
+  }
+  return await isDirectWriter(
+    dbAdapter,
+    realmURL,
+    run.actsAs,
+    matrixServerName,
+  );
+}
+
+// The error reason of a run whose person was not a direct writer of its
+// realm at one of its calls, or at its commit (ADR 026 §1.5).
+export const NOT_A_DIRECT_WRITER_REASON = 'not-a-direct-writer';
+
+// Ends a run that a call refused because the person it acts as is not a
+// direct writer of its realm: an error with reason `not-a-direct-writer`.
+// Ending the run, rather than refusing the call alone, makes every later call
+// answer that the run is not running, which is what stops the script in its
+// tab, so a run that catches the refusal can't keep its tab busy until its
+// time limit. Owner only, like any finish; a run that already finished, or
+// that another attempt took over, is left as it is.
+export async function endAutomationRunNotADirectWriter(
+  dbAdapter: DBAdapter,
+  id: string,
+  attempt: number,
+): Promise<AutomationRun | undefined> {
+  return await finishAutomationRun(dbAdapter, id, attempt, {
+    state: 'error',
+    reason: NOT_A_DIRECT_WRITER_REASON,
+    message:
+      "The person this run acts as stopped being a direct writer of the automation's workspace, so the run was stopped and its writes were not saved",
   });
 }
 

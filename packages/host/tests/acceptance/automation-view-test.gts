@@ -247,6 +247,11 @@ module('Acceptance | automation view', function (hooks) {
         'This trigger stops after 30 runs or at the end of Jan 15, 2030, whichever comes first.',
         "the card's own bounds still read",
       );
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .doesNotExist(
+        'without the server status, the card says nothing about webhook runs',
+      );
 
     await openFormat('embedded');
     assert.dom('[data-test-automation-embedded-state]').doesNotExist();
@@ -264,6 +269,11 @@ module('Acceptance | automation view', function (hooks) {
     };
     await openIsolated();
     await waitForStatus();
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .doesNotExist(
+        'a server that starts runs from webhooks, or says nothing, gets no warning',
+      );
     assert.dom('[data-test-automation-state="Off"]').exists();
     assert.dom('[data-test-automation-header-state="Off"]').exists();
     assert
@@ -275,6 +285,27 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-trigger-progress]').doesNotExist();
   });
 
+  test('each webhook trigger warns that the trigger can’t fire while the server starts no runs from webhooks', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        switchedOn: false,
+        webhookDeliveriesStartRuns: false,
+        lastRun: null,
+        currentRun: null,
+      },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-webhook-notice]', { timeout: 10000 });
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .exists({ count: 1 }, 'the webhook trigger, and no other, warns');
+    assert
+      .dom('[data-test-automation-webhook-notice]')
+      .hasText(
+        'This trigger can’t fire, Boxel doesn’t run automations from webhooks.',
+      );
+  });
   test("an active automation shows its payer, next run and each trigger's progress", async function (assert) {
     answer = { status: 200, attributes: ACTIVE };
     await openIsolated();
@@ -371,6 +402,61 @@ module('Acceptance | automation view', function (hooks) {
     assert
       .dom('[data-test-automation-status]')
       .includesText('Next run None while paused');
+  });
+
+  test("an automation event naming the automation makes the view ask its status again, and one naming another automation doesn't", async function (assert) {
+    // Switching an automation on, pausing, resuming or removing it changes
+    // its row and not its card, so the realm tells its direct writers with an
+    // `automation` event, the way the realm server sends one into a writer's
+    // session room.
+    function simulateAutomationChange(automation: string) {
+      mockMatrixUtils.simulateRemoteMessage(
+        mockMatrixUtils.getRoomIdForRealmAndUser(
+          testRealmURL,
+          '@testuser:localhost',
+        ),
+        testRealmInfo.realmUserId!,
+        {
+          eventName: 'automation',
+          automation,
+          realmURL: testRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+    }
+
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-state="Paused"]', { timeout: 10000 });
+    await settled();
+    let askedBefore = asked.length;
+
+    answer = { status: 200, attributes: ACTIVE };
+    simulateAutomationChange(PLANNED);
+    await settled();
+    assert.strictEqual(
+      asked.length,
+      askedBefore,
+      'an automation event naming another automation asks nothing',
+    );
+    assert.dom('[data-test-automation-state="Paused"]').exists();
+
+    simulateAutomationChange(AUTOMATION);
+    await waitFor('[data-test-automation-state="On"]', { timeout: 10000 });
+    await settled();
+    // One read per event: an ask the other automation's event had set off,
+    // however late it landed, would show here as a second.
+    assert.deepEqual(
+      asked.slice(askedBefore),
+      [AUTOMATION],
+      'an automation event naming the automation asks its status route once',
+    );
+    assert
+      .dom('[data-test-automation-status]')
+      .doesNotIncludeText('Next run None');
   });
 
   test("the card lists the milestones of the automation's last run from the run", async function (assert) {
@@ -744,6 +830,60 @@ module('Acceptance | automation view', function (hooks) {
       .doesNotIncludeText('Last error', 'no streak, no last error');
   });
 
+  test('an automation paused for an invalid declaration lists each problem where the problem is on the card', async function (assert) {
+    answer = {
+      status: 200,
+      attributes: {
+        ...ACTIVE,
+        state: 'paused',
+        pauseReason: 'invalid-declaration',
+        pauseProblems: [
+          {
+            code: 'cron-too-frequent',
+            path: 'triggers.1.expression',
+            message:
+              '"58,1 0,23 * * *" can fire twice 3 minutes apart, and Boxel runs an automation\'s cron trigger at most once every 5 minutes',
+          },
+          {
+            code: 'missing-cap',
+            path: 'caps.writes',
+            message: 'Set the "Saves" limit',
+          },
+        ],
+      },
+    };
+    await openIsolated();
+    await waitFor('[data-test-automation-pause-problems]', { timeout: 10000 });
+    assert
+      .dom('[data-test-automation-state-sentence]')
+      .hasText(
+        'Boxel paused the automation because the automation’s settings have problems. Boxel will resume the automation once someone who can edit this workspace fixes each problem below.',
+      );
+    assert
+      .dom('[data-test-automation-pause-problem="Trigger “hourly”"]')
+      .includesText('can fire twice 3 minutes apart');
+    assert
+      .dom('[data-test-automation-pause-problem="Limits"]')
+      .includesText('Set the "Saves" limit');
+
+    answer = {
+      status: 200,
+      attributes: { ...ACTIVE, state: 'paused', pauseReason: 'requested' },
+    };
+    await openFormat('embedded');
+    await openIsolated();
+    await waitUntil(
+      () =>
+        text('[data-test-automation-state-sentence]')?.includes(
+          'Someone who can edit this workspace paused',
+        ),
+      { timeout: 10000 },
+    );
+    assert
+      .dom('[data-test-automation-pause-problems]')
+      .doesNotExist('another pause reason lists no problems');
+  });
+
   test('a paused, waiting and done automation each read with that state', async function (assert) {
     let cases: [Record<string, unknown>, string, string][] = [
       [
@@ -755,6 +895,11 @@ module('Acceptance | automation view', function (hooks) {
         { state: 'paused', pauseReason: 'caps-raised' },
         'Paused',
         'Someone raised a limit above what the payer agreed to pay for, so Boxel paused the automation. Boxel runs nothing until someone who can edit this workspace resumes the automation and agrees to the new limits.',
+      ],
+      [
+        { state: 'paused', pauseReason: 'webhook-changed' },
+        'Paused',
+        'A workspace administrator pointed a trigger at an incoming webhook the payer didn’t agree to, so Boxel paused the automation. Boxel runs nothing until a workspace administrator resumes the automation and agrees to the new webhook.',
       ],
       [
         { state: 'paused', pauseReason: 'payer-lost-access' },

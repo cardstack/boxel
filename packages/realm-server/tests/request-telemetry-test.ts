@@ -226,8 +226,9 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    // A system-key route's body carries a key value, and a key route's body a
-    // key's value or a key write ticket, so each is logged as a proxy route is.
+    // A system-key route's or a platform secrets route's body carries a value,
+    // and a key route's body a key's value or a key write ticket, so each is
+    // logged as a proxy route is.
     // A key route takes nothing in its query string, so whatever a client put
     // there stays out of the log too.
     for (let [route, path] of [
@@ -235,6 +236,10 @@ module(basename(import.meta.filename), function () {
       [
         'a system-key route',
         '/_system-keys/6c1f3f8e-4a0e-4b9e-9a51-3c1d2b7a9e10',
+      ],
+      [
+        'a platform secrets route',
+        '/_platform-secrets/openrouter-batch-webhook-signing',
       ],
       [
         'a key route',
@@ -414,10 +419,12 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    test('a system-key route, and anything beneath it, keeps only its method and path', function (assert) {
+    test('a system-key or platform secrets route, and anything beneath it, keeps only its method and path', function (assert) {
       for (let url of [
         'https://app.telemetry.test/_system-keys',
         'https://app.telemetry.test/_System-Keys/0b6f6d55-6f39-4b4e-9d5e-0c3c35d1a0e1',
+        'https://app.telemetry.test/_platform-secrets',
+        'https://app.telemetry.test/_platform-secrets/openrouter-batch-webhook-signing',
       ]) {
         let event = scrubRequestTelemetry({
           request: {

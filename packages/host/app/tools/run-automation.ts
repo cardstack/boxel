@@ -11,6 +11,7 @@ import HostBaseTool from '../lib/host-base-tool';
 import {
   AutomationRunStoppedError,
   AutomationTimeLimitError,
+  isPlatformFailure,
   redactSecrets,
 } from '../lib/realm-runner/automation';
 import {
@@ -19,7 +20,7 @@ import {
 } from '../lib/realm-runner/research';
 import { RunLogSink } from '../lib/realm-runner/run-log-sink';
 import { RunStateWatch } from '../lib/realm-runner/run-state-watch';
-import { RealmScriptError } from '../lib/realm-runner/runner';
+import { RealmCallFailure, RealmScriptError } from '../lib/realm-runner/runner';
 import { claimsFromRawToken } from '../services/realm';
 
 import RunRealmCodeTool, {
@@ -43,8 +44,10 @@ export const FINAL_FLUSH_MARGIN_MS = 5000;
 // and every call the script makes carries it.
 //
 // It answers the run's outcome as the `json` of a `JsonCard`: `complete`, or
-// `error` with why and, for the script's own error, its line. The worker
-// commits the overlay or records the error. A script that throws is an
+// `error` with why and, for the script's own error, its line. A realm call's
+// error that ends the script is `call-failed`, unless the platform failed a
+// request the tab made while the script ran (see `watchedScriptOutcome`).
+// The worker commits the overlay or records the error. A script that throws is an
 // outcome, not a failure of the command: the command fails only when it
 // can't run the script at all.
 export default class RunAutomationTool extends HostBaseTool<
@@ -129,7 +132,8 @@ export default class RunAutomationTool extends HostBaseTool<
       });
       watch.start();
       try {
-        outcome = await scriptOutcome(
+        outcome = await watchedScriptOutcome(
+          this.network,
           () =>
             runAutomationScript({
               code: scriptInput.code,
@@ -220,12 +224,41 @@ async function flushBefore(
   }
 }
 
+// `scriptOutcome` for a run in this tab, with `platformFailed` read from
+// every fetch the tab makes while the script runs (`NetworkService.fetch`,
+// which the realm calls, the loader's module fetches, `realm.resolve`'s
+// request forwarding and the run's own log and state checks all go through).
+// One that fails for the platform (`isPlatformFailure`), before its answer
+// or while its body is read, makes a realm call's error `run-failed`: the
+// call may have failed for the platform's sake. The tab runs one automation
+// run at a time, so every fetch it makes while the script runs is the run's.
+export async function watchedScriptOutcome(
+  network: Pick<NetworkService, 'watchFetches'>,
+  run: () => Promise<unknown>,
+  secrets: string[],
+): Promise<AutomationScriptOutcome> {
+  let platformFailed = false;
+  let unwatch = network.watchFetches((_url, result) => {
+    if (isPlatformFailure(result)) {
+      platformFailed = true;
+    }
+  });
+  try {
+    return await scriptOutcome(run, secrets, () => platformFailed);
+  } finally {
+    unwatch();
+  }
+}
+
 // Runs a script and answers its outcome: `complete`, or the error it ended
 // with (redacted with `secrets`), with when it started and ended in this tab
-// for the run's telemetry.
+// for the run's telemetry. `platformFailed` says, once the script has ended,
+// whether the platform failed a request the run made, which makes a realm
+// call's error `run-failed` rather than `call-failed`.
 export async function scriptOutcome(
   run: () => Promise<unknown>,
   secrets: string[],
+  platformFailed: () => boolean,
 ): Promise<AutomationScriptOutcome> {
   let startedAt = Date.now();
   let outcome: AutomationScriptOutcome;
@@ -233,7 +266,7 @@ export async function scriptOutcome(
     await run();
     outcome = { state: 'complete' };
   } catch (error) {
-    outcome = errorOutcome(error, secrets);
+    outcome = errorOutcome(error, secrets, platformFailed());
   }
   outcome.timing = { startedAt, endedAt: Date.now() };
   return outcome;
@@ -242,6 +275,7 @@ export async function scriptOutcome(
 function errorOutcome(
   error: unknown,
   secrets: string[],
+  platformFailed: boolean,
 ): AutomationScriptOutcome {
   let message = redactSecrets(
     error instanceof Error ? error.message : String(error),
@@ -261,6 +295,9 @@ function errorOutcome(
       message,
       ...(typeof line === 'number' ? { line } : {}),
     };
+  }
+  if (error instanceof RealmCallFailure && !platformFailed) {
+    return { state: 'error', reason: 'call-failed', message };
   }
   return { state: 'error', reason: 'run-failed', message };
 }

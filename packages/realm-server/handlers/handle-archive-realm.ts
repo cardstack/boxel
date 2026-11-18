@@ -54,23 +54,30 @@ export default function handleArchiveRealm({
       // pending and running runs canceled, until a direct writer resumes it. They pause
       // before the realm is marked archived, so a failure in between leaves
       // the realm visible with its automations stopped, never archived with
-      // them running, and a retry archives it.
-      await pauseRealmAutomations(
-        dbAdapter,
-        ri(virtualNetwork.unresolveURL(realmURL)),
-        {
-          reportRunChange: realmServerRunChangeReporter({
-            dbAdapter,
-            virtualNetwork,
-            reconciler,
-          }),
-          reportAutomationChange: realmServerAutomationChangeReporter({
-            virtualNetwork,
-            reconciler,
-          }),
-        },
-      );
+      // them running, and a retry archives it. They pause once more after
+      // it: a switch-on or resume that read the realm as not yet archived
+      // commits before that second pause reads the realm's automations (see
+      // `lockRealmAutomations`), and one that starts later finds the realm
+      // archived and is refused.
+      let pauseAutomations = () =>
+        pauseRealmAutomations(
+          dbAdapter,
+          ri(virtualNetwork.unresolveURL(realmURL)),
+          {
+            reportRunChange: realmServerRunChangeReporter({
+              dbAdapter,
+              virtualNetwork,
+              reconciler,
+            }),
+            reportAutomationChange: realmServerAutomationChangeReporter({
+              virtualNetwork,
+              reconciler,
+            }),
+          },
+        );
+      await pauseAutomations();
       await archiveRealm(dbAdapter, new URL(realmURL));
+      await pauseAutomations();
       // Stop the realm's indexer: cancel any in-flight from-scratch /
       // incremental-index job and drop the pending queue in every lane of
       // this realm's index lane family. Mirrors the realm-level cancel-jobs endpoint

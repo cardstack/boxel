@@ -10,6 +10,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
 import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors.ts';
 import { cliLog } from '../../lib/cli-log.ts';
+import { describeFetchError } from '../../lib/describe-fetch-error.ts';
 import {
   confirmPolicyAuditFor,
   sendConfirmingPolicyAudit,
@@ -151,10 +152,9 @@ export async function write(
 
     return { ok: true };
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    // A request that never got a response (refused, reset, closed) surfaces
+    // from fetch as a bare "fetch failed"; the reason is on its cause.
+    return { ok: false, error: describeFetchError(err) };
   }
 }
 

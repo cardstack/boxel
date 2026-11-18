@@ -60,7 +60,10 @@ import {
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
 } from './automation-admission-route.ts';
-import type { AutomationRun } from './automation-runs.ts';
+import {
+  runActsAsDirectWriter,
+  type AutomationRun,
+} from './automation-runs.ts';
 import type { AutomationCaps } from './automation-declaration.ts';
 import {
   checkAutomationPayer,
@@ -74,7 +77,6 @@ import {
 import type { ReportAutomationChange } from './automation-change-events.ts';
 import type { ReportRunChange } from './automation-run-events.ts';
 import type { DBAdapter } from './db.ts';
-import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import { isSessionRevoked } from './db-queries/user-queries.ts';
 import { param, query } from './expression.ts';
 import { logger } from './log.ts';
@@ -139,7 +141,8 @@ export interface AdmissionContext {
   checks: AutomationAdmissionChecks | undefined;
   // Told of each run a pause the admission makes cancels.
   reportRunChange?: ReportRunChange;
-  // Told of the automation a pause the admission makes.
+  // Told of the automation when the admission pauses it, or moves it into or
+  // out of waiting for credits.
   reportAutomationChange?: ReportAutomationChange;
 }
 
@@ -220,8 +223,12 @@ export async function admitRunIdentity(
       'This worker has no Matrix server name, so it cannot tell a direct writer from a bot account',
     );
   }
-  let realmURL = virtualNetwork.toURL(run.realm);
-  if (!(await isDirectWriter(dbAdapter, realmURL, actsAs, matrixServerName))) {
+  if (
+    !(await runActsAsDirectWriter(
+      { dbAdapter, virtualNetwork, matrixServerName },
+      { realm: run.realm, actsAs },
+    ))
+  ) {
     let refusal = refuse(
       'not-a-direct-writer',
       `${actsAs}, whom the run acts as, is no longer a direct writer of ${run.realm}`,
@@ -372,9 +379,9 @@ export async function admitRunOperations(
   return { ok: true, operations: asked.answer.operations ?? 0 };
 }
 
-// Moves the run's automation into or out of *waiting for credits*. The run's
-// own outcome doesn't depend on it, so a failure is logged and the next run's
-// admission moves it.
+// Moves the run's automation into or out of *waiting for credits*, telling
+// `reportAutomationChange` when it moved. The run's own outcome doesn't depend
+// on it, so a failure is logged and the next run's admission moves it.
 async function waitingForCredits(
   ctx: AdmissionContext,
   run: AutomationRun,
@@ -385,6 +392,7 @@ async function waitingForCredits(
       ctx.dbAdapter,
       run.automationId,
       { payer: run.actsAs, waiting },
+      { reportAutomationChange: ctx.reportAutomationChange },
     );
     if (moved) {
       log.info(

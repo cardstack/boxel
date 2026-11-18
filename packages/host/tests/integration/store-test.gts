@@ -1830,9 +1830,11 @@ module('Integration | Store', function (hooks) {
             keystrokes,
             // waitUntil budgets in polls rather than milliseconds — it charges
             // each poll the interval it asked for, capped at 10ms — so this is
-            // thousands of polls, not seconds. It stays well inside testem's
-            // browser_no_activity_timeout, which would take the whole shard
-            // rather than fail this test with the message below.
+            // thousands of polls, not seconds. Nothing else bounds the wait:
+            // testem has no per-test or no-activity timeout and QUnit's
+            // testTimeout is unset, so without this budget a lost keystroke
+            // would hold the shard until the CI job's own timeout rather than
+            // fail this test with the message below.
             waitUntil(() => typedSoFar() === 'Hassan Paper', {
               timeout: 3_000,
             }),
