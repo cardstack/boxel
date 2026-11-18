@@ -7,9 +7,10 @@
 //
 // A prefix is literal. Nothing in it is evaluated, and it reads nothing about
 // the caller, a target or the realm's settings, so what a specifier covers can
-// be read from the specifier alone. `*` and `:` are refused, which keeps them
-// free for a pattern form that wouldn't change what any existing specifier
-// means.
+// be read from the specifier alone. `*` and `:` are refused as written, which
+// keeps them free for a pattern form that wouldn't change what any existing
+// specifier means. A pattern form reads a prefix as written, never its decoded
+// segments, so their escapes `%2A` and `%3A` stay a literal `*` and `:`.
 //
 // A prefix is relative to the root of the realm it is applied to. A leading
 // `/` is optional, and a trailing `/` makes it a directory. Its

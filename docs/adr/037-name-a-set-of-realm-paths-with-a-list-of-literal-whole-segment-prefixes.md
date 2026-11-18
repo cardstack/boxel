@@ -53,7 +53,9 @@ realm's settings, or evaluate anything. `*` and `:` MUST be refused as written,
 so that a pattern form can be added later without changing what any existing
 specifier means. A later pattern form MAY match path shapes, but MUST NOT bind
 values. Their escapes name them literally, `%2A` a `*` and `%3A` a `:`, so a
-prefix can name a file whose name holds either one.
+prefix can name a file whose name holds either one. A later pattern form MUST
+read a prefix as written, never its decoded segments, so that an escaped `*`
+or `:` stays literal.
 
 ### 1.4. Matching
 

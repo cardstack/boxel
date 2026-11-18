@@ -101,7 +101,9 @@ const tests: SharedTests<unknown> = Object.freeze({
     // of a file the realm stores.
     assert.deepEqual(prefix('a%2Fb/').segments, ['a%2Fb']);
     assert.deepEqual(prefix('a%3Fb/').segments, ['a%3Fb']);
-    // `:` as written is reserved, so its escape names it.
+    // `*` and `:` as written are reserved, so their escapes name them.
+    assert.deepEqual(prefix('blog/%2A/').segments, ['blog', '*']);
+    assert.strictEqual(prefix('blog/%2A/').source, 'blog/%2A/');
     assert.deepEqual(prefix('notes re%3A budget.m4a').segments, [
       'notes re: budget.m4a',
     ]);
@@ -286,6 +288,15 @@ const tests: SharedTests<unknown> = Object.freeze({
       );
       assert.true(
         isFile(specifier('notes/a%253Ab.json'), local('notes/a%3Ab.json')),
+      );
+      // A realm resolves `%2A` in a URL's path to `*`, as a prefix does.
+      assert.strictEqual(local('notes/a%2Ab.json'), 'notes/a*b.json');
+      assert.true(
+        isFile(specifier('notes/a%2Ab.json'), local('notes/a*b.json')),
+      );
+      assert.false(
+        isFile(specifier('notes/%2A/'), local('notes/a.json')),
+        'an escaped * is literal, not a wildcard',
       );
     },
 
