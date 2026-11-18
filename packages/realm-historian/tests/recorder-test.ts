@@ -194,6 +194,23 @@ module('recorder', (hooks) => {
     return appendEvent(database.db, realm, fields);
   }
 
+  // An AI tool call's write of `content` to `PATH`, `offsetMs` after T0.
+  async function aiPatch(
+    toolCall: string,
+    content: string,
+    offsetMs: number,
+  ): Promise<ChangeEvent> {
+    return event({
+      author: ALICE,
+      channel: 'ai-assistant',
+      agent: AGENT,
+      room: ROOM,
+      correlationId: toolCall,
+      changes: [await put(PATH, content)],
+      occurredAt: at(offsetMs),
+    });
+  }
+
   async function feed(
     target: Recorder,
     events: ChangeEvent[],
@@ -718,6 +735,36 @@ module('recorder', (hooks) => {
     );
   });
 
+  test('an unattributed revision after two supersessions names both, newest first', async (assert) => {
+    let target = recorder();
+    await recordInitial(target);
+    let edit = await event({
+      author: ALICE,
+      changes: [await put(PATH, '{"v":"alice"}')],
+      occurredAt: at(0),
+    });
+    let patch = await aiPatch('tool-call-1', '{"v":"ai-1"}', 300);
+    // Replaced on disk by something that writes no event.
+    await put(PATH, '{"v":"out of band"}');
+    await feed(target, [edit, patch], T0 + 300 + quietPeriodMs);
+    await feed(target, [], T0 + 300 + maxAgeMs);
+
+    let revisions = await history();
+    assert.strictEqual(revisions.length, 4);
+    let [, userRevision, aiRevision, unattributed] = revisions;
+    assert.deepEqual(userRevision.trailers.superseded, [PATH]);
+    assert.deepEqual(aiRevision.trailers.superseded, [PATH]);
+    assert.strictEqual(subjectOf(unattributed), 'Unattributed changes');
+    assert.deepEqual(unattributed.trailers.includesSuperseded, [
+      `${aiRevision.id} ${PATH}`,
+      `${userRevision.id} ${PATH}`,
+    ]);
+    assert.strictEqual(
+      await show(unattributed.id, PATH),
+      '{"v":"out of band"}',
+    );
+  });
+
   test('a mismatch is superseded once a newer event for the path reaches the journal during the wait', async (assert) => {
     let target = recorder();
     await recordInitial(target);
@@ -894,6 +941,132 @@ module('recorder', (hooks) => {
     assert.deepEqual(aiRevision.trailers.includesSuperseded, [
       `${userRevision.id} ${PATH}`,
     ]);
+  });
+
+  test('a path superseded twice before capture is named for each superseding revision, newest first, by the revision that records it', async (assert) => {
+    let target = recorder();
+    await recordInitial(target);
+    let edit = await event({
+      author: ALICE,
+      changes: [await put(PATH, '{"v":"alice"}')],
+      occurredAt: at(0),
+    });
+    let firstPatch = await aiPatch('tool-call-1', '{"v":"ai-1"}', 300);
+    let secondPatch = await aiPatch('tool-call-2', '{"v":"ai-2"}', 600);
+    await feed(
+      target,
+      [edit, firstPatch, secondPatch],
+      T0 + 600 + quietPeriodMs,
+    );
+
+    let revisions = await history();
+    assert.strictEqual(revisions.length, 4);
+    let [, userRevision, firstRevision, secondRevision] = revisions;
+    assert.deepEqual(userRevision.trailers.superseded, [PATH]);
+    assert.deepEqual(firstRevision.trailers.superseded, [PATH]);
+    assert.deepEqual(secondRevision.trailers.includesSuperseded, [
+      `${firstRevision.id} ${PATH}`,
+      `${userRevision.id} ${PATH}`,
+    ]);
+    assert.strictEqual(await show(secondRevision.id, PATH), '{"v":"ai-2"}');
+  });
+
+  test('a path superseded twice is named for both across a restart before the revision that records it', async (assert) => {
+    let first = recorder();
+    await recordInitial(first);
+    let edit = await event({
+      author: ALICE,
+      changes: [await put(PATH, '{"v":"alice"}')],
+      occurredAt: at(0),
+    });
+    let firstPatch = await aiPatch('tool-call-1', '{"v":"ai-1"}', 300);
+    let secondPatch = await aiPatch('tool-call-2', '{"v":"ai-2"}', 600);
+    // Both superseded revisions commit; the task stops before the third.
+    await feed(first, [edit, firstPatch], T0 + 300 + quietPeriodMs);
+    await first.stop();
+    let restarted = recorder();
+    await feed(restarted, [secondPatch], T0 + 600 + quietPeriodMs);
+
+    let [, userRevision, firstRevision, secondRevision] = await history();
+    assert.deepEqual(userRevision.trailers.superseded, [PATH]);
+    assert.deepEqual(firstRevision.trailers.superseded, [PATH]);
+    assert.deepEqual(secondRevision.trailers.includesSuperseded, [
+      `${firstRevision.id} ${PATH}`,
+      `${userRevision.id} ${PATH}`,
+    ]);
+  });
+
+  test('a superseded path that a later write changing nothing has settled stays settled across a restart', async (assert) => {
+    let first = recorder();
+    await recordInitial(first);
+    let edit = await event({
+      author: ALICE,
+      changes: [await put(PATH, '{"v":"alice"}')],
+      occurredAt: at(0),
+    });
+    // Bob puts the first content back before the edit is captured: the
+    // edit is superseded, and Bob's write changes nothing at HEAD, so it
+    // records no revision.
+    let restore = await event({
+      author: BOB,
+      changes: [await put(PATH, '{"v":"initial"}')],
+      occurredAt: at(300),
+    });
+    await feed(first, [edit, restore], T0 + 300 + quietPeriodMs);
+    let firstPatch = await aiPatch('tool-call-1', '{"v":"ai-1"}', 600);
+    let secondPatch = await aiPatch('tool-call-2', '{"v":"ai-2"}', 900);
+    await feed(first, [firstPatch], T0 + 600 + quietPeriodMs);
+    await first.stop();
+    let restarted = recorder();
+    await feed(restarted, [secondPatch], T0 + 900 + quietPeriodMs);
+
+    let revisions = await history();
+    assert.strictEqual(revisions.length, 4, "Bob's write records no revision");
+    let [, userRevision, firstRevision, secondRevision] = revisions;
+    assert.deepEqual(userRevision.trailers.superseded, [PATH]);
+    assert.deepEqual(firstRevision.trailers.superseded, [PATH]);
+    assert.deepEqual(
+      secondRevision.trailers.includesSuperseded,
+      [`${firstRevision.id} ${PATH}`],
+      "the user's edit was settled by Bob's write, so only the AI's first patch is named",
+    );
+  });
+
+  test('two supersessions of a path that writes changing nothing have each settled stay settled across a restart', async (assert) => {
+    let first = recorder();
+    await recordInitial(first);
+    // Bob puts the first content back before each AI patch is captured: each
+    // patch is superseded, and each of Bob's writes changes nothing at HEAD,
+    // so it records no revision and settles the patch before it.
+    let firstPatch = await aiPatch('tool-call-1', '{"v":"ai-1"}', 0);
+    let firstRestore = await event({
+      author: BOB,
+      changes: [await put(PATH, '{"v":"initial"}')],
+      occurredAt: at(300),
+    });
+    await feed(first, [firstPatch, firstRestore], T0 + 300 + quietPeriodMs);
+    let secondPatch = await aiPatch('tool-call-2', '{"v":"ai-2"}', 600);
+    let secondRestore = await event({
+      author: BOB,
+      changes: [await put(PATH, '{"v":"initial"}')],
+      occurredAt: at(900),
+    });
+    await feed(first, [secondPatch, secondRestore], T0 + 900 + quietPeriodMs);
+    await first.stop();
+    let restarted = recorder();
+    let thirdPatch = await aiPatch('tool-call-3', '{"v":"ai-3"}', 1200);
+    await feed(restarted, [thirdPatch], T0 + 1200 + quietPeriodMs);
+
+    let revisions = await history();
+    assert.strictEqual(revisions.length, 4, "Bob's writes record no revision");
+    let [, firstRevision, secondRevision, thirdRevision] = revisions;
+    assert.deepEqual(firstRevision.trailers.superseded, [PATH]);
+    assert.deepEqual(secondRevision.trailers.superseded, [PATH]);
+    assert.strictEqual(
+      thirdRevision.trailers.includesSuperseded,
+      undefined,
+      "each AI patch was settled by Bob's write after it, so neither is named",
+    );
   });
 
   test("a failure in the realm's own files stalls the realm without ending the task", async (assert) => {
