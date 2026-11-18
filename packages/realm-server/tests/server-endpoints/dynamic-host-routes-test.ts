@@ -722,7 +722,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           ${labelled('Post', '@field status = contains(StringField);')}
           ${labelled('Note')}
           ${labelled('Memo')}
-          ${labelled('Gadget', '@field category = linksTo(() => Category);')}
+          ${labelled(
+            'Gadget',
+            // A field match filters through the link, so its target is in
+            // the search doc.
+            '@field category = linksTo(() => Category, { searchable: true });',
+          )}
         `,
         'Category/shoes.json': card('Category', {
           slug: 'shoes',
@@ -735,7 +740,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         ),
         // Shares Product/trail's slug and category; Product/trail sorts
         // first.
-        'Product/trail-2.json': card(
+        'Product/trail2.json': card(
           'Product',
           { slug: 'trail-runner', label: 'Second Trail Runner' },
           { category: { links: { self: '../Category/shoes' } } },
@@ -995,7 +1000,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       let first = await page('p/trail');
       assert.strictEqual(first.status, 301, 'the first card redirects');
 
-      let second = await page('p/trail-2');
+      let second = await page('p/trail2');
       assert.strictEqual(second.status, 200, 'the second card does not');
       assert.true(second.text.includes('Served Second Trail Runner'));
     });
