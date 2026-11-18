@@ -695,7 +695,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     // match with a `where`, and a card id template the `where` sends drafts
     // to. Notes fit no route but their alias. A memo's canonical address is
     // its alias's own path, and a gadget's goes through its link to a
-    // category.
+    // category. Two products share a slug, so their address serves the one
+    // that sorts first.
     function makeAliasFixture(): Record<
       string,
       string | LooseSingleCardDocument
@@ -730,6 +731,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         'Product/trail.json': card(
           'Product',
           { slug: 'trail-runner', label: 'Trail Runner' },
+          { category: { links: { self: '../Category/shoes' } } },
+        ),
+        // Shares Product/trail's slug and category; Product/trail sorts
+        // first.
+        'Product/trail-2.json': card(
+          'Product',
+          { slug: 'trail-runner', label: 'Second Trail Runner' },
           { category: { links: { self: '../Category/shoes' } } },
         ),
         'Post/hello.json': card('Post', {
@@ -928,7 +936,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.true(response.text.includes('Served Note One'));
     });
 
-    test('a failed lookup of the canonical address answers 503, and a rate-limited one 429', async function (assert) {
+    test('a failed lookup of the canonical address serves the card at the alias path', async function (assert) {
       let handle = testRealm.handle;
       let status = 500;
       testRealm.handle = async (req: Request) => {
@@ -942,14 +950,54 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       };
       try {
         let failed = await page('a/hello');
-        assert.strictEqual(failed.status, 503, 'a failed search answers 503');
+        assert.strictEqual(failed.status, 200, 'a failed search');
+        assert.true(failed.text.includes('Served Hello Post'));
         status = 429;
         let limited = await page('a/hello');
-        assert.strictEqual(limited.status, 429, 'a rate limit answers 429');
-        assert.strictEqual(limited.headers['retry-after'], '30');
+        assert.strictEqual(limited.status, 200, 'a rate limit');
+        assert.true(limited.text.includes('Served Hello Post'));
       } finally {
         testRealm.handle = handle;
       }
+    });
+
+    test('while a route is dropped for an unavailable type, an alias serves the card', async function (assert) {
+      // The canonical route of a published post is dropped, so the walk
+      // would reach the archive route, which isn't canonical.
+      let getHostRoutes = testRealm.getHostRoutes;
+      testRealm.getHostRoutes = async function (this: Realm) {
+        let validation = await getHostRoutes.call(this);
+        return {
+          ...validation,
+          routes: validation.routes.filter(
+            (route) => route.fullPath !== '/posts/:slug',
+          ),
+          complete: false,
+        };
+      };
+      try {
+        let response = await page('a/hello');
+        assert.strictEqual(response.status, 200, 'no redirect');
+        assert.true(response.text.includes('Served Hello Post'));
+      } finally {
+        testRealm.getHostRoutes = getHostRoutes;
+      }
+    });
+
+    test('an alias whose canonical address serves another card with the same value serves its own card', async function (assert) {
+      let shared = await page('c/shoes/trail-runner');
+      assert.true(
+        shared.text.includes('Served Trail Runner'),
+        'the shared address serves the card that sorts first',
+      );
+      assert.false(shared.text.includes('Served Second Trail Runner'));
+
+      let first = await page('p/trail');
+      assert.strictEqual(first.status, 301, 'the first card redirects');
+
+      let second = await page('p/trail-2');
+      assert.strictEqual(second.status, 200, 'the second card does not');
+      assert.true(second.text.includes('Served Second Trail Runner'));
     });
   });
 });

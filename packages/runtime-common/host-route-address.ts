@@ -175,7 +175,6 @@ export function hostRouteAddress(
 }
 
 export type HostRouteDynamicRoute = HostCardIdRoute | HostFieldMatchRoute;
-type DynamicRoute = HostRouteDynamicRoute;
 
 // The reasons that mean a route can't tell yet whether the input fits it,
 // because a card or a value it needs isn't loaded.
@@ -188,7 +187,6 @@ const UNDECIDED: ReadonlySet<HostRouteNoAddressReason> = new Set([
 
 // A route's chain from the top level down to the route.
 export type HostRouteChain = readonly HostRoute[];
-type Chain = HostRouteChain;
 
 // Why one candidate route gave no address. `fits` is false when the
 // candidate simply doesn't take the input (an id that doesn't fit its
@@ -284,7 +282,7 @@ class Lookup {
       }
       // The values fill the route's own segments only, so a route under a
       // dynamic route can't be filled.
-      if (chain.slice(0, -1).some(isDynamic)) {
+      if (chain.slice(0, -1).some(isDynamicHostRoute)) {
         continue;
       }
       let params: RouteParams = {};
@@ -358,14 +356,14 @@ class Lookup {
   // `cards` form one card may stand for a nested route: it fills the levels
   // above it from its links to them.
   private fillChain(
-    chain: Chain,
+    chain: HostRouteChain,
     args: readonly (BaseDef | string | number)[],
     form: 'cards' | 'name',
   ):
     | { ok: true; address: string; route: HostRoute }
     | { ok: false; miss: Miss } {
     let route = chain[chain.length - 1]!;
-    let levels = chain.filter(isDynamic);
+    let levels = chain.filter(isDynamicHostRoute);
     let miss = (reason: HostRouteNoAddressReason, fits = true) => ({
       ok: false as const,
       miss: { reason, route, fits },
@@ -379,8 +377,8 @@ class Lookup {
       return miss('wrong-argument-count', false);
     }
 
-    let params: RouteParams = {};
-    // The card or id for each level, from the bottom up.
+    // The card or id for each level, from the top down. In the `cards` form
+    // one card fills the bottom level and the rest come from its links.
     let given: (BaseDef | string | number | undefined)[] = levels.map((_, i) =>
       args.length === levels.length
         ? args[i]
@@ -388,82 +386,63 @@ class Lookup {
           ? args[0]
           : undefined,
     );
+    let result = runHostRouteWalk(
+      walkHostRouteChain(chain, given),
+      (step): HostRouteWalkAnswer<BaseDef | string | number> => {
+        switch (step.kind) {
+          case 'parent': {
+            let parent = this.parentFromChild(step.childLevel, step.child);
+            return typeof parent === 'object' && 'reason' in parent
+              ? parent
+              : { card: parent };
+          }
+          case 'level':
+            return this.levelAnswer(step.level, step.card, step.derived, form);
+          case 'member':
+            // In the route-name form a string or number is a segment value,
+            // not a card, so there is nothing to check it against.
+            return form === 'name' &&
+              (typeof step.child !== 'object' ||
+                typeof step.parent !== 'object')
+              ? undefined
+              : this.isMember(step.childLevel, step.child, step.parent);
+        }
+      },
+    );
+    return result.ok
+      ? { ok: true, address: result.address, route }
+      : miss(result.reason, result.fits);
+  }
 
-    for (let i = levels.length - 1; i >= 0; i--) {
-      let level = levels[i]!;
-      let arg = given[i];
+  // The params a level reads from its argument: a segment value (a number,
+  // or a string in the route-name form) for a level with one segment, or a
+  // card or id.
+  private levelAnswer(
+    level: HostRouteDynamicRoute,
+    arg: BaseDef | string | number,
+    derived: boolean,
+    form: 'cards' | 'name',
+  ): HostRouteLevelAnswer {
+    if (typeof arg === 'number' || (form === 'name' && isString(arg))) {
       let ownNames = level.pattern.paramNames;
-      let derived = arg === undefined;
-      if (derived) {
-        if (
-          ownNames.every((n) => Object.prototype.hasOwnProperty.call(params, n))
-        ) {
-          // A card id pattern below already filled this level.
-          continue;
-        }
-        let child = given[i + 1];
-        let parent = this.parentFromChild(levels[i + 1]!, child);
-        if (typeof parent === 'object' && 'reason' in parent) {
-          return miss(parent.reason);
-        }
-        arg = parent;
-        given[i] = arg;
+      if (ownNames.length !== 1) {
+        return { reason: 'wrong-argument-count', fits: true };
       }
-      if (typeof arg === 'number' || (form === 'name' && isString(arg))) {
-        // A value for a level with one segment.
-        if (ownNames.length !== 1) {
-          return miss('wrong-argument-count');
-        }
-        let value = hostRouteSegmentValue(arg);
-        if (value === undefined) {
-          return miss('invalid-segment-value');
-        }
-        if (!agreeHostRouteParam(params, ownNames[0]!, value)) {
-          return miss('not-member');
-        }
-        continue;
+      let value = hostRouteSegmentValue(arg);
+      if (value === undefined) {
+        return { reason: 'invalid-segment-value', fits: true };
       }
-      let filled = this.levelParams(level, arg!, derived);
-      if ('reason' in filled) {
-        return miss(filled.reason, filled.fits);
-      }
-      for (let [n, v] of Object.entries(filled.params)) {
-        if (!agreeHostRouteParam(params, n, v)) {
-          return miss('not-member');
-        }
-      }
-      // Two given cards must belong together through the child's link.
-      // In the route-name form a string or number is a segment value, not a
-      // card, so there is nothing to check it against.
-      let child = given[i + 1];
-      if (
-        !derived &&
-        i < levels.length - 1 &&
-        child !== undefined &&
-        !(form === 'name' && typeof child !== 'object')
-      ) {
-        let member = this.isMember(levels[i + 1]!, child, arg!);
-        if (member === false) {
-          return miss('not-member');
-        }
-      }
+      return { params: { [ownNames[0]!]: value } };
     }
-
-    let address = fillHostRouteChainPath(chain, params);
-    if (address === undefined) {
-      return miss('invalid-segment-value');
-    }
-    return { ok: true, address, route };
+    return this.levelParams(level, arg, derived);
   }
 
   // The params a level's route reads from one card or id.
   private levelParams(
-    level: DynamicRoute,
+    level: HostRouteDynamicRoute,
     card: BaseDef | string,
     derived: boolean,
-  ):
-    | { params: RouteParams }
-    | { reason: HostRouteNoAddressReason; fits: boolean } {
+  ): HostRouteLevelAnswer {
     if (level.kind === 'card-id') {
       let id = cardId(card);
       if (id === undefined) {
@@ -516,7 +495,7 @@ class Lookup {
 
   // The parent level's card, or its id, from the child card's link to it.
   private parentFromChild(
-    childLevel: DynamicRoute,
+    childLevel: HostRouteDynamicRoute,
     child: BaseDef | string | number | undefined,
   ): BaseDef | string | { reason: HostRouteNoAddressReason } {
     let link: HostRouteParentLink | undefined = childLevel.parentLink;
@@ -550,7 +529,7 @@ class Lookup {
   // Whether a child card belongs to a parent card through the child route's
   // link. `undefined` when the link can't be read from what is loaded.
   private isMember(
-    childLevel: DynamicRoute,
+    childLevel: HostRouteDynamicRoute,
     child: BaseDef | string | number,
     parent: BaseDef | string | number,
   ): boolean | undefined {
@@ -646,9 +625,9 @@ class Lookup {
 }
 
 interface RouteIndex {
-  chains: Chain[];
+  chains: HostRouteChain[];
   // The first chain in authored order that ends at a route with the name.
-  byName: Map<string, Chain>;
+  byName: Map<string, HostRouteChain>;
 }
 
 // The validated routes don't change between lookups, and a page looks up
@@ -659,7 +638,7 @@ function indexOf(routes: readonly HostRoute[]): RouteIndex {
   let index = routeIndexes.get(routes);
   if (!index) {
     let all = chains(routes);
-    let byName = new Map<string, Chain>();
+    let byName = new Map<string, HostRouteChain>();
     for (let chain of all) {
       let name = chain[chain.length - 1]!.name;
       if (name !== undefined && !byName.has(name)) {
@@ -674,14 +653,159 @@ function indexOf(routes: readonly HostRoute[]): RouteIndex {
 
 // Every route's chain from the top level down to it, in depth-first
 // authored order: a route, then its children, then its later siblings.
-function chains(routes: readonly HostRoute[], above: Chain = []): Chain[] {
-  let out: Chain[] = [];
+function chains(
+  routes: readonly HostRoute[],
+  above: HostRouteChain = [],
+): HostRouteChain[] {
+  let out: HostRouteChain[] = [];
   for (let route of routes) {
     let chain = [...above, route];
     out.push(chain);
     out.push(...chains(route.routes, chain));
   }
   return out;
+}
+
+// One step of a chain walk that the caller answers from its own cards:
+// - `level`: the params a level's route reads from a card
+//   (`HostRouteLevelAnswer`);
+// - `parent`: the parent level's card, from the child card's link to it
+//   (`HostRouteParentAnswer`);
+// - `member`: whether two given cards belong together through the child
+//   route's link: `true`, `false`, or `undefined` when it can't be told.
+export type HostRouteWalkStep<C> =
+  | { kind: 'level'; level: HostRouteDynamicRoute; card: C; derived: boolean }
+  | {
+      kind: 'parent';
+      childLevel: HostRouteDynamicRoute;
+      child: C | undefined;
+    }
+  | {
+      kind: 'member';
+      childLevel: HostRouteDynamicRoute;
+      child: C;
+      parent: C;
+    };
+
+export type HostRouteLevelAnswer =
+  | { params: RouteParams }
+  | { reason: HostRouteNoAddressReason; fits: boolean };
+
+export type HostRouteParentAnswer<C> =
+  | { card: C }
+  | { reason: HostRouteNoAddressReason };
+
+export type HostRouteWalkAnswer<C> =
+  | HostRouteLevelAnswer
+  | HostRouteParentAnswer<C>
+  | boolean
+  | undefined;
+
+export type HostRouteWalkResult =
+  | { ok: true; address: string }
+  | { ok: false; reason: HostRouteNoAddressReason; fits: boolean };
+
+export type HostRouteWalk<C> = Generator<
+  HostRouteWalkStep<C>,
+  HostRouteWalkResult,
+  HostRouteWalkAnswer<C>
+>;
+
+// The walk that fills a route's chain from cards, shared by every caller
+// that works out an address: `hostRouteAddress` answers its steps from
+// loaded cards, and `hostRouteCanonicalAddress` from the index. `given`
+// holds the card for each dynamic level, from the top down, or `undefined`
+// for a level filled from the card below it. The levels are filled from the
+// bottom up: a level a card id pattern below already filled is skipped, a
+// level with no card takes the parent of the card below it, and every level
+// must agree on each value it shares with another.
+export function* walkHostRouteChain<C>(
+  chain: HostRouteChain,
+  given: readonly (C | undefined)[],
+): HostRouteWalk<C> {
+  let levels = chain.filter(isDynamicHostRoute);
+  let cards = [...given];
+  let params: RouteParams = {};
+  for (let i = levels.length - 1; i >= 0; i--) {
+    let level = levels[i]!;
+    let card = cards[i];
+    let derived = card === undefined;
+    if (card === undefined) {
+      if (
+        level.pattern.paramNames.every((n) =>
+          Object.prototype.hasOwnProperty.call(params, n),
+        )
+      ) {
+        // A card id pattern below already filled this level.
+        continue;
+      }
+      let parent = (yield {
+        kind: 'parent',
+        childLevel: levels[i + 1]!,
+        child: cards[i + 1],
+      }) as HostRouteParentAnswer<C>;
+      if ('reason' in parent) {
+        return { ok: false, reason: parent.reason, fits: true };
+      }
+      card = parent.card;
+      cards[i] = card;
+    }
+    let filled = (yield {
+      kind: 'level',
+      level,
+      card,
+      derived,
+    }) as HostRouteLevelAnswer;
+    if ('reason' in filled) {
+      return { ok: false, reason: filled.reason, fits: filled.fits };
+    }
+    for (let [n, v] of Object.entries(filled.params)) {
+      if (!agreeHostRouteParam(params, n, v)) {
+        return { ok: false, reason: 'not-member', fits: true };
+      }
+    }
+    // Two given cards must belong together through the child's link.
+    let child = cards[i + 1];
+    if (!derived && i < levels.length - 1 && child !== undefined) {
+      let member = yield {
+        kind: 'member',
+        childLevel: levels[i + 1]!,
+        child,
+        parent: card,
+      };
+      if (member === false) {
+        return { ok: false, reason: 'not-member', fits: true };
+      }
+    }
+  }
+  let address = fillHostRouteChainPath(chain, params);
+  return address === undefined
+    ? { ok: false, reason: 'invalid-segment-value', fits: true }
+    : { ok: true, address };
+}
+
+// Runs a chain walk, answering each step synchronously.
+export function runHostRouteWalk<C>(
+  walk: HostRouteWalk<C>,
+  answer: (step: HostRouteWalkStep<C>) => HostRouteWalkAnswer<C>,
+): HostRouteWalkResult {
+  let next = walk.next();
+  while (!next.done) {
+    next = walk.next(answer(next.value));
+  }
+  return next.value;
+}
+
+// Runs a chain walk, answering each step asynchronously.
+export async function runHostRouteWalkAsync<C>(
+  walk: HostRouteWalk<C>,
+  answer: (step: HostRouteWalkStep<C>) => Promise<HostRouteWalkAnswer<C>>,
+): Promise<HostRouteWalkResult> {
+  let next = walk.next();
+  while (!next.done) {
+    next = walk.next(await answer(next.value));
+  }
+  return next.value;
 }
 
 // The chains of the routes that can give a card its canonical address, in
@@ -691,7 +815,7 @@ function chains(routes: readonly HostRoute[], above: Chain = []): Chain[] {
 // whether a card fits each chain, and the first that fits is canonical.
 export function canonicalCandidateChains(
   routes: readonly HostRoute[],
-): Chain[] {
+): HostRouteChain[] {
   return indexOf(routes).chains.filter((chain) => {
     let route = chain[chain.length - 1]!;
     if (route.kind === 'redirect') {
@@ -701,18 +825,16 @@ export function canonicalCandidateChains(
   });
 }
 
-export function isDynamicHostRoute(route: HostRoute): route is DynamicRoute {
-  return isDynamic(route);
-}
-
-function isDynamic(route: HostRoute): route is DynamicRoute {
+export function isDynamicHostRoute(
+  route: HostRoute,
+): route is HostRouteDynamicRoute {
   return route.kind === 'card-id' || route.kind === 'field-match';
 }
 
 // The address of a chain, each level's own path filled from `params` and
 // joined.
 export function fillHostRouteChainPath(
-  chain: Chain,
+  chain: HostRouteChain,
   params: RouteParams,
 ): string | undefined {
   let path = '';
@@ -733,8 +855,10 @@ export function fillHostRouteChainPath(
 
 // The address of a fixed card route: its chain's paths joined. A fixed route
 // under a dynamic route has no address from its card alone.
-export function fixedHostRouteChainAddress(chain: Chain): string | undefined {
-  if (chain.some(isDynamic)) {
+export function fixedHostRouteChainAddress(
+  chain: HostRouteChain,
+): string | undefined {
+  if (chain.some(isDynamicHostRoute)) {
     return undefined;
   }
   return fillHostRouteChainPath(chain, {}) ?? chain[chain.length - 1]!.fullPath;

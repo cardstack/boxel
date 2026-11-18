@@ -4,9 +4,9 @@
 // index as the visitor.
 //
 // It walks the same candidate routes in the same canonical order as
-// `hostRouteAddress` (`canonicalCandidateChains`) and fills an address with
-// the same helpers, so the two give the same address for the same card.
-// Only the fit of each level is decided from index data:
+// `hostRouteAddress` (`canonicalCandidateChains`), and fills each with the
+// same walk (`walkHostRouteChain`), so the two give the same address for
+// the same card. Only the fit of each level is decided from index data:
 //
 // - a card id template matches the card's served URL against its pattern;
 // - a fixed card route matches its own card;
@@ -22,14 +22,15 @@
 
 import type { ResolvedCodeRef } from './code-ref.ts';
 import {
-  agreeHostRouteParam,
   canonicalCandidateChains,
-  fillHostRouteChainPath,
   fixedHostRouteChainAddress,
   hostRouteSegmentValue,
   isDynamicHostRoute,
+  runHostRouteWalkAsync,
+  walkHostRouteChain,
   type HostRouteChain,
   type HostRouteDynamicRoute,
+  type HostRouteWalkAnswer,
 } from './host-route-address.ts';
 import type { HostRouteLoad } from './host-route-resolver.ts';
 import type { HostRoute } from './host-routes.ts';
@@ -138,43 +139,38 @@ class CanonicalWalk {
   }
 
   // Fills a candidate chain from one card at its last dynamic level, the
-  // parent levels from the card's links to them, as `hostRouteAddress`
-  // does for a single card. `undefined` when the card doesn't fit.
+  // parent levels from the card's links to them, with the walk
+  // `hostRouteAddress` runs. `undefined` when the card doesn't fit.
   async fill(chain: HostRouteChain, cardHref: string) {
     let levels = chain.filter(isDynamicHostRoute);
-    let params: RouteParams = {};
-    let given: (string | undefined)[] = levels.map((_, i) =>
+    let given = levels.map((_, i) =>
       i === levels.length - 1 ? cardHref : undefined,
     );
-    for (let i = levels.length - 1; i >= 0; i--) {
-      let level = levels[i]!;
-      let href = given[i];
-      if (href === undefined) {
-        if (
-          level.pattern.paramNames.every((n) =>
-            Object.prototype.hasOwnProperty.call(params, n),
-          )
-        ) {
-          // A card id pattern below already filled this level.
-          continue;
+    let result = await runHostRouteWalkAsync(
+      walkHostRouteChain<string>(chain, given),
+      async (step): Promise<HostRouteWalkAnswer<string>> => {
+        switch (step.kind) {
+          case 'parent': {
+            let parent = await this.parentFromChild(
+              step.childLevel,
+              step.child,
+            );
+            return parent === undefined
+              ? { reason: 'no-parent' }
+              : { card: parent };
+          }
+          case 'level': {
+            let params = await this.levelParams(step.level, step.card);
+            return params ? { params } : { reason: 'no-route', fits: false };
+          }
+          case 'member':
+            // One card is given, so every level above it comes from its
+            // links and there is no pair to check.
+            return undefined;
         }
-        href = await this.parentFromChild(levels[i + 1]!, given[i + 1]);
-        if (href === undefined) {
-          return undefined;
-        }
-        given[i] = href;
-      }
-      let filled = await this.levelParams(level, href);
-      if (!filled) {
-        return undefined;
-      }
-      for (let [n, v] of Object.entries(filled)) {
-        if (!agreeHostRouteParam(params, n, v)) {
-          return undefined;
-        }
-      }
-    }
-    return fillHostRouteChainPath(chain, params);
+      },
+    );
+    return result.ok ? result.address : undefined;
   }
 
   // The params a level's route reads from one card, or `undefined` when the
