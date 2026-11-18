@@ -42,6 +42,11 @@ export function authorizationMiddleware(
       ) {
         token = await tokenSource.reauthenticate(realmURL);
         if (token) {
+          // The refused response is about to be dropped. Release its body
+          // rather than leaving it unread: the host's request limiter holds a
+          // request's slot until its body ends, so an unread body would keep
+          // the replay, and every request behind it, waiting.
+          await response.body?.cancel().catch(() => {});
           req.headers.set('Authorization', token);
           response = await next(req);
         }
