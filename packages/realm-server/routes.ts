@@ -83,6 +83,7 @@ import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-clai
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.ts';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
 import {
+  handleHostURLHomePageCheck,
   handleListHostURLs,
   handleMountHostURL,
   handleSetCanonicalHostURL,
@@ -1037,6 +1038,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_host-urls',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleListHostURLs(args),
+  );
+  router.get(
+    '/_host-urls/home-page-check',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleHostURLHomePageCheck(args),
   );
   router.post(
     '/_host-urls',

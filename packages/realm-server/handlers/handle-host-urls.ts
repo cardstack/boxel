@@ -45,6 +45,8 @@ import {
 // (ADR 033 §1.3).
 //
 //   GET    /_host-urls?realm=<realm URL>  the realm's host URLs
+//   GET    /_host-urls/home-page-check?realm=<realm URL>
+//                                         whether the realm can be mounted
 //   POST   /_host-urls                    mount: add a host URL
 //   PATCH  /_host-urls/:id                mark a host URL canonical
 //   DELETE /_host-urls/:id                unmount: remove a host URL
@@ -109,6 +111,45 @@ export function handleListHostURLs(
       });
     } catch (error) {
       log.error('Error listing host URLs:', error);
+      await sendResponseForSystemError(ctxt, 'Internal server error', error);
+    }
+  };
+}
+
+// The anonymous home page check (`lib/anonymous-home-page.ts`) for a realm,
+// as a `home-page-check` resource whose attributes are the check's report. A
+// realm can be mounted only when `anonymousCanView` is true, so a client asks
+// for this before it offers a mount, and shows a writer what is missing.
+export function handleHostURLHomePageCheck(
+  args: CreateRoutesArgs,
+): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  return async function (ctxt: Koa.Context) {
+    try {
+      let rawRealmURL = ctxt.query.realm;
+      let realmURL =
+        typeof rawRealmURL === 'string' ? normalizeRealmURL(rawRealmURL) : null;
+      if (!realmURL) {
+        await sendResponseForBadRequest(
+          ctxt,
+          'The realm query parameter must be a realm URL',
+        );
+        return;
+      }
+      let realm = await administeredRealm(ctxt, args, realmURL.href);
+      if (!realm) {
+        return;
+      }
+      let mounted = await args.reconciler.lookupOrMount(realm.url);
+      if (!mounted) {
+        await sendResponseForNotFound(ctxt, `Realm not found: ${realm.url}`);
+        return;
+      }
+      let report = await checkAnonymousHomePage(mounted);
+      await sendDocument(ctxt, 200, {
+        data: { type: 'home-page-check', id: realm.url, attributes: report },
+      });
+    } catch (error) {
+      log.error('Error checking the home page of a realm:', error);
       await sendResponseForSystemError(ctxt, 'Internal server error', error);
     }
   };
