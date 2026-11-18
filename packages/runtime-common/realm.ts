@@ -1487,8 +1487,9 @@ const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
 // Carries the transpiler version, so compiled output stored or cached under an
 // earlier version no longer matches the validator a request builds and is
-// compiled over. A realm adds its canonical name, which its compiled output
-// names its modules by.
+// compiled over. A realm adds the transpiler identity it was given, which names
+// the installed packages that compiled the output, and its canonical name,
+// which its compiled output names its modules by.
 const MODULE_ETAG_VARIANT = `module-v${TRANSPILE_VERSION}`;
 
 // A compile this long holds up every other request the process has, so it is
@@ -3665,6 +3666,7 @@ export class Realm {
       audioSizeLimitBytes,
       videoSizeLimitBytes,
       transpileCoordinator,
+      transpilerIdentity,
       mediaCacheAdapter,
       cardDocumentCache,
       realmFor,
@@ -3699,6 +3701,13 @@ export class Realm {
       // in-memory deployments leave this undefined and the uncoordinated
       // CS-11029 in-process dedup is the only sharing layer.
       transpileCoordinator?: PopulateCoordinator;
+      // Names the installed packages `transpileJS` runs (see
+      // `realm-server/lib/transpiler-identity.ts`). It is part of the
+      // validator of every module the realm compiles, so a compile cached
+      // under other packages, in memory, in `module_transpile_cache` or by a
+      // client, is compiled again rather than served. Without it, only
+      // `TRANSPILE_VERSION` marks the transpiler.
+      transpilerIdentity?: string;
       // The MediaCache object store the `_capture/` route streams from.
       // Optional — a process without one configured serves every capture
       // request as an uncaptured miss.
@@ -3734,7 +3743,9 @@ export class Realm {
   ) {
     this.paths = new RealmPaths(new URL(url), virtualNetwork);
     this.#canonicalPaths = new RealmPaths(canonicalName);
-    this.#moduleEtagVariant = `${MODULE_ETAG_VARIANT}-${canonicalName}`;
+    this.#moduleEtagVariant = transpilerIdentity
+      ? `${MODULE_ETAG_VARIANT}-${transpilerIdentity}-${canonicalName}`
+      : `${MODULE_ETAG_VARIANT}-${canonicalName}`;
     this.#realmSecretSeed = secretSeed;
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
