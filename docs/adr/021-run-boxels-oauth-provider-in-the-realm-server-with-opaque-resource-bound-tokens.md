@@ -142,8 +142,8 @@ by its client ID's registrable domain, and a DCR client as unverified, beside
 its redirect URI's registrable domain. It MUST NOT show a client's logo or
 website link.
 
-The endpoints that need no sign-in (registration, authorization, token and
-device-code entry) MUST be rate-limited. The token endpoint's limit MUST NOT
+The endpoints that need no sign-in (registration, authorization, token,
+revocation and device-code entry) MUST be rate-limited. The token endpoint's limit MUST NOT
 be keyed on the caller's address alone, since a hosted client refreshes every
 user's tokens from a few addresses. A client registered by DCR SHOULD be
 deleted once it has gone unused for a set period.
