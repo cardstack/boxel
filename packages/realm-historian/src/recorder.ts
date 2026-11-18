@@ -1529,7 +1529,12 @@ export class Recorder implements ManagedRecorder {
       }
       this.#sweep = undefined;
       this.#snapshotTried = true;
-      await this.#walkFailed(pending.error, 'skipping the initial snapshot');
+      this.#walkFailed(pending.error, 'skipping the initial snapshot');
+      await this.#persist({
+        cursor: this.#cursor,
+        head: this.#head,
+        requestSweep: true,
+      });
       return;
     }
     if (pending.walk!.changes.size === 0) {
@@ -1592,12 +1597,16 @@ export class Recorder implements ManagedRecorder {
     }
     if (pending.error !== undefined) {
       this.#scanSweep = undefined;
-      await this.#walkFailed(
+      this.#walkFailed(
         pending.error,
         `moving past the scan event ${scan.event.seq}`,
       );
       await this.#hook('cursor');
-      await this.#persist({ cursor: scan.position, head: this.#head });
+      await this.#persist({
+        cursor: scan.position,
+        head: this.#head,
+        requestSweep: true,
+      });
       this.#finish(group);
       return 'committed';
     }
@@ -1622,24 +1631,18 @@ export class Recorder implements ManagedRecorder {
     return 'committed';
   }
 
-  // A walk failed. A failure that ends the task does; otherwise a sweep is
-  // asked for in the realm's state row, which the daily sweep's schedule
-  // picks up.
-  async #walkFailed(error: unknown, consequence: string): Promise<void> {
+  // A walk failed. A failure that ends the task does; otherwise the caller
+  // asks for a sweep in the realm's state row, as it moves on, which the
+  // daily sweep's schedule picks up.
+  #walkFailed(error: unknown, consequence: string): void {
     if (
       error instanceof LeaseLostError ||
       error instanceof RecorderFatalError
     ) {
       throw error;
     }
-    let { realm } = this.#options;
     log.warn(
-      `sweeping ${realm.url} failed; ${consequence}, and asking for a sweep: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    await this.#query(
-      `UPDATE realm_history_state SET sweep_requested_at = now()
-       WHERE realm_id = $1`,
-      [realm.id],
+      `sweeping ${this.#options.realm.url} failed; ${consequence}, and asking for a sweep: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
