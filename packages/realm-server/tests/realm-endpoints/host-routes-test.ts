@@ -10,6 +10,7 @@ import type {
   CachingDefinitionLookup,
   LooseSingleCardDocument,
   Realm,
+  RealmPermissions,
 } from '@cardstack/runtime-common';
 
 import {
@@ -147,14 +148,17 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       }
     });
 
-    function hostRoutes(userId?: string) {
+    function hostRoutes(
+      userId?: string,
+      permissions: RealmPermissions['user'] = DEFAULT_PERMISSIONS,
+    ) {
       let get = request
         .get('/_host-routes')
         .set('Accept', SupportedMimeType.JSON);
       return userId
         ? get.set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, userId, DEFAULT_PERMISSIONS)}`,
+            `Bearer ${createJWT(testRealm, userId, permissions)}`,
           )
         : get;
     }
@@ -212,7 +216,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(anonymous.status, 401, 'no token: 401');
       assert.strictEqual(anonymous.body.routes, undefined, 'and no routes');
 
-      let stranger = await hostRoutes(strangerUserId);
+      let stranger = await hostRoutes(strangerUserId, []);
       assert.strictEqual(stranger.status, 403, 'no read permission: 403');
       assert.strictEqual(stranger.body.routes, undefined, 'and no routes');
     });
