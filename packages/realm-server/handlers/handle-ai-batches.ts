@@ -1,7 +1,11 @@
 import type Koa from 'koa';
 import {
   automationRunForCall,
+  endAutomationRunNotADirectWriter,
+  runActsAsDirectWriter,
   getAIBatch,
+  isLateAIBatch,
+  recordAIBatchReadByRun,
   reserveAutomationRunAICredits,
   isSessionRevoked,
   logger,
@@ -9,6 +13,7 @@ import {
   recordAIBatchState,
   type AutomationRun,
   type DBAdapter,
+  type ReportRunChange,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -26,19 +31,7 @@ import {
   sendResponseForUnauthorizedRequest,
   sendResponseForUnprocessableEntity,
 } from '../middleware/index.ts';
-import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
-import {
-  outboundFailureResponse,
-  outboundLogContext,
-  systemKeyCredential,
-} from '../lib/proxy-forward.ts';
-import {
-  OutboundRefusedError,
-  outboundFetch,
-  sendContext,
-} from '../lib/outbound/client.ts';
-import { scrubError } from '../lib/outbound/scrub-error.ts';
-import { CredentialScrubber } from '../lib/outbound/scrubber.ts';
+import { outboundLogContext } from '../lib/proxy-forward.ts';
 import { currentPricing } from '../lib/pricing.ts';
 import {
   BATCHED_AI_RESERVE_FACTOR,
@@ -51,6 +44,7 @@ import {
 import {
   MAX_AI_BATCH_DEADLINE_SECONDS,
   OPENROUTER_BATCHES_URL,
+  callOpenRouterBatchAPI,
   openRouterBatchSubmitBody,
   openRouterBatchURL,
   readOpenRouterBatch,
@@ -97,6 +91,10 @@ export interface AIBatchHandlerArgs {
   dbAdapter: DBAdapter;
   realmSecretSeed: string;
   virtualNetwork: VirtualNetwork;
+  matrixServerName: string;
+  // Told when a batch call ends its run because the run's person is no
+  // longer a direct writer of its realm.
+  reportRunChange?: ReportRunChange;
 }
 
 export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
@@ -307,7 +305,20 @@ export function handleAIBatchStatus(args: AIBatchHandlerArgs) {
         await recordAIBatchState(dbAdapter, batch.batchId, {
           state: read.status,
           expiresAt: read.expiresAt,
+          finalizedAt: read.finalizedAt,
         });
+        // A run that reads the batch still open at or after its deadline
+        // sends the same requests at the normal price (ADR 030 §1.3), so the
+        // batch is late from then on: its results are discarded rather than
+        // used twice. It is still billed.
+        let recorded = await recordAIBatchReadByRun(dbAdapter, batch.batchId);
+        let results = (json as { results?: unknown }).results;
+        if (recorded && isLateAIBatch(recorded) && results != null) {
+          log.info(
+            `batch ${batch.batchId} ended after a run read it still open past its deadline, at ${recorded.deadlineMissedAt}, so its results are discarded`,
+          );
+          text = JSON.stringify({ ...(json as object), results: null });
+        }
       }
     }
     sendJson(ctxt, status, text);
@@ -316,12 +327,18 @@ export function handleAIBatchStatus(args: AIBatchHandlerArgs) {
 
 // The run a batch call comes from, and its automation, after checking that
 // the call carries a run token whose identity's sessions weren't revoked
-// since it was minted, and that its run is still running and owned by the
-// token's attempt. Answers the refusal itself and returns undefined
-// otherwise.
+// since it was minted, that its run is still running and owned by the
+// token's attempt, and that its identity is still a direct writer of the
+// run's realm. Answers the refusal itself and returns undefined otherwise.
 async function batchCaller(
   ctxt: Koa.Context,
-  { dbAdapter, realmSecretSeed }: AIBatchHandlerArgs,
+  {
+    dbAdapter,
+    realmSecretSeed,
+    virtualNetwork,
+    matrixServerName,
+    reportRunChange,
+  }: AIBatchHandlerArgs,
 ): Promise<{ run: AutomationRun; automation: AutomationRow } | undefined> {
   let authorization = ctxt.req.headers['authorization'] ?? null;
   if (!authorization) {
@@ -371,6 +388,23 @@ async function batchCaller(
     return undefined;
   }
   let { run } = call;
+  if (
+    !(await runActsAsDirectWriter(
+      { dbAdapter, virtualNetwork, matrixServerName },
+      run,
+    ))
+  ) {
+    if (
+      await endAutomationRunNotADirectWriter(dbAdapter, run.id, token.attempt)
+    ) {
+      await reportRunChange?.(run.id);
+    }
+    await sendResponseForForbiddenRequest(
+      ctxt,
+      "The person this run acts as is not a direct writer of the automation's workspace, so the run has ended",
+    );
+    return undefined;
+  }
   let automation = await getAutomation(dbAdapter, run.automationId);
   if (!automation) {
     await sendResponseForForbiddenRequest(
@@ -537,68 +571,45 @@ type OpenRouterAnswer =
 async function sendToOpenRouter(
   ctxt: Koa.Context,
   dbAdapter: DBAdapter,
-  { url, method, body }: { url: string; method: string; body?: string },
+  request: { url: string; method: string; body?: string },
 ): Promise<OpenRouterAnswer> {
-  let destination =
-    await AllowedProxyDestinations.getInstance(dbAdapter).getDestinationConfig(
-      url,
-    );
-  if (!destination) {
-    await sendResponseForError(
-      ctxt,
-      503,
-      'Service Unavailable',
-      'The realm server has no OpenRouter key for batches',
-    );
-    return { kind: 'not-sent' };
-  }
-  let scrubber = new CredentialScrubber();
-  let credential = systemKeyCredential(destination);
-  let call = sendContext(credential.name, url);
-  try {
-    let response = await outboundFetch({
-      url,
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body,
-      sizePath: 'system-key',
-      responseSizeCap: destination.responseSizeCap,
-      destinationSetBy: 'platform',
-      credential,
-      scrubber,
-    });
-    let text = await response.text();
-    let json: unknown;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      json = undefined;
-    }
-    return { kind: 'answered', status: response.status, json, text };
-  } catch (error) {
-    scrubError(error, scrubber);
-    let failure = outboundFailureResponse(error);
-    if (failure) {
-      log.warn(
-        `Batch call stopped by the outbound guard: ${failure.message}${outboundLogContext(error, call)}`,
-      );
+  let answer = await callOpenRouterBatchAPI(dbAdapter, request);
+  switch (answer.kind) {
+    case 'answered':
+      return answer;
+    case 'no-key':
       await sendResponseForError(
         ctxt,
-        failure.status,
-        failure.statusText,
-        failure.message,
+        503,
+        'Service Unavailable',
+        'The realm server has no OpenRouter key for batches',
       );
-      return error instanceof OutboundRefusedError
-        ? { kind: 'not-sent' }
-        : { kind: 'unknown', error };
+      return { kind: 'not-sent' };
+    case 'failed': {
+      let { error, failure, sent, call } = answer;
+      if (failure) {
+        log.warn(
+          `Batch call stopped by the outbound guard: ${failure.message}${outboundLogContext(error, call)}`,
+        );
+        await sendResponseForError(
+          ctxt,
+          failure.status,
+          failure.statusText,
+          failure.message,
+        );
+        return sent ? { kind: 'unknown', error } : { kind: 'not-sent' };
+      }
+      // The caller reports it, with what it knows about the call.
+      log.error(
+        `Error in batch call${outboundLogContext(error, call)}:`,
+        error,
+      );
+      await sendResponseForSystemError(
+        ctxt,
+        'An error occurred while calling the batch API',
+      );
+      return { kind: 'unknown', error };
     }
-    // The caller reports it, with what it knows about the call.
-    log.error(`Error in batch call${outboundLogContext(error, call)}:`, error);
-    await sendResponseForSystemError(
-      ctxt,
-      'An error occurred while calling the batch API',
-    );
-    return { kind: 'unknown', error };
   }
 }
 

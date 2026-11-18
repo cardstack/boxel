@@ -21,6 +21,7 @@ import {
   ri,
   rri,
   searchEntryWireQueryFromQuery,
+  SKILLS_REALM_PREFIX,
   SupportedMimeType,
   validateWriteSize,
   type CapabilityAnswer,
@@ -118,11 +119,13 @@ import {
 } from '../lib/realm-runner/room-actions';
 import runRealmCode, {
   DeadlineExtension,
+  RealmCallFailure,
   RealmScriptError,
   scriptLocationOf,
 } from '../lib/realm-runner/runner';
 import {
   AUTOMATION_METHODS,
+  FOUND_CARD_SHAPE,
   INTERACTIVE_METHODS,
   MAX_MILESTONE_CHARS,
   MAX_MILESTONES,
@@ -137,7 +140,7 @@ import {
 } from '../lib/realm-runner/transform';
 import { STOPPED_BY_USER } from '../lib/realm-runner/types';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
-import { loadSkillWithLayoutFallback } from '../lib/skills-layout-fallback';
+import { loadSkillSource } from '../lib/skill-tools';
 import {
   captureDeadline,
   captureForAgent,
@@ -1572,7 +1575,8 @@ class RealmFsSession {
       // not count toward MAX_FILES and does not see this run's unsaved
       // state. Values cross into the sandbox only as JSON, so the script gets
       // the card serialized, as read-card-for-ai-assistant sends it to the
-      // model, and not an instance.
+      // model, and not an instance. The sandbox makes reading `.data` from
+      // it, or from a card a search found, throw with this shape.
       case 'cards.get': {
         let id = this.resolve(method, args[0]).replace(/\.json$/, '');
         let read = await this.readCard(id);
@@ -3325,8 +3329,17 @@ export async function runAutomationScript(
     );
     await settle();
     // The card updates the script made are saved after it finishes, still
-    // inside the run's time limit.
-    await withinTimeLimit(session.saveCardUpdates(), endsAt, signal);
+    // inside the run's time limit. A save that fails is the script's
+    // `realm.cards.update` call failing, after the script let go of it.
+    await withinTimeLimit(
+      session.saveCardUpdates().catch((error: unknown) => {
+        throw new RealmCallFailure(
+          error instanceof Error ? error.message : String(error),
+        );
+      }),
+      endsAt,
+      signal,
+    );
   } catch (error) {
     if (!session.isClosed) {
       await settle();
@@ -3407,6 +3420,9 @@ function redactedError(error: unknown, secrets: readonly string[]): unknown {
   }
   if (error instanceof AutomationRunStoppedError) {
     return new AutomationRunStoppedError(redactSecrets(error.message, secrets));
+  }
+  if (error instanceof RealmCallFailure) {
+    return new RealmCallFailure(redactSecrets(error.message, secrets));
   }
   if (error instanceof Error) {
     return new Error(redactSecrets(error.message, secrets));
@@ -3771,7 +3787,21 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'can change the skills and model of this room with room.*, can read ' +
     "the user's plan, credit balance and this room's spend with " +
     'room.credits(), and can ' +
-    'refresh the index of the workspace with realm.index.*. A card that ' +
+    'refresh the index of the workspace with realm.index.*. ' +
+    'realm.cards.get answers the card itself, and realm.cards.search ' +
+    'answers { cards, total, truncated } with each card the same: ' +
+    `${FOUND_CARD_SHAPE}, where path is its file, type is { module, ` +
+    "name } and can be missing, and relationships holds each link's URL by " +
+    'field path. Neither has the ' +
+    ".data of a card's .json file. realm.cards.get throws when it cannot " +
+    'read the card, with the reason, so a card it answers was found. ' +
+    'To filter, group, sum or sort a list of more than a few dozen items a ' +
+    'script holds (an API response, a JSON file, the cards a search found), ' +
+    'use realm.transform, not a ' +
+    'JavaScript loop: pass it the array itself, not the response around ' +
+    'it, and return only the result, never the raw data. Before the first ' +
+    `program, read the realm.transform section of ${SKILLS_REALM_PREFIX}source-code-editing/SKILL.md. ` +
+    'A card that ' +
     'realm.cards.get reports as not indexed while the workspace is not ' +
     'indexing will not index by waiting: run ' +
     "realm.index.invalidate('<card path>.json') and read it again, and " +
@@ -4307,8 +4337,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   private async checkSkill(id: string): Promise<void> {
     let source;
     try {
-      // TEMPORARY: skills layout fallback, see lib/skills-layout-fallback.ts.
-      source = (await loadSkillWithLayoutFallback(this.store, id))?.source;
+      source = await loadSkillSource(this.store, id);
     } catch (error) {
       throw new Error(
         `Unable to load skill ${id}: ${coerceErrorMessage(error, 'unknown error')}`,

@@ -12,6 +12,7 @@ import {
 } from '@cardstack/runtime-common/realm-runner-script';
 
 import {
+  FOUND_CARD_SHAPE,
   MAX_MILESTONE_CHARS,
   MAX_MILESTONES,
   MAX_RUN_NOTIFICATION_CHARS,
@@ -106,6 +107,36 @@ const BOOTSTRAP = `
       }
       return value;
     };
+    // A card that realm.cards.get or realm.cards.search answers is the card
+    // itself, with its fields at the top level, not the document of its
+    // .json file. Reading .data from one throws and names the shape, where it
+    // would otherwise be undefined and the card would read as missing. The
+    // getter is on the card's prototype, not the card, so the card's own keys
+    // are its fields alone: it serializes, spreads, copies and goes back into
+    // a realm call without .data, and it has no own property named data.
+    const cardPrototype = (answers) =>
+      Object.freeze(
+        Object.create(Object.prototype, {
+          data: {
+            get() {
+              throw new TypeError(
+                answers +
+                  ': ${FOUND_CARD_SHAPE}. There is no .data; read its fields from .attributes and its links from .relationships',
+              );
+            },
+          },
+        }),
+      );
+    const gotCard = cardPrototype('realm.cards.get returns the card itself');
+    const foundCard = cardPrototype(
+      'realm.cards.search returns each card itself',
+    );
+    const withoutData = (card, prototype) => {
+      if (card !== null && typeof card === 'object') {
+        Object.setPrototypeOf(card, prototype);
+      }
+      return card;
+    };
     const onSurface = (methods, prefix) => {
       const kept = {};
       for (const [key, value] of Object.entries(methods)) {
@@ -183,8 +214,15 @@ const BOOTSTRAP = `
               call('fs.download', [sourceUrl, path]),
           },
           cards: {
-            search: (query) => call('cards.search', [query]),
-            get: (path) => call('cards.get', [path]),
+            search: async (query) => {
+              const found = await call('cards.search', [query]);
+              for (const card of found?.cards ?? []) {
+                withoutData(card, foundCard);
+              }
+              return found;
+            },
+            get: async (path) =>
+              withoutData(await call('cards.get', [path]), gotCard),
             update: (path, attributes) =>
               call('cards.update', [path, attributes]),
           },
@@ -297,6 +335,10 @@ const BOOTSTRAP = `
 // and its message is the call's.
 const REALM_CALL_ERROR_NAME = 'RealmCallError';
 
+// What a realm call's error that the script let through throws out of the
+// run, so the host learns the call failed the run.
+class RealmCallEscaped extends Error {}
+
 // What a script error throws out of the run, so the host learns which error
 // it was, where, and whether the script got to run at all.
 class ScriptFailure extends Error {
@@ -337,7 +379,10 @@ function scriptFailure(
   // that the script let through is the call failing the run. Neither is
   // something the script threw. Anything else, including an error the script
   // throws itself, is the script's error and keeps its line.
-  if (name === 'InternalError' || name === REALM_CALL_ERROR_NAME) {
+  if (name === REALM_CALL_ERROR_NAME) {
+    return new RealmCallEscaped(message);
+  }
+  if (name === 'InternalError') {
     return new Error(message);
   }
   let line = scriptLineOf(error, code);
@@ -613,6 +658,7 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
       error: error instanceof Error ? error.message : String(error),
       ...(error instanceof ScriptFailure ? { scriptError: error.info } : {}),
       ...(location ? { scriptLocation: location } : {}),
+      ...(error instanceof RealmCallEscaped ? { realmCallFailed: true } : {}),
     });
   }
   // The caller terminates the worker once it has an answer, which frees the

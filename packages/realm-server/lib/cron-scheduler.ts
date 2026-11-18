@@ -38,6 +38,18 @@ import {
   AUTOMATION_TICK_CRON_TZ,
   createAutomationTickCronJob,
 } from './automation-tick-config.ts';
+import { enqueueAutomationReconcile } from '../scripts/automation-reconcile.ts';
+import { enqueueAIBatchSettle } from '../scripts/ai-batch-settle.ts';
+import {
+  AI_BATCH_SETTLE_CRON_SCHEDULE,
+  AI_BATCH_SETTLE_CRON_TZ,
+  createAIBatchSettleCronJob,
+} from './ai-batch-settle-config.ts';
+import {
+  AUTOMATION_RECONCILE_CRON_SCHEDULE,
+  AUTOMATION_RECONCILE_CRON_TZ,
+  createAutomationReconcileCronJob,
+} from './automation-reconcile-config.ts';
 import {
   SCOPED_CSS_GC_CRON_SCHEDULE,
   SCOPED_CSS_GC_CRON_TZ,
@@ -77,6 +89,10 @@ export function startCronJobs(): void {
   jobs.push(startAutomationStorageChargeCron());
 
   jobs.push(startAutomationTickCron());
+
+  jobs.push(startAutomationReconcileCron());
+
+  jobs.push(startAIBatchSettleCron());
 }
 
 export function stopCronJobs(): void {
@@ -220,6 +236,26 @@ function startAutomationStorageChargeCron(): CronJob {
   return job;
 }
 
+function startAIBatchSettleCron(): CronJob {
+  let job = createAIBatchSettleCronJob(
+    async () => {
+      try {
+        await enqueueAIBatchSettle();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('ai-batch-settle cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `ai-batch-settle cron scheduled for ${AI_BATCH_SETTLE_CRON_SCHEDULE} ${AI_BATCH_SETTLE_CRON_TZ}`,
+  );
+  return job;
+}
+
 function startAutomationTickCron(): CronJob {
   let job = createAutomationTickCronJob(
     async () => {
@@ -236,6 +272,28 @@ function startAutomationTickCron(): CronJob {
   job.start();
   log.info(
     `automation-tick cron scheduled for ${AUTOMATION_TICK_CRON_SCHEDULE} ${AUTOMATION_TICK_CRON_TZ}`,
+  );
+  return job;
+}
+
+// Runs on init too: reconcile at startup is what makes up a run an outage
+// cost without waiting for the first scheduled pass.
+function startAutomationReconcileCron(): CronJob {
+  let job = createAutomationReconcileCronJob(
+    async () => {
+      try {
+        await enqueueAutomationReconcile();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('automation-reconcile cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: true },
+  );
+
+  job.start();
+  log.info(
+    `automation-reconcile cron scheduled for ${AUTOMATION_RECONCILE_CRON_SCHEDULE} ${AUTOMATION_RECONCILE_CRON_TZ}, and once at startup`,
   );
   return job;
 }

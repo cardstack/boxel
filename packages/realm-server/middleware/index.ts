@@ -604,6 +604,29 @@ export function fullRequestURL(ctxt: Koa.Context): URL {
   return computedURL;
 }
 
+// A request's body as text, read once. The text is kept in `ctxt.state`, where
+// `fetchRequestFromContext` reads it instead of the consumed stream. Only for a
+// text body: a binary one must stay a stream.
+export async function readRequestText(ctxt: Koa.Context): Promise<string> {
+  let state = ctxt.state as Record<string, unknown>;
+  if (REQUEST_BODY_STATE in state) {
+    let body = state[REQUEST_BODY_STATE] as string | Buffer;
+    return typeof body === 'string' ? body : body.toString('utf8');
+  }
+  let text = await nodeStreamToText(ctxt.req);
+  state[REQUEST_BODY_STATE] = text;
+  return text;
+}
+
+// Replaces the body that every later reader of the request gets, and its
+// declared length with it.
+export function setRequestText(ctxt: Koa.Context, text: string): void {
+  (ctxt.state as Record<string, unknown>)[REQUEST_BODY_STATE] = text;
+  if (ctxt.req.headers['content-length'] !== undefined) {
+    ctxt.req.headers['content-length'] = String(Buffer.byteLength(text));
+  }
+}
+
 export async function fetchRequestFromContext(
   ctxt: Koa.Context,
 ): Promise<Request> {
@@ -935,6 +958,14 @@ export function isVanishedFileBody(error: unknown): boolean {
   );
 }
 
+const STORED_BYTES_STATE = 'boxelServesStoredBytes';
+
+// Whether the realm answered with a file's stored bytes (see
+// `ResponseWithNodeStream.servesStoredBytes`).
+export function servesStoredBytes(ctxt: Koa.Context): boolean {
+  return (ctxt.state as Record<string, unknown>)[STORED_BYTES_STATE] === true;
+}
+
 export async function setContextResponse(
   ctxt: Koa.Context,
   response: ResponseWithNodeStream,
@@ -942,6 +973,9 @@ export async function setContextResponse(
   let url = fullRequestURL(ctxt).href;
 
   let { status, statusText, headers, body, nodeStream } = response;
+  if (response.servesStoredBytes) {
+    (ctxt.state as Record<string, unknown>)[STORED_BYTES_STATE] = true;
+  }
   ctxt.status = status;
   ctxt.message = statusText;
   for (let [header, value] of headers.entries()) {

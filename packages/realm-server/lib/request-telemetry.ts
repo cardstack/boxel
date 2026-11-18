@@ -89,6 +89,9 @@ const keyRoutePaths = [
 export const SYSTEM_KEYS_PATH = '/_system-keys';
 // The operator routes that store the platform's own OAuth clients.
 export const PLATFORM_OAUTH_CLIENTS_PATH = '/_platform-oauth-clients';
+// The operator routes that store platform secrets, the secrets the platform
+// keeps and only reads.
+export const PLATFORM_SECRETS_PATH = '/_platform-secrets';
 
 // The headers whose value is a credential: the caller's session token, its
 // cookies, the HMAC signatures that authenticate a worker request
@@ -214,11 +217,15 @@ export function isKeyRoutePath(pathname: string): boolean {
   );
 }
 
-// The operator routes that store a platform secret: system keys, and the
-// platform's own OAuth clients.
+// The operator routes that store a secret of the platform's own: system keys,
+// the platform's own OAuth clients, and platform secrets.
 function isSystemKeysPath(pathname: string): boolean {
   let path = pathname.toLowerCase();
-  return [SYSTEM_KEYS_PATH, PLATFORM_OAUTH_CLIENTS_PATH].some(
+  return [
+    SYSTEM_KEYS_PATH,
+    PLATFORM_OAUTH_CLIENTS_PATH,
+    PLATFORM_SECRETS_PATH,
+  ].some(
     (operatorPath) =>
       path === operatorPath || path.startsWith(`${operatorPath}/`),
   );

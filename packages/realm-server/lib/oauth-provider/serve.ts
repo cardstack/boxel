@@ -19,6 +19,7 @@ import {
 import {
   OAUTH_DISCOVERY_PATH,
   OAUTH_REGISTRATION_PATH,
+  OAUTH_REVOCATION_PATH,
   OAUTH_TOKEN_PATH,
   type ConsentRouteDeps,
   type OAuthProviderService,
@@ -37,10 +38,11 @@ import {
 // sets its flow cookies on whatever host a request names. A request on any
 // other host goes on to the realm server's own routing.
 //
-// A registration, the request that starts a flow, a token request, and the
-// request that resumes a finished one go through Boxel's own handling first, which hands them on to
-// the library only once Boxel allows them. The interaction, finish, error,
-// consent and connections routes are Boxel's alone, though finishing hands the result to the
+// A registration, the request that starts a flow, a token request, a
+// revocation, and the request that resumes a finished one go through Boxel's
+// own handling first, which hands them on to the library only once Boxel
+// allows them. The interaction, finish, error, consent and connections routes
+// are Boxel's alone, though finishing hands the result to the
 // library, which answers the request.
 export function registerOAuthProviderRoutes(
   router: Router,
@@ -49,6 +51,7 @@ export function registerOAuthProviderRoutes(
     handleRegistration,
     handleAuthorization,
     handleToken,
+    handleRevocation,
     handleInteraction,
     handleFinish,
     handleResume,
@@ -157,14 +160,19 @@ export function registerOAuthProviderRoutes(
     OAUTH_AUTHORIZATION_PATH,
     onIssuerHost((ctxt) => handleAuthorization(ctxt, () => serve(ctxt))),
   );
-  // The token endpoint answers its own CORS, by the client a request names
-  // (`clientBasedCORS`), and its preflight; the realm server's CORS leaves
-  // the route to it.
+  // The token and revocation endpoints answer their own CORS, by the client
+  // a request names (`clientBasedCORS`), and their preflights; the realm
+  // server's CORS leaves the routes to them.
   router.post(
     OAUTH_TOKEN_PATH,
     onIssuerHost((ctxt) => handleToken(ctxt, () => serve(ctxt))),
   );
   router.options(OAUTH_TOKEN_PATH, onIssuerHost(serve));
+  router.post(
+    OAUTH_REVOCATION_PATH,
+    onIssuerHost((ctxt) => handleRevocation(ctxt, () => serve(ctxt))),
+  );
+  router.options(OAUTH_REVOCATION_PATH, onIssuerHost(serve));
   router.get(
     `${OAUTH_INTERACTION_PATH}/:uid`,
     onIssuerHost(boxelOnly(handleInteraction)),
@@ -204,8 +212,8 @@ export function registerOAuthProviderRoutes(
 }
 
 // The realm server's CORS, except on the routes where the library answers
-// CORS itself, by the client a request names: the token endpoint's `POST`
-// and its preflight, on the issuer's host. The library leaves CORS alone on
+// CORS itself, by the client a request names: the token and revocation
+// endpoints' `POST` and their preflights, on the issuer's host. The library leaves CORS alone on
 // a response that already has it, so the realm server's would let any origin
 // call those routes. Every other request keeps the realm server's CORS,
 // including one to the same path when the provider is off (`issuer`
@@ -219,21 +227,25 @@ export function leaveCORSToOAuthProvider(
   return (ctxt, next) =>
     issuerHost &&
     (ctxt.method === 'POST' || ctxt.method === 'OPTIONS') &&
-    isTokenPath(ctxt.path) &&
+    isClientCORSPath(ctxt.path) &&
     fullRequestURL(ctxt).host === issuerHost
       ? next()
       : cors(ctxt, next);
 }
 
-// Whether a path reaches the token route. Both the realm server's router and
-// the library's match a path in any case and with or without a trailing
-// slash, so this does too.
-function isTokenPath(pathname: string): boolean {
+// Whether a path reaches the token or revocation route. Both the realm
+// server's router and the library's match a path in any case and with or
+// without a trailing slash, so this does too.
+const CLIENT_CORS_PATHS = new Set(
+  [OAUTH_TOKEN_PATH, OAUTH_REVOCATION_PATH].map((path) => path.toLowerCase()),
+);
+
+function isClientCORSPath(pathname: string): boolean {
   let path = pathname.toLowerCase();
   if (path.length > 1 && path.endsWith('/')) {
     path = path.slice(0, -1);
   }
-  return path === OAUTH_TOKEN_PATH.toLowerCase();
+  return CLIENT_CORS_PATHS.has(path);
 }
 
 // The library runs in proxy mode (`provider.ts`), so it reads the request's

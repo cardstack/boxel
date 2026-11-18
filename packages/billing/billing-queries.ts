@@ -8,6 +8,7 @@ import {
   addExplicitParens,
   asExpressions,
   chargeKindForCreditType,
+  CREDITS_PER_USD,
   dbAdapterQuerier,
   every,
   insert,
@@ -497,6 +498,211 @@ export async function getLedgerUsage(
   }));
 }
 
+// The prices a pricing version stands for: every value, by the environment
+// variable it was read from, the margin, and the USD one unit of each metered
+// usage costs at those values.
+export interface PricingVersionRecord {
+  version: string;
+  margin: number;
+  values: Record<string, number>;
+  usdPerUnit: Partial<Record<UsageUnit, number>>;
+}
+
+// Records the prices `record.version` stands for, so its charges' usage can be
+// priced at them after the startup log is gone (see `getCostCoverage`). A version is a hash of its values, so
+// recording one that is already recorded writes nothing, and a record is never
+// changed. Nothing reads these rows to price a charge (ADR 029 §1.2).
+export async function recordPricingVersion(
+  dbAdapter: DBAdapter,
+  record: PricingVersionRecord,
+): Promise<void> {
+  await query(dbAdapter, [
+    `INSERT INTO pricing_versions (version, margin) VALUES (`,
+    param(record.version),
+    `,`,
+    param(record.margin),
+    `) ON CONFLICT (version) DO NOTHING`,
+  ] as Expression);
+  let values = Object.entries(record.values);
+  if (values.length > 0) {
+    await query(dbAdapter, [
+      `INSERT INTO pricing_version_values (pricing_version, variable, value) VALUES`,
+      ...separatedByCommas(
+        values.map(
+          ([variable, value]) =>
+            addExplicitParens(
+              separatedByCommas([
+                [param(record.version)],
+                [param(variable)],
+                [param(value)],
+              ]),
+            ) as Expression,
+        ),
+      ),
+      `ON CONFLICT (pricing_version, variable) DO NOTHING`,
+    ] as Expression);
+  }
+  let rates = Object.entries(record.usdPerUnit) as [UsageUnit, number][];
+  if (rates.length > 0) {
+    await query(dbAdapter, [
+      `INSERT INTO pricing_version_rates (pricing_version, unit, usd_per_unit) VALUES`,
+      ...separatedByCommas(
+        rates.map(
+          ([unit, usd]) =>
+            addExplicitParens(
+              separatedByCommas([
+                [param(record.version)],
+                [param(unit)],
+                [param(usd)],
+              ]),
+            ) as Expression,
+        ),
+      ),
+      `ON CONFLICT (pricing_version, unit) DO NOTHING`,
+    ] as Expression);
+  }
+}
+
+// One line of the cost coverage report: the consumption charges of one kind,
+// written at one pricing version, in the report's period.
+export interface CostCoverage {
+  chargeKind: Extract<
+    LedgerChargeKind,
+    'run' | 'run_indexing' | 'storage' | 'ai' | 'batched_ai'
+  >;
+  // Null for AI charges, which aren't metered.
+  pricingVersion: string | null;
+  charges: number;
+  // What every charge drew, in credits.
+  credits: number;
+  // The charges whose usage could be priced (see `credit_charge_costs`), and
+  // what they drew. The rest have no usage, a pricing version that isn't
+  // recorded, or a unit with no rate at their version.
+  pricedCharges: number;
+  pricedCredits: number;
+  // The hosting cost of the priced charges' usage, in USD and in credits (at
+  // `CREDITS_PER_USD`), and that cost times each charge's margin.
+  costUsd: number;
+  costCredits: number;
+  costAtMarginCredits: number;
+  // What the priced charges draw when every balance covers them: each one's
+  // cost at its margin, rounded up to a whole credit (to the nearest credit
+  // for AI). `fullCredits - costAtMarginCredits` is what rounding adds, which
+  // for charges well under a credit each is most of what they draw.
+  fullCredits: number;
+  // `pricedCredits / costCredits`: how many times their cost the priced
+  // charges recovered. A fully paid metered kind reads at least its margin
+  // and an AI kind about 1. Null when the cost is 0.
+  coverage: number | null;
+  // How far short of `fullCredits` the priced charges fell, summed per charge,
+  // and how many fell short: credits a balance couldn't cover, such as an
+  // indexing charge drawn after the balance ran low. A charge that rounded up
+  // never offsets one that went unpaid.
+  shortfallCredits: number;
+  shortChargedCharges: number;
+  // The batched AI charges billed at their estimate because the provider
+  // reported no cost, and what they drew. Their cost is the estimate, the
+  // most the batch could have cost, so how much the provider actually charged
+  // for them is unknown. Always 0 for other kinds.
+  estimatedCharges: number;
+  estimatedCredits: number;
+}
+
+// Compares, for the consumption charges written from `from` (inclusive) to
+// `to` (exclusive), the credits each kind drew with the hosting cost of the
+// usage it priced, by charge kind and pricing version, from the
+// `credit_charge_costs` view.
+export async function getCostCoverage(
+  dbAdapter: DBAdapter,
+  { from, to }: { from: Date; to: Date },
+): Promise<CostCoverage[]> {
+  let rows = await query(dbAdapter, [
+    `SELECT charge_kind, pricing_version,`,
+    `COUNT(*) AS charges,`,
+    `SUM(credits) AS credits,`,
+    `COUNT(*) FILTER (WHERE cost_usd IS NOT NULL) AS priced_charges,`,
+    `COALESCE(SUM(credits) FILTER (WHERE cost_usd IS NOT NULL), 0) AS priced_credits,`,
+    `COALESCE(SUM(cost_usd), 0) AS cost_usd,`,
+    `COALESCE(SUM(cost_usd * margin), 0) AS cost_at_margin_usd,`,
+    `COALESCE(SUM(full_credits), 0) AS full_credits,`,
+    `COALESCE(SUM(unpaid_credits), 0) AS shortfall_credits,`,
+    `COUNT(*) FILTER (WHERE unpaid_credits > 0) AS short_charged_charges,`,
+    `COUNT(*) FILTER (WHERE cost_estimated) AS estimated_charges,`,
+    `COALESCE(SUM(credits) FILTER (WHERE cost_estimated), 0) AS estimated_credits`,
+    `FROM credit_charge_costs WHERE created_at >=`,
+    param(Math.floor(from.getTime() / 1000)),
+    `AND created_at <`,
+    param(Math.floor(to.getTime() / 1000)),
+    `GROUP BY charge_kind, pricing_version`,
+    `ORDER BY charge_kind, pricing_version NULLS FIRST`,
+  ] as Expression);
+  return rows.map((row) => {
+    let pricedCredits = Number(row.priced_credits);
+    let costUsd = Number(row.cost_usd);
+    let costCredits = costUsd * CREDITS_PER_USD;
+    return {
+      chargeKind: row.charge_kind as CostCoverage['chargeKind'],
+      pricingVersion: (row.pricing_version as string | null) ?? null,
+      charges: Number(row.charges),
+      credits: Number(row.credits),
+      pricedCharges: Number(row.priced_charges),
+      pricedCredits,
+      costUsd,
+      costCredits,
+      costAtMarginCredits: Number(row.cost_at_margin_usd) * CREDITS_PER_USD,
+      fullCredits: Number(row.full_credits),
+      coverage: costCredits > 0 ? pricedCredits / costCredits : null,
+      shortfallCredits: Number(row.shortfall_credits),
+      shortChargedCharges: Number(row.short_charged_charges),
+      estimatedCharges: Number(row.estimated_charges),
+      estimatedCredits: Number(row.estimated_credits),
+    };
+  });
+}
+
+// A batch the settle job billed that has no batched AI charge in the ledger
+// although its cost comes to a credit or more: its payer's balance held
+// nothing to draw on, or its payer has no `users` row. The platform paid for
+// it and recovered nothing.
+export interface UnbilledAIBatch {
+  batchId: string;
+  runId: string;
+  actsAs: string;
+  billedUsd: number;
+  billedAtEstimate: boolean;
+  settledAt: string;
+}
+
+// The batches settled from `from` (inclusive) to `to` (exclusive) that wrote
+// no charge although they cost a credit or more: the part of batched AI the
+// cost coverage report can't see in `credit_charge_costs`, which only has
+// charges that were written.
+export async function getUnbilledAIBatches(
+  dbAdapter: DBAdapter,
+  { from, to }: { from: Date; to: Date },
+): Promise<UnbilledAIBatch[]> {
+  let rows = await query(dbAdapter, [
+    `SELECT b.batch_id, b.run_id, b.acts_as, b.billed_usd, b.billed_at_estimate, b.settled_at`,
+    `FROM ai_batches b WHERE b.settled_at >=`,
+    param(from.toISOString()),
+    `AND b.settled_at <`,
+    param(to.toISOString()),
+    `AND ROUND(b.billed_usd *`,
+    param(CREDITS_PER_USD),
+    `) >= 1`,
+    `AND NOT EXISTS (SELECT 1 FROM credits_ledger l WHERE l.charge_kind = 'batched_ai' AND l.batch_id = b.batch_id)`,
+    `ORDER BY b.settled_at`,
+  ] as Expression);
+  return rows.map((row) => ({
+    batchId: String(row.batch_id),
+    runId: String(row.run_id),
+    actsAs: String(row.acts_as),
+    billedUsd: Number(row.billed_usd),
+    billedAtEstimate: Boolean(row.billed_at_estimate),
+    settledAt: new Date(row.settled_at as string).toISOString(),
+  }));
+}
+
 export async function getStripeEventById(
   dbAdapter: DBAdapter,
   stripeEventId: string,
@@ -558,6 +764,26 @@ export async function sumUpCreditsLedger(
 
   // Sum can be null if there are no matching rows in the credits_ledger table
   return results[0].sum === null ? 0 : parseInt(results[0].sum as string);
+}
+
+// The credits `userId` (a `users` id) can spend: every credit bucket's grants
+// and purchases, less what was spent from it and what expired.
+export async function sumUpAvailableCredits(
+  db: Queryable,
+  userId: string,
+): Promise<number> {
+  return await sumUpCreditsLedger(db, {
+    userId,
+    creditType: [
+      'plan_allowance',
+      'plan_allowance_used',
+      'plan_allowance_expired',
+      'daily_credit',
+      'daily_credit_used',
+      'extra_credit',
+      'extra_credit_used',
+    ],
+  });
 }
 
 export async function getDailyCreditGrantInfo(

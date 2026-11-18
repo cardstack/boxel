@@ -13,7 +13,7 @@
 //    again after a resume. A trigger's run that no longer acts as the payer
 //    (a resume made someone else the payer) is refused (`payer-changed`). A
 //    run someone started by hand (Preview, Run now) needs no row. A
-//    `waiting-for-credits` row is admitted here and left to the billing
+//    `waiting-for-credits` row is admitted here and left to the spending
 //    check, and a `done` row is admitted, since the run of its last slot is
 //    enqueued before it is done.
 // 2. The run's identity: the person the run acts as (the payer, or whoever
@@ -42,7 +42,15 @@
 //    `share-suspended`, `binding-needs-reapproval` or `credential-rejected`;
 //    a realm that can't be asked refuses it (`run-admission-failed`).
 // 5. The run's spending: `AutomationAdmissionChecks.admitSpending`, which
-//    checks the balance and the monthly cap where one is configured.
+//    checks the automation's daily and monthly credit caps and its
+//    identity's balance under their cost lock, and holds the most the run
+//    can cost against that balance while it is in flight. A refusal is one
+//    of `SPENDING_REFUSAL_REASONS`. When a run that acts as the automation's
+//    payer is refused for its balance (`insufficient-credits`), the
+//    automation moves to *waiting for credits*; the tick still enqueues its
+//    due runs, and the first one whose balance passes (admitted, or refused
+//    only for a credit cap) moves it back to active, so it continues at its
+//    next due time once the balance recovers.
 //
 // A refused run finishes as an error whose `error_reason` is the refusal's
 // code. An admitted run records `admitted_at`. Either way the run's log gets
@@ -52,15 +60,23 @@ import {
   RUN_ADMISSION_PATH,
   type RunAdmissionAnswer,
 } from './automation-admission-route.ts';
-import type { AutomationRun } from './automation-runs.ts';
+import {
+  runActsAsDirectWriter,
+  type AutomationRun,
+} from './automation-runs.ts';
+import type { AutomationCaps } from './automation-declaration.ts';
 import {
   checkAutomationPayer,
   getAutomation,
   pauseForPayerLostAccess,
+  setAutomationWaitingForCredits,
+  SPENDING_REFUSAL_REASONS,
   type AutomationRow,
+  type SpendingRefusalReason,
 } from './automations.ts';
+import type { ReportAutomationChange } from './automation-change-events.ts';
+import type { ReportRunChange } from './automation-run-events.ts';
 import type { DBAdapter } from './db.ts';
-import { isDirectWriter } from './db-queries/realm-permission-queries.ts';
 import { isSessionRevoked } from './db-queries/user-queries.ts';
 import { param, query } from './expression.ts';
 import { logger } from './log.ts';
@@ -80,11 +96,16 @@ export interface AutomationAdmissionChecks {
   // Asks the Matrix server about `user`'s account. Throws when it can't be
   // asked.
   accountStanding(user: string): Promise<AccountStanding>;
-  // The run's balance and the automation's monthly cap. Undefined admits
-  // every run.
+  // The automation's credit caps and the run's identity's balance (step 5).
+  // An admitted run's cost ceiling is held against the balance, so the
+  // check and the hold happen together under the identity's cost lock.
+  // Undefined admits every run.
   admitSpending?(args: {
     run: AutomationRun;
     automation: AutomationRow | undefined;
+    // The run's caps: the card's, held to the automation's caps snapshot.
+    caps: AutomationCaps;
+    kind: AdmittedRunKind;
   }): Promise<AdmissionRefusal | undefined>;
 }
 
@@ -93,11 +114,36 @@ export interface AdmissionRefusal {
   message: string;
 }
 
+// The codes the spending check refuses a run with, kept in `automations.ts`,
+// whose failure streak leaves them out. None of them is the
+// script's fault, and each clears without anyone changing the automation:
+// the balance recovers, the day or month turns, or the worker gets its
+// prices back.
+//
+// - `insufficient-credits`: the run's identity holds less than the run's
+//   minimum balance, after what their other runs in flight hold.
+// - `daily-credit-cap-reached`, `monthly-credit-cap-reached`: what the
+//   automation was charged this UTC day or month, plus what its other runs
+//   in flight hold, has reached the cap.
+// - `pricing-unavailable`: the worker's pricing check failed, so it admits
+//   no run (ADR 029 §1.3).
+export { SPENDING_REFUSAL_REASONS, type SpendingRefusalReason };
+
+const CREDIT_CAP_REASONS: ReadonlySet<string> = new Set<SpendingRefusalReason>([
+  'daily-credit-cap-reached',
+  'monthly-credit-cap-reached',
+]);
+
 export interface AdmissionContext {
   dbAdapter: DBAdapter;
   virtualNetwork: VirtualNetwork;
   matrixServerName: string | undefined;
   checks: AutomationAdmissionChecks | undefined;
+  // Told of each run a pause the admission makes cancels.
+  reportRunChange?: ReportRunChange;
+  // Told of the automation when the admission pauses it, or moves it into or
+  // out of waiting for credits.
+  reportAutomationChange?: ReportAutomationChange;
 }
 
 // How a run was started: by hand (Preview, Run now), by a batch's follow-up,
@@ -117,7 +163,13 @@ export async function admitRunIdentity(
   | { ok: true; automation: AutomationRow | undefined }
   | ({ ok: false; pause?: () => Promise<unknown> } & AdmissionRefusal)
 > {
-  let { dbAdapter, virtualNetwork, matrixServerName } = ctx;
+  let {
+    dbAdapter,
+    virtualNetwork,
+    matrixServerName,
+    reportRunChange,
+    reportAutomationChange,
+  } = ctx;
   let automation = await getAutomation(dbAdapter, run.automationId);
   let actsAs = run.actsAs;
   if (kind !== 'manual') {
@@ -158,7 +210,10 @@ export async function admitRunIdentity(
       ? {
           ...refusal,
           pause: () =>
-            pauseForPayerLostAccess(dbAdapter, run.automationId, actsAs),
+            pauseForPayerLostAccess(dbAdapter, run.automationId, actsAs, {
+              reportRunChange,
+              reportAutomationChange,
+            }),
         }
       : refusal;
 
@@ -168,8 +223,12 @@ export async function admitRunIdentity(
       'This worker has no Matrix server name, so it cannot tell a direct writer from a bot account',
     );
   }
-  let realmURL = virtualNetwork.toURL(run.realm);
-  if (!(await isDirectWriter(dbAdapter, realmURL, actsAs, matrixServerName))) {
+  if (
+    !(await runActsAsDirectWriter(
+      { dbAdapter, virtualNetwork, matrixServerName },
+      { realm: run.realm, actsAs },
+    ))
+  ) {
     let refusal = refuse(
       'not-a-direct-writer',
       `${actsAs}, whom the run acts as, is no longer a direct writer of ${run.realm}`,
@@ -181,6 +240,8 @@ export async function admitRunIdentity(
             checkAutomationPayer(dbAdapter, run.automationId, {
               matrixServerName,
               virtualNetwork,
+              reportRunChange,
+              reportAutomationChange,
             }),
         }
       : refusal;
@@ -256,10 +317,14 @@ export async function admitRunOperations(
   run: AutomationRun,
   {
     automation,
+    caps,
+    kind,
     realmURL,
     token,
   }: {
     automation: AutomationRow | undefined;
+    caps: AutomationCaps;
+    kind: AdmittedRunKind;
     // The URL the automation's realm is served at.
     realmURL: string;
     token: string;
@@ -283,11 +348,62 @@ export async function admitRunOperations(
         : refusal.detail,
     );
   }
-  let spending = await ctx.checks?.admitSpending?.({ run, automation });
+  let spending = await ctx.checks?.admitSpending?.({
+    run,
+    automation,
+    caps,
+    kind,
+  });
+  // Only a run that acts as the payer speaks for the automation's balance: a
+  // Preview or a Run now is charged to whoever clicked.
+  let payersRun =
+    kind !== 'manual' &&
+    automation !== undefined &&
+    automation.payer === run.actsAs;
+  if (payersRun) {
+    // The spending check reads the balance before the caps, so a run it
+    // admits, or refuses for a cap, had balance enough: the automation is no
+    // longer waiting for credits.
+    if (spending?.reason === 'insufficient-credits') {
+      await waitingForCredits(ctx, run, true);
+    } else if (
+      automation!.state === 'waiting-for-credits' &&
+      (!spending || CREDIT_CAP_REASONS.has(spending.reason))
+    ) {
+      await waitingForCredits(ctx, run, false);
+    }
+  }
   if (spending) {
     return { ok: false, ...spending };
   }
   return { ok: true, operations: asked.answer.operations ?? 0 };
+}
+
+// Moves the run's automation into or out of *waiting for credits*, telling
+// `reportAutomationChange` when it moved. The run's own outcome doesn't depend
+// on it, so a failure is logged and the next run's admission moves it.
+async function waitingForCredits(
+  ctx: AdmissionContext,
+  run: AutomationRun,
+  waiting: boolean,
+): Promise<void> {
+  try {
+    let moved = await setAutomationWaitingForCredits(
+      ctx.dbAdapter,
+      run.automationId,
+      { payer: run.actsAs, waiting },
+      { reportAutomationChange: ctx.reportAutomationChange },
+    );
+    if (moved) {
+      log.info(
+        `run ${run.id}: automation ${run.automationId} is ${waiting ? 'waiting for credits' : 'active again'}`,
+      );
+    }
+  } catch (e: any) {
+    log.error(
+      `run ${run.id}: couldn't move automation ${run.automationId} ${waiting ? 'to' : 'out of'} waiting for credits: ${e?.message ?? e}`,
+    );
+  }
 }
 
 async function askRealm(

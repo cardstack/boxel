@@ -1,6 +1,6 @@
 ---
 name: oauth-connections
-description: Operate and diagnose OAuth clients and connections — the `oauth-client` and `oauth-connection` key kinds, the `oauth_clients`, `platform_oauth_clients` (and its `platform_oauth_client_history`), `oauth_connections` and `oauth_connect_requests` tables, connecting through a client from the secure window (`/_oauth/connections`, the vendor's redirect back to `/_oauth/callback`), how access tokens are minted and refreshed in memory, and what each refresh error means — `credential-rejected` with `meta.reason` `rejected` (`invalid_grant`), `needs-admin` (`invalid_client`, or a client deleted, unshared or suspended) and `unavailable` (5xx, timeouts, `temporarily_unavailable` after retries). Also the platform's own clients (`boxel realm-server keys --kind oauth-client`, `/_platform-oauth-clients`), the Boxel (read-only) GitHub App among them — its GitHub settings, who administers it, rotating its secret and installing it in an organization — and why a token endpoint is never a grant's destination. Use when a user reports a connection that stopped working, a Reconnect they're asked for, a client every teammate's connection broke on, a sign-in that comes back with an error, when adding or rotating a platform client, or when changing `lib/oauth.ts`, `handlers/handle-oauth.ts` or `lib/outbound/token-endpoints.ts`.
+description: Operate and diagnose OAuth clients and connections — the `oauth-client` and `oauth-connection` key kinds, the `oauth_clients`, `platform_oauth_clients` (and its `platform_oauth_client_history`), `oauth_connections` and `oauth_connect_requests` tables, connecting through a client from the secure window (`/_oauth/connections`, the vendor's redirect back to `/_oauth/callback`), how access tokens are minted and refreshed in memory, and what each refresh error means — `credential-rejected` with `meta.reason` `rejected` (`invalid_grant`), `needs-admin` (`invalid_client`, or a client deleted, unshared or suspended) and `unavailable` (5xx, timeouts, `temporarily_unavailable` after retries). Also how an automation run with nobody online refreshes and retries (`unavailable` asked again after pauses, `rejected` and `needs-admin` ending the run and recording the credential on it, a vendor's 401 to a minted token asked once more) and who is told (`automationCredentialNotices`). Also the platform's own clients (`boxel realm-server keys --kind oauth-client`, `/_platform-oauth-clients`), the Boxel (read-only) GitHub App among them — its GitHub settings, who administers it, rotating its secret and installing it in an organization — and why a token endpoint is never a grant's destination. Use when a user reports a connection that stopped working, a Reconnect they're asked for, a client every teammate's connection broke on, a sign-in that comes back with an error, when adding or rotating a platform client, or when changing `lib/oauth.ts`, `handlers/handle-oauth.ts` or `lib/outbound/token-endpoints.ts`.
 ---
 
 # OAuth clients and connections (operators)
@@ -208,6 +208,63 @@ WHERE n.client_key_id = '<client key id>' OR s.key_id = '<client key id>';
 The tables are withheld from `readonly_role`, like `user_keys`; query them as
 the application role, and select metadata columns only.
 
+## Unattended runs
+
+An automation run that comes due with nobody online mints and refreshes
+exactly as above: under the connection's refresh lease, through the same
+in-memory cache. What differs is what a refused credential does to the run.
+Only a run's calls (`callApiMode: 'automation'`) take these paths; an
+interactive call is refused as the tables above say, and is never retried.
+The executor is `callApiOperation` in `runtime-common/card-operations/call-api.ts`,
+and the run's side is its `CallApiRunMeter` (`automation-run-limits.ts`).
+
+| A run's call is refused, or answered               | What happens                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `credential-rejected`, `unavailable`               | Its slots are filled again after a pause (`DEFAULT_CREDENTIAL_RETRY_DELAYS_MS`: 5 s, 15 s, 45 s), each fill retrying the token request itself as usual, while the run is still running, checked before and after each pause. Each pause logs a `call-api` line ending `asking again in N s`. Once the pauses run out, only the call is refused; the run goes on                                        |
+| `credential-rejected`, `rejected` or `needs-admin` | The call is refused and **the run ends** as an error, `error_reason = 'credential-rejected'`, its message the refusal's detail, discarding its overlay, as a cap does. A script can't catch its way past it                                                                                                                                                                                            |
+| A vendor's 401 to a stored key                     | Rejects the grant (see the `user-keys` skill's rejected grants) and is refused `credential-rejected` with no reason, which ends the run like `rejected`                                                                                                                                                                                                                                                |
+| A vendor's 401 to a minted access token            | Asked once more with the token the key mints then: another process may have just refreshed the connection, which revokes the previous access token at a vendor such as GitHub. The retry is a request like any other: admitted only while the run runs, it counts against `callApiCalls` and `responseBytes` and gets its own `key_uses` row. A second 401 is the vendor's answer, given to the script |
+
+Admission refuses a run whose connection or client can't mint before it
+starts (see above). The realm records the credential on the run as it
+answers the worker, and the worker ends the run with the same code.
+
+**What the run records.** A run that ended on a credential a person must fix
+records `automation_runs.credential_reason` (`rejected` or `needs-admin`)
+and the share its refused slot is filled from (`credential_share_id`, for an
+`{{apiKey}}` slot) or the personal key that fills it (`credential_key_id`,
+for a `{{userKey}}` slot: the payer's connection).
+
+**Who is told.** `automationCredentialNotices` in
+`realm-server/lib/automation-credential-notices.ts` reads, for such a run,
+the notices that stand, against the key, its client and its share as they
+are now (`mintingFix` in `lib/oauth.ts` names the part that is broken):
+
+| Notice          | Stands while                                                                                                                         | Who is told                             | What fixes it                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `reconnect`     | The payer's connection is rejected, or its access-only token expired                                                                 | The payer                               | Reconnect in the secure window, opened with `#reconnect=<key id>` (`reconnectFragment`)                                       |
+| `connect-again` | The client the payer's connection signed in through was deleted, so a reconnect can't help                                           | The payer                               | Connect through a client that exists, from the secure window's connect page, and approve the operation for the new connection |
+| `fix-client`    | The client it mints through is broken: the connection's own or shared client, or an `{{apiKey}}` share's `client_credentials` client | The client key's owner                  | The owner replaces the client's secret                                                                                        |
+| `fix-share`     | The share is suspended, unshared, holds no key or another app, or holds a key the vendor refused                                     | The direct writers of the share's realm | A direct writer resumes the share or swaps a working key in                                                                   |
+
+So a notice ends once what it reports is fixed, with nothing to clear. A
+broken platform client tells no one here: an operator replaces it (see
+[Platform clients](#platform-clients)). A personal key that isn't a
+connection, refused at its destination, already leaves its owner the key's
+own notice (`user_key_grant_notices`).
+
+```sql
+-- Runs that ended on a credential, and what they record.
+SELECT id, automation_id, acts_as, finished_at, credential_reason,
+       credential_share_id, credential_key_id, error_message
+  FROM automation_runs
+ WHERE error_reason = 'credential-rejected'
+ ORDER BY finished_at DESC LIMIT 20;
+-- A run's retries and its refused call, from its log.
+SELECT at, message FROM automation_run_log
+ WHERE run_id = '<run id>' AND kind = 'call-api' ORDER BY seq;
+```
+
 ## Platform clients
 
 Managed with `boxel realm-server keys --kind oauth-client`, which signs an
@@ -410,7 +467,12 @@ answers as if they didn't exist. Both are installed at
   automation's admission for each kind of minting key: admitted while it can
   mint, refused `credential-rejected` for a rejected connection, an expired
   access-only token, a broken client or suspended client share
-  (`needs-admin`), and a broken `client_credentials` client.
+  (`needs-admin`), and a broken `client_credentials` client. And unattended
+  runs: a rejected connection and a broken client each end the run and tell
+  the payer or the client's owner until fixed, a suspended client share is
+  recorded at admission and tells the realm's direct writers, `unavailable`
+  is asked again and then refuses only the call, and a 401 to a minted token
+  is asked once more, and only once, and only for a run.
 - `packages/realm-server/tests/system-keys-test.ts` — the platform client
   operator routes: each add, secret replace and delete recorded with its note,
   the caller's address and the token's signing time, never the secret; a

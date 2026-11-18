@@ -50,19 +50,37 @@
 // follows an edit the card's index hook hasn't applied yet the same way the
 // hook does (`withEditCursors`), so a slot that passed before the edit never
 // comes due. A card that raises a cap above the snapshot is left for the index
-// hook to pause, and a card that doesn't read as a declaration leaves the row
-// due and unchanged until it does.
+// hook to pause. A card that indexed but doesn't read as a declaration pauses
+// the automation with `invalid-declaration` (`pauseForInvalidDeclaration`):
+// a run is due and nothing can start it, so the automation says why rather
+// than skipping its runs in silence. The index hook leaves such a card alone,
+// since the card saves itself mid-edit, and lifts the pause once the card
+// reads again. A card with nothing indexed to read leaves the row due and
+// unchanged until it does.
+//
+// The tick reports each run it starts (`job` events, from the task), and each
+// automation whose state or next run it moves without starting a run
+// (`reportAutomationChange`).
 
+import type {
+  ChangedAutomation,
+  ReportAutomationChange,
+} from './automation-change-events.ts';
 import { ensureTrailingSlash } from './paths.ts';
 import type { QueuePublisher } from './queue.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
-import type { AutomationDeclaration } from './automation-declaration.ts';
+import type {
+  AutomationDeclaration,
+  AutomationProblem,
+} from './automation-declaration.ts';
+import type { ReportRunChange } from './automation-run-events.ts';
 import { createAutomationRun } from './automation-runs.ts';
 import { logRunPlatformLine } from './automation-run-log.ts';
 import { computeAutomationSchedule } from './automation-schedule.ts';
 import {
   automationFromRow,
   capsRaisedAbove,
+  pauseForInvalidDeclaration,
   recordTriggers,
   withEditCursors,
   type AutomationPauseReason,
@@ -72,16 +90,22 @@ import {
 import type { DBAdapter } from './db.ts';
 import { param, query, type Querier } from './expression.ts';
 import { enqueueAutomationRunJob } from './jobs/run-command.ts';
+import {
+  emitAutomationRunEvent,
+  type AutomationRunEnqueuedEvent,
+} from './automation-run-telemetry.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 
 // How many due rows the tick reads per page. The tick reads pages until none
 // is left, so this bounds a query, not a tick.
 export const AUTOMATION_TICK_PAGE_SIZE = 100;
 
-// The card's declaration as the index holds it, or why it can't be read.
+// The card's declaration as the index holds it, or why it can't be read: a
+// card that indexed but doesn't read as a declaration carries the reader's
+// `problems` too.
 export type AutomationDeclarationRead =
   | { ok: true; declaration: AutomationDeclaration }
-  | { ok: false; message: string };
+  | { ok: false; message: string; problems?: AutomationProblem[] };
 
 export interface AutomationTickOptions {
   queue: QueuePublisher;
@@ -93,7 +117,18 @@ export interface AutomationTickOptions {
   virtualNetwork: Pick<VirtualNetwork, 'toURLHref'>;
   // Unix seconds; the current time when absent.
   now?: number;
+  // Handle only rows whose next run is at least this many seconds before
+  // `now`: the ones the minute tick has missed. Reconcile passes it; the
+  // tick handles every due row.
+  overdueBy?: number;
   pageSize?: number;
+  // Told of each automation whose state the tick changed, or whose next run
+  // it moved without starting a run, once its transaction has committed.
+  reportAutomationChange?: ReportAutomationChange;
+  // Told of each run a pause for an invalid declaration cancels.
+  reportRunChange?: ReportRunChange;
+  // Called after each automation the tick handles.
+  onProgress?: () => void;
 }
 
 // What the tick did with one due trigger slot.
@@ -121,7 +156,8 @@ export type AutomationTickTrigger =
 // - `not-due`: the card as indexed has nothing due, so the row's next run was
 //   recomputed with nothing enqueued.
 // - `unreadable`: the card doesn't read as a declaration (`message` says
-//   why). The row stays due and unchanged.
+//   why). When the card indexed, the automation is `paused` with
+//   `invalid-declaration`; otherwise the row stays due and unchanged.
 // - `caps-raised`: the card asks for more than the caps snapshot. Nothing is
 //   enqueued; the index hook pauses the automation.
 // - `failed`: handling the automation threw. A run or job the tick wrote
@@ -144,6 +180,7 @@ export type AutomationTickOutcome =
       kind: 'unreadable';
       automationId: RealmResourceIdentifier;
       message: string;
+      paused: boolean;
     }
   | {
       kind: 'caps-raised';
@@ -167,13 +204,14 @@ export async function tickAutomations(
   options: AutomationTickOptions,
 ): Promise<AutomationTickOutcome[]> {
   let now = options.now ?? currentUnixSeconds();
+  let dueBy = now - (options.overdueBy ?? 0);
   let pageSize = options.pageSize ?? AUTOMATION_TICK_PAGE_SIZE;
   let outcomes: AutomationTickOutcome[] = [];
   let after: string | undefined;
   for (;;) {
     let rows = await query(dbAdapter, [
       'SELECT automation_id FROM automations WHERE',
-      ...dueAt(now),
+      ...dueAt(dueBy),
       ...(after ? ['AND automation_id >', param(after)] : []),
       'ORDER BY automation_id LIMIT',
       param(pageSize),
@@ -185,6 +223,7 @@ export async function tickAutomations(
           dbAdapter,
           automationId,
           now,
+          dueBy,
           options,
         );
         if (outcome) {
@@ -193,6 +232,7 @@ export async function tickAutomations(
       } catch (error) {
         outcomes.push({ kind: 'failed', automationId, error });
       }
+      options.onProgress?.();
     }
     if (rows.length < pageSize) {
       return outcomes;
@@ -207,11 +247,57 @@ async function tickAutomation(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
   now: number,
+  dueBy: number,
   options: AutomationTickOptions,
 ): Promise<AutomationTickOutcome | undefined> {
-  let outcome = await claimAndEnqueue(dbAdapter, automationId, now, options);
+  // The runs' `enqueued` telemetry, written once the tick's transaction has
+  // committed and the row records the runs it started.
+  let enqueued: AutomationRunEnqueuedEvent[] = [];
+  let changed: { automation?: ChangedAutomation } = {};
+  let outcome = await claimAndEnqueue(
+    dbAdapter,
+    automationId,
+    now,
+    dueBy,
+    options,
+    enqueued,
+    changed,
+  );
   if (outcome?.kind === 'enqueued') {
+    for (let event of enqueued) {
+      emitAutomationRunEvent(event);
+    }
     await logTriggers(dbAdapter, outcome.triggers);
+  }
+  if (changed.automation) {
+    await options.reportAutomationChange?.(changed.automation);
+  }
+  if (outcome?.kind === 'unreadable') {
+    // The claim is over, so the pause locks the row afresh and reads the card
+    // again under the lock: an edit that fixed the card meanwhile is no
+    // reason to pause.
+    let automation = await pauseForInvalidDeclaration(
+      dbAdapter,
+      automationId,
+      async () => {
+        let read = await options.readDeclaration(automationId);
+        if (
+          read.ok ||
+          read.problems?.some(({ code }) => code === 'not-an-automation')
+        ) {
+          return undefined;
+        }
+        return read.problems;
+      },
+      {
+        reportAutomationChange: options.reportAutomationChange,
+        reportRunChange: options.reportRunChange,
+      },
+    );
+    return {
+      ...outcome,
+      paused: automation?.pauseReason === 'invalid-declaration',
+    };
   }
   return outcome;
 }
@@ -220,14 +306,22 @@ async function claimAndEnqueue(
   dbAdapter: DBAdapter,
   automationId: RealmResourceIdentifier,
   now: number,
+  dueBy: number,
   options: AutomationTickOptions,
+  enqueued: AutomationRunEnqueuedEvent[],
+  // Set to the automation when the committed change moved its state.
+  changed: { automation?: ChangedAutomation },
 ): Promise<AutomationTickOutcome | undefined> {
   return await dbAdapter.withTransaction(async (txQuery) => {
+    // A retried transaction starts its runs again, so only the last pass's
+    // events are the runs' `enqueued` telemetry.
+    enqueued.length = 0;
+    changed.automation = undefined;
     let [row] = await txQuery([
       'SELECT * FROM automations WHERE automation_id =',
       param(automationId),
       'AND',
-      ...dueAt(now),
+      ...dueAt(dueBy),
       'FOR UPDATE SKIP LOCKED',
     ]);
     if (!row) {
@@ -236,7 +330,12 @@ async function claimAndEnqueue(
     let automation = automationFromRow(row);
     let read = await options.readDeclaration(automationId);
     if (!read.ok) {
-      return { kind: 'unreadable', automationId, message: read.message };
+      return {
+        kind: 'unreadable',
+        automationId,
+        message: read.message,
+        paused: false,
+      };
     }
     let { declaration } = read;
     let raised = capsRaisedAbove(automation.capsSnapshot, declaration);
@@ -270,6 +369,21 @@ async function claimAndEnqueue(
         slot,
         secondsCap: declaration.caps.seconds,
         input: { runId: run.id, scheduledAt: slot, dryRun: false },
+      });
+      let enqueuedAt = Date.now();
+      enqueued.push({
+        kind: 'enqueued',
+        automation: automationId,
+        run: run.id,
+        job: job.id,
+        realm: automation.realm,
+        trigger: label,
+        triggerKind:
+          declaration.triggers.find((t) => t.label === label)?.kind ?? 'cron',
+        dryRun: false,
+        scheduledAt: slot,
+        enqueuedAt: new Date(enqueuedAt).toISOString(),
+        scheduleLagMs: Math.max(0, enqueuedAt - at * 1000),
       });
       let state = runState[label] ?? { runs: 0 };
       runState[label] = { ...state, runs: state.runs + 1, lastSlot: at };
@@ -364,6 +478,16 @@ async function claimAndEnqueue(
       'updated_at = now() WHERE automation_id =',
       param(automationId),
     ]);
+    // A run the tick starts sends its own `job` event, which a subscriber
+    // reads the automation again on. A tick that starts none and still moves
+    // the state or the next run (every due slot joined a pending run, or
+    // nothing was due after all) reports the automation itself.
+    if (
+      state !== automation.state ||
+      (!started && nextRun !== automation.nextRun)
+    ) {
+      changed.automation = automation;
+    }
 
     if (handled.length === 0) {
       return { kind: 'not-due', automationId, state, nextRun };
@@ -407,6 +531,7 @@ async function logTriggers(
               skipped: true,
             },
           },
+      trigger.kind === 'started' ? trigger.jobId : undefined,
     );
   }
 }
@@ -428,7 +553,7 @@ async function pendingRuns(
   }));
 }
 
-// The rows the tick handles at `now`: the ones `automations_due_idx` serves.
+// The rows due by `now`: the ones `automations_due_idx` serves.
 function dueAt(now: number) {
   return [
     "state IN ('active', 'waiting-for-credits') AND next_run IS NOT NULL AND next_run <=",

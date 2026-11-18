@@ -2005,6 +2005,8 @@ export default class Room extends Component<Signature> {
   private startFileUploadTask = task(async (file: FileDef) => {
     let sourceUrl = file.sourceUrl;
     if (!sourceUrl) return;
+    // Set before the first await: the pill shows "uploading" as soon as the
+    // upload is started, and the file-attachment tests rely on this order.
     this._fileUploadStates.set(sourceUrl, { status: 'uploading' });
     try {
       let [uploadedFile] = await this.matrixService.uploadFiles([file]);

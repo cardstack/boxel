@@ -39,9 +39,11 @@ import {
   closeServer,
   createJWT,
   createVirtualNetwork,
+  insertIncomingWebhookRow,
   insertUser,
   realmSecretSeed,
   setupPermissionedRealmCached,
+  setupSecretsKeyring,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -113,6 +115,8 @@ module(basename(import.meta.filename), function (hooks) {
   let dbAdapter: DBAdapter;
 
   setupCatalogTestSubset(hooks);
+  // The tests seal incoming webhooks' signing secrets.
+  setupSecretsKeyring(hooks);
 
   module('a realm with direct writers and a reader', function (hooks) {
     // The route reads the realm's clock for each trigger's next run.
@@ -211,7 +215,22 @@ module(basename(import.meta.filename), function (hooks) {
       return result.declaration;
     }
 
+    // The card's webhook trigger names `github-push`, which the payer made.
+    async function insertPayerWebhook() {
+      let [found] = await query(dbAdapter, [
+        `SELECT 1 FROM incoming_webhooks WHERE webhook_path = 'github-push'`,
+      ]);
+      if (!found) {
+        await insertIncomingWebhookRow(dbAdapter as PgAdapter, {
+          username: PAYER,
+          webhookPath: 'github-push',
+          signingSecret: 'payer-secret',
+        });
+      }
+    }
+
     async function switchOn(user = PAYER) {
+      await insertPayerWebhook();
       let result = await switchOnAutomation(
         dbAdapter,
         {
@@ -268,7 +287,12 @@ module(basename(import.meta.filename), function (hooks) {
         data: {
           type: 'automation-status',
           id: automationURL(),
-          attributes: { switchedOn: false, lastRun: null, currentRun: null },
+          attributes: {
+            switchedOn: false,
+            webhookDeliveriesStartRuns: false,
+            lastRun: null,
+            currentRun: null,
+          },
         },
       });
     });
@@ -551,6 +575,88 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
+    test('an automation paused for an invalid declaration reads with the problems the reader found', async function (assert) {
+      await writeAutomation();
+      await switchOn();
+      let active = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      assert.strictEqual(
+        active.switchedOn ? active.pauseProblems : undefined,
+        null,
+        'an active automation has no problems',
+      );
+      let problems = [
+        {
+          code: 'cron-too-frequent',
+          path: 'triggers.0.expression',
+          message:
+            '"58,1 0,23 * * *" can fire twice 3 minutes apart, and Boxel runs an automation\'s cron trigger at most once every 5 minutes',
+        },
+      ];
+      await query(dbAdapter, [
+        `UPDATE automations SET state = 'paused', pause_reason = 'invalid-declaration', pause_problems =`,
+        param(JSON.stringify(problems)),
+        `::jsonb WHERE automation_id =`,
+        param(automationURL()),
+      ]);
+      let status = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      assert.deepEqual(
+        status.switchedOn
+          ? [status.state, status.pauseReason, status.pauseProblems]
+          : [],
+        ['paused', 'invalid-declaration', problems],
+      );
+    });
+
+    test("a switched-on automation reads with its failure streak and the streak's last error", async function (assert) {
+      await writeAutomation();
+      await switchOn();
+      let fresh = attributesOf((await statusOf(ADMIN, ['read', 'write'])).body);
+      assert.deepEqual(
+        fresh.switchedOn ? [fresh.failuresInARow, fresh.lastFailure] : [],
+        [0, null],
+        'no runs, no streak',
+      );
+
+      await ranThrough(['Import'], ['Import', 'Index'], {
+        state: 'error',
+        reason: 'script-error',
+        message: 'Error: the feed was empty',
+      });
+      let lastId = await ranThrough(['Index'], ['Import', 'Index'], {
+        state: 'error',
+        reason: 'timed-out',
+        message: 'The run reached its time limit',
+      });
+      let status = attributesOf(
+        (await statusOf(ADMIN, ['read', 'write'])).body,
+      );
+      if (!status.switchedOn) {
+        throw new Error('expected a switched-on automation');
+      }
+      assert.strictEqual(status.failuresInARow, 2);
+      assert.strictEqual(status.lastFailure?.runId, lastId);
+      assert.strictEqual(status.lastFailure?.reason, 'timed-out');
+      assert.strictEqual(
+        status.lastFailure?.message,
+        'The run reached its time limit',
+      );
+      assert.strictEqual(typeof status.lastFailure?.finishedAt, 'string');
+
+      await ranThrough(['Import', 'Index'], ['Import', 'Index'], {
+        state: 'complete',
+      });
+      let reset = attributesOf((await statusOf(ADMIN, ['read', 'write'])).body);
+      assert.deepEqual(
+        reset.switchedOn ? [reset.failuresInARow, reset.lastFailure] : [],
+        [0, null],
+        'a complete run ends the streak',
+      );
+    });
+
     test('another direct writer who shares a realm with the payer sees who pays', async function (assert) {
       await writeAutomation();
       await switchOn();
@@ -666,6 +772,96 @@ module(basename(import.meta.filename), function (hooks) {
         ],
         `each trigger the row counted reports its runs; the row's trigger_runs: ${JSON.stringify(row?.trigger_runs)}`,
       );
+    });
+
+    module('the webhooks an automation may name', function () {
+      function webhooksOf(
+        user: string,
+        permissions: ('read' | 'write' | 'realm-owner')[],
+      ) {
+        return request
+          .get('/_automation-webhooks')
+          .set('Accept', SupportedMimeType.JSON)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, user, permissions)}`,
+          );
+      }
+
+      test("a direct writer lists the webhooks the realm's direct writers made, and no one else's", async function (assert) {
+        await insertPayerWebhook();
+        await insertIncomingWebhookRow(dbAdapter as PgAdapter, {
+          username: ADMIN,
+          webhookPath: 'admin-hook',
+          signingSecret: 'admin-secret',
+        });
+        await insertIncomingWebhookRow(dbAdapter as PgAdapter, {
+          username: READER,
+          webhookPath: 'reader-hook',
+          signingSecret: 'reader-secret',
+        });
+        await insertIncomingWebhookRow(dbAdapter as PgAdapter, {
+          username: STRANGER,
+          webhookPath: 'stranger-hook',
+          signingSecret: 'stranger-secret',
+        });
+        let response = await webhooksOf(ADMIN, ['read', 'write']);
+        assert.strictEqual(response.status, 200, 'HTTP 200');
+        assert.strictEqual(response.headers['cache-control'], 'no-store');
+        let listed = (
+          response.body.data as {
+            type: string;
+            id: string;
+            attributes: { webhookPath: string; owner: string };
+          }[]
+        )
+          .map(({ type, id, attributes: { webhookPath, owner } }) => ({
+            type,
+            id,
+            webhookPath,
+            owner,
+          }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+        assert.deepEqual(listed, [
+          {
+            type: 'automation-webhook',
+            id: 'admin-hook',
+            webhookPath: 'admin-hook',
+            owner: ADMIN,
+          },
+          {
+            type: 'automation-webhook',
+            id: 'github-push',
+            webhookPath: 'github-push',
+            owner: PAYER,
+          },
+        ]);
+        assert.deepEqual(response.body.meta, {
+          webhookDeliveriesStartRuns: false,
+        });
+        assert.notOk(
+          JSON.stringify(response.body).includes('secret'),
+          'no signing secret is listed',
+        );
+      });
+
+      test('a reader and an anonymous caller are refused the list', async function (assert) {
+        await insertPayerWebhook();
+        let reader = await webhooksOf(READER, ['read']);
+        assert.strictEqual(reader.status, 403, 'a reader gets HTTP 403');
+        assert.notOk(
+          JSON.stringify(reader.body).includes('github-push'),
+          "a reader's refusal names no webhook",
+        );
+        let anonymous = await request
+          .get('/_automation-webhooks')
+          .set('Accept', SupportedMimeType.JSON);
+        assert.strictEqual(
+          anonymous.status,
+          401,
+          'an anonymous caller gets 401',
+        );
+      });
     });
   });
 

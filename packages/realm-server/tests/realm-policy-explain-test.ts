@@ -226,6 +226,35 @@ const ORG_RULES: Rule[] = [
   },
 ];
 
+// An answer with the `module-not-granted` warning set aside. The types here
+// are defined in the realm the policy governs, and no policy here grants their
+// code, so compiling records that warning against each `read` or `query`
+// grant, and an explanation lists it among a grant's issues and a draft's.
+// `realm-policy-module-access-test` covers it. A grant left with no issue
+// carries none, as one that never had any does.
+function settingAsideModuleWarnings<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(settingAsideModuleWarnings) as T;
+  }
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+  let kept: [string, unknown][] = [];
+  for (let [key, entry] of Object.entries(value)) {
+    if (key === 'issues' && Array.isArray(entry)) {
+      let issues = entry.filter(
+        (issue: { code?: string }) => issue?.code !== 'module-not-granted',
+      );
+      if (issues.length > 0 || !('outcome' in value)) {
+        kept.push([key, issues]);
+      }
+      continue;
+    }
+    kept.push([key, settingAsideModuleWarnings(entry)]);
+  }
+  return Object.fromEntries(kept) as T;
+}
+
 function policyCard(rules: Rule[]) {
   return JSON.stringify({
     data: {
@@ -494,9 +523,11 @@ module(basename(import.meta.filename), function (hooks) {
         `explain(${actor}, ${target}, ${operation}) answered ${response.status}: ${response.text}`,
       );
     }
-    return (response.body as { 'atomic:results': PolicyExplanation[] })[
-      'atomic:results'
-    ][0];
+    return settingAsideModuleWarnings(
+      (response.body as { 'atomic:results': PolicyExplanation[] })[
+        'atomic:results'
+      ][0],
+    );
   }
 
   // The answer to a question as the IT admin, who reads both realms, is given
@@ -508,7 +539,9 @@ module(basename(import.meta.filename), function (hooks) {
         `explain(${JSON.stringify(question)}) answered ${response.status}: ${response.text}`,
       );
     }
-    return (response.body as { 'atomic:results': T[] })['atomic:results'][0];
+    return settingAsideModuleWarnings(
+      (response.body as { 'atomic:results': T[] })['atomic:results'][0],
+    );
   }
 
   function errorOf(response: Response) {

@@ -141,7 +141,7 @@ export function isAutomationScriptInput(
 // What the tab answers, as the `json` of the `JsonCard` the command returns.
 // A run whose script throws or runs out of time answers `error`; the command
 // itself fails only when it couldn't run the script at all.
-export type AutomationScriptOutcome =
+export type AutomationScriptOutcome = (
   | { state: 'complete' }
   | {
       state: 'error';
@@ -150,12 +150,29 @@ export type AutomationScriptOutcome =
       message: string;
       // The script's own line, when the error came from the script.
       line?: number;
-    };
+    }
+) & {
+  // When the script started and ended in the tab, in ms since the epoch by
+  // the tab's clock, for the run's telemetry. Absent when the script never
+  // started.
+  timing?: AutomationScriptTiming;
+};
+
+export interface AutomationScriptTiming extends JSONTypes.Object {
+  startedAt: number;
+  endedAt: number;
+}
 
 // `script-error`: the script threw an error of its own or didn't compile.
 // `timed-out`: the run reached its time limit.
-// `run-failed`: a realm call whose error the script didn't catch, or the
-// runner itself, failed the run.
+// `call-failed`: a realm call failed and the script didn't catch its error,
+// while no request the run made was failed by the platform. The call itself
+// was refused or couldn't do what the script asked (a missing file, a
+// refused write, a query the realm rejects), so the run fails the same way
+// every time the script runs.
+// `run-failed`: the runner failed the run, or a realm call failed while the
+// platform was failing the run's requests (a realm or model answered with a
+// server error, or never answered).
 // `stopped`: the run stopped running while its script ran: a person canceled
 // it, a pause or remove canceled it, it ended at a cap, or a newer attempt
 // took it over. The tab stopped the script. The run's row already says how
@@ -163,6 +180,7 @@ export type AutomationScriptOutcome =
 export type AutomationScriptErrorReason =
   | 'script-error'
   | 'timed-out'
+  | 'call-failed'
   | 'run-failed'
   | 'stopped';
 
@@ -180,6 +198,7 @@ export function isAutomationScriptOutcome(
     outcome.state === 'error' &&
     (outcome.reason === 'script-error' ||
       outcome.reason === 'timed-out' ||
+      outcome.reason === 'call-failed' ||
       outcome.reason === 'run-failed' ||
       outcome.reason === 'stopped') &&
     typeof outcome.message === 'string' &&

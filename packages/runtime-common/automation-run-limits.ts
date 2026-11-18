@@ -21,19 +21,25 @@ import {
   type AutomationCaps,
   type AutomationDeclaration,
   type AutomationOperationDeclaration,
+  type AutomationProblem,
 } from './automation-declaration.ts';
+import type { ReportRunChange } from './automation-run-events.ts';
 import { getAutomation, type AutomationCapsSnapshot } from './automations.ts';
 import {
   addAutomationRunCounts,
   countAutomationRunCall,
+  CREDENTIAL_REJECTED_REASON,
   endAutomationRunAtCap,
+  finishAutomationRun,
   getAutomationRun,
   type AutomationRunCallCounter,
+  type AutomationRunCredentialRefusal,
 } from './automation-runs.ts';
 import type {
   CallApiRunMeter,
   CallApiRunAdmission,
   CallApiRunLogEntry,
+  CallApiUseSubject,
 } from './card-operations/call-api.ts';
 import type { OperationError } from './card-operations/types.ts';
 import { OperationFailure } from './card-operations/types.ts';
@@ -59,9 +65,11 @@ export interface LimitedRun {
   automationId: RealmResourceIdentifier;
 }
 
+// A card that indexed but doesn't read as a declaration carries the reader's
+// `problems` too; a card with nothing indexed to read carries none.
 export type RunDeclarationRead =
   | { ok: true; declaration: AutomationDeclaration }
-  | { ok: false; message: string };
+  | { ok: false; message: string; problems?: AutomationProblem[] };
 
 // The automation's declaration, read from its card's live index row. A card
 // that isn't indexed, failed to index, or doesn't read as an automation
@@ -112,6 +120,7 @@ export async function readRunDeclaration({
       message: `the automation card ${automationId} doesn't read as an automation: ${read.problems
         .map(({ path, message }) => (path ? `${path}: ${message}` : message))
         .join('; ')}`,
+      problems: read.problems,
     };
   }
   return { ok: true, declaration: read.declaration };
@@ -204,13 +213,14 @@ export function runCapReached(cap: string): OperationError {
 }
 
 // Counts one call of a run against its cap on `counter`. A call past the cap
-// ends the run and is refused with `runCapReached`; a run that is no longer
-// running is refused as one.
+// ends the run, which `reportRunChange` is told, and is refused with
+// `runCapReached`; a run that is no longer running is refused as one.
 export async function countRunCall(
   dbAdapter: DBAdapter,
   run: LimitedRun,
   counter: AutomationRunCallCounter,
   cap: number,
+  reportRunChange?: ReportRunChange,
 ): Promise<{ ok: true } | { ok: false; error: OperationError }> {
   let count = await countAutomationRunCall(
     dbAdapter,
@@ -223,7 +233,7 @@ export async function countRunCall(
     case 'counted':
       return { ok: true };
     case 'over-cap':
-      await endRunAtCap(dbAdapter, run, counter);
+      await endRunAtCap(dbAdapter, run, counter, reportRunChange);
       return { ok: false, error: runCapReached(counter) };
     case 'not-running':
     case 'missing':
@@ -231,10 +241,12 @@ export async function countRunCall(
   }
 }
 
+// Ends a run at its `cap`, and tells `reportRunChange` when it did.
 export async function endRunAtCap(
   dbAdapter: DBAdapter,
   run: LimitedRun,
   cap: string,
+  reportRunChange?: ReportRunChange,
 ): Promise<void> {
   let ended = await endAutomationRunAtCap(
     dbAdapter,
@@ -242,6 +254,9 @@ export async function endRunAtCap(
     run.attempt,
     cap,
   );
+  if (ended) {
+    await reportRunChange?.(run.runId);
+  }
   log.info(
     ended
       ? `run ${run.runId} attempt ${run.attempt} of ${run.automationId} hit its ${cap} cap and ended`
@@ -258,6 +273,32 @@ function runNotRunning(): OperationError {
   };
 }
 
+// The pauses before a run's call fills its slots again after a key's token
+// endpoint failed for now (`credential-rejected`, `unavailable`). Each fill
+// already retried the token request itself (0.5 s, then 2 s), so these are
+// for an outage that outlasts a call: about a minute in all, bounded by the
+// run's time limit, since a run that stops running is not retried.
+export const DEFAULT_CREDENTIAL_RETRY_DELAYS_MS = [5_000, 15_000, 45_000];
+
+let credentialRetryDelaysMs = DEFAULT_CREDENTIAL_RETRY_DELAYS_MS;
+
+// Sets the pauses, for tests; with none, restores the defaults.
+export function configureCredentialRetryDelays(delaysMs?: number[]): void {
+  credentialRetryDelaysMs = delaysMs ?? DEFAULT_CREDENTIAL_RETRY_DELAYS_MS;
+}
+
+// The credential a refusal that ends a run names: a client or share that
+// needs an administrator, or a key or connection the vendor refused.
+export function credentialRefusalOf(
+  refusal: OperationError,
+  subject: CallApiUseSubject,
+): AutomationRunCredentialRefusal {
+  return {
+    reason: refusal.meta?.reason === 'needs-admin' ? 'needs-admin' : 'rejected',
+    subject: { kind: subject.kind, id: subject.id },
+  };
+}
+
 // Holds one run-token request's `callApi` calls to the automation's
 // declaration and the run's caps. The declaration is read once per request,
 // the first time a call needs it.
@@ -266,11 +307,14 @@ export function automationRunCallApiMeter({
   definitionLookup,
   virtualNetwork,
   run,
+  reportRunChange,
 }: {
   dbAdapter: DBAdapter;
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
   run: LimitedRun;
+  // Told when a call ends the run at a cap.
+  reportRunChange?: ReportRunChange;
 }): CallApiRunMeter {
   let limits: Promise<RunLimitsRead> | undefined;
   let declared = async (): Promise<RunLimits> => {
@@ -316,7 +360,7 @@ export function automationRunCallApiMeter({
       // a run with none left is stopped before its call counts.
       let current = await getAutomationRun(dbAdapter, run.runId);
       if (current && current.callApiResponseBytes >= caps.responseBytes) {
-        await endRunAtCap(dbAdapter, run, 'responseBytes');
+        await endRunAtCap(dbAdapter, run, 'responseBytes', reportRunChange);
         throw new OperationFailure(runCapReached('responseBytes'));
       }
       let counted = await countRunCall(
@@ -324,6 +368,7 @@ export function automationRunCallApiMeter({
         run,
         'callApiCalls',
         caps.callApiCalls,
+        reportRunChange,
       );
       if (!counted.ok) {
         throw new OperationFailure(counted.error);
@@ -342,13 +387,38 @@ export function automationRunCallApiMeter({
         });
       }
       if (budgetReached) {
-        await endRunAtCap(dbAdapter, run, 'responseBytes');
+        await endRunAtCap(dbAdapter, run, 'responseBytes', reportRunChange);
         return runCapReached('responseBytes');
       }
       return undefined;
     },
     async logCall(call) {
       await logRunPlatformLine(dbAdapter, run.runId, callApiLogLine(call));
+    },
+    async credentialRetryDelay(retry) {
+      let delay = credentialRetryDelaysMs[retry - 1];
+      return delay !== undefined && (await this.isRunning())
+        ? delay
+        : undefined;
+    },
+    async isRunning() {
+      let current = await getAutomationRun(dbAdapter, run.runId);
+      return current?.state === 'running' && current.attempt === run.attempt;
+    },
+    async endOnCredential(refusal, subject) {
+      let ended = await finishAutomationRun(dbAdapter, run.runId, run.attempt, {
+        state: 'error',
+        reason: CREDENTIAL_REJECTED_REASON,
+        message: refusal.detail,
+        ...(subject
+          ? { credential: credentialRefusalOf(refusal, subject) }
+          : {}),
+      });
+      log.info(
+        ended
+          ? `run ${run.runId} attempt ${run.attempt} of ${run.automationId} ended on a refused credential (${refusal.meta?.reason ?? 'rejected'})`
+          : `run ${run.runId} attempt ${run.attempt} of ${run.automationId} was refused a credential after it stopped running`,
+      );
     },
   };
 }
