@@ -1,0 +1,43 @@
+# TEMPORARY: hammer the v8-prof mtime race on GitHub runners. Not for merge.
+name: TMP v8-prof hammer
+on:
+  push:
+    branches: [cs-15446-v8-prof-mtime-clock-slack]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  hammer:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        job: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: kernel clock info
+        run: |
+          uname -a
+          grep -E '^CONFIG_HZ=' /boot/config-$(uname -r) || true
+          df -T "$(node -p 'require("os").tmpdir()')"
+      - name: tight loop, unfixed code (control, failures expected)
+        working-directory: packages/realm-server
+        run: node tests/scripts/v8-prof-hammer.ts control 5000
+      - name: tight loop, fixed code (must be 0 failures)
+        working-directory: packages/realm-server
+        run: node tests/scripts/v8-prof-hammer.ts fixed 5000
+      - name: real test file, 30 runs (must be 0 failures)
+        working-directory: packages/realm-server
+        shell: bash
+        run: |
+          fails=0
+          for i in $(seq 1 30); do
+            TEST_FILES=prerender-v8-prof-test node --expose-gc tests/index.ts > run.log 2>&1 || true
+            if grep -q '^not ok' run.log; then
+              fails=$((fails+1)); grep -A8 '^not ok' run.log
+            fi
+            grep -q '^# pass 9' run.log || { echo "run $i did not report 9 passes"; tail -20 run.log; fails=$((fails+1)); }
+          done
+          echo "real test file: $fails/30 runs failed"
+          test "$fails" -eq 0
