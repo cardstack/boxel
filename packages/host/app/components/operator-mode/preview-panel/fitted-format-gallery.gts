@@ -102,6 +102,11 @@ export default class FittedFormatGallery extends Component<Signature> {
       .specs > li + li {
         margin-top: var(--boxel-sp-lg);
       }
+      /* A format wider than the panel (the wide strip and card) scrolls in
+         its own row, so the gallery itself never scrolls sideways. */
+      .specs > li {
+        overflow-x: auto;
+      }
       .spec-title {
         font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-sm);

@@ -43,6 +43,10 @@ const QUERIES: Record<string, string> = {
     '(1.0 < aspect-ratio) and (width >= 400px) and (275px <= height < 445px)',
   'expanded-card':
     '(aspect-ratio <= 1.0) and (width >= 400px) and (445px <= height)',
+  'wide-strip':
+    '(1.0 < aspect-ratio) and (720px <= width) and (105px <= height < 170px)',
+  'wide-card':
+    '(1.0 < aspect-ratio) and (720px <= width) and (170px <= height < 445px)',
 };
 
 const containerQuery = (spec: Spec) => {
