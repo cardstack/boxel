@@ -27,7 +27,10 @@
 // link has the card's own URL, and it changes when the card arrives. An
 // empty argument (a link that is empty or not loaded yet) gives `undefined`.
 //
-// It never fails the render.
+// A link never fails the render because of what it points to. One failure
+// does pass through: in an HTML visit, when the realm's routes can't be read
+// for now, the visit fails with an error that makes it run again, so that
+// HTML with card URLs in place of routed addresses is never stored.
 
 import {
   getHostRouteLinks,
@@ -81,6 +84,7 @@ const API = {
 export function hrefTo(
   ...args: [...HrefToArgument[], HrefToNamed] | HrefToArgument[]
 ): string | undefined {
+  let target: HostRouteAddressTarget | undefined;
   try {
     let named: HrefToNamed = {};
     let positional = args as unknown[];
@@ -89,19 +93,21 @@ export function hrefTo(
       named = last;
       positional = positional.slice(0, -1);
     }
-    let target = linkTarget(positional, named);
-    if (!target) {
-      return undefined;
-    }
-    let links = getHostRouteLinks();
-    if (!links) {
-      // No app to ask, so no routes: a card link keeps the card's id.
-      return target.kind === 'cards' ? lastCardId(target.cards) : undefined;
-    }
-    return links.link(target, API);
+    target = linkTarget(positional, named);
   } catch {
     return undefined;
   }
+  if (!target) {
+    return undefined;
+  }
+  let links = getHostRouteLinks();
+  if (!links) {
+    // No app to ask, so no routes: a card link keeps the card's id.
+    return target.kind === 'cards' ? lastCardId(target.cards) : undefined;
+  }
+  // The app's answer is not caught: see the note on failing the render in
+  // the header.
+  return links.link(target, API);
 }
 
 function linkTarget(

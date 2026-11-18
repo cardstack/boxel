@@ -18,6 +18,13 @@ import {
   type UnresolvedHostRouteLink,
 } from '@cardstack/runtime-common';
 
+import {
+  CardError,
+  isGatewayFailureStatus,
+} from '@cardstack/runtime-common/error';
+
+import { duringPrerenderHeaders } from '@cardstack/host/lib/prerender-fetch-headers';
+
 import type HostModeService from './host-mode-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
@@ -25,6 +32,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RenderStoreService from './render-store';
 import type SessionService from './session';
 import type StoreService from './store';
+
 import type { BaseDef, CardDef } from '@cardstack/base/card-api';
 
 const log = logger('host-route-links');
@@ -36,9 +44,13 @@ const ROUTES_RETRY_MS = 5000;
 
 // What was last read of a realm's routes. `routes` is `undefined` when the
 // read got none. `key` says which read it was; see `routesReadKey`.
+// `failure` is set in an HTML visit whose read met a failure that is not
+// about the realm's routes: the endpoint could not answer yet, or the
+// network failed.
 interface RealmRoutes {
   key: string;
   routes: HostRouteLinkRoutes | undefined;
+  failure?: CardError;
 }
 
 type RenderGlobals = {
@@ -66,6 +78,13 @@ type RenderGlobals = {
 // realm is indexed: the app hears of that from the realm's index events, and
 // an HTML visit reads once for each indexing job. Until a read lands, and
 // when it gets no routes, links fall back as in a realm with no routes.
+//
+// One case fails the render instead. In an HTML visit, when the endpoint
+// can't answer yet (503) or the read fails on the network, the links would
+// be stored with card URLs that nothing corrects later. The visit doesn't
+// ask again, because the realm may be waiting on this visit's own tab. The
+// link throws an error marked as a gateway failure, so the HTML that is
+// stored stays as it was and the visit is tried again.
 export default class HostRouteLinksService
   extends Service
   implements HostRouteLinks
@@ -198,6 +217,9 @@ export default class HostRouteLinksService
     let key = this.routesReadKey();
     let held = this.realmRoutes.get(realmURL);
     if (held?.key === key) {
+      if (held.failure) {
+        throw held.failure;
+      }
       return held.routes;
     }
     this.readRoutes(realmURL, key);
@@ -258,9 +280,16 @@ export default class HostRouteLinksService
     await Promise.resolve();
     let routes: HostRouteLinkRoutes | undefined;
     let gotNone = false;
+    let failure: CardError | undefined;
+    let url = `${realmURL}_host-routes`;
     try {
-      let response = await this.network.authedFetch(`${realmURL}_host-routes`, {
-        headers: { Accept: 'application/json' },
+      let response = await this.network.authedFetch(url, {
+        headers: {
+          Accept: 'application/json',
+          // Tells the realm that a render waits on this request, so it must
+          // not wait on a render itself.
+          ...duringPrerenderHeaders(),
+        },
       });
       let body = response.ok
         ? ((await response.json()) as { routes?: unknown })
@@ -277,10 +306,20 @@ export default class HostRouteLinksService
         log.debug(
           `no host routes from ${realmURL} for now (status ${response.status})`,
         );
+        if (isGatewayFailureStatus(response.status)) {
+          failure = routesReadFailure(
+            `the host routes of ${realmURL} are not available yet: ${url} answered HTTP ${response.status}`,
+            response.status,
+          );
+        }
       }
     } catch (e) {
       gotNone = true;
       log.debug(`reading the host routes of ${realmURL} failed: ${String(e)}`);
+      failure = routesReadFailure(
+        `reading the host routes of ${realmURL} failed: ${String(e)}`,
+        502,
+      );
     }
     if (this.isDestroying || this.isDestroyed) {
       return;
@@ -294,7 +333,12 @@ export default class HostRouteLinksService
     if (gotNone && held?.key === key && held.routes) {
       // A read again that got none keeps the routes the app has.
     } else {
-      this.realmRoutes.set(realmURL, { key, routes });
+      this.realmRoutes.set(realmURL, {
+        key,
+        routes,
+        // Only an HTML visit fails on it; the app tries again below.
+        ...(failure && key !== 'app' ? { failure } : {}),
+      });
     }
     // The app tries again later. An HTML visit doesn't wait: the next job
     // or visit reads again.
@@ -375,6 +419,15 @@ export default class HostRouteLinksService
       }: ${link.reason}${link.routePath ? ` at ${link.routePath}` : ''}`,
     );
   };
+}
+
+// A read of a realm's routes that failed for a reason that is not about the
+// routes, as the error an HTML visit fails with. The gateway failure marker
+// makes the prerender keep the card's stored HTML and try the visit again.
+function routesReadFailure(message: string, status: number): CardError {
+  let error = new CardError(message, { status });
+  error.gatewayFailure = true;
+  return error;
 }
 
 declare module '@ember/service' {

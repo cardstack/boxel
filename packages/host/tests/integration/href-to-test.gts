@@ -6,6 +6,7 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import {
+  DURING_PRERENDER_HEADER,
   validateHostRoutes,
   type HostRoute,
   type HostRouteTypeInfo,
@@ -296,6 +297,127 @@ module('Integration | hrefTo', function (hooks) {
       href('[data-test-author]'),
       `${testRealmURL}authors/jane`,
       'the link follows the routes read after the realm was indexed',
+    );
+  });
+
+  // An HTML visit as the reader sees it: the render flag is up and the
+  // visit's realm is named. `routesRequest` answers the request for the
+  // realm's routes, or returns null to let the realm answer.
+  async function inHTMLVisit(
+    routesRequest: (request: Request) => Response | null,
+    run: () => Promise<void>,
+  ) {
+    let globals = globalThis as {
+      __boxelRenderContext?: boolean;
+      __boxelConsumingRealm?: string;
+    };
+    let before = {
+      context: globals.__boxelRenderContext,
+      realm: globals.__boxelConsumingRealm,
+    };
+    let network = getService('network');
+    let handler = async (request: Request) =>
+      request.url === `${testRealmURL}_host-routes`
+        ? routesRequest(request)
+        : null;
+    network.virtualNetwork.mount(handler, { prepend: true });
+    globals.__boxelRenderContext = true;
+    globals.__boxelConsumingRealm = testRealmURL;
+    try {
+      await run();
+    } finally {
+      network.virtualNetwork.unmount(handler);
+      if (before.context === undefined) {
+        delete globals.__boxelRenderContext;
+      } else {
+        globals.__boxelRenderContext = before.context;
+      }
+      if (before.realm === undefined) {
+        delete globals.__boxelConsumingRealm;
+      } else {
+        globals.__boxelConsumingRealm = before.realm;
+      }
+    }
+  }
+
+  test('the request for a realm routes says when a render waits on it', async function (assert) {
+    let links = getService('host-route-links');
+    let requests: Request[] = [];
+
+    await inHTMLVisit(
+      (request) => {
+        requests.push(request);
+        return null;
+      },
+      async () => {
+        assert.strictEqual(links.routes(), undefined, 'the read is under way');
+        await getService('render-store').loaded();
+        assert.strictEqual(requests.length, 1, 'the HTML visit read once');
+        assert.strictEqual(
+          requests[0]?.headers.get(DURING_PRERENDER_HEADER),
+          '1',
+          'the request from an HTML visit carries the header',
+        );
+        assert.deepEqual(
+          links.routes()?.routes.map((route) => route.fullPath),
+          ['/people/:id'],
+          'the visit has the realm routes',
+        );
+      },
+    );
+
+    // Outside an HTML visit the app reads for itself, with no header.
+    let appRequests: Request[] = [];
+    let network = getService('network');
+    let spy = async (request: Request) => {
+      if (request.url === `${testRealmURL}_host-routes`) {
+        appRequests.push(request);
+      }
+      return null;
+    };
+    network.virtualNetwork.mount(spy, { prepend: true });
+    try {
+      links.resetState();
+      links.routes();
+      await getService('store').loaded();
+      assert.strictEqual(appRequests.length, 1, 'the app read once');
+      assert.false(
+        appRequests[0]?.headers.has(DURING_PRERENDER_HEADER),
+        'the request from the app carries no header',
+      );
+    } finally {
+      network.virtualNetwork.unmount(spy);
+    }
+  });
+
+  test('an HTML visit fails, and does not ask again, when the realm routes are not available', async function (assert) {
+    let links = getService('host-route-links');
+    let requests = 0;
+
+    await inHTMLVisit(
+      () => {
+        requests++;
+        return new Response(
+          JSON.stringify({ errors: [{ status: 503, title: 'unavailable' }] }),
+          { status: 503, headers: { 'retry-after': '5' } },
+        );
+      },
+      async () => {
+        links.routes();
+        await getService('render-store').loaded();
+        let thrown: { gatewayFailure?: boolean; status?: number } | undefined;
+        try {
+          links.routes();
+        } catch (e) {
+          thrown = e as typeof thrown;
+        }
+        assert.true(
+          thrown?.gatewayFailure,
+          'a link throws an error that makes the visit run again',
+        );
+        assert.strictEqual(thrown?.status, 503);
+        assert.strictEqual(requests, 1, 'the endpoint was asked once');
+      },
     );
   });
 });
