@@ -52,7 +52,9 @@ A request whose signal aborts while it waits MUST leave the queue unsent.
 
 ### 1.6. Prerender
 
-The limiter MUST NOT apply in a prerender tab.
+The limiter MUST NOT apply in a prerender tab. An interactive tab's own index render is not a
+prerender tab: its requests share the tab's connection, and the limiter MUST
+count them.
 
 ## 2. Rationale
 
