@@ -16,9 +16,9 @@
 // A token is stored only while its grant is current: a grant that has ended
 // keeps no tokens, even one issued by an exchange that raced the end.
 
-import { errors, type AdapterPayload } from 'oidc-provider';
+import Provider, { errors, type AdapterPayload } from 'oidc-provider';
 import { logger, param, type DBAdapter } from '@cardstack/runtime-common';
-import { endGrant, markGrantExchanged } from './grants.ts';
+import { endGrant, markGrantExchanged, type GrantEndReason } from './grants.ts';
 import {
   OAuthProviderAdapter,
   OAuthProviderObjectError,
@@ -43,6 +43,25 @@ const EXPIRED_SWEEP_ONE_IN = 50;
 const EXPIRED_SWEEP_LIMIT = 500;
 
 export type TokenKind = 'AccessToken' | 'RefreshToken';
+
+// Why the library revokes a grant, by the route it revokes it on: the token
+// endpoint revokes one when a code or refresh token is used again, and the
+// revocation endpoint when its client revokes one of its tokens. A client
+// that revokes a refresh token it has already used ends the grant as `client`,
+// not `reuse`: the request gives up the connection rather than trying to get
+// tokens from it. Undefined on any other route, where nothing revokes one.
+const REVOKED_ON: Readonly<Record<string, GrantEndReason>> = {
+  token: 'reuse',
+  revocation: 'client',
+};
+
+export function grantEndReasonOnRoute(
+  route: string | undefined,
+): GrantEndReason | undefined {
+  return route && Object.hasOwn(REVOKED_ON, route)
+    ? REVOKED_ON[route]
+    : undefined;
+}
 
 // What decides a refresh token's use (§1.9), read for the token as `t` by
 // `REFRESH_USE_COLUMNS`.
@@ -308,7 +327,25 @@ export class TokenAdapter extends OAuthProviderAdapter {
     }
   }
 
+  // Deletes a token. The library revokes a token in two steps, deleting it
+  // and then revoking its grant, so on the revocation endpoint this ends the
+  // grant instead (§1.9), which deletes the token with the grant's others. A
+  // failure between the two steps would otherwise leave the grant live with
+  // the token gone, and the client's retry would find nothing to revoke. The
+  // library's own revocation of the grant that follows finds it ended.
   async destroy(id: string): Promise<void> {
+    let reason = grantEndReasonOnRoute(Provider.ctx?.oidc?.route);
+    if (reason === 'client') {
+      let [row] = (await this.#dbAdapter.execute(
+        `SELECT grant_id FROM oauth_provider_tokens
+          WHERE kind = $1 AND id_hash = decode($2, 'hex')`,
+        { bind: [this.#kind, sha256Hex(id)] },
+      )) as { grant_id: string }[];
+      if (row) {
+        await endGrant(this.#dbAdapter, row.grant_id, reason);
+        return;
+      }
+    }
     await this.#dbAdapter.execute(
       `DELETE FROM oauth_provider_tokens
          WHERE kind = $1 AND id_hash = decode($2, 'hex')`,

@@ -26,6 +26,21 @@ if (typeof module !== 'undefined') {
     // minutes in all. The disconnect reason in the debug log below names
     // which case a failure was.
     socket_heartbeat_timeout: 300,
+    // The page reports to testem over one socket.io connection: every
+    // console call (testem's client forwards console.log/warn/error/info as
+    // `browser-console` events, its arguments serialized to depth 5) and every
+    // test result. socket.io's default per-message cap is 1 MB, and a message
+    // over it does not fail just that message: the server closes the socket
+    // (`transport error` / `RangeError: Max payload size exceeded`), and
+    // testem then reports `Browser timeout exceeded` against whichever test
+    // happens to be running. One large console argument — an error carrying a
+    // big document or an object graph — is enough to end the shard. The cap
+    // here is high enough that no console output or test result reaches it;
+    // messages over the large-message threshold below are recorded in the
+    // debug log instead, so an oversized one names the event and its caller.
+    socket_server_options: {
+      maxHttpBufferSize: 64 * 1024 * 1024,
+    },
     launch_in_ci: ['Chrome'],
     launch_in_dev: ['Chrome'],
     browser_start_timeout: 240,
@@ -211,6 +226,43 @@ if (typeof module !== 'undefined') {
     TestemServer.prototype.injectMiddleware = function (app, ...rest) {
       mountLifeline(app);
       return injectMiddleware.call(this, app, ...rest);
+    };
+
+    // Record every control-socket message from the page larger than this,
+    // with its size and its head (the socket.io event name and the start of
+    // its arguments, which for a `browser-console` event is the logged text).
+    // Normal traffic stays well under it; a message near or over the socket
+    // cap above is a console call or test result worth trimming at its
+    // source, and this names it. Read off engine.io's raw packet, so measuring
+    // costs a string length rather than a re-serialization.
+    const LARGE_SOCKET_MESSAGE_BYTES = Number(
+      process.env.HOST_TESTEM_LARGE_MESSAGE_BYTES || 256 * 1024,
+    );
+    const onClientConnected = TestemServer.prototype.onClientConnected;
+    TestemServer.prototype.onClientConnected = function (client, ...rest) {
+      try {
+        client.conn.on('packet', (packet) => {
+          try {
+            let data = packet?.data;
+            let size =
+              typeof data === 'string'
+                ? Buffer.byteLength(data)
+                : (data?.byteLength ?? 0);
+            if (size >= LARGE_SOCKET_MESSAGE_BYTES) {
+              testemInternalLog.warn(
+                `large browser control socket message: bytes=${size} head=${JSON.stringify(
+                  String(data).slice(0, 4096),
+                )}`,
+              );
+            }
+          } catch (e) {
+            // best-effort diagnostics — never let logging break the run
+          }
+        });
+      } catch (e) {
+        // best-effort diagnostics — never let logging break the run
+      }
+      return onClientConnected.call(this, client, ...rest);
     };
   }
 
