@@ -892,7 +892,12 @@ export class PgAdapter implements DBAdapter {
         releaseTurn();
       }
     };
-    let onLost = (e: Error) => release(e);
+    // A hold whose connection is gone holds nothing a waiter could be
+    // deadlocked behind, so the rest of its work stops counting as nested.
+    let onLost = (e: Error) => {
+      opts?.hold?.end();
+      release(e);
+    };
     client.on('error', onLost);
     return { client, release };
   }

@@ -277,5 +277,46 @@ module(basename(import.meta.filename), function () {
         await adapter.close();
       }
     });
+
+    test('a hold whose connection died waits its turn behind earlier callers', async function (assert) {
+      // Nested work is served ahead of everything because its hold pins a
+      // connection until it finishes; a hold whose connection is gone pins
+      // nothing.
+      let { adapter, pool } = stubbedAdapter({
+        PG_POOL_MAX: '1',
+        PG_POOL_OVERFLOW: '0',
+      });
+      try {
+        let order: string[] = [];
+        let resume!: () => void;
+        let gate = new Promise<void>((r) => (resume = r));
+        let opened = new Deferred<void>();
+        let hold = adapter.withConnection(async (query) => {
+          await query(['SELECT 1']);
+          opened.fulfill();
+          await gate;
+          await adapter.execute('SELECT 2');
+          order.push('dead hold');
+          return await query(['SELECT 3']);
+        });
+        await opened.promise;
+        let callers = [1, 2].map((n) =>
+          adapter.execute('SELECT 1').then(() => {
+            order.push(`caller ${n}`);
+          }),
+        );
+        await new Promise((r) => setTimeout(r, 20));
+        assert.deepEqual(idle(adapter), { inUse: 1, holds: 1, waiting: 2 });
+
+        pool.clients[0].lose();
+        // caller 1 has the connection now; the dead hold asks for one after
+        // caller 2 did
+        resume();
+        await Promise.allSettled([hold, ...callers]);
+        assert.deepEqual(order, ['caller 1', 'caller 2', 'dead hold']);
+      } finally {
+        await adapter.close();
+      }
+    });
   });
 });
