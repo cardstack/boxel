@@ -1412,9 +1412,8 @@ export class Recorder implements ManagedRecorder {
   async #walk(scan: ReadPosition | undefined): Promise<Walk> {
     let { realm } = this.#options;
     let signal = this.#outsideAbort.signal;
-    let release = await this.#walks.acquire();
+    let release = await this.#walks.acquire(signal);
     try {
-      signal.throwIfAborted();
       let [state] = await this.#query(
         `SELECT cursor_xid::text AS cursor_xid, cursor_seq::text AS cursor_seq,
                 (extract(epoch FROM clock_timestamp()) * 1000)::float8 AS now

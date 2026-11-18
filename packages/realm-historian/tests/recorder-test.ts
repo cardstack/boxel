@@ -130,6 +130,7 @@ module('recorder', (hooks) => {
       maxQueuedEvents?: number;
       before?: (step: RecorderStep) => Promise<void>;
       io?: Semaphore;
+      walks?: Semaphore;
       onCommits?: (count: number) => void;
     } = {},
   ): Recorder {
@@ -139,6 +140,7 @@ module('recorder', (hooks) => {
       historyRoot,
       holder: options.holder ?? HOLDER,
       io: options.io ?? new Semaphore(4),
+      walks: options.walks,
       onFatal: options.onFatal ?? ((error) => fatals.push(error)),
       onCommits: options.onCommits,
       sizeOnlyThresholdBytes: options.sizeOnlyThresholdBytes,
@@ -2113,6 +2115,21 @@ module('recorder', (hooks) => {
       );
       assert.strictEqual(await target.runBackground(maintenance), 'ran');
       assert.strictEqual(ran, 1);
+    });
+
+    test('stopping a recorder whose walk waits for a slot another realm holds does not wait for that realm', async (assert) => {
+      let walks = new Semaphore(1);
+      let target = recorder({ walks });
+      await recordInitial(target);
+      let elsewhere = await walks.acquire();
+      let sweeping = target.runBackground(sweepJob);
+      await sleep(20);
+      let stopped = false;
+      let stopping = target.stop().then(() => (stopped = true));
+      await waitUntil(() => stopped, { what: 'the recorder to stop' });
+      await stopping;
+      assert.strictEqual(await sweeping, 'unavailable');
+      elsewhere();
     });
 
     test('stopping a recorder ends its walks and drops the sweeps waiting to commit', async (assert) => {
