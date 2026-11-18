@@ -20,6 +20,11 @@ import type { OperationQueryFilterTemplate } from './types.ts';
 // `{ $ref: 'actor' }` marker a declared query carries, so a search fills in
 // the caller the way it fills in a declared query's markers.
 //
+// A predicate that reads nothing of the card never reaches this compiler. It
+// holds or fails for every card alike, so the policy gives its grant the filter
+// a grant with no condition has, and a search composes that filter only where
+// the predicate holds for its caller (see `policy-query.ts`).
+//
 // A predicate compiles only when it passes two tests.
 //
 // The first is BXL's `predicate` profile: the allowlist of what a query can

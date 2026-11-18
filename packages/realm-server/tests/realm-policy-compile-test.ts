@@ -113,6 +113,15 @@ const CLASSROOM_REF = {
   name: 'Classroom',
 };
 
+// The issues a policy records that these tests are about. The types here are
+// defined in the realm the policy governs, and no policy here grants their
+// code, so compiling also records `module-not-granted` against each `read` or
+// `query` grant, after every other issue. `realm-policy-module-access-test`
+// covers that warning.
+function issuesOf(policy: CompiledRealmPolicy | undefined) {
+  return policy?.issues.filter(({ code }) => code !== 'module-not-granted');
+}
+
 function policyCard(grants: Grant[], adoptsFrom: object = REALM_POLICY) {
   return policyOf([{ targetType: CLASSROOM, grants }], adoptsFrom);
 }
@@ -307,7 +316,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     let policy = await compiled();
-    assert.deepEqual(policy?.issues, [], 'the policy compiles cleanly');
+    assert.deepEqual(issuesOf(policy), [], 'the policy compiles cleanly');
     assert.strictEqual(policy?.card, POLICY_CARD, 'the card the pointer names');
     assert.strictEqual(
       typeof policy?.version,
@@ -468,13 +477,13 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let policy = await compiled();
     assert.deepEqual(
-      policy?.issues.map(({ code, path }) => ({ code, path })),
+      issuesOf(policy)?.map(({ code, path }) => ({ code, path })),
       [{ code: 'unsnapshotted-policy-read', path: 'rules[0].grants[1].where' }],
       'the unannotated read of the computed value is recorded against its grant',
     );
     assert.true(
-      /`\.headTeacher` is computed/.test(policy?.issues[0]?.message ?? ''),
-      `the issue names the computed value: ${policy?.issues[0]?.message}`,
+      /`\.headTeacher` is computed/.test(issuesOf(policy)?.[0]?.message ?? ''),
+      `the issue names the computed value: ${issuesOf(policy)?.[0]?.message}`,
     );
     assert.deepEqual(
       policy?.rules[0].grants.map(({ operation, where }) => [
@@ -508,7 +517,7 @@ module(basename(import.meta.filename), function (hooks) {
       'only the grant that compiled is in the policy',
     );
     assert.deepEqual(
-      policy?.issues.map(({ code, path }) => ({ code, path })),
+      issuesOf(policy)?.map(({ code, path }) => ({ code, path })),
       [
         { code: 'invalid-predicate', path: 'rules[0].grants[1].where' },
         { code: 'invalid-predicate', path: 'rules[0].grants[2].where' },
@@ -516,7 +525,7 @@ module(basename(import.meta.filename), function (hooks) {
       ],
       'each refusal is recorded against its grant',
     );
-    let [paramsIssue, parseIssue, emptyIssue] = (policy?.issues ?? []).map(
+    let [paramsIssue, parseIssue, emptyIssue] = (issuesOf(policy) ?? []).map(
       (issue) => issue.message,
     );
     assert.true(
@@ -596,7 +605,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let policy = await compiled();
     assert.deepEqual(
-      policy?.issues.map(({ code, path }) => ({ code, path })),
+      issuesOf(policy)?.map(({ code, path }) => ({ code, path })),
       refused.map((_, index) => ({
         code: 'partial-match',
         path: `rules[0].grants[${index}].where`,
@@ -604,7 +613,7 @@ module(basename(import.meta.filename), function (hooks) {
       'each refused predicate is recorded against its grant, and nothing else is',
     );
     for (let [index, [where, builtin]] of refused.entries()) {
-      let message = String(policy?.issues[index]?.message);
+      let message = String(issuesOf(policy)?.[index]?.message);
       assert.true(
         message.includes(`\`${builtin}\``),
         `${where}: the issue names \`${builtin}\`: ${message}`,
@@ -646,7 +655,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     await pointAt(`${ORG}policies/subtyped`);
     let before = await compiled();
-    assert.deepEqual(before?.issues, [], 'a subtype of RealmPolicy compiles');
+    assert.deepEqual(issuesOf(before), [], 'a subtype of RealmPolicy compiles');
     assert.strictEqual(before?.rules[0].grants.length, 5);
 
     await writeTo(org, 'org-policy.gts', subtype('CardDef'));
@@ -662,7 +671,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.deepEqual(after?.rules, [], 'it grants nothing');
     assert.deepEqual(
-      after?.issues.map(({ code }) => code),
+      issuesOf(after)?.map(({ code }) => code),
       ['not-a-policy'],
       'because it is no longer a RealmPolicy',
     );
@@ -674,7 +683,7 @@ module(basename(import.meta.filename), function (hooks) {
     let policy = await compiled();
     assert.deepEqual(policy?.rules, [], 'no rules');
     assert.deepEqual(
-      policy?.issues.map(({ code }) => code),
+      issuesOf(policy)?.map(({ code }) => code),
       ['policy-card-missing'],
       'the missing card is recorded',
     );
@@ -682,7 +691,7 @@ module(basename(import.meta.filename), function (hooks) {
     await writeTo(org, 'policies/not-yet.json', policyCard(GRANTS));
     await refreshed(() => compiles() === 2, 'the new card compiles');
     policy = await compiled();
-    assert.deepEqual(policy?.issues, [], 'the card compiles once it exists');
+    assert.deepEqual(issuesOf(policy), [], 'the card compiles once it exists');
     assert.strictEqual(policy?.rules[0].grants.length, 5);
   });
 
@@ -696,7 +705,7 @@ module(basename(import.meta.filename), function (hooks) {
     let policy = await compiled();
     assert.deepEqual(policy?.rules, [], 'an unloadable card grants nothing');
     assert.deepEqual(
-      policy?.issues.map(({ code }) => code),
+      issuesOf(policy)?.map(({ code }) => code),
       ['policy-card-unloadable'],
     );
     assert.strictEqual(
@@ -713,7 +722,7 @@ module(basename(import.meta.filename), function (hooks) {
       'a card of another type grants nothing',
     );
     assert.deepEqual(
-      policy?.issues.map(({ code }) => code),
+      issuesOf(policy)?.map(({ code }) => code),
       ['not-a-policy'],
     );
   });
@@ -795,7 +804,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let policy = await compiled();
     assert.deepEqual(
-      policy?.issues.map(({ code, path }) => ({ code, path })),
+      issuesOf(policy)?.map(({ code, path }) => ({ code, path })),
       [
         { code: 'unknown-operation', path: 'rules[0].grants[1].operation' },
         { code: 'unknown-operation', path: 'rules[0].grants[2].operation' },
@@ -817,8 +826,10 @@ module(basename(import.meta.filename), function (hooks) {
       'every refused rule and grant is recorded where it is, and nothing else is',
     );
     assert.true(
-      String(policy?.issues[3]?.message).includes('non-grantable on Classroom'),
-      `a subclass's grant names the type that keeps the operation out of reach: ${policy?.issues[3]?.message}`,
+      String(issuesOf(policy)?.[3]?.message).includes(
+        'non-grantable on Classroom',
+      ),
+      `a subclass's grant names the type that keeps the operation out of reach: ${issuesOf(policy)?.[3]?.message}`,
     );
     assert.deepEqual(
       policy?.rules.map((rule) => ({
@@ -912,7 +923,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let policy = await compiled();
     assert.deepEqual(
-      policy?.issues.map(({ code, path, severity }) => ({
+      issuesOf(policy)?.map(({ code, path, severity }) => ({
         code,
         path,
         severity,
@@ -1086,7 +1097,7 @@ module(basename(import.meta.filename), function (hooks) {
       ]),
     );
     let policy = await compiled();
-    assert.deepEqual(policy?.issues, [], 'every grant compiles');
+    assert.deepEqual(issuesOf(policy), [], 'every grant compiles');
     assert.deepEqual(
       policy?.rules[0]?.grants.map(({ path, anonymous }) => ({
         path,
@@ -1133,7 +1144,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let policy = await compiled();
     assert.deepEqual(
-      policy?.issues.map(({ code, path, severity }) => ({
+      issuesOf(policy)?.map(({ code, path, severity }) => ({
         code,
         path,
         severity,
@@ -1269,7 +1280,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let policy = await compiled();
     assert.deepEqual(
-      policy?.issues.map(({ code, path, severity }) => ({
+      issuesOf(policy)?.map(({ code, path, severity }) => ({
         code,
         path,
         severity,
@@ -1333,7 +1344,7 @@ module(basename(import.meta.filename), function (hooks) {
       ],
       'every expression that cannot be used leaves its grant out, and one of the wrong kind is warned about and kept',
     );
-    let [paramsIssue] = (policy?.issues ?? [])
+    let [paramsIssue] = (issuesOf(policy) ?? [])
       .filter((issue) => issue.path === 'rules[0].grants[3].actingUser')
       .map((issue) => issue.message);
     assert.true(
@@ -1407,7 +1418,7 @@ module(basename(import.meta.filename), function (hooks) {
       ]),
     );
     let policy = await compiled();
-    assert.deepEqual(policy?.issues, [], 'both grants compile');
+    assert.deepEqual(issuesOf(policy), [], 'both grants compile');
     let [onlyAnonymous, either] = policy?.rules[0]?.grants ?? [];
     assert.strictEqual(
       onlyAnonymous?.filter,
@@ -1449,7 +1460,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     let policy = await compiled();
     assert.deepEqual(
-      policy?.issues.map(({ code }) => code),
+      issuesOf(policy)?.map(({ code }) => code),
       ['policy-not-filterable'],
     );
     assert.strictEqual(policy?.anonymous, undefined);

@@ -314,7 +314,12 @@ module(basename(import.meta.filename), function (hooks) {
     }));
   }
 
-  // What the realm naming the card holds in force, in the same terms.
+  // What the realm naming the card holds in force, in the same terms. A
+  // validate of the card compiles it as the policy of the Org realm that holds
+  // it, which defines none of the types it grants. The Education realm
+  // defines them all and its policy grants no one their code, so it also
+  // records `module-not-granted` against each read, which is set aside here.
+  // `realm-policy-module-access-test` covers that warning.
   async function inForce() {
     let compiled = await education.getCompiledPolicy();
     return {
@@ -322,7 +327,9 @@ module(basename(import.meta.filename), function (hooks) {
         rule.path,
         rule.grants.map((grant) => grant.path),
       ]),
-      issues: compiled?.issues,
+      issues: compiled?.issues.filter(
+        ({ code }) => code !== 'module-not-granted',
+      ),
       uncompilable: compiled?.uncompilable,
     };
   }

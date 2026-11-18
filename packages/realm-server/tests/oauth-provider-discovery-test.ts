@@ -484,6 +484,9 @@ module(basename(import.meta.filename), function () {
         scopes_supported: ['boxel:read', 'boxel:write', 'test:probe'],
         authorization_endpoint: 'http://127.0.0.1:0/_oauth-provider/auth',
         token_endpoint: 'http://127.0.0.1:0/_oauth-provider/token',
+        revocation_endpoint:
+          'http://127.0.0.1:0/_oauth-provider/token/revocation',
+        revocation_endpoint_auth_methods_supported: ['none'],
         registration_endpoint: 'http://127.0.0.1:0/_oauth-provider/reg',
         client_id_metadata_document_supported: true,
       });
@@ -507,7 +510,6 @@ module(basename(import.meta.filename), function () {
       for (let path of [
         OPENID_DISCOVERY,
         '/_oauth-provider/jwks',
-        '/_oauth-provider/token/revocation',
         '/_oauth-provider/device/auth',
       ]) {
         let response = await request.get(path);

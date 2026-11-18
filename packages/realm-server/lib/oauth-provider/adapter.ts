@@ -14,7 +14,6 @@ import {
   endGrant,
   GRANT_STATE_COLUMNS,
   grantUsable,
-  type GrantEndReason,
   type GrantState,
 } from './grants.ts';
 import {
@@ -24,7 +23,7 @@ import {
   OAuthProviderAdapter,
   SessionAdapter,
 } from './objects.ts';
-import { TokenAdapter } from './tokens.ts';
+import { grantEndReasonOnRoute, TokenAdapter } from './tokens.ts';
 
 // The ID dynamic client registration gives a client: 24 random bytes in
 // base64url, so always 32 characters of that alphabet. A client ID metadata
@@ -133,16 +132,6 @@ interface GrantRow extends GrantState {
   expires: number | string;
 }
 
-// Why the library revokes a grant, by the route it revokes it on: the token
-// endpoint revokes one when a code or refresh token is used again, and the
-// revocation endpoint when its client revokes one of its tokens. The
-// revocation endpoint is off for now (`provider.ts`), so only the token
-// endpoint revokes one yet.
-const REVOKED_ON: Record<string, GrantEndReason> = {
-  token: 'reuse',
-  revocation: 'client',
-};
-
 // The OAuth grants, in `oauth_provider_grants` (`grants.ts`). Boxel creates
 // every grant itself when a flow finishes. The library saves one only in its
 // development pages, which are off, so a grant the library tries to save is
@@ -207,8 +196,7 @@ class GrantAdapter extends OAuthProviderAdapter {
   }
 
   async destroy(id: string): Promise<void> {
-    let route = Provider.ctx?.oidc?.route;
-    let reason = route ? REVOKED_ON[route] : undefined;
+    let reason = grantEndReasonOnRoute(Provider.ctx?.oidc?.route);
     if (!reason) {
       throw new OAuthProviderStorageError(
         `the OAuth provider ends a grant only on a reuse or a client's revocation`,
