@@ -1858,6 +1858,28 @@ module('recorder', (hooks) => {
       assert.strictEqual((await authorOf(recorded.id)).name, ALICE);
     });
 
+    test("a sweep that walked a deploy's files gives way to the deploy's scan, which reaches the journal before the sweep commits", async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      await onDisk('deploy/a.json', '{"a":1}');
+      assert.strictEqual(await target.runBackground(sweepJob), 'ran');
+      // The deploy appends its scan once its copy is done, after the walk.
+      let scan = await deployScan(at(1000));
+      target.tick(past());
+      await target.settled();
+      assert.strictEqual(
+        (await history()).length,
+        1,
+        'the sweep records nothing as unattributed',
+      );
+
+      await feed(target, [scan], past());
+      let [, deploy, ...rest] = await history();
+      assert.deepEqual(rest, []);
+      assert.strictEqual(subjectOf(deploy), 'Deploy cardstack/boxel@abc1234');
+      assert.deepEqual(deploy.changedPaths, ['deploy/a.json']);
+    });
+
     test("a deploy scan records only the deploy's changes, leaving a write that lands while it walks to that write's revision", async (assert) => {
       let racing: ChangeEvent | undefined;
       let armed = false;

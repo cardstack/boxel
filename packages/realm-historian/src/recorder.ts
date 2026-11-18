@@ -77,8 +77,10 @@
 //   `boxel-system` for a realm with no HEAD, and otherwise `Unattributed
 //   external changes` by `boxel-system`, with a warning in the log. A
 //   sweep whose walk a scan's revision, or another writer's, has made stale
-//   is dropped, and so is one that comes due while a scan is next to commit,
-//   since the scan sweeps the realm again.
+//   is dropped. So is one with a scan event in the journal after its walk
+//   began: the scan sweeps the realm again, and a deploy appends its scan
+//   only once it has copied its files, so a walk before the scan may have
+//   seen the deploy's files and would claim them as unattributed.
 //
 // A sweep records `last_swept_at`, the time its walk started, in the realm's
 // state row. A walk that fails stalls nothing: a scan's sweep is moved past
@@ -1560,8 +1562,8 @@ export class Recorder implements ManagedRecorder {
     let stale =
       pending.epoch !== this.#sweepEpoch
         ? 'HEAD has moved by a revision its walk may not have seen'
-        : this.#captured[0]?.event.intent?.kind === 'scan'
-          ? 'a scan event is next to commit, and sweeps the realm itself'
+        : (await this.#scanSince(pending.walk!.since))
+          ? 'a scan event after its walk began sweeps the realm itself'
           : undefined;
     if (stale) {
       log.info(`dropped a sweep of ${realm.url}: ${stale}`);
@@ -1760,6 +1762,18 @@ export class Recorder implements ManagedRecorder {
       log.info(summary);
     }
     return 'committed';
+  }
+
+  // Whether the journal holds a scan event for the realm after `since`.
+  async #scanSince(since: ReadPosition): Promise<boolean> {
+    let rows = await this.#query(
+      `SELECT 1 FROM realm_change_events
+       WHERE realm_id = $1 AND intent->>'kind' = 'scan'
+         AND (xid, seq) > ($2::xid8, $3::bigint)
+       LIMIT 1`,
+      [this.#options.realm.id, since.xid, since.seq],
+    );
+    return rows.length > 0;
   }
 
   // Every path with an event after `since`: in hand, or in the journal,

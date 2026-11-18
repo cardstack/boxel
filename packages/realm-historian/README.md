@@ -94,8 +94,10 @@ Sweeps happen in these cases:
   out the paths that event and later ones change.
 - **The daily sweep** (`sweep`), which catches edits that bypassed the realm
   server. It records differences as `Unattributed external changes` by
-  `boxel-system`, and logs a warning that starts `unattributed external
-changes in <realm url>`.
+  `boxel-system`, and logs a warning that starts with
+  `unattributed external changes in <realm url>`. A sweep with a `scan` event
+  in the journal after its walk began records nothing, and leaves the realm to
+  the scan: a deploy appends its scan only once it has copied its files.
 - **Backfill** (`backfill`, `src/backfill.ts`), when the task loads a realm
   that has no HEAD and no events to record. It records an `Initial snapshot`
   by `boxel-system`.
