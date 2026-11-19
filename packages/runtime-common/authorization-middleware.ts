@@ -1,8 +1,22 @@
 import type { FetcherMiddlewareHandler } from './fetcher.ts';
 
+// A request a realm refused with a 401: `token` is the session it carried,
+// undefined when it carried none.
+export interface RefusedRequest {
+  token: string | undefined;
+}
+
 export interface TokenSource {
   token(url: string): string | undefined;
-  reauthenticate(realmURL: string): Promise<string | undefined>;
+  // Resolves to the session a replay of the refused request should carry, or
+  // undefined when its 401 stands. `refused` is passed when the request comes
+  // through `authorizationMiddleware`, so an implementation can tell a request
+  // sent before its session was replaced from one refused with the current
+  // session.
+  reauthenticate(
+    realmURL: string,
+    refused?: RefusedRequest,
+  ): Promise<string | undefined>;
 }
 
 function shouldSkipReauthentication(): boolean {
@@ -25,6 +39,7 @@ export function authorizationMiddleware(
 ): FetcherMiddlewareHandler {
   return async function (req, next) {
     let token = tokenSource.token(req.url);
+    let sentToken = token;
     if (token) {
       req.headers.set('Authorization', token);
     }
@@ -40,7 +55,9 @@ export function authorizationMiddleware(
         !shouldSkipReauthentication() &&
         !req.url.startsWith(`${realmURL}_session`)
       ) {
-        token = await tokenSource.reauthenticate(realmURL);
+        token = await tokenSource.reauthenticate(realmURL, {
+          token: sentToken,
+        });
         if (token) {
           // The refused response is about to be dropped. Release its body
           // rather than leaving it unread: the host's request limiter holds a

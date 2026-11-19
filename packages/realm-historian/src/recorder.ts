@@ -51,6 +51,42 @@
 //      without a trace, so a group whose every path was superseded records an
 //      empty revision by its author ending `(content not kept)`.
 //
+// A `scan` event says the realm's files changed with no event of their own,
+// such as a deploy's copy or a new realm's first files. It is a group of its
+// own, so by the time it is next to commit every earlier event is recorded.
+// The recorder then sweeps the realm (`sweeper.ts`) and records the
+// difference as one revision attributed by the scan, whose
+// `Boxel-Journal-Seq` covers it: `Initial snapshot` when the realm has no
+// HEAD, `Deploy <repo>@<commit>` for a deploy, and otherwise the subject its
+// changes give. A scan that finds nothing different records nothing. The
+// cursor moves past the scan either way.
+//
+// A sweep never claims a newer write's bytes. Its walk runs outside the
+// queue, and its revision waits until the clock has passed the walk's end by
+// the grouping's maximum age, by when a write that landed during the walk has
+// its event in hand or in the journal. It then leaves out every path with an
+// event after the scan, or, for any other sweep, after the cursor the walk
+// started from: that event's revision records the path.
+//
+// Other sweeps leave the cursor where it is:
+//
+// * A realm with no HEAD whose first group isn't a scan gets an `Initial
+//   snapshot` by `boxel-system` first.
+// * Background work asks for a sweep (`BackgroundContext.sweep`), such as
+//   the daily sweep or a backfill. Its revision is `Initial snapshot` by
+//   `boxel-system` for a realm with no HEAD, and otherwise `Unattributed
+//   external changes` by `boxel-system`, with a warning in the log. A
+//   sweep whose walk a scan's revision, or another writer's, has made stale
+//   is dropped. So is one with a scan event in the journal after its walk
+//   began: the scan sweeps the realm again, and a deploy appends its scan
+//   only once it has copied its files, so a walk before the scan may have
+//   seen the deploy's files and would claim them as unattributed.
+//
+// A sweep records `last_swept_at`, the time its walk started, in the realm's
+// state row. A walk that fails stalls nothing: a scan's sweep is moved past
+// and an initial snapshot is skipped, and either one sets
+// `sweep_requested_at`, which the daily sweep's schedule picks up.
+//
 // A change to a path history can't hold is left out with a warning, and the
 // rest of its event is recorded: a path with a segment git reads as `.git`
 // or one named like a size-only entry's marker, or a path with a line break,
@@ -76,11 +112,15 @@
 // a long job doesn't take a permit recording needs. Its signal fires when the
 // recorder stops, and when the realm's events fill the queue behind it,
 // since a full queue holds up every realm the task records; either way the
-// job counts as not having run.
+// job counts as not having run. A job in the queue is skipped the same way
+// while a sweep is under way: the sweep's objects are loose and no revision
+// reaches them until it commits, so maintenance would prune them. A job can
+// run outside the queue instead (`BackgroundJob.outsideQueue`): it runs
+// whether or not the realm has events in hand, and reaches the queue only
+// through a sweep it asks for.
 
-import { constants } from 'node:fs';
-import { open } from 'node:fs/promises';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import {
   CONTENT_HASH_WHOLE_LIMIT_BYTES,
   computeContentHash,
@@ -96,7 +136,6 @@ import {
 } from '@cardstack/runtime-common';
 import {
   BLOB_MODE,
-  isDotGitName,
   ObjectStore,
   TREE_MODE,
   type Identity,
@@ -125,7 +164,7 @@ import {
   repoPath,
   revisionMessage,
   runGit,
-  SIZE_ONLY_MARKER_NAME,
+  unrecordableReason,
   updateMain,
   writeSizeOnlyEntry,
   type JournalSeqRange,
@@ -140,8 +179,14 @@ import {
   type RealmRecorder,
 } from './consumer.ts';
 import { LeaseLostError } from './lease.ts';
-import type { Semaphore } from './semaphore.ts';
+import { Semaphore } from './semaphore.ts';
 import type { RecordedRealm } from './realms.ts';
+import {
+  readRealmFile,
+  walkRealm,
+  type RecordedPath,
+  type WalkResult,
+} from './sweeper.ts';
 
 const log = logger('realm-historian:recorder');
 
@@ -158,9 +203,15 @@ const DEFAULT_MAX_QUEUED_EVENTS = 1000;
 const SUPERSEDED_LOOKBACK = 100;
 
 // Where a test can stop a recorder: before it captures an event, before the
-// HEAD check that starts a commit, before it moves HEAD to a new commit, and
-// before each Postgres transaction that moves the cursor.
-export type RecorderStep = 'capture' | 'commit' | 'update-ref' | 'cursor';
+// HEAD check that starts a commit, before it moves HEAD to a new commit,
+// before each Postgres transaction that moves the cursor, and before a
+// sweep walks the realm directory, which runs outside the queue.
+export type RecorderStep =
+  | 'capture'
+  | 'commit'
+  | 'update-ref'
+  | 'cursor'
+  | 'walk';
 
 // What the task asks of a recorder beyond `record`. The methods are optional
 // so a test can stand in a recorder that only records.
@@ -187,6 +238,11 @@ export interface BackgroundContext {
   gitDir: string;
   head: string | undefined;
   signal: AbortSignal;
+  // Walks the realm directory, and leaves the differences it finds to be
+  // recorded once the clock has passed the walk. Resolves once the walk has
+  // ended, or at once when the realm has a sweep under way already. Only a
+  // job that runs outside the queue can sweep.
+  sweep(): Promise<void>;
 }
 
 export interface BackgroundJob {
@@ -196,12 +252,17 @@ export interface BackgroundJob {
   // only the job fails, and the realm records on. A lost lease or a failed
   // query (`LeaseLostError`, `RecorderFatalError`) ends the task either way.
   stallOnFailure?: boolean;
+  // Whether the job runs outside the realm's queue: at once, whether or not
+  // the realm has events in hand, and alongside them. Such a job only
+  // reads, or asks for a sweep. Its signal fires only when the recorder
+  // stops.
+  outsideQueue?: boolean;
   run(context: BackgroundContext): Promise<void>;
 }
 
 // How a background job ended, when it didn't throw: it ran; it was skipped,
-// because the realm had events in hand, or cut short because its queue
-// filled, and is for a later turn; or the recorder couldn't run it, or
+// because the realm had events or a sweep in hand, or cut short because its
+// queue filled, and is for a later turn; or the recorder couldn't run it, or
 // stopped it, because it had stalled or stopped.
 export type BackgroundOutcome = 'ran' | 'skipped' | 'unavailable';
 
@@ -218,6 +279,12 @@ export interface RecorderOptions {
   limits?: GroupingLimits;
   // Appended changes to files larger than this become size-only entries.
   sizeOnlyThresholdBytes?: number;
+  // A file a sweep finds different that is larger than this becomes a
+  // size-only entry rather than being read whole.
+  sizeOnlyAboveBytes?: number;
+  // Caps how many sweeps walk realm directories at once, shared by every
+  // recorder of the task. One walk at a time when not given.
+  walks?: Semaphore;
   maxQueuedEvents?: number;
   // Called as capture makes progress, for the task's health check.
   beat?: () => void;
@@ -317,6 +384,29 @@ type Work =
 
 type CommitOutcome = 'committed' | 'waiting' | 'regrouped';
 
+// A sweep's walk once it has ended: what differs from the path state, the
+// position whose later events it leaves out, and when, on the database's
+// clock, the walk started and ended.
+interface Walk extends WalkResult {
+  since: ReadPosition;
+  startedAt: number;
+  endedAt: number;
+}
+
+// A sweep under way: walking, or waiting to commit.
+interface PendingSweep {
+  // The scan event that asked for it, for a scan's sweep.
+  scan?: ReadPosition;
+  // Whether a background job asked for it, which hears of a failed walk.
+  forJob: boolean;
+  // `#sweepEpoch` when the walk started.
+  epoch: number;
+  // Set when the walk ends.
+  walk?: Walk;
+  error?: unknown;
+  ended: Promise<void>;
+}
+
 export class Recorder implements ManagedRecorder {
   #options: RecorderOptions;
   #limits: GroupingLimits;
@@ -357,6 +447,22 @@ export class Recorder implements ManagedRecorder {
   // didn't supersede it. A revision that records the path then names every
   // one of them.
   #superseded = new Map<string, Supersession[]>();
+  // The sweep the scan event next to commit asked for.
+  #scanSweep: PendingSweep | undefined;
+  // A sweep background work asked for, or an initial snapshot's.
+  #sweep: PendingSweep | undefined;
+  // Whether the initial snapshot of a realm with no HEAD has been tried,
+  // which happens once per recorder.
+  #snapshotTried = false;
+  // Counts the HEAD moves that can make a sweep's walk stale: a scan's
+  // revision, and revisions another writer committed.
+  #sweepEpoch = 0;
+  #walks: Semaphore;
+  #sizeOnlyAbove: number | undefined;
+  // Fires when the recorder stops or stalls, ending the walks and the jobs
+  // that run outside the queue, which `#outside` holds while they run.
+  #outsideAbort = new AbortController();
+  #outside = new Set<Promise<void>>();
 
   constructor(options: RecorderOptions) {
     this.#options = options;
@@ -366,6 +472,8 @@ export class Recorder implements ManagedRecorder {
     this.#maxQueued = options.maxQueuedEvents ?? DEFAULT_MAX_QUEUED_EVENTS;
     this.#gitDir = repoPath(options.historyRoot, options.realm.id);
     this.#store = new ObjectStore(this.#gitDir);
+    this.#walks = options.walks ?? new Semaphore(1);
+    this.#sizeOnlyAbove = options.sizeOnlyAboveBytes;
   }
 
   get state(): 'running' | 'stalled' | 'stopped' {
@@ -396,7 +504,8 @@ export class Recorder implements ManagedRecorder {
     if (
       this.#queue.length === 0 &&
       !this.#draining &&
-      this.#captured.length === 0
+      this.#captured.length === 0 &&
+      !this.#sweepDueBy(at)
     ) {
       // Nothing is open, so there is nothing for the clock to close.
       this.#clock = Math.max(this.#clock, at);
@@ -421,14 +530,30 @@ export class Recorder implements ManagedRecorder {
       this.#state === 'running' &&
       (this.#queue.length > 0 ||
         this.#draining !== undefined ||
-        this.#captured.length > 0);
+        this.#captured.length > 0 ||
+        this.#sweep !== undefined ||
+        this.#outside.size > 0);
     return busy ? undefined : this.#lastActiveAt;
   }
 
-  // Resolves once every queued step has run.
+  // Resolves once every queued step has run, and every sweep's walk has
+  // ended and been handed to the queue.
   async settled(): Promise<void> {
-    while (this.#draining) {
-      await this.#draining;
+    for (;;) {
+      if (this.#draining) {
+        await this.#draining;
+        continue;
+      }
+      let walking = [this.#scanSweep, this.#sweep].filter(
+        (pending): pending is PendingSweep =>
+          pending !== undefined &&
+          pending.walk === undefined &&
+          pending.error === undefined,
+      );
+      if (walking.length === 0) {
+        return;
+      }
+      await Promise.all(walking.map((pending) => pending.ended));
     }
   }
 
@@ -439,16 +564,22 @@ export class Recorder implements ManagedRecorder {
     this.#discard();
     this.#backgroundAbort?.abort();
     await this.settled();
+    while (this.#outside.size > 0) {
+      await Promise.all(this.#outside);
+    }
   }
 
   runBackground(job: BackgroundJob): Promise<BackgroundOutcome> {
     if (this.#state !== 'running') {
       return Promise.resolve('unavailable');
     }
+    if (job.outsideQueue) {
+      return this.#runOutsideQueue(job);
+    }
     // A job queued behind the realm's events would be skipped once they are
     // handled, so it is skipped now, rather than hold its place in the
     // task's background work while it waits for them.
-    if (this.#hasEventsInHand()) {
+    if (this.#hasWorkInHand()) {
       return Promise.resolve('skipped');
     }
     return new Promise((resolve, reject) => {
@@ -533,7 +664,7 @@ export class Recorder implements ManagedRecorder {
     }
     let work = this.#queue.shift() as BackgroundWork;
     this.#wakeSpaceWaiters();
-    if (this.#hasEventsInHand()) {
+    if (this.#hasWorkInHand()) {
       work.resolve('skipped');
       return;
     }
@@ -544,6 +675,12 @@ export class Recorder implements ManagedRecorder {
         gitDir: this.#gitDir,
         head: this.#head,
         signal: abort.signal,
+        sweep: () =>
+          Promise.reject(
+            new Error(
+              'a job in the queue cannot sweep: it would wait on itself',
+            ),
+          ),
       });
       work.resolve(abortedOutcome(abort.signal) ?? 'ran');
     } catch (error) {
@@ -566,13 +703,55 @@ export class Recorder implements ManagedRecorder {
     }
   }
 
+  // Runs a job outside the queue. The recorder waits for it when it stops,
+  // and for the stall its failure can make.
+  #runOutsideQueue(job: BackgroundJob): Promise<BackgroundOutcome> {
+    let outcome = this.#outsideJob(job);
+    this.#track(outcome);
+    return outcome;
+  }
+
+  async #outsideJob(job: BackgroundJob): Promise<BackgroundOutcome> {
+    let signal = this.#outsideAbort.signal;
+    try {
+      await job.run({
+        gitDir: this.#gitDir,
+        head: this.#head,
+        signal,
+        sweep: () => this.#sweepForJob(),
+      });
+      return signal.aborted ? 'unavailable' : 'ran';
+    } catch (error) {
+      let fatal =
+        error instanceof LeaseLostError || error instanceof RecorderFatalError;
+      if (!fatal && signal.aborted) {
+        return 'unavailable';
+      }
+      if (fatal || job.stallOnFailure) {
+        await this.#failed(error);
+      }
+      throw error;
+    }
+  }
+
+  // Holds `work` in `#outside` until it settles, so `stop()` waits for it.
+  #track(work: Promise<unknown>): void {
+    let settled: Promise<void> = work.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#outside.add(settled);
+    settled.then(() => this.#outside.delete(settled));
+  }
+
   // Whether the realm has events captured and not yet committed, being
-  // handled, or queued.
-  #hasEventsInHand(): boolean {
+  // handled, or queued, or a sweep walking or waiting to commit.
+  #hasWorkInHand(): boolean {
     return (
       this.#handlingEvent ||
       this.#captured.length > 0 ||
-      this.#queue.some((work) => work.kind === 'event')
+      this.#queue.some((work) => work.kind === 'event') ||
+      this.#sweep !== undefined
     );
   }
 
@@ -588,6 +767,9 @@ export class Recorder implements ManagedRecorder {
     this.#captured = [];
     this.#closed = [];
     this.#open = undefined;
+    this.#scanSweep = undefined;
+    this.#sweep = undefined;
+    this.#outsideAbort.abort();
     this.#wakeSpaceWaiters();
   }
 
@@ -955,6 +1137,13 @@ export class Recorder implements ManagedRecorder {
     this.#captured = this.#captured.filter(
       (captured) => comparePositions(captured.position, this.#cursor) > 0,
     );
+    if (
+      this.#scanSweep?.scan &&
+      comparePositions(this.#scanSweep.scan, this.#cursor) <= 0
+    ) {
+      // Another writer recorded the scan.
+      this.#scanSweep = undefined;
+    }
     this.#open = undefined;
     this.#closed = [];
     for (let captured of this.#captured) {
@@ -964,6 +1153,7 @@ export class Recorder implements ManagedRecorder {
   }
 
   async #commitReady(): Promise<void> {
+    await this.#commitSweep();
     while (this.#closed.length > 0 && this.#state === 'running') {
       if ((await this.#commitGroup(this.#closed[0])) === 'waiting') {
         return;
@@ -976,6 +1166,17 @@ export class Recorder implements ManagedRecorder {
     let events = group.events.map((captured) => captured.event);
     let first = events[0];
     let lastPosition = group.events[group.events.length - 1].position;
+
+    if (first.intent?.kind === 'scan') {
+      return await this.#commitScan(group);
+    }
+    if (!this.#head && !this.#snapshotTried && !first.intent) {
+      // The realm's first revision is a snapshot of all of it, which leaves
+      // out the paths this group and later ones change. A sweep background
+      // work already started serves. A realm deletion takes none.
+      this.#sweep ??= this.#startWalk({ forJob: false });
+      return 'waiting';
+    }
 
     // Settle every path whose capture didn't match its write.
     let superseded = new Set<string>();
@@ -1009,9 +1210,8 @@ export class Recorder implements ManagedRecorder {
     }
 
     if (first.intent && first.intent.kind !== 'revert') {
-      // A scan asks for a sweep and a realm deletion for the repo's removal,
-      // neither of which the recorder does: the cursor moves past the event
-      // and nothing is recorded.
+      // A realm deletion asks for the repo's removal, which the recorder
+      // doesn't do: the cursor moves past the event and nothing is recorded.
       log.warn(
         `event ${first.seq} for ${this.#options.realm.url} asks for a ${first.intent.kind}, which the recorder doesn't perform; moving past it`,
       );
@@ -1168,6 +1368,427 @@ export class Recorder implements ManagedRecorder {
         formatIncludesSuperseded({ revision, path }),
       ),
     );
+  }
+
+  // A sweep background work asks for. A sweep already under way serves.
+  async #sweepForJob(): Promise<void> {
+    this.#outsideAbort.signal.throwIfAborted();
+    if (this.#sweep) {
+      return;
+    }
+    let pending = this.#startWalk({ forJob: true });
+    this.#sweep = pending;
+    await pending.ended;
+    if (pending.error !== undefined) {
+      if (this.#sweep === pending) {
+        this.#sweep = undefined;
+      }
+      throw pending.error;
+    }
+  }
+
+  // Starts a walk outside the queue: for the scan at `scan`, or for a sweep
+  // that leaves out the paths changed after the cursor.
+  #startWalk({
+    scan,
+    forJob,
+  }: {
+    scan?: ReadPosition;
+    forJob: boolean;
+  }): PendingSweep {
+    let pending: PendingSweep = {
+      scan,
+      forJob,
+      epoch: this.#sweepEpoch,
+      ended: Promise.resolve(),
+    };
+    pending.ended = this.#walk(scan)
+      .then(
+        (walk) => {
+          pending.walk = walk;
+        },
+        (error) => {
+          pending.error = error;
+        },
+      )
+      .then(() => this.#wakeForSweep());
+    this.#track(pending.ended);
+    return pending;
+  }
+
+  async #walk(scan: ReadPosition | undefined): Promise<Walk> {
+    let { realm } = this.#options;
+    let signal = this.#outsideAbort.signal;
+    let release = await this.#walks.acquire(signal);
+    try {
+      let [state] = await this.#query(
+        `SELECT cursor_xid::text AS cursor_xid, cursor_seq::text AS cursor_seq,
+                (extract(epoch FROM clock_timestamp()) * 1000)::float8 AS now
+         FROM realm_history_state WHERE realm_id = $1`,
+        [realm.id],
+      );
+      if (!state) {
+        throw new Error(`${realm.url} no longer records history`);
+      }
+      let recorded = new Map<string, RecordedPath>();
+      for (let row of await this.#query(
+        `SELECT path, content_hash, size::text AS size, object_id
+         FROM realm_history_path_state WHERE realm_id = $1`,
+        [realm.id],
+      )) {
+        recorded.set(row.path as string, {
+          contentHash: row.content_hash as string,
+          size: Number(row.size),
+          objectId: row.object_id as string,
+        });
+      }
+      await initRepo(this.#gitDir);
+      await this.#hook('walk');
+      let started = performance.now();
+      let result = await walkRealm({
+        directory: realm.directory,
+        store: this.#store,
+        recorded,
+        sizeOnlyAboveBytes: this.#sizeOnlyAbove,
+        sizeOnlyThresholdBytes: this.#sizeOnlyThreshold,
+        signal,
+      });
+      let [{ now }] = await this.#query(
+        `SELECT (extract(epoch FROM clock_timestamp()) * 1000)::float8 AS now`,
+        [],
+      );
+      let since = scan ?? {
+        xid: state.cursor_xid as string,
+        seq: Number(state.cursor_seq),
+      };
+      let differ = result.changes.size;
+      // The paths later events change already, which the commit leaves out
+      // too.
+      for (let path of await this.#pathsChangedSince(since)) {
+        result.changes.delete(path);
+      }
+      log.info(
+        `walked ${realm.url} in ${Math.round(performance.now() - started)}ms: ${result.files} file(s), ${result.bytesRead} byte(s) read, ${differ} path(s) differ from the path state, ${differ - result.changes.size} of them changed by later events`,
+      );
+      return {
+        ...result,
+        since,
+        startedAt: Number(state.now),
+        endedAt: Number(now),
+      };
+    } finally {
+      release();
+    }
+  }
+
+  // A walk has ended: the queue looks again at what waits on it.
+  #wakeForSweep(): void {
+    if (this.#state !== 'running') {
+      return;
+    }
+    let last = this.#queue[this.#queue.length - 1];
+    if (last?.kind !== 'tick') {
+      this.#queue.push({ kind: 'tick', at: this.#clock });
+    }
+    this.#kick();
+  }
+
+  // Whether the sweep background work asked for can commit at `at`.
+  #sweepDueBy(at: number): boolean {
+    let walk = this.#sweep?.walk;
+    return (
+      walk !== undefined &&
+      (walk.changes.size === 0 || at >= walk.endedAt + this.#limits.maxAgeMs)
+    );
+  }
+
+  // Whether a sweep's walk has ended and, if it found anything to record,
+  // the clock has passed it by the maximum age. A later event can only take
+  // more paths out of a walk, so one that found nothing is ready at once.
+  #sweepReady(pending: PendingSweep): boolean {
+    if (pending.error !== undefined) {
+      return true;
+    }
+    return (
+      pending.walk !== undefined &&
+      (pending.walk.changes.size === 0 ||
+        this.#clock >= pending.walk.endedAt + this.#limits.maxAgeMs)
+    );
+  }
+
+  // Records the sweep background work asked for, or an initial snapshot's,
+  // once it is ready.
+  async #commitSweep(): Promise<void> {
+    let pending = this.#sweep;
+    if (!pending || !this.#sweepReady(pending)) {
+      return;
+    }
+    let { realm } = this.#options;
+    if (pending.error !== undefined) {
+      if (pending.forJob) {
+        // The job that asked for it hears of the failure, and is tried again.
+        return;
+      }
+      this.#sweep = undefined;
+      this.#snapshotTried = true;
+      this.#walkFailed(pending.error, 'skipping the initial snapshot');
+      await this.#persist({
+        cursor: this.#cursor,
+        head: this.#head,
+        requestSweep: true,
+      });
+      return;
+    }
+    if (pending.walk!.changes.size === 0) {
+      // Nothing to record, and nothing for the HEAD check to change. A
+      // background sweep records when it ran; an initial snapshot leaves the
+      // realm's first revision to go first, and the daily sweep to follow.
+      this.#sweep = undefined;
+      this.#snapshotTried = true;
+      if (pending.forJob) {
+        await this.#persist({
+          cursor: this.#cursor,
+          head: this.#head,
+          lastSweptAt: pending.walk!.startedAt,
+        });
+      }
+      log.info(`swept ${realm.url}: nothing differs from HEAD`);
+      return;
+    }
+    await this.#hook('commit');
+    if (await this.#syncWithRepo()) {
+      this.#regroup();
+    }
+    let stale =
+      pending.epoch !== this.#sweepEpoch
+        ? 'HEAD has moved by a revision its walk may not have seen'
+        : (await this.#scanSince(pending.walk!.since))
+          ? 'a scan event after its walk began sweeps the realm itself'
+          : undefined;
+    if (stale) {
+      log.info(`dropped a sweep of ${realm.url}: ${stale}`);
+    } else if (
+      (await this.#recordSweep(pending.walk!, { cursor: this.#cursor })) ===
+      'regrouped'
+    ) {
+      // Another writer moved HEAD, which makes the walk stale.
+      log.info(`dropped a sweep of ${realm.url}: another writer moved HEAD`);
+    }
+    if (this.#sweep === pending) {
+      this.#sweep = undefined;
+    }
+    this.#snapshotTried = true;
+  }
+
+  // Commits the scan group: sweeps the realm once every earlier event is
+  // recorded, and records what differs as the scan's revision.
+  async #commitScan(group: Group): Promise<CommitOutcome> {
+    let { realm } = this.#options;
+    // An intent event is a group of its own.
+    let [scan] = group.events;
+    let pending = this.#scanSweep;
+    if (!pending?.scan || comparePositions(pending.scan, scan.position) !== 0) {
+      this.#scanSweep = this.#startWalk({
+        scan: scan.position,
+        forJob: false,
+      });
+      return 'waiting';
+    }
+    if (!this.#sweepReady(pending)) {
+      return 'waiting';
+    }
+    if (pending.error !== undefined) {
+      this.#scanSweep = undefined;
+      this.#walkFailed(
+        pending.error,
+        `moving past the scan event ${scan.event.seq}`,
+      );
+      await this.#hook('cursor');
+      await this.#persist({
+        cursor: scan.position,
+        head: this.#head,
+        requestSweep: true,
+      });
+      this.#finish(group);
+      return 'committed';
+    }
+    await this.#hook('commit');
+    if (await this.#syncWithRepo()) {
+      this.#regroup();
+      return 'regrouped';
+    }
+    if (
+      (await this.#recordSweep(pending.walk!, {
+        scan: group,
+        cursor: scan.position,
+      })) === 'regrouped'
+    ) {
+      return 'regrouped';
+    }
+    if (this.#scanSweep === pending) {
+      this.#scanSweep = undefined;
+    }
+    this.#finish(group);
+    log.debug(`recorded the scan event ${scan.event.seq} of ${realm.url}`);
+    return 'committed';
+  }
+
+  // A walk failed. A failure that ends the task does; otherwise the caller
+  // asks for a sweep in the realm's state row, as it moves on, which the
+  // daily sweep's schedule picks up.
+  #walkFailed(error: unknown, consequence: string): void {
+    if (
+      error instanceof LeaseLostError ||
+      error instanceof RecorderFatalError
+    ) {
+      throw error;
+    }
+    log.warn(
+      `sweeping ${this.#options.realm.url} failed; ${consequence}, and asking for a sweep: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  // Records what a sweep's walk found, leaving out every path with an event
+  // after the walk's `since`, as one revision: the scan's, when `scan` is
+  // its group, and otherwise by `boxel-system`. Moves the cursor to `cursor`
+  // and records `last_swept_at`, whether or not anything differed.
+  // `regrouped` when another writer moved HEAD first.
+  async #recordSweep(
+    walk: Walk,
+    { scan, cursor }: { scan?: Group; cursor: ReadPosition },
+  ): Promise<'committed' | 'regrouped'> {
+    let { realm } = this.#options;
+    let newer = await this.#pathsChangedSince(walk.since);
+    let changes = new Map<string, FileEntry | null>();
+    let upserts: PathState[] = [];
+    let deletes: string[] = [];
+    let leftOut = 0;
+    for (let swept of walk.changes.values()) {
+      if (newer.has(swept.path)) {
+        leftOut++;
+        continue;
+      }
+      changes.set(swept.path, swept.entry);
+      if (swept.entry) {
+        upserts.push({
+          path: swept.path,
+          contentHash: swept.fingerprint!,
+          size: swept.size!,
+          objectId: swept.entry.id,
+        });
+      } else {
+        deletes.push(swept.path);
+      }
+    }
+    let tree = await this.#tree.apply(this.#store, changes);
+    let net = netChanges(this.#tree, tree, changes.keys()).sort((a, b) =>
+      a.path < b.path ? -1 : a.path > b.path ? 1 : 0,
+    );
+    let kept = leftOut > 0 ? `, ${leftOut} left to later events` : '';
+    let lastSweptAt = walk.startedAt;
+    if (net.length === 0) {
+      await this.#hook('cursor');
+      await this.#persist({
+        cursor,
+        head: this.#head,
+        upserts,
+        deletes,
+        lastSweptAt,
+      });
+      log.info(
+        `swept ${realm.url}: nothing differs from HEAD${kept}; recorded no revision`,
+      );
+      return 'committed';
+    }
+
+    let includes = this.#includesSuperseded(net.map(({ path }) => path));
+    let event = scan?.events[0].event;
+    let intent = event?.intent?.kind === 'scan' ? event.intent : undefined;
+    let subject: RevisionSubject = !this.#head
+      ? { kind: 'initial-snapshot' }
+      : !event
+        ? { kind: 'unattributed-external' }
+        : intent?.source && intent.commit
+          ? {
+              kind: 'deploy',
+              source: intent.source,
+              commit: intent.commit.slice(0, 7),
+            }
+          : { kind: 'changes', changes: net };
+    let trailers: Trailers = scan
+      ? revisionTrailers(scan, [], includes)
+      : {
+          channel: ['system'],
+          writeCount: ['0'],
+          ...(includes.length > 0 ? { includesSuperseded: includes } : {}),
+        };
+    let author = scan
+      ? authorIdentity(event!.author, new Date(scan.state.latestAt))
+      : authorIdentity(SYSTEM_AUTHOR, new Date(walk.endedAt));
+    let commit = await this.#writeRevision(
+      tree,
+      author,
+      buildMessage(revisionMessage({ subject }), trailers),
+    );
+    if (!(await this.#moveHead(commit))) {
+      this.#regroup();
+      return 'regrouped';
+    }
+    await this.#hook('cursor');
+    try {
+      await this.#persist({
+        cursor,
+        head: commit,
+        upserts,
+        deletes,
+        lastSweptAt,
+      });
+    } finally {
+      this.#head = commit;
+      this.#tree = tree;
+      this.#options.onCommits?.(1);
+    }
+    if (scan) {
+      this.#sweepEpoch++;
+    }
+    this.#settleSuperseded(net.map(({ path }) => path));
+    let summary = `recorded ${commit} for ${realm.url}: ${revisionMessage({ subject })}, ${net.length} path(s) changed${kept}`;
+    if (subject.kind === 'unattributed-external') {
+      // Alerts match this line's start.
+      log.warn(
+        `unattributed external changes in ${realm.url}: ${net.length} path(s) changed on disk with no event; ${summary}`,
+      );
+    } else {
+      log.info(summary);
+    }
+    return 'committed';
+  }
+
+  // Whether the journal holds a scan event for the realm after `since`.
+  async #scanSince(since: ReadPosition): Promise<boolean> {
+    let rows = await this.#query(
+      `SELECT 1 FROM realm_change_events
+       WHERE realm_id = $1 AND intent->>'kind' = 'scan'
+         AND (xid, seq) > ($2::xid8, $3::bigint)
+       LIMIT 1`,
+      [this.#options.realm.id, since.xid, since.seq],
+    );
+    return rows.length > 0;
+  }
+
+  // Every path with an event after `since`: in hand, or in the journal,
+  // which holds the events in hand too.
+  async #pathsChangedSince(since: ReadPosition): Promise<Set<string>> {
+    let rows = await this.#query(
+      `SELECT DISTINCT paths.path
+       FROM realm_change_events events
+       JOIN realm_change_event_paths paths
+         ON paths.realm_id = events.realm_id AND paths.seq = events.seq
+       WHERE events.realm_id = $1
+         AND (events.xid, events.seq) > ($2::xid8, $3::bigint)`,
+      [this.#options.realm.id, since.xid, since.seq],
+    );
+    return new Set(rows.map((row) => row.path as string));
   }
 
   // The paths among `finals` that an event after the one that made the
@@ -1392,6 +2013,7 @@ export class Recorder implements ManagedRecorder {
     );
     this.#head = actual;
     this.#tree = tree;
+    this.#sweepEpoch++;
     this.#options.onCommits?.(revisions.length);
     await this.#learnSuperseded(revisions);
     return true;
@@ -1455,16 +2077,22 @@ export class Recorder implements ManagedRecorder {
   // that this task still holds the realm's shard. The cursor moves only from
   // the one this recorder holds, so a cursor someone else moved is caught
   // rather than overwritten.
+  // `lastSweptAt` records a sweep whose walk started then, and
+  // `requestSweep` asks for a sweep.
   async #persist({
     cursor,
     head,
     upserts = [],
     deletes = [],
+    lastSweptAt,
+    requestSweep = false,
   }: {
     cursor: ReadPosition;
     head: string | undefined;
     upserts?: PathState[];
     deletes?: string[];
+    lastSweptAt?: number;
+    requestSweep?: boolean;
   }): Promise<void> {
     let { db, realm } = this.#options;
     let previous = this.#cursor;
@@ -1478,7 +2106,16 @@ export class Recorder implements ManagedRecorder {
           param(cursor.seq),
           ', head =',
           param(head ?? null),
-          ', recorded_at = now() WHERE realm_id =',
+          ', recorded_at = now()',
+          ...(lastSweptAt !== undefined
+            ? [
+                ', last_swept_at = to_timestamp(',
+                param(lastSweptAt / 1000),
+                '::float8)',
+              ]
+            : []),
+          ...(requestSweep ? [', sweep_requested_at = now()'] : []),
+          'WHERE realm_id =',
           param(realm.id),
           'AND cursor_xid =',
           param(previous.xid),
@@ -1676,70 +2313,5 @@ function assertRealmPath(path: string): void {
     throw new Error(
       `a change event names the invalid path ${JSON.stringify(path)}`,
     );
-  }
-}
-
-// Why history can't hold a realm path, or undefined when it can: a segment
-// git reads as `.git`, a segment size-only entries reserve, or a line break,
-// which would split the message lines the path appears in.
-function unrecordableReason(path: string): string | undefined {
-  if (path.includes('\n')) {
-    return 'it has a line break';
-  }
-  for (let segment of path.split('/')) {
-    if (isDotGitName(segment)) {
-      return `git refuses the name ${JSON.stringify(segment)}`;
-    }
-    if (segment === SIZE_ONLY_MARKER_NAME) {
-      return `size-only entries reserve the name ${SIZE_ONLY_MARKER_NAME}`;
-    }
-  }
-  return undefined;
-}
-
-// The file's bytes, or only its first `limit` bytes, or null when no regular
-// file is at the path: nothing, a directory, a symlink, which is not
-// followed, or a special file, which is not read.
-async function readRealmFile(
-  path: string,
-  limit?: number,
-): Promise<Uint8Array | null> {
-  let handle;
-  try {
-    // Non-blocking, so opening a FIFO doesn't wait for a writer.
-    handle = await open(
-      path,
-      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-    );
-  } catch (error: any) {
-    if (['ENOENT', 'ENOTDIR', 'EISDIR', 'ELOOP'].includes(error?.code)) {
-      return null;
-    }
-    throw error;
-  }
-  try {
-    if (!(await handle.stat()).isFile()) {
-      return null;
-    }
-    if (limit === undefined) {
-      return await handle.readFile();
-    }
-    let buffer = Buffer.alloc(limit);
-    let filled = 0;
-    while (filled < limit) {
-      let { bytesRead } = await handle.read(
-        buffer,
-        filled,
-        limit - filled,
-        filled,
-      );
-      if (bytesRead === 0) {
-        break;
-      }
-      filled += bytesRead;
-    }
-    return buffer.subarray(0, filled);
-  } finally {
-    await handle.close();
   }
 }

@@ -380,6 +380,7 @@ import {
 } from './index.ts';
 import {
   canonicalizeTarget,
+  loadPolicyToGate,
   newOperationScope,
   readPlan,
   resolveFacadeWrite,
@@ -406,14 +407,22 @@ import {
   pendingWriteHolds,
   pendingWriteRefusal,
   storedWriteRefusal,
+  type CreateLanding,
+  grantCoversPath,
+  grantsNaming,
+  noteTargetRead,
   type PendingWrite,
+  type TargetPath,
   policyGateStats,
   policyPredicatePreparations,
+  policyTargetReads,
   policyUnavailable,
   type PolicyGateStats,
   type NonGrantableAnswerSources,
+  type LoadedPolicy,
 } from './card-operations/gate.ts';
 import {
+  createLanding,
   namesForeignRealm,
   type AdmissionSubject,
 } from './card-operations/executors.ts';
@@ -1521,8 +1530,9 @@ const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
 // Carries the transpiler version, so compiled output stored or cached under an
 // earlier version no longer matches the validator a request builds and is
-// compiled over. A realm adds its canonical name, which its compiled output
-// names its modules by.
+// compiled over. A realm adds the transpiler identity it was given, which names
+// the installed packages that compiled the output, and its canonical name,
+// which its compiled output names its modules by.
 const MODULE_ETAG_VARIANT = `module-v${TRANSPILE_VERSION}`;
 
 // A compile this long holds up every other request the process has, so it is
@@ -3588,8 +3598,9 @@ export class Realm {
   // caches its result only when the epoch hasn't moved while it ran.
   #hostRoutesEpoch = 0;
   // The validation running now, shared by concurrent calls: the routes
-  // validated without their types, ready once the rules are read, and the
-  // whole validation, ready once the types are read too.
+  // validated with the types the definitions cache already holds, ready
+  // with no module visit, and the whole validation, ready once every type
+  // is read.
   #hostRoutesInFlight:
     | {
         withoutTypes: Promise<HostRoutesValidation | undefined>;
@@ -3700,6 +3711,7 @@ export class Realm {
       audioSizeLimitBytes,
       videoSizeLimitBytes,
       transpileCoordinator,
+      transpilerIdentity,
       mediaCacheAdapter,
       cardDocumentCache,
       realmFor,
@@ -3734,6 +3746,13 @@ export class Realm {
       // in-memory deployments leave this undefined and the uncoordinated
       // CS-11029 in-process dedup is the only sharing layer.
       transpileCoordinator?: PopulateCoordinator;
+      // Names the installed packages `transpileJS` runs (see
+      // `realm-server/lib/transpiler-identity.ts`). It is part of the
+      // validator of every module the realm compiles, so a compile cached
+      // under other packages, in memory, in `module_transpile_cache` or by a
+      // client, is compiled again rather than served. Without it, only
+      // `TRANSPILE_VERSION` marks the transpiler.
+      transpilerIdentity?: string;
       // The MediaCache object store the `_capture/` route streams from.
       // Optional — a process without one configured serves every capture
       // request as an uncaptured miss.
@@ -3769,7 +3788,9 @@ export class Realm {
   ) {
     this.paths = new RealmPaths(new URL(url), virtualNetwork);
     this.#canonicalPaths = new RealmPaths(canonicalName);
-    this.#moduleEtagVariant = `${MODULE_ETAG_VARIANT}-${canonicalName}`;
+    this.#moduleEtagVariant = transpilerIdentity
+      ? `${MODULE_ETAG_VARIANT}-${transpilerIdentity}-${canonicalName}`
+      : `${MODULE_ETAG_VARIANT}-${canonicalName}`;
     this.#realmSecretSeed = secretSeed;
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
@@ -8351,6 +8372,30 @@ export class Realm {
         target,
         canonical.name,
         scope,
+        {
+          // Where the entry's card lands if it creates one: a named create
+          // mints the type its declaration names, and the base create the
+          // type its resource adopts. An envelope create names no directory,
+          // so the card lands at the realm's root.
+          landing: (resolved) => {
+            let meta = canonical.data?.meta;
+            let adoptsFrom =
+              meta && typeof meta === 'object'
+                ? (meta as Record<string, unknown>).adoptsFrom
+                : undefined;
+            let type =
+              resolved?.of ?? (isCodeRef(adoptsFrom) ? adoptsFrom : undefined);
+            return type
+              ? createLanding(
+                  type,
+                  canonical.lid,
+                  undefined,
+                  this.paths,
+                  this.#mintPosture(scope.coarseDeclined),
+                )
+              : undefined;
+          },
+        },
       );
       assertTravelsInEnvelope(canonical, definition);
       assertVersionableEntry(canonical, definition);
@@ -16783,6 +16828,16 @@ export class Realm {
         requestContext,
         () => this.#createTarget(primaryResource),
         'create',
+        // Where the card lands: beneath the directory the `POST` was aimed at,
+        // as the batch entry below stages it.
+        (posture) =>
+          createLanding(
+            primaryResource.meta?.adoptsFrom,
+            lid,
+            this.paths.local(new URL(request.url)),
+            this.paths,
+            posture,
+          ),
       );
       admission.assertSideLoads(maybeIncluded);
       // Where the `POST` was aimed — the realm root, or a directory under it.
@@ -17708,6 +17763,9 @@ export class Realm {
     // to one.
     targetOf: () => OperationTarget,
     base: 'create' | 'update' | 'delete',
+    // For a create, where its card lands, staged under the batch posture
+    // this caller writes with (see `#mintPosture`).
+    landing?: (posture: { mintIds?: true }) => CreateLanding | undefined,
   ): Promise<CardWriteAdmission> {
     let coarseDeclined = this.#coarseDeclined(requestContext);
     if (coarseDeclined === 'none') {
@@ -17721,7 +17779,11 @@ export class Realm {
       route: cardJsonRoute(request.method),
       anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
     });
-    let decision = await resolveFacadeWrite(core, target, base, scope);
+    let decision = await resolveFacadeWrite(core, target, base, scope, {
+      ...(landing
+        ? { landing: () => landing(this.#mintPosture(coarseDeclined)) }
+        : {}),
+    });
     let assertSideLoads = (included: readonly unknown[] | undefined) => {
       // The same test the executors apply to decide which side-loads they
       // stage: one with no local id has nothing to be written under, and one
@@ -17874,30 +17936,61 @@ export class Realm {
       pending: PendingWrite | undefined;
     }[] = [];
     for (let write of writes) {
-      let operation: VerbatimOperation;
-      try {
-        operation = this.#verbatimOperation(
-          write,
-          await this.#storedForVerbatimWrite(write.path),
-          coarseDeclined,
-        );
-      } catch (refusal: unknown) {
-        // A write no operation describes is refused before the gate, by what
-        // the path holds. The gate loads the policy before it resolves
-        // anything for a caller who may not read the realm, so a policy that
-        // won't load answers the same whatever a target holds, and this
-        // refusal does too.
-        if (coarseDeclined === 'all') {
-          await loadPolicy(core);
+      // Whatever the write turns out to be, it is matched at its own path: a
+      // card's document is the card's stored `.json`, and a create lands
+      // exactly where it is written. So for a caller who may not read the
+      // realm, whose writes are judged as an update or a delete (a create is
+      // refused below), a path no such grant covers is refused before what
+      // the path holds is read (ADR 038 §1.3). The policy is loaded before
+      // anything is read, so a policy that won't load answers the same
+      // whatever a path holds, including for a write what the path holds
+      // refuses before the gate. The gate decides on that same load.
+      let loaded: LoadedPolicy | undefined;
+      if (coarseDeclined === 'all') {
+        let name = write.removal ? 'delete' : 'update';
+        loaded = await loadPolicyToGate(core, scope, name);
+        let path: TargetPath = { path: write.path, kind: 'file' };
+        if (
+          loaded.policy &&
+          !grantsNaming(loaded.policy, name).some((grant) =>
+            grantCoversPath(grant, path),
+          )
+        ) {
+          throw notPermitted(
+            { kind: 'instance', url: this.paths.fileURL(write.path).href },
+            name,
+          );
         }
-        throw refusal;
       }
+      // A write no operation describes is refused here, by what the path
+      // holds.
+      let operation = this.#verbatimOperation(
+        write,
+        await this.#storedForVerbatimWrite(write.path),
+        coarseDeclined,
+      );
       let decision = await resolveFacadeWrite(
         core,
         operation.target,
         operation.base,
         scope,
-        operation.kind === 'file' ? { asFile: true } : {},
+        {
+          loaded,
+          ...(operation.kind === 'file'
+            ? { asFile: true as const }
+            : operation.base === 'create'
+              ? {
+                  // A verbatim create lands exactly where it is written.
+                  landing: () => ({
+                    directory: write.path.slice(
+                      0,
+                      write.path.lastIndexOf('/') + 1,
+                    ),
+                    file: write.path,
+                  }),
+                }
+              : {}),
+        },
       );
       judged.push({
         write,
@@ -18008,6 +18101,7 @@ export class Realm {
   async #storedForVerbatimWrite(
     path: LocalPath,
   ): Promise<{ exists: boolean; text?: string }> {
+    noteTargetRead(this.operationCore);
     if (path.endsWith('.json')) {
       let text = (await this.readFileAsText(path))?.content;
       return text === undefined ? { exists: false } : { exists: true, text };
@@ -19219,6 +19313,21 @@ export class Realm {
       // other replica has no such handle on the write.
       return notIndexedYet(request, requestContext);
     }
+    if (assembly.kind === 'definition-not-ready') {
+      // The card's type is still being rendered into the realm's definition
+      // cache. That says nothing about the card, which may be indexed and
+      // healthy, and nothing about the index. The render keeps going, so the
+      // retry `Retry-After` asks for finds the definition cached.
+      let error = new CardError(assembly.detail, {
+        status: 503,
+        title: assembly.title,
+        id: request.url,
+      });
+      if (assembly.retryAfterSeconds !== undefined) {
+        error.meta = { retryAfterSeconds: assembly.retryAfterSeconds };
+      }
+      return responseWithError(error, requestContext);
+    }
     if (assembly.kind === 'redirect') {
       return createResponse({
         requestContext,
@@ -19927,10 +20036,10 @@ export class Realm {
           if (!isOperationFailure(err)) {
             throw err;
           }
-          // A definition the policy names that is not indexed yet is told to
-          // this caller, who may not read the realm, without naming it.
+          // A definition the policy names that is still being rendered is told
+          // to this caller, who may not read the realm, without naming it.
           let error =
-            err.error.code === 'target-not-indexed'
+            err.error.code === 'definition-not-ready'
               ? refusalForNonReader(err.error)
               : err.error;
           return createResponse({
@@ -21424,11 +21533,14 @@ export class Realm {
       );
       return unshareableFormats;
     } catch (err: unknown) {
-      // A type whose definition is not indexed yet withholds every format, as
-      // a type that cannot be resolved does: nothing can say which of its
-      // formats it withholds, and the page is served without markup rather
-      // than refused.
-      if (isOperationFailure(err) && err.error.code === 'target-not-indexed') {
+      // A type whose definition is still being rendered withholds every
+      // format, as a type that cannot be resolved does: nothing can say which
+      // of its formats it withholds, and the page is served without markup
+      // rather than refused.
+      if (
+        isOperationFailure(err) &&
+        err.error.code === 'definition-not-ready'
+      ) {
         return [...PRERENDERED_HTML_FORMATS];
       }
       throw err;
@@ -21463,12 +21575,14 @@ export class Realm {
     return (await full) ?? NO_HOST_ROUTES;
   }
 
-  // The host routes without waiting for the definitions of their types: the
-  // cached validation when there is one, else the routes validated with
-  // every field-match type taken as unavailable, as soon as the rules are
-  // read. The whole validation goes on, and `getHostRoutes` gives it. Only a
-  // field-match route needs its type, so a request no field-match route
-  // could answer doesn't wait for a module visit.
+  // The host routes without waiting for a module visit: the cached
+  // validation when there is one, else the routes validated with the types
+  // the definitions cache already holds, and every other field-match type
+  // taken as unavailable. When the cache holds every type, that is the
+  // whole validation, and it is complete. The whole validation goes on, and
+  // `getHostRoutes` gives it. Only a field-match route needs its type, so a
+  // request no field-match route could answer doesn't wait for a module
+  // visit.
   async getHostRoutesWithoutTypeReads(): Promise<HostRoutesValidation> {
     return (await this.#validateHostRoutes()).withoutTypes ?? NO_HOST_ROUTES;
   }
@@ -21509,8 +21623,8 @@ export class Realm {
   }
 
   // Coalesced: concurrent calls on a cold cache share one validation.
-  // Resolves when the rules are read; `full` resolves when the types are
-  // read too.
+  // Resolves when the rules and the types the definitions cache holds are
+  // read; `full` resolves when every type is read.
   async #validateHostRoutes(): Promise<{
     withoutTypes: HostRoutesValidation | undefined;
     full: Promise<HostRoutesValidation | undefined>;
@@ -21541,10 +21655,7 @@ export class Realm {
                 epoch,
                 generation,
               )
-            : validateHostRoutes(rules, {
-                realmURL: new URL(this.url),
-                lookupType: () => 'unavailable',
-              }),
+            : this.#validateHostRoutesFromCachedTypes(rules),
         () => undefined,
       );
       let started = {
@@ -21578,32 +21689,74 @@ export class Realm {
   async #readHostRouteType(
     ref: ResolvedCodeRef,
   ): Promise<HostRouteTypeInfo | 'unavailable' | undefined> {
-    let typeInfo = (entry: ModuleDefinitionResult) =>
-      hostRouteTypeInfo(entry, (codeRef) =>
-        internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-      );
     try {
-      return typeInfo(await this.#definitionLookup.lookupDefinitionEntry(ref));
+      return this.#hostRouteTypeInfo(
+        await this.#definitionLookup.lookupDefinitionEntry(ref),
+      );
     } catch (e) {
       // The read throws for a missing export as it does for a failed render.
       // The cache it just filled tells the two apart.
-      try {
-        let cached =
-          await this.#definitionLookup.lookupCachedDefinitionEntry(ref);
-        if (cached.status === 'found') {
-          return typeInfo(cached.entry);
-        }
-        if (cached.status === 'missing-export') {
-          return undefined;
-        }
-      } catch {
-        // Reported below with the read's own error.
+      let cached = await this.#readCachedHostRouteType(ref);
+      if (cached === 'unavailable') {
+        this.#log.warn(
+          `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
+        );
       }
-      this.#log.warn(
-        `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
-      );
-      return 'unavailable';
+      return cached;
     }
+  }
+
+  #hostRouteTypeInfo(entry: ModuleDefinitionResult): HostRouteTypeInfo {
+    return hostRouteTypeInfo(entry, (codeRef) =>
+      internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+    );
+  }
+
+  // The definition of one host route type as the definitions cache holds
+  // it now, with no module visit. A type the cache doesn't hold, or holds
+  // only a failed render of, is unavailable. A cached module with no such
+  // export is `undefined`.
+  async #readCachedHostRouteType(
+    ref: ResolvedCodeRef,
+  ): Promise<HostRouteTypeInfo | 'unavailable' | undefined> {
+    try {
+      let cached =
+        await this.#definitionLookup.lookupCachedDefinitionEntry(ref);
+      if (cached.status === 'found') {
+        return this.#hostRouteTypeInfo(cached.entry);
+      }
+      if (cached.status === 'missing-export') {
+        return undefined;
+      }
+    } catch {
+      // A cache that can't be read holds no type.
+    }
+    return 'unavailable';
+  }
+
+  // The rules validated with the types the definitions cache holds now.
+  // Nothing here waits for a module visit, so a request that must not wait
+  // for one can use the result: the prerender server's import of a route
+  // type's module is such a request. The result isn't cached: the whole
+  // validation reads each type as a search does, and caches that.
+  async #validateHostRoutesFromCachedTypes(
+    rules: RawHostRoutingRule[],
+  ): Promise<HostRoutesValidation> {
+    let types = new Map(
+      await Promise.all(
+        hostRouteTypeRefs(rules).map(
+          async (ref) =>
+            [
+              typeLookupKey(ref),
+              await this.#readCachedHostRouteType(ref),
+            ] as const,
+        ),
+      ),
+    );
+    return validateHostRoutes(rules, {
+      realmURL: new URL(this.url),
+      lookupType: (ref) => types.get(typeLookupKey(ref)),
+    });
   }
 
   async #readAndValidateHostRoutes(
@@ -21938,6 +22091,10 @@ export class Realm {
 
   __testOnlyPolicyPredicatePreparations(): number {
     return policyPredicatePreparations(this.operationCore);
+  }
+
+  __testOnlyPolicyTargetReads(): number {
+    return policyTargetReads(this.operationCore);
   }
 
   // The cache reads the policy card straight from the index, not through a
@@ -22890,11 +23047,12 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   return baseRealm.inRealm(parsed);
 }
 
-// A read's refusal, as the card+json GET reports it. Three of the four codes
-// the read can raise name an outcome the handler already had a shape for; a
-// refusal it does not recognize is an error document rather than a guess, so a
-// behavior added to the read later surfaces as a 500 with its own detail
-// instead of a 404 that claims the card is gone.
+// A read's refusal, as the card+json GET reports it. A missing card, a card
+// not indexed yet, and a type definition still being rendered each have a
+// shape of their own; a refusal the handler does not recognize is an error
+// document rather than a guess, so a behavior added to the read later surfaces
+// with its own status and detail instead of a 404 that claims the card is
+// gone.
 function cardJsonAssemblyFromFailure(
   failure: OperationFailure,
 ): Exclude<CardJsonAssembly, { kind: 'document' } | { kind: 'file-meta' }> {
@@ -22904,6 +23062,16 @@ function cardJsonAssemblyFromFailure(
   }
   if (error.code === 'target-not-indexed') {
     return { kind: 'not-indexed' };
+  }
+  if (error.code === 'definition-not-ready') {
+    let retryAfterSeconds = error.meta?.retryAfterSeconds;
+    return {
+      kind: 'definition-not-ready',
+      title: error.title,
+      detail: error.detail,
+      retryAfterSeconds:
+        typeof retryAfterSeconds === 'number' ? retryAfterSeconds : undefined,
+    };
   }
   // The row's own account of what went wrong, so the response body carries the
   // underlying title, message and salvage rather than the sentence the refusal

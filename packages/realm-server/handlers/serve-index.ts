@@ -407,12 +407,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         }),
       ));
     // The realm's host routes for this request, read at most once. Only a
-    // browser's request for a path that a route dropped for now could answer
-    // waits for the definitions of the route types, which may need a module
-    // visit. A fixed route needs no type. Any other request gets the routes
-    // as they are: the prerender server imports a route type's module with
-    // a generic Accept header, and that import must not wait for the
-    // validation that is visiting the module.
+    // browser's request waits for the definitions of the route types, which
+    // may need a module visit, and only when it needs them: here, for a path
+    // that a route dropped for now could answer, and below, for an alias. A
+    // fixed route needs no type. Any other request gets the routes as they
+    // are, validated with the types the definitions cache holds: the
+    // prerender server imports a route type's module with a generic Accept
+    // header, and that import must not wait for the validation that is
+    // visiting the module.
     let requestHostRoutes: Promise<HostRoutesValidation> | undefined;
     let hostRoutesFor = (realm: Realm, waitForTypes: boolean) =>
       (requestHostRoutes ??= (async () => {
@@ -760,11 +762,33 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         return;
       }
       if (resolved && resolution?.kind === 'alias') {
+        // A card's canonical address is known only from every route: with a
+        // route dropped for now, a later route would look canonical, or the
+        // card would seem to have no other address. So a browser's request
+        // waits for the definitions of the route types. No dropped route
+        // matches the alias's path, so the alias resolves to the same card
+        // in the whole validation.
+        if (!hostRoutesComplete && includesHtmlMimeType) {
+          hostRoutesValidation = await routedRealm.getHostRoutes();
+          hostRoutes = hostRoutesValidation.routes;
+          hostRoutesComplete = hostRoutesValidation.complete;
+        }
+        // A request that doesn't wait, and one whose wait ends with a type
+        // that couldn't be read, gets 503: a 200 here would serve the card
+        // at an address that may not be its canonical one.
+        if (!hostRoutesComplete) {
+          hostRoutesLog.warn(
+            `alias ${requestURL.href} can't be answered while a host route is dropped for a type whose definition isn't read`,
+          );
+          ctxt.status = 503;
+          ctxt.type = 'text';
+          ctxt.body = 'Service Unavailable';
+          return;
+        }
         let target = await aliasRedirectTarget({
           requestURL,
           realm: routedRealm,
           routes: hostRoutes,
-          routesComplete: hostRoutesComplete,
           cardHref: resolution.cardHref,
           canonicalPathname: resolved.canonicalPathname,
           visitorHeaders: ctxt.req.headers,
@@ -1115,10 +1139,11 @@ function routeRedirectTarget(
 }
 
 // Where an alias sends the request with its 301: the canonical address of
-// the alias's card, worked out from the index as the visitor. `undefined`
-// when the alias serves the card at its own path instead, which it does
-// whenever a permanent redirect could be wrong or can't be worked out:
-// - a route is dropped for now, so the canonical route may be missing;
+// the alias's card, worked out from the index as the visitor. `routes` is a
+// complete validation: with a route dropped for now, the canonical route
+// may be missing. `undefined` when the alias serves the card at its own
+// path instead, which it does whenever a permanent redirect could be wrong
+// or can't be worked out:
 // - the card has no canonical address, or it is the alias's own path;
 // - the address resolves to another card, which has the same value;
 // - a lookup fails or is refused.
@@ -1126,7 +1151,6 @@ async function aliasRedirectTarget({
   requestURL,
   realm,
   routes,
-  routesComplete,
   cardHref,
   canonicalPathname,
   visitorHeaders,
@@ -1134,17 +1158,10 @@ async function aliasRedirectTarget({
   requestURL: URL;
   realm: Realm;
   routes: readonly HostRoute[];
-  routesComplete: boolean;
   cardHref: string;
   canonicalPathname: string;
   visitorHeaders: Record<string, string | string[] | undefined>;
 }): Promise<URL | undefined> {
-  if (!routesComplete) {
-    hostRoutesLog.debug(
-      `alias ${requestURL.pathname} serves its card while a host route is dropped`,
-    );
-    return undefined;
-  }
   try {
     let lookups = visitorHostRouteLookups({ realm, visitorHeaders });
     let canonical = await hostRouteCanonicalAddress(cardHref, {
