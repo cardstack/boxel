@@ -721,14 +721,12 @@ export default class HostURLManager extends Component<Signature> {
       }
       a.url {
         color: var(--foreground);
-        text-decoration: underline;
-        text-decoration-color: var(--muted-foreground);
+        text-decoration: none;
         text-underline-offset: 0.15em;
       }
       a.url:hover {
         color: var(--foreground);
-        text-decoration-color: currentColor;
-        text-decoration-thickness: 2px;
+        text-decoration: underline;
       }
       .target-label {
         font-weight: 600;
