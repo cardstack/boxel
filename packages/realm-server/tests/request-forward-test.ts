@@ -324,6 +324,123 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test("the billable call's timing line carries the request's correlation id and splits its time", async function (assert) {
+      const mockFetch = sinon.stub(global, 'fetch');
+      mockFetch.callsFake(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.includes('/chat/completions')) {
+          // Long enough that the upstream stage is measurably the largest.
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return new Response(
+            JSON.stringify({
+              id: 'gen-timing',
+              choices: [{ text: 'ok' }],
+              usage: { total_tokens: 1, cost: 0.001 },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        return new Response('{}', { status: 404 });
+      });
+
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+        let correlationId = 'corr-request-forward-0123456789';
+        let status: number | undefined;
+        let lines = await logLinesDuring(['billable-call'], async () => {
+          let response = await request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt}`)
+            .set('X-Boxel-Logging-Correlation-Id', correlationId)
+            .send({
+              url: 'https://openrouter.ai/api/v1/chat/completions',
+              method: 'POST',
+              requestBody: JSON.stringify({
+                model: 'openai/gpt-3.5-turbo',
+                messages: [{ role: 'user', content: 'Hi' }],
+              }),
+            });
+          status = response.status;
+        });
+        assert.strictEqual(status, 200, 'the call was forwarded');
+
+        let timingLines = lines.filter((line) =>
+          line.message.startsWith('billable call '),
+        );
+        assert.strictEqual(timingLines.length, 1, 'one timing line');
+        let line = timingLines[0].message;
+        let fields = Object.fromEntries(
+          line
+            .slice('billable call '.length)
+            .split(' ')
+            .map((pair) => pair.split('=')),
+        );
+        assert.strictEqual(fields.corr, correlationId, line);
+        assert.strictEqual(fields.user, '@testuser:localhost', line);
+        assert.strictEqual(fields.route, '_request-forward', line);
+        assert.strictEqual(fields.outcome, 'charged', line);
+        let ms = (name: string) => {
+          let value = Number(fields[name]);
+          assert.true(
+            /^\d+$/.test(fields[name] ?? ''),
+            `${name} is a whole number of ms: ${line}`,
+          );
+          return value;
+        };
+        let requestMs = ms('requestMs');
+        assert.true(ms('upstreamMs') >= 50, `the upstream stage: ${line}`);
+        assert.true(
+          requestMs >= ms('totalMs'),
+          `the request's time includes the call's: ${line}`,
+        );
+        assert.strictEqual(
+          ms('lockWaitMs') +
+            ms('capacityWaitMs') +
+            ms('upstreamMs') +
+            ms('costMs') +
+            ms('localMs'),
+          requestMs,
+          `the stages add up to the request's time: ${line}`,
+        );
+      } finally {
+        mockFetch.restore();
+      }
+    });
+
+    test('a timing line for a request with no correlation id names none', async function (assert) {
+      const mockFetch = sinon.stub(global, 'fetch');
+      mockFetch.callsFake(
+        async () =>
+          new Response(
+            JSON.stringify({
+              id: 'gen-no-corr',
+              choices: [{ text: 'ok' }],
+              usage: { total_tokens: 1, cost: 0.001 },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      );
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+        let lines = await logLinesDuring(['billable-call'], async () => {
+          await sendChatForward(jwt);
+        });
+        let line = lines.find((l) => l.message.startsWith('billable call '));
+        assert.ok(line, 'the call has a timing line');
+        assert.false(line!.message.includes('corr='), line!.message);
+      } finally {
+        mockFetch.restore();
+      }
+    });
+
     test('should reject non-whitelisted endpoints', async function (assert) {
       const jwt = createJWT(testRealm, '@testuser:localhost');
 

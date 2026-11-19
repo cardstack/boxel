@@ -5,7 +5,11 @@ import type {
   ReportRunChange,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { logger } from '@cardstack/runtime-common';
+import {
+  logger,
+  sanitizeLoggingCorrelationId,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
+} from '@cardstack/runtime-common';
 import { runTokenOf } from '@cardstack/runtime-common/run-token';
 import {
   sendResponseForBadRequest,
@@ -173,6 +177,8 @@ export default function handleRequestForward({
   reportRunChange?: ReportRunChange;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    // The billable call's timing line counts the handler's own work from here.
+    let requestStartedAt = Date.now();
     // A caller that stops waiting must take the upstream call with it. Each
     // forward occupies one of the user's limited in-flight slots until it
     // ends, so an upstream request nobody is reading any more keeps that slot
@@ -404,6 +410,12 @@ export default function handleRequestForward({
           creditStrategy: destinationConfig.creditStrategy,
           signal: clientGone,
           destination: destinationConfig.url,
+          route: '_request-forward',
+          requestStartedAt,
+          correlationId:
+            sanitizeLoggingCorrelationId(
+              ctxt.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+            ) ?? undefined,
           charge: runForward
             ? {
                 kind: 'ai',
