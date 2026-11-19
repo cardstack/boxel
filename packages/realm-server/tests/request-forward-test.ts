@@ -33,7 +33,10 @@ import {
 } from '@cardstack/billing/billing-queries';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import { setSystemKeyResponseCap } from '../lib/system-keys.ts';
-import { MAX_IN_FLIGHT_CALLS_PER_USER } from '../lib/billable-call.ts';
+import {
+  billableCallLine,
+  MAX_IN_FLIGHT_CALLS_PER_USER,
+} from '../lib/billable-call.ts';
 import {
   configureOutbound,
   OutboundRefusedError,
@@ -3485,6 +3488,55 @@ module(basename(import.meta.filename), function () {
           assert.false('data' in (recorded ?? {}), 'it recorded no body');
         });
       });
+    });
+  });
+
+  module('billableCallLine', function () {
+    let opts = {
+      matrixUserId: '@example-user:localhost',
+      destination: 'https://openrouter.ai/api/v1/chat/completions',
+      route: '_request-forward',
+    };
+    let timing = {
+      lockWaitMs: 7,
+      capacityWaitMs: 300,
+      upstreamMs: 4000,
+      costMs: 20,
+    };
+
+    test('requestMs runs from the handler start, and localMs is what the stages leave of it', function (assert) {
+      let line = billableCallLine(
+        { ...opts, requestStartedAt: 1_000, correlationId: 'corr-abc' },
+        'charged',
+        2,
+        1_050,
+        timing,
+        5_500,
+      );
+      assert.strictEqual(
+        line,
+        'billable call user=@example-user:localhost route=_request-forward destination=https://openrouter.ai/api/v1/chat/completions outcome=charged inFlight=2 totalMs=4450 requestMs=4500 lockWaitMs=7 capacityWaitMs=300 upstreamMs=4000 costMs=20 localMs=173 corr=corr-abc',
+      );
+    });
+
+    test("with no handler start, requestMs is the call's own time; with no correlation id, the line names none", function (assert) {
+      let line = billableCallLine(
+        opts,
+        'denied',
+        undefined,
+        1_000,
+        {
+          lockWaitMs: 3,
+          capacityWaitMs: 0,
+          upstreamMs: 0,
+          costMs: 0,
+        },
+        1_010,
+      );
+      assert.strictEqual(
+        line,
+        'billable call user=@example-user:localhost route=_request-forward destination=https://openrouter.ai/api/v1/chat/completions outcome=denied inFlight=- totalMs=10 requestMs=10 lockWaitMs=3 capacityWaitMs=0 upstreamMs=0 costMs=0 localMs=7',
+      );
     });
   });
 });
