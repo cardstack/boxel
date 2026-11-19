@@ -41,6 +41,7 @@ import {
   leave as leavePass,
   letGo,
   type Pass,
+  passOpen,
   setBeforeMeasure,
   setPassScheduler,
 } from './far.ts';
@@ -408,6 +409,36 @@ function scrollerOf(el: Element): HTMLElement | null {
 setPassScheduler((run) => postRender(run));
 setBeforeMeasure(() => flushPendingMounts());
 
+/**
+ * Every mounted region, so that one render takes one "before".
+ *
+ * A region's render hook runs when the render reaches its own template. By
+ * then Glimmer has patched everything it rendered earlier: the region's
+ * ancestors and whatever comes before it in the document. What a modifier
+ * writes lands only after the render. A snapshot taken at that point is of a
+ * page that never stood: an ancestor's new class with its old inline size.
+ * A stack card coming out from under another is that case. Its cover comes
+ * off as a class and its width arrives through a modifier, so a region
+ * inside it would measure its participants in the covered card's layout and
+ * then move every one of them to where the uncovered card puts them.
+ *
+ * So the first region a render reaches snapshots every mounted region, and
+ * each region uses that snapshot when the render reaches it. The earlier in
+ * the document that first region is, the less of the render has landed
+ * before it. Under an outer region (the stack's own, around its cards)
+ * nothing of the cards has.
+ */
+const regions = new Set<Choreo>();
+/** counts the renders that took a snapshot of every region */
+let snapshotRound = 0;
+
+function snapshotEvery() {
+  snapshotRound++;
+  for (const region of regions) {
+    region.snapshotAhead(snapshotRound);
+  }
+}
+
 export class Choreo extends Component<Signature> implements ChoreoHost {
   private element?: HTMLDivElement;
   private orphanLayer?: HTMLDivElement;
@@ -457,6 +488,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   /** where the run stopped by a cover had its loops: the next run carries them on */
   private coveredLoops?: LoopPhases;
   private rootSnapshot?: DOMRect;
+  /** the `snapshotRound` this region's snapshot was taken ahead in, if any */
+  private snapshotTakenIn = 0;
   private passPending = false;
   private rendered = false;
   run?: ChoreoRun;
@@ -495,7 +528,9 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
       return false;
     });
+    regions.add(this);
     registerDestructor(this, () => {
+      regions.delete(this);
       stopProbe();
       leavePass(this);
       this.run?.cancel();
@@ -697,6 +732,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     snapshotOnRender();
     if (this.args.idle) {
       this.slept = true;
+      // a snapshot taken ahead of this render is not this region's to keep
+      this.snapshotTakenIn = 0;
       return undefined;
     }
     if (this.slept) {
@@ -708,8 +745,16 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     }
     if (!this.passPending) {
       this.passPending = true;
-      this.syncViewWatch();
-      this.snapshot();
+      if (!passOpen()) {
+        // the first region this render reaches: every region's "before" is
+        // taken now, ahead of what the render patches on its way to them
+        snapshotEvery();
+      }
+      if (this.snapshotTakenIn !== snapshotRound) {
+        // mounted after that snapshot, or idle when it was taken
+        this.syncViewWatch();
+        this.snapshot();
+      }
       // every region announces here, while Glimmer is still rendering, so the
       // barrier knows the whole cast before anybody measures
       joinPass(this);
@@ -717,6 +762,20 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     return undefined;
   }
   /* eslint-enable ember/no-side-effects */
+
+  /**
+   * Take this region's "before" as the first region of the render takes its
+   * own (see `regions`). The region still joins the pass from its own render
+   * hook, so the cast and its order are what they were.
+   */
+  snapshotAhead(round: number) {
+    if (!this.element || this.passPending || this.args.idle) {
+      return;
+    }
+    this.syncViewWatch();
+    this.snapshot();
+    this.snapshotTakenIn = round;
+  }
 
   private snapshot() {
     this.snapshots.clear();
