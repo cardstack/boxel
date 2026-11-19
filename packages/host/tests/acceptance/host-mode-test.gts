@@ -113,6 +113,13 @@ class StubHijackedOriginHostModeService extends StubRoutingHostModeService {
 // `hostRoutingMap`, where the server puts it.
 const DYNAMIC_ROUTE_RULES: RawHostRoutingRule[] = [
   { path: '/terms', instance: { id: `${testHostModeRealmURL}Pet/mango` } },
+  // Ahead of the card id templates that also fit a post's id, so that it is
+  // the canonical route of a post.
+  {
+    path: '/posts/:slug',
+    type: { module: `${testHostModeRealmURL}post`, name: 'Post' },
+    match: { slug: ':slug' },
+  },
   { path: '/pets/:pet', card: './Pet/:pet' },
   {
     path: '/by-name/:name',
@@ -128,11 +135,6 @@ const DYNAMIC_ROUTE_RULES: RawHostRoutingRule[] = [
   { path: '/files/:name', card: './:name' },
   // Matches a card's own path, `/Pet/<id>`, but names no card there.
   { path: '/Pet/:pet', card: './Pets/:pet' },
-  {
-    path: '/posts/:slug',
-    type: { module: `${testHostModeRealmURL}post`, name: 'Post' },
-    match: { slug: ':slug' },
-  },
 ];
 
 function dynamicRoutes(): readonly HostRoute[] {
