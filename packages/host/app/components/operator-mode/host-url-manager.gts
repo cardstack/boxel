@@ -13,6 +13,7 @@ import { Input as PretInput } from '@cardstack/pretui/components/input';
 import { RadioGroup } from '@cardstack/pretui/components/radio-group';
 import { ToastStore, Toaster } from '@cardstack/pretui/components/toaster';
 import { Tooltip } from '@cardstack/pretui/components/tooltip';
+import { Link } from '@cardstack/pretui/components/typography';
 import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -422,12 +423,12 @@ export default class HostURLManager extends Component<Signature> {
                 {{#each this.hostURLs as |hostURL|}}
                   <li class='row' data-test-host-url={{hostURL.url}}>
                     <div class='row-main'>
-                      <a
+                      <Link
                         class='url'
-                        href={{hostURL.url}}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                      >{{displayURL hostURL.url}}</a>
+                        @href={{hostURL.url}}
+                        @external={{true}}
+                        @variant='quiet'
+                      >{{displayURL hostURL.url}}</Link>
                       {{#if hostURL.isCanonical}}
                         <Tooltip
                           class='explain'
@@ -662,12 +663,12 @@ export default class HostURLManager extends Component<Signature> {
                 {{#each @v1SiteURLs as |url|}}
                   <li class='row' data-test-v1-site={{url}}>
                     <div class='row-main'>
-                      <a
+                      <Link
                         class='url'
-                        href={{url}}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                      >{{displayURL url}}</a>
+                        @href={{url}}
+                        @external={{true}}
+                        @variant='quiet'
+                      >{{displayURL url}}</Link>
                     </div>
                     <div class='row-actions'>
                       <Button
@@ -756,14 +757,13 @@ export default class HostURLManager extends Component<Signature> {
       .url {
         overflow-wrap: anywhere;
       }
-      a.url {
-        color: var(--foreground);
-        text-decoration: none;
-        text-underline-offset: 0.15em;
+      .url {
+        --pretui-link-ink: var(--foreground);
       }
+      /* The global link rule colours every link on hover, and it is not in a
+         layer, so it beats the link's own layered styles. */
       a.url:hover {
         color: var(--foreground);
-        text-decoration: underline;
       }
       .target-label {
         font-weight: 600;

@@ -204,10 +204,16 @@ module('Acceptance | host URL manager', function (hooks) {
       .hasAttribute('href', SPACE_URL);
     assert
       .dom(`[data-test-host-url="${SPACE_URL}"] a`)
-      .hasText(
+      .containsText(
         SPACE_URL.replace('https://', ''),
         'the link shows the URL without its scheme',
       );
+    assert
+      .dom(`[data-test-host-url="${SPACE_URL}"] a`)
+      .hasAttribute('target', '_blank', 'the link opens in a new tab');
+    assert
+      .dom(`[data-test-host-url="${SPACE_URL}"] a`)
+      .containsText('(opens in a new tab)');
     assert
       .dom(`[data-test-host-url="${SPACE_URL}"] [data-test-host-url-canonical]`)
       .exists('the first host URL is canonical');
