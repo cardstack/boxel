@@ -31,14 +31,17 @@ LOG_TEE="../observability/scripts/dev-log-tee.sh"
 # task fails. Restarting stops on:
 # - a clean exit, after SIGTERM or SIGINT;
 # - a usage error (exit 2), which a restart can't fix;
-# - the 12th failure in a row that came within a minute of its start, so a
+# - the 12th failure in a row while no run has yet lasted a minute, so a
 #   historian that can't start fails the stack instead of retrying until the
-#   stack's wait on its health check gives up. A restart of the database is
-#   over well before then;
+#   stack's wait on its health check gives up. Once a run has lasted a
+#   minute, realm-historian has started, and an exit would stop a stack
+#   that still looks ready, so from then on every failure is retried,
+#   however long the database is away;
 # - the exit of the process that started this one.
-QUICK_FAILURE_SECONDS=60
-MAX_QUICK_FAILURES=12
-quick_failures=0
+STARTED_SECONDS=60
+MAX_START_FAILURES=12
+has_started=
+start_failures=0
 while true; do
   started=$SECONDS
   NODE_NO_WARNINGS=1 \
@@ -54,14 +57,16 @@ while true; do
   if [ "$status" -eq 2 ] || ! kill -0 "$PPID" 2>/dev/null; then
     exit "$status"
   fi
-  if [ $((SECONDS - started)) -ge "$QUICK_FAILURE_SECONDS" ]; then
-    quick_failures=0
+  if [ $((SECONDS - started)) -ge "$STARTED_SECONDS" ]; then
+    has_started=1
   fi
-  quick_failures=$((quick_failures + 1))
-  if [ "$quick_failures" -ge "$MAX_QUICK_FAILURES" ]; then
-    echo "realm-historian failed ${quick_failures} times in a row; not restarting it" |
-      "$LOG_TEE" realm-historian
-    exit "$status"
+  if [ -z "$has_started" ]; then
+    start_failures=$((start_failures + 1))
+    if [ "$start_failures" -ge "$MAX_START_FAILURES" ]; then
+      echo "realm-historian failed ${start_failures} times in a row without starting; not restarting it" |
+        "$LOG_TEE" realm-historian
+      exit "$status"
+    fi
   fi
   echo "realm-historian exited with status ${status}; restarting it in 5 s" |
     "$LOG_TEE" realm-historian
