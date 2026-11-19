@@ -35,6 +35,7 @@ import {
   proxyAsset,
 } from './middleware/index.ts';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp.ts';
+import { compressResponse } from './middleware/compress-response.ts';
 import {
   clientAddress,
   clientAddressSettingsFromEnv,
@@ -1024,6 +1025,9 @@ export class RealmServer {
       .use(clientAddress(this.clientAddress))
       .use(httpLogging)
       .use(instanceIdHeader)
+      // Outside the host URL translation and every route, so it compresses
+      // each response body as it is finally sent.
+      .use(compressResponse)
       // A request on a host URL is made to name its realm's URL here, ahead
       // of every route that looks a realm up (ADR 033 §1.2).
       .use(
