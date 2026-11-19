@@ -1,15 +1,6 @@
 {
   "main": [
     {
-      "run": 43349548802,
-      "at": "2026-11-13T02:04:51Z",
-      "minutes": 240.5,
-      "slowestShard": 18.4,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
       "run": 43358334306,
       "at": "2026-11-13T03:20:46Z",
       "minutes": 243.1,
@@ -359,36 +350,18 @@
       "shards": 16,
       "runsOn": true,
       "indexCache": false
+    },
+    {
+      "run": 44501725181,
+      "at": "2026-11-19T10:01:17Z",
+      "minutes": 246.1,
+      "slowestShard": 18.4,
+      "shards": 16,
+      "runsOn": true,
+      "indexCache": false
     }
   ],
   "pullRequest": [
-    {
-      "run": 43439944908,
-      "at": "2026-11-13T14:08:43Z",
-      "minutes": 208,
-      "slowestShard": 18.5,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
-      "run": 43440488205,
-      "at": "2026-11-13T14:12:13Z",
-      "minutes": 220.5,
-      "slowestShard": 19.4,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
-    {
-      "run": 43440514050,
-      "at": "2026-11-13T14:12:23Z",
-      "minutes": 277.7,
-      "slowestShard": 21.5,
-      "shards": 16,
-      "runsOn": true,
-      "indexCache": false
-    },
     {
       "run": 43440520325,
       "at": "2026-11-13T14:12:26Z",
@@ -2981,6 +2954,33 @@
       "shards": 16,
       "runsOn": false,
       "indexCache": true
+    },
+    {
+      "run": 44495086080,
+      "at": "2026-11-19T09:17:42Z",
+      "minutes": 237.2,
+      "slowestShard": 19.3,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": false
+    },
+    {
+      "run": 44504674574,
+      "at": "2026-11-19T10:20:04Z",
+      "minutes": 238.2,
+      "slowestShard": 19.9,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": false
+    },
+    {
+      "run": 44504809586,
+      "at": "2026-11-19T10:20:54Z",
+      "minutes": 222.7,
+      "slowestShard": 18.3,
+      "shards": 16,
+      "runsOn": false,
+      "indexCache": false
     }
   ]
 }
