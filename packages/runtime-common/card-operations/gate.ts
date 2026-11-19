@@ -3,6 +3,7 @@ import { isFilterRefersToNonexistentTypeError } from '../definition-lookup.ts';
 import type { Definition, FieldDefinition } from '../definitions.ts';
 import type { InstanceOrError } from '../index-query-engine.ts';
 import type { LocalPath } from '../paths.ts';
+import { pathSpecifierMatches, type PathKind } from '../path-specifier.ts';
 import { isCardResource } from '../card-document-shape.ts';
 import { now } from '../clock.ts';
 import { logger } from '../log.ts';
@@ -214,7 +215,9 @@ export interface OperationPolicyAccess {
 // nothing the caller named.
 export type GateSubject =
   // A stored card, matched on the adoption chain its index row records.
-  | { kind: 'card'; url: URL }
+  // `landing` is set where the operation is a create anchored on the card, and
+  // is where the card it mints will be stored.
+  | { kind: 'card'; url: URL; landing?: CreateLanding }
   // A type a create mints from, matched on the adoption chain the definition
   // cache records beside the definition the type resolved to: the type and
   // every type it descends from up to the root of its family, `CardDef` for a
@@ -225,7 +228,11 @@ export type GateSubject =
   // `unknown-operation`. A rule on any field def fares the same, but for an
   // operation that def declares itself. A type the realm cannot resolve never
   // gets here. Resolution refuses it first, as not found.
-  | { kind: 'type'; types: string[] }
+  //
+  // `landing` is where the card the create mints will be stored, which is
+  // what a grant's paths are matched against. Without one, only a grant with
+  // no path limit can admit the create.
+  | { kind: 'type'; types: string[]; landing?: CreateLanding }
   // A stored path that names no card. Only a stored-bytes read and an update
   // that replaces the file's bytes are matched against one, and each resolves
   // what the path actually holds for itself: the extension table names a
@@ -235,6 +242,25 @@ export type GateSubject =
   | { kind: 'file'; url: URL }
   // A target no rule is matched against: a URL that does not parse.
   | { kind: 'unmatched' };
+
+// Where a create's card will be stored, as the realm works it out from what
+// the create sends, before anything is written: the directory the card's file
+// lands in (`blog/BlogPost/`, or `BlogPost/` at the realm's root), and the file
+// itself where its id is already fixed. The realm computes it with the same
+// path math that stages the card (`createLanding` in `executors.ts`), so the
+// gate judges the path the card is stored at, never one the caller claims.
+export interface CreateLanding {
+  directory: string;
+  file?: string;
+}
+
+// A target's path in the realm, as a grant's paths are matched against it: a
+// card by its stored `.json`, a file by its own path, and a create by where
+// its card lands. `kind` says whether `path` names a file or a directory.
+export interface TargetPath {
+  path: string;
+  kind: PathKind;
+}
 
 // What the gate reads of an invocation's scope: who the caller is, what the
 // realm ACL declined, and the index rows a card's chain comes from. A create's
@@ -390,6 +416,20 @@ export interface PolicyGateStats {
 }
 
 const statsByCore = new WeakMap<OperationCore, PolicyGateStats>();
+
+// What an operation reads of its target before acting on it, per core: each
+// index row an operation scope peeks, once per URL, and each path whose
+// stored bytes the gate reads to type them. A test reads it to show that a
+// target refused for its path costs neither read.
+const targetReadsByCore = new WeakMap<OperationCore, number>();
+
+export function noteTargetRead(core: OperationCore): void {
+  targetReadsByCore.set(core, (targetReadsByCore.get(core) ?? 0) + 1);
+}
+
+export function policyTargetReads(core: OperationCore): number {
+  return targetReadsByCore.get(core) ?? 0;
+}
 
 export function policyGateStats(core: OperationCore): PolicyGateStats {
   let stats = statsByCore.get(core);
@@ -637,11 +677,38 @@ async function decide(
   ) {
     return refuse('authorization-infrastructure');
   }
-  // Every other behavior is matched on its card's index row, which is peeked
-  // before the policy loads. A stored-bytes read, and a file's update, are
-  // typed from the bytes stored at the path instead, which costs a file read
-  // and a definition lookup, so none of that is paid until a policy is known
-  // to be there.
+  // The policy loads before anything about the target is read, so a target's
+  // path is matched against the grants first (ADR 038 §1.3). A path doesn't
+  // change while a write waits for its lock, so nothing read later can change
+  // this answer.
+  let { policy } = loaded ?? (await loadPolicy(core));
+  if (!policy) {
+    return refuse('no-grant');
+  }
+  let target = targetPathOf(core, subject);
+  // A target no grant naming the operation covers is refused here, with no
+  // row or byte read, so a request outside every grant's paths costs nothing
+  // and its timing doesn't tell whether the target is there. An explain or a
+  // capability check reads on anyway: it reports which rules match the
+  // target's type, and the matching below refuses it the same way.
+  if (!trace) {
+    let named = grantsNaming(policy, name);
+    if (named.length === 0) {
+      return refuse('no-grant');
+    }
+    if (!named.some((grant) => grantCoversPath(grant, target))) {
+      return refuse('outside-paths');
+    }
+  }
+  // No grant reaches a path the realm ignores, whatever its paths say. A
+  // stored target there has no index row either, but a create into an ignored
+  // directory would otherwise be admitted.
+  if (target && (await core.isIgnored(pathsFor(core).fileURL(target.path)))) {
+    return refuse('unmatchable-target');
+  }
+  // Every other behavior is matched on its card's index row. A stored-bytes
+  // read, and a file's update, are typed from the bytes stored at the path
+  // instead, which costs a file read and a definition lookup.
   let rowMatched: MatchedSubject | undefined;
   if (base !== 'readSource' && subject.kind !== 'file') {
     let indexed = await indexedSubject(scope, subject);
@@ -652,10 +719,6 @@ async function decide(
       return GATE_MISSING;
     }
     rowMatched = indexed;
-  }
-  let { policy } = loaded ?? (await loadPolicy(core));
-  if (!policy) {
-    return refuse('no-grant');
   }
   let matchOn =
     rowMatched ??
@@ -681,6 +744,19 @@ async function decide(
     core.policy,
     notes ? notes.alongside(trace) : trace,
   );
+  // A grant applies only where its paths cover the target, as its rule's type
+  // must cover the target's type.
+  let typeMatched = matched.length;
+  matched = matched.filter(({ grant }) => {
+    let covers = grantCoversPath(grant, target);
+    if (!covers) {
+      trace?.outsidePaths(grant);
+    }
+    return covers;
+  });
+  if (typeMatched > 0 && matched.length === 0) {
+    return refuse('outside-paths');
+  }
   // A caller who isn't signed in is admitted only by a grant whose `where`
   // names them, and only by one whose blocklist and rate limit let their
   // address in. Every other grant was written for signed-in callers, and
@@ -1099,6 +1175,7 @@ async function storedBytesSubject(
   if (await core.isIgnored(fileURL)) {
     return undefined;
   }
+  noteTargetRead(core);
   if (extensionOfName(localPath) === '.json') {
     let content = await core.readFileAsText(localPath);
     if (content === undefined) {
@@ -2048,6 +2125,67 @@ export async function matchingGrants(
     }
   }
   return matched;
+}
+
+// Every grant in the policy that names `name`, whatever its rule's type: the
+// grants whose paths decide whether the gate reads the target at all.
+export function grantsNaming(
+  policy: CompiledRealmPolicy,
+  name: string,
+): CompiledOperationGrant[] {
+  return policy.rules.flatMap((rule) =>
+    rule.grants.filter((grant) => grant.operation === name),
+  );
+}
+
+// Whether a grant's paths cover a target. A grant with no path limit covers
+// every target. One with a limit covers only a target whose path is known and
+// falls under one of its prefixes, so a target the realm can't place is
+// admitted only by a grant with no limit.
+export function grantCoversPath(
+  grant: CompiledOperationGrant,
+  target: TargetPath | undefined,
+): boolean {
+  if (!grant.paths) {
+    return true;
+  }
+  return (
+    target !== undefined &&
+    pathSpecifierMatches(grant.paths, target.path, target.kind)
+  );
+}
+
+// Where a subject's target is in the realm, or undefined where the realm
+// can't place it: a URL outside the realm, a create with no landing, or an
+// unmatched target. A create is placed where its card lands, whether it is
+// invoked on a type or anchored on a card. A card is placed at its stored
+// `.json`, the realm's root naming its index card.
+export function targetPathOf(
+  core: OperationCore,
+  subject: GateSubject,
+): TargetPath | undefined {
+  if ((subject.kind === 'type' || subject.kind === 'card') && subject.landing) {
+    return subject.landing.file !== undefined
+      ? { path: subject.landing.file, kind: 'file' }
+      : { path: subject.landing.directory, kind: 'directory' };
+  }
+  switch (subject.kind) {
+    case 'card':
+    case 'file': {
+      let local: string;
+      try {
+        local = localPathFor(core, subject.url);
+      } catch {
+        return undefined;
+      }
+      if (subject.kind === 'file') {
+        return local === '' ? undefined : { path: local, kind: 'file' };
+      }
+      return { path: `${local === '' ? 'index' : local}.json`, kind: 'file' };
+    }
+    default:
+      return undefined;
+  }
 }
 
 // Each rule's position in its policy, under every key its type is recorded

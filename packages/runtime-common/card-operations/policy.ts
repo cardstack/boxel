@@ -9,6 +9,7 @@ import type { Definition } from '../definitions.ts';
 import { codeRefFromInternalKey } from '../index.ts';
 import type { IndexedInstanceSource } from '../index-query-engine.ts';
 import { logger } from '../log.ts';
+import { parsePathSpecifier, type PathSpecifier } from '../path-specifier.ts';
 import { RealmPaths } from '../paths.ts';
 import { PRERENDERED_HTML_FORMATS } from '../prerendered-html-format.ts';
 import { rri } from '../realm-identifiers.ts';
@@ -124,6 +125,10 @@ export interface CompiledOperationGrant {
   operation: string;
   // Where the grant is in the policy card, as `rules[2].grants[1]`.
   path: string;
+  // The realm paths the grant is limited to: it admits a target only where
+  // the target's path falls under one of these prefixes. Absent for a grant
+  // with no path limit, which is what an absent or empty `paths` means.
+  paths?: PathSpecifier;
   // Absent for a grant with no condition.
   where?: CompiledPolicyPredicate;
   // Set on a grant whose `where` names the caller who isn't signed in
@@ -1475,6 +1480,10 @@ async function compileDocument(
         );
         continue;
       }
+      let paths = readGrantPaths(grant?.paths, grantPath, issue);
+      if (paths === 'invalid') {
+        continue;
+      }
       let where = readPredicate(grant?.where);
       if (where === 'malformed') {
         issue(
@@ -1572,6 +1581,10 @@ async function compileDocument(
                   expressions[name]?.canonical ?? null,
                 ]),
               ),
+              // A grant's paths decide which requests it counts, so grants
+              // that differ only there are counted apart. One with no path
+              // limit adds nothing, so its count is the same either way.
+              ...(paths ? [paths.prefixes.map((prefix) => prefix.path)] : []),
             ]) ?? '',
           ),
           writes: isWrite(granted.base),
@@ -1616,7 +1629,12 @@ async function compileDocument(
       if (!where || !outcome) {
         grants.push(
           await withFilter(
-            { operation, path: grantPath, ...(anonymous ? { anonymous } : {}) },
+            {
+              operation,
+              path: grantPath,
+              ...(paths ? { paths } : {}),
+              ...(anonymous ? { anonymous } : {}),
+            },
             granted.base,
             undefined,
             resolved,
@@ -1668,6 +1686,7 @@ async function compileDocument(
           {
             operation,
             path: grantPath,
+            ...(paths ? { paths } : {}),
             where: {
               source: where.source,
               canonical: outcome.canonical,
@@ -1815,7 +1834,14 @@ async function compileDocument(
         reaching.push({ rule, grant, definition, ...lane });
       }
     }
-    if (rule.grants.some((grant) => letsCallerRead(definition, grant))) {
+    // A grant limited to some paths admits only the cards under them, so it
+    // doesn't make a type readable: a card of the type that a granted card
+    // links to can be anywhere (ADR 038 §1.7).
+    if (
+      rule.grants.some(
+        (grant) => !grant.paths && letsCallerRead(definition, grant),
+      )
+    ) {
       readable.push({
         codeRef: rule.targetType,
         definedAs: isResolvedCodeRef(definition.codeRef)
@@ -2194,6 +2220,42 @@ function readPredicate(
     }
   }
   return 'malformed';
+}
+
+// A grant's `paths` as the policy card stores it: a list of path prefixes
+// (ADR 037). Absent, null or empty means no path limit, which is undefined
+// here. A value that isn't a list of strings, or a list holding a prefix the
+// specifier refuses, is recorded and makes the grant `'invalid'`, so the
+// caller leaves the whole grant out: a malformed value must never read as
+// absent, which would widen the grant to every path.
+function readGrantPaths(
+  value: unknown,
+  grantPath: string,
+  issue: (code: PolicyIssueCode, path: string, message: string) => void,
+): PathSpecifier | undefined | 'invalid' {
+  if (value == null) {
+    return undefined;
+  }
+  if (!Array.isArray(value) || value.some((p) => typeof p !== 'string')) {
+    issue(
+      'invalid-paths',
+      `${grantPath}.paths`,
+      '`paths` should be a list of path prefixes, such as `["blog/"]`, so this grant does nothing until it is',
+    );
+    return 'invalid';
+  }
+  let parsed = parsePathSpecifier(value as string[]);
+  if (!parsed.ok) {
+    for (let error of parsed.errors) {
+      issue(
+        'invalid-paths',
+        `${grantPath}.paths[${error.prefixIndex}]`,
+        `${error.message}\n\nOne prefix that can't be read leaves the whole grant out, so this grant does nothing until it's fixed.`,
+      );
+    }
+    return 'invalid';
+  }
+  return parsed.specifier.prefixes.length > 0 ? parsed.specifier : undefined;
 }
 
 // The request-context calls a policy predicate reads. The `policy` profile

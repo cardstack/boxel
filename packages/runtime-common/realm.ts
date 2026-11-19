@@ -406,14 +406,20 @@ import {
   pendingWriteHolds,
   pendingWriteRefusal,
   storedWriteRefusal,
+  type CreateLanding,
+  grantCoversPath,
+  grantsNaming,
   type PendingWrite,
+  type TargetPath,
   policyGateStats,
   policyPredicatePreparations,
+  policyTargetReads,
   policyUnavailable,
   type PolicyGateStats,
   type NonGrantableAnswerSources,
 } from './card-operations/gate.ts';
 import {
+  createLanding,
   namesForeignRealm,
   type AdmissionSubject,
 } from './card-operations/executors.ts';
@@ -8352,6 +8358,30 @@ export class Realm {
         target,
         canonical.name,
         scope,
+        {
+          // Where the entry's card lands if it creates one: a named create
+          // mints the type its declaration names, and the base create the
+          // type its resource adopts. An envelope create names no directory,
+          // so the card lands at the realm's root.
+          landing: (resolved) => {
+            let meta = canonical.data?.meta;
+            let adoptsFrom =
+              meta && typeof meta === 'object'
+                ? (meta as Record<string, unknown>).adoptsFrom
+                : undefined;
+            let type =
+              resolved?.of ?? (isCodeRef(adoptsFrom) ? adoptsFrom : undefined);
+            return type
+              ? createLanding(
+                  type,
+                  canonical.lid,
+                  undefined,
+                  this.paths,
+                  this.#mintPosture(scope.coarseDeclined),
+                )
+              : undefined;
+          },
+        },
       );
       assertTravelsInEnvelope(canonical, definition);
       assertVersionableEntry(canonical, definition);
@@ -16784,6 +16814,16 @@ export class Realm {
         requestContext,
         () => this.#createTarget(primaryResource),
         'create',
+        // Where the card lands: beneath the directory the `POST` was aimed at,
+        // as the batch entry below stages it.
+        (posture) =>
+          createLanding(
+            primaryResource.meta?.adoptsFrom,
+            lid,
+            this.paths.local(new URL(request.url)),
+            this.paths,
+            posture,
+          ),
       );
       admission.assertSideLoads(maybeIncluded);
       // Where the `POST` was aimed — the realm root, or a directory under it.
@@ -17709,6 +17749,9 @@ export class Realm {
     // to one.
     targetOf: () => OperationTarget,
     base: 'create' | 'update' | 'delete',
+    // For a create, where its card lands, staged under the batch posture
+    // this caller writes with (see `#mintPosture`).
+    landing?: (posture: { mintIds?: true }) => CreateLanding | undefined,
   ): Promise<CardWriteAdmission> {
     let coarseDeclined = this.#coarseDeclined(requestContext);
     if (coarseDeclined === 'none') {
@@ -17722,7 +17765,11 @@ export class Realm {
       route: cardJsonRoute(request.method),
       anonymousRequest: this.#anonymous.anonymousRequestFor(requestContext),
     });
-    let decision = await resolveFacadeWrite(core, target, base, scope);
+    let decision = await resolveFacadeWrite(core, target, base, scope, {
+      ...(landing
+        ? { landing: () => landing(this.#mintPosture(coarseDeclined)) }
+        : {}),
+    });
     let assertSideLoads = (included: readonly unknown[] | undefined) => {
       // The same test the executors apply to decide which side-loads they
       // stage: one with no local id has nothing to be written under, and one
@@ -17875,6 +17922,28 @@ export class Realm {
       pending: PendingWrite | undefined;
     }[] = [];
     for (let write of writes) {
+      // Whatever the write turns out to be, it is matched at its own path: a
+      // card's document is the card's stored `.json`, and a create lands
+      // exactly where it is written. So for a caller who may not read the
+      // realm, whose writes are judged as an update or a delete (a create is
+      // refused below), a path no such grant covers is refused before what
+      // the path holds is read (ADR 038 §1.3).
+      if (coarseDeclined === 'all') {
+        let { policy } = await loadPolicy(core);
+        let name = write.removal ? 'delete' : 'update';
+        let path: TargetPath = { path: write.path, kind: 'file' };
+        if (
+          policy &&
+          !grantsNaming(policy, name).some((grant) =>
+            grantCoversPath(grant, path),
+          )
+        ) {
+          throw notPermitted(
+            { kind: 'instance', url: this.paths.fileURL(write.path).href },
+            name,
+          );
+        }
+      }
       let operation: VerbatimOperation;
       try {
         operation = this.#verbatimOperation(
@@ -17898,7 +17967,20 @@ export class Realm {
         operation.target,
         operation.base,
         scope,
-        operation.kind === 'file' ? { asFile: true } : {},
+        operation.kind === 'file'
+          ? { asFile: true }
+          : operation.base === 'create'
+            ? {
+                // A verbatim create lands exactly where it is written.
+                landing: () => ({
+                  directory: write.path.slice(
+                    0,
+                    write.path.lastIndexOf('/') + 1,
+                  ),
+                  file: write.path,
+                }),
+              }
+            : {},
       );
       judged.push({
         write,
@@ -21998,6 +22080,10 @@ export class Realm {
 
   __testOnlyPolicyPredicatePreparations(): number {
     return policyPredicatePreparations(this.operationCore);
+  }
+
+  __testOnlyPolicyTargetReads(): number {
+    return policyTargetReads(this.operationCore);
   }
 
   // The cache reads the policy card straight from the index, not through a

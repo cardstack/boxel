@@ -536,6 +536,11 @@ export type PolicyIssueCode =
   // A grant with no operation name, or a `where` that is neither BXL source
   // nor the annotated `{ bxl, snapshot }` form.
   | 'invalid-grant'
+  // A grant whose `paths` isn't a list of prefixes, or holds a prefix the path
+  // specifier refuses. Recorded once for each such prefix. The whole grant is
+  // left out: leaving out only the bad prefixes could leave an empty list,
+  // which means no path limit.
+  | 'invalid-paths'
   // A grant naming an operation its rule's type neither declares nor carries
   // as a built-in behavior. A grant matches the name a caller invokes, so such
   // a grant would match nothing.
@@ -1233,6 +1238,9 @@ export type PolicyExplanationReason =
   // No rule governing the target's type has a grant for the operation. On the
   // search lane, none has one that compiled to a search filter.
   | 'no-grant'
+  // Grants for the operation match the target's type, but none of their paths
+  // covers the target's path, or where a create would store its card.
+  | 'outside-paths'
   // Grants for the operation matched, and none of their predicates held.
   | 'predicate-false'
   // A predicate threw. Grants union, so this is the answer only where no
@@ -1289,6 +1297,9 @@ export interface ExplainedGrant {
   // Where the grant is in the policy card, as `rules[2].grants[1]`, so an
   // explanation and an issue name the same grant the same way.
   path: string;
+  // The prefixes the grant is limited to, as the author wrote them. Absent for
+  // a grant with no path limit.
+  paths?: string[];
   // The predicate as the author wrote it. Absent for a grant with no
   // condition.
   where?: string;
@@ -1363,6 +1374,9 @@ export type ExplainedGrantOutcome =
   | 'held'
   | 'did-not-hold'
   | 'threw'
+  // The grant's paths don't cover the target's path, or where a create would
+  // store its card, so the gate set it aside without evaluating it.
+  | 'outside-paths'
   // The gate decided without evaluating it: an earlier grant admitted the
   // invocation, or a refusal came first. On the search lane every predicate
   // that reads the card is this: a search runs a grant's filter over the index

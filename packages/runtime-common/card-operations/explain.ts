@@ -15,6 +15,7 @@ import {
   localPathFor,
   newOperationScope,
   resolveGatedOperation,
+  rootLanding,
   resolvesToWrite,
   scopeCallerFor,
   servedRealmsRead,
@@ -842,6 +843,7 @@ async function searchRules(
           : grant.anonymousSettledFilter;
       explainedGrants.push({
         path: grant.path,
+        ...explainedPaths(grant),
         ...(grant.where
           ? {
               where: grant.where.source,
@@ -1000,6 +1002,7 @@ async function explain(
       target,
       question.operation,
       scope,
+      { landing: rootLanding(core, target) },
     ));
   } catch (e: unknown) {
     if (!isOperationFailure(e)) {
@@ -1157,6 +1160,8 @@ function refusalReason(
       return 'unmatchable-target';
     case 'no-grant':
       return 'no-grant';
+    case 'outside-paths':
+      return 'outside-paths';
     case 'reads-actor':
       return 'reads-actor';
     default:
@@ -1177,6 +1182,7 @@ function withRules(
     path: rule.path,
     grants: grants.map((grant) => ({
       path: grant.path,
+      ...explainedPaths(grant),
       ...(grant.where
         ? {
             where: grant.where.source,
@@ -1189,10 +1195,22 @@ function withRules(
   return { ...explanation, rules };
 }
 
+// A grant's paths as its author wrote them, where it has a path limit.
+function explainedPaths(
+  grant: MatchedGrant['grant'],
+): Pick<ExplainedGrant, 'paths'> {
+  return grant.paths
+    ? { paths: grant.paths.prefixes.map((prefix) => prefix.source) }
+    : {};
+}
+
 function grantOutcome(
   trace: GateTrace,
   grant: MatchedGrant['grant'],
 ): ExplainedGrantOutcome {
+  if (trace.outsideItsPaths.has(grant)) {
+    return 'outside-paths';
+  }
   if (!grant.where) {
     return 'unconditional';
   }
