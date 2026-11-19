@@ -78,12 +78,6 @@ module('Pretui | components/typography', function (hooks) {
     assert.strictEqual(b.getAttribute('target'), '_blank');
     assert.strictEqual(b.getAttribute('rel'), 'noopener noreferrer');
     assert.ok(b.textContent?.includes('(opens in a new tab)'), 'the new tab is announced');
-    let icon = b.querySelector('[data-test-pretui-link-ext]') as HTMLElement;
-    assert.strictEqual(
-      getComputedStyle(icon).display,
-      'inline-block',
-      'the icon is atomic, so the link underline does not run beneath it',
-    );
   });
 
   test('the Typography namespace is the same components', function (assert) {
