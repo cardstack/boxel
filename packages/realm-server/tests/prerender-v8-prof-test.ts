@@ -125,8 +125,8 @@ module(path.basename(import.meta.filename), function (hooks) {
     let s = status ?? '';
 
     assert.true(
-      s.includes(path.basename(big)),
-      `picks the largest (pegged-isolate) log, got: ${status}`,
+      s.includes(`kept local ${path.basename(big)}`),
+      `picks the largest (pegged-isolate) log and keeps it locally, got: ${status}`,
     );
     assert.true(
       s.includes('kept local'),
@@ -170,7 +170,7 @@ module(path.basename(import.meta.filename), function (hooks) {
     let status = await uploadV8ProfLog({ realm: 'r', card: 'c', step: 's' });
 
     assert.true(
-      (status ?? '').includes(path.basename(freshSmall)),
+      (status ?? '').includes(`kept local ${path.basename(freshSmall)}`),
       `picks the fresh log over the larger stale one, got: ${status}`,
     );
   });
