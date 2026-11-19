@@ -1686,7 +1686,7 @@
       ]
     },
     "shell.css": {
-      "bytes": 140172,
+      "bytes": 142708,
       "sources": [
         {
           "package": "@cardstack/boxel-ui@0.0.0",
@@ -1887,6 +1887,14 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/authorize/f736668169.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/connected-apps/10c76e6ade.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/connected-apps/7616b73c32.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2095,7 +2103,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 604249,
+      "bytes": 619873,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2552,8 +2560,13 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/security/oauth-provider-connections.ts",
+          "size": 2657
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/security/oauth-provider.ts",
-          "size": 4684
+          "size": 4710
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2563,7 +2576,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/app.gts",
-          "size": 3376
+          "size": 3454
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2593,7 +2606,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/authorize/outcome.gts",
-          "size": 944
+          "size": 1014
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2604,6 +2617,16 @@
           "package": "@cardstack/secure-origin",
           "module": "src/shell/cli-links.ts",
           "size": 349
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/connected-apps/connected-apps-page.gts",
+          "size": 15408
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/shell/connected-apps/format.ts",
+          "size": 2703
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2728,7 +2751,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/keys/keys-window.gts",
-          "size": 5796
+          "size": 5905
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2853,7 +2876,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/pages.js",
-          "size": 1939
+          "size": 1958
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2898,7 +2921,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in-copy.js",
-          "size": 1752
+          "size": 1764
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2978,7 +3001,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/telemetry/labels.ts",
-          "size": 2747
+          "size": 2852
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2993,7 +3016,7 @@
         {
           "package": "dompurify@3.4.10",
           "module": "dist/purify.es.mjs",
-          "size": 55878
+          "size": 55884
         },
         {
           "package": "ember-basic-dropdown@9.0.0",
