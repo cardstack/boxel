@@ -371,12 +371,13 @@ interface SearchOptions<S extends SearchEntryScope = 'cards'> {
   // it; an unthrottled search never waits long enough for the answer to
   // change.
   isObsolete?: () => boolean;
-  // The caller holds the result live: it re-runs the search on every realm
-  // event for the realms it searches. Such a search shares its answer with
+  // The caller holds the result live: it re-runs the search on the realm
+  // events that could change its result. Such a search shares its answer with
   // every identical live search the tab sends (see `LiveSearchCoalescer`),
-  // which is only sound because a realm event both stops the answer being
-  // shared and re-runs the caller. A caller that reads the result once
-  // leaves this unset, and its search always goes to the realm server.
+  // which is sound because any event for a searched realm stops the answer
+  // being shared, so no caller is handed an answer older than an event that
+  // would have re-run it. A caller that reads the result once leaves this
+  // unset, and its search always goes to the realm server.
   live?: boolean;
   // Pin which index rows the search returns: 'cards' (instance rows),
   // 'files' (FileDef rows), or 'all' (both). When omitted, the scope is
@@ -1870,8 +1871,8 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   // A search document's results as store instances. A document may be shared
-  // between callers (see `fetchSearchDoc`), so hydration reads it and never
-  // depends on which caller fetched it.
+  // between callers (see `fetchSearchDoc`), so hydration only reads it: each
+  // caller resolves the same entries against the same included resources.
   private async hydrateSearchDoc<T extends CardDef | FileDef = CardDef>(
     collectionDoc: SearchEntryResults,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -1967,9 +1968,9 @@ export default class StoreService extends Service implements StoreInterface {
   //
   // Outside a prerender both layers are bypassed. A live search (`live`)
   // takes a third layer of its own instead, `#liveSearches`: identical live
-  // searches share one request while it is in flight and for a short window
-  // after it settles, as long as no realm event for a searched realm and no
-  // write from this tab has arrived since it was sent. Every other search
+  // searches share one request for a short window after it is sent, in flight
+  // or settled, as long as no realm event for a searched realm and no write
+  // from this tab has arrived since it was sent. Every other search
   // goes to the realm server, so a caller that writes and then reads once
   // reads what the realm holds after its write.
   private async fetchSearchDoc(
@@ -2130,7 +2131,7 @@ export default class StoreService extends Service implements StoreInterface {
       return undefined;
     }
     let fingerprint = JSON.stringify([
-      this.cardService.writeCount,
+      this.network.writeCount,
       canonicalRealms.map((realm) =>
         this.messageService.realmEventCount(realm),
       ),
@@ -3977,14 +3978,18 @@ export default class StoreService extends Service implements StoreInterface {
     // canonical (RRI prefix form for mapped realms). Fold the id to canonical
     // form here so an instance's identity — and everything keyed off it, like
     // the markdown pill slots — doesn't depend on which path hydrated it.
+    //
+    // The fold goes into a copy. The resource belongs to a search document
+    // that other callers may hydrate too, and they find it by matching each
+    // entry's `item` reference, which carries the URL form, against its id.
     let canonicalId = this.network.virtualNetwork.unresolveURL(resource.id);
     if (canonicalId !== resource.id) {
-      (resource as { id: string }).id = canonicalId;
+      resource = { ...resource, id: canonicalId };
     }
 
     // Handle file-meta resources
     if (isFileMetaResource(resource)) {
-      let existingInstance = this.peek(resource.id, { type: 'file-meta' });
+      let existingInstance = this.peek(canonicalId, { type: 'file-meta' });
       if (existingInstance && isFileDefInstance(existingInstance)) {
         return existingInstance as T;
       }
@@ -3992,13 +3997,13 @@ export default class StoreService extends Service implements StoreInterface {
       return this.createFileMetaFromSerialized(
         resource,
         doc,
-        resource.id,
+        canonicalId,
         dependencyTrackingContext,
       ) as Promise<T>;
     }
 
     // Handle card resources
-    let existingInstance = this.peek(resource.id);
+    let existingInstance = this.peek(canonicalId);
     if (existingInstance && isCardInstance(existingInstance)) {
       return existingInstance as T;
     }
@@ -4006,7 +4011,7 @@ export default class StoreService extends Service implements StoreInterface {
     // distinguish unresolved empty seeds from explicit empty card-GET results.
     (resource as any)[queryFieldSeedFromSearchSymbol] = true;
     return this.addWithoutPersisting({ data: resource } as SingleCardDocument, {
-      relativeTo: resource.id,
+      relativeTo: canonicalId,
       dependencyTrackingContext,
     }) as Promise<T>;
   }

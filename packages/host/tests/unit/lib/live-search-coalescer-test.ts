@@ -55,6 +55,49 @@ module('Unit | lib | live search coalescer', function () {
     );
   });
 
+  test('a request in flight longer than the TTL is not joined', async function (assert) {
+    let now = 1000;
+    let coalescer = new LiveSearchCoalescer<string>({ now: () => now });
+    let fetches = 0;
+    let stalled = deferred<string>();
+    let fetch = () => {
+      fetches++;
+      return fetches === 1 ? stalled.promise : Promise.resolve('fresh');
+    };
+
+    let first = coalescer.run('q', 'f', fetch);
+    now += LIVE_SEARCH_REUSE_TTL_MS + 1;
+    assert.strictEqual(
+      await coalescer.run('q', 'f', fetch),
+      'fresh',
+      'a later request is sent rather than waiting on the stalled one',
+    );
+    stalled.resolve('late');
+    assert.strictEqual(await first, 'late', 'the stalled caller keeps its own');
+  });
+
+  test('the reuse window runs from when the request was sent', async function (assert) {
+    let now = 1000;
+    let coalescer = new LiveSearchCoalescer<string>({ now: () => now });
+    let fetches = 0;
+    let slow = deferred<string>();
+    let fetch = () => {
+      fetches++;
+      return fetches === 1 ? slow.promise : Promise.resolve('doc-2');
+    };
+
+    let first = coalescer.run('q', 'f', fetch);
+    now += LIVE_SEARCH_REUSE_TTL_MS - 1;
+    slow.resolve('doc-1');
+    await first;
+    now += 2;
+    assert.strictEqual(
+      await coalescer.run('q', 'f', fetch),
+      'doc-2',
+      'an answer that settled late is not reused past its send time + TTL',
+    );
+  });
+
   test('a changed fingerprint is never served the earlier answer', async function (assert) {
     let coalescer = new LiveSearchCoalescer<string>();
     let fetches = 0;

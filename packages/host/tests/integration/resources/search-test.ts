@@ -20,6 +20,7 @@ import {
   SearchBoundError,
   type Realm,
   type LooseSingleCardDocument,
+  searchEntryWireQueryFromQuery,
 } from '@cardstack/runtime-common';
 import { buildQuerySearchURL } from '@cardstack/runtime-common/query-field-utils';
 
@@ -1988,6 +1989,65 @@ module(`Integration | search resource`, function (hooks) {
         );
         await storeService.search(bookQuery, [testRealmURL], { live: true });
         assert.strictEqual(fetchCalls, 2, 'the search after the write is sent');
+      });
+
+      test(`a write sent outside the card service stops the answer being shared, and a read does not`, async function (assert) {
+        releaseFetch.fulfill();
+        let network = getService('network');
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+
+        await network.authedFetch(`${testRealmURL}books/1.json`, {
+          headers: { Accept: 'application/vnd.card+json' },
+        });
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+        assert.strictEqual(fetchCalls, 1, 'a read leaves the answer shared');
+
+        await network.authedFetch(`${testRealmURL}no-such-file.txt`, {
+          method: 'DELETE',
+          headers: { Accept: 'application/vnd.card+source' },
+        });
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+        assert.strictEqual(fetchCalls, 2, 'the search after the write is sent');
+      });
+
+      test(`hydrating a search document leaves it unchanged, so every caller sharing it reads the same rows`, async function (assert) {
+        // With a prefix registered for the realm, hydration folds each result
+        // id from the URL form the document carries to the prefix form. The
+        // fold must not land in the document: its entries name their items
+        // by the URL form, and a caller hydrating the document after another
+        // would find nothing to match.
+        releaseFetch.fulfill();
+        let doc = await storeService.searchEntries(
+          searchEntryWireQueryFromQuery(bookQuery, { fields: ['item'] }),
+          [testRealmURL],
+        );
+        assert.ok((doc.included ?? []).length > 0, 'the document has items');
+        let before = JSON.stringify(doc);
+        let { virtualNetwork } = getService('network');
+        virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+        try {
+          let hydrate = (
+            storeService as unknown as {
+              hydrateSearchDoc(
+                d: typeof doc,
+              ): Promise<{ instances: { id: string }[] }>;
+            }
+          ).hydrateSearchDoc.bind(storeService);
+          let first = await hydrate(doc);
+          assert.strictEqual(
+            JSON.stringify(doc),
+            before,
+            'the document is unchanged by hydration',
+          );
+          let second = await hydrate(doc);
+          assert.deepEqual(
+            second.instances.map((i) => i.id),
+            first.instances.map((i) => i.id),
+            'a second caller hydrating the document reads the same rows',
+          );
+        } finally {
+          virtualNetwork.removeRealmMapping('@test/mapped/');
+        }
       });
 
       test(`a one-shot search never takes a shared live answer`, async function (assert) {

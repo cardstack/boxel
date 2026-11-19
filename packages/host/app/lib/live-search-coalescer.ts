@@ -1,33 +1,35 @@
-// How long a settled live search answer may satisfy an identical request from
-// another consumer. Matches the realm-server's live-search cache TTL: a
-// request that reached the server inside that window could have been answered
-// from the server's cache with a body this old, so reusing it here adds no
-// staleness the server does not already allow.
+// How long after a live search is sent its answer may satisfy an identical
+// request from another consumer, whether the answer is still in flight or has
+// settled. The bound on what the fingerprint (see `LiveSearchCoalescer`)
+// cannot see: a change the tab was never told about, such as a write landing
+// while the tab's realm subscription is down. It also bounds how long a
+// request that has stalled can hold every identical search behind it.
 export const LIVE_SEARCH_REUSE_TTL_MS = 5_000;
 
 interface Entry<V> {
   promise: Promise<V>;
   // The state of the world the request was sent under (see `run`).
   fingerprint: string;
-  // When the request settled successfully; unset while it is in flight.
-  settledAt?: number;
+  // When the request was sent. The reuse window runs from here.
+  sentAt: number;
 }
 
 // Shares one live search between every consumer asking the identical
 // question, so a tab issuing the same query from many places sends it once.
-// A consumer joins a request already in flight, or adopts one that settled
-// within `ttlMs`.
+// A consumer joins a request already in flight, or adopts one that has
+// settled, as long as it was sent within `ttlMs`.
 //
 // Freshness is structural rather than temporal. Each request carries the
 // fingerprint of the state it was sent under: for a live search, the count of
 // realm events the tab has received for each realm it searches, and the count
 // of writes the tab has completed. A request is shared only while its
 // fingerprint still matches the current one, so an answer sent before a realm
-// event or a write is never handed to a consumer that asks after it. The
-// event that makes an answer unshareable is the same one that tells every
-// live consumer of that answer to search again, so a live result is never
-// left older than the newest event the tab received. `ttlMs` bounds what the
-// fingerprint cannot see: a change the tab has not been told about.
+// event or a write is never handed to a consumer that asks after it. Any event
+// for a searched realm ends the sharing, which is wider than what re-runs a
+// live consumer: a consumer re-runs on the events that could change its
+// result, and sharing ends on every one, so an answer is never handed out
+// past an event that would have made its holders search again. `ttlMs` bounds
+// what the fingerprint cannot see.
 //
 // A failed request is never shared past its own waiters; the next consumer
 // sends its own.
@@ -63,18 +65,13 @@ export class LiveSearchCoalescer<V> {
     }
     let entry: Entry<V> = {
       fingerprint,
-      promise: fetch().then(
-        (value) => {
-          entry.settledAt = this.#now();
-          return value;
-        },
-        (error) => {
-          if (this.#entries.get(key) === entry) {
-            this.#entries.delete(key);
-          }
-          throw error;
-        },
-      ),
+      sentAt: this.#now(),
+      promise: fetch().catch((error) => {
+        if (this.#entries.get(key) === entry) {
+          this.#entries.delete(key);
+        }
+        throw error;
+      }),
     };
     this.#entries.set(key, entry);
     return entry.promise;
@@ -85,14 +82,11 @@ export class LiveSearchCoalescer<V> {
   }
 
   // Expired answers are dropped on every access, so what the coalescer holds
-  // is bounded by what the tab fetched within one TTL.
+  // is bounded by what the tab sent within one TTL.
   #sweep(): void {
     let now = this.#now();
     for (let [key, entry] of this.#entries) {
-      if (
-        entry.settledAt !== undefined &&
-        now - entry.settledAt > this.#ttlMs
-      ) {
+      if (now - entry.sentAt > this.#ttlMs) {
         this.#entries.delete(key);
       }
     }
