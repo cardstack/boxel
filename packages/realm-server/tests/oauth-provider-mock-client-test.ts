@@ -249,6 +249,7 @@ module(basename(import.meta.filename), function (hooks) {
         shown: 'an app on this computer',
         verified: false,
         claimedName: EXAMPLE_AI_APP_NAME,
+        standIn: 'loopback',
       },
       'consent names it as an app on this computer',
     );

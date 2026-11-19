@@ -18,6 +18,7 @@ scope:
   - packages/secure-origin/src/shell/connected-apps/**
   - packages/secure-origin/src/shell/device/**
   - packages/secure-origin/src/security/oauth-provider*
+  - packages/secure-origin/src/security/oauth-error*
 ---
 
 # 021. Run Boxel's OAuth provider in the realm server, with opaque tokens bound to one resource

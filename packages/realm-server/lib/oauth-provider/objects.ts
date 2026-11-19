@@ -337,23 +337,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // Why an authorization request didn't reach consent. Each is a fixed label
-// for telemetry, and tells the error page which of its states to show.
-export type AuthorizationRefusalReason =
+// for telemetry, and tells the error page which of its states to show. The
+// secure origin's `security/oauth-error-states.js` gives each one a state.
+export const AUTHORIZATION_REFUSAL_REASONS = Object.freeze([
   // The library's own refusals, before Boxel could check the client.
-  | 'unknown-client'
-  | 'bad-redirect-uri'
-  | 'library'
+  'unknown-client',
+  'bad-redirect-uri',
+  'library',
   // Boxel's checks before the library (`checkAuthorizationRequest`).
-  | 'unsupported-response-type'
-  | 'pkce-required'
-  | 'prompt-none'
-  | 'malformed'
-  | 'unknown-resource'
-  | 'no-resource-for-scopes'
-  | 'client-not-allowed'
-  | 'unknown-scope'
-  | 'missing-scope'
-  | 'openid';
+  'unsupported-response-type',
+  'pkce-required',
+  'prompt-none',
+  'malformed',
+  'unknown-resource',
+  'no-resource-for-scopes',
+  'client-not-allowed',
+  'unknown-scope',
+  'missing-scope',
+  'openid',
+] as const);
+
+export type AuthorizationRefusalReason =
+  (typeof AUTHORIZATION_REFUSAL_REASONS)[number];
 
 // An authorization error, as Boxel's error page and its "Return" route read
 // it. `redirectUri` and `state` are kept only when the client and the redirect

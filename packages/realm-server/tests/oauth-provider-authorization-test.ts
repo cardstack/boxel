@@ -24,9 +24,15 @@ import {
   telemetryDuring,
 } from './helpers/oauth-provider-secrets.ts';
 import {
+  AUTHORIZATION_REFUSAL_REASONS,
   InteractionAdapter,
   sha256Hex,
 } from '../lib/oauth-provider/objects.ts';
+import {
+  ERROR_REFERENCE,
+  ERROR_STATE_BY_REASON,
+  FIXED_ERRORS,
+} from '@cardstack/secure-origin/security/oauth-error-states.js';
 import { asTheIssuerServes } from '../lib/oauth-provider/serve.ts';
 import { appName } from '../lib/oauth-provider/app-name.ts';
 import {
@@ -34,7 +40,10 @@ import {
   withOAuthProviderSecretsLabeled,
 } from '../lib/request-telemetry.ts';
 import type { CallerLimit } from '../lib/oauth-provider/caller-limit.ts';
-import { DEFAULT_AUTHORIZATION_LIMIT } from '../lib/oauth-provider/authorization.ts';
+import {
+  DEFAULT_AUTHORIZATION_LIMIT,
+  FIXED_ERROR_PAGES,
+} from '../lib/oauth-provider/authorization.ts';
 import {
   OAuthProviderConfigError,
   readAuthorizationLimit,
@@ -182,6 +191,9 @@ function setupServer(hooks: NestedHooks, options: StartOptions = {}) {
 
   return {
     get,
+    options(path: string) {
+      return supertest(server!).options(path).set('Host', serverURL.host);
+    },
     db: () => db!,
     async register(redirectUris: string[] = [REDIRECT_URI]): Promise<string> {
       let response = await supertest(server!)
@@ -327,12 +339,28 @@ module(basename(import.meta.filename), function () {
           claimedName: 'Claude',
         },
       );
-      assert.strictEqual(
+      assert.deepEqual(
         appName({
           clientId: 'generated-id',
           redirectUri: 'http://localhost:51234/callback',
-        }).shown,
-        'an app on this computer',
+        }),
+        {
+          kind: 'dynamic',
+          shown: 'an app on this computer',
+          verified: false,
+          standIn: 'loopback',
+        },
+        'a page tells a stand-in by its marker, not its words',
+      );
+      assert.deepEqual(
+        appName({ clientId: 'generated-id', clientName: 'Claude' }),
+        {
+          kind: 'dynamic',
+          shown: 'an unknown app',
+          verified: false,
+          claimedName: 'Claude',
+          standIn: 'unknown',
+        },
       );
     });
 
@@ -344,6 +372,22 @@ module(basename(import.meta.filename), function () {
           preRegistered: new Set(['boxel-cli']),
         }),
         { kind: 'pre-registered', shown: 'Boxel CLI', verified: true },
+      );
+    });
+  });
+
+  module("the error page's states", function () {
+    test('every reason a refusal can give has a state on the error page, and the page knows no other', function (assert) {
+      assert.deepEqual(
+        Object.keys(ERROR_STATE_BY_REASON).sort(),
+        [...AUTHORIZATION_REFUSAL_REASONS].sort(),
+      );
+    });
+
+    test('the error page knows each error the provider sends by name, and no other', function (assert) {
+      assert.deepEqual(
+        Object.keys(FIXED_ERRORS).sort(),
+        Object.values(FIXED_ERROR_PAGES).sort(),
       );
     });
   });
@@ -592,6 +636,16 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(badRedirectDetails.body.reason, 'bad-redirect-uri');
       assert.false(badRedirectDetails.body.returnOffered);
 
+      // Refused by the library, which stores nothing to return to.
+      let { client_id: _clientId, ...noClient } = validParams(clientId);
+      let library = await server.authorize(noClient);
+      assert.strictEqual(library.status, 303, library.text);
+      let libraryDetails = await details(
+        errorReference(assert, library.headers.location),
+      );
+      assert.strictEqual(libraryDetails.body.reason, 'library');
+      assert.false(libraryDetails.body.returnOffered);
+
       // Refused by Boxel's checks, with a redirect URI the client didn't
       // register.
       let refused = await server.authorize(
@@ -621,6 +675,10 @@ module(basename(import.meta.filename), function () {
         validParams(clientId, { scope: 'boxel:read openid' }),
       );
       let reference = errorReference(assert, refused.headers.location);
+      assert.ok(
+        ERROR_REFERENCE.test(reference),
+        'the error page accepts the reference as one',
+      );
 
       let found = await details(reference);
       assert.deepEqual(found.body, {
@@ -631,6 +689,7 @@ module(basename(import.meta.filename), function () {
           shown: 'an app on this computer',
           verified: false,
           claimedName: 'Test App',
+          standIn: 'loopback',
         },
         returnOffered: true,
       });
@@ -680,6 +739,33 @@ module(basename(import.meta.filename), function () {
         back.headers.location,
         `${AUTHORIZE_PAGE}?error=expired`,
       );
+    });
+
+    test("the secure origin's page can read an error's details across origins", async function (assert) {
+      let clientId = await server.register();
+      let refused = await server.authorize(
+        validParams(clientId, { prompt: 'none' }),
+      );
+      let reference = errorReference(assert, refused.headers.location);
+      let preflight = await server
+        .options(`/_oauth-provider/error/${reference}`)
+        .set('Origin', testOAuthSecureOriginURL.origin)
+        .set('Access-Control-Request-Method', 'GET')
+        .set(
+          'Access-Control-Request-Headers',
+          'x-boxel-logging-correlation-id',
+        );
+      assert.ok(preflight.ok, `preflight answered ${preflight.status}`);
+      assert.ok(preflight.headers['access-control-allow-origin']);
+      assert.ok(
+        /x-boxel-logging-correlation-id/i.test(
+          preflight.headers['access-control-allow-headers'] ?? '',
+        ),
+        'the telemetry header is allowed',
+      );
+      let found = await details(reference);
+      assert.strictEqual(found.status, 200);
+      assert.ok(found.headers['access-control-allow-origin']);
     });
 
     test("an error's details answer only the secure origin", async function (assert) {
