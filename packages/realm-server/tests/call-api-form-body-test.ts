@@ -105,7 +105,7 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(built.headers['content-type'], 'application/json');
   });
 
-  test('objects and lists are named with brackets, and a list of text repeats its name', async function (assert) {
+  test('objects and lists are named with brackets; a field that is a list of text repeats its name, and every nested list is numbered', async function (assert) {
     let request = lower(
       {
         mode: 'payment',
@@ -117,6 +117,8 @@ module(basename(import.meta.filename), function () {
         line_items: { $ref: 'params', key: 'lines' },
         subscription_data: { 'default_tax_rates[]': ['txr_1'] },
         nested: [['a', 'b'], ['c']],
+        empty: [],
+        none: {},
       },
       {},
       ['images', 'order', 'lines'],
@@ -129,7 +131,7 @@ module(basename(import.meta.filename), function () {
           images: ['https://img.example/1.png', 'https://img.example/2.png'],
           order: 'ord_7',
           lines: [
-            { price: 'price_A', quantity: 1 },
+            { price: 'price_A', quantity: 1, tax_rates: ['txr_1', 'txr_2'] },
             { price: 'price_B', quantity: 3 },
           ],
         },
@@ -146,12 +148,14 @@ module(basename(import.meta.filename), function () {
       ['metadata[order]', 'ord_7'],
       ['line_items[0][price]', 'price_A'],
       ['line_items[0][quantity]', '1'],
+      ['line_items[0][tax_rates][0]', 'txr_1'],
+      ['line_items[0][tax_rates][1]', 'txr_2'],
       ['line_items[1][price]', 'price_B'],
       ['line_items[1][quantity]', '3'],
       ['subscription_data[default_tax_rates][]', 'txr_1'],
-      ['nested[0]', 'a'],
-      ['nested[0]', 'b'],
-      ['nested[1]', 'c'],
+      ['nested[0][0]', 'a'],
+      ['nested[0][1]', 'b'],
+      ['nested[1][0]', 'c'],
     ]);
   });
 

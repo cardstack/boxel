@@ -25,6 +25,7 @@ import type { ResolvedCodeRef } from '../code-ref.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { SingleCardDocument } from '../document-types.ts';
 import type { CallApiMethod } from '@cardstack/base/operations';
+import { CALL_API_BODY_KINDS } from '../call-api-body-kinds.ts';
 import {
   CALL_API_KEY_KINDS,
   isCallApiKeyKind,
@@ -237,7 +238,9 @@ export function lowerCallApi(
   };
 
   // The method.
-  let bodies = BODY_KINDS.filter((kind) => clauses[kind] !== undefined);
+  let bodies = CALL_API_BODY_KINDS.filter(
+    (kind) => clauses[kind] !== undefined,
+  );
   let hasBody = bodies.length > 0;
   let method: CallApiMethod = hasBody ? 'POST' : 'GET';
   if (clauses.method !== undefined) {
@@ -436,9 +439,6 @@ export function lowerCallApi(
     ...(clauses.perInstance === true ? { perInstance: true as const } : {}),
   };
 }
-
-// The members that each declare the request's one body.
-const BODY_KINDS = ['json', 'graphql', 'form'] as const;
 
 // A form body's fields. A field's name is sent as written, so a slot can't
 // stand in one; its value may be text, a number, a boolean, a typed reference,
@@ -1320,40 +1320,46 @@ const BODY_CONTENT_TYPES: Record<CallApiBodyEncoding, string> = {
 // convention form-taking APIs read:
 //
 //   * text, a number or a boolean is one `name=value` pair;
-//   * an object's members are named `name[member]`, and a member whose name
-//     ends in `[]` keeps that suffix outside the brackets
-//     (`name[member][]`);
-//   * a list's text items each repeat the name (`MediaUrl=a&MediaUrl=b`; write
-//     the name `expand[]` for an API that wants `expand[]=a&expand[]=b`), and
-//     its objects and lists are numbered (`line_items[0][price]=…`);
-//   * null leaves the member out, since a form has no way to send one.
+//   * an object's members are named `name[member]`;
+//   * a list that is a field's whole value repeats the field's name for each
+//     item that is text, a number or a boolean (`MediaUrl=a&MediaUrl=b`), and
+//     so does a list under a name ending in `[]`, written as a field
+//     (`expand[]=a&expand[]=b`) or a member (`name[member][]=a`);
+//   * every other list item is numbered, `name[0]`, `name[0][price]`, as the
+//     item's position. A name repeated below the top level would be read as
+//     one value by a parser that keeps the last of a repeated name, so a list
+//     nested in an object or another list is always numbered;
+//   * null leaves the member out, and so does an empty list or object, since
+//     a form has no way to send one.
 //
 // A slot's token is letters, digits and `_`, which this encoding leaves as
 // they are, so the client finds it here and fills it form-encoded too.
 export function encodeFormBody(fields: Record<string, unknown>): string {
   let pairs = new URLSearchParams();
-  let add = (name: string, value: unknown) => {
+  // `repeats`: a list here sends its plain items under this name, once each.
+  let add = (name: string, value: unknown, repeats: boolean) => {
     if (value === null || value === undefined) {
       return;
     }
     if (Array.isArray(value)) {
-      value.forEach((item, index) =>
-        add(
-          item !== null && typeof item === 'object'
-            ? `${name}[${index}]`
-            : name,
-          item,
-        ),
-      );
+      let base = name.endsWith('[]') ? name.slice(0, -2) : name;
+      value.forEach((item, index) => {
+        let structured = item !== null && typeof item === 'object';
+        if (repeats && !structured) {
+          add(name, item, false);
+        } else {
+          add(`${base}[${index}]`, item, false);
+        }
+      });
       return;
     }
     if (typeof value === 'object') {
       for (let [member, inner] of Object.entries(value)) {
+        let repeated = member.endsWith('[]');
         add(
-          member.endsWith('[]')
-            ? `${name}[${member.slice(0, -2)}][]`
-            : `${name}[${member}]`,
+          repeated ? `${name}[${member.slice(0, -2)}][]` : `${name}[${member}]`,
           inner,
+          repeated,
         );
       }
       return;
@@ -1361,7 +1367,7 @@ export function encodeFormBody(fields: Record<string, unknown>): string {
     pairs.append(name, String(value));
   };
   for (let [name, value] of Object.entries(fields)) {
-    add(name, value);
+    add(name, value, true);
   }
   return pairs.toString();
 }

@@ -99,9 +99,13 @@ stand in a value (placement `body`, `at: 'form.<name>'`), never in a name, and
 `actor()` in a value makes the operation `readsActor`, so an anonymous caller
 is refused as for a JSON body. At build, `encodeFormBody` turns the filled
 fields into text: a scalar is one pair; an object's members are
-`name[member]` (a member named `x[]` becomes `name[x][]`); a list repeats the
-name for each scalar item and numbers each object or list item
-(`line_items[0][price]`); null is left out. The built request carries
+`name[member]` (a member named `x[]` becomes `name[x][]`); a field whose
+value is a list repeats the field's name for each scalar item and numbers each
+object or list item (`line_items[0][price]`); a list nested in an object or a
+list is numbered item by item (`line_items[0][tax_rates][1]`), because a
+parser that keeps the last of a repeated name (Rack, PHP, Stripe) would read a
+repeated nested name as one value, and a member named `x[]` is the one
+exception; null, an empty list and an empty object are left out. The built request carries
 `bodyEncoding: 'form'`, and the outbound client fills a slot's token in a form
 body form-encoded rather than JSON-escaped, so a value holding `&` or `=` stays
 one field.

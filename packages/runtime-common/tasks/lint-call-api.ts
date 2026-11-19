@@ -1,5 +1,6 @@
 import type { Rule } from 'eslint';
 import { lowerCallApiRequest } from '../card-operations/lowering.ts';
+import { CALL_API_BODY_KINDS } from '../call-api-body-kinds.ts';
 import { operationLabelProblem } from '../card-operations/label.ts';
 import type { CallApiClauses } from '../card-operations/call-api.ts';
 
@@ -48,9 +49,7 @@ const REQUEST_MEMBERS = [
   'path',
   'headers',
   'query',
-  'json',
-  'graphql',
-  'form',
+  ...CALL_API_BODY_KINDS,
   'perInstance',
   'keyKind',
 ] as const;

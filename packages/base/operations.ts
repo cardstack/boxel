@@ -1,6 +1,7 @@
 import {
   assertQuery,
   buildOperations,
+  CALL_API_BODY_KINDS,
   CALL_API_KEY_KINDS,
   type CallApiKeyKind,
   codeRefForDef,
@@ -862,10 +863,13 @@ export interface CallApiOperationDeclaration extends OperationCommon {
   //   },
   //
   // Text, a number or a boolean is one field. An object's members are named
-  // with brackets, `name[member]`. A list repeats the name for each item that
-  // is text (name the field `expand[]` for an API that wants the brackets),
-  // and numbers each item that is an object or a list, `name[0][member]`. A
-  // value that is null is left out.
+  // with brackets, `name[member]`. A field whose value is a list repeats its
+  // name for each item that is text, a number or a boolean (name the field
+  // `expand[]` for an API that wants the brackets), and numbers each item
+  // that is an object or a list, `name[0][member]`. A list nested in an
+  // object or another list is numbered item by item, `name[0][tags][1]`,
+  // unless its member's name ends in `[]`. A value that is null, and an empty
+  // list or object, is left out, since a form has no way to send one.
   readonly form?: { readonly [name: string]: OperationValue };
   // A GraphQL request, sent as a JSON body. The document is a fixed string,
   // and every value it takes is passed as a variable, never written into it.
@@ -997,9 +1001,7 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
     'path',
     'headers',
     'query',
-    'json',
-    'graphql',
-    'form',
+    ...CALL_API_BODY_KINDS,
   ],
 };
 
@@ -1818,7 +1820,7 @@ function assertDeclaresARequest(
   declaration: Record<string, unknown>,
 ) {
   let { method, url, graphql, form } = declaration;
-  let bodies = CALL_API_BODIES.filter(
+  let bodies = CALL_API_BODY_KINDS.filter(
     (body) => declaration[body] !== undefined,
   );
   if (typeof url !== 'string' || url.length === 0) {
@@ -1871,9 +1873,6 @@ function assertDeclaresARequest(
     );
   }
 }
-
-// The members that each declare a request's one body.
-const CALL_API_BODIES = ['json', 'graphql', 'form'] as const;
 
 // An `appendLine` names no clause, so the only thing it can get wrong is
 // where the line comes from. The base operation appends what the payload
