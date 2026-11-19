@@ -563,6 +563,7 @@ platform-only ([B-32](boundary-findings.md#b-32)).
 | `keyReadiness`                 | Contract, optional.                                                        | Shows nothing for the credential state.                   |
 | `toolContext`                  | Contract, optional: present where host tools can run.                      | Does not offer the tool.                                  |
 | Presentation intents           | Contract, optional ([B-04](boundary-findings.md#b-04)).                    | Renders as if not editing and not showing its definition. |
+| An overlay layer               | Proposed, optional ([B-38](boundary-findings.md#b-38)).                    | Renders its overlay in place.                             |
 | `getCard`, `getCardCollection` | To be folded into the search resource ([B-29](boundary-findings.md#b-29)). | —                                                         |
 | `commandContext`               | Alias of `toolContext`, to be removed ([B-05](boundary-findings.md#b-05)). | —                                                         |
 | `mode`, `submode`              | To be removed ([B-04](boundary-findings.md#b-04)).                         | —                                                         |
@@ -677,6 +678,9 @@ These are implementation, and a card that depends on them is not portable:
 - A class's identity across two loader universes that are not the same loader.
 - Any member of the runtime's diagnostic surface.
 - A runtime's internal mode, submode, or context names.
+- The DOM outside the card's own subtree: the environment's class names,
+  stacking contexts, z-index ranges, or what else is on the page
+  ([B-38](boundary-findings.md#b-38)).
 - A stored document's field ordering, key ordering, or which optional keys it
   chose to omit.
 - That a value the runtime did not track has not changed since the last read.

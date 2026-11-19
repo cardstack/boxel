@@ -62,6 +62,7 @@ stays here with status `fixed`, so the boundary it protects is not re-broken.
 | [B-35](#b-35) | Presentation statics name one host's chrome                                      | leak  | proposed |
 | [B-36](#b-36) | Card tests are written against the host app's test harness                       | leak  | proposed |
 | [B-37](#b-37) | A field's stored form is a closed list of platform serializers                   | gap   | open     |
+| [B-38](#b-38) | Cards find the host's layers by its class names                                  | leak  | open     |
 
 ### What the register proposes to remove
 
@@ -86,6 +87,7 @@ part of it, the register argues for removal. Taken together:
 | Card tests on the host's harness: seven setup calls, a Matrix mock, host services | One testing API module in base                                                      | [B-36](#b-36)                |
 | Three old/new name pairs from the tool rename                                     | One name each                                                                       | [B-05](#b-05)                |
 | `mode` and `submode`                                                              | Two presentation intents                                                            | [B-04](#b-04)                |
+| Host class names as overlay targets                                               | One overlay layer the environment provides                                          | [B-38](#b-38)                |
 | Synthetic `_`-prefixed search keys in card queries                                | Named concepts                                                                      | [B-11](#b-11), [B-24](#b-24) |
 | `form` in the format type; `edit` on files                                        | Neither                                                                             | [B-03](#b-03), [B-13](#b-13) |
 
@@ -233,8 +235,18 @@ A service whose presence depends on where the host laid the card out is the
 same leak by another route: [author API §10.2](author-api.md) requires such a
 service to be named in this contract, with what a card does without it.
 
-**Open question Q-02.** Is there a card outside `packages/base` that branches on
-`mode` or `submode` for a reason the two intents do not cover?
+**No card reads them.** No card outside `packages/base` reads `mode` or
+`submode`, in boxel-catalog or in this repository's realms. So freezing them
+breaks no card, and no catalog card needs anything beyond the two intents.
+Catalog cards do depend on the host's layout in two other ways:
+
+- They ask the host to switch to code submode. That is the request form of
+  _definition-visible_; see [B-26](#b-26).
+- They look up the host's layout by its class names to place overlays, and
+  they assume its chrome when printing; see [B-38](#b-38).
+
+Other catalog mentions of operator mode are in code comments, and none of them
+depends on it.
 
 ---
 
@@ -841,6 +853,27 @@ command surface, and on that command existing in the context it was handed. A
 runtime without that command cannot render a card that declares no template —
 which is the most portable kind of card there is.
 
+Realm cards make the same call. The host maps every
+`@cardstack/boxel-host/commands/<name>` and `@cardstack/boxel-host/tools/<name>`
+import to its own tool for any card it loads (`shimHostToolModule` in
+`packages/host/app/tools/index.ts`). That includes `switch-submode` and the
+code-submode tools beside it. Two places in boxel-catalog use it:
+
+- `commands/listing-remix.ts`, the catalog's Remix. It runs
+  `update-playground-selection`, `persist-module-inspector-view` and
+  `update-code-path-with-selection`, then switches to code submode. This sets
+  up the host's playground and module inspector step by step.
+- `SourceLink` in `gold-spec-demo/demo-parts.gts`, a button that opens a file
+  in code mode.
+
+Every caller wants the same thing: show this definition. That is the request
+form of the _definition-visible_ intent in [B-04](#b-04).
+
+So the call already works from a deployed realm's card, and catalog content
+depends on it: removing the command breaks the catalog's Remix. The fix has to
+keep that working, by giving cards the intent below before the command goes
+away.
+
 **Why it matters.** Default templates are the part of the model an author does
 not choose. If they reach the host, then "write no template and your card still
 renders" is true only in this host.
@@ -850,10 +883,9 @@ template MAY ask the environment to _show this card's definition_, and the
 environment decides what that means and whether it can. A host that has a code
 submode implements it as a submode switch; a runtime without one renders the card
 without the affordance. Then a default template imports nothing from the host.
-
-**Open question Q-09.** Is `switch-submode` reachable from a realm-sourced card in a
-deployed realm today, or only in the local host? That decides whether this is a
-portability fix or a live bug.
+The catalog's callers move to the same intent. Remix's setup of the playground
+and inspector becomes what the host does when asked to show a definition with
+an example card, not steps the card runs.
 
 **Open question Q-10.** Should a card's template be able to ask the
 environment to show the card's own definition at all, or does that affordance
@@ -1399,6 +1431,56 @@ ever wrote, or does a realm migrate its documents, and who runs the migration?
 
 ---
 
+## B-38
+
+**Cards find the host's layers by its class names**
+
+**Class:** leak · **Status:** open
+
+A card that draws something over the page, or prints only itself, has to work
+outside its own subtree. Nothing in the contract gives it a place to do that,
+so catalog cards find one in the host's markup.
+
+- **Overlays.** The catalog's `Popover` (`46f065-popover/popover.gts`) renders
+  into `document.querySelector('.submode-layout')`, falls back to
+  `.operator-mode`, then to `document.body`. A long comment explains the choice
+  using the host's stacking contexts. `.submode-layout` is the host's z-index-0
+  layer, holding the card stack and the host's in-submode popups at z 700–1001.
+  Its modals sit above it at z 1500–2000. Rendering into `.submode-layout` puts
+  the popover above the card stack and below every host surface. The card
+  therefore depends on two host class names, on the stacking contexts they
+  create, and on the z-index ranges of host UI it cannot see.
+- **Printing.** The wedding table seating planner
+  (`41e20f-wedding-table-seating-planner/components/tsp.gts`) moves its print
+  sheet to `<body>` before printing. It adds a print stylesheet that hides every
+  other child of `<body>`, and copies `data-boxel-theme-scope` from an ancestor
+  so its theme still applies after the move. Its comment says the reason: "the
+  operator-mode shell (workspace header, card frame, side rails) would otherwise
+  leak into the pages, and its 100vh clipping would cut pagination."
+
+Neither case is about host modes, so the presentation intents in [B-04](#b-04)
+do not cover them. Both are about the card's place in a page it does not own.
+If a host renames `.submode-layout`, the popover silently falls back to a level
+that paints over the host's popups. In another runtime, the popover lands on
+`<body>` with z-index values tuned for a host that isn't there, and the
+seating planner has to guess what to hide.
+
+**Proposal.** Make an overlay layer a context service
+([author API §10](author-api.md)), optional under §10.2. The environment gives
+a card an element to render overlays into, with one promise: above the card,
+below the environment's own UI. Without the service, a card renders its
+overlay in place. Make the DOM outside a card's own subtree something a card
+may not rely on ([author API §13](author-api.md)). The `Popover` then reads the
+service instead of querying selectors. Printing waits for Q-18.
+
+**Open question Q-18.** Should a card be able to ask the environment to print
+only itself, or is print layout the environment's business alone? If the card
+can ask, the contract names that request. If not, a runtime MUST print a card
+without its own chrome, and the seating planner's workaround becomes
+unnecessary.
+
+---
+
 ## Clean boundaries worth imitating
 
 Recorded so a later change does not accidentally break them.
@@ -1424,25 +1506,24 @@ Each also appears once, in the finding it belongs to, as a paragraph beginning
 grep -rn "Open question Q-[0-9]" docs/card-contract
 ```
 
-| ID   | Finding       | Question                                                                                              |
-| ---- | ------------- | ----------------------------------------------------------------------------------------------------- |
-| Q-01 | [B-02](#b-02) | Is `data-test-*` stripped when prerendered HTML is produced, or when it is served?                    |
-| Q-02 | [B-04](#b-04) | Does a card outside base branch on `mode` / `submode` for a reason the two presentation intents miss? |
-| Q-03 | [B-08](#b-08) | What is the rule for a value crossing two loader universes?                                           |
-| Q-04 | [B-13](#b-13) | Is a file ever edited in place?                                                                       |
-| Q-05 | [B-16](#b-16) | Is `cardInfo` the author's data or the platform's, and is "untitled" a real state?                    |
-| Q-06 | [B-20](#b-20) | Is author API §7.8 the whole reserved set, and may the platform ever add a colliding member?          |
-| Q-07 | [B-23](#b-23) | Must a card's icon ever be a component?                                                               |
-| Q-08 | [B-24](#b-24) | Is a `cardURL` sort by identity or by storage order?                                                  |
-| Q-09 | [B-26](#b-26) | Can a deployed realm's card reach `switch-submode` today, making B-26 a live bug?                     |
-| Q-10 | [B-26](#b-26) | Should a card's template be able to ask to show its own definition at all?                            |
-| Q-11 | [B-28](#b-28) | Are operations the one write path, and which store methods survive?                                   |
-| Q-12 | [B-32](#b-32) | Does a card need a way to pass a value to the cards it renders, beyond a component argument?          |
-| Q-13 | [B-34](#b-34) | Is the operation or the tool the card author's unit of behavior?                                      |
-| Q-14 | [B-36](#b-36) | Does the testing API commit to QUnit's `module` / `test` / `assert` shape, or define its own?         |
-| Q-15 | [B-31](#b-31) | Is ADR 036's `hrefTo` link helper part of the author API, and from which module?                      |
-| Q-16 | [B-37](#b-37) | May a realm author add a serializer, and is it code a runtime runs or data it interprets?             |
-| Q-17 | [B-37](#b-37) | Is a serializer's stored shape versioned, or does a realm migrate its documents when it changes?      |
+| ID   | Finding       | Question                                                                                         |
+| ---- | ------------- | ------------------------------------------------------------------------------------------------ |
+| Q-01 | [B-02](#b-02) | Is `data-test-*` stripped when prerendered HTML is produced, or when it is served?               |
+| Q-03 | [B-08](#b-08) | What is the rule for a value crossing two loader universes?                                      |
+| Q-04 | [B-13](#b-13) | Is a file ever edited in place?                                                                  |
+| Q-05 | [B-16](#b-16) | Is `cardInfo` the author's data or the platform's, and is "untitled" a real state?               |
+| Q-06 | [B-20](#b-20) | Is author API §7.8 the whole reserved set, and may the platform ever add a colliding member?     |
+| Q-07 | [B-23](#b-23) | Must a card's icon ever be a component?                                                          |
+| Q-08 | [B-24](#b-24) | Is a `cardURL` sort by identity or by storage order?                                             |
+| Q-10 | [B-26](#b-26) | Should a card's template be able to ask to show its own definition at all?                       |
+| Q-11 | [B-28](#b-28) | Are operations the one write path, and which store methods survive?                              |
+| Q-12 | [B-32](#b-32) | Does a card need a way to pass a value to the cards it renders, beyond a component argument?     |
+| Q-13 | [B-34](#b-34) | Is the operation or the tool the card author's unit of behavior?                                 |
+| Q-14 | [B-36](#b-36) | Does the testing API commit to QUnit's `module` / `test` / `assert` shape, or define its own?    |
+| Q-15 | [B-31](#b-31) | Is ADR 036's `hrefTo` link helper part of the author API, and from which module?                 |
+| Q-16 | [B-37](#b-37) | May a realm author add a serializer, and is it code a runtime runs or data it interprets?        |
+| Q-17 | [B-37](#b-37) | Is a serializer's stored shape versioned, or does a realm migrate its documents when it changes? |
+| Q-18 | [B-38](#b-38) | May a card ask the environment to print only itself, or is print layout the environment's alone? |
 
 **Rules.** A new open question takes the next unused ID, gets a paragraph in its
 finding and a row here, in the same change. A chapter that depends on one cites
