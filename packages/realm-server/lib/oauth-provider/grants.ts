@@ -9,6 +9,7 @@
 import { randomBytes } from 'crypto';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import { clientIdForLogs } from './client-metadata-document.ts';
+import { isDynamicClientId } from './dynamic-client-id.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -39,18 +40,31 @@ export interface NewGrant {
   redirectUri?: string;
 }
 
-// Stores a new grant and answers its ID.
+// Stores a new grant and answers its ID. When the grant's client was
+// registered by dynamic client registration and the daily cleanup has since
+// deleted it (`cleanup.ts`), no grant is stored, and the answer is undefined.
+// The check is a plain read, so a cleanup deleting the client at that moment
+// can still let the grant through; the flow then fails where the library
+// next looks the client up. The client counts as connected only once the
+// grant's code is exchanged (`markGrantExchanged`).
 export async function createGrant(
   dbAdapter: DBAdapter,
   { userId, clientId, resources, renewing, consentedAt, redirectUri }: NewGrant,
-): Promise<string> {
+): Promise<string | undefined> {
   let id = randomBytes(32).toString('base64url');
-  await dbAdapter.execute(
+  let rows = await dbAdapter.execute(
     `INSERT INTO oauth_provider_grants
        (id, user_id, client_id, resources, renewing, created_at, expires_at,
         redirect_uri)
-       VALUES ($1, $2, $3, $4::jsonb, $5, $6::timestamptz,
-               $6::timestamptz + make_interval(secs => $7), $8)`,
+       SELECT $1::varchar, $2::uuid, $3::varchar, $4::jsonb, $5::boolean,
+              $6::timestamptz, $6::timestamptz + make_interval(secs => $7),
+              $9::varchar
+        WHERE NOT $8::boolean
+           OR EXISTS (
+                SELECT 1 FROM oauth_provider_dynamic_clients
+                 WHERE client_id = $3::varchar
+              )
+       RETURNING id`,
     {
       bind: [
         id,
@@ -60,11 +74,38 @@ export async function createGrant(
         renewing,
         consentedAt.toISOString(),
         renewing ? RENEWING_GRANT_TTL_SECONDS : NON_RENEWING_GRANT_TTL_SECONDS,
+        isDynamicClientId(clientId),
         redirectUri ?? null,
       ],
     },
   );
-  return id;
+  return rows.length > 0 ? id : undefined;
+}
+
+// Records that a grant connected its app: when a token its code exchange
+// issued is stored (`exchanged_at`). A client
+// registered by dynamic client registration is marked connected then too
+// (`last_connected_at`), in the same statement, which the daily cleanup reads
+// (`cleanup.ts`). A cleanup that reaches the client's row after that update
+// re-checks the row and keeps it; one that reaches it first has already
+// deleted it, and the update then changes nothing. Later stores find the
+// grant already marked and change nothing.
+export async function markGrantExchanged(
+  dbAdapter: DBAdapter,
+  grantId: string,
+): Promise<void> {
+  await dbAdapter.execute(
+    `WITH exchanged AS (
+       UPDATE oauth_provider_grants
+          SET exchanged_at = now()
+        WHERE id = $1 AND exchanged_at IS NULL
+        RETURNING client_id
+     )
+     UPDATE oauth_provider_dynamic_clients
+        SET last_connected_at = now()
+      WHERE client_id IN (SELECT client_id FROM exchanged)`,
+    { bind: [grantId] },
+  );
 }
 
 // What a grant decides about the tokens issued from it: whether it renews,
@@ -261,8 +302,9 @@ async function deleteRevokedGrantsTokens(
   return grantIds.length;
 }
 
-// Deletes a grant no flow finished with. Only such a grant is ever deleted:
-// one that connected an app is ended instead, and kept.
+// Deletes a grant no flow finished with. A grant that connected an app is
+// ended instead, and kept until the daily cleanup deletes it 90 days after it
+// ended (`cleanup.ts`).
 export async function deleteGrant(
   dbAdapter: DBAdapter,
   id: string,

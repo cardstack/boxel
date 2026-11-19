@@ -1,11 +1,7 @@
 import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index.ts';
 import { jobIdentity } from '../index.ts';
-import {
-  registerQueueJobDefinition,
-  type QueueCoalesceContext,
-  type QueueCoalesceDecision,
-} from '../queue.ts';
+import { joinAnyJobOfSameType, registerQueueJobDefinition } from '../queue.ts';
 import {
   deleteMediaCacheRows,
   findMediaCacheGcCandidates,
@@ -31,24 +27,9 @@ export { mediaCacheGc };
 // time; this additionally collapses a queued tick into any pending or
 // in-flight sweep so overlapping cron ticks never pile up. The sweep carries
 // no args, so there is nothing to merge — a twin simply wins.
-function chooseMediaCacheGcCoalesceDecision(
-  context: QueueCoalesceContext,
-): QueueCoalesceDecision {
-  let { incoming, candidates, inFlightCandidates } = context;
-  let twin =
-    candidates.find((candidate) => candidate.jobType === incoming.jobType) ??
-    inFlightCandidates.find(
-      (candidate) => candidate.jobType === incoming.jobType,
-    );
-  if (!twin) {
-    return { type: 'insert' };
-  }
-  return { type: 'join', jobId: twin.id };
-}
-
 registerQueueJobDefinition({
   jobType: 'media-cache-gc',
-  coalesce: chooseMediaCacheGcCoalesceDecision,
+  coalesce: joinAnyJobOfSameType,
 });
 
 // Reconcile-style GC for the MediaCache: reclaims ledger rows whose capture
