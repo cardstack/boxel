@@ -1308,6 +1308,7 @@ module(basename(import.meta.filename), function () {
       async function buildPeerRealm(args: {
         dir: string;
         coordinator: ModuleCacheCoordinator;
+        transpilerIdentity?: string;
       }): Promise<Realm> {
         let virtualNetwork = createVirtualNetwork();
         let prerenderer = await getTestPrerenderer();
@@ -1327,11 +1328,14 @@ module(basename(import.meta.filename), function () {
           runner,
           dbAdapter,
           transpileCoordinator: args.coordinator,
+          transpilerIdentity: args.transpilerIdentity,
         });
         return realm;
       }
 
-      async function setupTwoPeers(): Promise<{
+      async function setupTwoPeers(
+        transpilerIdentities: { a?: string; b?: string } = {},
+      ): Promise<{
         realmA: Realm;
         realmB: Realm;
         coordA: ModuleCacheCoordinator;
@@ -1371,10 +1375,12 @@ module(basename(import.meta.filename), function () {
         let realmA = await buildPeerRealm({
           dir: testRealmDir,
           coordinator: coordA,
+          transpilerIdentity: transpilerIdentities.a,
         });
         let realmB = await buildPeerRealm({
           dir: testRealmDir,
           coordinator: coordB,
+          transpilerIdentity: transpilerIdentities.b,
         });
 
         // Drop anything either realm filled during construction so the
@@ -1420,6 +1426,82 @@ module(basename(import.meta.filename), function () {
             'peer B served from the L2 row peer A wrote — no babel ran on peer B',
           );
         } finally {
+          await coordA.shutDown();
+          await coordB.shutDown();
+        }
+      });
+
+      // A rolling deploy that upgrades a transpiler package runs peers of both
+      // installations against one shared cache until the old ones stop.
+      test('a peer under other transpiler packages compiles over the L2 row a peer wrote, rather than serving it', async function (assert) {
+        let { realmA, realmB, coordA, coordB, cardPath } = await setupTwoPeers({
+          a: 'old-packages',
+          b: 'new-packages',
+        });
+        try {
+          let respA = await realmA.handle(moduleRequest(realmA, cardPath));
+          assert.strictEqual(respA?.status, 200, 'peer A served the module');
+
+          let respB = await realmB.handle(moduleRequest(realmB, cardPath));
+          assert.strictEqual(respB?.status, 200, 'peer B served the module');
+          assert.strictEqual(
+            realmB.__testOnlyGetTranspileCallCount(),
+            1,
+            "peer B compiled the module, after its recheck under the lock rejected peer A's row",
+          );
+          assert.notStrictEqual(
+            respB?.headers.get('etag'),
+            respA?.headers.get('etag'),
+            'under a validator of its own',
+          );
+        } finally {
+          await coordA.shutDown();
+          await coordB.shutDown();
+        }
+      });
+
+      test('a peer that waits on a peer under other transpiler packages compiles for itself when the wait ends', async function (assert) {
+        let { realmA, realmB, coordA, coordB, cardPath } = await setupTwoPeers({
+          a: 'old-packages',
+          b: 'new-packages',
+        });
+        try {
+          // As in the coalesce test below: A takes the lock and parks inside
+          // its compile, and B finds the lock held and waits for A's NOTIFY.
+          let releaseGate!: () => void;
+          let gate = new Promise<void>((resolve) => {
+            releaseGate = resolve;
+          });
+          realmA.__testOnlyDelayTranspile(() => gate);
+          realmB.__testOnlyDelayTranspile(() => gate);
+
+          let pA = realmA.handle(moduleRequest(realmA, cardPath));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          let pB = realmB.handle(moduleRequest(realmB, cardPath));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          releaseGate();
+          let [respA, respB] = await Promise.all([pA, pB]);
+          assert.strictEqual(respA?.status, 200, 'peer A served 200');
+          assert.strictEqual(respB?.status, 200, 'peer B served 200');
+          assert.strictEqual(
+            realmA.__testOnlyGetTranspileCallCount(),
+            1,
+            'peer A, the winner, compiled the module',
+          );
+          assert.strictEqual(
+            realmB.__testOnlyGetTranspileCallCount(),
+            1,
+            'peer B rejected the row peer A wrote under its packages, and compiled the module too',
+          );
+          assert.notStrictEqual(
+            respB?.headers.get('etag'),
+            respA?.headers.get('etag'),
+            'each under a validator of its own',
+          );
+        } finally {
+          realmA.__testOnlyDelayTranspile(undefined);
+          realmB.__testOnlyDelayTranspile(undefined);
           await coordA.shutDown();
           await coordB.shutDown();
         }
@@ -1555,7 +1637,10 @@ module(basename(import.meta.filename), function () {
 
       // Started with no boot index and no file watcher, so between one run and
       // the next nothing reaches the shared cache but the reads themselves.
-      async function mountRealm(dir: string): Promise<Realm> {
+      async function mountRealm(
+        dir: string,
+        transpilerIdentity?: string,
+      ): Promise<Realm> {
         let virtualNetwork = createVirtualNetwork();
         let definitionLookup = new CachingDefinitionLookup(
           dbAdapter,
@@ -1573,6 +1658,7 @@ module(basename(import.meta.filename), function () {
           runner,
           dbAdapter,
           skipBootIndex: true,
+          transpilerIdentity,
         });
         await realm.start();
         return realm;
@@ -1670,6 +1756,85 @@ module(basename(import.meta.filename), function () {
         assert.true(
           (await sharedCacheBody())?.includes('AfterRestart'),
           'and the shared cache now holds that compile',
+        );
+      });
+
+      test('a module compiled under other transpiler packages is compiled again when the realm comes back', async function (assert) {
+        let dir = realmDirHolding('Unchanged');
+        let earlierRun = await mountRealm(dir, 'packages-before');
+        let first = await getModule(earlierRun);
+        assert.strictEqual(
+          first.status,
+          200,
+          'the earlier run served the module',
+        );
+        assert.true(
+          (await sharedCacheBody())?.includes('Unchanged'),
+          'and left its compile in the shared cache',
+        );
+        if (!first.etag) {
+          throw new Error('the earlier run served the module without an etag');
+        }
+
+        // The file is the same; only the packages that compile it changed, as
+        // a deploy that upgrades one of them changes them.
+        let laterRun = await mountRealm(dir, 'packages-after');
+        let revalidated = await getModule(laterRun, {
+          'If-None-Match': first.etag,
+        });
+        assert.strictEqual(
+          revalidated.status,
+          200,
+          "a client revalidating the earlier run's compile is sent a module",
+        );
+        assert.notStrictEqual(
+          revalidated.etag,
+          first.etag,
+          'under a validator of its own',
+        );
+        assert.strictEqual(
+          laterRun.__testOnlyGetTranspileCallCount(),
+          1,
+          "compiled again, rather than read from the earlier run's row",
+        );
+
+        let again = await getModule(laterRun, {
+          'If-None-Match': revalidated.etag!,
+        });
+        assert.strictEqual(
+          again.status,
+          304,
+          'and the new validator holds while the packages stay the same',
+        );
+      });
+
+      test('a module compiled under the same transpiler packages is served from the shared cache when the realm comes back', async function (assert) {
+        let dir = realmDirHolding('Unchanged');
+        let earlierRun = await mountRealm(dir, 'same-packages');
+        let first = await getModule(earlierRun);
+        assert.strictEqual(
+          first.status,
+          200,
+          'the earlier run served the module',
+        );
+
+        let laterRun = await mountRealm(dir, 'same-packages');
+        let served = await getModule(laterRun);
+        assert.strictEqual(
+          served.status,
+          200,
+          'the later run served the module',
+        );
+        assert.strictEqual(
+          served.etag,
+          first.etag,
+          'under the validator the earlier run gave it',
+        );
+        assert.strictEqual(served.body, first.body, 'with the same compile');
+        assert.strictEqual(
+          laterRun.__testOnlyGetTranspileCallCount(),
+          0,
+          "read from the earlier run's row, with no compile",
         );
       });
 

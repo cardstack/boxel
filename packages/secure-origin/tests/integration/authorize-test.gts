@@ -475,7 +475,9 @@ module('Integration | authorize', function (hooks) {
       ]);
       assert
         .dom('[data-test-authorize-outcome="allowed"]')
-        .hasText('Returning you to example.com…');
+        .hasText(
+          'Returning you to example.com… You can see and disconnect your apps in Connected apps.',
+        );
     });
 
     test('Deny records the answer, and the app is told no', async function (assert) {

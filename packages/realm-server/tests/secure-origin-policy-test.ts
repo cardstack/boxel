@@ -238,6 +238,12 @@ const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
     address: `authorize?error=${POLICY_TEST_ERRORS[2]!.ref}`,
     marker: '[data-test-oauth-error-return]',
   },
+  // Signed out, the window says so and lists no apps.
+  {
+    page: 'connected-apps',
+    address: 'connected-apps',
+    marker: '[data-test-keys-page="connected-apps"]',
+  },
 ];
 
 // Addresses that name a page by the `mode` query parameter, as earlier CLI
@@ -441,6 +447,39 @@ const POLICY_TEST_CONSENT = {
   account: { email: 'someone@example.test' },
   renewalOffered: true,
 };
+// The connections the stubbed provider lists, which a test sets and a
+// disconnect takes from. Ending `POLICY_TEST_FAILING_GRANT` is refused.
+let policyTestConnections: Record<string, unknown>[] = [];
+const POLICY_TEST_FAILING_GRANT = 'grant-refused';
+
+function policyTestConnection(
+  id: string,
+  app: Record<string, unknown>,
+  ageDays: number,
+  more: Record<string, unknown> = {},
+) {
+  let day = 24 * 60 * 60 * 1000;
+  return {
+    id,
+    app,
+    resources: [
+      {
+        id: 'https://realm-server.example.test/mcp',
+        name: 'Boxel workspaces',
+        scopes: [
+          { name: 'boxel:read', label: 'Read' },
+          { name: 'boxel:write', label: 'Change' },
+        ],
+      },
+    ],
+    connectedAt: new Date(Date.now() - ageDays * day).toISOString(),
+    lastUsedAt: new Date(Date.now() - day / 12).toISOString(),
+    endsAt: new Date(Date.now() + (30 - ageDays) * day).toISOString(),
+    renewing: true,
+    ...more,
+  };
+}
+
 const POLICY_TEST_REALMS = [
   ['https://realm-server.test/example-user/notes/', 'Notes'],
   ['https://realm-server.test/example-team/notes/', 'Notes'],
@@ -500,6 +539,20 @@ module(basename(import.meta.filename), function (hooks) {
         return req.method === 'GET'
           ? answer(200, POLICY_TEST_CONSENT)
           : answer(201, { ticket: 'policy-test-ticket' });
+      }
+      if (req.method === 'GET' && pathname === '/_oauth-provider/connections') {
+        return answer(200, { connections: policyTestConnections });
+      }
+      let grant = /^\/_oauth-provider\/connections\/([^/]+)$/.exec(pathname);
+      if (req.method === 'DELETE' && grant) {
+        let id = decodeURIComponent(grant[1]!);
+        if (id === POLICY_TEST_FAILING_GRANT) {
+          return answer(500, { error: 'failed' });
+        }
+        policyTestConnections = policyTestConnections.filter(
+          (connection) => connection.id !== id,
+        );
+        return answer(204);
       }
       if (pathname === `/_oauth-provider/interaction/${INTERACTION}/finish`) {
         // Long enough for the page to show where the browser goes next
@@ -1066,6 +1119,108 @@ module(basename(import.meta.filename), function (hooks) {
       );
     }
   }
+
+  test('Connected apps, empty, listed and disconnecting, runs under the policy', async function (assert) {
+    await page.goto(`${secureOrigin}/secure?mode=none`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.evaluate(() =>
+      localStorage.setItem(
+        'boxel-secure-session',
+        JSON.stringify({
+          token: 'policy-test',
+          user: '@someone:example.test',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        }),
+      ),
+    );
+
+    policyTestConnections = [];
+    let response = await page.goto(`${secureOrigin}/secure/connected-apps`, {
+      waitUntil: 'networkidle0',
+    });
+    let headers = response?.headers() ?? {};
+    assert.ok(
+      headers['content-security-policy']?.includes(`frame-ancestors 'none'`),
+      "the page can't be framed",
+    );
+    assert.strictEqual(headers['x-frame-options'], 'DENY');
+    await page.waitForSelector('[data-test-connected-apps-empty]', {
+      timeout: 10000,
+    });
+    assert.deepEqual(await violationsIn(page), [], 'empty: no violation');
+
+    let claude = {
+      kind: 'metadata-document',
+      shown: 'claude.ai',
+      verified: true,
+    };
+    policyTestConnections = [
+      policyTestConnection('grant-claude-new', claude, 1),
+      policyTestConnection('grant-claude-old', claude, 5),
+      policyTestConnection(
+        POLICY_TEST_FAILING_GRANT,
+        {
+          kind: 'dynamic',
+          shown: 'an app on this computer',
+          verified: false,
+          claimedName: 'Example agent app',
+        },
+        0,
+        {
+          lastUsedAt: null,
+          endsAt: new Date(Date.now() + 55 * 60 * 1000).toISOString(),
+          renewing: false,
+        },
+      ),
+    ];
+    await page.goto(`${secureOrigin}/secure/connected-apps`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForSelector('[data-test-connected-apps-list]', {
+      timeout: 10000,
+    });
+    assert.deepEqual(await violationsIn(page), [], 'listed: no violation');
+
+    await page.click(
+      '[data-test-connection="grant-claude-new"] [data-test-connection-disconnect]',
+    );
+    await page.waitForSelector('[data-test-connected-apps-confirm]', {
+      timeout: 10000,
+    });
+    assert.deepEqual(await violationsIn(page), [], 'confirming: no violation');
+    await page.click('[data-test-connected-apps-confirm-disconnect]');
+    await page.waitForFunction(
+      () =>
+        !document.querySelector('[data-test-connection="grant-claude-new"]'),
+      { timeout: 10000 },
+    );
+    assert.ok(
+      await page.$('[data-test-connection="grant-claude-old"]'),
+      "the app's other connection stays",
+    );
+    assert.deepEqual(
+      await violationsIn(page),
+      [],
+      'disconnected: no violation',
+    );
+
+    await page.click(
+      `[data-test-connection="${POLICY_TEST_FAILING_GRANT}"] [data-test-connection-disconnect]`,
+    );
+    await page.waitForSelector('[data-test-connected-apps-confirm]', {
+      timeout: 10000,
+    });
+    await page.click('[data-test-connected-apps-confirm-disconnect]');
+    await page.waitForSelector('[data-test-connected-apps-disconnect-error]', {
+      timeout: 10000,
+    });
+    assert.deepEqual(
+      await violationsIn(page),
+      [],
+      'a refused disconnect: no violation',
+    );
+  });
 
   test('a workspace picker opened and a username being checked run under the policy', async function (assert) {
     // The workspace list renders in the dropdown's wormhole, and the

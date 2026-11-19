@@ -35,6 +35,9 @@ export type GateTraceRefusal =
   | 'unmatchable-target'
   // No rule governing the target's type has a grant for the operation.
   | 'no-grant'
+  // Grants name the operation, but none of their paths covers the target's
+  // path, or where the create would store its card.
+  | 'outside-paths'
   // A grant opens the operation to a caller who isn't signed in, but the
   // operation as the target's type resolves it reads `actor()`, which such a
   // caller has none of, so it is refused before it runs.
@@ -51,6 +54,20 @@ export class GateTrace {
     grants: CompiledOperationGrant[];
   }[] = [];
   readonly outcomes = new Map<CompiledOperationGrant, GateTraceOutcome>();
+  // Set on an explain's trace, which reports every rule matching the
+  // target's type, with each grant's outcome. So the gate reads the target
+  // before it matches a grant's paths, which it otherwise matches first
+  // (ADR 038 §1.3). A capability check's trace is read only for why the gate
+  // refused, which that order doesn't change.
+  readonly explains: boolean;
+
+  constructor({ explains = false }: { explains?: boolean } = {}) {
+    this.explains = explains;
+  }
+
+  // The grants among `rules` whose paths don't cover the target, which the
+  // gate set aside without evaluating.
+  readonly outsideItsPaths = new Set<CompiledOperationGrant>();
   refusal: GateTraceRefusal | undefined;
   // How resolving the operation refused, before the gate was reached: no such
   // operation on the target's type, one its type does not carry, or one that
@@ -68,6 +85,10 @@ export class GateTrace {
 
   evaluated(grant: CompiledOperationGrant, outcome: GateTraceOutcome) {
     this.outcomes.set(grant, outcome);
+  }
+
+  outsidePaths(grant: CompiledOperationGrant) {
+    this.outsideItsPaths.add(grant);
   }
 
   // The first refusal is the one the gate acted on. A later one would be a

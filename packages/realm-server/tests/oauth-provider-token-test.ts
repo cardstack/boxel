@@ -1,5 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import { request as httpRequest } from 'http';
+import type { AddressInfo } from 'net';
 import { basename } from 'path';
 import supertest from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -1367,6 +1369,223 @@ module(basename(import.meta.filename), function () {
         elsewhere.headers['access-control-allow-origin'],
         undefined,
         'and a page elsewhere cannot',
+      );
+    });
+
+    // A body sent as written, which `tokenRequest` would encode.
+    function tokenWithBody(
+      body: string,
+      contentType = 'application/x-www-form-urlencoded',
+    ) {
+      return supertest(server())
+        .post('/_oauth-provider/token')
+        .set('Host', OAUTH_TEST_SERVER_URL.host)
+        .set('Content-Type', contentType)
+        .send(body);
+    }
+
+    test('a form whose Content-Type the library accepts is read as a form, so its refresh counts against its grant', async function (assert) {
+      let known = await tokensFor();
+      await failThrice(known.clientId);
+      let token = known.refreshToken;
+      // Content-Types the library reads as a form, and the realm server's
+      // own Koa doesn't.
+      for (let contentType of [
+        'application/x-www-form-urlencoded;',
+        'application/x-www-form-urlencoded; charset=utf-8;',
+      ]) {
+        let response = await tokenWithBody(
+          new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: known.clientId,
+            refresh_token: token,
+          }).toString(),
+          contentType,
+        );
+        assert.strictEqual(response.status, 200, contentType);
+        token = response.body.refresh_token;
+      }
+      let over = await refreshOAuthTokens(server(), known.clientId, token);
+      assert.strictEqual(
+        over.status,
+        429,
+        "and the grant's limit counted both refreshes",
+      );
+    });
+
+    test('a body that names a live refresh token the library does not act on counts as a failed attempt', async function (assert) {
+      let known = await tokensFor();
+      let live = encodeURIComponent(known.refreshToken);
+      let client = encodeURIComponent(known.clientId);
+      let bodies = {
+        // The library reads the first parameter as `?grant_type`.
+        'a ?-prefixed body': `?grant_type=refresh_token&refresh_token=${live}&client_id=${client}`,
+        'a repeated refresh_token': `grant_type=refresh_token&refresh_token=${live}&refresh_token=not-a-token&client_id=${client}`,
+        'a repeated client_id': `grant_type=refresh_token&refresh_token=${live}&client_id=${client}&client_id=${client}`,
+      };
+      for (let [label, body] of Object.entries(bodies)) {
+        let response = await tokenWithBody(body);
+        assert.strictEqual(response.status, 400, label);
+      }
+      let limited = await refreshOAuthTokens(
+        server(),
+        known.clientId,
+        'not-a-token',
+      );
+      assert.strictEqual(limited.status, 429, 'the address is limited');
+      let refresh = await refreshOAuthTokens(
+        server(),
+        known.clientId,
+        known.refreshToken,
+      );
+      assert.strictEqual(
+        refresh.status,
+        200,
+        "the grant's own limit is untouched, and its refresh token unused",
+      );
+    });
+
+    test('a body too large to read counts as a failed attempt', async function (assert) {
+      let known = await tokensFor();
+      let body = `grant_type=refresh_token&refresh_token=${encodeURIComponent(
+        known.refreshToken,
+      )}&client_id=${encodeURIComponent(known.clientId)}&pad=${'x'.repeat(
+        9 * 1024,
+      )}`;
+      for (let i = 0; i < 3; i++) {
+        let response = await tokenWithBody(body);
+        assert.strictEqual(response.status, 400, `too large ${i + 1}`);
+        assert.strictEqual(response.body.error, 'invalid_request');
+      }
+      let limited = await tokenWithBody(body);
+      assert.strictEqual(limited.status, 429, 'the address is limited');
+      let refresh = await refreshOAuthTokens(
+        server(),
+        known.clientId,
+        known.refreshToken,
+      );
+      assert.strictEqual(
+        refresh.status,
+        200,
+        "the grant's own limit is untouched, and its refresh token unused",
+      );
+    });
+
+    test('a body too large to read is answered while the client is still sending it', async function (assert) {
+      let { port } = server().address() as AddressInfo;
+      let outcome = await new Promise<number | string>((resolve) => {
+        let request = httpRequest({
+          host: '127.0.0.1',
+          port,
+          method: 'POST',
+          path: '/_oauth-provider/token',
+          headers: {
+            Host: OAUTH_TEST_SERVER_URL.host,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        });
+        request.on('response', (response) => {
+          response.resume();
+          resolve(response.statusCode ?? 'no status');
+          request.destroy();
+        });
+        request.on('error', (error: NodeJS.ErrnoException) =>
+          resolve(error.code ?? error.message),
+        );
+        // More than the limit, with the rest of the body still to come.
+        request.write(`grant_type=refresh_token&pad=${'x'.repeat(16 * 1024)}`);
+      });
+      assert.strictEqual(outcome, 400);
+    });
+
+    async function codeFor(clientId: string) {
+      let matrixId = randomMatrixId('limit');
+      await insertUser(db(), matrixId, `cus_${matrixId}`, null);
+      return codeForOAuthClient(
+        server(),
+        clientId,
+        await secureSessionAuth(db(), matrixId),
+      );
+    }
+
+    test('a code exchange whose body the library refuses counts as a failed attempt', async function (assert) {
+      let clientId = await registerOAuthClient(server());
+      let code = await codeFor(clientId);
+      let client = encodeURIComponent(clientId);
+      let live = encodeURIComponent(code);
+      let verifier = encodeURIComponent(OAUTH_TEST_CODE_VERIFIER);
+      let redirect = encodeURIComponent(OAUTH_TEST_WEB_REDIRECT_URI);
+      let bodies = {
+        'a repeated code': `grant_type=authorization_code&code=${live}&code=not-a-code&code_verifier=${verifier}&redirect_uri=${redirect}&client_id=${client}`,
+        'a repeated code_verifier': `grant_type=authorization_code&code=${live}&code_verifier=${verifier}&code_verifier=${verifier}&redirect_uri=${redirect}&client_id=${client}`,
+        'no client_id': `grant_type=authorization_code&code=${live}&code_verifier=${verifier}&redirect_uri=${redirect}`,
+      };
+      for (let [label, body] of Object.entries(bodies)) {
+        let response = await tokenWithBody(body);
+        assert.strictEqual(response.status, 400, label);
+      }
+      let limited = await exchangeOAuthCode(server(), clientId, 'not-a-code');
+      assert.strictEqual(limited.status, 429, 'the address is limited');
+      let exchanged = await exchangeOAuthCode(server(), clientId, code);
+      assert.strictEqual(
+        exchanged.status,
+        200,
+        "the grant's own limit is untouched, and its code unused",
+      );
+    });
+
+    test("a code sent with another client's id or another redirect URI counts as a failed attempt", async function (assert) {
+      let clientId = await registerOAuthClient(server());
+      let otherClientId = await registerOAuthClient(server());
+      let code = await codeFor(clientId);
+      let attempts = [
+        exchangeOAuthCode(server(), otherClientId, code),
+        exchangeOAuthCode(server(), clientId, code, {
+          redirectUri: 'https://elsewhere.example.test/callback',
+        }),
+        exchangeOAuthCode(server(), clientId, code, {
+          redirectUri: 'https://elsewhere.example.test/other',
+        }),
+      ];
+      for (let [i, attempt] of attempts.entries()) {
+        assert.strictEqual((await attempt).status, 400, `attempt ${i + 1}`);
+      }
+      let limited = await exchangeOAuthCode(server(), clientId, 'not-a-code');
+      assert.strictEqual(limited.status, 429, 'the address is limited');
+      let exchanged = await exchangeOAuthCode(server(), clientId, code);
+      assert.strictEqual(
+        exchanged.status,
+        200,
+        "the grant's own limit is untouched, and its code unused",
+      );
+    });
+
+    test("a refresh token sent with another client's id counts as a failed attempt, and never ends its grant", async function (assert) {
+      let known = await tokensFor();
+      let other = await tokensFor();
+      for (let i = 0; i < 3; i++) {
+        let response = await refreshOAuthTokens(
+          server(),
+          other.clientId,
+          known.refreshToken,
+        );
+        assert.strictEqual(response.status, 400, `attempt ${i + 1}`);
+      }
+      let limited = await refreshOAuthTokens(
+        server(),
+        other.clientId,
+        known.refreshToken,
+      );
+      assert.strictEqual(limited.status, 429, 'the address is limited');
+      let refresh = await refreshOAuthTokens(
+        server(),
+        known.clientId,
+        known.refreshToken,
+      );
+      assert.strictEqual(
+        refresh.status,
+        200,
+        "the grant's own limit is untouched, and its refresh token unused",
       );
     });
   });
