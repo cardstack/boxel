@@ -111,19 +111,20 @@ stated.
 
 **§4** The corpus MUST cover, at minimum:
 
-| Area         | What a corpus card must exercise                                              |
-| ------------ | ----------------------------------------------------------------------------- |
-| Fields       | Each field kind; a primitive and a composite field; a plural contained value. |
-| Computeds    | A computed read twice in one turn; a computed over a link; a computed link.   |
-| Links        | A self-referential link; a relative link; a link to a missing card.           |
-| Query fields | A query-backed relationship, `eager: false`; a clamped page.                  |
-| Formats      | A card with only defaults; one that overrides `atom` only; a field def.       |
-| Overrides    | A per-instance field override, checked in a render and in a search.           |
-| Documents    | A sparse document; a withheld-relationships document; a round trip.           |
-| Identity     | A prefix-form reference and a URL-form reference for the same card.           |
-| Operations   | A declared `transform`; a `read` with `links: 'ids'`; a refused invocation.   |
-| Files        | A file def created by writing bytes, not by upload.                           |
-| Errors       | A card whose render throws; a card whose link is broken.                      |
+| Area         | What a corpus card must exercise                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Fields       | Each field kind; a primitive and a composite field; a plural contained value.                                           |
+| Serializers  | A base field with a named serializer, filtered and sorted in the index and matched locally; an unreadable stored value. |
+| Computeds    | A computed read twice in one turn; a computed over a link; a computed link.                                             |
+| Links        | A self-referential link; a relative link; a link to a missing card.                                                     |
+| Query fields | A query-backed relationship, `eager: false`; a clamped page.                                                            |
+| Formats      | A card with only defaults; one that overrides `atom` only; a field def.                                                 |
+| Overrides    | A per-instance field override, checked in a render and in a search.                                                     |
+| Documents    | A sparse document; a withheld-relationships document; a round trip.                                                     |
+| Identity     | A prefix-form reference and a URL-form reference for the same card.                                                     |
+| Operations   | A declared `transform`; a `read` with `links: 'ids'`; a refused invocation.                                             |
+| Files        | A file def created by writing bytes, not by upload.                                                                     |
+| Errors       | A card whose render throws; a card whose link is broken.                                                                |
 
 **§5** Each corpus card MUST have assertions written as card tests against the
 testing API ([author API §15](author-api.md)), so the corpus and an author's own

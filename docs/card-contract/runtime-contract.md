@@ -211,6 +211,17 @@ detect it and MUST be able to show the reference.
 
 **§5.5** A runtime MUST NOT silently replace a broken link with an empty field.
 
+**§5.6** A runtime MUST read a stored field value through the serializer its
+field def names ([author API §2.9](author-api.md)) in every place it reads one:
+deserializing, indexing, matching a filter locally, answering a query in the
+index, and reading stored attributes without card code, as a policy compile
+does. Two readers of one stored value MUST NOT disagree on what it means,
+including on whether it is a number.
+
+**§5.7** A runtime MUST fail a card whose stored value its serializer cannot
+read, and MUST NOT read the value as unset ([author API §2.10](author-api.md)).
+See finding [B-37](boundary-findings.md#b-37).
+
 ## 6. The store contract
 
 The store is the environment's answer to "what cards are there, and what do they

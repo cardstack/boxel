@@ -179,6 +179,31 @@ roadmap item ([ADR 032 §1.3](../adr/032-define-the-card-contract-as-the-boundar
 needs to change how one field of one card renders. A runtime MUST NOT require an
 author to subclass a shared field def to change one usage.
 
+### A field's stored value
+
+**§2.8** A field def's stored value is part of the card's data contract, as its
+name is (§2.3). A field def stores its value in `attributes` either as the JSON
+the value already is, or in the form a serializer it names writes.
+
+**§2.9** A field def names a serializer with `static [fieldSerializer] =
+'<name>'`. The name, not the field def's code, decides how a stored value is
+read. A runtime MUST be able to read, index, filter, and sort a stored value
+from its serializer name alone, without loading the module that defines the
+field, and every reader of the value MUST read it through that serializer
+([runtime contract §5.6](runtime-contract.md)).
+
+**§2.10** A serializer MUST refuse a stored value it cannot read, and MUST NOT
+read it as unset. A value read as unset is written back as unset on the next
+save, which loses it ([runtime contract §5.2](runtime-contract.md)).
+
+**§2.11** The serializer names are the platform's: an author names one, and
+cannot add one (open question Q-16). The serialization hooks on a field class
+(`[serialize]`, `[deserialize]`, `[queryableValue]`, `[formatQuery]`, and
+`[emptyValue]`) are platform-only, not author API. A runtime that reads a stored
+value without card code cannot run them, so a field def that relies on one reads
+differently in a browser than in the index. See finding
+[B-37](boundary-findings.md#b-37).
+
 ## 3. Computed fields
 
 A field with `computeVia` derives its value from the owner's other fields.

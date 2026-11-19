@@ -107,6 +107,15 @@ between a def and its field's value:
 **Computed field** — a field whose value a definition derives, with a
 `computeVia` function. A computed is never stored.
 
+**Primitive field def** — a field def whose value is one JSON value, not fields
+of its own. **Composite field def** — a field def whose value is fields of its
+own.
+
+**Serializer** — the named, platform-provided reader and writer of a field def's
+stored value. A field def names one with `[fieldSerializer]`, and every reader
+of the stored value reads it through that serializer. See
+[author API §2.8–§2.11](author-api.md).
+
 **Query-backed relationship** — a `linksTo` / `linksToMany` whose targets a
 declared query resolves, rather than an author choosing them one at a time.
 

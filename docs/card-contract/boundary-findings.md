@@ -61,6 +61,7 @@ stays here with status `fixed`, so the boundary it protects is not re-broken.
 | [B-34](#b-34) | Tools and operations are two models of card behavior                             | gap   | open     |
 | [B-35](#b-35) | Presentation statics name one host's chrome                                      | leak  | proposed |
 | [B-36](#b-36) | Card tests are written against the host app's test harness                       | leak  | proposed |
+| [B-37](#b-37) | A field's stored form is a closed list of platform serializers                   | gap   | open     |
 
 ### What the register proposes to remove
 
@@ -1305,6 +1306,99 @@ another runner.
 
 ---
 
+## B-37
+
+**A field's stored form is a closed list of platform serializers, beside hooks
+the server never runs**
+
+**Class:** gap · **Status:** open
+
+A field def decides how its value is stored, indexed, and filtered in one of two
+ways, and nothing states either.
+
+1. **A named serializer.** `static [fieldSerializer] = 'date'` names one of the
+   fourteen serializers registered in
+   `packages/runtime-common/serializers/index.ts`. Each is a module with
+   `serialize`, `deserialize`, `queryableValue`, and optionally `formatQuery`.
+   Thirteen base field defs name one, and so does the catalog-owned
+   `PolicyPredicateField`. A card imports the `fieldSerializer` key from
+   `@cardstack/runtime-common`, not from the author API ([B-27](#b-27)).
+2. **Hooks on the class.** A field def may override `[serialize]`,
+   `[deserialize]`, `[queryableValue]`, `[formatQuery]`, and `[emptyValue]`,
+   whose keys `card-api` exports. A composite field def that overrides
+   `[deserialize]` fails ("Composite fields must use a registered
+   fieldSerializer instead"); nothing guards the other four. In base,
+   `JsonField` and `RouteJsonField` override `[queryableValue]` and
+   `BooleanField` sets `[emptyValue]`. No catalog card uses any of them. The
+   only `[formatQuery]` outside `card-api` is a test fixture,
+   `packages/test-realm-cards/contents/silly-number.gts`.
+
+The name is the part a server can see. A definition record carries
+`serializerName` (`packages/runtime-common/definitions.ts`), and the server
+reads stored values by it without loading card code:
+
+- `packages/runtime-common/index-query-engine.ts` formats a filter's value with
+  the named serializer's `formatQuery`, and casts a field to a number for a
+  range or a sort only when its serializer is `number` or `big-integer`.
+- `packages/runtime-common/file-serializer.ts` rewrites URLs in a stored value
+  only when its serializer is `code-ref`.
+- The policy compile reads `path-specifier` and `policy-predicate` values as
+  stored ([ADR 038](../adr/038-narrow-policy-grants-by-path-and-keep-every-grant-typed.md)).
+  `packages/base/path-specifier.gts` is a primitive field "because the stored
+  value is read as JSON as well as through this field", so its serializer is
+  "the one reader both share".
+
+That has four consequences:
+
+- **An author cannot give a field a stored form the server understands.** The
+  list is closed and lives in platform code. A field that needs one, even a
+  catalog-owned one, gets it by adding a serializer to runtime-common in a boxel
+  pull request, as `PolicyPredicateField` did.
+- **A class hook is read on one side only.** The local filter matcher
+  (`packages/runtime-common/instance-filter-matcher.ts`) formats a filter value
+  through `card-api`'s `formatQueryValue`, which falls back to the class's
+  `[formatQuery]`. The index query engine calls only the named serializer's. A
+  field with its own `[formatQuery]` matches differently in the two, which
+  breaks [runtime contract §10.3](runtime-contract.md). The matcher's comment
+  says both sides "pass through the field's serializer, exactly as they do in
+  `handleFieldValue`", which holds only for a named one.
+- **A numeric field that names no serializer sorts differently by database.**
+  Postgres extracts a search-doc value as text and casts it only for the two
+  numeric serializer names, so such a field sorts `"100" < "20" < "3"`. SQLite
+  keeps the JSON type, so the same field sorts numerically in a browser index.
+- **A stored shape has no stated lifetime.** `policy-predicate` reads two stored
+  shapes and writes whichever the value calls for. `path-specifier` and
+  `policy-predicate` refuse a malformed stored value instead of reading it as
+  unset. Others don't: `number` and `email` read a value they cannot parse as
+  `null`, `date` as an Invalid Date, and `boolean` coerces any value. Nothing
+  says which is right, or whether a serializer must keep reading what it once
+  wrote.
+
+**Proposal.** State the stored form as part of a field def's data contract
+([author API §2.8–§2.11](author-api.md)): a field def stores its value as the
+JSON it already is or names a serializer, and every reader of a stored value —
+deserialization, indexing, the local matcher, the index query engine, the policy
+compile — reads it through that serializer
+([runtime contract §5.6](runtime-contract.md)). Make the class hooks
+platform-only, as [B-08](#b-08) proposes for their keys, and give `JsonField`'s
+"not searchable" and `RouteJsonField`'s "searchable whole" named serializers of
+their own. Move `fieldSerializer` into the author API module, so a card stops
+importing it from runtime-common. Require a serializer to refuse a value it
+cannot read rather than read it as unset, since an unset value is written back
+as unset on the next save. Keep the list closed until Q-16 is decided.
+
+**Open question Q-16.** May a realm author add a serializer? A closed list keeps
+every stored value readable by every runtime with no card code loaded. An open
+one has to say what a runtime loads to read a stored value: an author's module
+the server runs, and in which sandbox, or a declaration the runtime interprets,
+as it interprets an operation's ([author API §11.4](author-api.md)).
+
+**Open question Q-17.** Is a serializer's stored shape versioned? When a
+serializer has to change what it writes, does it keep reading every shape it
+ever wrote, or does a realm migrate its documents, and who runs the migration?
+
+---
+
 ## Clean boundaries worth imitating
 
 Recorded so a later change does not accidentally break them.
@@ -1347,6 +1441,8 @@ grep -rn "Open question Q-[0-9]" docs/card-contract
 | Q-13 | [B-34](#b-34) | Is the operation or the tool the card author's unit of behavior?                                      |
 | Q-14 | [B-36](#b-36) | Does the testing API commit to QUnit's `module` / `test` / `assert` shape, or define its own?         |
 | Q-15 | [B-31](#b-31) | Is ADR 036's `hrefTo` link helper part of the author API, and from which module?                      |
+| Q-16 | [B-37](#b-37) | May a realm author add a serializer, and is it code a runtime runs or data it interprets?             |
+| Q-17 | [B-37](#b-37) | Is a serializer's stored shape versioned, or does a realm migrate its documents when it changes?      |
 
 **Rules.** A new open question takes the next unused ID, gets a paragraph in its
 finding and a row here, in the same change. A chapter that depends on one cites
