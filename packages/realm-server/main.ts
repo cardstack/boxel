@@ -106,6 +106,7 @@ import {
 } from './utils/matrix-server-name.ts';
 import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
 import { checkPricingAtStartup } from './lib/pricing.ts';
+import { transpilerIdentity } from './lib/transpiler-identity.ts';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
 // write(2) syscall directly, bypassing Node's stream layer.
@@ -805,6 +806,21 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // of it.
   let cardDocumentCache = new CardDocumentCache();
 
+  // Names the installed packages that compile modules, so a module compiled
+  // under other ones isn't served from a cache. The same installation gives
+  // the same value in every process, so peers serving the same realm share
+  // their compiles. Without it the server still serves, with only
+  // `TRANSPILE_VERSION` to tell one transpiler from another.
+  let transpilerId: string | undefined;
+  try {
+    transpilerId = transpilerIdentity();
+    log.info(`Transpiler identity: ${transpilerId}`);
+  } catch (e) {
+    log.error(
+      `Could not compute the transpiler identity; cached module compiles are checked against TRANSPILE_VERSION alone: ${String(e)}`,
+    );
+  }
+
   // Keep the modules table across this restart when nothing that derived its
   // rows changed; clear it otherwise. The post-deployment hook runs the same
   // check (lib/definition-cache-key.ts).
@@ -948,6 +964,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           // crosstalk between the two flows is a benign hash miss in
           // each direction.
           transpileCoordinator: moduleCacheCoordinator,
+          transpilerIdentity: transpilerId,
           cardSizeLimitBytes: Number(
             process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
           ),

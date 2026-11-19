@@ -1,6 +1,7 @@
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import { timeout } from 'ember-concurrency';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -26,6 +27,7 @@ import {
 } from '@cardstack/runtime-common/write-size-validation';
 
 import LimitedSet from '../lib/limited-set';
+import { unavailableReadRetryDelayMs } from '../lib/retry-after';
 
 import type EnvironmentService from './environment-service';
 import type LoaderService from './loader-service';
@@ -196,7 +198,7 @@ export default class CardService extends Service {
     }
 
     let response = isReadOperation
-      ? await this.network.authedFetch(url, requestInit)
+      ? await this.#readWithRetries(url, requestInit)
       : await this.sendWrite(url, requestInit);
     if (!response.ok) {
       let responseText = await response.text();
@@ -314,6 +316,41 @@ export default class CardService extends Service {
       content: await response.text(),
       contentType: response.headers.get('content-type'),
     };
+  }
+
+  // Sends a read. A GET the realm turns away for now — a 503 that says when to
+  // come back — is sent again after the interval it names, within the bounds
+  // `unavailableReadRetryDelayMs` sets. The realm answers a card read that way
+  // while the card's type definition is still being rendered, and the render
+  // keeps going, so the retry usually finds the definition ready.
+  //
+  // A render tab does not wait. It holds a prerender slot, which the
+  // definition render it would be waiting on may need, so the refusal reaches
+  // it at once.
+  async #readWithRetries(
+    url: string | URL,
+    init: RequestInit,
+  ): Promise<Response> {
+    let isGet = (init.method?.toUpperCase?.() ?? 'GET') === 'GET';
+    let inRender =
+      (globalThis as unknown as { __boxelRenderContext?: boolean })
+        .__boxelRenderContext === true;
+    let firstSentAt = Date.now();
+    for (let retriesSent = 0; ; retriesSent++) {
+      let response = await this.network.authedFetch(url, init);
+      if (!isGet || inRender || response.status !== 503) {
+        return response;
+      }
+      let delayMs = unavailableReadRetryDelayMs(
+        response.headers.get('Retry-After'),
+        retriesSent,
+        Date.now() - firstSentAt,
+      );
+      if (delayMs === undefined) {
+        return response;
+      }
+      await timeout(delayMs);
+    }
   }
 
   // Sends a write. One the realm refuses because it saves a policy change

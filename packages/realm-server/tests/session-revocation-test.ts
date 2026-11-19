@@ -257,6 +257,9 @@ module(basename(import.meta.filename), function () {
         renewing: true,
         consentedAt: new Date(Date.now() - 60_000),
       });
+      if (!grantId) {
+        throw new Error('the grant was not created');
+      }
       let response = await supertest(buildApp().callback())
         .post(`/_grafana-revoke-user-sessions?user=${encodeURIComponent(user)}`)
         .set('Authorization', `Bearer ${grafanaSecret}`);

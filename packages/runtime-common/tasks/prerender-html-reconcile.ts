@@ -7,11 +7,7 @@ import {
   jobIdentity,
   systemInitiatedPriority,
 } from '../index.ts';
-import {
-  registerQueueJobDefinition,
-  type QueueCoalesceContext,
-  type QueueCoalesceDecision,
-} from '../queue.ts';
+import { joinAnyJobOfSameType, registerQueueJobDefinition } from '../queue.ts';
 import {
   enqueuePrerenderHtmlJob,
   skipsPrerenderHtml,
@@ -45,24 +41,9 @@ export { prerenderHtmlReconcile };
 // time; this additionally collapses a queued tick into any pending or in-flight
 // scan so overlapping cron ticks never pile up. The scan carries no per-realm
 // args, so there is nothing to merge — a twin simply wins.
-function choosePrerenderHtmlReconcileCoalesceDecision(
-  context: QueueCoalesceContext,
-): QueueCoalesceDecision {
-  let { incoming, candidates, inFlightCandidates } = context;
-  let twin =
-    candidates.find((candidate) => candidate.jobType === incoming.jobType) ??
-    inFlightCandidates.find(
-      (candidate) => candidate.jobType === incoming.jobType,
-    );
-  if (!twin) {
-    return { type: 'insert' };
-  }
-  return { type: 'join', jobId: twin.id };
-}
-
 registerQueueJobDefinition({
   jobType: 'prerender-html-reconcile',
-  coalesce: choosePrerenderHtmlReconcileCoalesceDecision,
+  coalesce: joinAnyJobOfSameType,
 });
 
 // Catch-up sweep for the residue the queue's own durability does not cover: a

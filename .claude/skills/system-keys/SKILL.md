@@ -108,8 +108,10 @@ Next to the note, the history records what the server itself observed (see
 ## Authorization: the realm secret seed
 
 The command resolves the seed as `boxel realm pull` does in seed mode:
-`BOXEL_REALM_SECRET_SEED`, else a masked prompt. It signs an **operator
-token** locally — `{ operator: 'system-keys' }`, no user, the realm server's
+`BOXEL_REALM_SECRET_SEED`, else a masked prompt. The prompt reads from the
+terminal even when stdin carries the value (`--stdin` fed by a pipe); a process
+with no terminal at all (CI, a detached job) needs `BOXEL_REALM_SECRET_SEED`
+set. It signs an **operator token** locally — `{ operator: 'system-keys' }`, no user, the realm server's
 origin as its audience (`aud`), five minutes — and sends only the token; the
 seed never leaves the machine.
 
@@ -313,3 +315,4 @@ the data-key re-seal pass cover it.
 | `HTTP 409 … changed while it was being replaced` | Someone changed the row (its destination) mid-replace. Run it again.                                                                                                                                                                                                                                                                                 |
 | `No system key has the destination …`            | Compare with `keys list`; the destination must match as stored, path included.                                                                                                                                                                                                                                                                       |
 | `stdin is not a terminal`                        | Run from a terminal, or pass `--stdin` / `--key-file`, and `--note`.                                                                                                                                                                                                                                                                                 |
+| `there is no terminal to prompt on`              | The seed was to be prompted for, and the process has no terminal. Set `BOXEL_REALM_SECRET_SEED` in the environment.                                                                                                                                                                                                                                  |
