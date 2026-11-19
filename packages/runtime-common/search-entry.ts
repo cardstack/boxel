@@ -433,6 +433,9 @@ function translateFilterNode(
     } else if (key === 'matches') {
       // Full-text match over the whole document — no field path to address.
       out.matches = value;
+    } else if (key === 'paths') {
+      // Realm paths, not field paths, so nothing is `item.`-prefixed.
+      out.paths = value;
     } else if (key === HTML_QUERY) {
       throw invalidHtmlQuery(
         `${pointer}/${HTML_QUERY}: ${HTML_QUERY} is a field — bind it with eq: { "${HTML_QUERY}": … }`,
@@ -1194,6 +1197,8 @@ export type SearchEntryWireFilter = {
   in?: Record<string, unknown>;
   range?: Record<string, unknown>;
   matches?: string;
+  // Realm paths the entries are stored under (see `PathsFilter`).
+  paths?: string[];
 };
 
 export interface SearchEntryWireQuery {
@@ -1230,6 +1235,8 @@ export function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
       );
     } else if (key === 'matches') {
       out.matches = value as string;
+    } else if (key === 'paths') {
+      out.paths = value as string[];
     } else {
       throw new Error(
         `cannot translate filter member "${key}" to the entry wire grammar`,
