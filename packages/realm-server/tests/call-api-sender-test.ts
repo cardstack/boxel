@@ -109,6 +109,12 @@ module(basename(import.meta.filename), function (hooks) {
       ],
       'the vendor reads the value back whole, adding no field',
     );
+    let answered = JSON.stringify(response.body);
+    assert.false(
+      answered.includes('AC12+3%26x%3Dy%2Bz'),
+      'the vendor echoed the form-encoded credential and none of it reaches the caller',
+    );
+    assert.true(answered.includes(REDACTED));
   });
 
   test('a credential in the path fills one segment, and what is recorded is the request as declared', async function (assert) {
