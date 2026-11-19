@@ -48,7 +48,12 @@ export default class OpenSecureWindowTool extends HostBaseTool<
   ): Promise<BaseToolModule.OpenSecureWindowResult> {
     let request = secureWindowRequest(input);
     if (request.mode === 'connected-apps') {
-      let isOn = await this.oauthProvider.check();
+      // A known answer is read without waiting, so the window opens in the
+      // same task as the click that asked for it, which a browser needs to
+      // let a popup through. Only an unknown answer waits on the realm
+      // server; a popup that is blocked then still opens from the fallback's
+      // button.
+      let isOn = this.oauthProvider.isOn ?? (await this.oauthProvider.check());
       if (isOn === undefined) {
         throw new Error(
           'Could not check whether Connected apps is available: the realm server did not answer. Try again',

@@ -29,7 +29,13 @@ const ME = '@testuser:localhost';
 // How the realm server answers its OAuth provider's discovery document: the
 // document while the provider's flag is on, and 404 while it's off. Each
 // answer is given in turn, the last one from then on.
-type DiscoveryAnswer = 'on' | 'off' | 'html' | 'other-issuer' | 'unavailable';
+type DiscoveryAnswer =
+  | 'on'
+  | 'off'
+  | 'html'
+  | 'other-issuer'
+  | 'unavailable'
+  | 'throttled';
 
 function answer(kind: DiscoveryAnswer): Response {
   let issuer = new URL(ENV.realmServerURL).origin;
@@ -49,6 +55,8 @@ function answer(kind: DiscoveryAnswer): Response {
       });
     case 'unavailable':
       return new Response(null, { status: 503 });
+    case 'throttled':
+      return new Response(null, { status: 429 });
     case 'off':
       return new Response(null, { status: 404 });
   }
@@ -179,27 +187,29 @@ module('Acceptance | Connected apps', function (hooks) {
       .exists('no wait for the realm server once the menu is open');
   });
 
-  test('a realm server that can’t answer is asked again when the menu opens', async function (assert) {
-    discovery = stubDiscovery('unavailable', 'on');
-    await visitOperatorMode({
-      stacks: [[{ id: `${testRealmURL}realm`, format: 'isolated' }]],
+  for (let kind of ['unavailable', 'throttled'] as const) {
+    test(`a realm server that can’t answer (${kind}) is asked again when the menu opens`, async function (assert) {
+      discovery = stubDiscovery(kind, 'on');
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}realm`, format: 'isolated' }]],
+      });
+      await waitUntil(() => discovery!.reads === 1);
+      assert.strictEqual(
+        getService('oauth-provider').isOn,
+        undefined,
+        'nothing is remembered from an answer that isn’t definite',
+      );
+
+      await click('[data-test-profile-icon-button]');
+      await waitFor('[data-test-profile-connected-apps-button]');
+      assert.strictEqual(discovery.reads, 2, 'asked again');
+
+      await closeProfileMenu();
+      await click('[data-test-profile-icon-button]');
+      await waitFor('[data-test-profile-connected-apps-button]');
+      assert.strictEqual(discovery.reads, 2, 'a definite answer is kept');
     });
-    await waitUntil(() => discovery!.reads === 1);
-    assert.strictEqual(
-      getService('oauth-provider').isOn,
-      undefined,
-      'nothing is remembered from a failed check',
-    );
-
-    await click('[data-test-profile-icon-button]');
-    await waitFor('[data-test-profile-connected-apps-button]');
-    assert.strictEqual(discovery.reads, 2, 'asked again');
-
-    await closeProfileMenu();
-    await click('[data-test-profile-icon-button]');
-    await waitFor('[data-test-profile-connected-apps-button]');
-    assert.strictEqual(discovery.reads, 2, 'a definite answer is kept');
-  });
+  }
 
   test('the tool opens Connected apps only while the provider flag is on', async function (assert) {
     discovery = stubDiscovery('off');
@@ -252,6 +262,29 @@ module('Acceptance | Connected apps', function (hooks) {
     discovery = stubDiscovery('on');
     let result = await tool.execute({ mode: 'connected-apps' });
     assert.strictEqual(result.status, 'opened', 'the next try asks again');
+    assert.deepEqual(
+      windowOpen.calls.map((call) => call.url),
+      [connectedAppsPage],
+    );
+  });
+
+  test('the tool opens Connected apps without asking the realm server when the answer is known', async function (assert) {
+    discovery = stubDiscovery('on');
+    let windowOpen = stubWindowOpen(window);
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}realm`, format: 'isolated' }]],
+    });
+    await waitUntil(() => getService('oauth-provider').isOn === true);
+    let readsBefore = discovery.reads;
+    let { toolContext } = getService('tool-service');
+    let tool = new OpenSecureWindowTool(toolContext);
+    let result = await tool.execute({ mode: 'connected-apps' });
+    assert.strictEqual(result.status, 'opened');
+    assert.strictEqual(
+      discovery.reads,
+      readsBefore,
+      'the realm server is not asked again',
+    );
     assert.deepEqual(
       windowOpen.calls.map((call) => call.url),
       [connectedAppsPage],

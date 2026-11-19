@@ -19,11 +19,12 @@ const DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
 // naming this realm server as its issuer.
 //
 // The setting changes only when the realm server restarts with another one,
-// so a definite answer (the document, or a 404 or anything else that isn't
-// it) is kept until the app reloads. A tab left open across a restart that
-// turns the provider off therefore keeps offering Connected apps, and the
-// page it opens can't list any. A request that fails, or a 5xx, leaves the
-// answer unknown, and the next check asks again.
+// so a definite answer is kept until the app reloads: a 2xx (the document,
+// or something that isn't it) or a 404. A tab left open across a restart
+// that turns the provider off therefore keeps offering Connected apps, and
+// the page it opens can't list any. A request that fails, or any other
+// status (a 5xx, or a passing refusal such as 408 or 429), leaves the answer
+// unknown, and the next check asks again.
 export default class OAuthProviderService extends Service {
   @service declare private network: NetworkService;
   @service declare private realmServer: RealmServerService;
@@ -59,7 +60,7 @@ export default class OAuthProviderService extends Service {
       console.warn(`Could not check whether OAuth is on: ${e}`);
       return undefined;
     }
-    if (response.status >= 500) {
+    if (!response.ok && response.status !== 404) {
       console.warn(
         `Could not check whether OAuth is on: the realm server answered ${response.status}`,
       );
