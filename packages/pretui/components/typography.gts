@@ -332,7 +332,7 @@ export class Link extends Component<LinkSignature> {
       data-variant={{this.variant}}
       data-test-pretui-link
       ...attributes
-    >{{yield}}{{#if @external}}<span class='pretui-link-ext' aria-hidden='true'>↗</span><VisuallyHidden>
+    >{{yield}}{{#if @external}}<span class='pretui-link-ext' aria-hidden='true' data-test-pretui-link-ext>↗</span><VisuallyHidden>
           (opens in a new tab)</VisuallyHidden>{{/if}}</a>
     <style scoped>
       @layer PretComponent {
@@ -354,7 +354,10 @@ export class Link extends Component<LinkSignature> {
           outline: 2px solid var(--ring);
           outline-offset: 2px;
         }
+        /* An inline-block is atomic, so the link's underline does not
+           propagate under the icon or the gap before it. */
         .pretui-link-ext {
+          display: inline-block;
           margin-inline-start: 0.15em;
           font-size: 0.85em;
         }
