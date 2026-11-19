@@ -321,7 +321,7 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
             @title='Boxel couldn’t make the automation'
             data-test-new-automation-error
           >
-            Check your connection, then try again.
+            <:default>Check your connection, then try again.</:default>
             <:action>
               <Button
                 @size='s'
@@ -340,7 +340,7 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
             @title='Boxel couldn’t read the automations'
             data-test-realm-automations-error
           >
-            Check your connection, then try again.
+            <:default>Check your connection, then try again.</:default>
             <:action>
               <Button
                 @size='s'
