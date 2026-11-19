@@ -28,8 +28,9 @@ import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 // Pages served on host URLs, from two realms:
 // - Governed: only its owner may read it, and its policy, in the Org realm,
 //   opens its Home cards to visitors who aren't signed in, and nothing else.
-//   A routing rule serves its About card at `/about`. It is served at the root
-//   of one host.
+//   A routing rule serves its About card at `/about`, and a card id route
+//   serves the cards under `docs/` at `/docs/:id`. It is served at the root of
+//   one host.
 // - Open: everyone may read it. It is served at the root of its canonical
 //   host, and under a path prefix on another host.
 const GOVERNED = 'http://127.0.0.1:4444/governed-site/';
@@ -100,13 +101,16 @@ const GOVERNED_POLICY_CARD = JSON.stringify({
   },
 });
 
-// The governed site's config: its policy, and a routing rule that serves the
-// About card at `/about`.
+// The governed site's config: its policy, a routing rule that serves the
+// About card at `/about`, and a card id route for the cards under `docs/`.
 function governedRealmConfig() {
   let doc = JSON.parse(
     realmConfigCardJSON({ name: 'Governed', policy: GOVERNED_POLICY }),
   );
-  doc.data.attributes.hostRoutingRules = [{ path: '/about' }];
+  doc.data.attributes.hostRoutingRules = [
+    { path: '/about' },
+    { path: '/docs/:id', card: './docs/:id' },
+  ];
   doc.data.relationships = {
     'hostRoutingRules.0.instance': { links: { self: './about' } },
   };
@@ -164,6 +168,12 @@ module(basename(import.meta.filename), function (hooks) {
             }),
             'about.json': card('./home', 'Home', { headline: 'About us' }),
             'secret.json': card('./secret', 'Secret', { note: 'Top secret' }),
+            'docs/private.json': card('../secret', 'Secret', {
+              note: 'Private doc',
+            }),
+            'notes/release-2.0.json': card('../home', 'Home', {
+              headline: 'Release notes',
+            }),
           },
           permissions: { ...ownerOnly },
         },
@@ -343,6 +353,37 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("a card whose id looks like it has an extension is server-rendered when the realm's policy opens it", async function (assert) {
+    let response = await page('/notes/release-2.0', GOVERNED_HOST);
+
+    assert.strictEqual(response.status, 200, response.text.slice(0, 300));
+    assert.true(
+      /<h1 data-headline[^>]*>[\s\S]*Release notes/.test(response.text),
+      "the card's stored HTML is served",
+    );
+  });
+
+  test('a generic Accept request on a host URL answers a card visitors may not read as it answers a path that holds nothing', async function (assert) {
+    let privateCard = await page('/docs/private', GOVERNED_HOST, '*/*');
+    let nothing = await page('/docs/missing', GOVERNED_HOST, '*/*');
+
+    assert.strictEqual(privateCard.status, nothing.status, privateCard.text);
+    assert.false(
+      (privateCard.headers['content-type'] ?? '').startsWith('text/html'),
+      'the private card is not served as a page',
+    );
+    assert.false(privateCard.text.includes('Private doc'));
+  });
+
+  test('a dynamic route on a host URL answers a card visitors may not read as not found, as it answers a path that holds nothing', async function (assert) {
+    let privateCard = await page('/docs/private', GOVERNED_HOST);
+    let nothing = await page('/docs/missing', GOVERNED_HOST);
+
+    assert.strictEqual(nothing.status, 404, nothing.text.slice(0, 300));
+    assert.strictEqual(privateCard.status, 404, privateCard.text.slice(0, 300));
+    assert.false(privateCard.text.includes('Private doc'));
+  });
+
   test("the realm's own URL serves the bare shell to visitors when the realm has no public read", async function (assert) {
     let response = await request
       .get(new URL(GOVERNED).pathname)
@@ -397,6 +438,17 @@ module(basename(import.meta.filename), function (hooks) {
        WHERE url = $2 AND type = 'instance'`,
       { bind: [DEFAULT_INDEX_PLACEHOLDER, `${OPEN}index.json`] },
     );
+    // A card whose markup only mentions the placeholder's attribute.
+    await db.execute(
+      `UPDATE prerendered_html SET isolated_html = $1
+       WHERE url = $2 AND type = 'instance'`,
+      {
+        bind: [
+          '<section data-prerender><article><p>The shell carries data-boxel-realm-index.</p></article></section>',
+          `${OPEN}landing.json`,
+        ],
+      },
+    );
 
     let onHostURL = await page('/', OPEN_HOST);
     assert.strictEqual(onHostURL.status, 200, onHostURL.text.slice(0, 300));
@@ -411,6 +463,33 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(
       onRealmURL.text.includes('data-boxel-realm-index'),
       "the realm's own URL serves what the index holds",
+    );
+
+    let mentioning = await page('/landing', OPEN_HOST);
+    assert.true(
+      mentioning.text.includes('The shell carries data-boxel-realm-index.'),
+      'a card that only mentions the attribute is served',
+    );
+  });
+
+  test("a page's own og:url is kept, whether its head names it by property or by name", async function (assert) {
+    await db.execute(
+      `UPDATE prerendered_html SET head_html = $1
+       WHERE url = $2 AND type = 'instance'`,
+      {
+        bind: [
+          '<title>Landing</title><meta name="og:url" content="https://example.com/landing" />',
+          `${OPEN}landing.json`,
+        ],
+      },
+    );
+
+    let response = await page('/landing', OPEN_HOST);
+    assert.strictEqual(response.status, 200, response.text.slice(0, 300));
+    assert.strictEqual(
+      response.text.match(/og:url/g)?.length,
+      1,
+      'no second og:url is added',
     );
   });
 

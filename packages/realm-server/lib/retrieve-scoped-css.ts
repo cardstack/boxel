@@ -7,13 +7,13 @@ import {
   parseScopedCSSRequest,
 } from '@cardstack/runtime-common/scoped-css';
 import { indexURLCandidates, pageRowExpressions } from './index-url-utils.ts';
-import { matchedReadURL } from './index-html-injection.ts';
+import { matchedRead, type PageRead } from './index-html-injection.ts';
 
-// A page's scoped CSS, with the card or file whose row it came from, as the
-// URL it is read by (see `RetrievedMarkup`).
+// A page's scoped CSS, with the card or file whose row it came from (see
+// `RetrievedMarkup`).
 export interface RetrievedScopedCSS {
   css: string | null;
-  readURL: URL | null;
+  read: PageRead | null;
 }
 
 export async function retrieveScopedCSS({
@@ -31,7 +31,7 @@ export async function retrieveScopedCSS({
   let candidates = indexURLCandidates(cardURL);
 
   if (candidates.length === 0) {
-    return { css: null, readURL: null };
+    return { css: null, read: null };
   }
 
   // The scoped-CSS URLs needed to serve a card's HTML ride on the
@@ -97,7 +97,7 @@ export async function retrieveScopedCSS({
 
   return {
     css: scopedCSS,
-    readURL: scopedCSS ? matchedReadURL(depsRow) : null,
+    read: scopedCSS ? matchedRead(depsRow) : null,
   };
 }
 

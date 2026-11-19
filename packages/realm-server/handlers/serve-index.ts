@@ -35,6 +35,7 @@ import {
   injectIsolatedHTML,
   retrieveHeadHTML,
   retrieveIsolatedHTML,
+  type PageRead,
 } from '../lib/index-html-injection.ts';
 import { retrieveScopedCSS } from '../lib/retrieve-scoped-css.ts';
 import { fullRequestURL } from '../middleware/index.ts';
@@ -105,20 +106,20 @@ function inRealmSpelling(url: URL, realm: Realm): URL {
   return spelled;
 }
 
-// Whether a visitor who isn't signed in may read the card or file at
-// `readURL`, as the realm that holds it answers. Public read in the realm's
+// Whether a visitor who isn't signed in may read the card or file `read`
+// names, as the realm that holds it answers. Public read in the realm's
 // permissions admits every card, since a policy only widens them. Otherwise
 // the realm is sent the read such a visitor's browser sends: no credentials,
 // and the visitor's address headers, so the realm's policy admits, limits and
 // refuses it as it would the visitor's own read. Nothing here evaluates a
 // permission or a policy grant of its own.
 async function visitorMayReadPage(
-  readURL: URL,
+  read: PageRead,
   routedRealm: Realm | undefined,
   routingDeps: RealmRoutingDeps,
   visitorHeaders: Record<string, string | string[] | undefined>,
 ): Promise<boolean> {
-  let realm = await realmHoldingPage(readURL, routedRealm, routingDeps);
+  let realm = await realmHoldingPage(read.url, routedRealm, routingDeps);
   if (!realm) {
     return false;
   }
@@ -132,24 +133,35 @@ async function visitorMayReadPage(
       addressHeaders[name] = value;
     }
   }
-  // A card's row is read without its `.json` extension, and a file's by its
-  // own URL, extension and all (see `RetrievedMarkup`).
-  let accept = hasExtension(readURL.pathname)
-    ? SupportedMimeType.FileMeta
-    : SupportedMimeType.CardJson;
+  let accept = read.isCard
+    ? SupportedMimeType.CardJson
+    : SupportedMimeType.FileMeta;
   let status = await anonymousStatus(
     realm,
-    inRealmSpelling(readURL, realm).href,
+    inRealmSpelling(read.url, realm).href,
     accept,
     addressHeaders,
   );
   return status === 200;
 }
 
-// The markup the prerenderer stores for a realm's default index card when the
-// realm has not opted in to rendering it in full: a placeholder the host app
-// replaces once it boots. It is not the page, so a host URL does not serve it.
-const DEFAULT_INDEX_PLACEHOLDER = /\bdata-boxel-realm-index\b/;
+// Whether `html` is the markup the prerenderer stores for a realm's default
+// index card when the realm has not opted in to rendering it in full: a
+// placeholder the host app replaces once it boots. It is not the page, so a
+// host URL does not serve it. The placeholder is the whole markup, a
+// prerender section whose one element is the index shell, so a card that
+// only mentions or embeds the shell's attribute is still served.
+function isDefaultIndexPlaceholder(html: string, doc: Document): boolean {
+  let fragment = doc.createRange().createContextualFragment(html);
+  let section = fragment.firstElementChild;
+  let shell = section?.firstElementChild;
+  return (
+    fragment.childElementCount === 1 &&
+    section?.matches('section[data-prerender]') === true &&
+    section.childElementCount === 1 &&
+    shell?.matches('div[data-boxel-realm-index]') === true
+  );
+}
 
 function escapeAttribute(value: string): string {
   return value
@@ -157,9 +169,6 @@ function escapeAttribute(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;');
 }
-
-const CANONICAL_LINK = /<link\b[^>]*\brel\s*=\s*["']?[^"'>]*\bcanonical\b/i;
-const OG_URL_META = /<meta\b[^>]*\bproperty\s*=\s*["']?og:url["'\s/>]/i;
 
 export type ServeIndexDeps = {
   serverURL: URL;
@@ -484,6 +493,21 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           visitorHeaders: ctxt.req.headers,
         }),
       ));
+    // Whether `url` is a card's own path, or names a file of the realm, as
+    // this request may learn it. On a host URL, the index and the realm's
+    // directory are not enough: a path counts only where a visitor who isn't
+    // signed in may read the card or file there, so that a realm without
+    // public read answers a path that holds something the visitor can't read
+    // as it answers a path that holds nothing.
+    let visitorMayRead = (read: PageRead) =>
+      visitorMayReadPage(read, undefined, routingDeps, ctxt.req.headers);
+    let isCardPath = async (url: URL) =>
+      (await isIndexedCardInstance(url, routingDeps)) &&
+      (!hostURL || (await visitorMayRead({ url, isCard: true })));
+    let isFilePath = async (url: URL) =>
+      (await isRealmFilePath(url, routingDeps)) &&
+      (!hostURL || (await visitorMayRead({ url, isCard: false })));
+
     // For a generic-Accept request of a path that is no card's own and no
     // fixed route's: whether a dynamic route answers it, with a card, a
     // redirect or an error, so it gets what a browser gets. A path that
@@ -571,8 +595,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       let isIndexRequest = requestURL.pathname.endsWith('/');
       if (!isIndexRequest) {
         let cardURL = requestURL;
-        let isCardInstance = await isIndexedCardInstance(cardURL, routingDeps);
-        if (!isCardInstance) {
+        if (!(await isCardPath(cardURL))) {
           // A bare routed sub-path (e.g. /pricing) is not itself an indexed
           // card instance — its host routing rule maps it to a card that
           // lives elsewhere (e.g. /pages/pricing). Only fall through to the
@@ -878,8 +901,8 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       if (
         resolution?.kind === 'nothing' &&
         resolution.trace.length > 0 &&
-        !(await isIndexedCardInstance(cardURL, routingDeps)) &&
-        !(await isRealmFilePath(requestURL, routingDeps))
+        !(await isCardPath(cardURL)) &&
+        !(await isFilePath(requestURL))
       ) {
         if (!hostRoutesComplete) {
           hostRoutesLog.warn(
@@ -924,17 +947,17 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // definition lookup.
     let formatsFor = new Map<string, Promise<PrerenderedHtmlFormat[]>>();
     let withheld = async (
-      markup: { html: string | null; readURL: URL | null },
+      markup: { html: string | null; read: PageRead | null },
       format: PrerenderedHtmlFormat,
     ) => {
-      if (markup.html == null || !markup.readURL) {
+      if (markup.html == null || !markup.read) {
         return false;
       }
-      let key = markup.readURL.href;
+      let key = markup.read.url.href;
       let formats = formatsFor.get(key);
       if (!formats) {
         formats = unshareableFormatsForPage(
-          markup.readURL,
+          markup.read.url,
           routedRealm,
           routingDeps,
         );
@@ -951,16 +974,16 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     let readableFor = new Map<string, Promise<boolean>>();
     let unreadable = async (markup: {
       html: string | null;
-      readURL: URL | null;
+      read: PageRead | null;
     }) => {
-      if (!hostURL || markup.html == null || !markup.readURL) {
+      if (!hostURL || markup.html == null || !markup.read) {
         return false;
       }
-      let key = markup.readURL.href;
+      let key = `${markup.read.isCard}:${markup.read.url.href}`;
       let readable = readableFor.get(key);
       if (!readable) {
         readable = visitorMayReadPage(
-          markup.readURL,
+          markup.read,
           routedRealm,
           routingDeps,
           ctxt.req.headers,
@@ -980,22 +1003,22 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       withheld(isolatedMarkup, 'isolated'),
       unreadable(headMarkup),
       unreadable(isolatedMarkup),
-      unreadable({ html: scopedCSS.css, readURL: scopedCSS.readURL }),
+      unreadable({ html: scopedCSS.css, read: scopedCSS.read }),
     ]);
     let headHTML = headWithheld || headUnreadable ? null : headMarkup.html;
     let isolatedHTML =
       isolatedWithheld || isolatedUnreadable ? null : isolatedMarkup.html;
     let pageScopedCSS =
       isolatedUnreadable || scopedCSSUnreadable ? null : scopedCSS.css;
+    let doc = new JSDOM().window.document;
     if (
       hostURL &&
       isolatedHTML != null &&
-      DEFAULT_INDEX_PLACEHOLDER.test(isolatedHTML)
+      isDefaultIndexPlaceholder(isolatedHTML, doc)
     ) {
       isolatedHTML = null;
     }
 
-    let doc = new JSDOM().window.document;
     if (headHTML != null) {
       let sanitized = sanitizeHeadHTMLToString(headHTML, doc);
       if (sanitized !== null) {
@@ -1043,14 +1066,13 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       );
     }
 
-    let hasFavicon = false;
-    let hasAppleTouchIcon = false;
-    if (headHTML != null) {
-      let fragment = doc.createRange().createContextualFragment(headHTML);
-      hasFavicon = fragment.querySelector('link[rel~="icon"]') != null;
-      hasAppleTouchIcon =
-        fragment.querySelector('link[rel~="apple-touch-icon"]') != null;
-    }
+    let headFragment =
+      headHTML != null
+        ? doc.createRange().createContextualFragment(headHTML)
+        : undefined;
+    let hasFavicon = headFragment?.querySelector('link[rel~="icon"]') != null;
+    let hasAppleTouchIcon =
+      headFragment?.querySelector('link[rel~="apple-touch-icon"]') != null;
     let faviconURL = new URL('boxel-favicon.png', assetsURL).href;
     let webclipURL = new URL('boxel-webclip.png', assetsURL).href;
     if (!hasFavicon) {
@@ -1071,11 +1093,14 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       let pageURL = escapeAttribute(
         new URL(requestURL.pathname, routedRealm.url).href,
       );
-      let head = headFragments.join('\n');
-      if (!CANONICAL_LINK.test(head)) {
+      if (!headFragment?.querySelector('link[rel~="canonical" i]')) {
         headFragments.push(`<link rel="canonical" href="${pageURL}" />`);
       }
-      if (!OG_URL_META.test(head)) {
+      if (
+        !headFragment?.querySelector(
+          'meta[property="og:url" i], meta[name="og:url" i]',
+        )
+      ) {
         headFragments.push(`<meta property="og:url" content="${pageURL}" />`);
       }
     }
