@@ -136,25 +136,34 @@ function bodyBytes(body: unknown): Buffer | undefined {
 // server already holds in memory: card and search documents, modules, HTML.
 //
 // Compressed bodies replace the response body whole, so `Content-Length` is
-// the compressed length. A response's ETag is unchanged: it names the
-// document, and `Vary: Accept-Encoding` tells a cache which encoding it
-// stored. A validator still matches when the client sends it back, since it
-// does not change with the encoding. Ranges are never compressed, so a byte
-// range always counts bytes of the identity body.
+// the compressed length. Ranges are never compressed, so a byte range always
+// counts bytes of the identity body.
+//
+// A response's ETag is left as the route set it. It names the document, which
+// every coding of the response carries, and a client sends it back as it
+// received it, so `If-None-Match` and `If-Match` compare as they do for an
+// identity body. `Vary: Accept-Encoding` keeps a cache from serving one coding
+// to a client that asked for another; it is set on every response that may be
+// compressed, whatever its size, so the cache key does not change with the
+// body.
 //
 // Placed outside the host URL translation, so it compresses the body that
 // translation produced.
 export async function compressResponse(ctxt: Koa.Context, next: Koa.Next) {
   await next();
 
-  // A HEAD is compressed like its GET when it has a body, so it reports the
-  // same Content-Encoding and Content-Length; Koa never sends the body.
   if (
     ctxt.respond === false ||
     ctxt.status === 206 ||
     ctxt.get('Range') ||
     servesStoredBytes(ctxt) ||
-    !isCompressibleType(ctxt.response.type) ||
+    // A 304 carries no body and often no Content-Type, but it varies on what
+    // the 200 it revalidates varies on, or a cache would update that stored
+    // response under a narrower key.
+    !(
+      isCompressibleType(ctxt.response.type) ||
+      (ctxt.status === 304 && !ctxt.response.type)
+    ) ||
     !isCompressiblePath(ctxt.path) ||
     // Koa reads an absent header as ''.
     !['', 'identity'].includes(ctxt.response.get('Content-Encoding')) ||
@@ -162,17 +171,19 @@ export async function compressResponse(ctxt: Koa.Context, next: Koa.Next) {
   ) {
     return;
   }
-  let bytes = bodyBytes(ctxt.body);
-  if (!bytes || bytes.length < MIN_COMPRESSIBLE_BYTES) {
-    return;
-  }
 
   // The same URL is sent compressed or not depending on this header, so a
   // cache must key on it whichever this client gets.
   ctxt.vary('Accept-Encoding');
-
   let encoding = chooseEncoding(ctxt.get('Accept-Encoding'));
   if (!encoding) {
+    return;
+  }
+
+  // A HEAD is compressed like its GET when it has a body, so it reports the
+  // same Content-Encoding and Content-Length; Koa never sends the body.
+  let bytes = bodyBytes(ctxt.body);
+  if (!bytes || bytes.length < MIN_COMPRESSIBLE_BYTES) {
     return;
   }
 

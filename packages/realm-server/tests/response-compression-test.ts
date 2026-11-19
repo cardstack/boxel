@@ -239,7 +239,31 @@ module(basename(import.meta.filename), function () {
         headers: { 'Accept-Encoding': 'br' },
       });
       assert.strictEqual(response.headers['content-encoding'], undefined);
-      assert.strictEqual(response.headers['vary'], undefined);
+      assert.strictEqual(
+        response.headers['vary'],
+        'Accept-Encoding',
+        'a larger body at the same URL would be compressed',
+      );
+    });
+
+    test('a 304 without a content type varies like the 200 it revalidates', async function (assert) {
+      handler = (ctxt) => {
+        ctxt.status = 304;
+      };
+      let response = await send(server, '/realm/person', {
+        headers: { 'Accept-Encoding': 'br' },
+      });
+      assert.strictEqual(response.status, 304);
+      assert.strictEqual(response.headers['vary'], 'Accept-Encoding');
+
+      response = await send(server, '/_server-session', {
+        headers: { 'Accept-Encoding': 'br' },
+      });
+      assert.strictEqual(
+        response.headers['vary'],
+        undefined,
+        'a route that is never compressed does not vary on the coding',
+      );
     });
 
     test('leaves binary media as it is', async function (assert) {
@@ -497,6 +521,11 @@ module(basename(import.meta.filename), function () {
         revalidated.status,
         304,
         'the validator of a compressed response matches when it comes back',
+      );
+      assert.strictEqual(
+        revalidated.headers['etag'],
+        etag,
+        'the 304 names the validator the client holds',
       );
     });
 
