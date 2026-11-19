@@ -24,6 +24,17 @@ const KEY = 'Zq0f3a9c27b4e14d5a8e6b21c0d9f7a3e5Lm';
 // The same secret behind a listed vendor prefix.
 const PREFIXED_KEY = `sk-or-v1-${KEY}`;
 
+// A Stripe-style secret key, and the run of it that the account's object ids
+// carry too.
+const STRIPE_SECRET =
+  '51Tq8RvW2xYz3Lm4NpKc7Jd9Hf2Gs5Bv1Xn3Mq6Wz8Ly0Pr4Te7Ua2Si5Ok9Fh1Dg3Cj6Bm8Nx0Vq2Wr4Ys6Zt8Au1Bk3Cl5Dm7En9Fo';
+const STRIPE_KEY = `sk_test_${STRIPE_SECRET}`;
+const ACCOUNT_RUN = STRIPE_SECRET.slice(4, 15);
+
+function stripeId(prefix: string, run = ACCOUNT_RUN): string {
+  return `${prefix}1Ud8kn${run}6OHB5Ikb`;
+}
+
 // Every form a vendor might echo KEY back in.
 function encodedForms(value: string): Record<string, string> {
   let bytes = Buffer.from(value, 'utf8');
@@ -274,6 +285,149 @@ module(basename(import.meta.filename), function () {
         }
       }
       assert.deepEqual(failures, [], 'every split is scrubbed, as one marker');
+    });
+
+    test("returns a vendor's object ids whole when they carry a run of its key", function (assert) {
+      let body = JSON.stringify({
+        id: stripeId('price_'),
+        product: stripeId('prod_'),
+        session: stripeId('cs_test_'),
+        url: `https://checkout.stripe.com/c/pay/${stripeId('cs_test_')}#fid`,
+        data: [{ id: stripeId('pi_') }, { customer: stripeId('cus_') }],
+      });
+      assert.strictEqual(scrubberFor(STRIPE_KEY).scrubText(body), body);
+    });
+
+    test('still removes the key, its secret part and long runs of it', function (assert) {
+      let scrubber = scrubberFor(STRIPE_KEY);
+      for (let [name, text, leakedRun] of [
+        ['the full key', `{"echo":"${STRIPE_KEY}"}`, STRIPE_SECRET],
+        ['the secret part', `{"echo":"${STRIPE_SECRET}"}`, STRIPE_SECRET],
+        [
+          'a run longer than an id carries, inside an id',
+          `{"id":"${stripeId('price_', STRIPE_SECRET.slice(30, 47))}"}`,
+          STRIPE_SECRET.slice(30, 47),
+        ],
+        [
+          'the whole secret inside an id',
+          `{"id":"price_${STRIPE_SECRET}"}`,
+          STRIPE_SECRET,
+        ],
+      ]) {
+        let output = scrubber.scrubText(text);
+        assert.false(leaked(output, leakedRun), `${name}: ${output}`);
+        assert.true(output.includes(REDACTED), `${name}: ${output}`);
+      }
+    });
+
+    test('removes a short run of the key anywhere but inside a listed id', function (assert) {
+      let scrubber = scrubberFor(STRIPE_KEY);
+      for (let [name, text] of [
+        ['in prose', `account ${ACCOUNT_RUN} refused`],
+        ['behind an unlisted prefix', stripeId('widget_')],
+        ['behind a listed prefix inside a longer word', stripeId('xprice_')],
+        [
+          'too far behind a listed prefix to be an id',
+          `price_${'a'.repeat(200)}${ACCOUNT_RUN}`,
+        ],
+        [
+          'after other characters inside the id',
+          `price_1Ud8kn-${ACCOUNT_RUN}6OHB5Ikb`,
+        ],
+        [
+          'base64-encoded inside an id',
+          `price_${Buffer.from(STRIPE_SECRET.slice(0, 24)).toString('base64').replace(/=+$/, '')}`,
+        ],
+      ]) {
+        let output = scrubber.scrubText(text);
+        assert.true(output.includes(REDACTED), `${name}: ${output}`);
+      }
+    });
+
+    test("keeps ids whole only for the vendor's own keys", function (assert) {
+      let otherKey = `sk-or-v1-${STRIPE_SECRET}`;
+      let output = scrubberFor(otherKey).scrubText(stripeId('price_'));
+      assert.true(
+        output.includes(REDACTED),
+        `a run of a key from another vendor is removed: ${output}`,
+      );
+
+      let shortKey = `sk_test_${STRIPE_SECRET.slice(0, 32)}`;
+      output = scrubberFor(shortKey).scrubText(stripeId('price_'));
+      assert.true(
+        output.includes(REDACTED),
+        `a run of a short key is removed: ${output}`,
+      );
+    });
+
+    test('keeps an id whole and removes the key, however the stream is split', async function (assert) {
+      let scrubber = scrubberFor(STRIPE_KEY);
+      let id = stripeId('price_');
+      let body = Buffer.from(`{"id":"${id}","echo":"${STRIPE_KEY}"}`);
+      let expected = `{"id":"${id}","echo":"${REDACTED}"}`;
+      let failures: string[] = [];
+      for (let first = 0; first <= body.length; first++) {
+        for (let second = first; second <= body.length; second++) {
+          let output = (
+            await readAll(
+              scrubber.scrubStream(
+                streamOf([
+                  body.subarray(0, first),
+                  body.subarray(first, second),
+                  body.subarray(second),
+                ]),
+              ),
+            )
+          ).toString();
+          if (output !== expected) {
+            failures.push(`${first}/${second}: ${output}`);
+          }
+        }
+      }
+      assert.deepEqual(failures, [], 'every split gives the same output');
+    });
+
+    test("keeps an id whole when the window's limit splits it", async function (assert) {
+      let scrubber = scrubberFor(STRIPE_KEY);
+      // Letters the window holds back, after the run, so the window's own
+      // limit falls inside the run at some split.
+      let pad = 'a'.repeat(scrubber.holdbackBytes + 20);
+      let body = Buffer.from(`{"id":"${stripeId('price_')}${pad}"}`);
+      let failures: string[] = [];
+      for (let split = 0; split <= body.length; split++) {
+        let output = await readAll(
+          scrubber.scrubStream(
+            streamOf([body.subarray(0, split), body.subarray(split)]),
+          ),
+        );
+        if (!output.equals(body)) {
+          failures.push(`${split}: ${output.toString()}`);
+        }
+      }
+      assert.deepEqual(failures, []);
+    });
+
+    test('a run that grows past what an id carries in a later chunk is removed', async function (assert) {
+      let scrubber = scrubberFor(STRIPE_KEY);
+      let run = STRIPE_SECRET.slice(30, 60);
+      let body = Buffer.from(`{"id":"price_1Ud8kn${run}"}`);
+      let failures: string[] = [];
+      for (let split = 0; split <= body.length; split++) {
+        let output = (
+          await readAll(
+            scrubber.scrubStream(
+              streamOf([body.subarray(0, split), body.subarray(split)]),
+            ),
+          )
+        ).toString();
+        if (
+          leaked(output, run) ||
+          output !== `{"id":"price_1Ud8kn${REDACTED}"}`
+        ) {
+          failures.push(`${split}: ${output}`);
+        }
+      }
+      assert.deepEqual(failures, []);
     });
 
     test('passes a body with no credential through byte for byte', async function (assert) {

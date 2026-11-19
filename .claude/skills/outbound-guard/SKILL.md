@@ -547,6 +547,19 @@ await outboundFetch({ ..., credential, scrubber });
   at inside a longer encoded run, in full or as a partial run of at least 10
   characters.
 
+One kind of match stays: a short run of a key inside one of its vendor's
+public object ids. A Stripe object id (`price_1Ud8kn…`, `prod_…`, `cs_test_…`,
+`pi_…`, `cus_…`) carries about 10 characters that the account's secret key
+carries too. That run identifies the account, not the secret, and a card that
+stores the id needs it whole to send it back. `PUBLIC_ID_PREFIXES` in
+`scrubber.ts` lists each vendor's key prefixes beside its id prefixes. A match
+is kept only when it is a raw run (never an encoded form) of a registered key
+of that vendor, at most `MAX_ID_FRAGMENT_LENGTH` (16) bytes long, made only of
+letters and digits running back to a listed id prefix no more than 128 bytes
+earlier, and the key's secret part is at least 64 characters. A longer run, or
+the full key or its secret part inside an id, is still removed. To cover
+another vendor whose ids share characters with its keys, add an entry there.
+
 A response with no match passes through byte for byte, binary included. The
 scrubber works on bytes and never decodes the body as a string. A match is
 replaced as a whole with one `[REDACTED]`, even when the stream splits it
