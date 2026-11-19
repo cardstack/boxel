@@ -269,14 +269,14 @@ module('Acceptance | host URL manager', function (hooks) {
       .doesNotExist();
   });
 
-  test('to remove the canonical host URL with one other, makes that one canonical and says so', async function (assert) {
+  test('to unmount the canonical host URL with one other, makes that one canonical and says so', async function (assert) {
     let shopURL = `https://shop.${siteDomain}/`;
     fake.hostURLs = [
       { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
       { id: 'b', url: shopURL, kind: 'site-name', isCanonical: false },
     ];
     await openManager();
-    await click(`[data-test-remove-host-url="${SPACE_URL}"]`);
+    await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
     await waitFor(`[data-test-host-url="${SPACE_URL}"]`, { count: 0 });
 
     assert
@@ -291,7 +291,7 @@ module('Acceptance | host URL manager', function (hooks) {
       .containsText(`shop.${siteDomain}/ is now the canonical host URL`);
   });
 
-  test('removing a canonical site name host URL frees the name, and the manager offers to claim one again', async function (assert) {
+  test('unmounting a canonical site name host URL frees the name, and the manager offers to claim one again', async function (assert) {
     let shopURL = `https://shop.${siteDomain}/`;
     fake.claimedDomain = {
       id: 'claim-1',
@@ -304,7 +304,7 @@ module('Acceptance | host URL manager', function (hooks) {
       { id: 'b', url: SPACE_URL, kind: 'boxel-space', isCanonical: false },
     ];
     await openManager();
-    await click(`[data-test-remove-host-url="${shopURL}"]`);
+    await click(`[data-test-unmount-host-url="${shopURL}"]`);
     await waitFor(`[data-test-host-url="${shopURL}"]`, { count: 0 });
 
     assert.deepEqual(fake.calls, ['canonical b', 'unmount a']);
@@ -314,7 +314,7 @@ module('Acceptance | host URL manager', function (hooks) {
     assert.dom('[data-test-mount-target="site-name-claim"]').exists();
   });
 
-  test('to remove the canonical host URL with several others, asks for the new canonical one first', async function (assert) {
+  test('to unmount the canonical host URL with several others, asks for the new canonical one first', async function (assert) {
     let shopURL = `https://shop.${siteDomain}/`;
     let storeURL = `https://store.${siteDomain}/`;
     fake.hostURLs = [
@@ -323,7 +323,7 @@ module('Acceptance | host URL manager', function (hooks) {
       { id: 'c', url: storeURL, kind: 'custom-domain', isCanonical: false },
     ];
     await openManager();
-    await click(`[data-test-remove-host-url="${SPACE_URL}"]`);
+    await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
 
     assert.dom('[data-test-replace-canonical]').exists();
     assert.deepEqual(fake.calls, [], 'nothing is removed yet');
@@ -346,12 +346,12 @@ module('Acceptance | host URL manager', function (hooks) {
       .doesNotExist('no toast when the user chose');
   });
 
-  test('removes the only host URL at once', async function (assert) {
+  test('unmounts the only host URL at once', async function (assert) {
     fake.hostURLs = [
       { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
     ];
     await openManager();
-    await click(`[data-test-remove-host-url="${SPACE_URL}"]`);
+    await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
     await waitFor('[data-test-no-host-urls]');
     assert.deepEqual(fake.calls, ['unmount a']);
   });

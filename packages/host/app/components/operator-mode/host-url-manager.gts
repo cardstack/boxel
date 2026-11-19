@@ -84,7 +84,7 @@ export default class HostURLManager extends Component<Signature> {
   @tracked private loadError: string | undefined;
   // The reason the last change was refused, keyed by the URL it was for.
   @tracked private errors = new Map<string, string>();
-  // The canonical host URL being removed, while the user picks the new one.
+  // The canonical host URL being unmounted, while the user picks the new one.
   @tracked private replacingCanonical: HostURL | undefined;
   private toasts = new ToastStore();
   @tracked private newCanonicalId: string | undefined;
@@ -260,7 +260,7 @@ export default class HostURLManager extends Component<Signature> {
   });
 
   @action
-  private removeHostURL(hostURL: HostURL) {
+  private unmountHostURL(hostURL: HostURL) {
     // The canonical host URL goes last (ADR 033 §1.4): another one is made
     // canonical first. With one other, it is that one; with more, the user
     // picks.
@@ -288,7 +288,7 @@ export default class HostURLManager extends Component<Signature> {
     this.newCanonicalId = undefined;
   }
 
-  private get isRemoving() {
+  private get isUnmounting() {
     return this.unmountTask.isRunning || this.replaceCanonicalTask.isRunning;
   }
 
@@ -301,7 +301,7 @@ export default class HostURLManager extends Component<Signature> {
     }
   }
 
-  // Makes `next` canonical, then removes `removed`. When the manager chose
+  // Makes `next` canonical, then unmounts `removed`. When the manager chose
   // `next` itself, a toast says so.
   private replaceCanonicalTask = task(
     async (removed: HostURL, next: HostURL, chosenForUser: boolean) => {
@@ -315,7 +315,7 @@ export default class HostURLManager extends Component<Signature> {
         if (chosenForUser) {
           this.toasts.show({
             title: `${displayURL(next.url)} is now the canonical host URL`,
-            message: `It took over from ${displayURL(removed.url)}, which was removed.`,
+            message: `It took over from ${displayURL(removed.url)}, which was unmounted.`,
             tone: 'success',
           });
         }
@@ -461,10 +461,10 @@ export default class HostURLManager extends Component<Signature> {
                       <Button
                         @variant='outline'
                         @size='sm'
-                        @busy={{this.isRemoving}}
-                        {{on 'click' (fn this.removeHostURL hostURL)}}
-                        data-test-remove-host-url={{hostURL.url}}
-                      >Remove</Button>
+                        @busy={{this.isUnmounting}}
+                        {{on 'click' (fn this.unmountHostURL hostURL)}}
+                        data-test-unmount-host-url={{hostURL.url}}
+                      >Unmount</Button>
                     </div>
                     {{#let (this.errorFor hostURL.url) as |error|}}
                       {{#if error}}
@@ -489,7 +489,7 @@ export default class HostURLManager extends Component<Signature> {
                 <p id='host-urls-new-canonical' class='replace-prompt'>
                   {{displayURL this.replacingCanonical.url}}
                   is canonical. Choose the new canonical host URL before you
-                  remove it.
+                  unmount it.
                 </p>
                 <RadioGroup
                   @options={{this.newCanonicalOptions}}
@@ -512,7 +512,7 @@ export default class HostURLManager extends Component<Signature> {
                     @busy={{this.replaceCanonicalTask.isRunning}}
                     {{on 'click' this.confirmReplaceCanonical}}
                     data-test-confirm-replace-canonical
-                  >Remove</Button>
+                  >Unmount</Button>
                 </div>
               </div>
             {{/if}}
