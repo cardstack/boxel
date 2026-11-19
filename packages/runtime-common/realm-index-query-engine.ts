@@ -142,7 +142,7 @@ type QueryFieldPlanCache = Map<string, Promise<QueryFieldPlanEntry[]>>;
 // A single assembly pass's memo of `queryTargetsFileMeta` answers, keyed by
 // the type refs a query field's filter names. Whether the realm holds file
 // rows or instance rows of those types is a property of the realm, not of the
-// row being served, and asking it costs two realm-wide existence checks per
+// row being served, and asking it costs up to two realm-wide existence checks per
 // type. Without the memo a page of N cards with Q query-backed fields asks it
 // N x Q times. It holds the in-flight promise so the concurrent roots of one
 // layer share one check, and it lives only as long as the pass, so there is
@@ -884,6 +884,9 @@ export class RealmIndexQueryEngine {
     if (!cached) {
       cached = this.refsTargetFileMeta(refs, opts);
       answers.set(key, cached);
+      // A failed check is not an answer: forget it so the next row asks
+      // again rather than every remaining row failing with it.
+      cached.catch(() => answers.delete(key));
     }
     return await cached;
   }
@@ -892,19 +895,22 @@ export class RealmIndexQueryEngine {
     refs: CodeRef[],
     opts?: Options,
   ): Promise<boolean> {
-    let fileMatch = false;
-    let instanceMatch = false;
+    // Any instance row settles the answer as false, so check for instances
+    // first: a card type's instance check finds a row at once, while its file
+    // check has to read the realm's rows to learn there are none.
     for (let ref of refs) {
-      if (await this.#indexQueryEngine.hasFileType(this.realmURL, ref, opts)) {
-        fileMatch = true;
-      }
       if (
         await this.#indexQueryEngine.hasInstanceType(this.realmURL, ref, opts)
       ) {
-        instanceMatch = true;
+        return false;
       }
     }
-    return fileMatch && !instanceMatch;
+    for (let ref of refs) {
+      if (await this.#indexQueryEngine.hasFileType(this.realmURL, ref, opts)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // Every `boxel_index.types` membership key this ref can legitimately match:
