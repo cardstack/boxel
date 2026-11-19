@@ -13,7 +13,8 @@ import {
   type RateLimitStore,
 } from '@cardstack/runtime-common';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
-import { newDynamicClientId, oauthProviderAdapter } from './adapter.ts';
+import { oauthProviderAdapter } from './adapter.ts';
+import { newDynamicClientId } from './dynamic-client-id.ts';
 import type { CallerLimit } from './caller-limit.ts';
 import {
   authorizationHandler,
@@ -54,6 +55,10 @@ import { boxelHosts } from './redirect-uris.ts';
 import { revocationHandler } from './revocation.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { registrationHandler } from './registration.ts';
+import {
+  connectionsDisconnectHandler,
+  connectionsListHandler,
+} from './connections.ts';
 import { oauthResourceController } from './resource.ts';
 import {
   DEFAULT_TOKEN_LIMIT,
@@ -160,6 +165,11 @@ export interface OAuthProviderService {
   consentHandlers(deps: ConsentRouteDeps): {
     handleConsentDetails: Koa.Middleware;
     handleConsentDecision: Koa.Middleware;
+  };
+  // Connected apps' list and disconnect, behind the same check as consent.
+  connectionsHandlers(deps: Pick<ConsentRouteDeps, 'realmSecretSeed'>): {
+    handleConnectionsList: Koa.Middleware;
+    handleConnectionsDisconnect: Koa.Middleware;
   };
   // The issuer, and the resources it issues tokens for (`registry.ts`).
   issuer: string;
@@ -309,6 +319,19 @@ export function startOAuthProvider({
       return {
         handleConsentDetails: consentDetailsHandler(deps),
         handleConsentDecision: consentDecisionHandler(deps),
+      };
+    },
+    connectionsHandlers: ({ realmSecretSeed }) => {
+      let deps = {
+        registry,
+        preRegistered,
+        dbAdapter,
+        secureOriginURL,
+        realmSecretSeed,
+      };
+      return {
+        handleConnectionsList: connectionsListHandler(deps),
+        handleConnectionsDisconnect: connectionsDisconnectHandler(deps),
       };
     },
     handleRegistration: registrationHandler({

@@ -6,7 +6,7 @@ scope:
   - packages/host/app/lib/**
 ---
 
-# 039. Bound a tab's requests in flight to each origin, and send writes first
+# 040. Bound a tab's requests in flight to each origin, and send writes first
 
 The interactive host sends its requests to a realm server through one limiter
 that holds a fixed number in flight to each origin and queues the rest, with
@@ -105,4 +105,4 @@ bytes, which this ADR does not cover.
 
 ## 5. Remediation
 
-Known gaps are listed in [remediation/039.md](remediation/039.md).
+Known gaps are listed in [remediation/040.md](remediation/039.md).

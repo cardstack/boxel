@@ -5,10 +5,9 @@
 //
 //   pnpm oauth:mock-client [--mode loopback|unverified] [--realm-server <url>] [--port <n>]
 //
-// The stack's realm server must run with its OAuth provider on: set
-// BOXEL_DEV_OAUTH_PROVIDER=true before starting the stack, either exported in
-// the shell that starts it or in the `[env]` of the checkout's gitignored
-// `.mise.local.toml`. The realm server defaults to REALM_BASE_URL, which the
+// The stack's realm server must run with its OAuth provider on, as the
+// development realm server does unless BOXEL_DEV_OAUTH_PROVIDER=false was set
+// when the stack started. The realm server defaults to REALM_BASE_URL, which the
 // repo's mise environment sets, so run this from inside the checkout.
 //
 // The `unverified` mode registers a redirect on the web,

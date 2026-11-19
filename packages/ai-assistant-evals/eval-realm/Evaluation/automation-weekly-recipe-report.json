@@ -1,0 +1,61 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Every Monday at 9 AM Chicago time, count my recipes by cuisine and save the counts as a report in this workspace, so I find a fresh report each week. Don't ask me any follow-up questions; decide the details yourself.",
+      "followUpPrompts": [],
+      "successCriteria": "1. (problem) The workspace holds a card instance whose `meta.adoptsFrom` is `@cardstack/catalog/automation/automation` / `Automation`, and the instance's `script` relationship links a `.js` file that exists in the workspace snapshot's `files`. A card definition of the assistant's own that only stores a schedule, a scheduled-time field, or a reply promising to run the report later does not count.\n2. The Automation card has exactly one trigger: `kind` `cron`, a non-empty `label`, an expression that fires on Mondays at 09:00 (`0 9 * * 1`, `0 9 * * MON` or an equivalent), and `timeZone` `America/Chicago`.\n3. `caps` sets every run limit (`callApiCalls`, `responseBytes`, `resolveCalls`, `aiCredits`, `writes`, `seconds` at most 1200) and `monthlyCredits`. `callApiCalls`, `resolveCalls` and `aiCredits` are 0, since the report needs no outside call and no AI, and `writes` is at least 1. `operations` is empty.\n4. The script calls only methods on the automation surface: no `realm.ask`, `realm.ui`, `realm.transform`, `realm.capture`, `realm.web`, `realm.fs.delete` or `room`. The script reads the Recipe cards with `realm.cards.search` on the Recipe type and pages until `truncated` is false (a single unpaged search fails this criterion), counts them by `cuisine`, and writes one report file or card with `realm.fs.writeText` or `realm.cards.update`. The script writes no `.gts`, `.js` or Automation card.\n5. The script declares its milestones with one `realm.progress.plan([...])` of string literals and marks each with `realm.progress.milestone`.\n6. Run against the six seeded recipes, the script would report Italian 2, Mexican 2, Japanese 1, Indian 1 (read the script against the seed cards; nothing has run).\n7. The Automation card is shown with no error boundary. The reply says the automation runs nothing until a direct writer switches the automation on and confirms the limits and the monthly cap; the reply does not claim the automation is scheduled, switched on or already run.\n8. The assistant asked no question, and the whole flow took at most 15 turns.",
+      "cardInfo": {
+        "name": "Automation: weekly recipe report",
+        "summary": "Six recipes are in the workspace, with one of them open. The prompt asks for a report of the recipes counted by cuisine, saved into the workspace every Monday at 9 AM Chicago time. This eval tests whether the assistant writes a catalog Automation card with a cron trigger in the right time zone and a Realm Runner script that pages through the cards, declares milestones and writes one report, with the run limits set and without claiming the automation is switched on.",
+        "notes": "Known gap: Claude models show the Automation card from the same run-realm-code call that writes it. A fresh workspace can take longer to index its first Automation card than the host waits for a card to show (about 20 seconds against 10 on an environment-mode stack), so the runner finds no rendered card and grades the run model-failure, which scores 0 whatever the other criteria say. When the room shows the show failed with \"has not finished indexing\" and the card is in the workspace snapshot, judge the other criteria as usual and say in the analysis which failures are this gap and which are the model's.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": [],
+      "secondsPerPrompt": 300
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/margherita-pizza"
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/cacio-e-pepe.json"
+        }
+      },
+      "initialFiles.1": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/chicken-tinga-tacos.json"
+        }
+      },
+      "initialFiles.2": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/pozole-rojo.json"
+        }
+      },
+      "initialFiles.3": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/miso-ramen.json"
+        }
+      },
+      "initialFiles.4": {
+        "links": {
+          "self": "../automations/recipe-report/Recipe/chana-masala.json"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

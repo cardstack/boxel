@@ -82,6 +82,9 @@ interface Signature {
     page: string;
     // The CLI listener the window was opened for, if any.
     cli?: CliCallback;
+    // What the signed-out window tells the user to open again once signed
+    // in: "your keys" unless the page says otherwise.
+    reopen?: string;
   };
   Blocks: { default: [KeysWindowAPI] };
 }
@@ -136,7 +139,9 @@ export default class KeysWindow extends Component<Signature> {
             data-test-keys-signed-out
           >
             <:intro>Sign in to Boxel in the Boxel window you opened this from,
-              then open your keys from there.</:intro>
+              then open
+              {{this.reopen}}
+              from there.</:intro>
             <:actions>
               <Button
                 @variant='primary'
@@ -260,6 +265,10 @@ export default class KeysWindow extends Component<Signature> {
   }
 
   private is = (state: State) => this.page.state === state;
+
+  private get reopen(): string {
+    return this.args.reopen ?? 'your keys';
+  }
 
   private get crumbs(): Crumb[] {
     return (this.trailCrumbs ??= trail());
