@@ -72,6 +72,7 @@ module(basename(import.meta.filename), function (hooks) {
     let rules = (doc?.type === 'doc' ? doc.doc.data.attributes?.rules : []) as {
       grants: {
         operation: string;
+        paths: unknown;
         where: unknown;
         actingUser: unknown;
         blocklist: unknown;
@@ -84,6 +85,7 @@ module(basename(import.meta.filename), function (hooks) {
       [
         {
           operation: 'read',
+          paths: null,
           where: null,
           actingUser: null,
           blocklist: null,
@@ -92,6 +94,7 @@ module(basename(import.meta.filename), function (hooks) {
         },
         {
           operation: 'appendActivity',
+          paths: null,
           where: { bxl: 'actor() in .teacherIds', snapshot: true },
           actingUser: null,
           blocklist: null,
