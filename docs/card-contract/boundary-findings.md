@@ -1229,15 +1229,71 @@ differ in everything the contract cares about: where they run, what authority
 they have, whether the realm can decide them, and whether a runtime other than
 this host can run them.
 
-**Proposal.** Decide which is the card author's unit of behavior, and state the
-other's role. The recommendation: operations are the contract for behavior on a
-card, because the realm can run and authorize them without a browser. Tools are
-the host's automation API, a separate surface the contract names and does not
-govern, which a card may offer through the context but does not need to define
-its own behavior.
+One difference decides whether operations can replace tools: **a tool can act
+in the browser, and an operation cannot.** A tool runs in the person's tab, so
+it can show the person something, ask them something, and act in their
+session. An operation runs in the realm, which has none of these. So making
+operations the only behavior a card author writes means operations must first
+be able to act in the browser.
+
+The catalog shows which browser actions that covers. Across boxel-catalog's
+133 non-test modules that import a host tool, the imports fall into five
+groups:
+
+- **Card reads and writes**, which operations already have: `save-card`,
+  `get-card`, `patch-card-instance`, `search-cards`, `copy-card`. These are
+  most of the imports.
+- **Requests to outside services**, which can run in the realm:
+  `one-shot-llm-request` (12), `send-request-via-proxy` (8), `authed-fetch`,
+  `search-google-images`. A realm-side base such as `callApi` covers the
+  pattern ([author API §11](author-api.md)). These go through the browser today
+  because that is where tools run, not because they need it.
+- **File writes**, also realm work: `write-binary-file`, `write-text-file`.
+- **Work in the person's AI assistant session**: `ai-assistant`,
+  `send-ai-assistant-message`, `create-ai-assistant-room`,
+  `open-ai-assistant-room`, `update-room-skills`, `set-active-llm`. These act as
+  the person in their own room.
+- **Showing or asking the person**: `show-card`, `switch-submode` with the
+  code-submode tools behind Remix ([B-26](#b-26)), `search-and-choose`, and
+  `create-and-open-submission-workflow-card`.
+
+Only the last two groups need the browser. About ten more tool modules import
+no host tool at all. They are the author's own JavaScript, such as computing
+an SLA deadline or normalizing a phone number, which runs in the browser only
+because tools run there.
+
+**Proposal.** Make the operation the card author's unit of behavior, and give
+operations a browser-side form. Tools become the host's automation API, a
+separate surface the contract names and does not govern. A card may offer a
+tool through the context, but it does not define its own behavior with one.
+To get there:
+
+1. Move the realm work routed through tools to realm-side operation bases:
+   outbound requests and LLM calls under `callApi` or a sibling base, and file
+   writes under the file family's operations.
+2. Add browser-side actions to operations for the two groups that need a
+   person: showing something (a card, a definition per [B-26](#b-26)) and
+   asking for something (a choice, a confirmation), plus acting in the
+   person's assistant session.
+3. An operation with a browser-side step is offered only where an environment
+   can run that step, as an optional service under
+   [author API §10.2](author-api.md). Where nothing can run it, such as an
+   automation or a server-side caller, the operation is not offered. The realm
+   still authorizes every realm-side step it contains.
 
 **Open question Q-13.** Is the operation or the tool the card author's unit of
-behavior? The recommendation above: the operation.
+behavior? The recommendation is the operation, but only once operations can
+act in the browser (Q-19). Until then, tools are the only way to write behavior
+that shows or asks the person anything.
+
+**Open question Q-19.** What form does a browser-side step take? A closed list
+of environment actions (show a card, show a definition, ask for a choice, send
+to the assistant) keeps the declaration data under
+[author API §11.4](author-api.md), so a runtime can show and authorize it
+without loading card code. Author JavaScript run in the browser covers the
+compute-only tools too, but that step would no longer be data, so §11.4 would
+need an exception for it. The compute-only tools could instead move to
+computed fields or realm-side steps.
 
 ---
 
@@ -1524,6 +1580,7 @@ grep -rn "Open question Q-[0-9]" docs/card-contract
 | Q-16 | [B-37](#b-37) | May a realm author add a serializer, and is it code a runtime runs or data it interprets?        |
 | Q-17 | [B-37](#b-37) | Is a serializer's stored shape versioned, or does a realm migrate its documents when it changes? |
 | Q-18 | [B-38](#b-38) | May a card ask the environment to print only itself, or is print layout the environment's alone? |
+| Q-19 | [B-34](#b-34) | Is an operation's browser-side step a closed list of environment actions, or author code?        |
 
 **Rules.** A new open question takes the next unused ID, gets a paragraph in its
 finding and a row here, in the same change. A chapter that depends on one cites

@@ -707,7 +707,10 @@ store and the instance, and writes are operations
 **§14.3** Whether behavior a card author defines is an operation or a tool is an
 open question (Q-13, in [B-34](boundary-findings.md#b-34)). Until it is made, an author
 who wants behavior the realm can run and authorize without a browser declares an
-operation.
+operation. Behavior that shows the person something, asks them something, or
+acts in their assistant session is possible today only as a tool, because an
+operation cannot yet act in the browser (Q-19, in
+[B-34](boundary-findings.md#b-34)).
 
 ## 15. Tests
 
