@@ -1,6 +1,7 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -12,10 +13,13 @@ import { Avatar, BoxelButton } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 import WithSubscriptionData from '@cardstack/host/components/with-subscription-data';
+import { secureWindowURL } from '@cardstack/host/lib/secure-window';
 
 import type BillingService from '@cardstack/host/services/billing-service';
 import type KeyNoticesService from '@cardstack/host/services/key-notices';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OAuthProviderService from '@cardstack/host/services/oauth-provider';
+import type SecureWindowService from '@cardstack/host/services/secure-window';
 
 interface ProfileInfoPopoverSignature {
   Args: {
@@ -122,6 +126,10 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
       .api-keys-button {
         inline-size: 100%;
       }
+      .connected-apps-button {
+        inline-size: 100%;
+        margin-bottom: var(--boxel-sp);
+      }
       .daily-grant-note {
         flex-basis: 100%;
         color: var(--boxel-500);
@@ -176,6 +184,15 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
           data-test-profile-api-keys-button
         >API Keys</Button>
       </Badge>
+      {{#if this.oauthProvider.isOn}}
+        <Button
+          class='connected-apps-button'
+          @tone='neutral'
+          @appearance='outlined'
+          {{on 'click' this.openConnectedApps}}
+          data-test-profile-connected-apps-button
+        >Connected apps</Button>
+      {{/if}}
       <WithSubscriptionData as |subscriptionData|>
         <div class='credit-info' data-test-credit-info>
           <div class='info-group'>
@@ -230,6 +247,23 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   @service declare matrixService: MatrixService;
   @service declare billingService: BillingService;
   @service declare private keyNotices: KeyNoticesService;
+  @service declare private oauthProvider: OAuthProviderService;
+  @service declare private secureWindow: SecureWindowService;
+
+  constructor(owner: Owner, args: ProfileInfoPopoverSignature['Args']) {
+    super(owner, args);
+    // Connected apps is offered only while the realm server's OAuth provider
+    // is on. The layout around the profile button asks when it renders, so
+    // the answer is usually in before the menu opens; this asks again when
+    // the realm server couldn't answer then.
+    void this.oauthProvider.check();
+  }
+
+  // The secure origin's page listing the apps connected to the user's Boxel
+  // account, where they disconnect one.
+  private openConnectedApps = () => {
+    this.secureWindow.open(secureWindowURL({ mode: 'connected-apps' }));
+  };
 
   @action private logout() {
     this.matrixService.signOut();

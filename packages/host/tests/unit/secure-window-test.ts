@@ -137,6 +137,11 @@ module('Unit | secure-window', function () {
     });
   });
 
+  test('Connected apps is opened for nothing in particular', function (assert) {
+    let url = secureWindowURL({ mode: 'connected-apps' });
+    assert.strictEqual(url, secureOriginPage('connected-apps'));
+  });
+
   test('sharing a key names the realm', function (assert) {
     let url = secureWindowURL({ mode: 'share-key', realm: REALM });
     assert.strictEqual(url.split('#')[0], secureOriginPage('share-key'));
