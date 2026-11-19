@@ -6,8 +6,9 @@
 //   allows ten times that. Not per address or per client: a hosted client
 //   refreshes every user's tokens from a few server addresses.
 // - Failed attempts, for requests that name no code or refresh token the
-//   provider holds, name a code without the verifier its PKCE challenge
-//   needs, don't name their client once, or are too large to read: such a
+//   provider issued to the client they name, name a code without the
+//   verifier its PKCE challenge needs or with another redirect URI, don't
+//   name their client once, or are too large to read: such a
 //   request can never succeed, so each counts as it arrives, and a
 //   caller with none left is refused, so guessing codes or refresh tokens is
 //   slow. They are counted as the provider's other unsigned endpoints count
@@ -38,7 +39,8 @@
 // A code or refresh token presented again after it was used ends its grant
 // (§1.9) even when the grant is over its limit: the limit is checked after
 // that, so a grant whose limit is kept spent can't put off the reuse that
-// ends it. A code does so only with its verifier, as in the library.
+// ends it. Either does so only from the client it was issued to, and a code
+// only with its verifier and its redirect URI, as in the library.
 
 import { createHash, timingSafeEqual } from 'crypto';
 import { parse as parseQuery } from 'node:querystring';
@@ -192,7 +194,7 @@ export function tokenHandler({
       respond(ctxt, status, error);
     };
 
-    let exchange = await grantOfExchange(dbAdapter, param);
+    let exchange = await grantOfExchange(dbAdapter, form);
     if (exchange) {
       let taken = await rateLimitStore.take(
         counterKey('oauth-token-grant', exchange.grantId),
@@ -253,20 +255,26 @@ export async function allowClientOrigin(
 }
 
 // The grant a code or refresh exchange names, if the code or token is one
-// the provider issued and, for a code, the request proves it with the
-// verifier its PKCE challenge needs; and whether presenting it again ends
-// the grant. A code without its verifier is refused by the library before it
-// checks for reuse, so it names no grant here. Neither does a request that
+// the provider issued to the client the request names and, for a code, the
+// request proves it with the verifier its PKCE challenge needs and names no
+// other redirect URI; and whether presenting it again ends the grant.
+//
+// The library refuses each of those requests before it checks for reuse, so
+// they name no grant here and count as failures. That includes a request that
 // doesn't name its client once: every client here is public, and names
-// itself only by the body's `client_id`.
+// itself only by the body's `client_id`. A code exchange that leaves out
+// `redirect_uri` still names its grant, since the library fills in the
+// client's one registered redirect URI, when it has only one, and Boxel
+// doesn't look up the client.
 async function grantOfExchange(
   dbAdapter: DBAdapter,
-  param: FormParam,
+  { param, named }: Form,
 ): Promise<
   | { grantId: string; reused: boolean; what: 'code' | 'refresh token' }
   | undefined
 > {
-  if (!param('client_id')) {
+  let clientId = param('client_id');
+  if (!clientId) {
     return undefined;
   }
   let grantType = param('grant_type');
@@ -277,6 +285,8 @@ async function grantOfExchange(
     }
     let [row] = (await dbAdapter.execute(
       `SELECT payload->>'grantId' AS grant_id,
+              payload->>'clientId' AS client_id,
+              payload->>'redirectUri' AS redirect_uri,
               payload->>'codeChallenge' AS challenge,
               payload->>'codeChallengeMethod' AS method,
               payload->'consumed' IS NOT NULL AND expires_at > now() AS reused
@@ -285,11 +295,15 @@ async function grantOfExchange(
       { bind: [sha256Hex(code)] },
     )) as {
       grant_id: string | null;
+      client_id: string | null;
+      redirect_uri: string | null;
       challenge: string | null;
       method: string | null;
       reused: boolean;
     }[];
     return row?.grant_id &&
+      row.client_id === clientId &&
+      (!named('redirect_uri') || param('redirect_uri') === row.redirect_uri) &&
       pkceCanPass(param('code_verifier'), row.challenge, row.method)
       ? { grantId: row.grant_id, reused: row.reused, what: 'code' }
       : undefined;
@@ -300,7 +314,13 @@ async function grantOfExchange(
       return undefined;
     }
     let presented = await presentedRefreshToken(dbAdapter, token);
-    return presented ? { ...presented, what: 'refresh token' } : undefined;
+    return presented?.clientId === clientId
+      ? {
+          grantId: presented.grantId,
+          reused: presented.reused,
+          what: 'refresh token',
+        }
+      : undefined;
   }
   return undefined;
 }
@@ -409,6 +429,8 @@ export interface Form {
   // read it as a form, so it refuses the request for its missing parameters.
   body: string | undefined;
   param: FormParam;
+  // Whether the body names a parameter at all, with any value.
+  named: (name: string) => boolean;
 }
 
 // Reads a request's form-encoded body with `node:querystring`, as the library
@@ -440,7 +462,7 @@ export async function readForm({
       .createContext(ctxt.req, ctxt.res)
       .is('application/x-www-form-urlencoded')
   ) {
-    return { body: undefined, param: () => undefined };
+    return { body: undefined, param: () => undefined, named: () => false };
   }
   let body: string;
   try {
@@ -462,6 +484,7 @@ export async function readForm({
       let value = params[name];
       return typeof value === 'string' && value !== '' ? value : undefined;
     },
+    named: (name) => Object.hasOwn(params, name),
   };
 }
 
@@ -469,7 +492,10 @@ export async function readForm({
 async function readBody(req: Koa.Context['req']): Promise<string> {
   let chunks: Buffer[] = [];
   let received = 0;
-  for await (let chunk of req) {
+  // Stopping early leaves the request open, as the library's own reader
+  // does, so the answer to a body too large is written to a request that is
+  // still open.
+  for await (let chunk of req.iterator({ destroyOnReturn: false })) {
     let buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     received += buffer.length;
     if (received > MAX_BODY_BYTES) {
