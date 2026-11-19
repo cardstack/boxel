@@ -3,6 +3,7 @@ import { ensureTrailingSlash } from './paths.ts';
 import type { Query } from './query.ts';
 import type { RequestTimings } from './request-timings.ts';
 import { SupportedMimeType } from './router.ts';
+import { isDefinitionsUnavailableError } from './search-bounds.ts';
 import type { PrerenderedHtmlFormat } from './prerendered-html-format.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 
@@ -258,36 +259,60 @@ export async function fanOutRealmSearch<R extends { url?: string }, Doc>(
       console.error(describeFailure(label, queryLabel), result.reason);
     }
   });
+  // No realm answered and a definition is what stopped them: the request as a
+  // whole is the retryable refusal, not an empty merge.
+  if (results.length > 0 && results.every((r) => r.status === 'rejected')) {
+    let unavailable = results.find(
+      (r) => r.status === 'rejected' && isDefinitionsUnavailableError(r.reason),
+    ) as PromiseRejectedResult | undefined;
+    if (unavailable) {
+      throw unavailable.reason;
+    }
+  }
   return results.flatMap((result) =>
     result.status === 'fulfilled' ? [result.value] : [],
   );
 }
 
 export type SearchErrorBody = {
-  errors: { status: string; title: string; message: string }[];
+  errors: { status: string; title: string; message: string; code?: string }[];
 };
 
 export function buildSearchErrorBody(
   message: string,
   status = 400,
+  code?: string,
 ): SearchErrorBody {
   return {
     errors: [
       {
         status: String(status),
-        title: 'Invalid Query',
+        title: status === 503 ? 'Definitions Unavailable' : 'Invalid Query',
         message,
+        ...(code ? { code } : {}),
       },
     ],
   };
 }
 
+// `retryAfterSeconds` sets `Retry-After`, for a refusal the caller should
+// retry (a 503 `definitions-unavailable`).
 export function buildSearchErrorResponse(
   message: string,
   status = 400,
+  code?: string,
+  retryAfterSeconds?: number,
 ): Response {
-  return new Response(JSON.stringify(buildSearchErrorBody(message, status)), {
-    status,
-    headers: { 'content-type': SupportedMimeType.CardJson },
-  });
+  return new Response(
+    JSON.stringify(buildSearchErrorBody(message, status, code)),
+    {
+      status,
+      headers: {
+        'content-type': SupportedMimeType.CardJson,
+        ...(retryAfterSeconds !== undefined
+          ? { 'Retry-After': String(retryAfterSeconds) }
+          : {}),
+      },
+    },
+  );
 }

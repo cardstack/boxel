@@ -260,13 +260,26 @@ interface WriteToDatabaseCacheParams {
 
 export class FilterRefersToNonexistentTypeError extends Error {
   codeRef: ResolvedCodeRef;
+  // Set when the lookup failed for a reason that says nothing about whether
+  // the type exists: its module's prerender timed out or its server was
+  // unavailable (a cached error row of that kind), or every populate was
+  // discarded by an invalidation. A search must not read such a failure as
+  // "this type has no cards" — that answer is a confident `ok, 0` for a type
+  // that may have thousands — so it surfaces as a retryable 503 instead.
+  transient: boolean;
 
-  constructor(codeRef: ResolvedCodeRef, opts?: { cause?: unknown }) {
+  constructor(
+    codeRef: ResolvedCodeRef,
+    opts?: { cause?: unknown; transient?: boolean },
+  ) {
     super(
-      `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}". If this type exists, it may be caused by a stale modules cache. Clearing the "modules" table in the database can fix this.`,
+      opts?.transient
+        ? `The definition of ${codeRef.name} in "${codeRef.module}" could not be read just now (its module did not finish loading); retry the request`
+        : `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}". If this type exists, it may be caused by a stale modules cache. Clearing the "modules" table in the database can fix this.`,
     );
     this.name = 'FilterRefersToNonexistentTypeError';
     this.codeRef = codeRef;
+    this.transient = Boolean(opts?.transient);
     if (opts?.cause !== undefined) {
       (this as any).cause = opts.cause;
     }
@@ -278,6 +291,28 @@ export function isFilterRefersToNonexistentTypeError(
   error: unknown,
 ): error is FilterRefersToNonexistentTypeError {
   return error instanceof FilterRefersToNonexistentTypeError;
+}
+
+// A lookup failure that is not evidence the type is absent (see
+// `FilterRefersToNonexistentTypeError#transient`).
+export function isTransientDefinitionLookupError(
+  error: unknown,
+): error is FilterRefersToNonexistentTypeError {
+  return isFilterRefersToNonexistentTypeError(error) && error.transient;
+}
+
+// A module error row that records the prerender failing to finish rather than
+// the module failing to load: a render timeout, or a 502/503/504 from the
+// prerender path. It is cached like any error row (ERROR_CACHE_TTL_MS), but a
+// lookup that reads it does not know whether the type exists.
+export function isTransientModuleError(error: ErrorEntry | undefined): boolean {
+  let status = Number(error?.error?.status);
+  return (
+    error?.error?.title === 'Render timeout' ||
+    status === 502 ||
+    status === 503 ||
+    status === 504
+  );
 }
 
 // CS-10953 cross-process prerender-coalesce dependency. When provided,
@@ -1229,6 +1264,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
     if (!moduleEntry) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
+        transient: exhaustedByInvalidation,
         cause: exhaustedByInvalidation
           ? `Module entry not found for URL: ${codeRef.module} — every one of ${POPULATE_RACE_MAX_ATTEMPTS} populate attempts was discarded by a concurrent invalidation, so the module may be readable on disk and this is not evidence that the type is absent`
           : `Module entry not found for URL: ${codeRef.module}`,
@@ -1238,6 +1274,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     if (moduleEntry.error) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: moduleEntry.error,
+        transient: isTransientModuleError(moduleEntry.error),
       });
     }
 
