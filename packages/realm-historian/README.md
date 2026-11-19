@@ -30,6 +30,51 @@ degraded: a lost lease, a query failure or an unhandled error logs the reason
 and exits non-zero, and SIGTERM finishes the step in progress, releases the
 lease and exits 0.
 
+## Local development
+
+`mise run dev` starts realm-historian (`mise-tasks/services/realm-historian`),
+as do `dev-all`, `dev-minimal`, `dev-without-matrix` and
+`mise run test-services:realm-server`. It starts once the realm server answers,
+because the realm server migrates the database it reads, and it records the
+stack's own database (`boxel`, or `boxel_<slug>` in environment mode). It runs
+from `packages/realm-server` with:
+
+- the realms root the realm server uses, `realms/localhost_4201`
+  (`realms/<slug>` in environment mode);
+- the history root `~/.local/share/boxel/realm-history/localhost_4201`
+  (`…/realm-history/<slug>`), which is `REALM_HISTORY_ROOT` in
+  `mise-tasks/lib/env-vars.sh`. It belongs to the database, not the checkout:
+  every standard-mode checkout records the one `boxel` database, so they all
+  record into this root, and running the stack from another checkout doesn't
+  stall a recorded realm;
+- its health check on port 4214, which the stack waits on before it reports
+  ready. In environment mode the port is dynamic and isn't waited on.
+
+Its output goes to `/tmp/boxel-logs/realm-historian.log` as well as the
+terminal. Stopping the stack stops it, and so do `mise run kill-all` and
+`mise run stop-environment`.
+
+No realm is recorded until its recording is turned on. From the repo root,
+`mise exec` gives the script the stack's `PG*` variables:
+
+```
+mise exec -- node packages/realm-historian/scripts/enable.ts https://localhost:4201/<user>/<realm>/ on
+```
+
+A bootstrap realm is named by the URL it is registered under, which for the
+base realm is `https://cardstack.com/base/`.
+
+Neither process needs a restart. The realm's first write after recording is
+turned on starts its history: an `Initial snapshot` of the realm's files
+(see [Sweeps and initial snapshots](#sweeps-and-initial-snapshots)), then the
+write's revision, which closes 2 s after the last write in a burst. If
+realm-historian restarts before that write, it takes the snapshot as it
+starts. The script prints the realm's id, which names its repo:
+
+```
+git --git-dir="$HOME/.local/share/boxel/realm-history/localhost_4201/<realm id>.git" log --stat
+```
+
 ## Recording
 
 Each realm the task records gets a recorder (`src/recorder.ts`) when its
@@ -256,6 +301,20 @@ Each `--realm` names a bootstrap realm by the directory its realm server
 mounts. The event is by the realm's Matrix bot, or by `boxel-system` for a
 realm named without one, and carries the repository and commit deployed. A
 realm whose recording is off gets no event.
+
+`scripts/enable.ts` turns recording on or off for one realm:
+
+```
+node scripts/enable.ts <realm url> on|off
+```
+
+`on` sets the realm's `realm_history_state.enabled`, creating its row from
+`realm_registry` when it has none. `off` clears the flag and keeps the row, so
+turning recording back on carries on in the same repo. The script prints the
+realm's recording before and after, and says when the realm is stalled. It
+refuses a published realm, whose source realm's history covers it, and a URL
+no realm is registered at; both exit 1. It is how recording is turned on
+locally and in each deployed environment.
 
 ## Tests
 
