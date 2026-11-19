@@ -66,6 +66,8 @@ import {
 } from './error.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
+import { parsePathSpecifier } from './path-specifier.ts';
+import { RealmPaths } from './paths.ts';
 import {
   coerceTypes,
   normalizeRealmMetaValue,
@@ -1207,7 +1209,9 @@ export class IndexQueryEngine {
       }
 
       if (filter) {
-        conditions.push(this.filterCondition(filter, baseCardRef, 'positive'));
+        conditions.push(
+          this.filterCondition(filter, baseCardRef, 'positive', realmURL),
+        );
       }
 
       let everyCondition = every(conditions);
@@ -1579,10 +1583,13 @@ export class IndexQueryEngine {
     return normalizeRealmMetaValue(results[0]?.value);
   }
 
+  // `realmURL` is the realm the search reads, which a path filter's prefixes
+  // are relative to.
   private filterCondition(
     filter: Filter,
     onRef: CodeRef,
     polarity: FilterPolarity,
+    realmURL: URL,
   ): CardExpression {
     let typeRef = (filter as { type?: CodeRef }).type;
     let onProp = 'on' in filter ? filter.on : undefined;
@@ -1617,20 +1624,37 @@ export class IndexQueryEngine {
     } else if ('contains' in filter) {
       return this.containsCondition(filter, on, typeConditionRef);
     } else if ('not' in filter) {
-      return this.notCondition(filter, on, typeConditionRef, polarity);
+      return this.notCondition(
+        filter,
+        on,
+        typeConditionRef,
+        polarity,
+        realmURL,
+      );
     } else if ('range' in filter) {
       return this.rangeCondition(filter, on, typeConditionRef);
     } else if ('matches' in filter) {
       return this.matchesCondition(filter, on, typeConditionRef);
+    } else if ('paths' in filter) {
+      return every([
+        ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
+        pathsCondition(filter.paths, realmURL),
+      ]);
     } else if ('every' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
-        ...filter.every.map((i) => this.filterCondition(i, on, polarity)),
+        ...filter.every.map((i) =>
+          this.filterCondition(i, on, polarity, realmURL),
+        ),
       ]);
     } else if ('any' in filter) {
       return every([
         ...(typeConditionRef ? [this.typeCondition(typeConditionRef)] : []),
-        any([...filter.any.map((i) => this.filterCondition(i, on, polarity))]),
+        any([
+          ...filter.any.map((i) =>
+            this.filterCondition(i, on, polarity, realmURL),
+          ),
+        ]),
       ]);
     } else {
       if (isCardTypeFilter(filter)) {
@@ -1817,8 +1841,9 @@ export class IndexQueryEngine {
   private notCondition(
     filter: NotFilter,
     on: CodeRef,
-    typeConditionRef?: CodeRef,
-    polarity: FilterPolarity = 'positive',
+    typeConditionRef: CodeRef | undefined,
+    polarity: FilterPolarity,
+    realmURL: URL,
   ): CardExpression {
     let typeRef = typeConditionRef;
     return every([
@@ -1826,7 +1851,12 @@ export class IndexQueryEngine {
       [
         'NOT',
         ...addExplicitParens(
-          this.filterCondition(filter.not, on, flipPolarity(polarity)),
+          this.filterCondition(
+            filter.not,
+            on,
+            flipPolarity(polarity),
+            realmURL,
+          ),
         ),
       ],
     ]);
@@ -2826,6 +2856,48 @@ const PRERENDERED_HTML_SELECTS = [
 // char itself) with a backslash before binding.
 function escapeSqliteLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+// The rows stored under any of a path filter's prefixes in the realm at
+// `realmURL`. A row's `url` is its file's URL, so each prefix is turned into
+// the URL the realm stores a file at that path under, and compared with it: a
+// directory as a prefix of the URL, and a file as the whole URL. The
+// comparison is exact and case-sensitive, as a path specifier's matching is.
+// Postgres tests a prefix with `LIKE`, whose `%`, `_` and `\` are escaped, so
+// an index on `url` serves it. SQLite's `LIKE` ignores case, so it tests where
+// the prefix first appears instead. A filter with no prefixes, or with the
+// realm's root among them, has no path limit.
+function pathsCondition(paths: string[], realmURL: URL): CardExpression {
+  let parsed = parsePathSpecifier(paths);
+  if (!parsed.ok) {
+    throw new InvalidQueryError(parsed.errors[0].message);
+  }
+  let { prefixes } = parsed.specifier;
+  if (
+    prefixes.length === 0 ||
+    prefixes.some((prefix) => prefix.segments.length === 0)
+  ) {
+    return ['true'];
+  }
+  let realm = new RealmPaths(realmURL);
+  return any(
+    prefixes.map((prefix): CardExpression => {
+      let href = realm.fileURL(prefix.path).href;
+      if (!prefix.directory) {
+        return ['i.url =', param(href)];
+      }
+      return [
+        dbExpression({
+          pg: [
+            'i.url LIKE',
+            param(`${escapeSqliteLikePattern(href)}%`),
+            `ESCAPE '\\'`,
+          ],
+          sqlite: ['instr(i.url,', param(href), ') = 1'],
+        }),
+      ];
+    }),
+  );
 }
 
 function assertNever(value: never) {

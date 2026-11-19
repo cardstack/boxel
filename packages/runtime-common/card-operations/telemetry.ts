@@ -334,6 +334,7 @@ export type PolicyDecisionReason =
   | 'authorization-infrastructure'
   | 'unmatchable-target'
   | 'no-grant'
+  | 'outside-paths'
   | 'reads-actor'
   | 'predicate'
   | 'target-missing'

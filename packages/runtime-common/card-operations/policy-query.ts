@@ -513,8 +513,19 @@ async function grantFilters(
         `a compiled query grant on "${operation}" lowered to no filter`,
       );
     }
+    let scoped = withoutMisreadings(policyFilterFromWire(bound.filter), grant);
     filters.push({
-      filter: withoutMisreadings(policyFilterFromWire(bound.filter), grant),
+      // A grant limited to some paths admits only the cards stored under
+      // them, so its paths narrow its filter (ADR 038 §1.5). They travel in
+      // the filter, so an explain shows them with the rest of it.
+      filter: grant.paths
+        ? {
+            every: [
+              scoped,
+              { paths: grant.paths.prefixes.map((prefix) => prefix.source) },
+            ],
+          }
+        : scoped,
       matched: candidate,
     });
   }
