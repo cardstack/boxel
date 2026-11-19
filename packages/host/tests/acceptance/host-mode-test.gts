@@ -19,7 +19,6 @@ import { module, test } from 'qunit';
 
 import {
   Deferred,
-  hostRouteAddress,
   validateHostRoutes,
   type HostRoute,
   type HostRouteTypeInfo,
@@ -48,7 +47,6 @@ import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
-import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 import type * as HrefToModule from '@cardstack/base/href-to';
 
@@ -445,10 +443,8 @@ module('Acceptance | host mode tests', function (hooks) {
               data-test-link='routed'
               href={{this.routedHref @model.post}}
             >Routed</a>
-            <a
-              data-test-link='by-hand'
-              href='{{this.realm}}posts/trail-runner'
-            >By hand</a>
+            <a data-test-link='by-hand' href='{{this.realm}}by-name/Mango'>By
+              hand</a>
             <a data-test-link='own-url' href='{{this.realm}}Pet/mango'>Own URL</a>
             <a data-test-link='fixed' href='{{this.realm}}terms'>Fixed</a>
             <a
@@ -2078,6 +2074,7 @@ module('Acceptance | host mode tests', function (hooks) {
       };
       let link = (name: string) => `[data-test-link="${name}"]`;
       let post = `[data-test-host-mode-card="${testHostModeRealmURL}Post/trail-runner"]`;
+      let mango = `[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`;
       let searches = () => lookups.filter((l) => l.endsWith('_search')).length;
       let pageURL: string;
 
@@ -2090,36 +2087,7 @@ module('Acceptance | host mode tests', function (hooks) {
         ));
         await visit('/test/LinkPage/index');
         // The routed link has its address once the linked post has loaded.
-        try {
-          await waitFor(`${link('routed')}[href$="/posts/trail-runner"]`);
-        } catch {
-          // Says why the reverse lookup gave the post no address.
-          let routed = document.querySelector(link('routed'));
-          let card = await getService('store').get(
-            `${testHostModeRealmURL}Post/trail-runner`,
-          );
-          let api = await loader.import<typeof CardAPI>(
-            '@cardstack/base/card-api',
-          );
-          let result = hostRouteAddress(
-            { kind: 'cards', cards: [card as CardDefType] },
-            {
-              routes: dynamicRoutes(),
-              realmURL: new URL(testHostModeRealmURL),
-              api: {
-                ...api,
-                virtualNetwork: getService('network').virtualNetwork,
-              },
-            },
-          );
-          throw new Error(
-            `the routed link has no routed address: href=${routed?.getAttribute(
-              'href',
-            )} lookup=${JSON.stringify(result, (key, value) =>
-              key === 'route' ? value?.fullPath : value,
-            )}`,
-          );
-        }
+        await waitFor(`${link('routed')}[href$="/posts/trail-runner"]`);
         await settled();
         lookups = [];
         pageURL = window.location.href;
@@ -2157,10 +2125,22 @@ module('Acceptance | host mode tests', function (hooks) {
       test('a link written by hand resolves through the routes', async function (assert) {
         await click(link('by-hand'));
 
-        assert.dom(post).exists();
-        assert.strictEqual(currentURL(), '/test/posts/trail-runner');
+        assert.dom(mango).exists();
+        assert.strictEqual(currentURL(), '/test/by-name/Mango');
         assert.strictEqual(searches(), 1, 'the route searched once');
         assert.deepEqual(leftToBrowser, []);
+      });
+
+      test('a link written by hand to an address a routed link has needs no lookup', async function (assert) {
+        // The new-tab link has the routed link's address. Without its
+        // target, it is an ordinary link to that address.
+        document.querySelector(link('new-tab'))!.removeAttribute('target');
+
+        await click(link('new-tab'));
+
+        assert.dom(post).exists();
+        assert.strictEqual(currentURL(), '/test/posts/trail-runner');
+        assert.strictEqual(searches(), 0);
       });
 
       test("a link to a card's own URL opens the card", async function (assert) {
@@ -2279,8 +2259,8 @@ module('Acceptance | host mode tests', function (hooks) {
         assert.strictEqual(searches(), 1, 'a second hover loads nothing');
 
         await click(link('by-hand'));
-        assert.dom(post).exists();
-        assert.strictEqual(currentURL(), '/test/posts/trail-runner');
+        assert.dom(mango).exists();
+        assert.strictEqual(currentURL(), '/test/by-name/Mango');
         assert.strictEqual(searches(), 1, 'the click ran no lookup');
       });
 
