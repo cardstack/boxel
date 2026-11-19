@@ -21355,10 +21355,31 @@ export class Realm {
   // When the index can't be read, this answers 503 with `Retry-After`, as a
   // page does, never an empty tree: a reader would take that for a realm
   // with no routes.
+  //
+  // `servedAtHostURL` says whether a host URL serves this realm, which today
+  // is a published realm. Only there does a routed address open, so a
+  // reader that gives links their addresses uses the routes only when it is
+  // true. A render that asks about a realm no host URL serves gets that
+  // answer alone, and its links keep card URLs.
   private async hostRoutes(
-    _request: Request,
+    request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let servedAtHostURL = this.#published;
+    let headers = {
+      'content-type': SupportedMimeType.JSON,
+      // The tree changes when the realm is indexed, and when an unavailable
+      // route's type can be read again, and carries no validator a cache
+      // could ask with.
+      'cache-control': 'no-store',
+    };
+    if (!servedAtHostURL && isDuringPrerenderRequest(request)) {
+      return createResponse({
+        body: JSON.stringify({ servedAtHostURL }),
+        init: { headers },
+        requestContext,
+      });
+    }
     let routes: HostRoutesValidation['routes'];
     try {
       ({ routes } = await this.getHostRoutes());
@@ -21381,15 +21402,8 @@ export class Realm {
       });
     }
     return createResponse({
-      body: JSON.stringify({ routes }),
-      init: {
-        headers: {
-          'content-type': SupportedMimeType.JSON,
-          // The tree changes when the realm is indexed, and carries no
-          // validator a cache could ask with.
-          'cache-control': 'no-store',
-        },
-      },
+      body: JSON.stringify({ routes, servedAtHostURL }),
+      init: { headers },
       requestContext,
     });
   }

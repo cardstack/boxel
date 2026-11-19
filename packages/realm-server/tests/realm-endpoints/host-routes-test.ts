@@ -3,6 +3,7 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 import {
   DEFAULT_PERMISSIONS,
+  DURING_PRERENDER_HEADER,
   HostRoutesReadError,
   SupportedMimeType,
   rri,
@@ -152,8 +153,12 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       );
       assert.deepEqual(
         Object.keys(response.body),
-        ['routes'],
-        'the answer holds the routes and nothing else',
+        ['routes', 'servedAtHostURL'],
+        'the answer holds the routes, whether a host URL serves the realm, and nothing else',
+      );
+      assert.false(
+        response.body.servedAtHostURL,
+        'no host URL serves a realm that is not published',
       );
       let { routes } = await testRealm.getHostRoutes();
       assert.deepEqual(
@@ -223,6 +228,69 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(stranger.status, 403, 'no read permission: 403');
       assert.strictEqual(stranger.body.routes, undefined, 'and no routes');
     });
+
+    test('answers a render without reading the routes, because no host URL serves the realm', async function (assert) {
+      let getHostRoutes = testRealm.getHostRoutes;
+      let reads = 0;
+      testRealm.getHostRoutes = async function (this: Realm) {
+        reads++;
+        return await getHostRoutes.call(this);
+      };
+      try {
+        let response = await hostRoutes(ownerUserId).set(
+          DURING_PRERENDER_HEADER,
+          '1',
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          response.body,
+          { servedAtHostURL: false },
+          'the answer says only that no host URL serves the realm',
+        );
+        assert.strictEqual(reads, 0, 'the routes were not read');
+      } finally {
+        testRealm.getHostRoutes = getHostRoutes;
+      }
+    });
+  });
+
+  module('a published realm with host routes', function (hooks) {
+    let realmURL = testRealmURLFor('published-host-routes/');
+    let request: RealmRequest;
+    let testRealm: Realm;
+
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
+      permissions: { '*': ['read'] },
+      fileSystem: makeRoutedFixture(),
+      published: true,
+      onRealmSetup(args) {
+        testRealm = args.testRealm;
+        request = withRealmPath(args.request, realmURL);
+      },
+    });
+
+    function hostRoutesForRender() {
+      return request
+        .get('/_host-routes')
+        .set('Accept', SupportedMimeType.JSON)
+        .set(DURING_PRERENDER_HEADER, '1');
+    }
+
+    test('answers a render the routes, and that a host URL serves the realm', async function (assert) {
+      // The routes are the tree the index stored, so a render's request
+      // doesn't wait for a type's definition.
+      let response = await hostRoutesForRender();
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.true(response.body.servedAtHostURL, 'a host URL serves it');
+      assert.deepEqual(
+        response.body.routes,
+        JSON.parse(JSON.stringify((await testRealm.getHostRoutes()).routes)),
+        'with its routes',
+      );
+    });
   });
 
   module('a public realm without host routes', function (hooks) {
@@ -248,7 +316,11 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         .set('Accept', SupportedMimeType.JSON);
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      assert.deepEqual(response.body, { routes: [] }, 'no routes');
+      assert.deepEqual(
+        response.body,
+        { routes: [], servedAtHostURL: false },
+        'no routes',
+      );
     });
   });
 });
