@@ -509,4 +509,94 @@ module(basename(import.meta.filename), function (hooks) {
       'a module path is served as the module',
     );
   });
+
+  test('a page on a host URL of a realm everyone may read has an ETag a shared cache may keep, and a matching request gets a 304', async function (assert) {
+    let response = await page('/landing', OPEN_HOST);
+    assert.strictEqual(response.status, 200, response.text.slice(0, 300));
+    let etag = response.headers['etag'];
+    assert.ok(etag, 'the page has an ETag');
+    assert.strictEqual(
+      response.headers['cache-control'],
+      'public, max-age=0, must-revalidate',
+    );
+    let vary = (response.headers['vary'] ?? '').toLowerCase();
+    for (let header of ['accept', 'sec-fetch-dest', 'authorization']) {
+      assert.true(vary.includes(header), `it varies on ${header} (${vary})`);
+    }
+
+    let conditional = await page('/landing', OPEN_HOST).set(
+      'If-None-Match',
+      etag,
+    );
+    assert.strictEqual(
+      conditional.status,
+      304,
+      'a matching request gets a 304',
+    );
+    assert.notOk(conditional.text, 'with no body');
+    assert.strictEqual(conditional.headers['etag'], etag);
+  });
+
+  test("a page's ETag changes with its content and with the host URL it is served on", async function (assert) {
+    let first = await page('/landing', OPEN_HOST);
+    let etag = first.headers['etag'];
+    assert.ok(etag);
+
+    let onSpace = await page(`${SPACE_PREFIX}landing`, SPACE_HOST);
+    assert.ok(onSpace.headers['etag']);
+    assert.notStrictEqual(
+      onSpace.headers['etag'],
+      etag,
+      'each host URL has its own ETag',
+    );
+
+    await db.execute(
+      `UPDATE prerendered_html SET isolated_html = $1
+       WHERE url = $2 AND type = 'instance'`,
+      {
+        bind: [
+          '<section data-prerender><h1 data-headline>Changed landing</h1></section>',
+          `${OPEN}landing.json`,
+        ],
+      },
+    );
+    let changed = await page('/landing', OPEN_HOST).set('If-None-Match', etag);
+    assert.strictEqual(
+      changed.status,
+      200,
+      'the old ETag no longer matches once the page changes',
+    );
+    assert.true(changed.text.includes('Changed landing'));
+    assert.notStrictEqual(changed.headers['etag'], etag);
+  });
+
+  test("a page whose markup the realm's policy admits is private", async function (assert) {
+    let response = await page('/', GOVERNED_HOST);
+    assert.strictEqual(response.status, 200, response.text.slice(0, 300));
+    assert.true(response.text.includes('Governed home'));
+    assert.ok(response.headers['etag'], 'it still has an ETag');
+    assert.strictEqual(
+      response.headers['cache-control'],
+      'private, max-age=0, must-revalidate',
+      'a grant can answer two visitors differently, so no shared cache keeps it',
+    );
+  });
+
+  test('a signed-in request for a page is private', async function (assert) {
+    let response = await page('/landing', OPEN_HOST).set(
+      'Authorization',
+      'Bearer not-checked-here',
+    );
+    assert.strictEqual(response.status, 200, response.text.slice(0, 300));
+    assert.strictEqual(
+      response.headers['cache-control'],
+      'private, max-age=0, must-revalidate',
+    );
+  });
+
+  test('a not-found page on a host URL has no ETag', async function (assert) {
+    let response = await page('/docs/missing', GOVERNED_HOST);
+    assert.strictEqual(response.status, 404, response.text.slice(0, 300));
+    assert.strictEqual(response.headers['etag'], undefined);
+  });
 });
