@@ -365,6 +365,9 @@ module(basename(import.meta.filename), function (hooks) {
         consentedAt: new Date(),
         redirectUri: 'https://apps.document-client.example/callback',
       });
+      if (!grantId) {
+        throw new Error('the grant was not stored');
+      }
       await db.execute(
         `INSERT INTO oauth_provider_tokens
            (id_hash, kind, grant_id, resource, scope, payload, expires_at,
