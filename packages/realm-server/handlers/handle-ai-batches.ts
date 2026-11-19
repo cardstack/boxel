@@ -1,6 +1,8 @@
 import type Koa from 'koa';
 import {
   automationRunForCall,
+  endAutomationRunNotADirectWriter,
+  runActsAsDirectWriter,
   getAIBatch,
   isLateAIBatch,
   recordAIBatchReadByRun,
@@ -11,6 +13,7 @@ import {
   recordAIBatchState,
   type AutomationRun,
   type DBAdapter,
+  type ReportRunChange,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
@@ -88,6 +91,10 @@ export interface AIBatchHandlerArgs {
   dbAdapter: DBAdapter;
   realmSecretSeed: string;
   virtualNetwork: VirtualNetwork;
+  matrixServerName: string;
+  // Told when a batch call ends its run because the run's person is no
+  // longer a direct writer of its realm.
+  reportRunChange?: ReportRunChange;
 }
 
 export function handleSubmitAIBatch(args: AIBatchHandlerArgs) {
@@ -320,12 +327,18 @@ export function handleAIBatchStatus(args: AIBatchHandlerArgs) {
 
 // The run a batch call comes from, and its automation, after checking that
 // the call carries a run token whose identity's sessions weren't revoked
-// since it was minted, and that its run is still running and owned by the
-// token's attempt. Answers the refusal itself and returns undefined
-// otherwise.
+// since it was minted, that its run is still running and owned by the
+// token's attempt, and that its identity is still a direct writer of the
+// run's realm. Answers the refusal itself and returns undefined otherwise.
 async function batchCaller(
   ctxt: Koa.Context,
-  { dbAdapter, realmSecretSeed }: AIBatchHandlerArgs,
+  {
+    dbAdapter,
+    realmSecretSeed,
+    virtualNetwork,
+    matrixServerName,
+    reportRunChange,
+  }: AIBatchHandlerArgs,
 ): Promise<{ run: AutomationRun; automation: AutomationRow } | undefined> {
   let authorization = ctxt.req.headers['authorization'] ?? null;
   if (!authorization) {
@@ -375,6 +388,23 @@ async function batchCaller(
     return undefined;
   }
   let { run } = call;
+  if (
+    !(await runActsAsDirectWriter(
+      { dbAdapter, virtualNetwork, matrixServerName },
+      run,
+    ))
+  ) {
+    if (
+      await endAutomationRunNotADirectWriter(dbAdapter, run.id, token.attempt)
+    ) {
+      await reportRunChange?.(run.id);
+    }
+    await sendResponseForForbiddenRequest(
+      ctxt,
+      "The person this run acts as is not a direct writer of the automation's workspace, so the run has ended",
+    );
+    return undefined;
+  }
   let automation = await getAutomation(dbAdapter, run.automationId);
   if (!automation) {
     await sendResponseForForbiddenRequest(

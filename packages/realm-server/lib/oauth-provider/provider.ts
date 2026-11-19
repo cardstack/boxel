@@ -13,7 +13,8 @@ import {
   type RateLimitStore,
 } from '@cardstack/runtime-common';
 import { OAUTH_PROVIDER_PATH } from '../request-telemetry.ts';
-import { newDynamicClientId, oauthProviderAdapter } from './adapter.ts';
+import { oauthProviderAdapter } from './adapter.ts';
+import { newDynamicClientId } from './dynamic-client-id.ts';
 import type { CallerLimit } from './caller-limit.ts';
 import {
   authorizationHandler,
@@ -40,6 +41,7 @@ import {
 } from './grants.ts';
 import {
   CHECKS_PROPERTY,
+  clientIdForLogs,
   clientMetadataDocuments,
   DOCUMENT_CACHE_SECONDS,
   MAX_DOCUMENT_BYTES,
@@ -50,11 +52,17 @@ import {
   type NewClientLimit,
 } from './new-client-limit.ts';
 import { boxelHosts } from './redirect-uris.ts';
+import { revocationHandler } from './revocation.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { registrationHandler } from './registration.ts';
+import {
+  connectionsDisconnectHandler,
+  connectionsListHandler,
+} from './connections.ts';
 import { oauthResourceController } from './resource.ts';
 import {
   DEFAULT_TOKEN_LIMIT,
+  failureAlert,
   tokenHandler,
   type TokenLimit,
 } from './token-limit.ts';
@@ -69,6 +77,7 @@ export const OAUTH_PROVIDER_PATH_PREFIX = OAUTH_PROVIDER_PATH;
 export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
 export const OAUTH_REGISTRATION_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/reg`;
 export const OAUTH_TOKEN_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/token`;
+export const OAUTH_REVOCATION_PATH = `${OAUTH_TOKEN_PATH}/revocation`;
 
 // The fields discovery copies from the library's document. That document
 // also lists every endpoint it mounts, `jwks_uri`, and OpenID Connect
@@ -92,6 +101,10 @@ export const OAUTH_TOKEN_PATH = `${OAUTH_PROVIDER_PATH_PREFIX}/token`;
 // finds it missing assumes `client_secret_basic` (RFC 8414 §2) and registers
 // asking for a secret, which registration refuses. The library lists `none`,
 // from `clientAuthMethods`.
+//
+// `revocation_endpoint_auth_methods_supported` is set, not copied, because
+// the library doesn't list it, and a client that finds it missing assumes
+// `client_secret_basic` (RFC 8414 §2), which no client here has.
 //
 // `authorization_response_iss_parameter_supported` says the provider sends
 // `iss` with every authorization response (RFC 9207), which lets a client
@@ -141,6 +154,7 @@ export interface OAuthProviderService {
   handleRegistration: Koa.Middleware;
   handleAuthorization: Koa.Middleware;
   handleToken: Koa.Middleware;
+  handleRevocation: Koa.Middleware;
   handleInteraction: Koa.Middleware;
   handleFinish: Koa.Middleware;
   handleResume: Koa.Middleware;
@@ -151,6 +165,11 @@ export interface OAuthProviderService {
   consentHandlers(deps: ConsentRouteDeps): {
     handleConsentDetails: Koa.Middleware;
     handleConsentDecision: Koa.Middleware;
+  };
+  // Connected apps' list and disconnect, behind the same check as consent.
+  connectionsHandlers(deps: Pick<ConsentRouteDeps, 'realmSecretSeed'>): {
+    handleConnectionsList: Koa.Middleware;
+    handleConnectionsDisconnect: Koa.Middleware;
   };
   // The issuer, and the resources it issues tokens for (`registry.ts`).
   issuer: string;
@@ -241,6 +260,9 @@ export function startOAuthProvider({
   });
   // Boxel's own apps, listed in code. None is listed yet.
   let preRegistered: ReadonlySet<string> = new Set();
+  // The token and revocation endpoints count failures in the same buckets,
+  // so one alert watches both.
+  let tokenFailureAlert = failureAlert(tokenLimit);
   return {
     provider,
     issuer,
@@ -261,6 +283,14 @@ export function startOAuthProvider({
       dbAdapter,
       rateLimitStore,
       limit: tokenLimit,
+      alert: tokenFailureAlert,
+    }),
+    handleRevocation: revocationHandler({
+      provider,
+      dbAdapter,
+      rateLimitStore,
+      limit: tokenLimit,
+      alert: tokenFailureAlert,
     }),
     handleInteraction: interactionHandler({ secureOriginURL }),
     handleFinish: finishHandler({ provider, dbAdapter, secureOriginURL }),
@@ -289,6 +319,19 @@ export function startOAuthProvider({
       return {
         handleConsentDetails: consentDetailsHandler(deps),
         handleConsentDecision: consentDecisionHandler(deps),
+      };
+    },
+    connectionsHandlers: ({ realmSecretSeed }) => {
+      let deps = {
+        registry,
+        preRegistered,
+        dbAdapter,
+        secureOriginURL,
+        realmSecretSeed,
+      };
+      return {
+        handleConnectionsList: connectionsListHandler(deps),
+        handleConnectionsDisconnect: connectionsDisconnectHandler(deps),
       };
     },
     handleRegistration: registrationHandler({
@@ -362,9 +405,8 @@ export function createOAuthProvider({
     // Revoking any token of a grant revokes the whole grant, which
     // `GrantAdapter` ends rather than deletes (ADR 021 §1.9). Not the
     // library's default, which leaves the grant live when its client revokes
-    // an access token. Nothing reaches this yet: the revocation endpoint is
-    // off (`features.revocation` below, listed in ADR 021's remediation). It
-    // is set now so the endpoint ends grants as §1.9 requires once it is on.
+    // an access token. `TokenAdapter.destroy` has already ended it by the
+    // time the library gets here on the revocation endpoint.
     revokeGrantPolicy: () => true,
     // The account a flow signs in as: a user's internal ID. The library
     // reads nothing about the user: the provider issues no ID tokens and
@@ -386,8 +428,9 @@ export function createOAuthProvider({
       }
       return { accountId, claims: async () => ({ sub: accountId }) };
     },
-    // A browser may call the token endpoint only from a page on the origin
-    // of one of the client's redirect URIs, and only for a public client.
+    // A browser may call the token and revocation endpoints only from a page
+    // on the origin of one of the client's redirect URIs, and only for a
+    // public client.
     // The library's default, set so an upgrade can't change it.
     clientBasedCORS: (_ctx: KoaContextWithOIDC, origin: string, client) =>
       browserOriginAllowed(origin, client),
@@ -488,7 +531,7 @@ export function createOAuthProvider({
       jwks: `${OAUTH_PROVIDER_PATH_PREFIX}/jwks`,
       pushed_authorization_request: `${OAUTH_PROVIDER_PATH_PREFIX}/request`,
       registration: `${OAUTH_PROVIDER_PATH_PREFIX}/reg`,
-      revocation: `${OAUTH_PROVIDER_PATH_PREFIX}/token/revocation`,
+      revocation: OAUTH_REVOCATION_PATH,
       token: OAUTH_TOKEN_PATH,
       userinfo: `${OAUTH_PROVIDER_PATH_PREFIX}/me`,
     },
@@ -557,9 +600,21 @@ export function createOAuthProvider({
             cacheDuration: { ...DOCUMENT_CACHE_SECONDS },
           }
         : { enabled: false },
-      // Off: nothing serves them.
+      // A client ending its own connection (RFC 7009), checked by Boxel
+      // before the library sees it (`revocation.ts`).
+      revocation: {
+        enabled: true,
+        // A client may revoke only a token issued to it, and is answered 200
+        // either way. The library's default for a public client, set so an
+        // upgrade can't change it.
+        allowedPolicy: (
+          _ctx: KoaContextWithOIDC,
+          client: { clientId: string },
+          token: { clientId?: string },
+        ) => token.clientId === client.clientId,
+      },
+      // Off: nothing serves it.
       deviceFlow: { enabled: false },
-      revocation: { enabled: false },
       // No ID tokens or OpenID claims: the provider is not an OpenID provider.
       userinfo: { enabled: false },
       jwtUserinfo: { enabled: false },
@@ -630,6 +685,8 @@ export function createOAuthProvider({
       document.scopes_supported = scopes;
       document.authorization_endpoint = `${issuer}${OAUTH_AUTHORIZATION_PATH}`;
       document.token_endpoint = `${issuer}${OAUTH_TOKEN_PATH}`;
+      document.revocation_endpoint = `${issuer}${OAUTH_REVOCATION_PATH}`;
+      document.revocation_endpoint_auth_methods_supported = ['none'];
       document.registration_endpoint = `${issuer}${OAUTH_REGISTRATION_PATH}`;
       ctx.body = document;
     }
@@ -649,6 +706,21 @@ export function createOAuthProvider({
       log.info(
         `token refused: ${error.error ?? 'server_error'}, client ${
           ctx.oidc?.client?.clientId ?? 'unknown'
+        }`,
+      );
+    },
+  );
+
+  // The revocation endpoint's refusals, by their OAuth error code alone. A
+  // revocation that ends a grant is logged where the grant ends
+  // (`endGrant`), with its reason.
+  provider.on(
+    'revocation.error',
+    (ctx: KoaContextWithOIDC, error: { error?: string }) => {
+      let clientId = ctx.oidc?.client?.clientId;
+      log.info(
+        `revocation refused: ${error.error ?? 'server_error'}, client ${
+          clientId ? clientIdForLogs(clientId) : 'unknown'
         }`,
       );
     },

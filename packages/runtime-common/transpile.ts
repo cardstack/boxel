@@ -57,7 +57,29 @@ const compiler = {
 // their identity; version 3 tags the definitions a module marks with
 // `markDefinition`, in place of the results of a fixed list of factories;
 // version 4 keys the tag by `Symbol.for('cardstack-ident')`.
+//
+// This covers the code in this package. A change to an installed package that
+// `transpileJS` runs is covered by `TRANSPILER_PACKAGES` below instead.
 export const TRANSPILE_VERSION = 4;
+
+// The installed packages whose code decides what `transpileJS` makes from a
+// given source. The realm server derives a transpiler identity from what is
+// installed for each of them (see `realm-server/lib/transpiler-identity.ts`),
+// so upgrading or patching one changes the module validator without a bump of
+// `TRANSPILE_VERSION`. Every package that this file loads, directly or
+// through the files it imports, is listed here; a realm-server test checks
+// that.
+export const TRANSPILER_PACKAGES = [
+  '@babel/core',
+  '@babel/plugin-transform-typescript',
+  'babel-plugin-ember-template-compilation',
+  'content-tag',
+  'decorator-transforms',
+  'ember-concurrency-async-plugin',
+  'ember-source',
+  'glimmer-scoped-css',
+  'super-fast-md5',
+] as const;
 
 // `identity.moduleIdentifier` names the module in its canonical form: the
 // canonical name of the realm that serves it, followed by its path. When

@@ -82,14 +82,17 @@ description: >-
   with (`handlers/handle-automations.ts`, paths in
   `runtime-common/automation-routes.ts`): the switch-on estimate, switch-on
   with the monthly credit cap it agrees to, Preview, Run now, pause, resume,
-  remove and cancel a run, their bodies, refusals and status codes, and how
-  to call them by hand in development.
+  remove, cancel a run and read a run's log, their bodies, refusals and
+  status codes, and how to call them by hand in development.
   Also covers a run's log — `automation_run_log`, `appendRunLog` and
   `readRunLog` in `automation-run-log.ts`, the `/_run-log` route and the
   host's `RunLogSink`, the platform's `callApi`, `resolve`, commit and cap
-  lines, redaction, the per-run size cap, and the `[automation-run-log]` lines
-  in Loki. Use when reading a run's log in Postgres or Loki, adding a line the
-  platform logs for a run, or diagnosing a run whose log is missing lines.
+  lines, redaction, the per-run size cap, the `[automation-run-log]` lines
+  in Loki, and how the console reads a log: `GET /_automation-run-log`,
+  paged and filtered by level, and `followAutomationRunLog`, which polls a
+  running run's log. Use when reading a run's log in Postgres or Loki, adding
+  a line the platform logs for a run, showing a run's log in the app, or
+  diagnosing a run whose log is missing lines.
   Also covers a run's admission (`automation-admission.ts`): the checks the
   worker makes before a run costs anything (the automation's row, the run's
   identity's direct write, revoked sessions and Matrix account, the script,
@@ -198,12 +201,13 @@ The server reads the card from the index as data and never runs its module, so e
 | `batchedAI`            | `BooleanField`                      | off unless `true`                                                                                                                                                                                                                                                                                                                               |
 | `batchDeadlineMinutes` | `NumberField`                       | with `batchedAI` on, minutes a batch may take before its requests go again at the normal price; 1–1440, 60 when unset                                                                                                                                                                                                                           |
 
-A trigger's fields by kind: `cron` reads `expression`, `timeZone`, optional `count`, and optional `untilDate` with optional `untilTime` (absent: 23:59, the end of that day) in `timeZone`; `once` reads `date`, `time` and `timeZone`; `webhook` reads `webhookPath`, one of the realm's incoming webhooks. Dates are `DateField` (`yyyy-MM-dd`); times are `StringField`s holding a wall-clock `HH:MM`.
+A trigger's fields by kind: `cron` reads `expression`, `timeZone`, optional `count`, and optional `untilDate` with optional `untilTime` (absent: 23:59, the end of that day) in `timeZone`; `once` reads `date`, `time` and `timeZone`; `webhook` reads `webhookPath`, one of the incoming webhooks the realm can use (_Which webhooks a realm can use_, below). Dates are `DateField` (`yyyy-MM-dd`); times are `StringField`s holding a wall-clock `HH:MM`.
 
 Every view is built from Pret UI, which subset files may import, and speaks plainly: "workspace", "outside services", "AI requests" and "saves", never realm, `callApi` or `resolve`.
 
 - **Isolated**: `PanelSection`s. The script shows read-only in a `CodeView` (from `fields/code/code.gts`, the catalog `CodeField`'s read face over Pret UI's `CodeBlock`). Each trigger is an `Item` row: an icon for its kind (a lightning bolt for a webhook), its label, its schedule in words with the raw expression as a `Token`, and the times, days or months it names as bulleted lists. Limits are two bordered `Descriptions` grids, _Each run_ and _Each month_, with a line under each value saying what it counts. Outside calls are `Item` rows, params a `KeyValue` list, and each empty group an `EmptyState`. Run milestones aren't a field: the script declares them with `realm.progress.plan([...])` and marks each with `realm.progress.milestone(name)` as it reaches it (_Run milestones_, below). For a direct writer, the card's _Run milestones_ section lists the milestones of the run in progress (`currentRun`), or else of the last run (`lastRun`), as a Pret UI `Timeline` whose rail joins them: each one's time and last count, and a marker shaded by state, gray before a milestone runs, yellow while it runs, green once it is done, red where the run ended with an error, and a pause where Boxel stopped the run. The plan's milestones the run hasn't started stay gray after it, marked _Not started_. Without a last run to list, and for everyone else, the section lists the milestones the script declares, each _Not started_. The card reads them from the script's text: the first `realm.progress.plan([...])` whose array holds only string literals (`declaredMilestones`). A plan built at run time shows nothing until a run reports one, and the section shows an `EmptyState`. A `Callout` says who runs it and who pays.
-- **Edit**: `FormSection`s of `Field`s. The script is edited in place in a `CodeEdit` (the `CodeField`'s edit face over Pret UI's `CodeEditor`) and saved to its file with the host's `write-text-file` tool. It reloads when the file changes elsewhere, unless it holds unsaved edits. A trigger's form shows only its kind's fields: a `SegmentedControl` for the kind, a `Combobox` of IANA zones, `DatePicker`, `TimeInput` and `NumberInput` controls, and the schedule's reading under its expression.
+- **Edit**: `FormSection`s of `Field`s. The script is edited in place in a `CodeEdit` (the `CodeField`'s edit face over Pret UI's `CodeEditor`) and saved to its file with the host's `write-text-file` tool. It reloads when the file changes elsewhere, unless it holds unsaved edits. A trigger's form shows only its kind's fields: a `SegmentedControl` for the kind, a `Combobox` of IANA zones, `DatePicker`, `TimeInput` and `NumberInput` controls, and the schedule's reading under its expression. The schedule's expression is checked as the author types with `cronTriggerProblem` in the trigger's time zone, the rule the server reads the declaration with (_The 5-minute minimum_), so the editor shows the server's own message and accepts exactly what the server accepts.
+- **Webhook triggers**: the edit view picks the webhook from the realm's `_automation-webhooks` list in a Pret UI `Select`, each choice showing who made it. A path the card holds that the list lacks stays a choice, marked as not one of the workspace's webhooks, with a problem under the field. Without the list (no tools, as in a prerender, or a refused request) the field takes a typed path. While the server reports `webhookDeliveriesStartRuns: false` (the status route's attributes in the isolated view, the webhook list's `meta` in the editor), each webhook trigger warns "This trigger can’t fire, Boxel doesn’t run automations from webhooks." A server that reports true, or nothing, gets no warning.
 - **Cron in words**: `describeCron(expression)` in `automation/describe-cron.ts` returns `{ summary, groups }`. A short summary ("Weekdays at 9:00 AM", "3 times a day") plus a labelled group for every list of times, days or months, so several values are listed rather than joined into a long sentence. It returns undefined for shapes it can't put plainly, and the view falls back to the expression alone. It is display only; validity and firing times are `automation-schedule.ts`'s.
 
 The card declares `update`, `delete`, `transform` and `appendContainsMany` `nonGrantable`, as `RealmPolicy` does, so only the realm's direct writers edit an automation.
@@ -219,13 +223,25 @@ The views get the row from `GET <realm>/_automation-status?automation=<card URL>
 
 - **403** unless the caller is a direct writer of the realm (`isDirectWriter`), asked of the session the realm vouches for (`#sessionPrincipal`): a reader, a writer by the `*` or `users` row, a policy grant, a revoked session, a session delegated to another realm, and a realm-authority or diagnostic session never see the row. An anonymous caller gets 401 from the ACL on a realm only signed-in users can read, and 403 from the route on one anyone can read.
 - **400** when `automation` is missing, not a URL, or outside the realm.
-- **200** with `{ data: { type: 'automation-status', id, attributes } }`. `attributes` is `{ switchedOn: false }` when no row exists. Otherwise it holds `state`, `pauseReason`, `payer`, `viewerIsPayer`, `nextRun`, `lastResult`, `lastFinishedAt`, `failuresInARow` and `lastFailure` (the failure streak and its latest run's id, `reason`, `message` and `finishedAt`, or null; see _Pausing after repeated failures_), and `triggers`, one per trigger the card declares, in the card's order: `label`, `runs`, and for a bounded trigger `runsLeft` (with `runsLeftAtLeast` past `REMAINING_RUNS_LIMIT`) and `until`, plus `nextRun` and `spent`. Times are ISO strings.
+- **200** with `{ data: { type: 'automation-status', id, attributes } }`. `attributes` is `{ switchedOn: false }` when no row exists. Otherwise it holds `state`, `pauseReason`, `payer`, `viewerIsPayer`, `nextRun`, `lastResult`, `lastFinishedAt`, `failuresInARow` and `lastFailure` (the failure streak and its latest run's id, `reason`, `message` and `finishedAt`, or null; see _Pausing after repeated failures_), `pauseProblems` (what the declaration reader found, each `{ code, path, message }`, when `pauseReason` is `invalid-declaration`, else null), and `triggers`, one per trigger the card declares, in the card's order: `label`, `runs`, and for a bounded trigger `runsLeft` (with `runsLeftAtLeast` past `REMAINING_RUNS_LIMIT`) and `until`, plus `nextRun` and `spent`. Times are ISO strings.
 
-Both shapes carry `lastRun`, the automation's last run that started and has ended (`readLastRunMilestones`), and `currentRun`, its run in progress (`readCurrentRunMilestones`), each with its milestones (_Run milestones_) or null. A Preview is a test of the script, so neither is ever one. A run can start and end before switch-on (a Run now), so neither depends on the row.
+Both shapes carry `webhookDeliveriesStartRuns` (`WEBHOOK_DELIVERIES_START_RUNS`, _Which webhooks a realm can use_), which the card reads to warn under each webhook trigger. Both shapes carry `lastRun`, the automation's last run that started and has ended (`readLastRunMilestones`), and `currentRun`, its run in progress (`readCurrentRunMilestones`), each with its milestones (_Run milestones_) or null. A Preview is a test of the script, so neither is ever one. A run can start and end before switch-on (a Run now), so neither depends on the row.
 
 `payer` is the payer's Matrix id only when the viewer is the payer or `shareARealmGrant` finds a realm whose permission rows name both (ADR 011 §1.2). Otherwise it is null, and the view reads "A person who shares no workspace with you". Each trigger's next run and whether the trigger is spent come from `computeAutomationSchedule` at the realm's clock (`now()` in `clock.ts`), as the tick computes them. Runs left are counted one trigger at a time over the indexed declaration, the row's `scheduled_since` and `trigger_runs`, with no `now`, so a slot that has passed but isn't enqueued yet still counts as left. Counting stops after `RUNS_LEFT_BUDGET_MS` (250 ms) per answer; a trigger past the budget reports no `runsLeft`. When the card no longer reads as a declaration, each trigger the row has counted reports `runs` alone. The response is `no-store`. The view fetches again when the card is re-indexed, and on a `job` or `automation` realm event naming the automation (below), since a run or a change to the row changes the answer and not the card.
 
 The realm loads `automation-status.ts` with a dynamic `import()` on the route's first use, so the schedule code stays out of every bundle that imports the realm. An in-browser test realm has no `automations` table. Host tests mount a virtual-network handler that answers the route (`tests/acceptance/automation-view-test.gts`).
+
+### Which webhooks a realm can use
+
+An incoming webhook (`incoming_webhooks`, made through the realm server's `/_incoming-webhooks`) belongs to the person who made it, not to a realm. A realm can use a webhook when the webhook's owner is a direct writer of the realm (`isDirectWriter`): direct writers administer a realm and are who switch its automations on and pay for them, so a webhook any of them made is one of the realm's. Anyone else's webhook is foreign, so a person who holds a webhook's signing secret but can't write the realm can never start runs the realm's payer pays for. `packages/runtime-common/automation-webhooks.ts` holds the rule:
+
+- **`unusableWebhookProblems(txQuery, realmURL, declaration, matrixServerName)`** returns a problem per webhook trigger the realm can't use: `unknown-webhook` (no webhook has the path) or `foreign-webhook` (the owner isn't a direct writer), each at `triggers.N.webhookPath` with a message for the card. It asks inside the caller's transaction with each owner's permission row locked (`isDirectWriterLocked`). The declaration reader never reports these codes, since it reads the card alone.
+- **Switch-on and resume** ask it before they take the payer on, and refuse with `unusable-webhook` and the problems; the routes answer 422 with the messages. Resume asks before it locks the automation's row, so permission rows still lock first.
+- **The caps snapshot keeps the webhooks the payer agreed to**, as `webhookPaths` (`declaredWebhookPaths`: each path once, sorted). The index hook pauses a switched-on automation whose card names a path the snapshot lacks, a trigger pointed at another webhook or a new webhook trigger, with `webhook-changed` (`webhooksChangedFrom`). Removing a webhook trigger asks for nothing more. A snapshot without `webhookPaths` limits no webhook. A resume confirms: it checks the webhooks again and takes a new snapshot.
+- **`GET <realm>/_automation-webhooks`** (`answerAutomationWebhooks`) lists every webhook the realm can use, oldest first, as `automation-webhook` resources with `webhookPath`, `owner` (a Matrix id the viewer may see, since both are direct writers of the realm), `verificationType` and `createdAt`; never a signing secret. It answers on the realm ACL and then only a direct writer (403 otherwise), `no-store`. The card's editor reads it through `authed-fetch`.
+- **`WEBHOOK_DELIVERIES_START_RUNS`** says whether the webhook receiver starts automation runs from deliveries. While it is false, a webhook trigger never fires and is never spent. The status route reports it as `webhookDeliveriesStartRuns` and the webhook list as `meta.webhookDeliveriesStartRuns`, and the card warns under each webhook trigger. The switch-on estimate (`attributes.notices`), switch-on and resume (`meta.notices`) carry the `webhook-triggers-start-no-runs` notice (`switchOnNotices`) for a card with a webhook trigger. The change that starts runs from deliveries sets the constant to true, and every warning goes away with no card change.
+
+A webhook's owner can lose write after switch-on. Nothing pauses the automation for that, since the webhook starts no runs; the delivery that starts a run checks the webhook against the rule then.
 
 ### The declaration reader
 
@@ -239,7 +255,9 @@ Each problem has a `code`, a `path` into the card (`triggers.0.expression`, `cap
 
 ### The 5-minute minimum
 
-A cron trigger may fire at most once every `MIN_CRON_INTERVAL_MINUTES` (5). `cronFrequencyError(expression, timeZone?)` decides it from the parsed sets rather than by sampling fire times: it takes every minute of the day the hour and minute sets name, finds the closest two distinct ones, and compares the last time of a day with the first of the next only when two consecutive days can both match (a scan of one 400-year Gregorian cycle when a day field is restricted, kept per parsed schedule). `*/5 * * * *` and `3,58 * * * *` pass; `* * * * *`, `*/2 * * * *`, `0,3 * * * *` and `58,1 0,23 * * *` are refused, while `58,1 0,23 * * MON` passes, since Monday is never followed by Monday.
+A cron trigger may fire at most once every `MIN_CRON_INTERVAL_MINUTES` (5). The rule lives in `packages/runtime-common/automation-cron-rule.ts`, which depends only on `automation-schedule.ts` and `Intl`. `cronTriggerProblem(expression, timeZone?)` returns `{ code, message }` (`invalid-cron` for an expression `cronExpressionError` refuses, `cron-too-frequent` for one `cronFrequencyError` refuses) or undefined. The declaration reader reports each trigger's result, and the card's editor shows the message under the expression: the host shims the module as `@cardstack/runtime-common/automation-cron-rule` (`host/app/lib/externals.ts`), so the card and the server run one rule and can't disagree. A change to the rule changes both at once; the messages are shown to people, so they follow the UI copy rules.
+
+`cronFrequencyError(expression, timeZone?)` decides the frequency from the parsed sets rather than by sampling fire times: it takes every minute of the day the hour and minute sets name, finds the closest two distinct ones, and compares the last time of a day with the first of the next only when two consecutive days can both match (a scan of one 400-year Gregorian cycle when a day field is restricted, kept per parsed schedule). `*/5 * * * *` and `3,58 * * * *` pass; `* * * * *`, `*/2 * * * *`, `0,3 * * * *` and `58,1 0,23 * * *` are refused, while `58,1 0,23 * * MON` passes, since Monday is never followed by Monday.
 
 With a time zone it also applies each of the zone's offset changes (found once per zone from 2020 to 2060, then cached, each with the local day it falls on) the way `computeAutomationSchedule` fires them, since a change can bring two times closer. A change applies only when the schedule fires on its day, or on the next day when its window crosses midnight: New York springs forward on a Sunday, so `1,58 2,4 * * MON` passes there and `1,58 2,4 * * SUN` is refused.
 
@@ -255,31 +273,33 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 
 ### What a row holds
 
-| Column                                                                   | Holds                                                                                                                                                                                                                                       |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `automation_id`, `realm`                                                 | The automation card and its realm, as canonical identifiers (ADR 002), the same spellings `automation_runs` uses                                                                                                                            |
-| `payer`                                                                  | The Matrix user id of the direct writer who switched it on or last resumed it. Only switch-on and resume set it                                                                                                                             |
-| `state`, `pause_reason`, `paused_by`                                     | `active`, `paused`, `waiting-for-credits` or `done`. A paused row has a reason, and no other row does; `paused_by` names the person, when a person paused it                                                                                |
-| `caps_snapshot`                                                          | JSON: every cap in `AUTOMATION_CAP_NAMES` as the card set it, plus `batchedAI`, when the payer switched it on or resumed it                                                                                                                 |
-| `trigger_runs`                                                           | JSON keyed by trigger label: `{ runs, lastSlot?, since?, timing?, live? }`, the `runState` `computeAutomationSchedule` reads (see _The cursor_), plus each trigger's `timing` and whether it was `live` when the row last followed the card |
-| `scheduled_since`                                                        | When it was switched on or last resumed: the schedule's `since`. Slots at or before it never run                                                                                                                                            |
-| `next_run`                                                               | The earliest next run across unspent cron and one-time triggers; null when none is left. The `automations_due_idx` partial index serves the tick's search over active and waiting-for-credits rows                                          |
-| `last_enqueued_at`, `last_started_at`, `last_finished_at`, `last_result` | The most recent run: when it was enqueued, started and finished, and whether it ended `complete`, `error` or `canceled`                                                                                                                     |
-| `failures_since`                                                         | When it was switched on or last resumed, by the database clock: only runs created at or after it count toward a pause for repeated failures (see _Pausing after repeated failures_)                                                         |
-| `switched_on_at`, `updated_at`                                           | When the row was made and last changed                                                                                                                                                                                                      |
+| Column                                                                   | Holds                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `automation_id`, `realm`                                                 | The automation card and its realm, as canonical identifiers (ADR 002), the same spellings `automation_runs` uses                                                                                                                                                                                                                                     |
+| `payer`                                                                  | The Matrix user id of the direct writer who switched it on or last resumed it. Only switch-on and resume set it                                                                                                                                                                                                                                      |
+| `state`, `pause_reason`, `paused_by`, `pause_problems`                   | `active`, `paused`, `waiting-for-credits` or `done`. A paused row has a reason, and no other row does; `paused_by` names the person, when a person paused it; `pause_problems` (JSON `[{ code, path, message }]`) what the declaration reader found, read only when the reason is `invalid-declaration`. Every pause writes it, and resume clears it |
+| `caps_snapshot`                                                          | JSON: every cap in `AUTOMATION_CAP_NAMES` as the card set it, plus `batchedAI` and the webhooks its triggers named (`webhookPaths`), when the payer switched it on or resumed it                                                                                                                                                                     |
+| `trigger_runs`                                                           | JSON keyed by trigger label: `{ runs, lastSlot?, since?, timing?, live? }`, the `runState` `computeAutomationSchedule` reads (see _The cursor_), plus each trigger's `timing` and whether it was `live` when the row last followed the card                                                                                                          |
+| `scheduled_since`                                                        | When it was switched on or last resumed: the schedule's `since`. Slots at or before it never run                                                                                                                                                                                                                                                     |
+| `next_run`                                                               | The earliest next run across unspent cron and one-time triggers; null when none is left. The `automations_due_idx` partial index serves the tick's search over active and waiting-for-credits rows                                                                                                                                                   |
+| `last_enqueued_at`, `last_started_at`, `last_finished_at`, `last_result` | The most recent run: when it was enqueued, started and finished, and whether it ended `complete`, `error` or `canceled`                                                                                                                                                                                                                              |
+| `failures_since`                                                         | When it was switched on or last resumed, by the database clock: only runs created at or after it count toward a pause for repeated failures (see _Pausing after repeated failures_)                                                                                                                                                                  |
+| `switched_on_at`, `updated_at`                                           | When the row was made and last changed                                                                                                                                                                                                                                                                                                               |
 
 ### States and who changes them
 
-| Reason a row is `paused` | Set by                                                                                                                                                                                           |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `requested`              | `pauseAutomation`: a direct writer paused it                                                                                                                                                     |
-| `caps-raised`            | `checkAutomationCaps`: the card, as indexed, sets a cap above the snapshot, or leaves unset a credit cap the snapshot set                                                                        |
-| `batched-ai-enabled`     | `checkAutomationCaps`: the card turned on `batchedAI` and the snapshot had it off                                                                                                                |
-| `payer-lost-access`      | `checkAutomationPayer`: the payer is no longer a direct writer of the realm; or a run's admission (`pauseForPayerLostAccess`): the payer's sessions were revoked, or their account can't sign in |
-| `realm-archived`         | `pauseRealmAutomations`: the realm was archived (`handlers/handle-archive-realm.ts`)                                                                                                             |
-| `repeated-failures`      | `pauseAfterRepeatedFailures`: the automation's own runs failed `AUTOMATION_FAILURES_BEFORE_PAUSE` (5) times in a row; the worker asks once each run ends as an error                             |
+| Reason a row is `paused` | Set by                                                                                                                                                                                                                                                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `requested`              | `pauseAutomation`: a direct writer paused it                                                                                                                                                                                                                                             |
+| `caps-raised`            | `checkAutomationCaps`: the card, as indexed, sets a cap above the snapshot, or leaves unset a credit cap the snapshot set                                                                                                                                                                |
+| `webhook-changed`        | The index hook, and `checkAutomationCaps` when handed the card's triggers (`webhooksChangedFrom`): the card names an incoming webhook the snapshot's `webhookPaths` lacks                                                                                                                |
+| `batched-ai-enabled`     | `checkAutomationCaps`: the card turned on `batchedAI` and the snapshot had it off                                                                                                                                                                                                        |
+| `payer-lost-access`      | `checkAutomationPayer`: the payer is no longer a direct writer of the realm; or a run's admission (`pauseForPayerLostAccess`): the payer's sessions were revoked, or their account can't sign in                                                                                         |
+| `realm-archived`         | `pauseRealmAutomations`: the realm was archived (`handlers/handle-archive-realm.ts`)                                                                                                                                                                                                     |
+| `repeated-failures`      | `pauseAfterRepeatedFailures`: the automation's own runs failed `AUTOMATION_FAILURES_BEFORE_PAUSE` (5) times in a row; the worker asks once each run ends as an error                                                                                                                     |
+| `invalid-declaration`    | `pauseForInvalidDeclaration`, from the tick and reconcile: a run came due while the card indexed but didn't read as a declaration; `pause_problems` holds the reader's problems. Pending runs are canceled; a running run is left to finish. The index hook lifts it once the card reads |
 
-- **`switchOnAutomation`** makes the row for a direct writer, who becomes the payer, snapshots the caps the declaration sets, and starts the schedule now. A row whose triggers are all spent starts `done`. A second switch-on is refused (`already-switched-on`).
+- **`switchOnAutomation`** makes the row for a direct writer, who becomes the payer, snapshots the caps and webhooks the declaration sets, and starts the schedule now. A webhook trigger naming a webhook the realm can't use is refused (`unusable-webhook`, with the problems). A row whose triggers are all spent starts `done`. A second switch-on is refused (`already-switched-on`).
 - **`pauseAutomation`**, **`resumeAutomation`** and **`removeAutomation`** are for a direct writer of the row's own realm. Resume works from any pause reason, makes its caller the payer, takes a new snapshot from the card as it is now, and restarts the schedule at the resume, so slots that passed while paused don't run; each trigger keeps its count. Remove deletes the row and leaves the card and script. Deleting the realm (`removeRealmDatabaseArtifacts`) deletes its rows too, so a realm later made at the same URL starts with none on. Archiving the realm pauses every automation in it that isn't paused already, with `realm-archived`, and cancels their pending and running runs, before the realm is marked archived (a failure in between leaves the realm visible with its automations stopped, and a retry archives it), and pauses them once more after. Switch-on and resume refuse an archived realm (`realm-archived`), asked in their own transaction under the realm's automation lock, which they take shared and `pauseRealmAutomations` takes exclusive (`lockRealmAutomations`), so one that read the realm as not yet archived commits before the second pause reads the realm's automations. Restoring the realm leaves them paused until a direct writer resumes each one.
 - **`checkAutomationCaps`** and **`checkAutomationPayer`** pause without a person. A row already paused keeps its reason, since a resume takes a new snapshot whatever paused it. A cap the snapshot doesn't limit (an unset credit cap, or a cap added to the card type after the snapshot) is never "raised"; `capsRaisedAbove` is the comparison.
 - **Waiting for credits.** A run's admission moves the row between `active` and `waiting-for-credits` (`setAutomationWaitingForCredits`). A run that acts as the payer and is refused with `insufficient-credits` moves an active row to waiting; the next such run whose balance passes (admitted, or refused only for a credit cap, which the check reads after the balance) moves it back to active. The tick keeps enqueuing a waiting row's due runs as it does an active one's, and each is admitted or refused on the balance at that moment, so the automation continues at its next due time once the balance recovers. Nothing changes the state when the payer tops up; the view says _Waiting for credits_ until the next due run. A Preview or Run now is charged to whoever clicked, so its refusal never moves the row. A paused or _done_ row, or one whose payer a resume changed, is never moved. The move is one conditional `UPDATE`, so a pause that commits first wins.
@@ -289,14 +309,16 @@ Every switched-on automation has one row in `automations`, keyed by the card's c
 
 `syncAutomationsAfterIndex` (`packages/runtime-common/automation-index-hook.ts`) runs in the worker's `from-scratch-index` and `incremental-index` tasks (`tasks/indexer.ts`) once the pass has committed, so it reads the committed index. A from-scratch pass syncs every automation in the realm; an incremental pass syncs those whose card file it visited or deleted. For each, `syncAutomationWithCard` in `automations.ts` reads the card's index row (`IndexQueryEngine.getInstanceSource`) and, in one transaction holding the automation's row:
 
-| The card as indexed                                                                                                                      | The row                                                                                                                                                      |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| No live instance (deleted)                                                                                                               | Removed, pending and running runs canceled with `error_reason` `card-deleted`                                                                                |
-| Doesn't adopt from the catalog `Automation` type                                                                                         | Removed, pending and running runs canceled with `not-an-automation`                                                                                          |
-| Failed to index (or carries only an earlier visit, `failureWithheld`), or doesn't read as a declaration (an invalid cron, a missing cap) | Unchanged: the next index that reads it recomputes                                                                                                           |
-| Row is paused                                                                                                                            | Unchanged, whatever paused it: a resume restarts the schedule                                                                                                |
-| Raises a cap or turns on `batchedAI` (`capsRaisedAbove`)                                                                                 | Paused with `caps-raised` or `batched-ai-enabled`                                                                                                            |
-| Anything else                                                                                                                            | `next_run` recomputed from the triggers and `trigger_runs` with `now`; _done_ when every trigger is spent, active again when a _done_ one has a trigger left |
+| The card as indexed                                                                                                     | The row                                                                                                                                                                                                                                               |
+| ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No live instance (deleted)                                                                                              | Removed, pending and running runs canceled with `error_reason` `card-deleted`                                                                                                                                                                         |
+| Doesn't adopt from the catalog `Automation` type                                                                        | Removed, pending and running runs canceled with `not-an-automation`                                                                                                                                                                                   |
+| Failed to index (or carries only an earlier visit, `failureWithheld`)                                                   | Unchanged: the next index that reads it recomputes                                                                                                                                                                                                    |
+| Indexed, but doesn't read as a declaration (an invalid cron, a missing cap, a trigger just added and not filled in)     | Unchanged, since the card saves itself mid-edit; the tick pauses it if a run comes due meanwhile. A row paused with `invalid-declaration` has its `pause_problems` replaced by the card's current problems                                            |
+| Reads again, and the row is paused with `invalid-declaration`                                                           | Resumed as `resumeAutomation` would, with the same payer and caps snapshot: the schedule restarts now, so no slot from the pause runs. Paused with `caps-raised`, `batched-ai-enabled` or `webhook-changed` instead when the fixed card asks for more |
+| Row is paused                                                                                                           | Unchanged, whatever paused it: a resume restarts the schedule                                                                                                                                                                                         |
+| Raises a cap or turns on `batchedAI` (`capsRaisedAbove`), or names a webhook the snapshot lacks (`webhooksChangedFrom`) | Paused with `caps-raised`, `batched-ai-enabled` or `webhook-changed`                                                                                                                                                                                  |
+| Anything else                                                                                                           | `next_run` recomputed from the triggers and `trigger_runs` with `now`; _done_ when every trigger is spent, active again when a _done_ one has a trigger left                                                                                          |
 
 Run counts are keyed by label, so editing the card keeps them. Each trigger's `timing` (kind, expression, time zone, `at`, `until`; not `count`) and `live` (on the card and unspent) are recorded at switch-on, resume and every sync. A trigger starts afresh, with `since` = now, when its timing changed, its label is new, or it wasn't live last time: re-added after being removed, or a spent trigger given a higher `count` or a later `until`. So a slot that passed before the edit, or while the trigger was gone or spent, never comes due as a make-up run; the count carries on.
 
@@ -322,7 +344,9 @@ SELECT state, pause_reason, paused_by, payer, next_run, scheduled_since,
 - No row: it isn't switched on, or was removed: by a person, by deleting the realm, or by the index hook when the card was deleted or stopped adopting from `Automation` (a run canceled with `card-deleted` or `not-an-automation` says which). Nothing runs it.
 - `paused` with `realm-archived`: the realm was archived. Restoring it doesn't resume the automation; a direct writer does.
 - `paused` with `caps-raised` or `batched-ai-enabled`: compare `caps_snapshot` with the card's `caps` and `batchedAI`. A direct writer resumes it to agree to the new caps and pay for them.
+- `paused` with `webhook-changed`: compare `caps_snapshot->'webhookPaths'` with the card's webhook triggers. A direct writer resumes it to agree to the new webhook, and resume refuses a webhook the realm can't use.
 - `paused` with `payer-lost-access`: the payer's own permission row no longer grants write. Another direct writer resumes it and becomes the payer.
+- `paused` with `invalid-declaration`: a run came due while the card didn't read as a declaration. `pause_problems` (or the status route's `pauseProblems`, which the card's Status section lists by trigger or section) names each problem, and follows the card as it is re-indexed. Fixing the card resumes the automation on the next index pass; no one needs to resume it.
 - `paused` with `repeated-failures`: the automation's own runs kept failing. `readAutomationFailures` (or the status route's `failuresInARow` and `lastFailure`) names the latest failed run, its `error_reason` and its `error_message`; the query under _Pausing after repeated failures_ lists the whole streak. Fix what the runs fail on (the script, a key, the card), check it with a Preview, then resume, which clears the streak.
 - `active` with a null `next_run`: only webhook triggers, or none left that the schedule can place.
 - `waiting-for-credits`: the payer's last run was refused with `insufficient-credits`. Its due runs still start and are refused until the payer's balance, less what their runs in flight hold, reaches the run's minimum balance (the `pricing` skill, _The minimum balance and the credit caps_). The first run admitted makes it `active`.
@@ -335,10 +359,10 @@ An automation whose own runs keep failing pauses itself with `repeated-failures`
 - **The streak is read from the runs, never stored.** `readAutomationFailures(querier, automationId)` counts the automation's runs that ended as `error` after its latest `complete` one, ordered by `finished_at`, and returns that count (`inARow`) and the latest of them (`last`: run id, `error_reason`, `error_message`, `finished_at`). So a complete run resets it, and a run recorded as an error whose commit lands after all (`recordAutomationRunCommitted` makes it complete) ends it too.
 - **Only the automation's own runs count:** runs its triggers started, a batch follow-up included. A Preview (`dry_run`) and a Run now (trigger `manual`) are a person's runs, acting as and charged to them whether or not the automation is on, so they neither extend nor break the streak. Nor does a canceled run, or a failed run whose reason is in either of two lists:
   - `SPENDING_REFUSAL_REASONS` (`insufficient-credits`, `daily-credit-cap-reached`, `monthly-credit-cap-reached`, `pricing-unavailable`): admission refused the run for the payer's spending, and the automation waits for credits instead and runs again once the payer can pay.
-  - `PLATFORM_FAILURE_REASONS` (`account-unverifiable`, `run-admission-failed`, `run-failed`, `commit-failed`, `commit-interrupted`, `job-lost`, `dry-run-mismatch`): the platform failed the run, not the automation. A Matrix, prerender or worker outage fails every automation's runs this way, and counting them would pause every automation that runs during it.
+  - `PLATFORM_FAILURE_REASONS` (`account-unverifiable`, `run-admission-failed`, `run-failed`, `commit-failed`, `commit-interrupted`, `job-lost`, `dry-run-mismatch`): the platform failed the run, not the automation. A Matrix, prerender, realm or worker outage fails every automation's runs this way, and counting them would pause every automation that runs during it. A realm call that fails on its own terms ends its run as `call-failed`, which counts; the tab answers `run-failed` instead when the platform failed any request the run made (_The tab_ says how the tab tells).
 - **Resuming clears it.** Only runs created at or after the row's `failures_since` count, and switch-on and resume set it.
 - **`pauseAfterRepeatedFailures(dbAdapter, automationId, { failuresBeforePause }, reporters)`** locks the row, reads the streak and pauses once it reaches `failuresBeforePause` (default `AUTOMATION_FAILURES_BEFORE_PAUSE`, 5), cancelling the pending run as every pause does. Like the other pauses it runs in `withChanges`, so `reporters` hear about the paused automation and each canceled run once the pause commits. Only an active automation, or one waiting for credits, pauses: one already paused keeps its reason, and one _done_ has no runs left to stop. It returns `{ automation, paused }`, where `paused` says whether this call paused it. Since the streak is read from the runs, calling it again, or for a run that didn't fail, changes nothing.
-- **Who asks.** The worker's `runAutomationAttempt` asks after every attempt whose run has ended as an error, however it ended: the attempt's own finish, or the realm server ending the run at a cap or a refused credential. The threshold comes from `AutomationAttemptContext.failuresBeforePause`. Reconcile doesn't ask: `abandonAutomationRun` ends a run as `job-lost`, which never counts, or as `complete`, which resets the streak. Anything else that ends an automation's run with a reason that counts calls it too; a call that is missed is made up by the next failed run's.
+- **Who asks.** The worker's `runAutomationAttempt` asks after every attempt whose run has ended as an error, however it ended: the attempt's own finish, or the realm server ending the run at a cap or a refused credential. The threshold comes from `AutomationAttemptContext.failuresBeforePause`. Reconcile asks too, after each lost run it ends as an error and once it has let go of the automation's row (the pause takes the row itself). Its `job-lost` never counts, so the ask only pauses an automation whose streak an earlier run's attempt reached without getting to ask. Anything else that ends an automation's run with a reason that counts calls it too; a call that is missed is made up by the next failed run's.
 - **The run that tripped the pause keeps its own error.** It had ended before the pause, so the pause cancels only the runs after it.
 
 The streak, by hand:
@@ -363,7 +387,7 @@ Reading down, the streak is the `error` rows above the first `complete` one, ski
 For each row due at `now` (`state` `active` or `waiting-for-credits`, `next_run` at or before now; the `automations_due_idx` rows), one transaction:
 
 1. Claims the row with `FOR UPDATE SKIP LOCKED`. A row another tick holds, or one no longer due, is skipped.
-2. Reads the card. A card that doesn't read as a declaration leaves the row due and unchanged (`unreadable`). A card that raises a cap above the snapshot enqueues nothing (`caps-raised`); the index hook pauses it.
+2. Reads the card. A card that doesn't read as a declaration enqueues nothing (`unreadable`). Once the claim ends, `pauseForInvalidDeclaration` locks the row, reads the card again, and pauses the automation with `invalid-declaration` when the card indexed and still doesn't read (the outcome's `paused`), so a due automation says why rather than skipping its runs in silence. The index hook lifts that pause once the card reads. A card with nothing indexed to read, or one that no longer adopts from `Automation` (the index hook removes it), leaves the row due and unchanged. A card that raises a cap above the snapshot enqueues nothing (`caps-raised`); the index hook pauses it.
 3. Follows an edit the index hook hasn't applied yet the way the hook does (`withEditCursors`), then computes the schedule with `now`.
 4. For each trigger due at the next run: if a **scheduled** run of the automation (one a cron or one-time trigger on the card started) is pending from an **earlier instant**, the slot **joins** it (_skipped_): no run, no job, the trigger's `runs` stays, its `lastSlot` moves to the slot, and the pending run's log gets a `trigger` line naming the slot. Otherwise it makes the run row (`trigger` = label, `slot` = the instant as ISO text, `acts_as` = the payer) and enqueues its job with `enqueueAutomationRunJob` (the card's `seconds` cap sets the timeout), then counts the run and moves `lastSlot`. A run at the same instant is another trigger's and is never joined, nor is a Preview or Run now (a Preview never commits, and a Run now acts as whoever clicked), nor a run already running: the new run waits behind it in the automation's concurrency group.
 5. Repeats for any other trigger due by now (each cron trigger owes at most one make-up run), then writes `trigger_runs` (each entry's `timing` and `live` recorded as the index hook records them), `next_run`, `done` when every trigger is spent, and `last_enqueued_at` when a run started.
@@ -671,7 +695,20 @@ which refuses it unless:
 - `automationRunForCall` finds the run `running`, owned by the token's attempt,
   in the token's realm and acting as the token's user. A cancel, a pause that
   cancels the run, its finish, or a newer attempt taking it over refuses the
-  next call with `The automation run is not running`.
+  next call with `The automation run is not running`;
+- `acts_as` is a direct writer (`isDirectWriter`) of the run's own realm,
+  whichever realm the call reaches. Losing direct write mid-run refuses the
+  next call with 403 `not-a-direct-writer` and ends the run with that reason
+  (`endAutomationRunNotADirectWriter`), so the calls after it, and the tab's
+  `/_run-state` check, answer 401 and the script stops. The commit checks it
+  again inside its write lock. The realm-server routes that take run tokens
+  (`/_request-forward`, `/_ai-batches`) check and end the run the same way.
+  All three, and the worker's admission, ask `runActsAsDirectWriter`.
+
+In `handleAutomation` the revoked-session, run-row and direct-writer reads
+go to the database together, one indexed row each, so the check costs a call
+about one round trip. The realm-server routes read them one after another,
+so there the check adds a round trip.
 
 An admitted call takes the ACL check as `acts_as` and sets
 `requestContext.automationRun` (`{ runId, attempt, automationId, actsAs,
@@ -1059,7 +1096,7 @@ of the person who switched the automation on.
 | `trigger`        | `{ label?, kind }`, kind one of `cron`, `once`, `webhook`, `manual` (Preview, Run now), `batch` |
 | `scheduledAt`    | when the trigger was due, or when a manual run was asked for (ISO 8601)                         |
 | `lastSuccessAt`  | when the automation's last complete run started, if it has had one; a Preview never counts      |
-| `params`         | the card's params with the trigger's own merged over them                                       |
+| `params`         | the automation card's params; a trigger has none of its own                                     |
 | `webhookPayload` | the delivery's JSON body, for a webhook run                                                     |
 | `dryRun`         | true for a Preview                                                                              |
 
@@ -1174,6 +1211,96 @@ the batch in flight, when the realm server answers slowly; each says how many
 in a line of its own. A time no `Date` holds is stored as the time the line
 arrived, and a script line past Postgres's `integer` is left off, so one bad
 event doesn't cost its batch.
+
+### How the console reads a run's log
+
+The console reads a run's log through the realm server's
+`GET /_automation-run-log` (`handleAutomationRunLog` in
+`handlers/handle-automations.ts`; path, parameters and the answer's shape in
+`runtime-common/automation-routes.ts`), never through the realm's
+`/_run-log`, which only takes the lines a run's tab sends with its token.
+
+```
+GET /_automation-run-log?realm=<realm URL>&run=<run id>&after=<seq>&limit=<n>&level=warn,error
+```
+
+| Parameter | Means                                                                                                                               |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `realm`   | the realm the run belongs to                                                                                                        |
+| `run`     | the run's id                                                                                                                        |
+| `after`   | the `seq` the page starts past; absent or `-1` reads from the start                                                                 |
+| `limit`   | the most lines on a page: `AUTOMATION_RUN_LOG_DEFAULT_LIMIT` (500) when absent, at most `AUTOMATION_RUN_LOG_MAX_LIMIT` (1000)       |
+| `level`   | the levels to keep, comma-separated from `log`, `info`, `warn` and `error`; absent keeps every line. A line with no level is `info` |
+
+It answers only the session's own user, and only a direct writer of `realm`,
+like the other automation routes. The session check refuses a delegated
+session and a run token with 401. The route refuses a reader and a
+realm-authority session with 403 before it looks the run up, so that refusal
+is the same whether or not the run exists. A run of another realm, or an id
+that names no run, is 404. A parameter out of range is 400.
+
+The answer is one page (`readRunLogPage` in `automation-run-log.ts`):
+
+```json
+{
+  "data": {
+    "type": "automation-run-log",
+    "id": "<run id>",
+    "attributes": {
+      "state": "running",
+      "lines": [
+        {
+          "seq": 0,
+          "at": 1795424400000,
+          "source": "script",
+          "kind": "console",
+          "level": "log",
+          "message": "…",
+          "scriptLine": 3
+        }
+      ],
+      "next": 0,
+      "more": false,
+      "total": 1,
+      "dropped": 0
+    }
+  }
+}
+```
+
+- **`next`** is the `after` for the next page. With a level filter it passes
+  the lines the filter left out, so a reader never scans them again.
+- **`more`** says the log already holds lines past `next`: read again at once.
+- **`total`** is the lines stored, whatever the filter. **`dropped`** is the
+  lines the cap refused (`log_dropped`). The console shows the count beside
+  the log; no line on a page stands for them, unlike `readRunLog`'s closing
+  `warn` line.
+- A page ends at the lines stored when the run's row was read, so a line
+  appended while the page is read waits for the next page and is never
+  skipped by the cursor.
+
+**Live lines are polled.** The `job` realm event never carries log text (see
+_The `job` realm event_), so the console follows a running run with
+`followAutomationRunLog` (`runtime-common/automation-run-log-follow.ts`). It
+reads page after page with the last `next`, reads on at once while `more`,
+and otherwise asks again every `AUTOMATION_RUN_LOG_FOLLOW_INTERVAL_MS`
+(2 s) while the run is `pending` or `running`. Call its `wake()` on each `job`
+event for the run, so a milestone or the run's end is read at once. The
+realm server writes the run's `finish` line just after the row ends, so once
+a page reads the run ended with nothing more, the follower reads once more an
+interval later, which a wake doesn't shorten, and then stops; `done` settles
+then. A refused read (a 4xx) stops it too, with the refusal passed to
+`onError`; any other failure is tried again at the next interval. `stop()`
+settles `done` at once, and a read in flight then reports neither its page
+nor its failure. A finished run's log is read the same way:
+its pages in turn, then the follower stops.
+
+By hand in development, with a realm-server session token for a direct writer:
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:4201/_automation-run-log?realm=http://localhost:4201/example-user/example-realm/&run=<run id>&level=warn,error'
+```
 
 ### Reading a run's log in Postgres
 
@@ -1350,7 +1477,9 @@ realm's `reportRunChange`.
 In the host, subscribe to the realm's events the way other realm-event
 consumers do. Skip any event whose `eventName` isn't `'job'`, then match
 `automation` (or `runId`) and read the run again. For an automation card,
-read `GET <realm>/_automation-status`. For a run, read its report. The
+read `GET <realm>/_automation-status`. For a run, read its report. For a
+run's log, wake the run's `followAutomationRunLog` (see _How the console
+reads a run's log_). The
 event is a cue to re-read, not the run's record. Missing one is harmless,
 because the next change sends another, and a subscriber that comes back reads
 the run afresh anyway.
@@ -1404,15 +1533,16 @@ takes the automation's id and realm, since a removed automation has no row to
 read them from, and never rejects; a failed report is logged as
 `could not send the automation event for …`.
 
-| Change                                                                                                     | Reported by                                                                                                                                                               |
-| ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Switch-on, pause, resume, remove                                                                           | `switchOnAutomation`, `pauseAutomation`, `resumeAutomation`, `removeAutomation`, given the reporter                                                                       |
-| The payer losing access                                                                                    | `checkAutomationPayer`, `pauseForPayerLostAccess`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                   |
-| A move into or out of waiting for credits                                                                  | `setAutomationWaitingForCredits`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                                    |
-| Archiving the realm                                                                                        | `pauseRealmAutomations`, from the archive handler (`realmServerAutomationChangeReporter`)                                                                                 |
-| Its runs failing repeatedly                                                                                | `pauseAfterRepeatedFailures`, from `runAutomationAttempt` (`AutomationAttemptContext.reportAutomationChange`)                                                             |
-| The card's index hook removes it, pauses it for a raised cap or batched AI, or makes it done/active        | `syncAutomationWithCard`, from `syncAutomationsAfterIndex` in the indexing tasks. `checkAutomationCaps` pauses the same way and reports to a caller that passes reporters |
-| The tick makes it done, or moves its next run without starting a run (every due slot joined a pending run) | `tickAutomations` (`AutomationTickOptions.reportAutomationChange`)                                                                                                        |
+| Change                                                                                                                                                                             | Reported by                                                                                                                                                               |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Switch-on, pause, resume, remove                                                                                                                                                   | `switchOnAutomation`, `pauseAutomation`, `resumeAutomation`, `removeAutomation`, given the reporter                                                                       |
+| The payer losing access                                                                                                                                                            | `checkAutomationPayer`, `pauseForPayerLostAccess`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                   |
+| A move into or out of waiting for credits                                                                                                                                          | `setAutomationWaitingForCredits`, from the run's admission (`AdmissionContext.reportAutomationChange`)                                                                    |
+| Archiving the realm                                                                                                                                                                | `pauseRealmAutomations`, from the archive handler (`realmServerAutomationChangeReporter`)                                                                                 |
+| Its runs failing repeatedly                                                                                                                                                        | `pauseAfterRepeatedFailures`, from `runAutomationAttempt` (`AutomationAttemptContext.reportAutomationChange`)                                                             |
+| The card's index hook removes it, pauses it for a raised cap, batched AI or a changed webhook, lifts an invalid-declaration pause or updates its problems, or makes it done/active | `syncAutomationWithCard`, from `syncAutomationsAfterIndex` in the indexing tasks. `checkAutomationCaps` pauses the same way and reports to a caller that passes reporters |
+| The tick makes it done, or moves its next run without starting a run (every due slot joined a pending run)                                                                         | `tickAutomations` (`AutomationTickOptions.reportAutomationChange`)                                                                                                        |
+| The tick or reconcile pauses it for an invalid declaration                                                                                                                         | `pauseForInvalidDeclaration`, from `tickAutomations` (`AutomationTickOptions.reportAutomationChange` and `reportRunChange`, which reconcile passes through too)           |
 
 A sync that leaves the state as it was reports nothing: its new next run
 follows a card edit, which the card's `index` event already announces. A tick
@@ -1500,7 +1630,7 @@ for a run row its trigger has already made with `createAutomationRun`:
      error named by the refusal's code (_Committing the overlay_), unless
      the row says the batch landed, which finishes it complete;
    - `error`: finishes the run as an error with the outcome's reason
-     (`script-error`, `timed-out`, `run-failed`, `stopped`) and its message, prefixed
+     (`script-error`, `timed-out`, `call-failed`, `run-failed`, `stopped`) and its message, prefixed
      `line N:` for a script error that has a line. The finish discards the
      overlay, so nothing the script staged lands;
    - a tab that never answered (`unusable`) is `timed-out`; a command that
@@ -1652,8 +1782,23 @@ is counted and priced against the run's caps. It answers an
 `AutomationScriptOutcome`: an error the script throws itself
 (`RealmScriptError`) is `script-error` with its line, a run out of time
 (`AutomationTimeLimitError`) is `timed-out`, and a realm call's error the
-script didn't catch is `run-failed`. In the script, a realm call's error is
-an `Error` named `RealmCallError`. A script that couldn't start before the
+script didn't catch (`RealmCallFailure`) is `call-failed`. A card update that
+`realm.cards.update` staged and the realm refuses to save once the script ends
+is `call-failed` too. In the script, a realm call's error is an `Error` named
+`RealmCallError`; the sandbox reports that one ended the script with
+`realmCallFailed`.
+
+`call-failed` counts toward a pause for repeated failures, so the tab answers
+`run-failed` in its place when the platform failed any request the tab made
+while the script ran (`watchedScriptOutcome`). `isPlatformFailure` counts a
+server error, a 429 load shed, no answer, and a body that fails while it is
+read; a refusal and an abort don't count. The tab hears every fetch through
+`NetworkService.watchFetches`, which sits on `NetworkService.fetch`, the one
+fetch everything in the tab goes through: `authedFetch` and the realm calls,
+the loader's module fetches, `realm.resolve`'s request forwarding, and the
+run's log and state checks. A prerender tab runs one automation run at a
+time, so those requests are all the run's. Anything else the runner fails
+with is `run-failed`. A script that couldn't start before the
 run's `endsAt` is `timed-out`.
 
 The run's progress goes to its run log: the tool records it with a
@@ -1707,7 +1852,9 @@ _Diagnosing a run_.
 ## The routes
 
 A direct writer switches an automation on, runs it by hand, pauses, resumes
-or removes it, and cancels a run through realm-server routes
+or removes it, cancels a run, and reads what the console shows (a run's
+report, a Preview's staged file, the automation's storage) through
+realm-server routes
 (`packages/realm-server/handlers/handle-automations.ts`; paths and body
 types in `packages/runtime-common/automation-routes.ts`). They are not on a
 realm: each takes the realm-server session (`Authorization: Bearer <realm-server
@@ -1740,6 +1887,9 @@ run instead, `{ "data": { "type": "automation-run", "id": "<run id>",
 | `POST /_automation-resume`                                           | `monthlyCredits` | 200 `automation`; the caller is the payer, with a new caps snapshot                                                                                                                                                                     |
 | `POST /_automation-remove`                                           | —                | 200 `automation`, the row as it was; the row is gone                                                                                                                                                                                    |
 | `POST /_automation-run-cancel`                                       | —                | 200 `automation-run`, canceled by the caller                                                                                                                                                                                            |
+| `GET /_automation-run-report?realm=&run=`                            | —                | 200 `automation-run-report` (_The console's reads_, below)                                                                                                                                                                              |
+| `GET /_automation-preview-file?realm=&run=&path=`                    | —                | 200, the staged file's bytes as `application/octet-stream`                                                                                                                                                                              |
+| `GET /_automation-storage?realm=&automation=`                        | —                | 200 `automation-storage` (_The console's reads_, below)                                                                                                                                                                                 |
 
 **The monthly cap.** Switch-on and resume make the caller the payer of the
 caps the card sets (the caps snapshot), and the monthly credit cap is what
@@ -1764,12 +1914,68 @@ automations both before and after marking it archived, so a switch-on or
 resume racing an archive ends paused or refused. Preview and Run now check
 the archive at the route.
 
+**Webhooks.** Switch-on and resume refuse a webhook trigger naming a webhook the realm can't use with 422 and each trigger's message (_Which webhooks a realm can use_), and, while `WEBHOOK_DELIVERIES_START_RUNS` is false, carry `meta.notices` saying the webhook triggers can't fire; the estimate carries the same in `attributes.notices`.
+
 **Refusals.** 403 not a direct writer; 404 not switched on (pause, resume,
 remove) or no such run in the realm (cancel); 409 already switched on, already
 paused, not paused, a click already used for another person's run or the
 other kind of run, a run that already ended or whose commit was claimed; 400
 for a malformed body, an automation outside the realm, or a missing click.
 The error body is `{ "errors": [<message>] }`.
+
+### The console's reads
+
+The three GETs take the realm and the run or card as query parameters, check
+direct write on the realm first, and answer `no-store`. A run of another
+realm, or a run id that isn't a UUID, answers 404 as no such run, so a
+writer of one realm learns nothing about another realm's runs.
+
+**Identities follow ADR 011 §1.2.** An answer names a person's Matrix id only
+to that person or to a viewer who shares a named realm grant with that
+person (`shareARealmGrant`); anyone else reads `null`. Booleans say as much as
+the viewer may know: `viewerIsActsAs`, `viewerCanceled` and
+`canceledByAPerson` on a run's report, and `viewerIsPayer` on the storage
+answer.
+
+**`/_automation-run-report`** serves `readAutomationRunSummary`, which reads
+the run as `readAutomationRunReport` does but counts the log instead of
+returning the lines. The attributes:
+
+- the run: `automation`, `trigger`, `dryRun`, `state`, `errorReason`,
+  `errorMessage`, `credentialRefusal`, `actsAs`, `canceledBy`;
+- `timings` and `cost`, as in _The run's report_ (`cost.creditsByKind` holds
+  `ai`, `run`, `run_indexing` and `batched_ai`);
+- `milestones`: the run's `RunMilestones` (_Run milestones_): the plan, each
+  milestone reached with its time and count, the current one, the ones
+  ahead, and the one a failed run was in;
+- `log`: `{ lines, dropped, byLevel, byKind }`, line counts without the
+  text. `/_automation-run-log` serves the lines;
+- `callApiCalls` (`operation`, `method`, masked `destination`, `status` or
+  `code`, `ms`, `bytes`) and `resolveCalls` (`model`, `status`, `ms`,
+  `costInUsd`), one per `call-api` or `resolve` platform line, with the
+  line's `seq` and `at`. The automation surface has no `transform`, so a
+  run makes no transform calls;
+- `writes`: `count` (the row's `writes`), plus `staged` and
+  `stagedReplacedBy` for a complete Preview and `committed` for a run whose
+  commit landed, as `stagedFiles`, `stagedFilesReplacedBy` and
+  `committedPaths` in _The run's report_.
+
+**`/_automation-preview-file`** serves `readAutomationPreviewFile`: 404 when
+the Preview kept no file at `path`, 400 without a `path`. The script chose
+the bytes, so the route always answers `application/octet-stream` with
+`X-Content-Type-Options: nosniff`, and the console picks how to show the file
+from its path.
+
+**`/_automation-storage`** serves `getAutomationStorage`
+(`automation-files.ts`): `files` (`path`, `run`,
+`createdAt`, `fileBytes`, `indexBytes`) with the totals `fileBytes` and
+`indexBytes`; `switchedOn` and the `payer`, who pays the storage charge;
+`dailyCredits`, what one day of that storage costs at the server's prices
+before rounding (`exactMeteredCredits` of a day's GB-months, `null` without
+prices) with `pricingVersion`; and `charges`, the last 30 storage charges in
+`credits_ledger` as `{ day, credits }`, newest first. A charge covers the
+days since the previous one and is written once they cost a whole credit
+(_The daily storage charge_ in the `pricing` skill).
 
 ### Calling them in development
 
@@ -1794,7 +2000,7 @@ Name the realm by the URL its permission rows use
 one the caller writes, and is refused with 403. The same body with
 `monthlyCredits` (the card's) switches it on at
 `/_automation-switch-on`. A Preview or Run now answers its run's id; follow
-the run in Postgres (_Diagnosing a run_) or with `readAutomationRunReport`,
+the run in Postgres (_Diagnosing a run_) or at `/_automation-run-report`,
 and the automation's row with `GET <realm>/_automation-status`.
 
 ## Preview and Run now

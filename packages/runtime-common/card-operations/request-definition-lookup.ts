@@ -43,7 +43,7 @@ export interface RequestDefinitionLookup extends OperationDefinitionLookup {
 // default of 0, below every card render the re-index queued, and a realm with
 // a few thousand instances of the module answers nothing until they drain. And
 // the wait is bounded: a lookup still unanswered at the deadline refuses with a
-// retryable `target-not-indexed` 503 instead of holding the request open. The
+// retryable `definition-not-ready` 503 instead of holding the request open. The
 // render is left running, so the definition it populates is there for the
 // retry.
 export function requestDefinitionLookup(
@@ -82,7 +82,7 @@ async function withinDeadline<T>(
           definitionNotReady(
             undefined,
             codeRef,
-            `did not finish rendering within ${deadlineMs} ms`,
+            `is still being rendered after ${deadlineMs} ms`,
           ),
         ),
       deadlineMs,

@@ -71,14 +71,14 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
-# Boxel's OAuth provider runs on the development realm server only when
-# BOXEL_DEV_OAUTH_PROVIDER=true is set, exported in the shell that starts the
+# Boxel's OAuth provider runs on the development realm server unless
+# BOXEL_DEV_OAUTH_PROVIDER=false is set, exported in the shell that starts the
 # stack or in the [env] of the checkout's gitignored .mise.local.toml. It is a
 # separate switch from the provider's own BOXEL_OAUTH_PROVIDER_ENABLED, which
 # set that way would also reach the test realm server, which has no secure
 # origin for the provider's pages. Its development keys are made once into a
 # gitignored file (scripts/oauth-provider-dev-config.ts), never committed.
-if [ "${BOXEL_DEV_OAUTH_PROVIDER:-}" = "true" ]; then
+if [ "${BOXEL_DEV_OAUTH_PROVIDER:-true}" != "false" ]; then
   BOXEL_OAUTH_PROVIDER_ENABLED=true
   export BOXEL_OAUTH_PROVIDER_ENABLED
   if [ -z "${BOXEL_OAUTH_CONFIG:-}" ]; then

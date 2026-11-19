@@ -273,7 +273,11 @@ module(basename(import.meta.filename), function (hooks) {
   test('a query grant on a file type compiles to nothing', async function (assert) {
     let policy = await school.getCompiledPolicy();
     assert.deepEqual(
-      policy?.issues.map(({ code, path }) => ({ code, path })),
+      policy?.issues
+        // The realm defines the types it grants and grants no one its code,
+        // which `realm-policy-module-access-test` covers.
+        .filter(({ code }) => code !== 'module-not-granted')
+        .map(({ code, path }) => ({ code, path })),
       [{ code: 'unknown-operation', path: 'rules[1].grants[0].operation' }],
       'a file type carries no query, so the grant is recorded and kept out of the policy',
     );

@@ -284,7 +284,10 @@ const NOTIFICATION_HEARTBEAT_TIMEOUT_MS = 10_000;
 // lifecycle this module owns carries one, whether it lives for a query or for
 // the life of a subscription. A short-lived client is no less exposed: its
 // in-flight query rejects into the caller that can handle it, and the socket's
-// closing event arrives afterwards with nobody left to hear it.
+// closing event arrives afterwards. A client this module opens itself has only
+// this listener to hear that event. A pooled checkout also has its own, which
+// gives the dead connection back (see `#checkout`), so recording one is for
+// the log.
 //
 // The migration runner is the deliberate exception. `migrate()` is given a
 // connection config rather than a client, so node-pg-migrate opens and owns
@@ -360,6 +363,10 @@ export class PgAdapter implements DBAdapter {
     // How long a writer may wait for its write locks; see
     // DEFAULT_WRITE_LOCK_WAIT_MS.
     writeLockWaitMs?: number;
+    // A pool to check connections out of instead of one this adapter opens,
+    // for tests that stand in for Postgres. It gets the same wiring, and must
+    // allow the scheduler's ceiling of connections like the one it replaces.
+    testOnlyPool?: Pool;
   }) {
     this.#writeLockWaitMs =
       opts?.writeLockWaitMs ?? configuredWriteLockWaitMs();
@@ -377,17 +384,19 @@ export class PgAdapter implements DBAdapter {
       overflow: configuredPoolOverflow(),
     });
     log.debug(`connecting to DB ${this.url}`);
-    this.pool = new Pool({
-      user,
-      host,
-      database,
-      password,
-      port,
-      // Room for the overflow the scheduler grants past `max` once every
-      // connection is held by a hold waiting on nested work. It never grants
-      // more than this, so the pool's own queue still never forms.
-      max: this.#scheduler.ceiling,
-    });
+    this.pool =
+      opts?.testOnlyPool ??
+      new Pool({
+        user,
+        host,
+        database,
+        password,
+        port,
+        // Room for the overflow the scheduler grants past `max` once every
+        // connection is held by a hold waiting on nested work. It never
+        // grants more than this, so the pool's own queue still never forms.
+        max: this.#scheduler.ceiling,
+      });
     // An idle client whose connection dies — a failover, a restart, an
     // administrator terminating the backend — emits `error` on the pool, and
     // an `error` event nobody listens for is an uncaught exception. The pool
@@ -818,11 +827,8 @@ export class PgAdapter implements DBAdapter {
     opts?: ExecuteOptions,
   ): Promise<Record<string, PgPrimitive>[]> {
     await this.started;
-    let { client, releaseTurn } = await this.#checkout();
-    // A checked-out client's death is nobody's event: the pool removes its
-    // own idle listener for the duration of the checkout, so the in-flight
-    // query rejects into the caller that handles it and the socket's closing
-    // event lands unheard.
+    let { client, release } = await this.#checkout();
+    // The checkout gives this connection back if it dies; recording logs why.
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     log.debug(
       `executing sql: ${sql}, with bindings: ${loggableBindings(opts)}`,
@@ -849,26 +855,61 @@ export class PgAdapter implements DBAdapter {
       throw e;
     } finally {
       stopRecording();
-      client.release();
-      releaseTurn();
+      release();
     }
   }
 
   // Wait for the scheduler's go-ahead, then check a client out of the pool.
-  // The turn is handed back by the caller after the client is released, or
-  // here if the checkout itself fails. `hold` is for a checkout kept across
+  // `release` gives back the client and the turn together, once; a failed
+  // checkout gives the turn back here. `hold` is for a checkout kept across
   // the caller's other work rather than given back once one statement
   // returns (see `ConnectionScheduler`).
-  async #checkout(opts?: {
-    hold?: ConnectionHold;
-  }): Promise<{ client: PoolClient; releaseTurn: () => void }> {
+  //
+  // A connection that dies while checked out (Postgres ending an idle
+  // transaction, an administrator terminating the backend, a failover) is
+  // given back as soon as the client reports it, not when the caller is done.
+  // The caller may be a hold waiting on other work, and that work may be what
+  // is waiting for a turn. Counted until the hold ends, a dead connection
+  // would keep the scheduler's count above what Postgres has, with every
+  // waiter queued behind it. The caller's own statements on the client fail,
+  // its later `release` does nothing, and `isLost` tells it why.
+  async #checkout(opts?: { hold?: ConnectionHold }): Promise<{
+    client: PoolClient;
+    release: (destroy?: boolean | Error) => void;
+    isLost: () => boolean;
+  }> {
     let releaseTurn = await this.#scheduler.acquire(opts);
+    let client: PoolClient;
     try {
-      return { client: await this.pool.connect(), releaseTurn };
+      client = await this.pool.connect();
     } catch (e) {
       releaseTurn();
       throw e;
     }
+    let released = false;
+    let release = (destroy?: boolean | Error) => {
+      if (released) {
+        return;
+      }
+      released = true;
+      client.removeListener('error', onLost);
+      try {
+        client.release(destroy);
+      } finally {
+        releaseTurn();
+      }
+    };
+    // A hold whose connection is gone holds nothing a waiter could be
+    // deadlocked behind, so the rest of its work, including any already
+    // waiting for a turn, stops counting as nested.
+    let lost = false;
+    let onLost = (e: Error) => {
+      lost = true;
+      opts?.hold?.end();
+      release(e);
+    };
+    client.on('error', onLost);
+    return { client, release, isLost: () => lost };
   }
 
   async notify(channel: string, payload: string): Promise<void> {
@@ -1563,7 +1604,9 @@ export class PgAdapter implements DBAdapter {
     // the adapter is one it needs before it can give this one back. The hold
     // is made before the checkout so the scheduler knows it as a hold.
     let holding = markConnectionHeld();
-    let { client, releaseTurn } = await this.#checkout({ hold: holding });
+    let { client, release, isLost } = await this.#checkout({
+      hold: holding,
+    });
     let stopRecording = recordConnectionErrors(client, this.url, 'warn');
     let query = async (expression: Expression) => {
       let sql = expressionToSql(this.kind, expression);
@@ -1571,10 +1614,14 @@ export class PgAdapter implements DBAdapter {
       let { rows } = await client.query(sql);
       return rows;
     };
-    let released = false;
     try {
       return await holding.run(() => fn(query));
     } catch (e) {
+      // A lost connection has nothing to clean up: Postgres ended its
+      // transaction with the session, and the pool has discarded the client.
+      if (isLost()) {
+        throw e;
+      }
       // Clean up any in-progress transaction before returning the client to
       // the pool. Without this, a connection left in a dirty transaction
       // state will cause "SET TRANSACTION ISOLATION LEVEL must be called
@@ -1588,20 +1635,14 @@ export class PgAdapter implements DBAdapter {
           'ROLLBACK failed during connection cleanup, destroying client: %s',
           rollbackError,
         );
-        client.release(true);
-        released = true;
+        release(true);
         throw e;
       }
-      client.release();
-      released = true;
       throw e;
     } finally {
       holding.end();
       stopRecording();
-      if (!released) {
-        client.release();
-      }
-      releaseTurn();
+      release();
     }
   }
 

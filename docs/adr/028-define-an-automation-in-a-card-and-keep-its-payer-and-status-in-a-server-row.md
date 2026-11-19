@@ -47,15 +47,16 @@ that a switched-on automation names.
 
 ### 1.3. The payer and the status live in a server row
 
-The payer, the status (active, paused with a reason, waiting for credits, or
-done), the next run, each trigger's run count and the caps snapshot MUST be
+The payer, the status (active, paused with a reason, waiting for credits,
+waiting for key approval (ADR 039), or done), the next run, each trigger's run count and the caps snapshot MUST be
 kept in a server row, one per switched-on automation, and MUST NOT be card
 fields. The payer MUST be set only by a direct writer's call to the route
 that switches an automation on or resumes it, and that caller MUST become the
 payer. A write to the card MUST NOT change the payer.
 
-A card edit that raises a cap above the snapshot, or turns on `batchedAI`,
-MUST pause the automation. That pause MUST end only through a resume, which
+A card edit that raises a cap above the snapshot, turns on `batchedAI`, or
+names an incoming webhook the snapshot doesn't (a webhook trigger pointed at
+another webhook, or a new webhook trigger), MUST pause the automation. That pause MUST end only through a resume, which
 makes its caller the payer and takes a new snapshot.
 
 ### 1.4. Triggers
@@ -63,7 +64,9 @@ makes its caller the payer and takes a new snapshot.
 An automation MUST hold a list of triggers. Each trigger MUST be `cron` (a
 cron expression and a time zone, with an optional `until` and `count`),
 `once` (a date, time and time zone), or `webhook` (one of the realm's
-incoming webhooks). Each trigger MUST have a label, unique within its
+incoming webhooks). A realm's incoming webhooks MUST be the ones a direct
+writer of the realm made: switching an automation on and resuming it MUST
+refuse a webhook trigger that names any other. Each trigger MUST have a label, unique within its
 automation. Times MUST be stored as UTC. A trigger's time zone MUST be used
 only to compute its next run. A trigger's run count MUST be kept by its
 label, so that other edits to the card don't reset it. A renamed label starts
@@ -89,7 +92,8 @@ the next tick finds the same run and the same job.
 A reconcile pass MUST run at startup and periodically. It MUST enqueue a
 make-up run for a trigger whose due time passed with nothing enqueued, or
 whose run never finished with no live job left, and at most one make-up run
-per trigger.
+per trigger. It MUST NOT enqueue one for an automation that is paused or
+waiting for key approval.
 
 ## 2. Rationale
 
@@ -114,6 +118,13 @@ anyone who can write the card could make someone else pay. So the payer is
 server state, set only by an administrator who switches the automation on
 and so agrees to pay. The caps snapshot keeps a later edit from raising the
 spend until an administrator resumes the automation and pays for it.
+
+An incoming webhook belongs to the person who made it, and whoever holds its
+signing secret can send deliveries at will. A webhook trigger that could name
+anyone's webhook would let a person with no access to the realm start runs
+its payer pays for. Direct writers already administer the realm and pay for
+its automations, so a webhook one of them made is the realm's, and pointing a
+trigger at a different webhook is the same kind of edit as a raised cap.
 
 The status, next run and run counts are the platform's bookkeeping about an
 automation, not data its script keeps between runs. A script's own state

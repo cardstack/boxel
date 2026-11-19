@@ -275,55 +275,67 @@ module(basename(import.meta.filename), function () {
     });
   });
 
-  module("the realm server's CORS on the token path", function () {
-    const issuer = 'https://app.boxel.ai/';
+  module(
+    "the realm server's CORS on the token and revocation paths",
+    function () {
+      const issuer = 'https://app.boxel.ai/';
+      const paths = [
+        '/_oauth-provider/token',
+        '/_oauth-provider/token/revocation',
+      ];
 
-    function corsOn(
-      method: 'get' | 'post' | 'options',
-      host: string,
-      issuerOrNone: string | undefined,
-    ) {
-      let app = new Koa()
-        .use(leaveCORSToOAuthProvider(cors({ origin: '*' }), issuerOrNone))
-        .use((ctxt) => {
-          ctxt.status = 204;
-        });
-      let request = supertest(app.callback())
-        [method]('/_oauth-provider/token')
-        .set('Host', host)
-        .set('Origin', 'https://elsewhere.example.test');
-      if (method === 'options') {
-        request = request.set('Access-Control-Request-Method', 'POST');
+      function corsOn(
+        method: 'get' | 'post' | 'options',
+        host: string,
+        issuerOrNone: string | undefined,
+        path: string,
+      ) {
+        let app = new Koa()
+          .use(leaveCORSToOAuthProvider(cors({ origin: '*' }), issuerOrNone))
+          .use((ctxt) => {
+            ctxt.status = 204;
+          });
+        let request = supertest(app.callback())
+          [method](path)
+          .set('Host', host)
+          .set('Origin', 'https://elsewhere.example.test');
+        if (method === 'options') {
+          request = request.set('Access-Control-Request-Method', 'POST');
+        }
+        return request;
       }
-      return request;
-    }
 
-    test('it is left to the provider for the token POST and its preflight on the issuer host', async function (assert) {
-      for (let method of ['post', 'options'] as const) {
-        let response = await corsOn(method, 'app.boxel.ai', issuer);
-        assert.strictEqual(
-          response.headers['access-control-allow-origin'],
-          undefined,
-          method,
-        );
-      }
-    });
+      test('it is left to the provider for each POST and its preflight on the issuer host', async function (assert) {
+        for (let path of paths) {
+          for (let method of ['post', 'options'] as const) {
+            let response = await corsOn(method, 'app.boxel.ai', issuer, path);
+            assert.strictEqual(
+              response.headers['access-control-allow-origin'],
+              undefined,
+              `${method} ${path}`,
+            );
+          }
+        }
+      });
 
-    test('it stays on every request the provider does not serve', async function (assert) {
-      for (let [label, method, host, issuerOrNone] of [
-        ['the provider is off', 'post', 'app.boxel.ai', undefined],
-        ['another host', 'post', 'site.boxel.site', issuer],
-        ['another method', 'get', 'app.boxel.ai', issuer],
-      ] as const) {
-        let response = await corsOn(method, host, issuerOrNone);
-        assert.strictEqual(
-          response.headers['access-control-allow-origin'],
-          '*',
-          label,
-        );
-      }
-    });
-  });
+      test('it stays on every request the provider does not serve', async function (assert) {
+        for (let [label, method, host, issuerOrNone] of [
+          ['the provider is off', 'post', 'app.boxel.ai', undefined],
+          ['another host', 'post', 'site.boxel.site', issuer],
+          ['another method', 'get', 'app.boxel.ai', issuer],
+        ] as const) {
+          for (let path of paths) {
+            let response = await corsOn(method, host, issuerOrNone, path);
+            assert.strictEqual(
+              response.headers['access-control-allow-origin'],
+              '*',
+              `${label}: ${path}`,
+            );
+          }
+        }
+      });
+    },
+  );
 
   module('the new-client limit', function () {
     test('reads named parts, each defaulting when left out', function (assert) {

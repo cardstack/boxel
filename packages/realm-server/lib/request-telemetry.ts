@@ -89,6 +89,9 @@ const keyRoutePaths = [
 export const SYSTEM_KEYS_PATH = '/_system-keys';
 // The operator routes that store the platform's own OAuth clients.
 export const PLATFORM_OAUTH_CLIENTS_PATH = '/_platform-oauth-clients';
+// The operator routes that store platform secrets, the secrets the platform
+// keeps and only reads.
+export const PLATFORM_SECRETS_PATH = '/_platform-secrets';
 
 // The headers whose value is a credential: the caller's session token, its
 // cookies, the HMAC signatures that authenticate a worker request
@@ -214,11 +217,15 @@ export function isKeyRoutePath(pathname: string): boolean {
   );
 }
 
-// The operator routes that store a platform secret: system keys, and the
-// platform's own OAuth clients.
+// The operator routes that store a secret of the platform's own: system keys,
+// the platform's own OAuth clients, and platform secrets.
 function isSystemKeysPath(pathname: string): boolean {
   let path = pathname.toLowerCase();
-  return [SYSTEM_KEYS_PATH, PLATFORM_OAUTH_CLIENTS_PATH].some(
+  return [
+    SYSTEM_KEYS_PATH,
+    PLATFORM_OAUTH_CLIENTS_PATH,
+    PLATFORM_SECRETS_PATH,
+  ].some(
     (operatorPath) =>
       path === operatorPath || path.startsWith(`${operatorPath}/`),
   );
@@ -244,19 +251,26 @@ const keyRouteQuery = new RegExp(
 
 // The OAuth provider's routes whose path names a bearer secret: a flow's
 // interaction ID (the interaction route and those beneath it, the library's
-// resume route, and consent's details and decision) and an error reference. Telemetry names each such
-// route by a fixed label in place of the secret, wherever its path is
-// written.
+// resume route, and consent's details and decision) and an error reference.
+// Also Connected apps' disconnect, whose path names a grant: no secret, but
+// the provider's own log lines never name a grant either. Telemetry names
+// each such route by a fixed label in place of the value, wherever its path
+// is written.
 const oauthProviderSecretSegment = new RegExp(
-  `(${escapeRegExp(OAUTH_PROVIDER_PATH)}/(interaction|auth|error|consent)/)[^/\\s?#"'<>]+`,
+  `(${escapeRegExp(OAUTH_PROVIDER_PATH)}/(interaction|auth|error|consent|connections)/)[^/\\s?#"'<>]+`,
   'gi',
 );
+
+const OAUTH_PROVIDER_SEGMENT_LABELS: Record<string, string> = {
+  error: ':ref',
+  connections: ':grantId',
+};
 
 export function withOAuthProviderSecretsLabeled(value: string): string {
   return value.replace(
     oauthProviderSecretSegment,
     (_match, prefix: string, route: string) =>
-      `${prefix}${route.toLowerCase() === 'error' ? ':ref' : ':uid'}`,
+      `${prefix}${OAUTH_PROVIDER_SEGMENT_LABELS[route.toLowerCase()] ?? ':uid'}`,
   );
 }
 

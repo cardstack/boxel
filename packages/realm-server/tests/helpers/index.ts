@@ -1595,6 +1595,7 @@ export async function createRealm({
   audioSizeLimitBytes,
   videoSizeLimitBytes,
   transpileCoordinator,
+  transpilerIdentity,
   fullIndexOnStartup,
   skipBootIndex,
   mediaCacheAdapter,
@@ -1630,6 +1631,9 @@ export async function createRealm({
   // is the only thing serializing them — that's the behavior we want to
   // exercise.
   transpileCoordinator?: PopulateCoordinator;
+  // Forwarded to the Realm constructor's `transpilerIdentity` option, so a
+  // test can mount the same realm as two installations would.
+  transpilerIdentity?: string;
   // Forwarded to the Realm constructor's `fullIndexOnStartup` option so
   // tests can exercise the bootstrap-realm code path in `Realm.#startup`
   // (the kind='bootstrap' branch that triggers the CS-11245 broadcast).
@@ -1758,6 +1762,7 @@ export async function createRealm({
           process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
         ),
       transpileCoordinator,
+      transpilerIdentity,
       mediaCacheAdapter,
       cardDocumentCache,
       ...(history ? { history } : {}),
