@@ -35,10 +35,10 @@ import type { CompiledOperationGrant, CompiledPolicyRule } from './policy.ts';
 //
 // It is a diagnostic, and it doesn't evaluate a code grant's `where`: a live
 // `readSource` grant on a code type counts as covering the realm's modules
-// under its paths for every kind of caller it can admit. One whose `where` can never hold for a
-// signed-in caller, as `actor() == "anonymous"` can't, covers only callers who
-// aren't signed in, and one that doesn't name them covers only signed-in
-// callers. Nor can it tell a module's extension from its identifier, so a
+// under its paths for every kind of caller it can admit. One whose `where`
+// can never hold for a signed-in caller, as `actor() == "anonymous"` can't,
+// covers only callers who aren't signed in, and one that doesn't name them
+// covers only signed-in callers. Nor can it tell a module's extension from its identifier, so a
 // `GtsFileDef` grant counts as covering a `.ts` module too. A caller a `where`
 // leaves out, or a card defined in a `.ts` module, can still meet a module no
 // grant reaches.
@@ -123,10 +123,13 @@ export async function moduleAccessIssues(
 
   let issues: ModuleAccessIssue[] = [];
   for (let { rule, types, grants } of rules) {
+    // A grant whose callers a code grant with no paths covers needs no
+    // module looked up.
     let reading = grants.filter(
       ({ base, opensToSignedIn, opensToAnonymous }) =>
         (base === 'read' || base === 'query') &&
-        (opensToSignedIn || opensToAnonymous),
+        ((opensToSignedIn && !everywhere('signedIn')) ||
+          (opensToAnonymous && !everywhere('anonymous'))),
     );
     if (reading.length === 0) {
       continue;
