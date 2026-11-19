@@ -166,6 +166,9 @@ module(basename(import.meta.filename), function (hooks) {
             'notes/readme.txt': 'Read me',
             'misc/other.txt': 'Something else',
             'styles/site.css': 'body { margin: 0; }',
+            // A policy card stored in the governed realm, which no grant
+            // reaches wherever it is.
+            'policies/other.json': policyCard([]),
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -531,6 +534,92 @@ module(basename(import.meta.filename), function (hooks) {
     });
   });
 
+  module('verbatim writes', function () {
+    // A card's document written as is, through `/_atomic`, at a realm path.
+    function atomic(
+      auth: string,
+      op: 'add' | 'update',
+      local: string,
+      title: string,
+    ) {
+      return request
+        .post(`${path(EDUCATION)}_atomic`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Authorization', auth)
+        .send(
+          JSON.stringify({
+            'atomic:operations': [
+              {
+                op,
+                href: `./${local}`,
+                data: (JSON.parse(post(title)) as { data: unknown }).data,
+              },
+            ],
+          }),
+        );
+    }
+
+    test('a verbatim write is matched at the path it writes', async function (assert) {
+      let updated = await atomic(
+        AUTH.reader(),
+        'update',
+        'blog/Post/1.json',
+        'Rewritten',
+      );
+      assert.strictEqual(updated.status, 201, 'an update under blog/');
+      assert.strictEqual(await titleOf(IN_BLOG), 'Rewritten');
+      assertNotPermitted(
+        assert,
+        await atomic(
+          AUTH.reader(),
+          'update',
+          'drafts/Post/3.json',
+          'Rewritten',
+        ),
+        'an update under drafts/',
+      );
+
+      let added = await atomic(
+        AUTH.reader(),
+        'add',
+        'blog/Post/added.json',
+        'Added',
+      );
+      assert.strictEqual(added.status, 201, 'a create under blog/');
+      assertNotPermitted(
+        assert,
+        await atomic(AUTH.reader(), 'add', 'drafts/Post/added.json', 'Added'),
+        'a create under drafts/',
+      );
+      assert.strictEqual(
+        (await getCard(`${EDUCATION}drafts/Post/added`, AUTH.admin())).status,
+        404,
+        'which wrote nothing',
+      );
+    });
+
+    test('a verbatim write outside every grant’s paths reads nothing stored there', async function (assert) {
+      let before = education.__testOnlyPolicyTargetReads();
+      let response = await atomic(
+        AUTH.teacher(),
+        'update',
+        'drafts/Post/3.json',
+        'Rewritten',
+      );
+      assert.strictEqual(
+        response.status,
+        404,
+        'refused as a card that is not there, to a caller who may not read the realm',
+      );
+      assert.strictEqual(
+        education.__testOnlyPolicyTargetReads(),
+        before,
+        'what the path holds was never read',
+      );
+      assert.strictEqual(await titleOf(IN_DRAFTS), 'A draft');
+    });
+  });
+
   module('files and paths out of reach', function () {
     test('a file is matched by its own path', async function (assert) {
       let before = education.__testOnlyPolicyTargetReads();
@@ -547,7 +636,7 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a grant on `/` reaches neither the realm’s config card nor a path the realm ignores', async function (assert) {
+    test('a grant on `/` reaches neither the realm’s config card, a policy card, nor a path the realm ignores', async function (assert) {
       await usePolicy([
         {
           targetType: CARD_DEF,
@@ -572,6 +661,11 @@ module(basename(import.meta.filename), function (hooks) {
         (await getCard(`${EDUCATION}realm`, AUTH.teacher())).status,
         404,
         'not the config card',
+      );
+      assert.strictEqual(
+        (await getCard(`${EDUCATION}policies/other`, AUTH.teacher())).status,
+        404,
+        'nor a policy card',
       );
       assert.false(
         await served(`${EDUCATION}realm.json`),

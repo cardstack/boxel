@@ -409,6 +409,7 @@ import {
   type CreateLanding,
   grantCoversPath,
   grantsNaming,
+  noteTargetRead,
   type PendingWrite,
   type TargetPath,
   policyGateStats,
@@ -18091,6 +18092,7 @@ export class Realm {
   async #storedForVerbatimWrite(
     path: LocalPath,
   ): Promise<{ exists: boolean; text?: string }> {
+    noteTargetRead(this.operationCore);
     if (path.endsWith('.json')) {
       let text = (await this.readFileAsText(path))?.content;
       return text === undefined ? { exists: false } : { exists: true, text };
