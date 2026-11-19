@@ -18,6 +18,7 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { validateSubdomain } from '../lib/user-subdomain-validation.ts';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 
 interface ClaimedBoxelDomainJSON {
   data: {
@@ -80,8 +81,18 @@ export default function handleClaimBoxelDomainRequest({
         return;
       }
 
-      const { source_realm_url: sourceRealmURL, hostname } =
+      const { source_realm_url: rawSourceRealmURL, hostname } =
         json.data.attributes;
+
+      const parsedSourceRealmURL = normalizeRealmURL(rawSourceRealmURL);
+      if (!parsedSourceRealmURL) {
+        await sendResponseForBadRequest(
+          ctxt,
+          'json.data.attributes.source_realm_url must be a valid URL',
+        );
+        return;
+      }
+      const sourceRealmURL = parsedSourceRealmURL.href;
 
       const trimmedHostname = hostname.trim();
       const normalizedHostname = trimmedHostname.toLowerCase();
@@ -145,9 +156,25 @@ export default function handleClaimBoxelDomainRequest({
         return;
       }
 
+      // The claim names its realm by registry id, so it stays with the realm
+      // if the realm's URL changes. The request names the realm by its URL,
+      // which is resolved to the id here.
+      const realmRows = (await query(dbAdapter, [
+        `SELECT id FROM realm_registry WHERE url = `,
+        param(sourceRealmURL),
+      ])) as { id: string }[];
+      if (realmRows.length === 0) {
+        await sendResponseForNotFound(
+          ctxt,
+          `Realm not found: ${sourceRealmURL}`,
+        );
+        return;
+      }
+
       const { valueExpressions, nameExpressions } = asExpressions({
         user_id: user.id,
         hostname: normalizedHostname,
+        realm_id: realmRows[0].id,
         source_realm_url: sourceRealmURL,
         claimed_at: Math.floor(Date.now() / 1000),
       });

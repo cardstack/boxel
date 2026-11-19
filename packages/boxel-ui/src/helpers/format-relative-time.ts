@@ -5,6 +5,11 @@ import {
   parseDateValue,
   resolveEffectiveTimeZone,
 } from '../utils/date-utils.ts';
+import {
+  cachedDateTimeFormat,
+  cachedNumberFormat,
+  cachedRelativeTimeFormat,
+} from '../utils/intl-formatters.ts';
 import type { FormatDateTimeOptions } from './format-date-time.ts';
 
 type RelativeSize = 'tiny' | 'short' | 'medium' | 'long';
@@ -110,7 +115,7 @@ function formatRelativeTimeInternal(
     (selection.unit === 'month' || selection.unit === 'year')
       ? 'long'
       : resolveRelativeStyle(size);
-  const rtf = new Intl.RelativeTimeFormat(options.locale ?? 'en-US', {
+  const rtf = cachedRelativeTimeFormat(options.locale ?? 'en-US', {
     numeric: options.numeric ?? 'auto',
     style: styleForUnit,
   });
@@ -202,7 +207,7 @@ function buildMultiUnitRelativeString(
   // ordering of number/unit (use formatToParts to respect locale rules but
   // strip only detected directional words like "ago"/"in").
 
-  const rtfForParts = new Intl.RelativeTimeFormat(locale, {
+  const rtfForParts = cachedRelativeTimeFormat(locale, {
     numeric: numericOption,
     style: styleForUnit,
   });
@@ -341,7 +346,7 @@ function formatUnitWithLocale(
 
   // Build formatted number using Intl.NumberFormat so grouping/locale are
   // respected.
-  const nf = new Intl.NumberFormat(locale, { useGrouping: true });
+  const nf = cachedNumberFormat(locale, { useGrouping: true });
   const formattedNumber = nf.format(value);
 
   // Fallback approach: format the full localized string and strip any
@@ -560,7 +565,7 @@ function formatNow(options: FormatRelativeTimeOptions): string {
     return 'now';
   }
 
-  const rtf = new Intl.RelativeTimeFormat(options.locale ?? 'en-US', {
+  const rtf = cachedRelativeTimeFormat(options.locale ?? 'en-US', {
     numeric: options.numeric ?? 'auto',
     style: resolveRelativeStyle(options.size ?? 'medium'),
   });
@@ -781,7 +786,7 @@ function formatAbsoluteWithIntl(date: Date, options: FormatDateTimeOptions) {
   }
 
   try {
-    return new Intl.DateTimeFormat(locale, intlOpts).format(date);
+    return cachedDateTimeFormat(locale, intlOpts).format(date);
   } catch {
     // As a final fallback, use toISOString()
     return date.toISOString();

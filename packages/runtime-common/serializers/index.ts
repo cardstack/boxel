@@ -9,6 +9,7 @@ import * as NumberSerializer from './number.ts';
 import * as EmailSerializer from './email.ts';
 import * as ImageSizeSerializer from './image-size.ts';
 import * as PhoneSerializer from './phone.ts';
+import * as PathSpecifierSerializer from './path-specifier.ts';
 import * as PolicyPredicateSerializer from './policy-predicate.ts';
 import * as StringToContentSerializer from './string-to-content.ts';
 
@@ -35,10 +36,12 @@ export {
   ImageSizeSerializer,
   EmailSerializer,
   PhoneSerializer,
+  PathSpecifierSerializer,
   PolicyPredicateSerializer,
   StringToContentSerializer,
 };
 
+export type { SerializedPathSpecifier } from './path-specifier.ts';
 export type {
   PolicyPredicate,
   SerializedPolicyPredicate,
@@ -74,6 +77,7 @@ const serializerMapping: { [name: string]: Serializer } = {
   'image-size': ImageSizeSerializer,
   email: EmailSerializer,
   phone: PhoneSerializer,
+  'path-specifier': PathSpecifierSerializer,
   'policy-predicate': PolicyPredicateSerializer,
   'string-to-content': StringToContentSerializer,
 };
@@ -90,6 +94,7 @@ export type SerializerName =
   | 'image-size'
   | 'email'
   | 'phone'
+  | 'path-specifier'
   | 'policy-predicate'
   | 'string-to-content';
 

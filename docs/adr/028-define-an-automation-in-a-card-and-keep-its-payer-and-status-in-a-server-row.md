@@ -54,8 +54,9 @@ fields. The payer MUST be set only by a direct writer's call to the route
 that switches an automation on or resumes it, and that caller MUST become the
 payer. A write to the card MUST NOT change the payer.
 
-A card edit that raises a cap above the snapshot, or turns on `batchedAI`,
-MUST pause the automation. That pause MUST end only through a resume, which
+A card edit that raises a cap above the snapshot, turns on `batchedAI`, or
+names an incoming webhook the snapshot doesn't (a webhook trigger pointed at
+another webhook, or a new webhook trigger), MUST pause the automation. That pause MUST end only through a resume, which
 makes its caller the payer and takes a new snapshot.
 
 ### 1.4. Triggers
@@ -63,7 +64,9 @@ makes its caller the payer and takes a new snapshot.
 An automation MUST hold a list of triggers. Each trigger MUST be `cron` (a
 cron expression and a time zone, with an optional `until` and `count`),
 `once` (a date, time and time zone), or `webhook` (one of the realm's
-incoming webhooks). Each trigger MUST have a label, unique within its
+incoming webhooks). A realm's incoming webhooks MUST be the ones a direct
+writer of the realm made: switching an automation on and resuming it MUST
+refuse a webhook trigger that names any other. Each trigger MUST have a label, unique within its
 automation. Times MUST be stored as UTC. A trigger's time zone MUST be used
 only to compute its next run. A trigger's run count MUST be kept by its
 label, so that other edits to the card don't reset it. A renamed label starts
@@ -79,8 +82,12 @@ batched-AI follow-up run, and a new id per click for Preview and Run now. A
 run's job args MUST depend only on the automation, the trigger and the slot.
 
 A system cron MUST enqueue a tick job every minute. The tick MUST claim due
-rows with `FOR UPDATE SKIP LOCKED`. It MUST advance a row's next run and the
-trigger's run count in the same transaction that enqueues the run.
+rows with `FOR UPDATE SKIP LOCKED`, and MUST hold a row's claim while it
+enqueues the row's runs. It MUST advance the row's next run and each
+trigger's run count in the claim's transaction, after the runs it advances
+past are enqueued. A run's row and job are keyed by its automation, trigger
+and slot, so a tick that stops before the advance leaves the slot due, and
+the next tick finds the same run and the same job.
 
 A reconcile pass MUST run at startup and periodically. It MUST enqueue a
 make-up run for a trigger whose due time passed with nothing enqueued, or
@@ -111,6 +118,13 @@ server state, set only by an administrator who switches the automation on
 and so agrees to pay. The caps snapshot keeps a later edit from raising the
 spend until an administrator resumes the automation and pays for it.
 
+An incoming webhook belongs to the person who made it, and whoever holds its
+signing secret can send deliveries at will. A webhook trigger that could name
+anyone's webhook would let a person with no access to the realm start runs
+its payer pays for. Direct writers already administer the realm and pay for
+its automations, so a webhook one of them made is the realm's, and pointing a
+trigger at a different webhook is the same kind of edit as a raised cap.
+
 The status, next run and run counts are the platform's bookkeeping about an
 automation, not data its script keeps between runs. A script's own state
 lives in its realm.
@@ -122,9 +136,13 @@ catch-up run. UTC storage with the time zone used only for the next run keeps
 
 `run-command` already runs a host command in a prerender tab from a queue
 job, with `runAs`, a `dedupeKey` and a `concurrencyGroup`. Every worker
-manager fires every system cron, so the tick must coalesce. Claiming a row
-and advancing its next run in the transaction that enqueues the run is what
-makes a duplicate tick find nothing due. The `dedupeKey` joins a duplicate
+manager fires every system cron, so the tick must coalesce. Holding a row's
+claim while its runs are enqueued, and advancing its next run before the
+claim is released, is what makes a duplicate tick find nothing due. The
+queue publishes a job in a transaction of its own, and a worker must find a
+run's row when it takes the job, so the run's row and job are written before
+the advance rather than in its transaction; their keys make a repeat of them
+harmless. The `dedupeKey` joins a duplicate
 enqueue that arrives while the run is still queued or running, which
 `run-command` does only for identical args. Two triggers that fire at the
 same moment still start two runs, one after the other in the automation's

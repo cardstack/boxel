@@ -1,6 +1,9 @@
 import {
-  automationRef,
   cronFrequencyError,
+  cronTriggerProblem,
+} from '../automation-cron-rule.ts';
+import {
+  automationRef,
   readAutomationDeclaration,
   type AutomationIndexEntry,
   type AutomationProblemCode,
@@ -20,6 +23,7 @@ const CAPS = {
   callApiCalls: 10,
   responseBytes: 1_000_000,
   resolveCalls: 2,
+  aiCredits: 40,
   writes: 5,
   seconds: 300,
   dailyCredits: 50,
@@ -464,6 +468,50 @@ const tests = Object.freeze({
     );
   },
 
+  'the card editor and the reader apply one rule, cronTriggerProblem': async (
+    assert,
+  ) => {
+    // Each of these fires too often only across midnight or across a
+    // daylight-saving change, which a check of wall-clock times within one
+    // day misses.
+    for (let [expression, timeZone, why] of [
+      ['58,1 0,23 * * *', undefined, '23:58 and the next day’s 00:01'],
+      ['1,58 2,4 * * *', 'America/New_York', 'the skipped 02:58 and 04:01'],
+      ['0,58 */2 * * *', 'Europe/London', '00:58 GMT and 02:00 BST'],
+    ] as const) {
+      let problem = cronTriggerProblem(expression, timeZone);
+      assert.strictEqual(
+        problem?.code,
+        'cron-too-frequent',
+        `"${expression}" is refused: ${why}`,
+      );
+      assert.deepEqual(
+        codes(
+          read(
+            entry({
+              attributes: {
+                triggers: [cron(expression, { timeZone: timeZone ?? 'UTC' })],
+              },
+            }),
+          ),
+        ),
+        [['cron-too-frequent', 'triggers.0.expression']],
+        `the reader refuses "${expression}" with the same code`,
+      );
+    }
+    assert.strictEqual(
+      cronTriggerProblem('every day')?.code,
+      'invalid-cron',
+      'an expression that does not parse',
+    );
+    assert.strictEqual(
+      cronTriggerProblem('1,58 2,4 * * *', 'Not/A_Zone'),
+      undefined,
+      'a time zone the runtime does not know is reported on its own, so only the wall clock is checked',
+    );
+    assert.strictEqual(cronTriggerProblem('0 7 * * MON', 'UTC'), undefined);
+  },
+
   'reports an unknown or missing time zone': async (assert) => {
     assert.deepEqual(
       codes(
@@ -530,9 +578,43 @@ const tests = Object.freeze({
         'missing-cap',
         'missing-cap',
         'missing-cap',
+        'missing-cap',
         'missing-credit-cap',
       ],
       'each run limit is required, and one credit limit',
+    );
+  },
+
+  'reads the AI spending cap, which every automation must set': async (
+    assert,
+  ) => {
+    let result = read(entry());
+    assert.true(result.ok, 'the declaration reads');
+    if (result.ok) {
+      assert.strictEqual(result.declaration.caps.aiCredits, 40);
+    }
+    let forbidden = read(
+      entry({ attributes: { caps: { ...CAPS, aiCredits: 0 } } }),
+    );
+    assert.true(forbidden.ok, '0 forbids AI spending and is valid');
+    if (forbidden.ok) {
+      assert.strictEqual(forbidden.declaration.caps.aiCredits, 0);
+    }
+    assert.deepEqual(
+      codes(
+        read(entry({ attributes: { caps: { ...CAPS, aiCredits: null } } })),
+      ),
+      [['missing-cap', 'caps.aiCredits']],
+      'an empty AI spending cap is missing, not unlimited',
+    );
+    assert.deepEqual(
+      codes(read(entry({ attributes: { caps: { ...CAPS, aiCredits: 2.5 } } }))),
+      [['invalid-cap', 'caps.aiCredits']],
+      'credits are whole numbers',
+    );
+    assert.deepEqual(
+      codes(read(entry({ attributes: { caps: { ...CAPS, aiCredits: -1 } } }))),
+      [['invalid-cap', 'caps.aiCredits']],
     );
   },
 
@@ -633,6 +715,23 @@ const tests = Object.freeze({
         ['duplicate-label', 'triggers.1.label'],
         ['missing-label', 'triggers.2.label'],
       ],
+    );
+  },
+
+  'refuses the trigger label that runs started by hand carry': async (
+    assert,
+  ) => {
+    assert.deepEqual(
+      codes(
+        read(
+          entry({
+            attributes: {
+              triggers: [cron('0 9 * * *', { label: 'manual' })],
+            },
+          }),
+        ),
+      ),
+      [['reserved-label', 'triggers.0.label']],
     );
   },
 

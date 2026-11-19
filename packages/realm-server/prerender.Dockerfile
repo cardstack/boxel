@@ -19,7 +19,9 @@ WORKDIR /realm-server
 ARG CHROME_MIN_VERSION=157.0.8103.50
 
 # Install Chrome dependencies required by Puppeteer; the google-chrome package
-# drags in the shared libraries that Chromium needs at runtime.
+# drags in the shared libraries that Chromium needs at runtime. Google's apt
+# repository has amd64 and arm64 builds of the same release, so the source
+# names the architecture this image is built for.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -54,7 +56,7 @@ RUN apt-get update \
     fonts-kacst \
     fonts-freefont-ttf \
     && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
+    && sh -c 'echo "deb [arch=$(dpkg --print-architecture)] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
     && apt-get update \
     && apt-get install -y --no-install-recommends google-chrome-stable \
     && chrome_version="$(dpkg-query -W -f='${Version}' google-chrome-stable)" \

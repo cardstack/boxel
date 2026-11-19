@@ -265,8 +265,8 @@ function base64url(bytes) {
 // Begins a sign-in with Google, and answers the address at Google to send
 // this window to. The state, nonce and PKCE verifier stay in this origin's
 // session storage; `resume` is whatever the callback needs to carry on with,
-// or to start again from (which client, the CLI's listener, and the username
-// the CLI named).
+// or to start again from (which client, the CLI's listener, the username the
+// CLI named, and the OAuth flow the authorize page signs in for).
 export async function beginGoogleSignIn(google, resume) {
   let state = randomToken();
   let nonce = randomToken();
@@ -395,11 +395,16 @@ export function forgetSession() {
 // Signs the window's own session out: forgotten here even when the server
 // can't be reached, and ended on the server. One past its stored end is
 // ended too, since a session bound to the app's outlives its token.
-export async function signOut(config) {
-  let session = storedRecord();
-  forgetSession();
+//
+// Given a session, it ends that one, and forgets the stored session only
+// while it is still that one: another of the origin's windows may have signed
+// in, or renewed, since a page read it.
+export async function signOut(config, session = storedRecord()) {
   if (!session) {
     return;
+  }
+  if (storedRecord()?.token === session.token) {
+    forgetSession();
   }
   await endSession(config, session);
 }

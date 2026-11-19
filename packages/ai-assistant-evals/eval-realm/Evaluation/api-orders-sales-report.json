@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "I saved October's orders from our shop's API to api-reports/api/orders-2026-10.json. Make me a Sales Report card (the type is in api-reports/sales-report.gts) for October 2026 from the paid orders: revenue and units for each product type, biggest revenue first, and our top 5 customers by spend.",
+      "followUpPrompts": [],
+      "successCriteria": "**Problem**\nP1. (problem) The filter to paid orders and the totals per product type and per customer are computed by a `realm.transform` program in a `run-realm-code` script, not by JavaScript in the script that walks the orders (`for`, `forEach`, `reduce`, or a `filter`/`map` chain that builds the totals). A JavaScript step that only puts the transform's result into the card's fields is fine.\n\n**The report**\nA1. A new SalesReport card that adopts from `SalesReport` in `api-reports/sales-report.gts` has `period` naming October 2026, `paidOrders` 331, `unitsSold` 1651 and `revenue` 47410.85.\nA2. `productTypes` holds exactly these 5 entries, in this order, with `units` and `revenue` exact to the cent: Brewing Gear 364 / 17654.10, Coffee 417 / 10006.85, Mugs & Cups 338 / 8020.70, Gift Cards 189 / 7675.00, Tea 343 / 4054.20. A value carrying float noise (17654.100000000002) fails.\nA3. `topCustomers` holds exactly these 5 entries, in this order, each with its email, order count and spend: Amara Nwosu (amara.nwosu@example.com, 35, 6029.55), Sofia Lindqvist (sofia.lindqvist@example.com, 19, 3464.05), Mateo Rossi (mateo.rossi@example.com, 25, 3111.75), Olivia Grant (olivia.grant@example.com, 20, 3108.95), Lukas Weber (lukas.weber@example.com, 27, 3037.75).\nA4. The 35 refunded, 35 pending and 19 voided orders count nowhere in the report.\nA5. The reply names the totals or the top product type and customer, and they match the card.\n\n**All tasks**\nZ1. The SalesReport card renders with no error boundary and was shown on screen at the end of the run.\nZ2. `api-reports/api/orders-2026-10.json` and `api-reports/sales-report.gts` are byte-identical to the seed, and the only new file is the SalesReport instance.\nZ3. Every tool call applied or was repaired by the model, and the assistant did not ask a question or wait for confirmation before acting.\nZ4. No tool result carries the whole order list: the script returned the totals or the card it wrote, not the 420 orders.",
+      "cardInfo": {
+        "name": "API data: sales report from saved orders",
+        "summary": "A shop workspace holds one month of orders saved from the shop's orders API as a JSON file, 420 orders with string prices and four payment statuses, and a SalesReport definition. One prompt asks for a Sales Report card with revenue and units per product type and the top 5 customers, from paid orders only. This eval tests whether the assistant reshapes the API data with realm.transform rather than a JavaScript loop in the script, and whether the totals are exact.",
+        "notes": "Use case: create card instances (1). The prompt names the outcome, a report from saved API data, and where the SalesReport type lives; it never names `realm.transform` or how to reshape the data. Judge from the workspace snapshot (the new SalesReport's file under `files` and its indexed document under `cards`) and from the room's `run-realm-code` scripts for P1 and Z4.\n\nSeed: the seed script `eval-seeds/api-orders.ts` writes `api-reports/api/orders-2026-10.json` when a run starts: a shop orders API response, `{ orders: [...], page_info }`, holding 420 orders (#1001 to #1420) of October 2026, about 380 KB. Each order has `financial_status` (331 `paid`, 35 `refunded`, 35 `pending`, 19 `voided`), `total_price` as a string, a `customer` with `first_name`, `last_name` and `email`, and `line_items` with `product_type`, `quantity` and `price` as a string. `total_price` is the sum of the order's lines, so a customer's spend is the same from either. `expectedSalesReport()` in the same file computes the totals the criteria quote. `api-reports/sales-report.gts` (committed, in `initialFiles`) defines SalesReport with `period`, `paidOrders`, `unitsSold`, `revenue`, `productTypes` (containsMany of `productType`, `units`, `revenue`) and `topCustomers` (containsMany of `name`, `email`, `orders`, `spend`).\n\nThe path the skills give (`source-code-editing`) is one script that reads the file with `realm.fs.readText`, parses it, reshapes it with `realm.transform` (`map(select(.financial_status == \"paid\"))`, `group_by`, `add`, `ROUND(…; 2)`, `sort_by`), and writes the card with `realm.fs.writeText`, returning `{ show: path }`. The trap criteria: P1 (the problem: a JavaScript loop gets the right numbers, so only the room shows it), A2 (prices are strings, and float sums need rounding to the cent), A3 (Mateo Rossi and Olivia Grant are $2.80 apart, and only paid orders put them in this order) and A4 (counting every order changes every total). Z4 catches a script that returns the parsed file to read it in the conversation.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": [],
+      "seedScript": "api-orders",
+      "secondsPerPrompt": 240
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialFiles.0": {
+        "links": {
+          "self": "../api-reports/sales-report.gts"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

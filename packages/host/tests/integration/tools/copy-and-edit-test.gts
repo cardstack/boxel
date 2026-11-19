@@ -93,8 +93,19 @@ module('Integration | tools | copy-and-edit', function (hooks) {
             },
           },
           'simple-card.gts': `
-          import { CardDef, field, contains } from "@cardstack/base/card-api";
+          import { CardDef, FieldDef, field, contains, containsMany } from "@cardstack/base/card-api";
           import StringField from "@cardstack/base/string";
+
+          export class TreeNodeField extends FieldDef {
+            static displayName = 'Tree Node';
+            @field label = contains(StringField);
+            @field children = containsMany(() => TreeNodeField);
+          }
+
+          export class TreeCard extends CardDef {
+            static displayName = 'TreeCard';
+            @field tree = contains(TreeNodeField);
+          }
 
           export class Theme extends CardDef {
             static displayName = 'Theme';
@@ -115,6 +126,26 @@ module('Integration | tools | copy-and-edit', function (hooks) {
                 adoptsFrom: {
                   module: '@cardstack/base/theme',
                   name: 'default',
+                },
+              },
+            },
+          },
+          'tree-card-instance.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              relationships: {
+                'cardInfo.theme': {
+                  data: {
+                    type: 'card',
+                    id: './Theme/og',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './simple-card',
+                  name: 'TreeCard',
                 },
               },
             },
@@ -260,6 +291,57 @@ module('Integration | tools | copy-and-edit', function (hooks) {
         stackIndex: 0,
         relationshipContext: {
           // overlay only knows about the leaf field name
+          fieldName: 'theme',
+          fieldType: 'linksTo',
+        },
+      }),
+    );
+
+    let command = new CopyAndEditTool(toolService.toolContext);
+    await command.execute({
+      card: originalTheme,
+    });
+
+    await settled();
+
+    let updatedParent = (await store.get(parentCard.id as string)) as CardDef;
+    let linkedThemeId =
+      (updatedParent as any).cardInfo?.theme?.id ??
+      (updatedParent as any).cardInfo?.theme;
+
+    assert.ok(linkedThemeId, 'parent cardInfo.theme is set after copy');
+    assert.notEqual(
+      linkedThemeId,
+      originalTheme.id,
+      'cardInfo.theme points to copied theme',
+    );
+  });
+
+  test('finds a nested link field past a field that contains itself', async function (assert) {
+    let toolService = getService('tool-service');
+    let store = getService('store');
+    let operatorModeStateService = getService('operator-mode-state-service');
+
+    // TreeCard's own `tree` field is searched before the inherited
+    // `cardInfo`, and `tree.children` contains its own type.
+    let parentCard = (await store.get(
+      `${testRealmURL}tree-card-instance`,
+    )) as CardDef;
+    let originalTheme = (await store.get(`${testRealmURL}Theme/og`)) as CardDef;
+
+    operatorModeStateService.addItemToStack(
+      new StackItem({
+        id: parentCard.id as string,
+        format: 'isolated',
+        stackIndex: 0,
+      }),
+    );
+    operatorModeStateService.addItemToStack(
+      new StackItem({
+        id: originalTheme.id as string,
+        format: 'isolated',
+        stackIndex: 0,
+        relationshipContext: {
           fieldName: 'theme',
           fieldType: 'linksTo',
         },

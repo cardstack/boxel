@@ -290,7 +290,9 @@ export {
   buildCallApiRequest,
   destinationCovers,
   notApproved,
+  refusedFrom,
   slotKeyKinds,
+  subjectOfRefusal,
   slotsIn,
   type CallApiKeyKind,
   type AnonymousCallApiCaller,
@@ -302,7 +304,10 @@ export {
   type CallApiMode,
   type CallApiReadinessLookup,
   type CallApiRequest,
+  type CallApiRunAdmission,
+  type CallApiRunMeter,
   type CallApiSender,
+  type CallApiSendOptions,
   type CallApiSlotLookup,
 } from './call-api.ts';
 export type {

@@ -18,6 +18,7 @@ scope:
   - packages/secure-origin/src/shell/connected-apps/**
   - packages/secure-origin/src/shell/device/**
   - packages/secure-origin/src/security/oauth-provider*
+  - packages/secure-origin/src/security/oauth-error*
 ---
 
 # 021. Run Boxel's OAuth provider in the realm server, with opaque tokens bound to one resource
@@ -130,7 +131,11 @@ registered one exactly, except for the port of a loopback address (RFC 8252
 §7.3). A CIMD client ID or a redirect URI MUST NOT be on a host where Boxel
 serves its own pages or users' files: the realm server, the secure origin, the
 published-site domains, and every app origin the realm server lists for the
-deployment (ADR 005 §1.7), other than a loopback address.
+deployment (ADR 005 §1.7), other than a loopback address. A CIMD client ID
+MUST NOT be under the registrable domain of any of those hosts either, since
+consent names a CIMD client by that domain and any Boxel host may serve JSON
+an account holder controls. A CIMD client ID's scheme MUST be written
+`https://` in lower case, the form consent recognizes as a CIMD client.
 
 Consent MUST take what the access means (each resource's name, what it covers
 and what each scope allows) from the registry. Consent MUST name a CIMD client
@@ -138,8 +143,8 @@ by its client ID's registrable domain, and a DCR client as unverified, beside
 its redirect URI's registrable domain. It MUST NOT show a client's logo or
 website link.
 
-The endpoints that need no sign-in (registration, authorization, token and
-device-code entry) MUST be rate-limited. The token endpoint's limit MUST NOT
+The endpoints that need no sign-in (registration, authorization, token,
+revocation and device-code entry) MUST be rate-limited. The token endpoint's limit MUST NOT
 be keyed on the caller's address alone, since a hosted client refreshes every
 user's tokens from a few addresses. A client registered by DCR SHOULD be
 deleted once it has gone unused for a set period.
@@ -245,6 +250,18 @@ An operator's revocation of a user's sessions, and the first revocation after
 a password change (ADR 005 §1.6), MUST also revoke the user's OAuth grants.
 The later revocation that covers Matrix OpenID tokens MUST NOT, since an
 OpenID token can't create a grant (§1.7).
+
+A grant is live while it passes the grant checks of §1.5: it hasn't ended or
+expired, and no revocation of the user's grants covers it. A user MUST be able
+to see their live grants whose code has been exchanged, and end any one of
+their live grants, from the secure origin's Connected apps page. The routes
+that list and end them MUST answer only a request whose `Origin` is the secure
+origin's, under the secure window's own session, as consent's routes do
+(§1.7). Ending one grant MUST NOT end another, including another grant of the
+same client. Ending a grant of the signed-in user's that is no longer live
+SHOULD be answered as done, so that a repeated request succeeds, and MUST
+change nothing. A grant ID that doesn't name a grant of the signed-in user's
+MUST be answered as unknown, and MUST change nothing.
 
 ## 2. Rationale
 

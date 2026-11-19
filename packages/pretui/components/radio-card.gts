@@ -5,7 +5,12 @@ import { fn } from '@ember/helper';
 import { guidFor } from '@ember/object/internals';
 import { emit, firstDefined } from '../pretui-primitives';
 import { ChoiceGrid, OptionCard } from '../internal/choice-cards';
-import type { ChoiceCardOption, ChoiceCardOrientation, ChoiceCardsSharedArgs } from '../internal/choice-cards';
+import type {
+  ChoiceCardOption,
+  ChoiceCardOrientation,
+  ChoiceCardsSharedArgs,
+  ChoiceCardVariant,
+} from '../internal/choice-cards';
 
 export interface RadioCardSignature {
   Args: ChoiceCardsSharedArgs & {
@@ -14,6 +19,8 @@ export interface RadioCardSignature {
     onValueChange?: (value: string) => void;
     /** alias */
     onChange?: (value: string) => void;
+    /** `cards` (default) or `list`: rows in one bordered group, `meta` on the trailing edge */
+    variant?: ChoiceCardVariant;
   };
   Blocks: {
     /** replaces the generated title and description of every card */
@@ -65,6 +72,7 @@ export class RadioCard extends Component<RadioCardSignature> {
       aria-label={{@label}}
       data-orientation={{this.orientation}}
       data-columns={{@columns}}
+      data-variant={{@variant}}
       data-test-pretui-radio-card
       ...attributes
     >
@@ -78,6 +86,7 @@ export class RadioCard extends Component<RadioCardSignature> {
           @onChange={{fn this.pick option}}
           @custom={{has-block}}
           @hasMedia={{has-block 'media'}}
+          @variant={{@variant}}
         >
           <:default as |o selected|>{{yield o selected}}</:default>
           <:media as |o|>{{yield o to='media'}}</:media>

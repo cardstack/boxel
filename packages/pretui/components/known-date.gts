@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { guidFor } from '@ember/object/internals';
 import { Input } from './input';
+import { cachedDateTimeFormat } from '../internal/intl-cache';
 
 // ═══════════════════════════════════════════════════════════════════════
 // Pure date maths and parsing. No DOM, no clock.
@@ -54,7 +55,7 @@ export const DEFAULT_PIVOT_YEAR = 2000;
  */
 export function orderForLocale(locale: string): DateOrder {
   try {
-    let parts = new Intl.DateTimeFormat(locale).formatToParts(ORDER_PROBE);
+    let parts = cachedDateTimeFormat(locale).formatToParts(ORDER_PROBE);
     let sequence = parts
       .filter((p) => p.type === 'day' || p.type === 'month' || p.type === 'year')
       .map((p) => p.type.charAt(0))
@@ -78,7 +79,7 @@ function monthVocabulary(locale: string): Map<string, number> {
     for (let style of ['long', 'short'] as const) {
       let format: Intl.DateTimeFormat;
       try {
-        format = new Intl.DateTimeFormat(tag, { month: style, timeZone: 'UTC' });
+        format = cachedDateTimeFormat(tag, { month: style, timeZone: 'UTC' });
       } catch {
         continue;
       }
@@ -561,7 +562,7 @@ export class KnownDate extends Component<KnownDateSignature> {
       return '';
     }
     try {
-      return new Intl.DateTimeFormat(this.locale, {
+      return cachedDateTimeFormat(this.locale, {
         dateStyle: 'full',
         timeZone: 'UTC',
       }).format(new Date(Date.UTC(resolved.year, resolved.month - 1, resolved.day)));

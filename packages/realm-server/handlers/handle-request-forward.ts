@@ -1,6 +1,12 @@
 import type Koa from 'koa';
-import type { DBAdapter } from '@cardstack/runtime-common';
+import type {
+  DBAdapter,
+  DefinitionLookup,
+  ReportRunChange,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
+import { runTokenOf } from '@cardstack/runtime-common/run-token';
 import {
   sendResponseForBadRequest,
   sendResponseForError,
@@ -28,7 +34,19 @@ import {
 import { scrubError } from '../lib/outbound/scrub-error.ts';
 import { CredentialScrubber } from '../lib/outbound/scrubber.ts';
 import { withBillableCall } from '../lib/billable-call.ts';
+import {
+  admitRunForward,
+  type AdmittedRunForward,
+} from '../lib/run-token-forward.ts';
+import {
+  AI_BATCHES_PATH,
+  isOpenRouterBatchURL,
+} from '../lib/openrouter-batches.ts';
 import * as Sentry from '@sentry/node';
+import {
+  logRunPlatformLine,
+  type RunLogLine,
+} from '@cardstack/runtime-common/automation-run-log';
 
 const log = logger('request-forward');
 
@@ -133,10 +151,26 @@ interface RequestForwardBody {
   multipart?: boolean;
 }
 
+// A request carrying an automation run's token takes the run's path: the
+// route lets it past the session check, and `admitRunForward` checks the
+// token and holds the request to the run's caps before it is sent (see
+// `lib/run-token-forward.ts`). It is billed to the person the run acts as,
+// and its ledger entry is an AI charge naming the run and its realm.
 export default function handleRequestForward({
   dbAdapter,
+  definitionLookup,
+  virtualNetwork,
+  realmSecretSeed,
+  matrixServerName,
+  reportRunChange,
 }: {
   dbAdapter: DBAdapter;
+  definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
+  realmSecretSeed: string;
+  matrixServerName: string;
+  // Told when a run's request ends the run at a cap.
+  reportRunChange?: ReportRunChange;
 }) {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     // A caller that stops waiting must take the upstream call with it. Each
@@ -151,19 +185,29 @@ export default function handleRequestForward({
     // The key and the recorded form of the caller's URL, once the call has a
     // key.
     let call: OutboundErrorContext | undefined;
+    // An automation run's admitted request, whose AI reservation is settled
+    // once however the request ends.
+    let runForward: AdmittedRunForward | undefined;
+    let sent = false;
+    let sentAt: number | undefined;
+    // The model a run's request named, for its line in the run's log.
+    let runModel: string | undefined;
+    let costInUsd: number | undefined;
+    // The upstream's status, once it has answered.
+    let upstreamStatus: number | undefined;
 
     try {
       // 1. Validate JWT token and extract user
+      let authorization = ctxt.req.headers['authorization'] ?? null;
+      let runToken = runTokenOf(authorization);
       const token = ctxt.state.token;
-      if (!token) {
+      if (!token && !runToken) {
         await sendResponseForForbiddenRequest(
           ctxt,
           'Token is required to forward requests',
         );
         return;
       }
-
-      const { user: matrixUserId } = token;
 
       // 2. Parse request body
       const request = await fetchRequestFromContext(ctxt);
@@ -203,6 +247,17 @@ export default function handleRequestForward({
         await sendResponseForBadRequest(
           ctxt,
           `Header ${forbiddenHeaders.join(', ')} may not be forwarded`,
+        );
+        return;
+      }
+
+      // A batch submit answers with no cost, and a batch can't be canceled,
+      // so a batch sent from here would be paid for and never billed. Batches
+      // go only through the batch path, which records each one for billing.
+      if (isOpenRouterBatchURL(json.url)) {
+        await sendResponseForForbiddenRequest(
+          ctxt,
+          `Batch calls to ${json.url} are accepted only from automation runs, through ${AI_BATCHES_PATH}`,
         );
         return;
       }
@@ -290,6 +345,44 @@ export default function handleRequestForward({
         setContentTypeHeader(headers, 'application/json');
       }
 
+      let matrixUserId: string;
+      if (runToken) {
+        let admission = await admitRunForward(
+          {
+            dbAdapter,
+            definitionLookup,
+            virtualNetwork,
+            realmSecretSeed,
+            matrixServerName,
+            reportRunChange,
+          },
+          {
+            token: runToken,
+            url: json.url,
+            method: json.method,
+            stream: Boolean(json.stream),
+            multipart: Boolean(json.multipart),
+            body: typeof finalBody === 'string' ? finalBody : undefined,
+          },
+        );
+        if (!admission.ok) {
+          await sendResponseForError(
+            ctxt,
+            admission.status,
+            STATUS_TEXT[admission.status],
+            admission.message,
+          );
+          return;
+        }
+        runForward = admission.admitted;
+        matrixUserId = runForward.run.actsAs;
+        let model = (parsedRequestBody as { model?: unknown } | undefined)
+          ?.model;
+        runModel = typeof model === 'string' ? model : undefined;
+      } else {
+        matrixUserId = token.user;
+      }
+
       if (
         json.stream &&
         !(await destinationsConfig.supportsStreaming(json.url))
@@ -311,6 +404,16 @@ export default function handleRequestForward({
           creditStrategy: destinationConfig.creditStrategy,
           signal: clientGone,
           destination: destinationConfig.url,
+          charge: runForward
+            ? {
+                kind: 'ai',
+                realm: runForward.run.realm,
+                runId: runForward.run.runId,
+              }
+            : undefined,
+          onCostResolved: (cost) => {
+            costInUsd = cost;
+          },
         },
         (errorMessage) => sendResponseForForbiddenRequest(ctxt, errorMessage),
         async () => {
@@ -339,7 +442,23 @@ export default function handleRequestForward({
           // provider has already generated and billed for the tokens, and
           // abandoning the read only loses the charge. forwardJsonResponse
           // cancels the read only when nothing is charged.
+          if (runForward) {
+            // Counted just before it is sent, so a forward the person's
+            // credits refused never counts against the run's cap.
+            let counted = await runForward.countCall();
+            if (!counted.ok) {
+              await sendResponseForError(
+                ctxt,
+                counted.status,
+                STATUS_TEXT[counted.status],
+                counted.message,
+              );
+              return undefined;
+            }
+          }
           const upstreamCall = upstreamCallSignal(clientGone);
+          sent = true;
+          sentAt = Date.now();
           const externalResponse = await outboundFetch({
             url: json.url,
             method: json.method,
@@ -354,6 +473,7 @@ export default function handleRequestForward({
             scrubber,
           });
           upstreamCall.release();
+          upstreamStatus = externalResponse.status;
 
           return await forwardJsonResponse(ctxt, externalResponse, {
             chargesForUsage: destinationConfig.creditStrategy.chargesForUsage,
@@ -394,6 +514,75 @@ export default function handleRequestForward({
         ctxt,
         'An error occurred while processing the request',
       );
+    } finally {
+      // A request never sent cost nothing, and neither did one the upstream
+      // answered with an error and no cost. One sent whose cost couldn't be
+      // learned otherwise spends its whole reservation, the most it could
+      // have cost.
+      let settledCost =
+        !sent ||
+        (costInUsd === undefined &&
+          upstreamStatus !== undefined &&
+          upstreamStatus >= 400)
+          ? 0
+          : costInUsd;
+      await runForward
+        ?.settle(settledCost)
+        .catch((error) =>
+          log.error(
+            `Could not settle run ${runForward!.run.runId}'s AI reservation:`,
+            error,
+          ),
+        );
+      if (runForward && sent) {
+        await logRunPlatformLine(
+          dbAdapter,
+          runForward.run.runId,
+          resolveLogLine({
+            model: runModel,
+            status: upstreamStatus,
+            ms: sentAt !== undefined ? Date.now() - sentAt : undefined,
+            costInUsd: settledCost,
+          }),
+        );
+      }
     }
+  };
+}
+
+const STATUS_TEXT = {
+  401: 'Unauthorized',
+  403: 'Forbidden',
+  422: 'Unprocessable Content',
+  503: 'Service Unavailable',
+} as const;
+
+// A run's `resolve` call as its line in the run's log: the model, the
+// provider's status and time, and what the call cost.
+export function resolveLogLine({
+  model,
+  status,
+  ms,
+  costInUsd,
+}: {
+  model?: string;
+  status?: number;
+  ms?: number;
+  costInUsd?: number;
+}): Omit<RunLogLine, 'source' | 'at'> {
+  let measured = [
+    ...(ms !== undefined ? [`${ms} ms`] : []),
+    ...(costInUsd !== undefined ? [`$${costInUsd.toFixed(6)}`] : []),
+  ].join(', ');
+  return {
+    kind: 'resolve',
+    level: status === undefined ? 'error' : status >= 400 ? 'warn' : 'info',
+    message: `resolve${model ? ` ${model}` : ''}: ${status ?? 'failed'}${measured ? ` (${measured})` : ''}`,
+    data: {
+      ...(model ? { model } : {}),
+      ...(status !== undefined ? { status } : {}),
+      ...(ms !== undefined ? { ms } : {}),
+      ...(costInUsd !== undefined ? { costInUsd } : {}),
+    },
   };
 }

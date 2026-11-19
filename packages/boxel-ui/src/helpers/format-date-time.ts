@@ -16,6 +16,11 @@ import {
   parseDateValue,
   resolveEffectiveTimeZone,
 } from '../utils/date-utils.ts';
+import {
+  cachedDateTimeFormat,
+  cachedDisplayNames,
+  cachedNumberFormat,
+} from '../utils/intl-formatters.ts';
 import formatRelativeTime from './format-relative-time.ts';
 
 /**
@@ -131,7 +136,7 @@ function formatTinyWithToday(
     if (timeZone) {
       intlOpts.timeZone = timeZone;
     }
-    return new Intl.DateTimeFormat(options.locale ?? 'en-US', intlOpts).format(
+    return cachedDateTimeFormat(options.locale ?? 'en-US', intlOpts).format(
       date,
     );
   }
@@ -144,7 +149,7 @@ function formatTinyWithToday(
     formatterOpts.timeZone = timeZone;
   }
 
-  const formatter = new Intl.DateTimeFormat(
+  const formatter = cachedDateTimeFormat(
     options.locale ?? 'en-US',
     formatterOpts,
   );
@@ -349,7 +354,7 @@ function formatWithIntl(
     return result.value;
   }
 
-  const formatter = new Intl.DateTimeFormat(
+  const formatter = cachedDateTimeFormat(
     options.locale ?? 'en-US',
     result.options,
   );
@@ -486,7 +491,7 @@ function formatSpecialKinds(
 function formatWeek(date: Date, options: FormatDateTimeOptions): string {
   const { week, year } = getISOWeekInfo(date, options.timeZone);
   const locale = options.locale ?? 'en-US';
-  const numberFormat = new Intl.NumberFormat(locale, {
+  const numberFormat = cachedNumberFormat(locale, {
     numberingSystem: options.numberingSystem,
     useGrouping: false,
   });
@@ -494,7 +499,7 @@ function formatWeek(date: Date, options: FormatDateTimeOptions): string {
 
   if (options.weekFormat === 'label') {
     const label = getDateTimeFieldLabel(locale, 'week');
-    const yearLabel = new Intl.NumberFormat(locale, {
+    const yearLabel = cachedNumberFormat(locale, {
       numberingSystem: options.numberingSystem,
       useGrouping: false,
     }).format(year);
@@ -508,21 +513,21 @@ function formatQuarter(date: Date, options: FormatDateTimeOptions): string {
   const parts = getZonedDateParts(date, options.timeZone);
   const quarter = Math.floor((parts.month - 1) / 3) + 1;
   const locale = options.locale ?? 'en-US';
-  const yearLabel = new Intl.NumberFormat(locale, {
+  const yearLabel = cachedNumberFormat(locale, {
     numberingSystem: options.numberingSystem,
     useGrouping: false,
   }).format(parts.year);
 
   if (options.quarterFormat === 'long') {
     const label = getDateTimeFieldLabel(locale, 'quarter');
-    const quarterNumber = new Intl.NumberFormat(locale, {
+    const quarterNumber = cachedNumberFormat(locale, {
       numberingSystem: options.numberingSystem,
       useGrouping: false,
     }).format(quarter);
     return `${label} ${quarterNumber}, ${yearLabel}`;
   }
 
-  const quarterLabel = new Intl.NumberFormat(locale, {
+  const quarterLabel = cachedNumberFormat(locale, {
     numberingSystem: options.numberingSystem,
     useGrouping: false,
   }).format(quarter);
@@ -539,7 +544,7 @@ function getDateTimeFieldLabel(
   }
 
   try {
-    const displayNames = new Intl.DisplayNames([locale], {
+    const displayNames = cachedDisplayNames(locale, {
       type: 'dateTimeField',
     });
     return displayNames.of(field) ?? field;

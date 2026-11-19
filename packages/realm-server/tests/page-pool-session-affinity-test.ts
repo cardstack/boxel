@@ -6,10 +6,14 @@ import {
   fromAffinityKey,
   isAffinityOfRealm,
   isRealmAuthorityAffinityKey,
+  isRunAffinityKey,
   realmAffinityKeyOf,
+  renderSessionOf,
   toAffinityKey,
 } from '../prerender/affinity.ts';
 import { buildCreatePrerenderAuth } from '../prerender/auth.ts';
+import { mintRunToken } from '../lib/run-token.ts';
+import type { AutomationRun } from '@cardstack/runtime-common';
 
 // A render hands its tab its sessions through localStorage, which belongs to
 // the tab's BrowserContext. A context must therefore only ever carry one
@@ -41,6 +45,29 @@ const otherOwnerAuthorityAuth = createPrerenderAuth(OTHER_OWNER, permissions, {
 const user1Auth = createPrerenderAuth(USER_1, permissions);
 const user2Auth = createPrerenderAuth(USER_2, permissions);
 const anonymousAuth = '{}';
+
+// An automation run's tab auth: its run token, alone, for its realm.
+function runAuth(user: string, runId = 'run-1') {
+  let now = new Date().toISOString();
+  let run = {
+    id: runId,
+    actsAs: user,
+    attempt: 1,
+    state: 'running',
+    startedAt: now,
+  } as AutomationRun;
+  return JSON.stringify({
+    [REALM]: mintRunToken({
+      realmSecretSeed: 'page-pool-session-affinity-test-seed',
+      run,
+      realmURL: REALM,
+      readRealms: [],
+      writesCap: 10,
+      realmServerURL: 'http://localhost:4202/',
+      timeLimitSeconds: 60,
+    }),
+  });
+}
 
 const POOL_SIZING_ENV_KEYS = [
   'PRERENDER_PAGE_POOL_MIN',
@@ -188,6 +215,40 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
+    test("an automation run's tab is keyed by its realm and its run's identity", function (assert) {
+      let key = realmKeyFor(runAuth(USER_1));
+      assert.strictEqual(key, `${REALM_KEY}#run:${USER_1}`);
+      assert.true(isRunAffinityKey(key), 'it is a run affinity');
+      assert.strictEqual(
+        realmKeyFor(runAuth(USER_1, 'run-2')),
+        key,
+        'another run of the realm and identity shares the affinity',
+      );
+      assert.notStrictEqual(
+        realmKeyFor(runAuth(USER_2)),
+        key,
+        'a run of another identity does not',
+      );
+      assert.notStrictEqual(
+        realmKeyFor(user1Auth),
+        key,
+        "the identity's own sessions never share a run's affinity",
+      );
+      for (let auth of [realmAuthorityAuth, user1Auth, anonymousAuth]) {
+        assert.false(isRunAffinityKey(realmKeyFor(auth)));
+      }
+      assert.strictEqual(realmAffinityKeyOf(key), REALM_KEY);
+    });
+
+    test('a run token beside any other session is unreadable', function (assert) {
+      let mixed = JSON.stringify({
+        ...JSON.parse(runAuth(USER_1)),
+        'http://localhost:4202/other/': JSON.parse(user1Auth)[REALM],
+      });
+      assert.strictEqual(renderSessionOf(mixed).kind, 'unreadable');
+      assert.false(isRunAffinityKey(realmKeyFor(mixed)));
+    });
+
     test('a user affinity is keyed by its user alone', function (assert) {
       assert.strictEqual(
         toAffinityKey({
@@ -227,6 +288,38 @@ module(basename(import.meta.filename), function (hooks) {
       lease.release();
     }
     assert.strictEqual(contexts.size, 5, 'five BrowserContexts');
+  });
+
+  test("an automation run's affinity holds one tab, and its runs take turns on it", async function (assert) {
+    let pool = makePool({ maxPages: 4, browserManager: makeBrowserStub() });
+    await pool.warmStandbys();
+    let key = realmKeyFor(runAuth(USER_1));
+    let first = await pool.getPage(key, 'command');
+    let secondHeld = false;
+    let second = pool.getPage(key, 'command').then((lease) => {
+      secondHeld = true;
+      return lease;
+    });
+    // Long enough for a render with a free standby to take it.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.false(
+      secondHeld,
+      'a second run of the realm and identity waits, though standbys are free',
+    );
+    first.release();
+    let lease = await second;
+    assert.strictEqual(lease.pageId, first.pageId, 'it runs on the same tab');
+    lease.release();
+
+    let user = await pool.getPage('user:A', 'command');
+    let otherUser = await pool.getPage('user:A', 'command');
+    assert.notStrictEqual(
+      user.pageId,
+      otherUser.pageId,
+      'an ordinary command affinity still takes a second tab',
+    );
+    user.release();
+    otherUser.release();
   });
 
   test('a cross-affinity steal does not take a tab whose BrowserContext has another tab in it', async function (assert) {

@@ -19,6 +19,7 @@ import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  commandRequestTimeoutMs,
   resolvePrerenderManagerRequestTimeoutMs,
   retryPolicyForPath,
   sanitizePrerenderJobId,
@@ -120,6 +121,12 @@ export function createRemotePrerenderer(
     let requestId = randomUUID();
     let affinityTag = `${attributes.affinityType}:${attributes.affinityValue}`;
 
+    // A command given its own time limit (an automation run's) is waited on
+    // that long, plus the request overhead.
+    let attemptTimeoutMs = commandRequestTimeoutMs(
+      requestTimeoutMs,
+      attributes.timeoutMs,
+    );
     let attempts = 0;
     let lastError: Error | undefined;
     let attemptStart = Date.now();
@@ -128,7 +135,7 @@ export function createRemotePrerenderer(
       attemptStart = Date.now();
       try {
         const ac = new AbortController();
-        const timer = setTimeout(() => ac.abort(), requestTimeoutMs);
+        const timer = setTimeout(() => ac.abort(), attemptTimeoutMs);
         let response = await fetch(endpoint, {
           method: 'POST',
           headers: {
@@ -209,7 +216,7 @@ export function createRemotePrerenderer(
               ? ` command=${attributes.command}`
               : '';
           throw new Error(
-            `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms ` +
+            `Prerender request to ${endpoint.href} aborted after ${attemptTimeoutMs}ms ` +
               `(requestId=${requestId}, attempt=${attempts}/${maxAttempts}, ` +
               `affinity=${affinityTag}${subject}, elapsed=${elapsedMs}ms; ` +
               `grep manager/prerender-server logs for requestId=${requestId} to locate the stall)`,
@@ -322,17 +329,30 @@ export function createRemotePrerenderer(
         },
       );
     },
-    async runCommand({ userId, auth, command, commandInput, priority }) {
+    async runCommand({
+      userId,
+      auth,
+      command,
+      commandInput,
+      priority,
+      runRealm,
+      timeoutMs,
+    }) {
       return await requestWithRetry<RunCommandResponse>(
         'run-command',
         'run-command-request',
         {
-          affinityType: 'user',
-          affinityValue: userId,
+          // An automation run is routed and pooled by its realm; the
+          // prerender server keys its tab by the realm and the run token's
+          // identity.
+          ...(runRealm
+            ? { affinityType: 'realm' as const, affinityValue: runRealm }
+            : { affinityType: 'user' as const, affinityValue: userId }),
           auth,
           command,
           commandInput,
           ...(priority !== undefined ? { priority } : {}),
+          ...(timeoutMs !== undefined ? { timeoutMs } : {}),
         },
       );
     },
@@ -447,7 +467,13 @@ function validatePrerenderAttributes(
   if (typeof attrs.auth !== 'string' || attrs.auth.trim().length === 0) {
     missing.add('auth');
   }
-  if (requestType === 'run-command-request' && attrs.affinityType !== 'user') {
+  // A command runs on its user's affinity, or an automation run on its
+  // realm's; the prerender server checks a realm one carries a run token.
+  if (
+    requestType === 'run-command-request' &&
+    attrs.affinityType !== 'user' &&
+    attrs.affinityType !== 'realm'
+  ) {
     missing.add('affinityType');
   }
   if (requestType !== 'run-command-request' && attrs.affinityType !== 'realm') {

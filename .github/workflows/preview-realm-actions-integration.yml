@@ -19,6 +19,7 @@ on:
       - .github/workflows/sync-workspace.yml
       - .github/workflows/preview-realm.yml
       - .github/workflows/preview-realm-actions-integration.yml
+      - .github/scripts/preview-realm-push.test.sh
       # builds the host this suite downloads
       - .github/workflows/test-web-assets.yaml
       - packages/boxel-cli/src/commands/realm/publish.ts
@@ -31,6 +32,7 @@ on:
       - .github/workflows/sync-workspace.yml
       - .github/workflows/preview-realm.yml
       - .github/workflows/preview-realm-actions-integration.yml
+      - .github/scripts/preview-realm-push.test.sh
       # builds the host this suite downloads
       - .github/workflows/test-web-assets.yaml
       - packages/boxel-cli/src/commands/realm/publish.ts
@@ -54,6 +56,21 @@ jobs:
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: preview-realm-integration
+
+  # The reusable workflow's push step decides which of a pull request's files
+  # are staged and where the CLI runs. It is a script inside the workflow
+  # file, so this runs that script itself against fixture checkouts.
+  push-step:
+    name: Test the preview workflow's push step
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run the push step against fixtures
+        run: |
+          yq '.jobs.deploy.steps[] | select(.id == "push") | .run' \
+            .github/workflows/preview-realm.yml > "${RUNNER_TEMP}/push-step.sh"
+          [ -s "${RUNNER_TEMP}/push-step.sh" ]
+          .github/scripts/preview-realm-push.test.sh "${RUNNER_TEMP}/push-step.sh"
 
   integration:
     name: Run preview-realm CLI commands against local stack

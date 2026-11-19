@@ -4,7 +4,15 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { SupportedMimeType, type Realm } from '@cardstack/runtime-common';
+import {
+  CATALOG_REALM_PREFIX,
+  SupportedMimeType,
+  type Realm,
+} from '@cardstack/runtime-common';
+import {
+  SKILL_FEATURES,
+  SKILL_FEATURE_REALMS,
+} from '@cardstack/runtime-common/ai/debug';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -15,6 +23,7 @@ import {
 
 import type MessageTool from '@cardstack/host/lib/matrix-classes/message-tool';
 import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
+import { FOUND_CARD_SHAPE } from '@cardstack/host/lib/realm-runner/surfaces';
 import type { TelemetryEventInput } from '@cardstack/host/services/client-telemetry';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
@@ -36,6 +45,16 @@ import { setupRenderingTest } from '../../helpers/setup';
 import type { CardDef } from '@cardstack/base/card-api';
 
 const otherRealmURL = 'http://test-realm/test2/';
+
+// The error a script gets for reading `.data` from a card that `answers`
+// returns, as the tool reports it.
+function readsDataError(answers: string) {
+  return (error: Error) =>
+    error.message.includes('TypeError in the script') &&
+    error.message.includes(
+      `${answers}: ${FOUND_CARD_SHAPE}. There is no .data; read its fields from .attributes and its links from .relationships`,
+    );
+}
 
 // Makes the realm service know a workspace the user can read under
 // `identifier`, without a realm behind it: the capture endpoint is stubbed,
@@ -1040,6 +1059,54 @@ return await realm.cards.get('people/hassan');`,
         code: `await realm.cards.get('https://example.com/card');`,
       }),
       /Path is outside this realm/,
+    );
+  });
+
+  test('realm.cards.get throws on .data, naming the shape it answers, and has no own data', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    for (let read of ['card.data', 'card?.data?.attributes']) {
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `const card = await realm.cards.get('people/hassan');
+return ${read};`,
+        }),
+        readsDataError('realm.cards.get returns the card itself'),
+        `${read} throws`,
+      );
+    }
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `const card = await realm.cards.get('people/hassan');
+const hasOwnData = Object.prototype.hasOwnProperty.call(card, 'data');
+return {
+  card,
+  spread: Object.keys({ ...card }),
+  stringified: Object.keys(JSON.parse(JSON.stringify(card))),
+  own: Object.getOwnPropertyNames(card),
+  reflected: Reflect.ownKeys(card),
+  hasOwnData,
+  path: (hasOwnData ? card.data : card).path,
+};`,
+    });
+    let { card, spread, stringified, own, reflected, hasOwnData, path } =
+      JSON.parse(result.scriptResult!);
+    // The keys the shape names, which checks the shape against the answer.
+    let keys = FOUND_CARD_SHAPE.match(/\w+/g);
+    assert.deepEqual(Object.keys(card), keys, 'a returned card has no data');
+    assert.deepEqual(spread, keys, 'a spread card has no data');
+    assert.deepEqual(stringified, keys, 'a serialized card has no data');
+    assert.deepEqual(own, keys, 'its own property names have no data');
+    assert.deepEqual(reflected, keys, 'its own keys have no data');
+    assert.false(hasOwnData, 'it has no own data');
+    assert.strictEqual(
+      path,
+      'people/hassan.json',
+      'a read that checks for its own data first reads the card',
     );
   });
 
@@ -2344,6 +2411,30 @@ return { byPrefix, byURL, listByPrefix, listByURL, rootByPrefix, rootByURL };`,
         error.message ===
         `The current user cannot read or write ${nestedRealmURL}`,
       'the readable outer realm does not answer for the nested one',
+    );
+  });
+
+  test('refuses a folder listing to a user who can only write, without pointing them at a policy', async function (assert) {
+    let nestedRealmURL = `${testRealmURL}nested/`;
+    knowReadableWorkspace(nestedRealmURL, ['write']);
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: nestedRealmURL,
+      roomId: '!room:example.com',
+      code: `try {
+  await realm.fs.list('');
+  return 'listed';
+} catch (e) {
+  return e.message;
+}`,
+    });
+
+    assert.strictEqual(
+      JSON.parse(result.scriptResult!),
+      "You can't read this workspace directly; realm.fs.list was not run",
+      'the listing is refused before the realm is asked, and names no policy, which the realm may not have',
     );
   });
 
@@ -3770,6 +3861,39 @@ return errors;`);
       );
     });
 
+    test('a found card throws on .data, naming the shape it answers, and has no own data', async function (assert) {
+      await assert.rejects(
+        run(`const { cards } = await realm.cards.search({ filter: { eq: { name: 'Pancakes' }, on: ${recipeRef} } });
+return cards[0].data.attributes;`),
+        readsDataError('realm.cards.search returns each card itself'),
+      );
+
+      let { value } = await run(`
+const found = await realm.cards.search({ filter: { eq: { name: 'Pancakes' }, on: ${recipeRef} } });
+return {
+  found,
+  spread: Object.keys({ ...found.cards[0] }),
+  stringified: Object.keys(JSON.parse(JSON.stringify(found.cards[0]))),
+  own: Object.getOwnPropertyNames(found.cards[0]),
+  hasOwnData: Object.prototype.hasOwnProperty.call(found.cards[0], 'data'),
+};`);
+      // The keys the shape names, which checks the shape against the answer.
+      let keys = FOUND_CARD_SHAPE.match(/\w+/g);
+      assert.deepEqual(
+        Object.keys(value.found.cards[0]),
+        keys,
+        'a returned card has no data',
+      );
+      assert.deepEqual(value.spread, keys, 'a spread card has no data');
+      assert.deepEqual(
+        value.stringified,
+        keys,
+        'a serialized card has no data',
+      );
+      assert.deepEqual(value.own, keys, 'its own property names have no data');
+      assert.false(value.hasOwnData, 'it has no own data');
+    });
+
     test('a linksToMany field reports each link under its field path', async function (assert) {
       let { value } = await run(
         `return (await realm.cards.search({ filter: { eq: { name: 'Ramen' }, on: ${recipeRef} } })).cards[0].relationships;`,
@@ -3941,6 +4065,20 @@ const PATIENT_MODULE = `
     @operation static northWard = {
       base: 'query',
       query: { filter: { on: () => Patient, eq: { ward: 'north' } } },
+    };
+  }
+
+  // A type the clinic holds no card of. Its own create opens the first one,
+  // reached through the type rather than through a ward that exists.
+  export class Ward extends CardDef {
+    static displayName = 'Ward';
+    @field name = contains(StringField);
+
+    @operation static open = {
+      base: 'create',
+      of: () => Ward,
+      params: { name: StringField },
+      fill: { name: params('name') },
     };
   }
 `;
@@ -4155,11 +4293,15 @@ return { refused, text: await realm.fs.readText('task.json') };`,
 
       assert.deepEqual(result.files, [], 'nothing is saved');
       let { refused, text } = JSON.parse(result.scriptResult!);
-      assert.strictEqual(refused.length, 2, 'both writes are refused');
+      assert.strictEqual(
+        refused.length,
+        2,
+        'both writes reach the realm, which refuses them: its policy, not the run, decides a write',
+      );
       for (let message of refused) {
-        assert.true(
+        assert.false(
           /You can only read this workspace/.test(message),
-          `the refusal says why: ${message}`,
+          `the realm refuses the write, not the run: ${message}`,
         );
       }
       assert.strictEqual(text, '{ "title": "Old title" }\n');
@@ -4183,7 +4325,7 @@ return { refused, text: await realm.fs.readText('task.json') };`,
           roomId: '!room:example.com',
           code: `await realm.fs.writeText('new.json', '{}');`,
         }),
-        /You can only read this workspace.*No file was saved/,
+        /No file was saved/,
       );
     });
 
@@ -4552,20 +4694,44 @@ await images.generate({ prompt: 'a dot', path: 'dot.png' });`;
   });
 });
 
-// The catalog-reuse feature is read from the room's messages, which reach the
-// room resources only for a signed-in user.
+const STAND_IN_FEATURE = 'stand-in-feature';
+
+// A realm gated behind a stand-in skill feature, with the catalog standing in
+// for the realm: no feature is registered, and none gates the catalog. The
+// feature is read from the room's messages, which reach the room resources
+// only for a signed-in user.
 module(
-  'Integration | tools | run-realm-code | catalog-reuse',
+  'Integration | tools | run-realm-code | skill feature gate',
   function (hooks) {
     setupRenderingTest(hooks);
+    // The registries are read-only by type; the module registers a stand-in
+    // feature that gates the catalog, and puts back what they held for it.
+    let features = SKILL_FEATURES as Record<string, string>;
+    let featureRealms = SKILL_FEATURE_REALMS as Record<string, string[]>;
+    let savedFeature: string | undefined;
+    let savedRealms: string[] | undefined;
     // The test build lists no catalog, so list one for the default realms
     // to leave out. It must be listed before the user signs in.
     hooks.beforeEach(function () {
       setCatalogRealmURL(
         getService('network').virtualNetwork.toURL('@cardstack/catalog/').href,
       );
+      savedFeature = features[STAND_IN_FEATURE];
+      savedRealms = featureRealms[STAND_IN_FEATURE];
+      features[STAND_IN_FEATURE] = 'Gates the catalog in these tests.';
+      featureRealms[STAND_IN_FEATURE] = [CATALOG_REALM_PREFIX];
     });
     hooks.afterEach(function () {
+      if (savedFeature) {
+        features[STAND_IN_FEATURE] = savedFeature;
+      } else {
+        delete features[STAND_IN_FEATURE];
+      }
+      if (savedRealms) {
+        featureRealms[STAND_IN_FEATURE] = savedRealms;
+      } else {
+        delete featureRealms[STAND_IN_FEATURE];
+      }
       resetCatalogRealmURL();
     });
     setupLocalIndexing(hooks);
@@ -4583,11 +4749,11 @@ module(
       });
     });
 
-    test('realm.entries.search leaves the catalog out unless the room enabled catalog-reuse', async function (assert) {
+    test('realm.entries.search leaves the catalog out unless the room enabled the feature', async function (assert) {
       await getService('matrix-service').ready;
       let roomId = mockMatrixUtils.createAndJoinRoom({
         sender: '@testuser:localhost',
-        name: 'catalog-reuse',
+        name: 'skill-feature',
       });
       let { virtualNetwork } = getService('network');
       let sentRealms: string[][] = [];
@@ -4643,7 +4809,7 @@ module(
 
         mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
           msgtype: 'm.text',
-          body: 'boxel-debug:feature:enable:catalog-reuse',
+          body: `boxel-debug:feature:enable:${STAND_IN_FEATURE}`,
         });
         await settled();
         await search(
@@ -4663,7 +4829,7 @@ module(
       await getService('matrix-service').ready;
       let roomId = mockMatrixUtils.createAndJoinRoom({
         sender: '@testuser:localhost',
-        name: 'catalog-reuse',
+        name: 'skill-feature',
       });
       let { virtualNetwork } = getService('network');
       let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
@@ -4772,7 +4938,7 @@ module(
 
         mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
           msgtype: 'm.text',
-          body: 'boxel-debug:feature:enable:catalog-reuse',
+          body: `boxel-debug:feature:enable:${STAND_IN_FEATURE}`,
         });
         // The message reaches the room's events a tick after it is sent.
         await waitUntil(() =>
@@ -4781,7 +4947,7 @@ module(
             ?.events.some(
               (event) =>
                 (event.content as { body?: string })?.body ===
-                'boxel-debug:feature:enable:catalog-reuse',
+                `boxel-debug:feature:enable:${STAND_IN_FEATURE}`,
             ),
         );
         await search('kanban board', `['@cardstack/catalog/']`);
@@ -4919,11 +5085,11 @@ module(
       }
     });
 
-    test('realm.cards.search in the catalog finds nothing unless the room enabled catalog-reuse', async function (assert) {
+    test('realm.cards.search in the catalog finds nothing unless the room enabled the feature', async function (assert) {
       await getService('matrix-service').ready;
       let roomId = mockMatrixUtils.createAndJoinRoom({
         sender: '@testuser:localhost',
-        name: 'catalog-reuse',
+        name: 'skill-feature',
       });
       let { virtualNetwork } = getService('network');
       let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
@@ -4986,7 +5152,7 @@ module(
 
         mockMatrixUtils.simulateRemoteMessage(roomId, '@testuser:localhost', {
           msgtype: 'm.text',
-          body: 'boxel-debug:feature:enable:catalog-reuse',
+          body: `boxel-debug:feature:enable:${STAND_IN_FEATURE}`,
         });
         // The message reaches the room's events a tick after it is sent.
         await waitUntil(() =>
@@ -4995,7 +5161,7 @@ module(
             ?.events.some(
               (event) =>
                 (event.content as { body?: string })?.body ===
-                'boxel-debug:feature:enable:catalog-reuse',
+                `boxel-debug:feature:enable:${STAND_IN_FEATURE}`,
             ),
         );
         await search();
@@ -5006,6 +5172,155 @@ module(
     });
   },
 );
+
+// A script's searches reach the catalog in any room, with nothing enabled
+// first.
+module('Integration | tools | run-realm-code | catalog', function (hooks) {
+  setupRenderingTest(hooks);
+  // The test build lists no catalog, so list one for the default realms
+  // to include. It must be listed before the user signs in.
+  hooks.beforeEach(function () {
+    setCatalogRealmURL(
+      getService('network').virtualNetwork.toURL('@cardstack/catalog/').href,
+    );
+  });
+  hooks.afterEach(function () {
+    resetCatalogRealmURL();
+  });
+  setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+  setupRealmCacheTeardown(hooks);
+
+  hooks.beforeEach(async function () {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: { 'note.md': '# Note\n' },
+    });
+  });
+
+  test('realm.entries.search reaches the catalog without the room enabling anything', async function (assert) {
+    await getService('matrix-service').ready;
+    let roomId = mockMatrixUtils.createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'catalog',
+    });
+    let { virtualNetwork } = getService('network');
+    let sentRealms: string[][] = [];
+    let spy = async (request: Request) => {
+      if (new URL(request.url).pathname.endsWith('/_federated-search')) {
+        sentRealms.push(JSON.parse(await request.clone().text()).realms);
+      }
+      return null;
+    };
+    virtualNetwork.mount(spy, { prepend: true });
+    let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+    try {
+      let realmServer = getService('realm-server');
+      await realmServer.ready;
+      let isCatalog = (realm: string) =>
+        realm === '@cardstack/catalog/' || realm === catalogURL;
+      assert.ok(
+        realmServer.availableRealmIdentifiers.some(isCatalog),
+        'the catalog is one of the available realms',
+      );
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+      let search = (code: string) =>
+        command.execute({ realm: testRealmURL, roomId, code });
+
+      await search(
+        `await realm.entries.search({}, { realms: ['@cardstack/catalog/'] });`,
+      );
+      await search(`await realm.entries.search({});`);
+      assert.strictEqual(sentRealms.length, 2, 'both searches were sent');
+      assert.deepEqual(
+        sentRealms[0],
+        ['@cardstack/catalog/'],
+        'a named catalog is searched',
+      );
+      assert.ok(
+        sentRealms[1].some(isCatalog),
+        'the default realms include the catalog',
+      );
+    } finally {
+      virtualNetwork.unmount(spy);
+    }
+  });
+
+  test('realm.cards.search reaches the catalog without the room enabling anything', async function (assert) {
+    await getService('matrix-service').ready;
+    let roomId = mockMatrixUtils.createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'catalog',
+    });
+    let { virtualNetwork } = getService('network');
+    let catalogURL = virtualNetwork.toURL('@cardstack/catalog/').href;
+    let searches = 0;
+    // Stands in for the catalog: a public realm whose searches are counted.
+    let catalog = async (request: Request) => {
+      let { pathname } = new URL(request.url);
+      if (request.url === `${catalogURL}_info`) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              id: catalogURL,
+              type: 'realm-info',
+              attributes: { name: 'Catalog' },
+            },
+          }),
+          {
+            headers: {
+              'content-type': SupportedMimeType.RealmInfo,
+              'x-boxel-realm-public-readable': 'true',
+            },
+          },
+        );
+      }
+      if (
+        pathname.endsWith('_search') ||
+        pathname.endsWith('_federated-search')
+      ) {
+        searches++;
+        return new Response(
+          JSON.stringify({ data: [], meta: { page: { total: 0 } } }),
+          { headers: { 'content-type': SupportedMimeType.CardJson } },
+        );
+      }
+      return null;
+    };
+    virtualNetwork.mount(catalog, { prepend: true });
+    try {
+      await getService('realm').ensureRealmMeta(catalogURL);
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+      let search = async () =>
+        JSON.parse(
+          (
+            await command.execute({
+              realm: '@cardstack/catalog/',
+              roomId,
+              code: `return await realm.cards.search({});`,
+            })
+          ).scriptResult!,
+        );
+
+      assert.deepEqual(await search(), {
+        cards: [],
+        total: 0,
+        truncated: false,
+      });
+      assert.strictEqual(searches, 1, 'the catalog is searched');
+    } finally {
+      virtualNetwork.unmount(catalog);
+    }
+  });
+});
 
 // `realm.web.search`, `realm.web.read` and `realm.resolve` send their requests
 // through the realm server's proxy, which needs a realm server session, so
@@ -5547,6 +5862,12 @@ return reasons;`);
       `a program that does not parse says so: ${parse}`,
     );
     assert.true(
+      [loop, parse].every((reason) =>
+        reason.includes('@cardstack/skills/source-code-editing/SKILL.md'),
+      ),
+      'an error the program caused names the skill that teaches the dialect',
+    );
+    assert.true(
       spelling.includes('"jq" (the default) or "readable"'),
       `an unknown spelling names the ones there are: ${spelling}`,
     );
@@ -5561,6 +5882,29 @@ return reasons;`);
     assert.true(
       inherited.includes('"jq" (the default) or "readable"'),
       `a name every object inherits is not a spelling: ${inherited}`,
+    );
+  });
+
+  test('realm.transform says what the input was when the program fails on it', async function (assert) {
+    // A program written for the array inside a response, run on the
+    // response itself.
+    await assert.rejects(
+      run(
+        `await realm.transform({ orders: [{ id: 1 }], page_info: {} }, 'map(.id)');`,
+      ),
+      /realm\.transform: the program failed: .*\. The input is an object with keys "orders" \(an array of 1 item\), "page_info" \(an object\)\.\nBefore the next program, read the realm\.transform section of @cardstack\/skills\/source-code-editing\/SKILL\.md/,
+    );
+    await assert.rejects(
+      run(`await realm.transform([{ id: 1, tags: [] }], '.id');`),
+      /The input is an array of 1 item; the first is an object with keys "id", "tags"\./,
+    );
+    await assert.rejects(
+      run(`await realm.transform([{}], '.id');`),
+      /The input is an array of 1 item; the first is an empty object\./,
+    );
+    await assert.rejects(
+      run(`await realm.transform({ ['k'.repeat(500)]: 1 }, '.[0]');`),
+      /The input is an object with keys "k{40}…" \(a number\)\./,
     );
   });
 
@@ -5776,6 +6120,125 @@ return await realm.operations.invoke('Patient/ana', 'transferTo', { ward: 'ICU' 
         'the answer has the version the card now holds',
       );
       assert.strictEqual((await attributesOf('Patient/ana.json')).ward, 'ICU');
+    });
+
+    test('realm.operations.invoke runs an operation on a type the workspace holds no card of', async function (assert) {
+      let result = await run(`
+return await realm.operations.invoke({ module: './patient', name: 'Ward' }, 'open', { name: 'North' });`);
+
+      let answer = JSON.parse(result.scriptResult!);
+      assert.strictEqual(answer.operation, 'open');
+      assert.deepEqual(
+        answer.type,
+        { module: './patient', name: 'Ward' },
+        'the answer names the type as the script did',
+      );
+      assert.true(
+        String(answer.path).endsWith('.json'),
+        `the answer names the card the operation made: ${answer.path}`,
+      );
+      assert.strictEqual(
+        answer.id,
+        `${testRealmURL}${answer.path.replace(/\.json$/, '')}`,
+        "in the run's realm",
+      );
+      assert.strictEqual(
+        (await attributesOf(answer.path)).name,
+        'North',
+        'and the declaration filled it from the payload',
+      );
+    });
+
+    test('an operation that acts on a card is refused when named on its type', async function (assert) {
+      let result = await run(`
+try {
+  await realm.operations.invoke({ module: './patient', name: 'Patient' }, 'transferTo', { ward: 'ICU' });
+  return 'ran';
+} catch (e) {
+  return e.message;
+}`);
+
+      assert.strictEqual(
+        JSON.parse(result.scriptResult!),
+        '"transferTo" is not an operation Patient carries on the type itself: it acts on one of its cards, so it is invoked on that card. On the type it carries: create',
+      );
+    });
+
+    test('a batch entry names a card rather than a type, however the type is spelled', async function (assert) {
+      let result = await run(`
+let refusals = [];
+for (let entry of [
+  { type: { module: './patient', name: 'Ward' }, operation: 'open', payload: { name: 'South' } },
+  { path: { module: './patient', name: 'Ward' }, operation: 'open', payload: { name: 'East' } },
+]) {
+  try {
+    await realm.operations.invokeBatchOperation([entry]);
+    refusals.push('ran');
+  } catch (e) {
+    refusals.push(e.message);
+  }
+}
+return refusals;`);
+
+      let refusal =
+        'a realm.operations.invokeBatchOperation entry names a card by its path; run an operation on a type with realm.operations.invoke(type, operation, payload)';
+      assert.deepEqual(
+        JSON.parse(result.scriptResult!),
+        [refusal, refusal],
+        'a type as its own member and a type where the path goes are both refused',
+      );
+    });
+
+    // A search answers each card with its type beside its path, so a batch
+    // built by spreading the results carries both.
+    test('a batch entry spread from a search result runs on the card at its path', async function (assert) {
+      let result = await run(`
+let found = await realm.cards.search({
+  filter: {
+    on: { module: ${JSON.stringify(`${testRealmURL}patient`)}, name: 'Patient' },
+    eq: { ward: 'Oncology' },
+  },
+});
+let answers = await realm.operations.invokeBatchOperation(
+  found.cards.map((patient) => ({
+    ...patient,
+    operation: 'recordVitals',
+    payload: { reading: 'HR 70' },
+  })),
+);
+return {
+  carriedType: found.cards.every((patient) => patient.type !== undefined),
+  paths: answers.map((answer) => answer.path),
+};`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        carriedType: true,
+        paths: ['Patient/dev.json'],
+      });
+      assert.strictEqual(
+        (await attributesOf('Patient/dev.json')).lastVitals,
+        'HR 70',
+        'the operation ran on the card at the path',
+      );
+    });
+
+    // A card a read answers holds its fields as its own keys and nothing
+    // else, so the card itself, given an operation and a payload, is a batch
+    // entry.
+    test('a card realm.cards.get answers goes into a batch as itself', async function (assert) {
+      let result = await run(`
+let patient = await realm.cards.get('Patient/dev');
+let answers = await realm.operations.invokeBatchOperation([
+  Object.assign(patient, { operation: 'recordVitals', payload: { reading: 'HR 66' } }),
+]);
+return answers.map((answer) => answer.path);`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), ['Patient/dev.json']);
+      assert.strictEqual(
+        (await attributesOf('Patient/dev.json')).lastVitals,
+        'HR 66',
+        'the operation ran on the card at the path',
+      );
     });
 
     // The example the realm runner is for: find the patients of a ward, then

@@ -3,6 +3,13 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { SearchInput } from './search-input';
+import { LayoutControl } from './layout-control';
+import { Button } from './button';
+import { IconButton } from './icon-button';
+import { iconFor } from '../icon-registry';
+
+const ICON_ONLY = [{ name: 'icon', minWidth: 2 }];
+const ROW_WIDTHS = ['18rem', '26rem', '36rem'];
 
 // ── SearchInput — typed-input split, fresh page ──────────────────────────
 // Type-specific knob: clearable (the ✕ button). Wave-0 adaptation on
@@ -15,6 +22,9 @@ class SearchInputUsage extends Component {
   @tracked disabled = false;
   @tracked display = 'field';
   displays = ['field', 'collapsed'];
+  rowWidths = ROW_WIDTHS;
+  iconOnly = ICON_ONLY;
+  more = iconFor('ellipsis');
   setDisplay = (v: string) => (this.display = v);
   get displayVal() {
     return this.display as 'field' | 'collapsed';
@@ -56,7 +66,7 @@ class SearchInputUsage extends Component {
           @value={{this.display}}
           @options={{this.displays}}
           @defaultValue='field'
-          @description="field is the whole field. collapsed is a square button, as wide as the field is high, showing only the magnifier; a click opens the full field over the row (--pretui-search-open-w, 15rem by default), Escape closes it and returns focus to the button, and the value carries across. --pretui-field-h sets the height."
+          @description='field is the whole field. collapsed is a square button, as wide as the field is high, showing only the magnifier; a click opens the full field across the whole LayoutControl row, from its start (--pretui-search-open-w overrides the width; outside a row it is 15rem), Escape closes it and returns focus to the button, and the value carries across. --pretui-field-h sets the height.'
           @onInput={{this.setDisplay}}
         />
         <Args.Bool
@@ -91,7 +101,40 @@ class SearchInputUsage extends Component {
         />
       </:api>
     </FreestyleUsage>
+    <FreestyleUsage
+      @name='SearchInput collapsed in a LayoutControl row'
+      @description='The opened field covers the whole row, from its start, at any row width, so no neighbouring control shows beside it. Focus moves into the field on open; Escape or leaving returns it to the magnifier.'
+    >
+      <:example>
+        {{#each this.rowWidths as |w|}}
+          <div class='pretui-demo-row' data-demo-width={{w}}>
+            <LayoutControl @label='Row {{w}}' as |lc|>
+              <lc.Slot @id='search' @forms={{this.iconOnly}} @label='Search'>
+                <SearchInput @display='collapsed' @placeholder='Search' />
+              </lc.Slot>
+              <lc.Slot @id='add' @forms={{this.iconOnly}} @label='New'>
+                <Button @tone='primary'>New</Button>
+              </lc.Slot>
+              <IconButton @label='More options' @icon={{this.more}} />
+            </LayoutControl>
+          </div>
+        {{/each}}
+      </:example>
+    </FreestyleUsage>
     <style scoped>
+      .pretui-demo-row {
+        max-inline-size: 100%;
+        margin-block-end: var(--boxel-sp-sm);
+      }
+      .pretui-demo-row[data-demo-width='18rem'] {
+        inline-size: 18rem;
+      }
+      .pretui-demo-row[data-demo-width='26rem'] {
+        inline-size: 26rem;
+      }
+      .pretui-demo-row[data-demo-width='36rem'] {
+        inline-size: 36rem;
+      }
       .pretui-demo-readout {
         margin: 8px 0 0;
         font-family: var(--font-mono);

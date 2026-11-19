@@ -13,6 +13,7 @@
     "eval:users": "node ensure-users.ts",
     "eval": "node run-eval.ts",
     "eval:judge": "node judge-result.ts",
+    "test": "node --test routing.test.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:hbs": "ember-template-lint .",

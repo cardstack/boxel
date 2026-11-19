@@ -78,6 +78,8 @@ The keys' own properties, each unset by default:
 - `--pretui-kv-label-letter-spacing` (unset: `--boxel-ui-label-letter-spacing`)
 - `--pretui-kv-label-text-transform`
 
+`--pretui-kv-pad-inline` (default `0`, so nothing moves) insets the text from the container's inline edges without insetting the `@divided` hairlines. In the horizontal layout the keys pad their start edge and the values their end edge, so each hairline still runs the full width of the container. In `'stacked'` every key and value pads both sides, and in `'inline'` the strip pads its own start and end. Set it on the KeyValue or any ancestor, for example inside a card or a `Panel` with no body padding. Padding the `<dl>` instead would inset the hairlines too.
+
 With `@labelStyle='eyebrow'`, the unset typography properties take the eyebrow role instead and the text transform becomes uppercase. The color stays `--muted-foreground`.
 
 The arrangement is `@layout`, not a token, and there is still no way to set a fixed key column or right-align keys (`@valueAlign` moves the values only).

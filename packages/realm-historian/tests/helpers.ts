@@ -2,8 +2,21 @@
 // variables name, created before each test and dropped after it.
 
 import { PgAdapter } from '@cardstack/postgres';
-import { param, type DBAdapter, type Querier } from '@cardstack/runtime-common';
-import { JOURNAL_START, type ReadPosition } from '../src/consumer.ts';
+import {
+  dbAdapterQuerier,
+  param,
+  type ChangeEvent,
+  type ChangeEventChange,
+  type ChangeIntent,
+  type DBAdapter,
+  type Querier,
+  type WriteChannel,
+} from '@cardstack/runtime-common';
+import {
+  changeEventFromRow,
+  JOURNAL_START,
+  type ReadPosition,
+} from '../src/consumer.ts';
 
 let databaseCounter = 0;
 
@@ -148,6 +161,91 @@ export async function insertEventAt(
     `::jsonb) RETURNING seq::text, xid::text`,
   ]);
   return { xid: xid as string, seq: Number(seq) };
+}
+
+export interface EventFields {
+  changes: ChangeEventChange[];
+  author?: string;
+  channel?: WriteChannel;
+  agent?: string;
+  room?: string;
+  operationId?: string;
+  correlationId?: string;
+  partial?: boolean;
+  pushId?: string;
+  pushFinal?: boolean;
+  intent?: ChangeIntent;
+  // The database's `now()` when left out.
+  occurredAt?: Date;
+}
+
+// A journal row with its path rows, as the realm server's journal writes
+// them, read back as the consumer reads it.
+export async function appendEvent(
+  db: DBAdapter,
+  realm: TestRealm,
+  fields: EventFields,
+): Promise<ChangeEvent> {
+  return appendEventOn(dbAdapterQuerier(db), realm, fields);
+}
+
+// `appendEvent` through `querier`, so a test can append on a transaction it
+// holds open.
+export async function appendEventOn(
+  querier: Querier,
+  realm: TestRealm,
+  fields: EventFields,
+): Promise<ChangeEvent> {
+  let [row] = await querier([
+    `WITH event AS (
+       INSERT INTO realm_change_events
+         (realm_id, realm_url, occurred_at, author, channel, agent, room,
+          operation_id, correlation_id, partial, push_id, push_final, intent,
+          changes)
+       VALUES (`,
+    param(realm.id),
+    ',',
+    param(realm.url),
+    ', COALESCE(',
+    param(fields.occurredAt?.toISOString() ?? null),
+    '::timestamptz, now()),',
+    param(fields.author ?? '@test-user:localhost'),
+    ',',
+    param(fields.channel ?? 'host'),
+    ',',
+    param(fields.agent ?? null),
+    ',',
+    param(fields.room ?? null),
+    ',',
+    param(fields.operationId ?? null),
+    ',',
+    param(fields.correlationId ?? null),
+    ',',
+    param(fields.partial ?? false),
+    ',',
+    param(fields.pushId ?? null),
+    ',',
+    param(fields.pushFinal ?? false),
+    ',',
+    param(fields.intent ? JSON.stringify(fields.intent) : null),
+    '::jsonb,',
+    param(JSON.stringify(fields.changes)),
+    `::jsonb)
+       RETURNING *
+     ), event_paths AS (
+       INSERT INTO realm_change_event_paths (realm_id, path, seq)
+       SELECT event.realm_id, changed.path, event.seq
+       FROM event, jsonb_array_elements_text(`,
+    param(JSON.stringify([...new Set(fields.changes.map(({ path }) => path))])),
+    `::jsonb) AS changed(path)
+       ON CONFLICT DO NOTHING
+     )
+     SELECT seq, xid::text AS xid, realm_id, realm_url, occurred_at, author,
+            channel, agent, room, operation_id, correlation_id, partial,
+            push_id, push_final, intent, changes
+     FROM event`,
+  ]);
+  return changeEventFromRow(row);
 }
 
 export async function waitUntil(

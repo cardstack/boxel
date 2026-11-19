@@ -2,7 +2,12 @@ import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
 import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
-import { readOAuthProviderConfig } from './lib/oauth-provider/config.ts';
+import {
+  readAuthorizationLimit,
+  readTokenLimit,
+  readNewClientLimit,
+  readOAuthProviderConfig,
+} from './lib/oauth-provider/config.ts';
 import { writeSync } from 'node:fs';
 import {
   CardDocumentCache,
@@ -52,7 +57,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler.ts';
-import { realmDiskPath } from './lib/realm-disk-path.ts';
+import { mountableRealmDiskPath } from './lib/realm-disk-path.ts';
 import { findRealm } from './lib/realm-routing.ts';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener.ts';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener.ts';
@@ -493,6 +498,13 @@ const secureOriginURL =
 const oauthProvider = readOAuthProviderConfig(process.env, {
   secureOriginURL,
 });
+const oauthNewClientLimit = oauthProvider
+  ? readNewClientLimit(process.env)
+  : undefined;
+const oauthAuthorizationLimit = oauthProvider
+  ? readAuthorizationLimit(process.env)
+  : undefined;
+const oauthTokenLimit = oauthProvider ? readTokenLimit(process.env) : undefined;
 
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
@@ -874,17 +886,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   // has finished its first reconcile pass.
   reconciler = new RealmRegistryReconciler({
     dbAdapter,
-    bootstrapOrder: hrefs.map(([url]) => url),
+    bootstrapRealms: hrefs.map(([url]) => url),
     prepareRealmFromRow: (row: RealmRegistryRow) => {
       // The directory `mayNameRealmPolicy` reads a realm's `realm.json` from
       // to decide whether to mount it, so the file it reads is the one the
       // mounted realm reads its policy pointer from.
-      let diskPath = realmDiskPath(row, realmsRootPath);
-      if (!diskPath) {
-        throw new Error(
-          `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
-        );
-      }
+      let diskPath = mountableRealmDiskPath(row, realmsRootPath);
       const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
       let publishedMount = publishedMountOf(row);
       let fullIndexOnStartup = resolveFullIndexOnStartup(
@@ -1018,7 +1025,14 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
     ...(googleSignIn ? { googleSignIn } : {}),
-    ...(oauthProvider ? { oauthProvider } : {}),
+    ...(oauthProvider
+      ? {
+          oauthProvider,
+          oauthNewClientLimit,
+          oauthAuthorizationLimit,
+          oauthTokenLimit,
+        }
+      : {}),
   });
 
   const secureHttpServer =

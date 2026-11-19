@@ -300,6 +300,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     await context.dbAdapter.execute(`INSERT INTO job_reservations
       (job_id, locked_until, worker_id)
       VALUES (${unrelatedJob.id}, NOW() + INTERVAL '5 minutes', 'worker-unrelated')`);
+    // A claim written with only its realm URL, as the previous code revision
+    // writes it. The database fills in realm_id, and the delete finds the
+    // claim by that id.
     let { valueExpressions, nameExpressions } = asExpressions({
       user_id: user.id,
       source_realm_url: realmURL,
@@ -643,11 +646,18 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     );
 
     let claimedDomains = (await context.dbAdapter.execute(
-      `SELECT removed_at FROM claimed_domains_for_sites WHERE source_realm_url = '${realmURL}'`,
-    )) as { removed_at: number | null }[];
-    assert.ok(
-      claimedDomains.every((row) => row.removed_at != null),
-      'claimed domains are soft deleted',
+      `SELECT removed_at, realm_id FROM claimed_domains_for_sites WHERE hostname = 'delete-me.boxel.site'`,
+    )) as { removed_at: number | null; realm_id: string | null }[];
+    assert.strictEqual(claimedDomains.length, 1, 'the claim row is kept');
+    assert.notStrictEqual(
+      claimedDomains[0].removed_at,
+      null,
+      'the realm claim is soft deleted',
+    );
+    assert.strictEqual(
+      claimedDomains[0].realm_id,
+      null,
+      'the claim no longer names the deleted realm',
     );
 
     let unlistedPaths = (await context.dbAdapter.execute(
@@ -930,6 +940,26 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
 
     assert.strictEqual(response.status, 403, 'deletion is forbidden');
+  });
+
+  test('DELETE /_delete-realm lets a platform service account delete a realm it created under its own name', async function (assert) {
+    let serviceAccountUserId = '@sync_writer:localhost';
+    let realmURL = await createRealmFor(serviceAccountUserId);
+
+    let response = await context.request
+      .delete('/_delete-realm')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user: serviceAccountUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`,
+      )
+      .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+
+    assert.strictEqual(response.status, 204, 'realm deleted');
   });
 
   test('DELETE /_delete-realm refuses a bootstrap realm, whatever writes its permissions grant', async function (assert) {

@@ -8,6 +8,8 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 
+import { getPendingWaiterState } from '@ember/test-waiters';
+
 import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
@@ -768,6 +770,28 @@ module('Acceptance | markdown BFM card references', function (hooks) {
     });
 
     await settled();
+
+    // When KaTeX is missing, print what decides whether the markdown loads it:
+    // the render context a host tab's own index render sets while it runs,
+    // the KaTeX loader the application route installs, and anything
+    // `settled()` was still waiting on.
+    if (!document.querySelector('.math-placeholder .katex')) {
+      let context = globalThis as {
+        __boxelRenderContext?: unknown;
+        __boxelRenderContextScope?: unknown;
+        __loadKatex?: unknown;
+      };
+      console.warn(
+        '[katex-diag] KaTeX output missing after settled()',
+        JSON.stringify({
+          placeholders: document.querySelectorAll('.math-placeholder').length,
+          renderContext: context.__boxelRenderContext ?? null,
+          renderContextScope: context.__boxelRenderContextScope ?? null,
+          hasKatexLoader: typeof context.__loadKatex === 'function',
+          pendingWaiters: getPendingWaiterState(),
+        }),
+      );
+    }
 
     assert
       .dom('.math-placeholder .katex')

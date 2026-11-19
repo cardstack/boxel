@@ -24,6 +24,12 @@ import type LoaderService from './loader-service';
 import type RealmService from './realm';
 import type SessionService from './session';
 
+// What a fetch ended with: the answer it got, or the error it failed with,
+// either before its answer arrived or while its body was being read.
+export type FetchResult = { response: Response } | { error: unknown };
+
+export type FetchWatcher = (url: string, result: FetchResult) => void;
+
 export default class NetworkService extends Service {
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
@@ -31,13 +37,65 @@ export default class NetworkService extends Service {
 
   virtualNetwork = this.makeVirtualNetwork();
 
+  private watchers = new Set<FetchWatcher>();
+
   constructor(owner: Owner) {
     super(owner);
     this.session.register(this);
   }
 
-  get fetch() {
-    return this.virtualNetwork.fetch;
+  // Every fetch the app makes goes through here: `authedFetch` and the
+  // loader build on it. It is the virtual network's fetch, seen by any
+  // watchers (`watchFetches`).
+  get fetch(): typeof globalThis.fetch {
+    return this.watchedFetch;
+  }
+
+  private watchedFetch: typeof globalThis.fetch = async (input, init) => {
+    if (this.watchers.size === 0) {
+      return await this.virtualNetwork.fetch(input, init);
+    }
+    let url =
+      input instanceof Request
+        ? input.url
+        : input instanceof URL
+          ? input.href
+          : String(input);
+    let response: Response;
+    try {
+      response = await this.virtualNetwork.fetch(input, init);
+    } catch (error) {
+      this.notifyWatchers(url, { error });
+      throw error;
+    }
+    this.notifyWatchers(url, { response });
+    if (response.body) {
+      // A body that fails while it is read fails the fetch as surely as one
+      // that never answered. A copy is read alongside the caller's, so the
+      // watchers hear of it whether or not the caller reads the body.
+      let watchers = [...this.watchers];
+      response
+        .clone()
+        .arrayBuffer()
+        .catch((error: unknown) =>
+          this.notifyWatchers(url, { error }, watchers),
+        );
+    }
+    return response;
+  };
+
+  private notifyWatchers(
+    url: string,
+    result: FetchResult,
+    watchers: FetchWatcher[] = [...this.watchers],
+  ) {
+    for (let watcher of watchers) {
+      try {
+        watcher(url, result);
+      } catch {
+        // A watcher only observes; the fetch's caller still gets its result.
+      }
+    }
   }
 
   get resolveImport() {
@@ -58,6 +116,17 @@ export default class NetworkService extends Service {
       ],
       this.virtualNetwork,
     );
+  }
+
+  // Calls `watcher` with each fetch's URL and what it ended with, until the
+  // returned function is called: its answer, or the error it failed with.
+  // A fetch whose body then fails while it is read is reported again, with
+  // that error. A watcher that throws is ignored.
+  watchFetches(watcher: FetchWatcher): () => void {
+    this.watchers.add(watcher);
+    return () => {
+      this.watchers.delete(watcher);
+    };
   }
 
   get mount() {

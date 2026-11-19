@@ -30,6 +30,7 @@ export const PAGE_PATHS = Object.freeze([
   'connected',
   'approve',
   'review-changes',
+  'authorize',
 ]);
 
 // The pages whose form makes a new password. A password manager decides what

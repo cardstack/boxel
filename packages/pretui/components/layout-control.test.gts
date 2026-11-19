@@ -41,6 +41,21 @@ module('Pretui | components/layout-control | chooseForms', function () {
     assert.deepEqual(names([A, B, P], 1 * REM), ['menu', 'menu', 'icon']);
   });
 
+  test('every slot steps through its shorter forms before any slot folds', function (assert) {
+    let F = slot('f', 1, ['chips', 22], ['menu', 0]);
+    let add = slot('add', 0, ['label', 9], ['short', 5], ['icon', 2]);
+    assert.deepEqual(names([F, add], 31 * REM), ['chips', 'label'], 'fits');
+    assert.deepEqual(names([F, add], 27 * REM), ['chips', 'short'], 'the action shortens, the filter stays');
+    assert.deepEqual(names([F, add], 24 * REM), ['chips', 'icon'], 'the action is an icon, no filter fold yet');
+    assert.deepEqual(names([F, add], 23 * REM), ['menu', 'icon'], 'only then the filter folds');
+  });
+
+  test('folding goes least important first, and only after every slot is at its last non-menu form', function (assert) {
+    // A: 10, 5, menu; B: 10, 5, menu; total at last non-menu form is 10 + 2 gaps
+    assert.deepEqual(names([A, B], 8 * REM), ['small', 'menu'], 'b folds first (higher @priority), a keeps its short form');
+    assert.deepEqual(names([A, B], 3 * REM), ['menu', 'menu']);
+  });
+
   test('stepping back up is guarded by HYSTERESIS_PX', function (assert) {
     assert.strictEqual(HYSTERESIS_PX, 16);
     let lv = (a: number, b: number) => new Map([['a', a], ['b', b]]);

@@ -1,8 +1,14 @@
 import { service } from '@ember/service';
 
-import { isCardInstance, realmURL } from '@cardstack/runtime-common';
+import {
+  humanReadable,
+  isCardInstance,
+  isResolvedCodeRef,
+  realmURL,
+} from '@cardstack/runtime-common';
 import type {
   BaseOperation,
+  CodeRef,
   OperationWriteResult,
 } from '@cardstack/runtime-common';
 import { isWrite } from '@cardstack/runtime-common/card-operations';
@@ -13,6 +19,8 @@ import {
   baseOf,
   defNameOf,
   invocableNames,
+  invokeOnType,
+  loadOperationType,
   offeredHere,
   type OperationsBucket,
 } from '../lib/card-operation-invocation';
@@ -37,7 +45,9 @@ Naming an operation a card does not carry is refused with the list of the ones i
 
 "payload" supplies those params, keyed exactly as the declaration names them. A param the declaration requires and the payload omits is refused before anything is sent - unless the declaration computes that param itself, in which case leaving it out is how you take the value it computes rather than one you invented.
 
-Besides a type's declared operations, the plain "create" mints a new card of the type of the card at "cardId". It alone reads the other two inputs: "payload" as the new card's field values, "relationships" as the cards it is created linking to - JSON:API relationship objects such as {"author": {"links": {"self": "<card id>"}}} - and "realm" as where it lands, which defaults to the realm holding the card at "cardId". Every other operation acts on that card and runs in that card's own realm, so it takes neither "realm" nor "relationships".
+Besides a type's declared operations, the plain "create" mints a new card of the type of the card at "cardId". It alone reads the other two inputs: "payload" as the new card's field values, "relationships" as the cards it is created linking to - JSON:API relationship objects such as {"author": {"links": {"self": "<card id>"}}} - and "realm" as where it lands, which defaults to the realm holding the card at "cardId". Every other operation reached through "cardId" acts on that card and runs in that card's own realm, so it takes neither "realm" nor "relationships".
+
+An operation that acts on a type rather than on one of its cards - the plain "create", or a create the type declares - needs no card at all: give "type", the type's module and export name such as {"module": "https://realm.example/member", "name": "Member"} (the same pair a realm's policy names a type by), in place of "cardId", and "realm", the realm it runs in and where a card it creates lands. That is how the first card of a type is made in a realm that holds none. A relative "module" is read from the root of "realm". An operation that acts on a card is refused when named on a type, with the ones the type carries.
 
 A write answers the card it wrote and the version that card now holds; a read answers the document. A write whose indexing is still pending says so with "indexPending", and a search may not show it until it lands; set "skipIndexWait" to have a write answer without waiting for that indexing at all.`;
 
@@ -47,9 +57,28 @@ A write answers the card it wrote and the version that card now holds; a read an
     return InvokeCardOperationInput;
   }
 
-  requireInputFields = ['cardId', 'operation'];
+  // One of `cardId` and `type` is required too, which a schema of required
+  // fields cannot say, so `run` refuses a call naming neither or both.
+  requireInputFields = ['operation'];
 
   protected async run(
+    input: BaseToolModule.InvokeCardOperationInput,
+  ): Promise<BaseToolModule.InvokeCardOperationResult> {
+    let type = givenType(input.type);
+    if (Boolean(input.cardId) === Boolean(type)) {
+      throw new Error(
+        `"${input.operation}" is reached through exactly one of "cardId", a card to act on, and "type", a type to act on with no card - ${
+          input.cardId ? 'not both' : 'give one'
+        }.`,
+      );
+    }
+    if (type) {
+      return await this.runOnType(input, type);
+    }
+    return await this.runOnCard(input);
+  }
+
+  private async runOnCard(
     input: BaseToolModule.InvokeCardOperationInput,
   ): Promise<BaseToolModule.InvokeCardOperationResult> {
     let card = await this.store.get(input.cardId);
@@ -149,7 +178,58 @@ A write answers the card it wrote and the version that card now holds; a read an
       opts?: unknown,
     ) => Promise<OperationWriteResult | Record<string, unknown> | null>;
     let answer = await member(payload, invokeOptions(input, card, mintsACard));
+    return await this.resultOf(answer, base);
+  }
 
+  // An operation invoked on a type, named by its module and export, which is
+  // how a create runs where the realm holds no card of the type to reach it
+  // through. Every call here is type-scoped, so each one runs in the realm the
+  // caller names: there is no card whose realm it could take instead, and the
+  // session's default writable realm is a realm nobody named.
+  private async runOnType(
+    input: BaseToolModule.InvokeCardOperationInput,
+    type: CodeRef,
+  ): Promise<BaseToolModule.InvokeCardOperationResult> {
+    let name = input.operation;
+    if (!isResolvedCodeRef(type)) {
+      throw new Error(
+        `"type" names a type by its module and export, as {"module": "<module>", "name": "<export>"}`,
+      );
+    }
+    if (!input.realm) {
+      throw new Error(
+        `"${name}" on ${humanReadable(type)} acts on the type rather than on a card, so no card says which realm it runs in. Name it with "realm": where it runs, and where a card it creates lands.`,
+      );
+    }
+    let Type = await loadOperationType(
+      name,
+      type,
+      input.realm,
+      this.loaderService.loader,
+    );
+    let { base, answer } = await invokeOnType(
+      await this.loadOperationsModule(),
+      Type,
+      name,
+      payloadOf(input),
+      {
+        realm: input.realm,
+        relationships: input.relationships as
+          | Record<string, unknown>
+          | undefined,
+        skipIndexWait: input.skipIndexWait,
+      },
+    );
+    return await this.resultOf(
+      answer as OperationWriteResult | Record<string, unknown> | null,
+      base,
+    );
+  }
+
+  private async resultOf(
+    answer: OperationWriteResult | Record<string, unknown> | null,
+    base: BaseOperation,
+  ): Promise<BaseToolModule.InvokeCardOperationResult> {
     let commandModule = await this.loadToolModule();
     const { InvokeCardOperationResult } = commandModule;
     if (answer === null) {
@@ -217,6 +297,22 @@ function invokeOptions(
     ...(realm ? { realm } : {}),
     ...(relationships ? { relationships } : {}),
   };
+}
+
+// The type a call names, or none where the caller left it blank. A model
+// fills an optional code ref with empty strings as readily as it leaves it
+// out, so `{}` and `{ module: '', name: '' }` read as no type rather than as
+// one given beside "cardId". A ref with either part filled in is given, and
+// one that names no module and export is refused for that.
+function givenType(type: CodeRef | null | undefined): CodeRef | undefined {
+  if (!type) {
+    return undefined;
+  }
+  let { module, name } = type as { module?: unknown; name?: unknown };
+  if (!('type' in type) && !module && !name) {
+    return undefined;
+  }
+  return type;
 }
 
 // The payload as the operation reads it. A field the caller left unset arrives

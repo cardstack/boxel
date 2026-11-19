@@ -58,6 +58,28 @@ on:
           deleted from the realm. Empty pushes the whole repository.
         type: string
         default: ""
+      content-ref:
+        description: |
+          Git ref whose files become the preview's content. Empty checks
+          out the ref the event names. A caller that runs on
+          `pull_request_target` passes the pull request's head SHA here:
+          its own job and scripts then come from the base branch, and
+          this workflow's runner copies and pushes the pull request's
+          files without running any of them. The realm server does run
+          them: it indexes and prerenders the pushed cards as the preview
+          account and serves them from the published domain.
+        type: string
+        default: ""
+      allow-fork-content:
+        description: |
+          Deploy a preview for a pull request whose head is in another
+          repository. Off, such a pull request gets no preview. A caller
+          that turns it on with `pull_request_target` runs and publishes
+          code from anyone who can open a pull request, so it MUST limit
+          who triggers it, for example by `author_association` or an
+          environment with required reviewers.
+        type: boolean
+        default: false
       fail-on-deploy-error:
         description: |
           Whether a failed install, sign-in, create, push, publish or
@@ -94,17 +116,32 @@ on:
 
 jobs:
   deploy:
-    if: github.event.action != 'closed' && !inputs.unpublish
+    if: >-
+      ${{ github.event.action != 'closed' && !inputs.unpublish
+      && (inputs.allow-fork-content
+      || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: Deploy preview realm
     runs-on: ubuntu-latest
+    # Every step runs outside the checkout unless it says otherwise: the CLI
+    # reads `.env` from the directory it runs in, and the checkout's files
+    # are content.
+    defaults:
+      run:
+        working-directory: /tmp
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.content-ref }}
+          persist-credentials: false
 
+      # The checkout's package.json must not turn on a cache this job
+      # would save into the base branch's scope.
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "24"
+          package-manager-cache: false
 
       - name: Install Boxel CLI
         id: install
@@ -177,11 +214,15 @@ jobs:
           PUSH_PATHS: ${{ inputs.paths }}
         run: |
           SOURCE_REALM_URL="${REALM_SERVER%/}/${MATRIX_USERNAME}/${REALM_ENDPOINT}/"
-          SOURCE_DIR=.
+          SOURCE_DIR="$GITHUB_WORKSPACE"
           if [ -n "${PUSH_PATHS//[[:space:]]/}" ]; then
             SOURCE_DIR="${RUNNER_TEMP}/preview-content"
             mkdir -p "$SOURCE_DIR"
+            cd "$GITHUB_WORKSPACE"
             while IFS= read -r path; do
+              # A trailing slash would have every test below look through
+              # a link to what it points at.
+              while [ "$path" != "${path%/}" ]; do path="${path%/}"; done
               [ -z "$path" ] && continue
               case "$path" in
                 /* | .. | ../* | */../* | */..)
@@ -193,6 +234,20 @@ jobs:
                 echo "::warning title=Preview realm::Path '${path}' does not exist, skipping it."
                 continue
               fi
+              # A symbolic link on the way to a path would have the copy
+              # take files from outside the repository. A link below a
+              # listed folder, or anywhere in a whole-repository push, is
+              # copied as a link and never uploaded: the CLI's push walk
+              # (`getLocalFileList` in boxel-cli's realm-sync-base.ts)
+              # takes regular files and folders only.
+              part="$path"
+              while [ "$part" != . ]; do
+                if [ -L "$part" ]; then
+                  echo "::error title=Preview realm::'${part}' is a symbolic link. A listed path must be reached through regular folders."
+                  exit 1
+                fi
+                part=$(dirname "$part")
+              done
               mkdir -p "${SOURCE_DIR}/$(dirname "$path")"
               cp -R "$path" "${SOURCE_DIR}/$(dirname "$path")/"
               # The CLI reads ignore files only inside the folder it pushes,
@@ -200,7 +255,9 @@ jobs:
               dir=$(dirname "$path")
               while :; do
                 for ignore in .gitignore .boxelignore; do
-                  if [ -f "${dir}/${ignore}" ] && [ ! -e "${SOURCE_DIR}/${dir}/${ignore}" ]; then
+                  # A linked ignore file is left behind: copying it would
+                  # stage what it points at as a regular file.
+                  if [ -f "${dir}/${ignore}" ] && [ ! -L "${dir}/${ignore}" ] && [ ! -e "${SOURCE_DIR}/${dir}/${ignore}" ]; then
                     mkdir -p "${SOURCE_DIR}/${dir}"
                     cp "${dir}/${ignore}" "${SOURCE_DIR}/${dir}/${ignore}"
                   fi
@@ -211,6 +268,7 @@ jobs:
             done <<< "$PUSH_PATHS"
             echo "Staged $(find "$SOURCE_DIR" -type f | wc -l | tr -d ' ') file(s) from the listed paths"
           fi
+          cd "$RUNNER_TEMP"
           echo "Pushing content to ${SOURCE_REALM_URL}"
           boxel realm push "$SOURCE_DIR" "${SOURCE_REALM_URL}" --delete
 
@@ -291,7 +349,10 @@ jobs:
             _${{ steps.stamp.outputs.now }} UTC_
 
   cleanup:
-    if: github.event.action == 'closed' || inputs.unpublish
+    if: >-
+      ${{ (github.event.action == 'closed' || inputs.unpublish)
+      && (inputs.allow-fork-content
+      || github.event.pull_request.head.repo.full_name == github.repository) }}
     name: Cleanup preview realm
     runs-on: ubuntu-latest
     steps:

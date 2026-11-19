@@ -6,12 +6,14 @@
 // Each object goes to a temp file beside its final path, is fsynced, then
 // renamed into place, so a reader never sees a partial object and a crash
 // leaves at most a temp file. An object whose file exists is not written
-// again: its name is its content, so the file is already right.
+// again: its name is its content, so the file is already right. Its
+// modification time is set to now instead, so `git prune`'s expiry counts
+// from the object's latest use.
 
 import { createHash } from 'node:crypto';
 import { deflate } from 'node:zlib';
 import { promisify } from 'node:util';
-import { mkdir, open, rename, stat, unlink } from 'node:fs/promises';
+import { mkdir, open, rename, unlink, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 
 // Deflating runs on the thread pool, so a large blob doesn't hold the event
@@ -80,14 +82,14 @@ export function treeBody(entries: TreeEntry[]): Uint8Array {
   let parts: Uint8Array[] = [];
   let names = new Set<string>();
   for (let entry of sorted) {
-    // The names git fsck refuses: empty, with a slash or NUL, `.git` in any
-    // case, `.` and `..`, and a name used twice, which a file and a
+    // The names git fsck refuses: empty, with a slash or NUL, `.` and `..`,
+    // a name git reads as `.git`, and a name used twice, which a file and a
     // directory of one name would be.
     if (
       entry.name === '' ||
       entry.name === '.' ||
       entry.name === '..' ||
-      entry.name.toLowerCase() === '.git' ||
+      isDotGitName(entry.name) ||
       entry.name.includes('/') ||
       entry.name.includes('\0') ||
       names.has(entry.name)
@@ -100,6 +102,21 @@ export function treeBody(entries: TreeEntry[]): Uint8Array {
   }
   return concat(parts);
 }
+
+// Whether git fsck reads a tree entry name as `.git`, which it refuses: `.git`
+// in any case, also with code points macOS ignores in file names, and the
+// names Windows takes for it: `.git` or its short name `git~1`, trailing
+// spaces and dots, or an alternate data stream, in any part of a name split
+// at backslashes.
+export function isDotGitName(name: string): boolean {
+  if (name.replace(HFS_IGNORED, '').toLowerCase() === '.git') {
+    return true;
+  }
+  return name.split('\\').some((part) => NTFS_DOT_GIT.test(part));
+}
+
+const HFS_IGNORED = /[\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]/g;
+const NTFS_DOT_GIT = /^(?:\.git|git~1)[. ]*(?::.*)?$/i;
 
 function sortKey(entry: TreeEntry): string {
   return entry.mode === TREE_MODE ? `${entry.name}/` : entry.name;
@@ -159,11 +176,15 @@ export class ObjectStore {
     return this.write('commit', commitBody(commit));
   }
 
-  // Writes the object unless its file exists, and returns its id.
+  // Writes the object unless its file exists, and returns its id. An
+  // existing file's modification time is set to now, as git sets it when it
+  // would write an object it already has: `git prune` removes an object HEAD
+  // doesn't reach once that time is older than its expiry, and the object
+  // is about to be used.
   async write(type: ObjectType, body: Uint8Array): Promise<WriteResult> {
     let id = hashObject(type, body);
     let path = this.pathOf(id);
-    if (await exists(path)) {
+    if (await freshen(path)) {
       return { id, written: false };
     }
     let directory = join(this.#gitDir, 'objects', id.slice(0, 2));
@@ -193,17 +214,24 @@ export class ObjectStore {
   }
 }
 
-async function exists(path: string): Promise<boolean> {
+// Sets the file's access and modification times to now. False when there is
+// no file, or when its times can't be set, as on a file another user owns or
+// a read-only file system: the caller then writes a fresh copy in its place,
+// as git does when it can't freshen an object.
+async function freshen(path: string): Promise<boolean> {
   try {
-    await stat(path);
+    let now = new Date();
+    await utimes(path, now, now);
     return true;
   } catch (error: any) {
-    if (error?.code === 'ENOENT') {
+    if (UNFRESHENABLE.has(error?.code)) {
       return false;
     }
     throw error;
   }
 }
+
+const UNFRESHENABLE = new Set(['ENOENT', 'EPERM', 'EACCES', 'EROFS']);
 
 function concat(parts: Uint8Array[]): Uint8Array {
   let length = parts.reduce((sum, part) => sum + part.byteLength, 0);

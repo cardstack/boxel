@@ -1,9 +1,11 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+import type PowerCalendarService from 'ember-power-calendar/services/power-calendar';
 import type {
   NormalizeRangeActionValue,
   SelectedPowerCalendarRange,
@@ -12,6 +14,9 @@ import type {
 import DateRangePicker from './index.gts';
 
 export default class DateRangePickerUsage extends Component {
+  // Today comes from the same service the picker reads, so an app that
+  // overrides it with a clock of its own moves this bound too.
+  @service('power-calendar') declare powerCalendar: PowerCalendarService;
   @tracked range1: SelectedPowerCalendarRange = {
     start: new Date(2024, 10, 1),
     end: new Date(2024, 10, 15),
@@ -33,7 +38,7 @@ export default class DateRangePickerUsage extends Component {
     if (!this.disablePastDates) {
       return undefined;
     }
-    let today = new Date();
+    let today = new Date(this.powerCalendar.getDate());
     today.setHours(0, 0, 0, 0);
     return today;
   }

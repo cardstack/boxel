@@ -12,11 +12,15 @@ import {
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common';
 import {
+  createAutomationRunToken,
   createJWT,
   insertUser,
   realmSecretSeed,
   setupPermissionedRealmCached,
+  automationFixture,
+  TEST_AUTOMATION_PATH,
 } from './helpers/index.ts';
+import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   KEY_NOTICES_UPDATED_EVENT_TYPE,
@@ -124,6 +128,8 @@ const inboxModule = `
 `;
 
 module(basename(import.meta.filename), function (hooks) {
+  setupCatalogTestSubset(hooks);
+
   let realm: Realm;
   let request: SuperTest<Test>;
   let dbAdapter: PgAdapter;
@@ -178,6 +184,9 @@ module(basename(import.meta.filename), function (hooks) {
     },
     fileSystem: {
       'inbox.gts': inboxModule,
+      ...automationFixture({
+        operations: [{ type: INBOX, names: ['check', 'shared', 'both'] }],
+      }),
     },
     onRealmSetup(args) {
       realm = args.testRealm;
@@ -343,7 +352,13 @@ module(basename(import.meta.filename), function (hooks) {
         headers: {
           Accept: OPERATIONS,
           'Content-Type': OPERATIONS,
-          Authorization: `Bearer ${createJWT(realm, user, ['read', 'write'])}`,
+          Authorization: `Bearer ${
+            (
+              await createAutomationRunToken(dbAdapter, realm, user, {
+                automation: TEST_AUTOMATION_PATH,
+              })
+            ).token
+          }`,
         },
         body: JSON.stringify(envelope(operation)),
       }),

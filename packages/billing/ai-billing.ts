@@ -1,7 +1,8 @@
 import {
   getUserByMatrixUserId,
   spendCredits,
-  sumUpCreditsLedger,
+  sumUpAvailableCredits,
+  type SpendResult,
 } from './billing-queries.ts';
 import {
   type ChargeUsage,
@@ -41,18 +42,7 @@ async function getAvailableCredits(
     );
   }
 
-  return await sumUpCreditsLedger(dbAdapter, {
-    userId: user.id,
-    creditType: [
-      'plan_allowance',
-      'plan_allowance_used',
-      'plan_allowance_expired',
-      'daily_credit',
-      'daily_credit_used',
-      'extra_credit',
-      'extra_credit_used',
-    ],
-  });
+  return await sumUpAvailableCredits(dbAdapter, user.id);
 }
 
 /**
@@ -118,6 +108,56 @@ export async function spendUsageCost(
     );
     Sentry.captureException(err);
   }
+}
+
+// What charging a batch did: what `spendCredits` did (`charged`,
+// `already-charged`, or `nothing-to-charge` when the payer's buckets held
+// nothing, or the cost rounds to no credit), or `no-payer` when the person the
+// batch is billed to has no `users` row.
+export type AIBatchChargeResult = SpendResult | 'no-payer';
+
+// Charges a batch of AI requests once it ends (ADR 030 §1.4): `usd` to
+// `payer`, the Matrix user id its run acted as, at 1,000 credits to the dollar
+// with no margin, rounded to the nearest credit as every AI charge is. `usd`
+// is the cost the provider reported, recorded as `ai_provider_usd`, or, when
+// `estimated`, the estimate made at submit, recorded as `ai_estimated_usd` so
+// the cost coverage report can tell the two apart. A batch is charged once:
+// a retry finds the charge in the ledger and writes nothing. Holds the payer's
+// cost lock around the spend.
+export async function chargeAIBatch(
+  dbAdapter: DBAdapter,
+  {
+    payer,
+    charge,
+    usd,
+    estimated,
+  }: {
+    payer: string;
+    charge: Extract<SpendCharge, { kind: 'batched_ai' }>;
+    usd: number;
+    estimated: boolean;
+  },
+): Promise<AIBatchChargeResult> {
+  if (!Number.isFinite(usd) || usd < 0) {
+    throw new Error(
+      `a batch is charged a finite number of USD, 0 or more, not ${usd}`,
+    );
+  }
+  let user = await getUserByMatrixUserId(dbAdapter, payer);
+  if (!user) {
+    return 'no-payer';
+  }
+  let userId = user.id;
+  let credits = Math.round(usd * CREDITS_PER_USD);
+  return await dbAdapter.withUserCostLock(payer, () =>
+    spendCredits(
+      dbAdapter,
+      userId,
+      credits,
+      charge,
+      estimated ? { ai_estimated_usd: usd } : { ai_provider_usd: usd },
+    ),
+  );
 }
 
 // Sends the cost lookup. The realm-server passes its guarded outbound client;

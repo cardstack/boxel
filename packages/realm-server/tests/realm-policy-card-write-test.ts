@@ -48,8 +48,6 @@ const READER = '@reader:localhost';
 const TEACHER = '@teacher:localhost';
 const COLLEAGUE = '@colleague:localhost';
 
-const INSUFFICIENT = 'Insufficient permissions to perform this action';
-
 const REALM_POLICY = {
   module: rri('@cardstack/catalog/realm-policy/realm-policy'),
   name: 'RealmPolicy',
@@ -1414,8 +1412,11 @@ module(basename(import.meta.filename), function (hooks) {
         .set('Accept', SupportedMimeType.CardSource)
         .set('Authorization', AUTH.openTeacher())
         .send(realmConfigCardJSON({ name: 'Taken' }));
-      assert.strictEqual(source.status, 403, 'a card+source write');
-      assert.strictEqual(source.text, INSUFFICIENT);
+      assert.strictEqual(
+        source.status,
+        404,
+        'a card+source write, told as a card that is not there',
+      );
       let atomic = await request
         .post(`${path(OPEN)}_atomic`)
         .set('Accept', SupportedMimeType.JSONAPI)
@@ -1431,8 +1432,11 @@ module(basename(import.meta.filename), function (hooks) {
             ],
           }),
         );
-      assert.strictEqual(atomic.status, 403, 'an /_atomic write');
-      assert.strictEqual(atomic.text, INSUFFICIENT);
+      assert.strictEqual(
+        atomic.status,
+        404,
+        'an /_atomic write, told as a card that is not there',
+      );
 
       assert.strictEqual(
         await open.operationCore.readFileAsText(

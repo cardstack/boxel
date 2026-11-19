@@ -11,8 +11,19 @@ import {
   wrapRealmRunnerScript,
 } from '@cardstack/runtime-common/realm-runner-script';
 
+import {
+  FOUND_CARD_SHAPE,
+  MAX_MILESTONE_CHARS,
+  MAX_MILESTONES,
+  MAX_RUN_NOTIFICATION_CHARS,
+  MAX_RUN_NOTIFICATIONS,
+  NOTIFY_METHODS,
+  surfaceMethods,
+} from './surfaces';
+
 import type {
   RealmScriptErrorInfo,
+  RealmScriptLocation,
   RealmRunnerCallMethod,
   RealmRunnerRequest,
   RealmRunnerResponse,
@@ -22,6 +33,12 @@ import type {
   QuickJSDeferredPromise,
   QuickJSWASMModule,
 } from 'quickjs-emscripten';
+
+// The script's file name as a pattern, for finding its frames in a stack.
+const SCRIPT_FILE_PATTERN = REALM_RUNNER_SCRIPT_FILE_NAME.replace(
+  /[.*+?^${}()|[\]\\]/g,
+  '\\$&',
+);
 
 const worker = globalThis as unknown as {
   onmessage: ((event: MessageEvent<RealmRunnerRequest>) => void) | null;
@@ -48,88 +65,279 @@ async function loadQuickJS(wasmURL: string): Promise<QuickJSWASMModule> {
   }
 }
 
-// The guest sees only `realm` and `room`. Each method is a thin wrapper that hands its
-// arguments to the host and parses the host's JSON answer; the host does the
-// work and the checks, so nothing here is trusted.
+// The guest sees only `realm`, and on surfaces that have them, `room` and
+// `console`. Each method is a thin wrapper that hands its arguments to the
+// host and parses the host's JSON answer; the host does the work and the
+// checks, so nothing here is trusted. Every method is defined here, and the
+// surface's list (`__methods`) keeps those it names: a group left with no
+// method, such as `room` on the automation surface, is not defined at all.
+//
+// Progress and console methods are one-way (`__hostNotify`): they return
+// nothing, so a script needn't await them, and a run doesn't fail for a
+// `console.log` it didn't await. Their arguments are checked here, where a
+// bad one can still throw in the script.
 const BOOTSTRAP = `
   (() => {
     const hostCall = globalThis.__hostCall;
-    delete globalThis.__hostCall;
+    const hostNotify = globalThis.__hostNotify;
+    const allowed = new Set(JSON.parse(globalThis.__methods));
+    const automation =
+      globalThis.__automation === undefined
+        ? undefined
+        : JSON.parse(globalThis.__automation);
+    const realmURL = globalThis.__realmURL;
+    for (const name of [
+      '__hostCall',
+      '__hostNotify',
+      '__methods',
+      '__automation',
+      '__realmURL',
+    ]) {
+      delete globalThis[name];
+    }
     const call = async (method, args) =>
       JSON.parse(await hostCall(method, JSON.stringify(args)));
+    const notify = (method, args) => {
+      hostNotify(method, JSON.stringify(args));
+    };
+    const deepFreeze = (value) => {
+      if (value !== null && typeof value === 'object') {
+        Object.values(value).forEach(deepFreeze);
+        Object.freeze(value);
+      }
+      return value;
+    };
+    // A card that realm.cards.get or realm.cards.search answers is the card
+    // itself, with its fields at the top level, not the document of its
+    // .json file. Reading .data from one throws and names the shape, where it
+    // would otherwise be undefined and the card would read as missing. The
+    // getter is on the card's prototype, not the card, so the card's own keys
+    // are its fields alone: it serializes, spreads, copies and goes back into
+    // a realm call without .data, and it has no own property named data.
+    const cardPrototype = (answers) =>
+      Object.freeze(
+        Object.create(Object.prototype, {
+          data: {
+            get() {
+              throw new TypeError(
+                answers +
+                  ': ${FOUND_CARD_SHAPE}. There is no .data; read its fields from .attributes and its links from .relationships',
+              );
+            },
+          },
+        }),
+      );
+    const gotCard = cardPrototype('realm.cards.get returns the card itself');
+    const foundCard = cardPrototype(
+      'realm.cards.search returns each card itself',
+    );
+    const withoutData = (card, prototype) => {
+      if (card !== null && typeof card === 'object') {
+        Object.setPrototypeOf(card, prototype);
+      }
+      return card;
+    };
+    const onSurface = (methods, prefix) => {
+      const kept = {};
+      for (const [key, value] of Object.entries(methods)) {
+        const name = prefix + key;
+        if (typeof value === 'function') {
+          if (allowed.has(name)) {
+            kept[key] = value;
+          }
+        } else {
+          const group = onSurface(value, name + '.');
+          if (Object.keys(group).length > 0) {
+            kept[key] = group;
+          }
+        }
+      }
+      return Object.freeze(kept);
+    };
+    const milestoneName = (name, method) => {
+      if (typeof name !== 'string' || !name.trim() || name.length > ${MAX_MILESTONE_CHARS}) {
+        throw new TypeError(
+          'realm.progress.' + method + ' expects milestone names of 1 to ${MAX_MILESTONE_CHARS} characters',
+        );
+      }
+      return name.trim();
+    };
+    const wholeNumber = (value, name) => {
+      if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+        throw new TypeError(
+          'realm.progress.count ' + name + ' must be a whole number of 0 or more',
+        );
+      }
+      return value;
+    };
+    // The script's own line that made the call: the first frame of the
+    // script in the stack, less the line the wrapper adds above it.
+    const scriptLine = () => {
+      const found = /${SCRIPT_FILE_PATTERN}:(\\d+)/.exec(new Error().stack ?? '');
+      return found ? Number(found[1]) - ${REALM_RUNNER_WRAPPER_LINES} : null;
+    };
+    const show = (value) => {
+      if (typeof value === 'string') {
+        return value;
+      }
+      if (value instanceof Error) {
+        return value.name + ': ' + value.message;
+      }
+      try {
+        const text = JSON.stringify(value);
+        return text === undefined ? String(value) : text;
+      } catch {
+        return String(value);
+      }
+    };
+    const log = (level) => (...values) => {
+      notify('console.' + level, [values.map(show).join(' '), scriptLine()]);
+    };
     globalThis.realm = Object.freeze({
-      current: Object.freeze({ url: globalThis.__realmURL }),
-      fs: Object.freeze({
-        readText: (path) => call('fs.readText', [path]),
-        exists: (path) => call('fs.exists', [path]),
-        list: (path) => call('fs.list', [path]),
-        replace: (path, search, replacement) =>
-          call('fs.replace', [path, search, replacement]),
-        writeText: (path, content) => call('fs.writeText', [path, content]),
-        copy: (fromPath, toPath) => call('fs.copy', [fromPath, toPath]),
-        writeBytes: (path, base64) => call('fs.writeBytes', [path, base64]),
-        delete: (path) => call('fs.delete', [path]),
-        download: (sourceUrl, path) =>
-          call('fs.download', [sourceUrl, path]),
+      current: deepFreeze({
+        url: realmURL,
+        ...(automation === undefined ? {} : { automation }),
       }),
-      cards: Object.freeze({
-        search: (query) => call('cards.search', [query]),
-        get: (path) => call('cards.get', [path]),
-        update: (path, attributes) =>
-          call('cards.update', [path, attributes]),
-      }),
-      operations: Object.freeze({
-        invoke: (path, name, payload) =>
-          call('operations.invoke', [path, name, payload]),
-        invokeBatchOperation: (entries) => call('operations.invokeBatchOperation', [entries]),
-        capabilities: (checks) => call('operations.capabilities', [checks]),
-      }),
-      entries: Object.freeze({
-        search: (query, options) =>
-          call('entries.search', [query, options ?? {}]),
-      }),
-      capture: (path, options) => call('capture', [path, options ?? {}]),
-      images: Object.freeze({
-        generate: (options) => call('images.generate', [options ?? {}]),
-      }),
-      workspaces: Object.freeze({
-        create: (options) => call('workspaces.create', [options ?? {}]),
-        delete: (url) => call('workspaces.delete', [url]),
-      }),
-      ui: Object.freeze({
-        switchSubmode: (submode) => call('ui.switchSubmode', [submode]),
-        openFile: (path) => call('ui.openFile', [path]),
-        previewFormat: (path, format) =>
-          call('ui.previewFormat', [path, format]),
-        openWorkspace: () => call('ui.openWorkspace', []),
-      }),
-      index: Object.freeze({
-        invalidate: (paths) => call('index.invalidate', [paths]),
-        reindex: () => call('index.reindex', []),
-        fullReindex: () => call('index.fullReindex', []),
-        cancelJob: () => call('index.cancelJob', []),
-      }),
-      web: Object.freeze({
-        search: (query, options) =>
-          call('web.search', [query, options ?? {}]),
-        read: (url, options) => call('web.read', [url, options ?? {}]),
-      }),
-      resolve: (request) => call('resolve', [request ?? {}]),
-      transform: (input, source, options) =>
-        call('transform', [input ?? null, source, options ?? {}]),
-      activity: (details) => call('activity', [details ?? {}]),
-      plan: (steps) => call('plan', [steps]),
-      ask: (request) => call('ask', [request ?? {}]),
+      ...onSurface(
+        {
+          fs: {
+            readText: (path) => call('fs.readText', [path]),
+            exists: (path) => call('fs.exists', [path]),
+            list: (path) => call('fs.list', [path]),
+            replace: (path, search, replacement) =>
+              call('fs.replace', [path, search, replacement]),
+            writeText: (path, content) => call('fs.writeText', [path, content]),
+            copy: (fromPath, toPath) => call('fs.copy', [fromPath, toPath]),
+            writeBytes: (path, base64) => call('fs.writeBytes', [path, base64]),
+            delete: (path) => call('fs.delete', [path]),
+            download: (sourceUrl, path) =>
+              call('fs.download', [sourceUrl, path]),
+          },
+          cards: {
+            search: async (query) => {
+              const found = await call('cards.search', [query]);
+              for (const card of found?.cards ?? []) {
+                withoutData(card, foundCard);
+              }
+              return found;
+            },
+            get: async (path) =>
+              withoutData(await call('cards.get', [path]), gotCard),
+            update: (path, attributes) =>
+              call('cards.update', [path, attributes]),
+          },
+          operations: {
+            invoke: (path, name, payload) =>
+              call('operations.invoke', [path, name, payload]),
+            invokeBatchOperation: (entries) => call('operations.invokeBatchOperation', [entries]),
+            capabilities: (checks) => call('operations.capabilities', [checks]),
+          },
+          entries: {
+            search: (query, options) =>
+              call('entries.search', [query, options ?? {}]),
+          },
+          capture: (path, options) => call('capture', [path, options ?? {}]),
+          images: {
+            generate: (options) => call('images.generate', [options ?? {}]),
+          },
+          workspaces: {
+            create: (options) => call('workspaces.create', [options ?? {}]),
+            delete: (url) => call('workspaces.delete', [url]),
+          },
+          ui: {
+            switchSubmode: (submode) => call('ui.switchSubmode', [submode]),
+            openFile: (path) => call('ui.openFile', [path]),
+            previewFormat: (path, format) =>
+              call('ui.previewFormat', [path, format]),
+            openWorkspace: () => call('ui.openWorkspace', []),
+          },
+          index: {
+            invalidate: (paths) => call('index.invalidate', [paths]),
+            reindex: () => call('index.reindex', []),
+            fullReindex: () => call('index.fullReindex', []),
+            cancelJob: () => call('index.cancelJob', []),
+          },
+          web: {
+            search: (query, options) =>
+              call('web.search', [query, options ?? {}]),
+            read: (url, options) => call('web.read', [url, options ?? {}]),
+          },
+          resolve: (request) => call('resolve', [request ?? {}]),
+          transform: (input, source, options) =>
+            call('transform', [input ?? null, source, options ?? {}]),
+          activity: (details) => call('activity', [details ?? {}]),
+          plan: (steps) => call('plan', [steps]),
+          ask: (request) => call('ask', [request ?? {}]),
+          progress: {
+            plan: (names) => {
+              if (
+                !Array.isArray(names) ||
+                names.length === 0 ||
+                names.length > ${MAX_MILESTONES}
+              ) {
+                throw new TypeError(
+                  'realm.progress.plan expects 1 to ${MAX_MILESTONES} milestone names',
+                );
+              }
+              notify('progress.plan', [
+                names.map((name) => milestoneName(name, 'plan')),
+              ]);
+            },
+            milestone: (name) => {
+              notify('progress.milestone', [milestoneName(name, 'milestone')]);
+            },
+            count: (done, total) => {
+              wholeNumber(done, 'done');
+              if (total !== undefined && total !== null) {
+                wholeNumber(total, 'total');
+                if (done > total) {
+                  throw new TypeError(
+                    'realm.progress.count done cannot be more than total',
+                  );
+                }
+              }
+              notify('progress.count', [done, total ?? null]);
+            },
+          },
+        },
+        '',
+      ),
     });
-    globalThis.room = Object.freeze({
-      enableSkills: (ids) => call('room.enableSkills', [ids]),
-      disableSkills: (ids) => call('room.disableSkills', [ids]),
-      setModel: (model) => call('room.setModel', [model]),
-      credits: () => call('room.credits', []),
-    });
-    delete globalThis.__realmURL;
+    const room = onSurface(
+      {
+        enableSkills: (ids) => call('room.enableSkills', [ids]),
+        disableSkills: (ids) => call('room.disableSkills', [ids]),
+        setModel: (model) => call('room.setModel', [model]),
+        credits: () => call('room.credits', []),
+      },
+      'room.',
+    );
+    if (Object.keys(room).length > 0) {
+      globalThis.room = room;
+    }
+    const console = onSurface(
+      {
+        log: log('log'),
+        info: log('info'),
+        warn: log('warn'),
+        error: log('error'),
+      },
+      'console.',
+    );
+    if (Object.keys(console).length > 0) {
+      globalThis.console = console;
+    }
   })();
 `;
+
+// The name a realm call's error has in the script, so a run can tell a call
+// that failed from an error the script threw. `instanceof Error` still holds,
+// and its message is the call's.
+const REALM_CALL_ERROR_NAME = 'RealmCallError';
+
+// What a realm call's error that the script let through throws out of the
+// run, so the host learns the call failed the run.
+class RealmCallEscaped extends Error {}
 
 // What a script error throws out of the run, so the host learns which error
 // it was, where, and whether the script got to run at all.
@@ -142,6 +350,17 @@ class ScriptFailure extends Error {
   }
 }
 
+// The script location of each error the script threw (see `scriptLocation`).
+const locations = new WeakMap<object, RealmScriptLocation>();
+
+function located(error: Error, dumped: unknown, code: string): Error {
+  let location = scriptLocation(dumped, code);
+  if (location) {
+    locations.set(error, location);
+  }
+  return error;
+}
+
 function scriptFailure(
   dumped: unknown,
   code: string,
@@ -151,65 +370,103 @@ function scriptFailure(
     name?: string;
     message?: string;
     lineNumber?: number;
+    stack?: string;
   };
   let message = describeScriptError(dumped, code);
   let name = error.name ?? 'Error';
-  if (
-    !['SyntaxError', 'TypeError', 'ReferenceError', 'RangeError'].includes(name)
-  ) {
+  // QuickJS's own InternalError is the engine stopping the script (an
+  // interrupt at its time limit, memory or stack), and a realm call's error
+  // that the script let through is the call failing the run. Neither is
+  // something the script threw. Anything else, including an error the script
+  // throws itself, is the script's error and keeps its line.
+  if (name === REALM_CALL_ERROR_NAME) {
+    return new RealmCallEscaped(message);
+  }
+  if (name === 'InternalError') {
     return new Error(message);
   }
+  let line = scriptLineOf(error, code);
   return new ScriptFailure(message, {
     name,
     message: error.message ?? String(dumped),
-    ...(typeof error.lineNumber === 'number'
-      ? { line: error.lineNumber - REALM_RUNNER_WRAPPER_LINES }
-      : {}),
+    ...(line !== undefined ? { line } : {}),
     phase,
   });
 }
 
-const METHODS = new Set<RealmRunnerCallMethod>([
-  'fs.readText',
-  'fs.exists',
-  'fs.list',
-  'fs.replace',
-  'fs.writeText',
-  'fs.copy',
-  'fs.writeBytes',
-  'fs.download',
-  'cards.search',
-  'cards.get',
-  'cards.update',
-  'operations.invoke',
-  'operations.invokeBatchOperation',
-  'operations.capabilities',
-  'entries.search',
-  'fs.delete',
-  'capture',
-  'images.generate',
-  'workspaces.create',
-  'workspaces.delete',
-  'room.enableSkills',
-  'room.disableSkills',
-  'room.setModel',
-  'room.credits',
-  'ui.switchSubmode',
-  'ui.openFile',
-  'ui.previewFormat',
-  'ui.openWorkspace',
-  'index.invalidate',
-  'index.reindex',
-  'index.fullReindex',
-  'index.cancelJob',
-  'web.search',
-  'web.read',
-  'resolve',
-  'transform',
-  'activity',
-  'plan',
-  'ask',
-]);
+// The line of its own script an error points at. QuickJS gives an error it
+// raises a `lineNumber`, kept as it is. An error the script constructs
+// itself carries its line only in its stack, whose frames in the script's
+// file include the wrapper's own call to the script: only a frame on one of
+// the script's lines counts, and the first such frame is where it was thrown.
+function scriptLineOf(
+  error: { lineNumber?: number; stack?: string },
+  code: string,
+): number | undefined {
+  let lineCount = code.split('\n').length;
+  let onScript = (wrapped: number) => {
+    let line = wrapped - REALM_RUNNER_WRAPPER_LINES;
+    return line >= 1 && line <= lineCount ? line : undefined;
+  };
+  if (typeof error.lineNumber === 'number') {
+    return error.lineNumber - REALM_RUNNER_WRAPPER_LINES;
+  }
+  for (let found of (error.stack ?? '').matchAll(
+    new RegExp(`${SCRIPT_FILE_PATTERN}:(\\d+)`, 'g'),
+  )) {
+    let line = onScript(Number(found[1]));
+    if (line !== undefined) {
+      return line;
+    }
+  }
+  return undefined;
+}
+
+// Where a dumped error came from in the script: its stack's frames in the
+// script, each naming the script's own line, and the first of those lines.
+// Frames outside the script's own lines (the bootstrap's, and the wrapper's
+// call to the script) are left out.
+function scriptLocation(
+  dumped: unknown,
+  code: string,
+): RealmScriptLocation | undefined {
+  let error = (dumped ?? {}) as { stack?: unknown; lineNumber?: unknown };
+  let scriptLines = code.split('\n').length;
+  let inScript = (line: number) => line >= 1 && line <= scriptLines;
+  let frame = new RegExp(`${SCRIPT_FILE_PATTERN}:(\\d+)(?::\\d+)?`);
+  let frames: { text: string; line: number }[] = [];
+  if (typeof error.stack === 'string') {
+    for (let text of error.stack.split('\n')) {
+      let found = frame.exec(text);
+      if (!found) {
+        continue;
+      }
+      let line = Number(found[1]) - REALM_RUNNER_WRAPPER_LINES;
+      if (inScript(line)) {
+        frames.push({
+          text: text.replace(frame, `script line ${line}`),
+          line,
+        });
+      }
+    }
+  }
+  let lineNumber =
+    typeof error.lineNumber === 'number'
+      ? error.lineNumber - REALM_RUNNER_WRAPPER_LINES
+      : undefined;
+  let line =
+    frames[0]?.line ??
+    (lineNumber !== undefined && inScript(lineNumber) ? lineNumber : undefined);
+  if (line === undefined && frames.length === 0) {
+    return undefined;
+  }
+  return {
+    ...(line !== undefined ? { line } : {}),
+    ...(frames.length > 0
+      ? { stack: frames.map(({ text }) => text).join('\n') }
+      : {}),
+  };
+}
 
 // A worker runs one script. These hold that run's open host calls so a
 // `callResult` can settle the guest promise that is waiting for it.
@@ -220,6 +477,18 @@ let pending = new Map<number, QuickJSDeferredPromise>();
 // (realm.ask) does not count: its answer moves this out.
 let deadlineAt = 0;
 let nextCallId = 1;
+// One-way calls posted, the characters of their arguments, and those dropped
+// past the run's limit. They are dropped here, before they are posted, so a
+// script looping on `console.log` can't fill the tab with messages.
+let notified = 0;
+let notifiedChars = 0;
+let dropped = 0;
+
+function reportDropped() {
+  if (dropped > 0) {
+    worker.postMessage({ type: 'dropped', count: dropped });
+  }
+}
 
 function settleCall(
   request: Extract<RealmRunnerRequest, { type: 'callResult' }>,
@@ -233,7 +502,10 @@ function settleCall(
     deadlineAt += request.extendMs;
   }
   if (request.error !== undefined) {
-    let error = vm.newError(request.error);
+    let error = vm.newError({
+      name: REALM_CALL_ERROR_NAME,
+      message: request.error,
+    });
     deferred.reject(error);
     error.dispose();
   } else {
@@ -280,11 +552,13 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
       }
     };
 
+    let surface = request.surface ?? 'interactive';
+    let methods = surfaceMethods(surface);
     let hostCall = context.newFunction(
       '__hostCall',
       (methodHandle, argsHandle) => {
         let method = context.getString(methodHandle) as RealmRunnerCallMethod;
-        if (!METHODS.has(method)) {
+        if (!methods.has(method) || NOTIFY_METHODS.has(method)) {
           throw new Error(`Unknown realm call: ${method}`);
         }
         let args = JSON.parse(context.getString(argsHandle)) as unknown[];
@@ -297,9 +571,43 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     );
     context.setProp(context.global, '__hostCall', hostCall);
     hostCall.dispose();
-    let realmURL = context.newString(request.realmURL);
-    context.setProp(context.global, '__realmURL', realmURL);
-    realmURL.dispose();
+    let hostNotify = context.newFunction(
+      '__hostNotify',
+      (methodHandle, argsHandle) => {
+        let method = context.getString(methodHandle) as RealmRunnerCallMethod;
+        if (!methods.has(method) || !NOTIFY_METHODS.has(method)) {
+          throw new Error(`Unknown realm call: ${method}`);
+        }
+        let argsJSON = context.getString(argsHandle);
+        if (
+          notified >= MAX_RUN_NOTIFICATIONS ||
+          notifiedChars + argsJSON.length > MAX_RUN_NOTIFICATION_CHARS
+        ) {
+          dropped += 1;
+          if (dropped === 1) {
+            reportDropped();
+          }
+          return;
+        }
+        notified += 1;
+        notifiedChars += argsJSON.length;
+        let args = JSON.parse(argsJSON) as unknown[];
+        worker.postMessage({ type: 'notify', method, args });
+      },
+    );
+    context.setProp(context.global, '__hostNotify', hostNotify);
+    hostNotify.dispose();
+    for (let [name, value] of Object.entries({
+      __realmURL: request.realmURL,
+      __methods: JSON.stringify([...methods]),
+      ...(surface === 'automation' && request.automation
+        ? { __automation: JSON.stringify(request.automation) }
+        : {}),
+    })) {
+      let handle = context.newString(value);
+      context.setProp(context.global, name, handle);
+      handle.dispose();
+    }
     context.unwrapResult(context.evalCode(BOOTSTRAP)).dispose();
 
     let evaluated = context.evalCode(
@@ -309,7 +617,11 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     if (evaluated.error) {
       let dumped = context.dump(evaluated.error);
       evaluated.error.dispose();
-      throw scriptFailure(dumped, request.code, 'compile');
+      throw located(
+        scriptFailure(dumped, request.code, 'compile'),
+        dumped,
+        request.code,
+      );
     }
     let promise = evaluated.value;
     let resolvedPromise = context.resolvePromise(promise);
@@ -319,7 +631,11 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     if (resolved.error) {
       let dumped = context.dump(resolved.error);
       resolved.error.dispose();
-      throw scriptFailure(dumped, request.code, 'run');
+      throw located(
+        scriptFailure(dumped, request.code, 'run'),
+        dumped,
+        request.code,
+      );
     }
     let value = resolved.value;
     let scriptResult = JSON.stringify(context.dump(value)) ?? '';
@@ -332,12 +648,17 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
         'The script returned before all realm calls finished; await every realm call',
       );
     }
+    reportDropped();
     worker.postMessage({ type: 'success', result: { scriptResult } });
   } catch (error) {
+    reportDropped();
+    let location = locations.get(error as object);
     worker.postMessage({
       type: 'error',
       error: error instanceof Error ? error.message : String(error),
       ...(error instanceof ScriptFailure ? { scriptError: error.info } : {}),
+      ...(location ? { scriptLocation: location } : {}),
+      ...(error instanceof RealmCallEscaped ? { realmCallFailed: true } : {}),
     });
   }
   // The caller terminates the worker once it has an answer, which frees the

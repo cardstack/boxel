@@ -22,6 +22,31 @@ export function repoPath(historyRoot: string, realmId: string): string {
   return join(historyRoot, `${realmId}.git`);
 }
 
+// The largest output a git command may return: above a file's largest
+// allowed size (50 MB for video), so a blob read whole always fits.
+export const GIT_MAX_BUFFER_BYTES = 256 * 1024 * 1024;
+
+// Runs a git command against the repo and returns its standard output as
+// bytes, so blob content and NUL-separated listings come back unaltered.
+// Aborting `signal` sends git SIGTERM, on which git removes its lock files,
+// and rejects with an `AbortError`.
+export async function runGit(
+  gitDir: string,
+  args: string[],
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<Buffer> {
+  let { stdout } = await execFileAsync(
+    'git',
+    [`--git-dir=${gitDir}`, ...args],
+    {
+      encoding: 'buffer',
+      maxBuffer: GIT_MAX_BUFFER_BYTES,
+      signal,
+    },
+  );
+  return stdout;
+}
+
 // Creates an empty bare repo at `gitDir`, or leaves an existing one alone.
 export async function initRepo(gitDir: string): Promise<void> {
   await mkdir(join(gitDir, 'objects', 'info'), { recursive: true });
@@ -249,17 +274,28 @@ const KEY_BY_NAME = new Map(
   ]),
 );
 
-// The `Boxel-*` trailers of a message: the lines of its last paragraph, when
-// every line there is a trailer. Unknown trailers are left out.
-export function parseTrailers(message: string): Trailers {
+// A message's trailer block: its last paragraph, when the message has more
+// than one and every line of the last is a trailer, with the paragraphs
+// before it. Undefined for a message with no trailer block.
+function trailerBlock(
+  message: string,
+): { before: string; lines: string[] } | undefined {
   let paragraphs = message.trimEnd().split(/\n\s*\n/);
-  let last = paragraphs.length > 1 ? paragraphs[paragraphs.length - 1] : '';
-  let trailers: Trailers = {};
-  let lines = last.split('\n');
-  if (!lines.every((line) => TRAILER_LINE.test(line))) {
-    return trailers;
+  if (paragraphs.length < 2) {
+    return undefined;
   }
-  for (let line of lines) {
+  let lines = paragraphs[paragraphs.length - 1].split('\n');
+  if (!lines.every((line) => TRAILER_LINE.test(line))) {
+    return undefined;
+  }
+  return { before: paragraphs.slice(0, -1).join('\n\n'), lines };
+}
+
+// The `Boxel-*` trailers of a message's trailer block. Unknown trailers are
+// left out.
+export function parseTrailers(message: string): Trailers {
+  let trailers: Trailers = {};
+  for (let line of trailerBlock(message)?.lines ?? []) {
     let [, name, value] = TRAILER_LINE.exec(line)!;
     let key = KEY_BY_NAME.get(name);
     if (key) {
@@ -269,11 +305,172 @@ export function parseTrailers(message: string): Trailers {
   return trailers;
 }
 
+// The message without its trailer block, or the whole message when it has
+// none.
+export function messageWithoutTrailers(message: string): string {
+  return trailerBlock(message)?.before ?? message.trimEnd();
+}
+
+// `Boxel-Journal-Seq`: the change events a revision covers, as the `seq` of
+// its first and last events in the realm's journal order, `<first>-<last>`,
+// or the one `seq` of a revision that covers one event. The journal is read
+// in `(xid, seq)` order, which can differ from `seq` order between two
+// overlapping writes, so the range names the realm's events from the first
+// through the last in that order, not every `seq` between the two numbers.
+// Revisions cover unbroken runs of the realm's events, so no event falls in
+// two revisions' ranges.
+export interface JournalSeqRange {
+  first: number;
+  last: number;
+}
+
+export function formatJournalSeq({ first, last }: JournalSeqRange): string {
+  return first === last ? `${first}` : `${first}-${last}`;
+}
+
+export function parseJournalSeq(value: string): JournalSeqRange | undefined {
+  let match = /^(\d+)(?:-(\d+))?$/.exec(value.trim());
+  if (!match) {
+    return undefined;
+  }
+  let first = Number(match[1]);
+  let last = match[2] === undefined ? first : Number(match[2]);
+  return { first, last };
+}
+
+// `Boxel-Includes-Superseded`: a path whose diff in this revision also
+// contains a superseded write's change, and the revision that recorded that
+// write, as `<revision> <path>`. The revision comes first because a path may
+// hold a space. A path superseded more than once since the last write to it
+// that wasn't superseded has one value per superseding revision, newest
+// first.
+export interface IncludedSuperseded {
+  revision: string;
+  path: string;
+}
+
+export function formatIncludesSuperseded({
+  revision,
+  path,
+}: IncludedSuperseded): string {
+  return `${revision} ${path}`;
+}
+
+export function parseIncludesSuperseded(
+  value: string,
+): IncludedSuperseded | undefined {
+  let match = /^([0-9a-f]{40}) (.+)$/.exec(value);
+  return match ? { revision: match[1], path: match[2] } : undefined;
+}
+
+export interface RevisionRecord {
+  id: string;
+  message: string;
+  trailers: Trailers;
+  // The realm paths the revision changed: a size-only entry counts as its
+  // file's path, not its marker's.
+  changedPaths: string[];
+}
+
+// The revisions `git log` lists for `revisionArgs` (such as `<old>..<new>`,
+// or `-n 100 <head>`), newest first, each with its trailers and the paths
+// it changed, from one git process.
+export async function readRevisions(
+  gitDir: string,
+  revisionArgs: string[],
+): Promise<RevisionRecord[]> {
+  let output = (
+    await runGit(gitDir, [
+      // A root revision's paths are listed whatever the user's git config
+      // says, and the output is never colored.
+      '-c',
+      'log.showRoot=true',
+      'log',
+      '--no-color',
+      '-z',
+      '--raw',
+      '--no-abbrev',
+      '--no-renames',
+      '--format=%H%x00%B',
+      ...revisionArgs,
+      '--',
+    ])
+  ).toString('utf8');
+  return parseRawLog(output, 2).map(({ fields: [id, message], entries }) => ({
+    id,
+    message,
+    trailers: parseTrailers(message),
+    changedPaths: [...new Set(entries.map((entry) => realmPathOf(entry.path)))],
+  }));
+}
+
+// One path a revision changed, as `git log --raw` prints it: the modes and
+// object ids before and after (zeros for none) and git's status letter.
+export interface RawEntry {
+  srcMode: string;
+  dstMode: string;
+  srcId: string;
+  dstId: string;
+  status: string;
+  path: string;
+}
+
+// The revisions in the output of `git log -z --raw` with a `--format` of
+// `fieldCount` fields, each ended by `%x00`. With `-z`, each revision is its
+// fields, each ended by a NUL, then, for a revision that changed anything, a
+// newline and one raw entry per path: `:<modes> <ids> <status>` and the
+// path, each ended by a NUL. The first field is the revision's id, which
+// starts with a hex digit, and a raw entry starts with `:`, which is how the
+// next revision is told from the next entry.
+export function parseRawLog(
+  output: string,
+  fieldCount: number,
+): { fields: string[]; entries: RawEntry[] }[] {
+  let revisions: { fields: string[]; entries: RawEntry[] }[] = [];
+  let position = 0;
+  let next = (): string => {
+    let end = output.indexOf('\0', position);
+    if (end === -1) {
+      end = output.length;
+    }
+    let token = output.slice(position, end);
+    position = end + 1;
+    return token;
+  };
+  while (position < output.length) {
+    let fields: string[] = [];
+    for (let index = 0; index < fieldCount; index++) {
+      fields.push(next());
+    }
+    let entries: RawEntry[] = [];
+    if (output[position] === '\n') {
+      position++;
+    }
+    while (output[position] === ':') {
+      let [srcMode, dstMode, srcId, dstId, status] = next().slice(1).split(' ');
+      entries.push({ srcMode, dstMode, srcId, dstId, status, path: next() });
+    }
+    revisions.push({ fields, entries });
+  }
+  return revisions;
+}
+
+// The realm path a repo path stands for: a size-only entry's marker stands
+// for the entry's own path.
+function realmPathOf(repoPath: string): string {
+  let suffix = `/${SIZE_ONLY_MARKER_NAME}`;
+  return repoPath.endsWith(suffix)
+    ? repoPath.slice(0, -suffix.length)
+    : repoPath;
+}
+
 // A size-only entry: the shape of an appended file above the size threshold,
 // whose content history does not keep. It is a tree with the file's name,
 // holding one marker blob, so it can't be mistaken for the file's content.
 // The marker's first line names the shape and its version, and a later shape
 // such as chunked storage can take the same form with a marker of its own.
+// The marker's name is reserved: no realm file of that name is recorded, so
+// a tree holding only a blob of that name is always a size-only entry.
 export const SIZE_ONLY_MARKER_NAME = '.realm-history-size-only';
 export const SIZE_ONLY_FORMAT = 'realm-history-size-only';
 export const SIZE_ONLY_VERSION = 1;

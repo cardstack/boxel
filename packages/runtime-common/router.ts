@@ -324,6 +324,11 @@ export interface RouteOptions {
   // anyway. It records that the route was weighed and left to the ACL, so
   // that a route that says nothing about the policy is one nobody decided.
   aclOnly?: true;
+  // The route answers an automation run's write itself, and writes nothing
+  // of the run's to the realm before the run commits (ADR 027 §1.2): it
+  // stages the write in the run's overlay, or refuses what it can't stage.
+  // A run's write to a route without it is refused before the route runs.
+  takesRunWrites?: true;
   // What the route would run for a caller who isn't signed in, where a grant
   // could admit one: the operations any one of which the realm's policy has to
   // open to such callers (`any` for any at all, `any-write` for any write),
@@ -347,6 +352,7 @@ export interface Route {
   grantableBytes: boolean;
   operationalEndpoint: boolean;
   aclOnly: boolean;
+  takesRunWrites: boolean;
   anonymous?: AnonymousRouteOptions;
 }
 
@@ -455,6 +461,7 @@ export class Router {
       grantableBytes: opts.grantableBytes === true,
       operationalEndpoint: opts.operationalEndpoint === true,
       aclOnly: opts.aclOnly === true,
+      takesRunWrites: opts.takesRunWrites === true,
       ...(opts.anonymous ? { anonymous: opts.anonymous } : {}),
     });
   }

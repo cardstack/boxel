@@ -1,6 +1,10 @@
 // A page that only says something: a title, a line under it, and whatever
-// follows. Every page a sign-in ends on, or stops at, is one.
+// follows. Every page a sign-in ends on, or stops at, is one. A page that
+// replaces another the user was working in (`@focus`) takes focus on its
+// title, so a screen reader reads what it says.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import { focusWhen } from '@cardstack/pretui/focus';
 
 import AuthContainer from '../../components/auth-container.gts';
 
@@ -8,6 +12,7 @@ interface Signature {
   Args: {
     heading: string;
     info?: string;
+    focus?: boolean;
   };
   Blocks: { default: [] };
 }
@@ -15,7 +20,16 @@ interface Signature {
 const MessagePage: TemplateOnlyComponent<Signature> = <template>
   <AuthContainer>
     <section class='message' data-test-secure-sign-in>
-      <h1 class='title' data-test-secure-title>{{@heading}}</h1>
+      {{#if @focus}}
+        <h1
+          class='title'
+          tabindex='-1'
+          {{focusWhen true}}
+          data-test-secure-title
+        >{{@heading}}</h1>
+      {{else}}
+        <h1 class='title' data-test-secure-title>{{@heading}}</h1>
+      {{/if}}
       {{#if @info}}
         <p class='info' data-test-secure-info>{{@info}}</p>
       {{/if}}
@@ -34,6 +48,13 @@ const MessagePage: TemplateOnlyComponent<Signature> = <template>
       color: var(--foreground);
       margin: 0 0 var(--boxel-sp-sm);
       padding: 0;
+    }
+    .title:focus {
+      outline: none;
+    }
+    .title:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
     }
     .info {
       margin-top: 0;

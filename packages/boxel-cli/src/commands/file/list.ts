@@ -8,6 +8,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { FG_RED, DIM, RESET } from '../../lib/colors.ts';
 import { cliLog } from '../../lib/cli-log.ts';
+import { describeFetchError } from '../../lib/describe-fetch-error.ts';
 import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 
 export interface ListFilesResult {
@@ -87,10 +88,7 @@ export async function listFiles(
 
     return { filenames: filenames.sort() };
   } catch (err) {
-    return {
-      filenames: [],
-      error: err instanceof Error ? err.message : String(err),
-    };
+    return { filenames: [], error: describeFetchError(err) };
   }
 }
 

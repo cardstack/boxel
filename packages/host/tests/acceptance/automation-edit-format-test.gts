@@ -80,6 +80,7 @@ function automationJSON(
           callApiCalls: 0,
           responseBytes: 0,
           resolveCalls: 0,
+          aiCredits: 0,
           writes: 1,
           seconds: 60,
           dailyCredits: 5,
@@ -243,6 +244,14 @@ function buttonIn(scope: ParentNode, text: string): HTMLElement {
 
 module('Acceptance | automation edit format', function (hooks) {
   let adapter: TestRealmAdapter;
+  // What the realm's `_automation-webhooks` route answers: the webhooks a
+  // trigger may name. An in-browser test realm has no server rows for the
+  // route to read, so each test that uses the picker says what it lists;
+  // undefined leaves the route to the realm, which refuses, and the trigger
+  // then takes a typed path.
+  let webhooks:
+    | { webhookPath: string; owner: string; createdAt: string }[]
+    | undefined;
 
   setupApplicationTest(hooks);
   setupCatalogTestSubset(hooks);
@@ -284,8 +293,24 @@ module('Acceptance | automation edit format', function (hooks) {
           let json = automationJSON('Batched', { script: null });
           let attributes = json.data.attributes as Record<string, any>;
           attributes.triggers = [attributes.triggers[1]];
-          attributes.caps = { ...attributes.caps, resolveCalls: 5 };
+          attributes.caps = {
+            ...attributes.caps,
+            resolveCalls: 5,
+            aiCredits: 50,
+          };
           attributes.batchedAI = true;
+          return json;
+        })(),
+        // A webhook trigger naming a webhook outside the workspace's list.
+        'automations/stale-webhook.json': (() => {
+          let json = automationJSON('Stale webhook');
+          (json.data.attributes as Record<string, unknown>).triggers = [
+            trigger('webhook', {
+              label: 'stripe',
+              timeZone: null,
+              webhookPath: 'whk_stripe',
+            }),
+          ];
           return json;
         })(),
         'automations/fresh.json': (() => {
@@ -295,6 +320,30 @@ module('Acceptance | automation edit format', function (hooks) {
         })(),
       },
     }));
+    webhooks = undefined;
+    getService('network').virtualNetwork.mount(
+      async (request: Request) => {
+        let url = new URL(request.url);
+        if (!url.pathname.endsWith('/_automation-webhooks') || !webhooks) {
+          return null;
+        }
+        return new Response(
+          JSON.stringify({
+            data: webhooks.map((webhook) => ({
+              type: 'automation-webhook',
+              id: webhook.webhookPath,
+              attributes: {
+                ...webhook,
+                verificationType: 'HMAC_SHA256_HEADER',
+              },
+            })),
+            meta: { webhookDeliveriesStartRuns: false },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      },
+      { prepend: true },
+    );
   });
 
   async function openEdit(name = 'nightly') {
@@ -401,9 +450,14 @@ module('Acceptance | automation edit format', function (hooks) {
       'unscripted',
     );
     let file = await adapter.openFile('scripts/unscripted.js');
+    let source = String(file?.content);
     assert.ok(
-      String(file?.content).includes('await realm.activity('),
-      'the new script starts from the outline',
+      source.includes('realm.progress.plan('),
+      'the new script starts by declaring its milestones',
+    );
+    assert.ok(
+      source.includes('realm.progress.milestone('),
+      'the new script marks a milestone',
     );
     await waitForCodeEditor(SCRIPT_EDITOR);
     assert.ok(
@@ -435,14 +489,21 @@ module('Acceptance | automation edit format', function (hooks) {
     await fillIn(inputOf('Cron expression', item), '* * * * *');
     assert.strictEqual(
       messageOf('Cron expression', item),
-      'It can run at most once every 5 minutes',
-      'a schedule more often than every 5 minutes is refused',
+      '"* * * * *" can fire twice 1 minute apart, and Boxel runs an automation\'s cron trigger at most once every 5 minutes',
+      'a schedule more often than every 5 minutes is refused, in the words the server uses',
+    );
+    // The server refuses this expression, since 23:58 and the next day's
+    // 00:01 are 3 minutes apart, so the editor refuses it too.
+    await fillIn(inputOf('Cron expression', item), '58,1 0,23 * * *');
+    assert.ok(
+      messageOf('Cron expression', item).includes(
+        'can fire twice 3 minutes apart',
+      ),
+      'a schedule too frequent across midnight is refused',
     );
     await fillIn(inputOf('Cron expression', item), 'not cron');
     assert.ok(
-      messageOf('Cron expression', item).startsWith(
-        'A cron expression has five fields',
-      ),
+      messageOf('Cron expression', item).includes('a cron expression has five'),
       'a malformed expression is explained',
     );
 
@@ -569,6 +630,104 @@ module('Acceptance | automation edit format', function (hooks) {
     );
   });
 
+  module('picking a webhook', function (hooks) {
+    hooks.beforeEach(function () {
+      webhooks = [
+        {
+          webhookPath: 'whk_stripe',
+          owner: '@testuser:localhost',
+          createdAt: '2026-11-01T00:00:00.000Z',
+        },
+        {
+          webhookPath: 'whk_github',
+          owner: '@colleague:localhost',
+          createdAt: '2026-11-02T00:00:00.000Z',
+        },
+      ];
+    });
+
+    // The webhook picker in `scope`: a Pret UI Select, whose trigger and
+    // options ember-power-select renders.
+    async function openPicker(scope: HTMLElement) {
+      await waitFor('[data-test-automation-webhook-picker]');
+      let picker = field('Webhook', scope);
+      await click(picker.querySelector('[data-ebd-id$="-trigger"]')!);
+      await waitFor('[role="option"]');
+      return [...document.querySelectorAll('[role="option"]')] as HTMLElement[];
+    }
+
+    test('a webhook trigger picks one of the workspace’s webhooks from a list and saves the path', async function (assert) {
+      await openEdit();
+      let item = triggerItem(0);
+      await click(item.querySelector('input[type="radio"][value="webhook"]')!);
+      assert.strictEqual(
+        messageOf('Webhook', item),
+        'Required: pick one of this workspace’s incoming webhooks',
+      );
+      assert
+        .dom('[data-test-automation-webhook-notice]', item)
+        .hasText(
+          'This trigger can’t fire, Boxel doesn’t run automations from webhooks.',
+        );
+      let options = await openPicker(item);
+      assert.deepEqual(
+        options.map((option) =>
+          option.textContent?.replace(/\s+/g, ' ').trim(),
+        ),
+        [
+          'whk_stripe @testuser:localhost made this webhook',
+          'whk_github @colleague:localhost made this webhook',
+        ],
+        'every webhook the route lists is a choice, with who made it',
+      );
+      await click(options[1]);
+      await waitForSave(
+        (d) =>
+          d.attributes.triggers[0].kind === 'webhook' &&
+          d.attributes.triggers[0].webhookPath === 'whk_github',
+        'the picked webhook’s path is saved',
+      );
+      assert.strictEqual(
+        messageOf('Webhook', item),
+        'Each delivery to this webhook starts a run. The list shows every webhook that a workspace administrator made.',
+        'with a webhook picked, the field shows its hint and no problem',
+      );
+    });
+
+    test('a path the list lacks stays a choice, with a problem under the field', async function (assert) {
+      // The card names a webhook the route doesn't list.
+      webhooks = webhooks!.slice(1);
+      await openEdit('stale-webhook');
+      let item = triggerItem(0);
+      await waitFor('[data-test-automation-webhook-picker]');
+      assert.strictEqual(
+        messageOf('Webhook', item),
+        'Pick one of this workspace’s incoming webhooks: Boxel turns the automation on only with a webhook that a workspace administrator made',
+      );
+      let shown = await openPicker(item);
+      assert.deepEqual(
+        shown.map((option) => option.textContent?.replace(/\s+/g, ' ').trim()),
+        [
+          'whk_stripe Not one of this workspace’s webhooks',
+          'whk_github @colleague:localhost made this webhook',
+        ],
+      );
+    });
+
+    test('a workspace with no webhooks says so', async function (assert) {
+      webhooks = [];
+      await openEdit();
+      let item = triggerItem(0);
+      await click(item.querySelector('input[type="radio"][value="webhook"]')!);
+      await waitFor('[data-test-automation-webhook-picker-empty]');
+      assert
+        .dom('[data-test-automation-webhook-picker-empty]', item)
+        .includesText(
+          'No workspace administrator has made an incoming webhook.',
+        );
+    });
+  });
+
   test('triggers are added and removed', async function (assert) {
     await openEdit();
     await click('[data-test-automation-add-trigger]');
@@ -623,6 +782,7 @@ module('Acceptance | automation edit format', function (hooks) {
       callApiCalls: ['Outside calls', '7', 7],
       responseBytes: ['Data received, in MB', '3', 3_000_000],
       resolveCalls: ['AI requests', '4', 4],
+      aiCredits: ['AI spending, in credits', '25', 25],
       writes: ['Saves', '12', 12],
       seconds: ['Run time, in minutes', '10', 600],
       dailyCredits: ['Credits a day', '20', 20],
@@ -642,6 +802,7 @@ module('Acceptance | automation edit format', function (hooks) {
       'Outside calls',
       'Data received, in MB',
       'AI requests',
+      'AI spending, in credits',
       'Saves',
       'Run time, in minutes',
     ]) {
@@ -702,6 +863,7 @@ module('Acceptance | automation edit format', function (hooks) {
           callApiCalls: 10,
           responseBytes: 5_000_000,
           resolveCalls: 5,
+          aiCredits: 300,
           writes: 50,
           seconds: 300,
           dailyCredits: 500,
@@ -744,7 +906,7 @@ module('Acceptance | automation edit format', function (hooks) {
     );
   });
 
-  test('batched AI needs AI requests, and saves its deadline', async function (assert) {
+  test('batched AI needs AI requests and AI spending, and saves its deadline', async function (assert) {
     await openEdit();
     let batched = section('Batched AI');
     let toggle = () =>
@@ -756,6 +918,10 @@ module('Acceptance | automation edit format', function (hooks) {
       .includesText('This automation may not make AI requests');
 
     await fillIn(inputOf('AI requests', section('Limits')), '3');
+    assert
+      .dom(toggle())
+      .isDisabled('AI requests with no credits to spend on them');
+    await fillIn(inputOf('AI spending, in credits', section('Limits')), '50');
     assert.dom(toggle()).isEnabled();
     assert.dom(batched).doesNotIncludeText('may not make AI requests');
 

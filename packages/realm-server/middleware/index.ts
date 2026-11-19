@@ -35,6 +35,7 @@ import {
 import {
   isKeyRoutePath,
   keepsMethodAndPathOnly,
+  withOAuthProviderSecretsLabeled,
   withCredentialHeadersMasked,
 } from '../lib/request-telemetry.ts';
 import {
@@ -76,7 +77,7 @@ const SEARCH_METHODS = new Set(['POST', 'QUERY']);
 // What a shed search tells the client to do. One second is the granularity
 // `Retry-After` allows and is long enough for the burst that filled the gate
 // to drain a slot or two.
-const SEARCH_SHED_RETRY_AFTER_SECONDS = 1;
+export const SEARCH_SHED_RETRY_AFTER_SECONDS = 1;
 
 const REQUEST_BODY_STATE = 'requestBody';
 
@@ -238,12 +239,21 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 // travel in a query string masked, because these lines ship to Loki: a
 // `token` (capture-URL tokens on `_capture/` GETs and full session JWTs on
 // `_download-realm` links) and a `loginToken` (the single-use Matrix login
-// token `boxel browse` hands the app page). (ALB access logs
-// still record the raw request line; each token's single-URL scope or single
-// use and short TTL are the mitigation there.)
-const MASKED_QUERY_PARAMS = ['token', 'loginToken'];
+// token `boxel browse` hands the app page), and an `access_token`, an OAuth
+// access token a client put in the query string, which a resource refuses
+// unread (ADR 021 §1.5). ALB access logs still record the raw request line.
+// For a capture or login token, its single-URL scope or single use and short
+// TTL are the mitigation there. An OAuth access token has neither: it works
+// at its resource for its whole lifetime, up to 60 minutes, so one a client
+// sends in a query string can be replayed from those logs until it expires.
+// Only the client can avoid that, by never sending one there.
+const MASKED_QUERY_PARAMS = ['token', 'loginToken', 'access_token'];
 
 function loggableRequestURL(ctxt: Koa.Context): string {
+  return withOAuthProviderSecretsLabeled(unlabeledRequestURL(ctxt));
+}
+
+function unlabeledRequestURL(ctxt: Koa.Context): string {
   let url = fullRequestURL(ctxt);
   // A key route takes nothing in its query string, so whatever a client put
   // there (a misplaced ticket or value) is left out.
@@ -594,6 +604,29 @@ export function fullRequestURL(ctxt: Koa.Context): URL {
   return computedURL;
 }
 
+// A request's body as text, read once. The text is kept in `ctxt.state`, where
+// `fetchRequestFromContext` reads it instead of the consumed stream. Only for a
+// text body: a binary one must stay a stream.
+export async function readRequestText(ctxt: Koa.Context): Promise<string> {
+  let state = ctxt.state as Record<string, unknown>;
+  if (REQUEST_BODY_STATE in state) {
+    let body = state[REQUEST_BODY_STATE] as string | Buffer;
+    return typeof body === 'string' ? body : body.toString('utf8');
+  }
+  let text = await nodeStreamToText(ctxt.req);
+  state[REQUEST_BODY_STATE] = text;
+  return text;
+}
+
+// Replaces the body that every later reader of the request gets, and its
+// declared length with it.
+export function setRequestText(ctxt: Koa.Context, text: string): void {
+  (ctxt.state as Record<string, unknown>)[REQUEST_BODY_STATE] = text;
+  if (ctxt.req.headers['content-length'] !== undefined) {
+    ctxt.req.headers['content-length'] = String(Buffer.byteLength(text));
+  }
+}
+
 export async function fetchRequestFromContext(
   ctxt: Koa.Context,
 ): Promise<Request> {
@@ -925,6 +958,14 @@ export function isVanishedFileBody(error: unknown): boolean {
   );
 }
 
+const STORED_BYTES_STATE = 'boxelServesStoredBytes';
+
+// Whether the realm answered with a file's stored bytes (see
+// `ResponseWithNodeStream.servesStoredBytes`).
+export function servesStoredBytes(ctxt: Koa.Context): boolean {
+  return (ctxt.state as Record<string, unknown>)[STORED_BYTES_STATE] === true;
+}
+
 export async function setContextResponse(
   ctxt: Koa.Context,
   response: ResponseWithNodeStream,
@@ -932,6 +973,9 @@ export async function setContextResponse(
   let url = fullRequestURL(ctxt).href;
 
   let { status, statusText, headers, body, nodeStream } = response;
+  if (response.servesStoredBytes) {
+    (ctxt.state as Record<string, unknown>)[STORED_BYTES_STATE] = true;
+  }
   ctxt.status = status;
   ctxt.message = statusText;
   for (let [header, value] of headers.entries()) {

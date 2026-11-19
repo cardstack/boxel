@@ -37,9 +37,7 @@ export const PRICING_VARIABLES = {
 
 export type PricingValueName = keyof typeof PRICING_VARIABLES;
 
-// The GB that per-GB rates are quoted in. AWS bills data transfer and
-// storage in binary gigabytes, 2^30 bytes.
-export const BYTES_PER_GB = 1024 ** 3;
+export { BYTES_PER_GB } from '@cardstack/runtime-common/metered-charges';
 
 // How each value is checked. A rate or a task size must be above zero, since
 // a zero would make that usage free. Tabs and processes count things, so they
@@ -198,8 +196,9 @@ export function currentPricing(): Pricing | undefined {
 
 // The startup check each of the realm-server, worker and prerender processes
 // runs once. A passing check logs every value and the pricing version. A
-// failing one logs every problem at error level and sends it to Sentry, which
-// is what pricing alerts fire on, and leaves the process without prices.
+// failing one logs every problem at error level (the Grafana "Pricing check
+// failed" alert fires on the realm-server's and the worker's line), sends the
+// same message to Sentry, and leaves the process without prices.
 export interface PricingReporter {
   info(message: string): void;
   error(message: string): void;

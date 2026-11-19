@@ -1,3 +1,4 @@
+import { SKILLS_REALM_PREFIX } from '@cardstack/runtime-common';
 import { isPlainObject } from '@cardstack/runtime-common/is-plain-object';
 
 import { jsonBytes } from './research';
@@ -43,6 +44,65 @@ export interface TransformRequest {
   message: Omit<TransformWorkerRequest, 'id'>;
   // The input's and params' bytes, counted toward the run's budget.
   bytes: number;
+  // The input's top-level shape, for an error the program meets on it.
+  inputShape: string;
+}
+
+const SHAPE_KEYS = 8;
+const SHAPE_KEY_CHARS = 40;
+
+// A value's kind in a few words: "an array of 420 items", "an object", "a
+// string".
+function kindOf(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `an array of ${value.length} item${value.length === 1 ? '' : 's'}`;
+  }
+  if (value === null) {
+    return 'null';
+  }
+  if (typeof value === 'object') {
+    return 'an object';
+  }
+  return `a ${typeof value}`;
+}
+
+// The input's top-level shape, so a program that indexes it wrongly can be
+// fixed from the error alone: an object names its keys and what each holds,
+// and an array names its length and the keys of its first item.
+export function describeTransformInput(input: unknown): string {
+  let more = (count: number) =>
+    count > SHAPE_KEYS ? `, and ${count - SHAPE_KEYS} more` : '';
+  // Keys are quoted, so an empty key or one holding ", " still reads as one,
+  // and a long one is cut so the error stays short.
+  let key = (name: string) =>
+    JSON.stringify(
+      name.length > SHAPE_KEY_CHARS
+        ? `${name.slice(0, SHAPE_KEY_CHARS)}…`
+        : name,
+    );
+  if (Array.isArray(input)) {
+    let first = input[0];
+    if (isPlainObject(first)) {
+      let keys = Object.keys(first);
+      return keys.length === 0
+        ? `${kindOf(input)}; the first is an empty object`
+        : `${kindOf(input)}; the first is an object with keys ${keys.slice(0, SHAPE_KEYS).map(key).join(', ')}${more(keys.length)}`;
+    }
+    return input.length > 0
+      ? `${kindOf(input)}; the first is ${kindOf(first)}`
+      : kindOf(input);
+  }
+  if (isPlainObject(input)) {
+    let entries = Object.entries(input);
+    if (entries.length === 0) {
+      return 'an empty object';
+    }
+    let keys = entries
+      .slice(0, SHAPE_KEYS)
+      .map(([name, value]) => `${key(name)} (${kindOf(value)})`);
+    return `an object with keys ${keys.join(', ')}${more(entries.length)}`;
+  }
+  return kindOf(input);
 }
 
 // Checks a realm.transform call's arguments before any work is done.
@@ -104,24 +164,34 @@ export function transformRequest(
       syntax: SPELLINGS[spelling as Spelling],
     },
     bytes: inputBytes,
+    inputShape: describeTransformInput(input ?? null),
   };
 }
+
+// The skill that teaches the dialect. A program that fails is most often
+// written without it, so each error the program itself caused names it.
+const TRANSFORM_SKILL_HINT = `Before the next program, read the realm.transform section of ${SKILLS_REALM_PREFIX}source-code-editing/SKILL.md: it has the spelling, what a transform may not do, and the limits.`;
 
 function transformError(
   message: string,
   phase: 'parse' | 'profile' | 'evaluate' | undefined,
+  inputShape: string,
 ): Error {
   switch (phase) {
     case 'parse':
       return new SyntaxError(
-        `realm.transform: the program does not parse: ${message}`,
+        `realm.transform: the program does not parse: ${message}\n${TRANSFORM_SKILL_HINT}`,
       );
     case 'profile':
       return new Error(
-        `realm.transform: the program uses what a transform may not:\n${message}`,
+        `realm.transform: the program uses what a transform may not:\n${message}\n${TRANSFORM_SKILL_HINT}`,
       );
     case 'evaluate':
-      return new Error(`realm.transform: the program failed: ${message}`);
+      // The evaluator's message names the operation, not the value it met,
+      // so the error says what the input was.
+      return new Error(
+        `realm.transform: the program failed: ${message.replace(/\.$/, '')}. The input is ${inputShape}.\n${TRANSFORM_SKILL_HINT}`,
+      );
     default:
       return new Error(`realm.transform failed: ${message}`);
   }
@@ -132,6 +202,7 @@ interface Waiting {
   reject: (error: Error) => void;
   // Set when the worker starts the program, not when the call is posted.
   timer?: number;
+  inputShape: string;
 }
 
 // The transform worker of one run. It starts on the run's first
@@ -184,7 +255,7 @@ export class RealmTransformer {
     this.count += 1;
     this.bytes += request.bytes;
     return new Promise((resolve, reject) => {
-      this.waiting.set(id, { resolve, reject });
+      this.waiting.set(id, { resolve, reject, inputShape: request.inputShape });
     });
   }
 
@@ -234,7 +305,9 @@ export class RealmTransformer {
       this.waiting.delete(message.id);
       window.clearTimeout(waiting.timer);
       if ('error' in message) {
-        waiting.reject(transformError(message.error, message.phase));
+        waiting.reject(
+          transformError(message.error, message.phase, waiting.inputShape),
+        );
         return;
       }
       if ('outputTooLarge' in message) {

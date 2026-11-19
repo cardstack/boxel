@@ -26,9 +26,8 @@ The differences, stated honestly:
 
 - **Web Awesome has `sync`, which auto-updates the phrase.** Pretui cannot — no timers — so `@now` is the caller's job. That is a real capability gap, imposed by the platform rather than chosen, and it is why the arg exists at all.
 - **Pretui has no locale arg.** `Intl.RelativeTimeFormat` is constructed with a hard-coded `'en-US'`. Web Awesome takes the element's `lang`. For an internationalised product this is disqualifying, and it is the same gap **Calendar** has.
-- **Pretui recomputes the formatter on every access.** `new Intl.RelativeTimeFormat(...)` inside the `phrase` getter means a table of 200 timestamps constructs 200 formatters per render. `Intl` constructors are not cheap; hoisting them into module-level constants (as this same file already does for `DISPLAY_FMT`, `LABEL_FMT`, `MONTH_FMT` and `ABS_FMT`) is a one-line fix and an inconsistency with the file's own practice.
 
-Where it is better than the naive version everyone writes: it uses `Intl.RelativeTimeFormat` rather than a hand-written pluralisation ladder, so "1 minute ago" versus "2 minutes ago" is the platform's problem, and it renders a real `<time>` element.
+Where it is better than the naive version everyone writes: it uses `Intl.RelativeTimeFormat` rather than a hand-written pluralisation ladder, so "1 minute ago" versus "2 minutes ago" is the platform's problem; it builds one formatter per `@format` and `@numeric` pair and shares it across every instance, so a table of 200 timestamps constructs no formatters per render; and it renders a real `<time>` element.
 
 ## Accessibility
 

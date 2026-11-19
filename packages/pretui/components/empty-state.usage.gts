@@ -3,6 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { FreestyleUsage } from './freestyle-usage';
 import { Button } from './button';
+import { ButtonGroup } from './button-group';
 import { Token } from './token';
 import { EmptyState, type EmptyStateSize } from './empty-state';
 
@@ -98,15 +99,39 @@ class EmptyStateUsage extends Component {
           @name='default'
           @description='The message with markup in it (a Token, a link, emphasis), in the same place and type as @message. Wins over @message when both are given.'
         />
-        <Args.Yield @name='action' />
         <Args.Yield
-          @name='altAction'
-          @description='The second way in, given equal billing with a separator between.'
+          @name='action'
+          @description="Any content, placed under the message as given: one Button, or several in the caller's own layout."
         />
       </:api>
     </FreestyleUsage>
+    <FreestyleUsage
+      @name='EmptyState with several actions'
+      @description='The action block places what it is given and does not lay it out. For several actions, bring a layout such as a ButtonGroup.'
+      @source={{SEVERAL_ACTIONS_SOURCE}}
+    >
+      <:example>
+        <EmptyState @title='No batches yet' @message='Start one from scratch, or bring your records in.'>
+          <:action>
+            <ButtonGroup>
+              <Button @tone='neutral' @appearance='outlined'>Start blank</Button>
+              <Button @tone='neutral' @appearance='outlined'>Import CSV</Button>
+            </ButtonGroup>
+          </:action>
+        </EmptyState>
+      </:example>
+    </FreestyleUsage>
   </template>
 }
+
+const SEVERAL_ACTIONS_SOURCE = `<EmptyState @title='No batches yet' @message='…'>
+  <:action>
+    <ButtonGroup>
+      <Button>Start blank</Button>
+      <Button>Import CSV</Button>
+    </ButtonGroup>
+  </:action>
+</EmptyState>`;
 
 export const DEMOS_EMPTY_STATE: Record<string, unknown> = {
   EmptyState: EmptyStateUsage,

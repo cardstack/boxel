@@ -834,6 +834,7 @@ module(basename(import.meta.filename), function (hooks) {
         carriedPrerenderHtmlChanges: [],
         readsOwnWrite: false,
         realmEvents,
+        runIndexing: null,
       };
     }
 

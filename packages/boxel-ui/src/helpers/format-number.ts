@@ -1,3 +1,5 @@
+import { cachedNumberFormat } from '../utils/intl-formatters.ts';
+
 export default function formatNumber(
   value: number | null | undefined,
   options: {
@@ -53,7 +55,7 @@ export default function formatNumber(
       formatOptions.maximumFractionDigits = maximumFractionDigits;
     }
 
-    return new Intl.NumberFormat(locale, formatOptions).format(value);
+    return cachedNumberFormat(locale, formatOptions).format(value);
   }
 
   // Handle currency formatting
@@ -70,7 +72,7 @@ export default function formatNumber(
       formatOptions.maximumFractionDigits = maximumFractionDigits;
     }
 
-    return new Intl.NumberFormat(locale, formatOptions).format(value);
+    return cachedNumberFormat(locale, formatOptions).format(value);
   }
 
   // Handle decimal formatting with size variants
@@ -136,5 +138,5 @@ export default function formatNumber(
     formatOptions.maximumFractionDigits = maximumFractionDigits;
   }
 
-  return new Intl.NumberFormat(locale, formatOptions).format(value);
+  return cachedNumberFormat(locale, formatOptions).format(value);
 }
