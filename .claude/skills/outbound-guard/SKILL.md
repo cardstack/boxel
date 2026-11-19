@@ -558,9 +558,10 @@ is kept only when it is a raw run (never an encoded form) of the first
 `ID_WINDOW_LENGTH` (24) characters of a registered key's secret part, for a
 key of that vendor; made only of letters and digits running back to a listed
 id prefix no more than 128 bytes earlier; and the key's secret part is at
-least 64 characters. However many ids come back, nothing past that window is
-ever returned: a run from further into the key, the full key, or its secret
-part is still removed, inside an id or not. To cover another vendor whose ids
+least 64 characters. However many ids come back, the exemption returns nothing
+past that window: a run from further into the key, the full key, or its secret
+part is still removed, inside an id or not. (Runs shorter than
+`MIN_PARTIAL_LENGTH` are never matched at all, exemption or not.) To cover another vendor whose ids
 share characters with its keys, add an entry there.
 
 A response with no match passes through byte for byte, binary included. The

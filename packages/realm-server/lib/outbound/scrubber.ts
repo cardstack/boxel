@@ -66,7 +66,7 @@ export function publicPrefix(value: string): string {
 // - a raw run (never an encoded form) of the first `ID_WINDOW_LENGTH`
 //   characters of a registered key's secret part, for a key of that vendor.
 //   However many ids a response holds, and however many responses there are,
-//   no more of the secret than that window is ever returned;
+//   this exemption returns no more of the secret than that window;
 // - inside the id's body: only letters and digits from the id's prefix up to
 //   the end of the match, the prefix itself following a byte that can't be
 //   part of an id, and no more than `MAX_ID_LENGTH` bytes from the start of
@@ -567,8 +567,8 @@ export class CredentialScrubber {
   }
 
   // Whether the match `bytes[start, end)` is a raw run from the start of a
-  // registered key's secret part inside one of its vendor's public ids, and so stays (see
-  // `PUBLIC_ID_PREFIXES`).
+  // registered key's secret part inside one of its vendor's public ids, and
+  // so stays (see `PUBLIC_ID_PREFIXES`).
   private isInPublicId(bytes: Uint8Array, [start, end]: [number, number]) {
     if (this.idKeys.length === 0 || end - start > ID_WINDOW_LENGTH) {
       return false;
