@@ -473,8 +473,8 @@ export type OperationLoweringIssueCode =
   // it by, so two of them under one name would be filled with the same key.
   | 'slot-name-reused'
   // A slot outside a header value, a query value, a path value and a string in
-  // the JSON body: in the URL as written, in a header or parameter name, or in
-  // a GraphQL document. Those are recorded or routed on as they stand, so a
+  // the body: in the URL as written, in a header, parameter or form field name,
+  // or in a GraphQL document. Those are recorded or routed on as they stand, so a
   // credential there would be logged or would choose the destination.
   | 'slot-out-of-place'
   // A path segment filled other than through `path`: a `{name}` that is not a
@@ -1529,6 +1529,9 @@ export interface CallApiSlot {
 
 export type CallApiBodyTemplate =
   | { kind: 'json'; value: OperationTemplate }
+  // Sent as `application/x-www-form-urlencoded`: each member a name and its
+  // value, nested members named with brackets (`encodeFormBody`).
+  | { kind: 'form'; fields: Record<string, OperationTemplate> }
   | {
       kind: 'graphql';
       document: string;

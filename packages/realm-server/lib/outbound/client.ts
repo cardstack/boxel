@@ -520,6 +520,9 @@ export interface OutboundRequest {
   // this call is added.
   headers: Record<string, string>;
   body?: BodyInit;
+  // How a string `body` is encoded, which is how a substitution filled into it
+  // is encoded. Absent, JSON.
+  bodyEncoding?: 'json' | 'form';
   // The caller's cancellation, e.g. its client going away.
   signal?: AbortSignal;
   sizePath: ResponseSizePath;
@@ -565,8 +568,8 @@ export interface OutboundRequest {
 // request carries in the URL, a header value or the body wherever the value
 // goes, chosen from characters every one of those encodings leaves alone, so
 // it reads the same in each. The value is encoded for where it lands: as a
-// URL component in the URL, as a JSON string's contents in the body, and as
-// itself in a header.
+// URL component in the URL, as a JSON string's contents or a form value in the
+// body, as the body is encoded, and as itself in a header.
 export interface OutboundSubstitution {
   token: string;
   value: string;
@@ -597,6 +600,7 @@ function applySubstitutions(
   url: URL,
   headers: Record<string, string>,
   body: BodyInit | undefined,
+  bodyEncoding: 'json' | 'form',
   substitutions: OutboundSubstitution[] | undefined,
   scrubber: CredentialScrubber,
 ): { url: URL; body: BodyInit | undefined } {
@@ -648,8 +652,12 @@ function applySubstitutions(
     body:
       body === undefined
         ? undefined
-        : substituteInto(body, substitutions, (v) =>
-            JSON.stringify(v).slice(1, -1),
+        : substituteInto(
+            body,
+            substitutions,
+            bodyEncoding === 'form'
+              ? (v) => new URLSearchParams([['', v]]).toString().slice(1)
+              : (v) => JSON.stringify(v).slice(1, -1),
           ),
   };
 }
@@ -800,6 +808,7 @@ async function send(
     checked,
     headers,
     request.body,
+    request.bodyEncoding ?? 'json',
     request.substitutions,
     scrubber,
   );

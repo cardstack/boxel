@@ -137,6 +137,7 @@ export interface CallApiClauses {
   query?: unknown;
   json?: unknown;
   graphql?: unknown;
+  form?: unknown;
   perInstance?: unknown;
   keyKind?: unknown;
 }
@@ -220,7 +221,7 @@ export function lowerCallApi(
         fail(
           'slot-out-of-place',
           at,
-          `\`${slot.text}\` in \`${at}\` is outside a header value, a query value, a path value and the JSON body, which are the only places a credential is filled into`,
+          `\`${slot.text}\` in \`${at}\` is outside a header value, a query value, a path value and the body, which are the only places a credential is filled into`,
         );
         continue;
       }
@@ -236,7 +237,8 @@ export function lowerCallApi(
   };
 
   // The method.
-  let hasBody = clauses.json !== undefined || clauses.graphql !== undefined;
+  let bodies = BODY_KINDS.filter((kind) => clauses[kind] !== undefined);
+  let hasBody = bodies.length > 0;
   let method: CallApiMethod = hasBody ? 'POST' : 'GET';
   if (clauses.method !== undefined) {
     if (!METHODS.includes(clauses.method as CallApiMethod)) {
@@ -364,16 +366,18 @@ export function lowerCallApi(
 
   // The body.
   let body: CallApiBodyTemplate | undefined;
-  if (clauses.json !== undefined && clauses.graphql !== undefined) {
+  if (bodies.length > 1) {
     fail(
       'invalid-request',
-      'json',
-      `a request carries one body — \`json\` or \`graphql\`, not both`,
+      bodies[0],
+      `a request carries one body — \`json\`, \`graphql\` or \`form\` — and this one gives ${bodies.map((kind) => `\`${kind}\``).join(' and ')}`,
     );
   } else if (clauses.json !== undefined) {
     body = { kind: 'json', value: lowerValue(clauses.json, 'json', 'body') };
   } else if (clauses.graphql !== undefined) {
     body = lowerGraphql(clauses.graphql, fail, readSlots, lowerValue);
+  } else if (clauses.form !== undefined) {
+    body = lowerForm(clauses.form, fail, readSlots, lowerValue);
   }
 
   // Each slot once, and each name for one slot.
@@ -431,6 +435,49 @@ export function lowerCallApi(
     }),
     ...(clauses.perInstance === true ? { perInstance: true as const } : {}),
   };
+}
+
+// The members that each declare the request's one body.
+const BODY_KINDS = ['json', 'graphql', 'form'] as const;
+
+// A form body's fields. A field's name is sent as written, so a slot can't
+// stand in one; its value may be text, a number, a boolean, a typed reference,
+// or objects and lists of those, which `encodeFormBody` names with brackets.
+function lowerForm(
+  form: unknown,
+  fail: (
+    code: OperationLoweringIssueCode,
+    path: string,
+    message: string,
+  ) => void,
+  readSlots: (
+    text: string,
+    at: string,
+    placement: CallApiSlotPlacement | undefined,
+  ) => void,
+  lowerValue: (
+    value: unknown,
+    path: string,
+    placement: CallApiSlotPlacement | undefined,
+  ) => OperationTemplate,
+): CallApiBodyTemplate | undefined {
+  if (!isPlainObject(form) || isMarker(form)) {
+    fail(
+      'invalid-request',
+      'form',
+      `\`form\` must map each field name to its value`,
+    );
+    return undefined;
+  }
+  let fields: Record<string, OperationTemplate> = {};
+  for (let [name, value] of Object.entries(form)) {
+    readSlots(name, 'form', undefined);
+    if (name.length === 0) {
+      fail('invalid-request', 'form', `a \`form\` field needs a name`);
+    }
+    fields[name] = lowerValue(value, `form.${name}`, 'body');
+  }
+  return { kind: 'form', fields };
 }
 
 const KEY_KIND_LIST = CALL_API_KEY_KINDS.map((k) => `"${k}"`).join(', ');
@@ -829,6 +876,8 @@ export function callApiReadsActor(request: OperationCallApi): boolean {
   ];
   if (request.body?.kind === 'json') {
     templates.push(request.body.value);
+  } else if (request.body?.kind === 'form') {
+    templates.push(...Object.values(request.body.fields));
   } else if (request.body?.variables) {
     templates.push(...Object.values(request.body.variables));
   }
@@ -860,6 +909,9 @@ export interface CallApiRequest {
   url: string;
   headers: Record<string, string>;
   body?: string;
+  // How `body` is encoded, which is how a credential filled into it is
+  // encoded too.
+  bodyEncoding?: CallApiBodyEncoding;
   // Each slot the request carries, with the token that stands where it goes.
   slots: (CallApiSlot & { token: string })[];
 }
@@ -1214,7 +1266,15 @@ export async function buildCallApiRequest(
   }
 
   let body: string | undefined;
-  if (request.body) {
+  let bodyEncoding: CallApiBodyEncoding | undefined;
+  if (request.body?.kind === 'form') {
+    let fields: Record<string, unknown> = {};
+    for (let [field, template] of Object.entries(request.body.fields)) {
+      fields[field] = await fill.json(template, `form.${field}`, tokenFor);
+    }
+    body = encodeFormBody(fields);
+    bodyEncoding = 'form';
+  } else if (request.body) {
     let json =
       request.body.kind === 'json'
         ? await fill.json(request.body.value, 'json', tokenFor)
@@ -1231,18 +1291,79 @@ export async function buildCallApiRequest(
               : {}),
           };
     body = JSON.stringify(json);
-    if (!Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')) {
-      headers['content-type'] = 'application/json';
-    }
+    bodyEncoding = 'json';
+  }
+  if (
+    bodyEncoding &&
+    !Object.keys(headers).some((h) => h.toLowerCase() === 'content-type')
+  ) {
+    headers['content-type'] = BODY_CONTENT_TYPES[bodyEncoding];
   }
 
   return {
     method: request.method,
     url: target.href,
     headers,
-    ...(body !== undefined ? { body } : {}),
+    ...(body !== undefined ? { body, bodyEncoding } : {}),
     slots,
   };
+}
+
+export type CallApiBodyEncoding = 'json' | 'form';
+
+const BODY_CONTENT_TYPES: Record<CallApiBodyEncoding, string> = {
+  json: 'application/json',
+  form: 'application/x-www-form-urlencoded',
+};
+
+// A form body as `application/x-www-form-urlencoded` text, in the bracket
+// convention form-taking APIs read:
+//
+//   * text, a number or a boolean is one `name=value` pair;
+//   * an object's members are named `name[member]`, and a member whose name
+//     ends in `[]` keeps that suffix outside the brackets
+//     (`name[member][]`);
+//   * a list's text items each repeat the name (`MediaUrl=a&MediaUrl=b`; write
+//     the name `expand[]` for an API that wants `expand[]=a&expand[]=b`), and
+//     its objects and lists are numbered (`line_items[0][price]=…`);
+//   * null leaves the member out, since a form has no way to send one.
+//
+// A slot's token is letters, digits and `_`, which this encoding leaves as
+// they are, so the client finds it here and fills it form-encoded too.
+export function encodeFormBody(fields: Record<string, unknown>): string {
+  let pairs = new URLSearchParams();
+  let add = (name: string, value: unknown) => {
+    if (value === null || value === undefined) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) =>
+        add(
+          item !== null && typeof item === 'object'
+            ? `${name}[${index}]`
+            : name,
+          item,
+        ),
+      );
+      return;
+    }
+    if (typeof value === 'object') {
+      for (let [member, inner] of Object.entries(value)) {
+        add(
+          member.endsWith('[]')
+            ? `${name}[${member.slice(0, -2)}][]`
+            : `${name}[${member}]`,
+          inner,
+        );
+      }
+      return;
+    }
+    pairs.append(name, String(value));
+  };
+  for (let [name, value] of Object.entries(fields)) {
+    add(name, value);
+  }
+  return pairs.toString();
 }
 
 // Letters, digits and `_`, which percent-encoding, JSON escaping and a header

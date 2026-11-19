@@ -50,6 +50,7 @@ const REQUEST_MEMBERS = [
   'query',
   'json',
   'graphql',
+  'form',
   'perInstance',
   'keyKind',
 ] as const;

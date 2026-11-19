@@ -817,7 +817,7 @@ export { CALL_API_KEY_KINDS, type CallApiKeyKind };
 //     is the base64 of `user:password` that HTTP Basic authentication takes.
 //
 // A slot may appear in a header value, a query value, a path value or a string
-// in the JSON body, and once in the request. It is filled at send time, after
+// in the body, and once in the request. It is filled at send time, after
 // the destination has been checked against the request as declared, and it is
 // never carried across a redirect to another destination. Nothing that
 // records the request — logs, errors, telemetry — ever sees a filled one.
@@ -850,6 +850,23 @@ export interface CallApiOperationDeclaration extends OperationCommon {
   readonly query?: { readonly [name: string]: OperationValue };
   // A JSON body, sent as `application/json`.
   readonly json?: OperationValue;
+  // A form body, sent as `application/x-www-form-urlencoded`, for an API that
+  // takes only that, such as Twilio's or Stripe's:
+  //
+  //   form: {
+  //     To: params('to'),
+  //     Body: params('message'),
+  //     MediaUrl: params('images'),        // MediaUrl=a&MediaUrl=b
+  //     metadata: { order: params('id') }, // metadata[order]=…
+  //     line_items: params('lines'),       // line_items[0][price]=…
+  //   },
+  //
+  // Text, a number or a boolean is one field. An object's members are named
+  // with brackets, `name[member]`. A list repeats the name for each item that
+  // is text (name the field `expand[]` for an API that wants the brackets),
+  // and numbers each item that is an object or a list, `name[0][member]`. A
+  // value that is null is left out.
+  readonly form?: { readonly [name: string]: OperationValue };
   // A GraphQL request, sent as a JSON body. The document is a fixed string,
   // and every value it takes is passed as a variable, never written into it.
   readonly graphql?: {
@@ -974,7 +991,16 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   // Nor a validate: the card it is invoked on is the whole question.
   validate: [],
   // The parts of the request it sends.
-  callApi: ['method', 'url', 'path', 'headers', 'query', 'json', 'graphql'],
+  callApi: [
+    'method',
+    'url',
+    'path',
+    'headers',
+    'query',
+    'json',
+    'graphql',
+    'form',
+  ],
 };
 
 // Keys that shape how a base operation answers rather than describing work for
@@ -1791,7 +1817,10 @@ function assertDeclaresARequest(
   label: string,
   declaration: Record<string, unknown>,
 ) {
-  let { method, url, json, graphql } = declaration;
+  let { method, url, graphql, form } = declaration;
+  let bodies = CALL_API_BODIES.filter(
+    (body) => declaration[body] !== undefined,
+  );
   if (typeof url !== 'string' || url.length === 0) {
     throw new Error(
       `${label}: \`url\` must be the absolute URL the request is sent to, with each path segment the payload fills written \`{name}\``,
@@ -1813,9 +1842,14 @@ function assertDeclaresARequest(
       );
     }
   }
-  if (json !== undefined && graphql !== undefined) {
+  if (bodies.length > 1) {
     throw new Error(
-      `${label}: a request carries one body — \`json\` or \`graphql\`, not both`,
+      `${label}: a request carries one body — \`json\`, \`graphql\` or \`form\` — and this one gives ${bodies.map((body) => `\`${body}\``).join(' and ')}`,
+    );
+  }
+  if (form !== undefined && !isPlainObject(form)) {
+    throw new Error(
+      `${label}: \`form\` must be an object mapping each field name to its value`,
     );
   }
   if (graphql !== undefined) {
@@ -1831,12 +1865,15 @@ function assertDeclaresARequest(
       );
     }
   }
-  if (method === 'GET' && (json !== undefined || graphql !== undefined)) {
+  if (method === 'GET' && bodies.length > 0) {
     throw new Error(
-      `${label}: a GET request carries no body, so it takes no \`${json !== undefined ? 'json' : 'graphql'}\``,
+      `${label}: a GET request carries no body, so it takes no \`${bodies[0]}\``,
     );
   }
 }
+
+// The members that each declare a request's one body.
+const CALL_API_BODIES = ['json', 'graphql', 'form'] as const;
 
 // An `appendLine` names no clause, so the only thing it can get wrong is
 // where the line comes from. The base operation appends what the payload
