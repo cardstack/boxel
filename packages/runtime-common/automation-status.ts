@@ -179,9 +179,11 @@ export type AutomationStatusAnswer =
 // them. Any other caller the realm ACL lets read, a reader or a writer by
 // the `*` or `users` row, is told it isn't a direct writer and shown
 // nothing, and the card's view shows the card's own fields alone. The answer
-// isn't an HTTP refusal: the host takes a 401 or 403 as an auth failure of
-// whatever it is rendering at the time, and the card's view asks while it
-// renders. The route answers on the realm ACL alone, so a caller only a
+// isn't an HTTP refusal, so the card's own read never counts as an auth
+// failure: the host sends an auth-error event for any 401 or 403 that comes
+// back through `authedFetch`, and wherever an auth-error guard listens, as in
+// the in-page indexer the host's tests run, that fails whatever is rendering
+// or loading at the time. The route answers on the realm ACL alone, so a caller only a
 // policy grant admits gets the ACL's refusal: a grant reaches a card, not
 // the row.
 export async function answerAutomationStatus({

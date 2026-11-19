@@ -289,9 +289,10 @@ module('Acceptance | automation view', function (hooks) {
     assert.dom('[data-test-automation-fitted-state]').doesNotExist();
   });
 
-  // The host takes a 401 or 403 from a realm as an auth failure of whatever
-  // it renders or indexes at the time. The status route's answer to a viewer
-  // who isn't a direct writer is no such refusal, so a card module the realm
+  // The in-page indexer this test runs listens for the host's auth-error
+  // event, which any 401 or 403 through `authedFetch` sends, and fails the
+  // next load it races on one. The status route's answer to a viewer who
+  // isn't a direct writer is no such refusal, so a card module the realm
   // indexes after that viewer opens an automation still loads.
   test("a card the realm indexes after a viewer who isn't a direct writer opens an automation still loads", async function (assert) {
     await openIsolated();

@@ -174,8 +174,8 @@ export interface AutomationWebhooksAnswer {
 // and own the webhooks a trigger may name. Any other caller the realm ACL
 // lets read, a reader or a writer by the `*` or `users` row, is told it
 // isn't a direct writer and listed nothing, and the card's editor takes a
-// typed path. The answer isn't an HTTP refusal: the host takes a 401 or 403
-// as an auth failure of whatever it is rendering at the time. The route
+// typed path. The answer isn't an HTTP refusal, for the reason
+// `answerAutomationStatus` gives. The route
 // answers on the realm ACL alone, so a caller only a policy grant admits
 // gets the ACL's refusal: a grant reaches a card, not the realm's webhooks.
 // A webhook's signing secret is never part of the answer; its path alone
