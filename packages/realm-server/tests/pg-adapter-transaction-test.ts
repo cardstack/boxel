@@ -391,56 +391,56 @@ module(basename(import.meta.filename), function () {
   // death as an `error` event on the client even when no query is running.
   // This holds it to that against Postgres itself.
   module('PgAdapter when Postgres ends a held connection', function (hooks) {
-    let dbAdapter: PgAdapter;
-    setupDB(hooks, {
-      beforeEach: async (adapter) => {
-        dbAdapter = adapter;
-      },
-    });
+    // A database for each test, which the test opens an adapter of its own on.
+    setupDB(hooks, { beforeEach: async () => {} });
+
+    function counts(adapter: PgAdapter) {
+      let { holds, inUse } = adapter.connectionStats;
+      return { holds, inUse };
+    }
 
     test("the hold's turn comes back while the hold is still open", async function (assert) {
-      let { holds: holdsBefore, inUse: inUseBefore } =
-        dbAdapter.connectionStats;
-      let resume!: () => void;
-      let gate = new Promise<void>((r) => (resume = r));
-      let opened = new Deferred<void>();
-      let hold = dbAdapter.withConnection(async (query) => {
-        // Set for this session only, which Postgres then ends.
-        await query([`SET idle_in_transaction_session_timeout = '200ms'`]);
-        await query(['BEGIN']);
-        await query(['SELECT 1']);
-        opened.fulfill();
-        await gate;
-        return await query(['SELECT 2']);
-      });
+      // An adapter of its own on the test database, so that no other work
+      // moves its counts.
+      let adapter = new PgAdapter();
       try {
-        await untilOpened(opened, hold);
-        assert.strictEqual(dbAdapter.connectionStats.holds, holdsBefore + 1);
+        let resume!: () => void;
+        let gate = new Promise<void>((r) => (resume = r));
+        let opened = new Deferred<void>();
+        let hold = adapter.withConnection(async (query) => {
+          // Set for this session only, which Postgres then ends.
+          await query([`SET idle_in_transaction_session_timeout = '200ms'`]);
+          await query(['BEGIN']);
+          await query(['SELECT 1']);
+          opened.fulfill();
+          await gate;
+          return await query(['SELECT 2']);
+        });
+        try {
+          await untilOpened(opened, hold);
+          assert.deepEqual(counts(adapter), { holds: 1, inUse: 1 });
 
-        let deadline = Date.now() + 5_000;
-        while (
-          dbAdapter.connectionStats.holds > holdsBefore &&
-          Date.now() < deadline
-        ) {
-          await new Promise((r) => setTimeout(r, 25));
+          let deadline = Date.now() + 5_000;
+          while (adapter.connectionStats.holds > 0 && Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 25));
+          }
+          assert.deepEqual(
+            counts(adapter),
+            { holds: 0, inUse: 0 },
+            'the dead connection stopped counting before the hold finished',
+          );
+        } finally {
+          resume();
         }
+        await assert.rejects(hold, /not queryable/);
         assert.deepEqual(
-          {
-            holds: dbAdapter.connectionStats.holds,
-            inUse: dbAdapter.connectionStats.inUse,
-          },
-          { holds: holdsBefore, inUse: inUseBefore },
-          'the dead connection stopped counting before the hold finished',
+          await adapter.execute('SELECT 1 AS one'),
+          [{ one: 1 }],
+          'the pool still serves',
         );
       } finally {
-        resume();
+        await adapter.close();
       }
-      await assert.rejects(hold, /not queryable/);
-      assert.deepEqual(
-        await dbAdapter.execute('SELECT 1 AS one'),
-        [{ one: 1 }],
-        'the pool still serves',
-      );
     });
   });
 });
