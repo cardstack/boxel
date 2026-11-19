@@ -64,9 +64,12 @@ mise exec -- node packages/realm-historian/scripts/enable.ts https://localhost:4
 A bootstrap realm is named by the URL it is registered under, which for the
 base realm is `https://cardstack.com/base/`.
 
-Neither process needs a restart. A realm's history starts with its first write
-after recording is turned on, and a revision closes 2 s after the last write
-in a burst. The script prints the realm's id, which names its repo:
+Neither process needs a restart. The realm's first write after recording is
+turned on starts its history: an `Initial snapshot` of the realm's files
+(see [Sweeps and initial snapshots](#sweeps-and-initial-snapshots)), then the
+write's revision, which closes 2 s after the last write in a burst. If
+realm-historian restarts before that write, it takes the snapshot as it
+starts. The script prints the realm's id, which names its repo:
 
 ```
 git --git-dir="$HOME/.local/share/boxel/realm-history/localhost_4201/<realm id>.git" log --stat
@@ -310,8 +313,8 @@ node scripts/enable.ts <realm url> on|off
 turning recording back on carries on in the same repo. The script prints the
 realm's recording before and after, and says when the realm is stalled. It
 refuses a published realm, whose source realm's history covers it, and a URL
-no realm is registered at; both exit 1. It is how recording is turned on locally and in each deployed
-environment.
+no realm is registered at; both exit 1. It is how recording is turned on
+locally and in each deployed environment.
 
 ## Tests
 
