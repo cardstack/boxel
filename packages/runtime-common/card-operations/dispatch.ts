@@ -970,7 +970,9 @@ export async function resolveFacadeWrite(
   target: OperationTarget,
   base: 'create' | 'update' | 'delete',
   scope: OperationScope,
-  opts: { asFile?: true; landing?: LandingFor } = {},
+  // `loaded` is the realm's policy, where the caller already loaded it with
+  // `loadPolicyToGate`.
+  opts: { asFile?: true; landing?: LandingFor; loaded?: LoadedPolicy } = {},
 ): Promise<GateDecision> {
   let { decision } = await resolveAndGate(core, target, base, scope, {
     builtInOnly: true,
@@ -984,6 +986,23 @@ export async function resolveFacadeWrite(
   return decision;
 }
 
+// Load the realm's policy for a caller the realm ACL declined outright, ahead
+// of the gate's decision on `name`, which then counts the load as part of it.
+// A load that fails is recorded as that decision.
+export async function loadPolicyToGate(
+  core: OperationCore,
+  scope: OperationScope,
+  name: string,
+): Promise<LoadedPolicy> {
+  let started = performance.now();
+  try {
+    return { ...(await loadPolicy(core)), started };
+  } catch (e: unknown) {
+    recordPolicyLoadFailure(core, scope, name, started, e);
+    throw e;
+  }
+}
+
 async function resolveAndGate(
   core: OperationCore,
   target: OperationTarget,
@@ -992,7 +1011,12 @@ async function resolveAndGate(
   // Refuse a name the target's type declares, for a caller the ACL declined,
   // before the gate runs, and judge the target as a file (see
   // `resolveFacadeWrite`). `landing` is where a create's card will be stored.
-  opts: { builtInOnly?: true; asFile?: true; landing?: LandingFor } = {},
+  opts: {
+    builtInOnly?: true;
+    asFile?: true;
+    landing?: LandingFor;
+    loaded?: LoadedPolicy;
+  } = {},
 ): Promise<GatedOperation> {
   let refusal = (e: unknown): unknown =>
     scope.coarseDeclined === 'all' && isOperationFailure(e)
@@ -1008,13 +1032,7 @@ async function resolveAndGate(
     } catch (e: unknown) {
       throw refusal(e);
     }
-    let started = performance.now();
-    try {
-      loaded = { ...(await loadPolicy(core)), started };
-    } catch (e: unknown) {
-      recordPolicyLoadFailure(core, scope, name, started, e);
-      throw e;
-    }
+    loaded = opts.loaded ?? (await loadPolicyToGate(core, scope, name));
     // Resolving the operation reads the target's index row, so an operation
     // no grant can admit at the target's path is refused first (ADR 038
     // §1.3). A grant is matched on the name the caller invokes, so a name no

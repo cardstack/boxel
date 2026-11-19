@@ -380,6 +380,7 @@ import {
 } from './index.ts';
 import {
   canonicalizeTarget,
+  loadPolicyToGate,
   newOperationScope,
   readPlan,
   resolveFacadeWrite,
@@ -418,6 +419,7 @@ import {
   policyUnavailable,
   type PolicyGateStats,
   type NonGrantableAnswerSources,
+  type LoadedPolicy,
 } from './card-operations/gate.ts';
 import {
   createLanding,
@@ -17928,14 +17930,18 @@ export class Realm {
       // exactly where it is written. So for a caller who may not read the
       // realm, whose writes are judged as an update or a delete (a create is
       // refused below), a path no such grant covers is refused before what
-      // the path holds is read (ADR 038 §1.3).
+      // the path holds is read (ADR 038 §1.3). The policy is loaded before
+      // anything is read, so a policy that won't load answers the same
+      // whatever a path holds, including for a write what the path holds
+      // refuses before the gate. The gate decides on that same load.
+      let loaded: LoadedPolicy | undefined;
       if (coarseDeclined === 'all') {
-        let { policy } = await loadPolicy(core);
         let name = write.removal ? 'delete' : 'update';
+        loaded = await loadPolicyToGate(core, scope, name);
         let path: TargetPath = { path: write.path, kind: 'file' };
         if (
-          policy &&
-          !grantsNaming(policy, name).some((grant) =>
+          loaded.policy &&
+          !grantsNaming(loaded.policy, name).some((grant) =>
             grantCoversPath(grant, path),
           )
         ) {
@@ -17945,43 +17951,35 @@ export class Realm {
           );
         }
       }
-      let operation: VerbatimOperation;
-      try {
-        operation = this.#verbatimOperation(
-          write,
-          await this.#storedForVerbatimWrite(write.path),
-          coarseDeclined,
-        );
-      } catch (refusal: unknown) {
-        // A write no operation describes is refused before the gate, by what
-        // the path holds. The gate loads the policy before it resolves
-        // anything for a caller who may not read the realm, so a policy that
-        // won't load answers the same whatever a target holds, and this
-        // refusal does too.
-        if (coarseDeclined === 'all') {
-          await loadPolicy(core);
-        }
-        throw refusal;
-      }
+      // A write no operation describes is refused here, by what the path
+      // holds.
+      let operation = this.#verbatimOperation(
+        write,
+        await this.#storedForVerbatimWrite(write.path),
+        coarseDeclined,
+      );
       let decision = await resolveFacadeWrite(
         core,
         operation.target,
         operation.base,
         scope,
-        operation.kind === 'file'
-          ? { asFile: true }
-          : operation.base === 'create'
-            ? {
-                // A verbatim create lands exactly where it is written.
-                landing: () => ({
-                  directory: write.path.slice(
-                    0,
-                    write.path.lastIndexOf('/') + 1,
-                  ),
-                  file: write.path,
-                }),
-              }
-            : {},
+        {
+          loaded,
+          ...(operation.kind === 'file'
+            ? { asFile: true as const }
+            : operation.base === 'create'
+              ? {
+                  // A verbatim create lands exactly where it is written.
+                  landing: () => ({
+                    directory: write.path.slice(
+                      0,
+                      write.path.lastIndexOf('/') + 1,
+                    ),
+                    file: write.path,
+                  }),
+                }
+              : {}),
+        },
       );
       judged.push({
         write,
