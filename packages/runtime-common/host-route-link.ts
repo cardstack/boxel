@@ -5,8 +5,8 @@
 // - The address is the routed path on the realm's own URL. A host URL takes
 //   the realm URL's place where a response leaves the server, never here.
 // - A link given cards or ids falls back to the card's own URL when no route
-//   gives it an address: the realm has no routes, the routes aren't known
-//   yet, the card is in another realm, or no route fits.
+//   gives it an address: the realm has no routes, the render has none to
+//   use, the card is in another realm, or no route fits.
 // - A link given a card type with field values, or a route name, has no card
 //   to fall back to, so it gives `undefined` and renders with no `href`.
 // - When a route can't tell yet whether the cards fit it, because a card or
@@ -50,8 +50,9 @@ export interface UnresolvedHostRouteLink {
 }
 
 export interface HostRouteLinkOptions {
-  // `undefined` when the realm's routes aren't known: none were read yet,
-  // or the read failed. Links then fall back as for a realm with no routes.
+  // `undefined` when the render has no routes to give addresses from: no
+  // host URL serves the realm, the render is in the app, or none were read
+  // yet. Links then fall back as for a realm with no routes.
   routes: HostRouteLinkRoutes | undefined;
   api: CardAPIForMatching;
   // The loaded card for an id, or `undefined` when it isn't loaded. It asks

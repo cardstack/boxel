@@ -13,8 +13,6 @@ import {
   type RawHostRoutingRule,
 } from '@cardstack/runtime-common';
 
-import type { Realm } from '@cardstack/runtime-common/realm';
-
 import ENV from '@cardstack/host/config/environment';
 
 import {
@@ -117,7 +115,6 @@ module('Integration | hrefTo', function (hooks) {
   });
 
   let hrefTo: (typeof HrefToModule)['hrefTo'];
-  let realm: Realm;
 
   setupCardLogs(
     hooks,
@@ -128,7 +125,7 @@ module('Integration | hrefTo', function (hooks) {
   );
 
   hooks.beforeEach(async function () {
-    ({ realm } = await setupIntegrationTestRealm({
+    await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'realm.json': realmConfig('/people/:id'),
@@ -153,7 +150,7 @@ module('Integration | hrefTo', function (hooks) {
           },
         },
       },
-    }));
+    });
     // The app starts this service at boot; a rendering test has no boot.
     getService('host-route-links');
     ({ hrefTo } = await getService('loader-service').loader.import<
@@ -253,51 +250,54 @@ module('Integration | hrefTo', function (hooks) {
     );
   });
 
-  test('in the app a link reads the routes of the open realm from its endpoint, and again after the realm is indexed', async function (assert) {
+  test('in the app a link keeps the card URL, and the app reads no routes', async function (assert) {
     let store = getService('store');
     let author = (await store.get(`${testRealmURL}Author/jane`)) as Author;
-    let post = (await store.get(`${testRealmURL}Post/hello`)) as Post;
+    let AuthorType = author.constructor as typeof CardDef;
+    let requests = 0;
+    let network = getService('network');
+    let spy = async (request: Request) => {
+      if (request.url === `${testRealmURL}_host-routes`) {
+        requests++;
+      }
+      return null;
+    };
+    network.virtualNetwork.mount(spy, { prepend: true });
+    try {
+      await render(
+        <template>
+          <a data-test-author href={{hrefTo author}}>author</a>
+          <a data-test-author-id href={{hrefTo author.id}}>author id</a>
+          <a data-test-type href={{hrefTo AuthorType name='jane'}}>type</a>
+          <a data-test-route href={{hrefTo author route='people'}}>route</a>
+        </template>,
+      );
+      await store.loaded();
 
-    await render(
-      <template>
-        <a data-test-author href={{hrefTo author}}>author</a>
-        <a data-test-route href={{hrefTo author route='people'}}>route</a>
-        <a data-test-post href={{hrefTo post}}>post</a>
-      </template>,
-    );
-    await waitUntil(
-      () => href('[data-test-author]') === `${testRealmURL}people/jane`,
-    );
-
-    assert.strictEqual(
-      href('[data-test-author]'),
-      `${testRealmURL}people/jane`,
-      'a card the routes serve',
-    );
-    assert.strictEqual(
-      href('[data-test-route]'),
-      `${testRealmURL}people/jane`,
-      'a route name',
-    );
-    assert.strictEqual(
-      href('[data-test-post]'),
-      `${testRealmURL}Post/hello`,
-      'a card no route fits keeps its own URL',
-    );
-
-    await realm.write(
-      'realm.json',
-      JSON.stringify(realmConfig('/authors/:id')),
-    );
-    await waitUntil(
-      () => href('[data-test-author]') === `${testRealmURL}authors/jane`,
-      { timeout: 10000 },
-    );
-    assert.strictEqual(
-      href('[data-test-author]'),
-      `${testRealmURL}authors/jane`,
-      'the link follows the routes read after the realm was indexed',
-    );
+      assert.strictEqual(
+        href('[data-test-author]'),
+        `${testRealmURL}Author/jane`,
+        'a card that a route of the realm serves keeps its own URL',
+      );
+      assert.strictEqual(
+        href('[data-test-author-id]'),
+        `${testRealmURL}Author/jane`,
+        'a card id keeps the card URL',
+      );
+      assert.strictEqual(
+        href('[data-test-type]'),
+        null,
+        'a card type with field values: no href',
+      );
+      assert.strictEqual(
+        href('[data-test-route]'),
+        null,
+        'a route name: no href',
+      );
+      assert.strictEqual(requests, 0, 'the realm routes were not asked for');
+    } finally {
+      network.virtualNetwork.unmount(spy);
+    }
   });
 
   // An HTML visit as the reader sees it: the render flag is up and the
@@ -340,14 +340,56 @@ module('Integration | hrefTo', function (hooks) {
     }
   }
 
-  test('the request for a realm routes says when a render waits on it', async function (assert) {
+  test('an HTML visit for a realm that no host URL serves keeps card URLs', async function (assert) {
     let links = getService('host-route-links');
+    let store = getService('store');
+    let author = (await store.get(`${testRealmURL}Author/jane`)) as Author;
     let requests: Request[] = [];
 
     await inHTMLVisit(
       (request) => {
         requests.push(request);
+        // The realm answers: it is not a published realm.
         return null;
+      },
+      async () => {
+        links.routes();
+        await getService('render-store').loaded();
+        assert.strictEqual(
+          links.routes(),
+          undefined,
+          'the visit has no routes, and no failure',
+        );
+        assert.strictEqual(
+          hrefTo(author),
+          `${testRealmURL}Author/jane`,
+          'a card that a route of the realm serves keeps its own URL',
+        );
+        assert.strictEqual(
+          hrefTo(author, { route: 'people' }),
+          undefined,
+          'a route name gives no address',
+        );
+      },
+    );
+
+    assert.strictEqual(requests.length, 1, 'the visit asked the realm once');
+  });
+
+  test('an HTML visit for a realm that a host URL serves gets routed addresses', async function (assert) {
+    let links = getService('host-route-links');
+    let store = getService('store');
+    let author = (await store.get(`${testRealmURL}Author/jane`)) as Author;
+    let post = (await store.get(`${testRealmURL}Post/hello`)) as Post;
+    let requests: Request[] = [];
+
+    await inHTMLVisit(
+      (request) => {
+        requests.push(request);
+        return new Response(
+          JSON.stringify({ routes: validatedRoutes(), servedAtHostURL: true }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
       },
       async () => {
         assert.strictEqual(links.routes(), undefined, 'the read is under way');
@@ -356,38 +398,26 @@ module('Integration | hrefTo', function (hooks) {
         assert.strictEqual(
           requests[0]?.headers.get(DURING_PRERENDER_HEADER),
           '1',
-          'the request from an HTML visit carries the header',
+          'the request says that a render waits on it',
         );
-        assert.deepEqual(
-          links.routes()?.routes.map((route) => route.fullPath),
-          ['/people/:id'],
-          'the visit has the realm routes',
+        assert.strictEqual(
+          hrefTo(author),
+          `${testRealmURL}people/jane`,
+          'a card that a card id template serves',
         );
+        assert.strictEqual(
+          hrefTo(post),
+          `${testRealmURL}posts/hello-world`,
+          'a card that a field match serves',
+        );
+        assert.strictEqual(
+          hrefTo(author, { route: 'people' }),
+          `${testRealmURL}people/jane`,
+          'a route name',
+        );
+        assert.strictEqual(requests.length, 1, 'and did not read again');
       },
     );
-
-    // Outside an HTML visit the app reads for itself, with no header.
-    let appRequests: Request[] = [];
-    let network = getService('network');
-    let spy = async (request: Request) => {
-      if (request.url === `${testRealmURL}_host-routes`) {
-        appRequests.push(request);
-      }
-      return null;
-    };
-    network.virtualNetwork.mount(spy, { prepend: true });
-    try {
-      links.resetState();
-      links.routes();
-      await getService('store').loaded();
-      assert.strictEqual(appRequests.length, 1, 'the app read once');
-      assert.false(
-        appRequests[0]?.headers.has(DURING_PRERENDER_HEADER),
-        'the request from the app carries no header',
-      );
-    } finally {
-      network.virtualNetwork.unmount(spy);
-    }
   });
 
   test('an HTML visit fails, and does not ask again, when the realm routes are not available', async function (assert) {
@@ -397,6 +427,8 @@ module('Integration | hrefTo', function (hooks) {
     await inHTMLVisit(
       () => {
         requests++;
+        // What a realm that a host URL serves answers while a route's type
+        // can't be read yet.
         return new Response(
           JSON.stringify({ errors: [{ status: 503, title: 'unavailable' }] }),
           { status: 503, headers: { 'retry-after': '5' } },

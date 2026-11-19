@@ -22,14 +22,19 @@
 //   For these two forms, when no route fits, the result is `undefined`, so
 //   the `<a>` renders with no `href`.
 //
+// A routed address opens only where a host URL serves the realm. So a link
+// gets one on a page served on a host URL and in the HTML stored for a realm
+// that a host URL serves. Everywhere else, which includes the app, a link
+// falls back as when no route fits.
+//
 // The address is on the realm's own URL. A link into another realm keeps
 // that card's own URL. While a card the routes read is still loading, the
 // link has the card's own URL, and it changes when the card arrives. An
 // empty argument (a link that is empty or not loaded yet) gives `undefined`.
 //
 // A link never fails the render because of what it points to. One failure
-// does pass through: in an HTML visit, when the realm's routes can't be read
-// for now, the visit fails with an error that makes it run again, so that
+// does pass through: in an HTML visit for a realm that a host URL serves,
+// when the realm's routes can't be read for now, the visit fails with an error that makes it run again, so that
 // HTML with card URLs in place of routed addresses is never stored.
 
 import {
