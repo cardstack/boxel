@@ -404,9 +404,12 @@ export default class StoreService extends Service implements StoreInterface {
   private inflightGetCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
     new Map();
   // Local ids of the instances built from their stored source because the
-  // realm had no index row for them when they were read. Nothing names these
-  // cards when a from-scratch index pass lands — it announces itself with a
-  // bare `full` event — so this is how that event finds them to re-read.
+  // realm could not serve their card+json when they were read: it had no
+  // index row for them, or it turned the read away for now while it rendered
+  // their type's definition. An event naming one of these cards re-reads it
+  // in place. Nothing names them when a from-scratch index pass lands — it
+  // announces itself with a bare `full` event — so this is how that event
+  // finds them to re-read.
   #builtFromSource = new Set<string>();
   // The ids of the cards being built from their source right now, as
   // `getCardInstance` normalizes them. The instance is in the identity map
@@ -1353,9 +1356,11 @@ export default class StoreService extends Service implements StoreInterface {
     return result as InstanceForReadType[K] | CardErrorJSONAPI;
   }
 
-  // Bypass cached state and fetch from source of truth. A card the realm has
-  // not indexed comes back as the awaiting-index error, so a caller reading
-  // through here learns the index's state rather than a stand-in for it.
+  // Bypass cached state and fetch from source of truth. A card the realm
+  // cannot serve right now comes back as the realm's answer — the
+  // awaiting-index error, or the 503 it turns a read away with while it
+  // renders the card's type definition — so a caller reading through here
+  // learns the realm's state rather than a stand-in for it.
   async getWithoutCache<K extends StoreReadType = 'card'>(
     id: string,
     opts?: { type?: K },
@@ -3936,18 +3941,24 @@ export default class StoreService extends Service implements StoreInterface {
     this.autoSaveStates.delete(instance[localIdSymbol]);
   }
 
-  // The document to build a card from when its card+json read failed because
-  // the realm has not indexed it yet. The realm serves a card's stored source
-  // from its file system whatever state its index is in, and this is the same
-  // read a linked card resolves through, so the card comes up exactly as it
-  // would as the target of a link: its computed fields evaluate in this tab.
-  // Undefined for any other failure, and when the source cannot be read
-  // either, which leaves the awaiting-index error to stand.
-  async #unindexedCardSource(
+  // The document to build a card from when the realm could not serve its
+  // card+json: it has not indexed the card yet, or it turned the read away for
+  // now (a 503 with `Retry-After`, which `fetchJSON` has already retried as
+  // far as it goes) while it renders the card's type definition. The realm
+  // serves a card's stored source from its file system whatever state its
+  // index and its definitions are in, and this is the same read a linked card
+  // resolves through, so the card comes up exactly as it would as the target
+  // of a link: its computed fields evaluate in this tab. Undefined for any
+  // other failure, and when the source cannot be read either, which leaves
+  // the realm's answer to stand.
+  async #storedCardSource(
     url: string,
     error: unknown,
   ): Promise<SingleCardDocument | undefined> {
-    if (!processCardError(url, error).errors[0]?.awaitingIndex) {
+    if (
+      !processCardError(url, error).errors[0]?.awaitingIndex &&
+      !isRetryableUnavailable(error)
+    ) {
       return undefined;
     }
     let doc: SingleCardDocument | CardError;
@@ -3977,9 +3988,10 @@ export default class StoreService extends Service implements StoreInterface {
       noCache?: boolean;
       localDir?: string;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-      // Answer a card the realm has not indexed with the awaiting-index error
+      // Answer a card the realm cannot serve right now with the realm's answer
+      // (the awaiting-index error, or the 503 it turns a read away with)
       // rather than an instance built from its stored source. For a caller
-      // whose question is the index's state, not the card's content.
+      // whose question is the realm's state, not the card's content.
       reportUnindexed?: true;
     };
   }): Promise<T | CardErrorJSONAPI> {
@@ -4092,7 +4104,7 @@ export default class StoreService extends Service implements StoreInterface {
             let source =
               opts?.reportUnindexed || this.store.getCard(id)
                 ? undefined
-                : await this.#unindexedCardSource(url, error);
+                : await this.#storedCardSource(url, error);
             if (!source) {
               throw error;
             }
@@ -4192,9 +4204,10 @@ export default class StoreService extends Service implements StoreInterface {
         (cardError?.awaitingIndex || isRetryableUnavailable(error)) && id
           ? this.store.getCard(id)
           : undefined;
-      // A card built from its source is the store standing in for the missing
-      // row, which is exactly what a read reporting the index's state is asking
-      // about, so that read gets the realm's answer instead.
+      // A card built from its source is the store standing in for the
+      // document the realm could not serve, which is exactly what a read
+      // reporting the realm's state is asking about, so that read gets the
+      // realm's answer instead.
       if (
         running &&
         opts?.reportUnindexed &&
@@ -4208,10 +4221,16 @@ export default class StoreService extends Service implements StoreInterface {
         return running as T;
       }
       deferred?.fulfill(cardError);
-      // The awaiting-index answer to such a read is the caller's alone: what
-      // the store records is what every other read of the card is handed, and
-      // for them the card is built from its source.
-      if (!(opts?.reportUnindexed && cardError?.awaitingIndex)) {
+      // The realm's answer to such a read, when it says the card cannot be
+      // served right now, is the caller's alone: what the store records is
+      // what every other read of the card is handed, and for them the card is
+      // built from its source.
+      if (
+        !(
+          opts?.reportUnindexed &&
+          (cardError?.awaitingIndex || isRetryableUnavailable(error))
+        )
+      ) {
         this.setIdentityContext(cardError);
       }
       let status = cardError?.status ?? error?.status;

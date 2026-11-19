@@ -5266,9 +5266,11 @@ module('Integration | Store', function (hooks) {
     await writePerson('Person/still-rendering.json', 'Still Rendering');
     let url = `${testRealmURL}Person/still-rendering`;
     let realm = turnAwayCardReads('Person/still-rendering', Infinity);
-    let result: CardDef | CardErrorJSONAPI;
+    let refusal: any;
     try {
-      result = await storeService.get(url);
+      await getService('card-service').fetchJSON(url);
+    } catch (err) {
+      refusal = err;
     } finally {
       realm.restore();
     }
@@ -5277,14 +5279,73 @@ module('Integration | Store', function (hooks) {
       4,
       'the read was sent four times: once, and three retries',
     );
-    assert.false(isCardInstance(result), 'the card is not served');
-    let error = result as CardErrorJSONAPI;
-    assert.strictEqual(error.status, 503, 'the refusal is the 503 it was');
-    assert.strictEqual(error.title, 'Definition not ready');
+    assert.strictEqual(refusal?.status, 503, 'the refusal is the 503 it was');
     assert.strictEqual(
-      error.awaitingIndex,
+      refusal?.responseHeaders?.get('Retry-After'),
+      '0',
+      'with the interval the realm named',
+    );
+  });
+
+  test('a card the realm keeps turning away is built from its source', async function (assert) {
+    await writePerson('Person/built-while-rendering.json', 'From Source');
+    let url = `${testRealmURL}Person/built-while-rendering`;
+    let realm = turnAwayCardReads('Person/built-while-rendering', Infinity);
+    let card: CardDef | CardErrorJSONAPI;
+    try {
+      card = await storeService.get(url);
+    } finally {
+      realm.restore();
+    }
+    assert.strictEqual(
+      realm.turnedAway,
+      4,
+      'the card+json read was turned away on every try',
+    );
+    assert.true(isCardInstance(card), 'the card is served');
+    assert.strictEqual(
+      (card as CardDef & { name?: string }).name,
+      'From Source',
+      'built from its stored source',
+    );
+    assert.strictEqual(
+      storeService.peekError(url),
       undefined,
-      'and nothing says the card is waiting on the index',
+      'with no error recorded for it',
+    );
+  });
+
+  test('a cache-bypassing read the realm turns away records nothing over a card built from its source', async function (assert) {
+    await writePerson('Person/bypass-turned-away.json', 'Bypassed');
+    let url = `${testRealmURL}Person/bypass-turned-away`;
+    let realm = turnAwayCardReads('Person/bypass-turned-away', Infinity);
+    let card: CardDef | CardErrorJSONAPI;
+    let bypassing: CardDef | CardErrorJSONAPI;
+    try {
+      card = await storeService.get(url);
+      bypassing = await storeService.getWithoutCache(url);
+    } finally {
+      realm.restore();
+    }
+    assert.true(isCardInstance(card), 'the card was built from its source');
+    assert.false(
+      isCardInstance(bypassing),
+      "the cache-bypassing read gets the realm's answer",
+    );
+    assert.strictEqual(
+      (bypassing as CardErrorJSONAPI).status,
+      503,
+      'which is the refusal',
+    );
+    assert.strictEqual(
+      storeService.peekError(url),
+      undefined,
+      'no error card stands in front of the running card',
+    );
+    assert.strictEqual(
+      storeService.peek(url),
+      card,
+      'which is still the one the store hands out',
     );
   });
 
