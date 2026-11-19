@@ -259,11 +259,35 @@ module('Acceptance | host URL manager', function (hooks) {
       .doesNotExist();
   });
 
-  test('to remove the canonical host URL, asks for the new canonical one first', async function (assert) {
+  test('to remove the canonical host URL with one other, makes that one canonical and says so', async function (assert) {
     let shopURL = `https://shop.${siteDomain}/`;
     fake.hostURLs = [
       { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
       { id: 'b', url: shopURL, kind: 'site-name', isCanonical: false },
+    ];
+    await openManager();
+    await click(`[data-test-remove-host-url="${SPACE_URL}"]`);
+    await waitFor(`[data-test-host-url="${SPACE_URL}"]`, { count: 0 });
+
+    assert
+      .dom('[data-test-replace-canonical]')
+      .doesNotExist('there is no choice to ask about');
+    assert.deepEqual(fake.calls, ['canonical b', 'unmount a']);
+    assert
+      .dom(`[data-test-host-url="${shopURL}"] [data-test-host-url-canonical]`)
+      .exists();
+    assert
+      .dom('[data-test-host-url-toaster] [data-test-pretui-toast-item]')
+      .containsText(`shop.${siteDomain}/ is now the canonical host URL`);
+  });
+
+  test('to remove the canonical host URL with several others, asks for the new canonical one first', async function (assert) {
+    let shopURL = `https://shop.${siteDomain}/`;
+    let storeURL = `https://store.${siteDomain}/`;
+    fake.hostURLs = [
+      { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
+      { id: 'b', url: shopURL, kind: 'site-name', isCanonical: false },
+      { id: 'c', url: storeURL, kind: 'custom-domain', isCanonical: false },
     ];
     await openManager();
     await click(`[data-test-remove-host-url="${SPACE_URL}"]`);
@@ -274,7 +298,7 @@ module('Acceptance | host URL manager', function (hooks) {
 
     assert
       .dom('[data-test-new-canonical] input[type="radio"]')
-      .exists({ count: 1 }, 'only the other host URL is offered');
+      .exists({ count: 2 }, 'only the other host URLs are offered');
     await click('[data-test-new-canonical] input[value="b"]');
     await click('[data-test-confirm-replace-canonical]');
     await waitFor(`[data-test-host-url="${SPACE_URL}"]`, { count: 0 });
@@ -284,6 +308,9 @@ module('Acceptance | host URL manager', function (hooks) {
       .dom(`[data-test-host-url="${shopURL}"] [data-test-host-url-canonical]`)
       .exists();
     assert.dom('[data-test-replace-canonical]').doesNotExist();
+    assert
+      .dom('[data-test-host-url-toaster] [data-test-pretui-toast-item]')
+      .doesNotExist('no toast when the user chose');
   });
 
   test('removes the only host URL at once', async function (assert) {

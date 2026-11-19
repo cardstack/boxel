@@ -11,6 +11,7 @@ import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
 import { Input as PretInput } from '@cardstack/pretui/components/input';
 import { RadioGroup } from '@cardstack/pretui/components/radio-group';
+import { ToastStore, Toaster } from '@cardstack/pretui/components/toaster';
 import { Tooltip } from '@cardstack/pretui/components/tooltip';
 import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -84,6 +85,7 @@ export default class HostURLManager extends Component<Signature> {
   @tracked private errors = new Map<string, string>();
   // The canonical host URL being removed, while the user picks the new one.
   @tracked private replacingCanonical: HostURL | undefined;
+  private toasts = new ToastStore();
   @tracked private newCanonicalId: string | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -258,9 +260,15 @@ export default class HostURLManager extends Component<Signature> {
 
   @action
   private removeHostURL(hostURL: HostURL) {
-    // The canonical host URL goes last (ADR 033 §1.4): the user picks the new
-    // canonical one first.
-    if (hostURL.isCanonical && this.hostURLs.length > 1) {
+    // The canonical host URL goes last (ADR 033 §1.4): another one is made
+    // canonical first. With one other, it is that one; with more, the user
+    // picks.
+    let others = this.hostURLs.filter(({ id }) => id !== hostURL.id);
+    if (hostURL.isCanonical && others.length === 1) {
+      this.replaceCanonicalTask.perform(hostURL, others[0]!, true);
+      return;
+    }
+    if (hostURL.isCanonical && others.length > 1) {
       this.replacingCanonical = hostURL;
       this.newCanonicalId = undefined;
       return;
@@ -279,22 +287,42 @@ export default class HostURLManager extends Component<Signature> {
     this.newCanonicalId = undefined;
   }
 
-  private replaceCanonicalTask = task(async () => {
+  private get isRemoving() {
+    return this.unmountTask.isRunning || this.replaceCanonicalTask.isRunning;
+  }
+
+  @action
+  private confirmReplaceCanonical() {
     let removed = this.replacingCanonical;
     let next = this.hostURLs.find(({ id }) => id === this.newCanonicalId);
-    if (!removed || !next) {
-      return;
+    if (removed && next) {
+      this.replaceCanonicalTask.perform(removed, next, false);
     }
-    try {
-      await this.realmServer.setCanonicalHostURL(next.id);
-      await this.realmServer.unmountHostURL(removed.id);
-      this.replacingCanonical = undefined;
-      this.newCanonicalId = undefined;
-    } catch (error) {
-      this.setError(removed.url, error);
-    }
-    await this.refreshHostURLs();
-  });
+  }
+
+  // Makes `next` canonical, then removes `removed`. When the manager chose
+  // `next` itself, a toast says so.
+  private replaceCanonicalTask = task(
+    async (removed: HostURL, next: HostURL, chosenForUser: boolean) => {
+      this.setError(removed.url, undefined);
+      try {
+        await this.realmServer.setCanonicalHostURL(next.id);
+        await this.realmServer.unmountHostURL(removed.id);
+        this.replacingCanonical = undefined;
+        this.newCanonicalId = undefined;
+        if (chosenForUser) {
+          this.toasts.show({
+            title: `${displayURL(next.url)} is now the canonical host URL`,
+            message: `It took over from ${displayURL(removed.url)}, which was removed.`,
+            tone: 'success',
+          });
+        }
+      } catch (error) {
+        this.setError(removed.url, error);
+      }
+      await this.refreshHostURLs();
+    },
+  );
 
   private unmountTask = task(async (hostURL: HostURL) => {
     this.setError(hostURL.url, undefined);
@@ -426,7 +454,7 @@ export default class HostURLManager extends Component<Signature> {
                       <Button
                         @variant='outline'
                         @size='sm'
-                        @busy={{this.unmountTask.isRunning}}
+                        @busy={{this.isRemoving}}
                         {{on 'click' (fn this.removeHostURL hostURL)}}
                         data-test-remove-host-url={{hostURL.url}}
                       >Remove</Button>
@@ -475,7 +503,7 @@ export default class HostURLManager extends Component<Signature> {
                     @size='sm'
                     @disabled={{this.isReplaceDisabled}}
                     @busy={{this.replaceCanonicalTask.isRunning}}
-                    {{on 'click' (perform this.replaceCanonicalTask)}}
+                    {{on 'click' this.confirmReplaceCanonical}}
                     data-test-confirm-replace-canonical
                   >Remove</Button>
                 </div>
@@ -659,6 +687,7 @@ export default class HostURLManager extends Component<Signature> {
             </section>
           {{/if}}
         {{/if}}
+        <Toaster @store={{this.toasts}} data-test-host-url-toaster />
       </:content>
     </ModalContainer>
 
