@@ -181,6 +181,10 @@ module.exports = function (environment) {
       process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaults.realmHost,
     publishedRealmBoxelSiteDomain:
       process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || defaults.realmHost,
+    // A realm server serving the host puts its own value here; a host served
+    // on its own, as in development, reads the same variable.
+    publishedRealmDomainOverrides:
+      process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES || '',
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
