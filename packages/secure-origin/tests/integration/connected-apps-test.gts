@@ -5,6 +5,8 @@ import {
   render,
   settled,
   triggerKeyEvent,
+  waitFor,
+  waitUntil,
 } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
@@ -329,7 +331,7 @@ module('Integration | connected apps', function (hooks) {
       .hasText('claude.ai', 'one connection left, so no count');
     assert
       .dom('[data-test-connected-apps-announcement]')
-      .hasText('Disconnected claude.ai.');
+      .hasText('Disconnected the claude.ai connection.');
     assert
       .dom(`${row('grant-claude-old')} [data-test-connection-disconnect]`)
       .isFocused('focus goes to the connection that took its place');
@@ -378,12 +380,111 @@ module('Integration | connected apps', function (hooks) {
       .includesText(`To use it again, connect it from “${AGENT_NAME}”.`);
   });
 
+  test('an app that registered itself without a name is described, not named, in a sentence', async function (assert) {
+    signedIn();
+    serveList([
+      connection('grant-nameless', {
+        kind: 'dynamic',
+        shown: 'an app on this computer',
+        verified: false,
+      }),
+    ]);
+    await open();
+    assert
+      .dom('[data-test-connected-app-name]')
+      .hasText('An app on this computer');
+    await click('[data-test-connection-disconnect]');
+    assert
+      .dom('[data-test-connected-apps-confirm]')
+      .includesText('Disconnect this connection?')
+      .includesText('To use it again, connect it from the app.');
+  });
+
+  test("each Disconnect is described by its connection's details", async function (assert) {
+    signedIn();
+    serveList(everyApp());
+    await open();
+    let ids = new Set<string>();
+    for (let button of findAll('[data-test-connection-disconnect]')) {
+      let id = button.getAttribute('aria-describedby');
+      assert.ok(id, 'the button is described');
+      ids.add(id!);
+      let details = document.getElementById(id!);
+      assert.ok(
+        details?.closest('[data-test-connection]')?.contains(button),
+        'by the details of its own connection',
+      );
+      assert.ok(details?.textContent?.includes('Boxel workspaces'));
+    }
+    assert.strictEqual(ids.size, 4, 'each by its own');
+  });
+
+  test('disconnecting two connections of one app announces each', async function (assert) {
+    signedIn();
+    serveList(everyApp());
+    serveDisconnect('grant-claude-new');
+    serveDisconnect('grant-claude-old');
+    await open();
+    let announcement = () =>
+      find('[data-test-connected-apps-announcement]')!.textContent;
+    await click(`${row('grant-claude-new')} [data-test-connection-disconnect]`);
+    await click('[data-test-connected-apps-confirm-disconnect]');
+    let first = announcement();
+    await click(`${row('grant-claude-old')} [data-test-connection-disconnect]`);
+    await click('[data-test-connected-apps-confirm-disconnect]');
+    assert
+      .dom('[data-test-connected-apps-announcement]')
+      .includesText('Disconnected the claude.ai connection.');
+    assert.notStrictEqual(
+      announcement(),
+      first,
+      'the status changes, so it is read out again',
+    );
+  });
+
+  test('a read of the list that lands late never brings back a disconnected connection', async function (assert) {
+    signedIn();
+    serveList(everyApp());
+    serveDisconnect('grant-chatgpt');
+    await open();
+    // The read the window's focus starts is held until after the disconnect,
+    // and answers the list as it was before it.
+    let before = [...listed];
+    let release!: () => void;
+    let held = new Promise<Answer>((resolve) => {
+      release = () => resolve({ connections: before });
+    });
+    let reads = 0;
+    servers.realmServer(LIST, () => {
+      reads++;
+      return reads === 1 ? held : { connections: listed };
+    });
+    window.dispatchEvent(new Event('focus'));
+    await waitUntil(() => reads === 1);
+
+    (
+      find(
+        `${row('grant-chatgpt')} [data-test-connection-disconnect]`,
+      ) as HTMLElement
+    ).click();
+    await waitFor('[data-test-connected-apps-confirm-disconnect]');
+    (
+      find('[data-test-connected-apps-confirm-disconnect]') as HTMLElement
+    ).click();
+    await waitUntil(() => reads === 2 && !find(row('grant-chatgpt')));
+
+    release();
+    await settled();
+    assert.dom(row('grant-chatgpt')).doesNotExist();
+    assert.dom(row('grant-claude-new')).exists();
+  });
+
   test("an app Boxel can't name is still listed and can be disconnected", async function (assert) {
     signedIn();
     serveList([connection('grant-unknown', UNKNOWN)]);
     serveDisconnect('grant-unknown');
     await open();
-    assert.dom('[data-test-connected-app-name]').hasText('an unknown app');
+    assert.dom('[data-test-connected-app-name]').hasText('An unknown app');
     assert.dom('[data-test-connected-app-unverified]').exists();
     await click('[data-test-connection-disconnect]');
     assert
@@ -393,7 +494,7 @@ module('Integration | connected apps', function (hooks) {
     await click('[data-test-connected-apps-confirm-disconnect]');
     assert
       .dom('[data-test-connected-apps-announcement]')
-      .hasText('Disconnected the app.');
+      .hasText('Disconnected the connection.');
     assert.dom('[data-test-connected-apps-empty]').exists();
   });
 
@@ -411,8 +512,11 @@ module('Integration | connected apps', function (hooks) {
     assert
       .dom('[data-test-connected-apps-disconnect-error]')
       .hasText(
-        'Boxel couldn’t disconnect this app. Check your connection and try again.',
+        'Boxel couldn’t end this connection. Check that you’re online and try again.',
       );
+    assert
+      .dom('[data-test-connected-apps-confirm-disconnect]')
+      .isFocused('focus stays on Disconnect, ready to try again');
     assert.strictEqual(listRequests().length, 2, 'the list is read again');
     assert
       .dom('[data-test-connected-apps-announcement]')

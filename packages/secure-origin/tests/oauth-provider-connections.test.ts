@@ -130,7 +130,9 @@ describe('the address that ends a connection', () => {
     );
   });
 
-  test('refuses an empty ID', () => {
-    assert.throws(() => connectionPath(''));
+  test('refuses an empty ID, and one that would be read as a step in the path', () => {
+    for (let id of ['', '.', '..']) {
+      assert.throws(() => connectionPath(id), JSON.stringify(id));
+    }
   });
 });

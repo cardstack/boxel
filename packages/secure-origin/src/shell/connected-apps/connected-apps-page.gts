@@ -51,16 +51,31 @@ import {
 } from './format.ts';
 
 const HEADING = 'Connected apps';
-const UNKNOWN_APP = 'an unknown app';
 const DISCONNECT_FAILED =
-  'Boxel couldn’t disconnect this app. Check your connection and try again.';
+  'Boxel couldn’t end this connection. Check that you’re online and try again.';
 // How often the page's times ("Ends in 12 min") move on.
 const TICK_MS = 60 * 1000;
 
-// The app as a sentence names it, or undefined for one Boxel can't name.
+// The app as a sentence names it: the name Boxel can check, or the name an
+// app that registered itself gave, quoted. An app that registered itself
+// without a name has none to put in a sentence, only a description of where
+// it returns to ("an app on this computer"), so a sentence leaves it out.
 function nameInSentence(app: AppName): string | undefined {
+  if (app.kind === 'dynamic' && !app.claimedName) {
+    return undefined;
+  }
+  return appNameShown(app);
+}
+
+// The app as its group's heading names it. An app that registered itself
+// without a name is described rather than named ("an app on this computer"),
+// and a heading starts that description with a capital; a name, such as a
+// domain, is shown as it is.
+function appHeading(app: AppName): string {
   let name = appNameShown(app);
-  return name === UNKNOWN_APP ? undefined : name;
+  return nameInSentence(app) === undefined
+    ? name.charAt(0).toUpperCase() + name.slice(1)
+    : name;
 }
 
 function joinNames(names: string[]): string {
@@ -70,6 +85,8 @@ function joinNames(names: string[]): string {
 interface ConfirmSignature {
   Args: {
     connection: Connection;
+    // The id of the element naming the connection's question.
+    headingId: string;
     disconnecting: boolean;
     error: string | undefined;
     onCancel: () => void;
@@ -79,6 +96,8 @@ interface ConfirmSignature {
 
 // The confirmation that stands in for a connection's Disconnect: what ending
 // it does, with Cancel focused, so a stray Enter cancels. Escape cancels too.
+// While the disconnect is under way its button shows that it's busy but stays
+// focusable, so focus never falls out of the panel, and neither button acts.
 class ConfirmDisconnect extends Component<ConfirmSignature> {
   <template>
     <div
@@ -100,7 +119,6 @@ class ConfirmDisconnect extends Component<ConfirmSignature> {
           type='button'
           @variant='secondary'
           @size='s'
-          @disabled={{@disconnecting}}
           data-test-connected-apps-cancel
           {{focusWhen true}}
           {{on 'click' @onCancel}}
@@ -109,7 +127,6 @@ class ConfirmDisconnect extends Component<ConfirmSignature> {
           type='button'
           @variant='destructive'
           @size='s'
-          @disabled={{@disconnecting}}
           @loading={{@disconnecting}}
           data-test-connected-apps-confirm-disconnect
           {{on 'click' @onDisconnect}}
@@ -146,7 +163,9 @@ class ConfirmDisconnect extends Component<ConfirmSignature> {
     </style>
   </template>
 
-  private headingId = `confirm-${this.args.connection.id}`;
+  private get headingId(): string {
+    return this.args.headingId;
+  }
 
   private get name(): string | undefined {
     return nameInSentence(this.args.connection.app);
@@ -227,7 +246,10 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
                         class='connection'
                         data-test-connection={{connection.id}}
                       >
-                        <div class='connection-details'>
+                        <div
+                          class='connection-details'
+                          id={{this.detailsId connection}}
+                        >
                           {{#each connection.resources as |resource|}}
                             <p class='resource' data-test-connection-resource>
                               <span
@@ -257,6 +279,7 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
                           <div class='confirm-slot'>
                             <ConfirmDisconnect
                               @connection={{connection}}
+                              @headingId={{this.confirmId connection}}
                               @disconnecting={{this.state.disconnecting}}
                               @error={{this.state.disconnectError}}
                               @onCancel={{this.cancel}}
@@ -269,6 +292,7 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
                             type='button'
                             @variant='secondary'
                             @size='s'
+                            aria-describedby={{this.detailsId connection}}
                             data-disconnect-for={{connection.id}}
                             data-test-connection-disconnect
                             {{on 'click' (fn this.confirm connection)}}
@@ -396,6 +420,13 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
     now: new Date(),
   });
   private loaded = false;
+  // Each read of the list is numbered, and only the latest one's answer is
+  // shown, so a read that started earlier can't land later and bring back a
+  // connection that has since been disconnected.
+  private reads = 0;
+  // Alternates a trailing no-break space, so the same announcement made twice
+  // in a row still changes the status and is read out again.
+  private announcements = 0;
   private tick: ReturnType<typeof setInterval> | undefined;
 
   constructor(owner: Owner, args: ConnectedAppsSignature['Args']) {
@@ -422,8 +453,24 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
     );
   }
 
+  // Element ids for a connection's parts, made here rather than from the
+  // connection's id, which the server chooses.
+  private ids = new Map<string, number>();
+  private idFor(connection: Connection): number {
+    let n = this.ids.get(connection.id);
+    if (n === undefined) {
+      n = this.ids.size + 1;
+      this.ids.set(connection.id, n);
+    }
+    return n;
+  }
+  private detailsId = (connection: Connection) =>
+    `connection-details-${this.idFor(connection)}`;
+  private confirmId = (connection: Connection) =>
+    `connection-confirm-${this.idFor(connection)}`;
+
   private appTitle = (group: AppGroup): string => {
-    let name = appNameShown(group.app);
+    let name = appHeading(group.app);
     let count = group.connections.length;
     return count > 1 ? `${name} · ${count} connections` : name;
   };
@@ -452,14 +499,22 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
     this.state.confirming === connection.id;
 
   private async load() {
+    let read = ++this.reads;
     try {
-      this.state.connections = await listConnections(this.args.api.config);
+      let connections = await listConnections(this.args.api.config);
+      if (read !== this.reads) {
+        return;
+      }
+      this.state.connections = connections;
       this.state.now = new Date();
       if (!this.loaded) {
         this.loaded = true;
         this.args.api.visit.loaded();
       }
     } catch (e) {
+      if (read !== this.reads) {
+        return;
+      }
       if (isSignedOut(e)) {
         this.args.api.signedOut();
       } else if (!this.loaded) {
@@ -497,6 +552,9 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
   };
 
   private cancel = () => {
+    if (this.state.disconnecting) {
+      return;
+    }
     let id = this.state.confirming;
     this.state.confirming = undefined;
     this.state.disconnectError = undefined;
@@ -535,9 +593,11 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
       );
       this.state.confirming = undefined;
       let name = nameInSentence(connection.app);
-      this.state.announcement = name
-        ? `Disconnected ${name}.`
-        : 'Disconnected the app.';
+      this.announce(
+        name
+          ? `Disconnected the ${name} connection.`
+          : 'Disconnected the connection.',
+      );
     }
     await this.load();
     this.state.disconnecting = false;
@@ -548,6 +608,10 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
       this.focusAfterRemoval(next);
     }
   };
+
+  private announce(text: string) {
+    this.state.announcement = `${text}${++this.announcements % 2 ? '' : '\u00a0'}`;
+  }
 
   // Focus goes to the Disconnect of the connection that took the removed
   // one's place, or of the one before it, or to the empty list.

@@ -5,8 +5,8 @@
 // neither read the list nor disconnect anything.
 //
 // A connection's ID names the grant it ends. It isn't a bearer secret, but it
-// is put in the path only encoded, so it can never name another of the realm
-// server's routes.
+// is put in the path only encoded, and never as a dot segment, so it can never
+// name another of the realm server's routes.
 
 import { authorizedRequest, SecureSessionError } from './session.js';
 import type { AppName } from './oauth-provider.ts';
@@ -137,9 +137,10 @@ export function readConnections(json: unknown): Connection[] {
     .filter((c): c is Connection => c !== undefined);
 }
 
-// The path that ends one connection.
+// The path that ends one connection. An ID of `.` or `..` would be read as a
+// step in the path, not a segment of it, so it is refused with the empty one.
 export function connectionPath(id: string): string {
-  if (!id) {
+  if (!id || id === '.' || id === '..') {
     throw new SecureSessionError(400, 'bad-request', 'This link is not valid.');
   }
   return `_oauth-provider/connections/${encodeURIComponent(id)}`;
