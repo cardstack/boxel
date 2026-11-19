@@ -11,6 +11,7 @@ import { Button } from '@cardstack/pretui/components/button';
 import { Chip } from '@cardstack/pretui/components/chip';
 import { Input as PretInput } from '@cardstack/pretui/components/input';
 import { RadioGroup } from '@cardstack/pretui/components/radio-group';
+import { Tooltip } from '@cardstack/pretui/components/tooltip';
 import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -51,6 +52,11 @@ interface Signature {
     removeV1Site: (url: string) => Promise<void>;
   };
 }
+
+const CANONICAL_EXPLANATION =
+  'The main address of this realm. Search engines, link previews and the sitemap use it, whichever address a visitor opens.';
+const MAKE_CANONICAL_EXPLANATION =
+  'Make this the main address of this realm. Search engines, link previews and the sitemap will use it.';
 
 interface MountTarget {
   kind: HostURLKind;
@@ -162,6 +168,10 @@ export default class HostURLManager extends Component<Signature> {
       });
     }
     return targets.filter(({ url }) => !this.isMounted(url));
+  }
+
+  private get hasMountTargets() {
+    return this.mountTargets.length > 0 || this.showsSiteNameClaim;
   }
 
   private get showsSiteNameClaim() {
@@ -379,22 +389,32 @@ export default class HostURLManager extends Component<Signature> {
                         rel='noopener noreferrer'
                       >{{hostURL.url}}</a>
                       {{#if hostURL.isCanonical}}
-                        <Chip
-                          @label='Canonical'
-                          @tone='success'
-                          data-test-host-url-canonical
-                        />
+                        <Tooltip
+                          class='explain'
+                          @content={{CANONICAL_EXPLANATION}}
+                        >
+                          <Chip
+                            @label='Canonical'
+                            @tone='success'
+                            data-test-host-url-canonical
+                          />
+                        </Tooltip>
                       {{/if}}
                     </div>
                     <div class='row-actions'>
                       {{#unless hostURL.isCanonical}}
-                        <Button
-                          @variant='ghost'
-                          @size='sm'
-                          @busy={{this.setCanonicalTask.isRunning}}
-                          {{on 'click' (fn this.setCanonical hostURL)}}
-                          data-test-make-canonical={{hostURL.url}}
-                        >Make canonical</Button>
+                        <Tooltip
+                          class='explain'
+                          @content={{MAKE_CANONICAL_EXPLANATION}}
+                        >
+                          <Button
+                            @variant='ghost'
+                            @size='sm'
+                            @busy={{this.setCanonicalTask.isRunning}}
+                            {{on 'click' (fn this.setCanonical hostURL)}}
+                            data-test-make-canonical={{hostURL.url}}
+                          >Make canonical</Button>
+                        </Tooltip>
                       {{/unless}}
                       <Button
                         @variant='outline'
@@ -511,75 +531,81 @@ export default class HostURLManager extends Component<Signature> {
             </p>
           </section>
 
-          <section class='section' aria-labelledby='host-urls-add'>
-            <h3 id='host-urls-add' class='section-title'>Mount at</h3>
-            <ul class='rows'>
-              {{#each this.mountTargets as |target|}}
-                <li class='row' data-test-mount-target={{target.kind}}>
-                  <div class='row-main'>
-                    <span class='target-label'>{{target.label}}</span>
-                    <span class='url'>{{target.url}}</span>
-                  </div>
-                  <div class='row-actions'>
-                    <Button
-                      @variant='primary'
-                      @size='sm'
-                      @disabled={{this.isMountDisabled}}
-                      @busy={{this.mountTask.isRunning}}
-                      {{on 'click' (fn this.mount target.url)}}
-                      data-test-mount={{target.kind}}
-                    >Mount</Button>
-                  </div>
-                  {{#let (this.errorFor target.url) as |error|}}
-                    {{#if error}}
-                      <p
-                        class='row-error'
-                        role='alert'
-                        data-test-mount-error={{target.kind}}
-                      >{{error}}</p>
-                    {{/if}}
-                  {{/let}}
-                </li>
-              {{/each}}
-              {{#if this.showsSiteNameClaim}}
-                <li class='row' data-test-mount-target='site-name-claim'>
-                  <div class='row-main'>
-                    <label class='target-label' for='host-url-site-name'>Site
-                      name</label>
-                    <div class='site-name'>
-                      <PretInput
-                        @controlId='host-url-site-name'
-                        @value={{this.siteName}}
-                        placeholder='your-site'
-                        @onInput={{this.updateSiteName}}
-                        data-test-site-name-input
-                      />
-                      <span class='muted'>.{{this.siteDomain}}</span>
+          {{#if this.hasMountTargets}}
+            <section
+              class='section'
+              aria-labelledby='host-urls-add'
+              data-test-mount-targets
+            >
+              <h3 id='host-urls-add' class='section-title'>Mount at</h3>
+              <ul class='rows'>
+                {{#each this.mountTargets as |target|}}
+                  <li class='row' data-test-mount-target={{target.kind}}>
+                    <div class='row-main'>
+                      <span class='target-label'>{{target.label}}</span>
+                      <span class='url'>{{target.url}}</span>
                     </div>
-                  </div>
-                  <div class='row-actions'>
-                    <Button
-                      @variant='primary'
-                      @size='sm'
-                      @disabled={{this.isClaimDisabled}}
-                      @busy={{this.claimSiteNameTask.isRunning}}
-                      {{on 'click' (perform this.claimSiteNameTask)}}
-                      data-test-claim-site-name
-                    >Claim and mount</Button>
-                  </div>
-                  {{#let (this.errorFor this.siteNameURL) as |error|}}
-                    {{#if error}}
-                      <p
-                        class='row-error'
-                        role='alert'
-                        data-test-mount-error='site-name-claim'
-                      >{{error}}</p>
-                    {{/if}}
-                  {{/let}}
-                </li>
-              {{/if}}
-            </ul>
-          </section>
+                    <div class='row-actions'>
+                      <Button
+                        @variant='primary'
+                        @size='sm'
+                        @disabled={{this.isMountDisabled}}
+                        @busy={{this.mountTask.isRunning}}
+                        {{on 'click' (fn this.mount target.url)}}
+                        data-test-mount={{target.kind}}
+                      >Mount</Button>
+                    </div>
+                    {{#let (this.errorFor target.url) as |error|}}
+                      {{#if error}}
+                        <p
+                          class='row-error'
+                          role='alert'
+                          data-test-mount-error={{target.kind}}
+                        >{{error}}</p>
+                      {{/if}}
+                    {{/let}}
+                  </li>
+                {{/each}}
+                {{#if this.showsSiteNameClaim}}
+                  <li class='row' data-test-mount-target='site-name-claim'>
+                    <div class='row-main'>
+                      <label class='target-label' for='host-url-site-name'>Site
+                        name</label>
+                      <div class='site-name'>
+                        <PretInput
+                          @controlId='host-url-site-name'
+                          @value={{this.siteName}}
+                          placeholder='your-site'
+                          @onInput={{this.updateSiteName}}
+                          data-test-site-name-input
+                        />
+                        <span class='muted'>.{{this.siteDomain}}</span>
+                      </div>
+                    </div>
+                    <div class='row-actions'>
+                      <Button
+                        @variant='primary'
+                        @size='sm'
+                        @disabled={{this.isClaimDisabled}}
+                        @busy={{this.claimSiteNameTask.isRunning}}
+                        {{on 'click' (perform this.claimSiteNameTask)}}
+                        data-test-claim-site-name
+                      >Claim and mount</Button>
+                    </div>
+                    {{#let (this.errorFor this.siteNameURL) as |error|}}
+                      {{#if error}}
+                        <p
+                          class='row-error'
+                          role='alert'
+                          data-test-mount-error='site-name-claim'
+                        >{{error}}</p>
+                      {{/if}}
+                    {{/let}}
+                  </li>
+                {{/if}}
+              </ul>
+            </section>
+          {{/if}}
 
           {{#if @v1SiteURLs.length}}
             <section class='section' aria-labelledby='host-urls-v1'>
@@ -700,6 +726,9 @@ export default class HostURLManager extends Component<Signature> {
       }
       .modules code {
         overflow-wrap: anywhere;
+      }
+      .explain {
+        --pretui-tooltip-measure: 20rem;
       }
       .replace-canonical {
         display: flex;

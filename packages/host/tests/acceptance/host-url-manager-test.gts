@@ -10,6 +10,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import ENV from '@cardstack/host/config/environment';
 import type RealmService from '@cardstack/host/services/realm';
 import type {
+  ClaimedDomain,
   HomePageCheck,
   HostURL,
 } from '@cardstack/host/services/realm-server';
@@ -65,6 +66,7 @@ class FakeHostURLs {
   homePage: HomePageCheck = VIEWABLE;
   calls: string[] = [];
   refusal: string | undefined;
+  claimedDomain: ClaimedDomain | null = null;
   #nextId = 1;
   #restore: (() => void)[] = [];
 
@@ -77,7 +79,7 @@ class FakeHostURLs {
     };
     stub('listHostURLs', async () => this.hostURLs.map((h) => ({ ...h })));
     stub('checkHomePage', async () => this.homePage);
-    stub('fetchBoxelClaimedDomain', async () => null);
+    stub('fetchBoxelClaimedDomain', async () => this.claimedDomain);
     stub('mountHostURL', async (_realmURL: string, url: string) => {
       this.calls.push(`mount ${url}`);
       if (this.refusal) {
@@ -163,7 +165,7 @@ module('Acceptance | host URL manager', function (hooks) {
     });
     await click('[data-test-publish-realm-button]');
     await waitFor('[data-test-host-url-manager]');
-    await waitFor('[data-test-mount-target]');
+    await waitFor('[data-test-visibility-note]');
   }
 
   test('the publish dialog is the host URL manager, with no progress or "last published" UI', async function (assert) {
@@ -205,6 +207,24 @@ module('Acceptance | host URL manager', function (hooks) {
     await click('[data-test-mount="boxel-space"]');
     await waitFor('[data-test-mount-error="boxel-space"]');
     assert.dom('[data-test-mount-error="boxel-space"]').hasText(fake.refusal);
+  });
+
+  test('hides the "Mount at" section when there is nowhere left to mount', async function (assert) {
+    let siteURL = `https://shop.${siteDomain}/`;
+    fake.claimedDomain = {
+      id: 'claim-1',
+      hostname: `shop.${siteDomain}`,
+      subdomain: 'shop',
+      sourceRealmURL: testRealmURL,
+    };
+    fake.hostURLs = [
+      { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
+      { id: 'b', url: siteURL, kind: 'site-name', isCanonical: false },
+    ];
+    await openManager();
+    assert.dom(`[data-test-host-url="${siteURL}"]`).exists();
+    assert.dom('[data-test-mount-targets]').doesNotExist();
+    assert.dom('[data-test-mount-target]').doesNotExist();
   });
 
   test('marks another host URL canonical', async function (assert) {
