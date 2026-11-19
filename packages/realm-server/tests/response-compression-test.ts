@@ -246,9 +246,11 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a 304 without a content type varies like the 200 it revalidates', async function (assert) {
+    test('a 304 varies like the 200 it revalidates, whatever it is typed', async function (assert) {
       handler = (ctxt) => {
         ctxt.status = 304;
+        // What a realm 304 is typed when it names no type of its own.
+        ctxt.type = 'application/octet-stream';
       };
       let response = await send(server, '/realm/person', {
         headers: { 'Accept-Encoding': 'br' },

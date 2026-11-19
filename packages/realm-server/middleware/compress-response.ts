@@ -157,13 +157,10 @@ export async function compressResponse(ctxt: Koa.Context, next: Koa.Next) {
     ctxt.status === 206 ||
     ctxt.get('Range') ||
     servesStoredBytes(ctxt) ||
-    // A 304 carries no body and often no Content-Type, but it varies on what
-    // the 200 it revalidates varies on, or a cache would update that stored
-    // response under a narrower key.
-    !(
-      isCompressibleType(ctxt.response.type) ||
-      (ctxt.status === 304 && !ctxt.response.type)
-    ) ||
+    // A 304 carries no body, and its Content-Type, if any, is not the 200's,
+    // but it varies on what the 200 it revalidates varies on, or a cache
+    // would update that stored response under a narrower key.
+    (ctxt.status !== 304 && !isCompressibleType(ctxt.response.type)) ||
     !isCompressiblePath(ctxt.path) ||
     // Koa reads an absent header as ''.
     !['', 'identity'].includes(ctxt.response.get('Content-Encoding')) ||
