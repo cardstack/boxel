@@ -291,18 +291,26 @@ module(basename(import.meta.filename), function (hooks) {
       ?.code;
   }
 
-  // The gate's refusal to a caller who may read the realm.
+  // The gate's refusal to a caller who may read the realm: a 403, which the
+  // operations envelope also names by its code. A card+json route answers
+  // it with the status alone.
   function assertNotPermitted(
     assert: Assert,
     response: Response,
     label: string,
   ) {
     assert.strictEqual(response.status, 403, `${label}: status`);
-    assert.strictEqual(
-      errorCode(response),
-      'operation-not-permitted',
-      `${label}: the gate's refusal`,
-    );
+    if (
+      (response.get('content-type') ?? '').startsWith(
+        SupportedMimeType.BoxelOperations,
+      )
+    ) {
+      assert.strictEqual(
+        errorCode(response),
+        'operation-not-permitted',
+        `${label}: the gate's refusal`,
+      );
+    }
   }
 
   async function titleOf(url: string) {
