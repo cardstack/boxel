@@ -5349,6 +5349,33 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a read in a render tab is not sent again when the realm turns it away', async function (assert) {
+    await writePerson('Person/render-tab-read.json', 'Render Tab');
+    let url = `${testRealmURL}Person/render-tab-read`;
+    let realm = turnAwayCardReads('Person/render-tab-read', Infinity);
+    let renderContext = globalThis as unknown as {
+      __boxelRenderContext?: boolean;
+    };
+    let hadRenderContext = '__boxelRenderContext' in renderContext;
+    let previousRenderContext = renderContext.__boxelRenderContext;
+    renderContext.__boxelRenderContext = true;
+    let refusal: any;
+    try {
+      await getService('card-service').fetchJSON(url);
+    } catch (err) {
+      refusal = err;
+    } finally {
+      if (hadRenderContext) {
+        renderContext.__boxelRenderContext = previousRenderContext;
+      } else {
+        delete renderContext.__boxelRenderContext;
+      }
+      realm.restore();
+    }
+    assert.strictEqual(realm.turnedAway, 1, 'the read was sent once');
+    assert.strictEqual(refusal?.status, 503, 'and the refusal reached it');
+  });
+
   test('a running card stays in place when the realm turns its reload away for now', async function (assert) {
     await writePerson('Person/reload-turned-away.json', 'Running');
     let url = `${testRealmURL}Person/reload-turned-away`;
