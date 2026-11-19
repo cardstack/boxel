@@ -54,6 +54,17 @@ export class GateTrace {
     grants: CompiledOperationGrant[];
   }[] = [];
   readonly outcomes = new Map<CompiledOperationGrant, GateTraceOutcome>();
+  // Set on an explain's trace, which reports every rule matching the
+  // target's type, with each grant's outcome. So the gate reads the target
+  // before it matches a grant's paths, which it otherwise matches first
+  // (ADR 038 §1.3). A capability check's trace is read only for why the gate
+  // refused, which that order doesn't change.
+  readonly explains: boolean;
+
+  constructor({ explains = false }: { explains?: boolean } = {}) {
+    this.explains = explains;
+  }
+
   // The grants among `rules` whose paths don't cover the target, which the
   // gate set aside without evaluating.
   readonly outsideItsPaths = new Set<CompiledOperationGrant>();

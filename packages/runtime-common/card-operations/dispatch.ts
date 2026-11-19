@@ -1020,16 +1020,20 @@ async function resolveAndGate(
     // §1.3). A grant is matched on the name the caller invokes, so a name no
     // grant names needs nothing resolved. Where the target is placed before
     // anything resolves, so do its paths. The gate makes the same checks once
-    // the operation resolves, and makes them alone for an explain or a
-    // capability check, after the reads that let it report which rules match.
-    if (loaded.policy && !scope.trace) {
+    // the operation resolves, and makes them alone for an explain, after the
+    // reads that let it report which rules match.
+    if (loaded.policy && !scope.trace?.explains) {
       let named = grantsNaming(loaded.policy, name);
       let path = placedBeforeResolving(core, target, name, opts);
+      if (named.length === 0) {
+        scope.trace?.refused('no-grant');
+        throw notPermitted(target, name);
+      }
       if (
-        named.length === 0 ||
-        (path !== 'unplaced' &&
-          !named.some((grant) => grantCoversPath(grant, path)))
+        path !== 'unplaced' &&
+        !named.some((grant) => grantCoversPath(grant, path))
       ) {
+        scope.trace?.refused('outside-paths');
         throw notPermitted(target, name);
       }
     }

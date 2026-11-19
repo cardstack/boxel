@@ -808,7 +808,7 @@ async function searchRules(
   if (!policy || !core.policy) {
     return [];
   }
-  let trace = new GateTrace();
+  let trace = new GateTrace({ explains: true });
   for (let on of invocation.types) {
     let resolved = core.resolveCodeRef(on, new URL(core.realmURL));
     if (!resolved) {
@@ -985,7 +985,7 @@ async function explain(
       code: 'actor-required',
     });
   }
-  let trace = new GateTrace();
+  let trace = new GateTrace({ explains: true });
   let scope = newOperationScope(core, {
     caller: actor,
     coarseDeclined,

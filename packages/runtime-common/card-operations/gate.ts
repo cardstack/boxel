@@ -688,10 +688,10 @@ async function decide(
   let target = targetPathOf(core, subject);
   // A target no grant naming the operation covers is refused here, with no
   // row or byte read, so a request outside every grant's paths costs nothing
-  // and its timing doesn't tell whether the target is there. An explain or a
-  // capability check reads on anyway: it reports which rules match the
-  // target's type, and the matching below refuses it the same way.
-  if (!trace) {
+  // and its timing doesn't tell whether the target is there. An explain reads
+  // on anyway: it reports which rules match the target's type, and the
+  // matching below refuses it the same way.
+  if (!trace?.explains) {
     let named = grantsNaming(policy, name);
     if (named.length === 0) {
       return refuse('no-grant');
