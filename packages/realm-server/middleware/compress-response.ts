@@ -66,6 +66,47 @@ function isCompressiblePath(path: string): boolean {
   return true;
 }
 
+// The q-value an Accept-Encoding header gives a coding, `*` standing in for a
+// coding it does not name. An absent coding is not acceptable.
+function qualityOf(acceptEncoding: string, coding: string): number {
+  let wildcard = 0;
+  for (let part of acceptEncoding.split(',')) {
+    let [name, ...params] = part.trim().toLowerCase().split(';');
+    let q = 1;
+    for (let param of params) {
+      let [key, value] = param.trim().split('=');
+      if (key === 'q') {
+        q = Number(value);
+        if (!Number.isFinite(q)) {
+          q = 0;
+        }
+      }
+    }
+    if (name === coding) {
+      return q;
+    }
+    if (name === '*') {
+      wildcard = q;
+    }
+  }
+  return wildcard;
+}
+
+// Brotli whenever the client accepts it at least as readily as gzip. Browsers
+// list gzip first at the same quality (`gzip, deflate, br, zstd`), so the
+// client's order is not a preference to follow.
+function chooseEncoding(acceptEncoding: string): 'br' | 'gzip' | undefined {
+  let br = qualityOf(acceptEncoding, 'br');
+  let gzip = qualityOf(acceptEncoding, 'gzip');
+  if (br > 0 && br >= gzip) {
+    return 'br';
+  }
+  if (gzip > 0) {
+    return 'gzip';
+  }
+  return undefined;
+}
+
 // The body as the bytes Koa would send, or undefined for a body this
 // middleware leaves alone. A stream is always left alone: it may be an event
 // stream whose events must reach the client as they happen, or a file that
@@ -130,8 +171,8 @@ export async function compressResponse(ctxt: Koa.Context, next: Koa.Next) {
   // cache must key on it whichever this client gets.
   ctxt.vary('Accept-Encoding');
 
-  let encoding = ctxt.acceptsEncodings('br', 'gzip', 'identity');
-  if (encoding !== 'br' && encoding !== 'gzip') {
+  let encoding = chooseEncoding(ctxt.get('Accept-Encoding'));
+  if (!encoding) {
     return;
   }
 
@@ -158,4 +199,15 @@ export async function compressResponse(ctxt: Koa.Context, next: Koa.Next) {
   ctxt.body = compressed;
   ctxt.set('Content-Encoding', encoding);
   ctxt.set(X_BOXEL_UNCOMPRESSED_LENGTH_HEADER, String(bytes.length));
+  // A cross-origin browser caller reads the uncompressed length only if the
+  // response exposes it. The expose list is whichever one the response
+  // carries: the CORS middleware's, or the one a realm response sets in its
+  // place.
+  let exposed = ctxt.response.get('Access-Control-Expose-Headers');
+  if (exposed) {
+    ctxt.set(
+      'Access-Control-Expose-Headers',
+      `${exposed}, ${X_BOXEL_UNCOMPRESSED_LENGTH_HEADER}`,
+    );
+  }
 }

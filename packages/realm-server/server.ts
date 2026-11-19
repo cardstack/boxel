@@ -22,7 +22,6 @@ import {
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   WRITE_CONTEXT_HEADERS,
-  X_BOXEL_UNCOMPRESSED_LENGTH_HEADER,
 } from '@cardstack/runtime-common';
 import fsExtra from 'fs-extra';
 const { ensureDirSync } = fsExtra;
@@ -1102,13 +1101,8 @@ export class RealmServer {
             // WWW-Authenticate carries an OAuth resource's challenge, naming
             // its metadata and scopes, which a browser-based OAuth client reads
             // to start or restart its flow.
-            // The uncompressed length of a compressed body is how a browser
-            // caller measures the document it parsed, since Content-Length is
-            // the compressed length.
-            exposeHeaders: [
+            exposeHeaders:
               'ETag, Location, Retry-After, Content-Range, Accept-Ranges, Content-Length, Content-Disposition, X-Boxel-Live-Search-Cache, WWW-Authenticate',
-              X_BOXEL_UNCOMPRESSED_LENGTH_HEADER,
-            ].join(', '),
             allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
             // Cache the preflight response for 24 h. Without this @koa/cors
             // omits Access-Control-Max-Age and Chrome falls back to its

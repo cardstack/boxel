@@ -151,6 +151,21 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.headers['vary'], 'Accept-Encoding');
     });
 
+    test('exposes the uncompressed length wherever the response exposes headers', async function (assert) {
+      handler = (ctxt) => {
+        ctxt.type = SupportedMimeType.CardJson;
+        ctxt.set('Access-Control-Expose-Headers', 'ETag,Content-Length');
+        ctxt.body = largeDocument;
+      };
+      let response = await send(server, '/realm/person', {
+        headers: { 'Accept-Encoding': 'br' },
+      });
+      assert.strictEqual(
+        response.headers['access-control-expose-headers'],
+        `ETag,Content-Length, ${X_BOXEL_UNCOMPRESSED_LENGTH_HEADER}`,
+      );
+    });
+
     test('sends gzip to a client that does not accept brotli', async function (assert) {
       let response = await send(server, '/realm/person', {
         headers: { 'Accept-Encoding': 'gzip, deflate' },
@@ -168,6 +183,24 @@ module(basename(import.meta.filename), function () {
         headers: { 'Accept-Encoding': 'br;q=0.5, gzip' },
       });
       assert.strictEqual(response.headers['content-encoding'], 'gzip');
+
+      response = await send(server, '/realm/person', {
+        headers: { 'Accept-Encoding': 'gzip, br;q=0' },
+      });
+      assert.strictEqual(
+        response.headers['content-encoding'],
+        'gzip',
+        'a coding refused with q=0 is not sent',
+      );
+
+      response = await send(server, '/realm/person', {
+        headers: { 'Accept-Encoding': '*' },
+      });
+      assert.strictEqual(
+        response.headers['content-encoding'],
+        'br',
+        'a wildcard accepts brotli',
+      );
     });
 
     test('sends the body as it is to a client that accepts no encoding, varying on the header', async function (assert) {
@@ -339,7 +372,7 @@ module(basename(import.meta.filename), function () {
         headers: { 'Accept-Encoding': 'br' },
       });
       assert.strictEqual(response.headers['content-encoding'], 'gzip');
-      assert.deepEqual(response.body, gzipped, 'not encoded twice');
+      assert.ok(response.body.equals(gzipped), 'not encoded twice');
     });
 
     test('a HEAD reports the encoding and length its GET is sent with', async function (assert) {
@@ -424,6 +457,7 @@ module(basename(import.meta.filename), function () {
         .get(`${realmPath}person-0`)
         .set('Accept', SupportedMimeType.CardJson)
         .set('Accept-Encoding', 'br')
+        .set('Origin', 'https://app.example.test')
         .buffer(true)
         .parse(binaryParser);
       assert.strictEqual(response.status, 200);
