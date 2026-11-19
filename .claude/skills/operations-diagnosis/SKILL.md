@@ -461,12 +461,24 @@ The telemetry answers questions about traffic: who was refused, how often, under
 
 So: use the logs to find the realm, the actor, the operation, the grant path and the time; then hand off to the boxel-skills **`realm-policy-authoring`** skill, which covers calling explain and validate and reading their answers. Explain decisions show up on this channel with `hypothetical: true` — that is your own explain, not a user's traffic.
 
+## Calls from outside apps
+
+An outside app calls Boxel with an OAuth access token, not a session (the
+`realm-auth` skill). The resource's controller checks the token before any
+operation gate runs, so a call it refuses (401 `invalid_token`, or 403
+`insufficient_scope`) writes no line on this channel. Look for it on
+`boxel:oauth-provider` instead: `token refused: <reason>, resource …` or
+`token refused: insufficient scope, …`, plain-text lines found by their text
+(the `tail-logs` skill). The `oauth-provider` skill lists every line on that
+channel and how to trace an app's connection from registration to its calls.
+
 ## Related skills
 
 - **`policy-performance`** — what the policy costs: `evaluationMs`, `predicateMs`, compile durations, the before/after method, and asserting on these records in realm-server tests through their sinks.
 - **`realm-policy-authoring`** (boxel-skills) — explain and validate, for one actor and one card.
 - **`call-api`** — a `callApi` refused or answering unexpectedly: which stage refused it, and the `boxel:key-use` line each invocation writes.
 - **`realm-auth`** — a 401, or a 403 with no decision line: tokens, sessions, the ACL itself.
+- **`oauth-provider`** — an outside app's call refused, or its connection failing: the `boxel:oauth-provider` lines.
 - **`indexing-diagnostics`** — a policy card that won't index, or a target whose error row makes it unmatchable.
 - **`search-shape-diagnosis`** — the federated search's own line, including `incomplete`, for a search missing rows.
 - **`tail-logs`** / **`aws-access`** — reaching staging and production Loki.
