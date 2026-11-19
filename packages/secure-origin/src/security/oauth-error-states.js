@@ -11,6 +11,7 @@ export const ERROR_STATE_BY_REASON = Object.freeze({
   'bad-redirect-uri': 'bad-redirect',
   library: 'cant-continue',
   'unsupported-response-type': 'unsupported',
+  'unsupported-parameter': 'unsupported',
   'pkce-required': 'unsupported',
   'prompt-none': 'unsupported',
   malformed: 'unsupported',
@@ -18,6 +19,7 @@ export const ERROR_STATE_BY_REASON = Object.freeze({
   'no-resource-for-scopes': 'not-offered',
   'client-not-allowed': 'not-allowed',
   'unknown-scope': 'not-offered',
+  'unregistered-scope': 'unsupported',
   'missing-scope': 'not-offered',
   openid: 'not-offered',
 });

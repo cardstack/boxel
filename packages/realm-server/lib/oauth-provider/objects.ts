@@ -346,6 +346,7 @@ export const AUTHORIZATION_REFUSAL_REASONS = Object.freeze([
   'library',
   // Boxel's checks before the library (`checkAuthorizationRequest`).
   'unsupported-response-type',
+  'unsupported-parameter',
   'pkce-required',
   'prompt-none',
   'malformed',
@@ -353,6 +354,7 @@ export const AUTHORIZATION_REFUSAL_REASONS = Object.freeze([
   'no-resource-for-scopes',
   'client-not-allowed',
   'unknown-scope',
+  'unregistered-scope',
   'missing-scope',
   'openid',
 ] as const);
