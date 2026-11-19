@@ -53,6 +53,12 @@ interface Signature {
   };
 }
 
+// A host URL as the manager shows it: without `https://`, which every host
+// URL has, and without a trailing slash. Its link still goes to the full URL.
+function displayURL(url: string): string {
+  return url.replace(/^https:\/\//, '').replace(/\/$/, '');
+}
+
 const CANONICAL_EXPLANATION =
   'The main address of this realm. Search engines, link previews and the sitemap use it, whichever address a visitor opens.';
 const MAKE_CANONICAL_EXPLANATION =
@@ -191,7 +197,7 @@ export default class HostURLManager extends Component<Signature> {
   private get newCanonicalOptions() {
     return this.hostURLs
       .filter(({ id }) => id !== this.replacingCanonical?.id)
-      .map(({ id, url }) => ({ value: id, label: url }));
+      .map(({ id, url }) => ({ value: id, label: displayURL(url) }));
   }
 
   private errorFor = (url: string) => this.errors.get(url);
@@ -387,7 +393,7 @@ export default class HostURLManager extends Component<Signature> {
                         href={{hostURL.url}}
                         target='_blank'
                         rel='noopener noreferrer'
-                      >{{hostURL.url}}</a>
+                      >{{displayURL hostURL.url}}</a>
                       {{#if hostURL.isCanonical}}
                         <Tooltip
                           class='explain'
@@ -446,7 +452,7 @@ export default class HostURLManager extends Component<Signature> {
             {{#if this.replacingCanonical}}
               <div class='replace-canonical' data-test-replace-canonical>
                 <p id='host-urls-new-canonical' class='replace-prompt'>
-                  {{this.replacingCanonical.url}}
+                  {{displayURL this.replacingCanonical.url}}
                   is canonical. Choose the new canonical host URL before you
                   remove it.
                 </p>
@@ -544,7 +550,7 @@ export default class HostURLManager extends Component<Signature> {
                   <li class='row' data-test-mount-target={{target.kind}}>
                     <div class='row-main'>
                       <span class='target-label'>{{target.label}}</span>
-                      <span class='url'>{{target.url}}</span>
+                      <span class='url'>{{displayURL target.url}}</span>
                     </div>
                     <div class='row-actions'>
                       <Button
@@ -625,7 +631,7 @@ export default class HostURLManager extends Component<Signature> {
                         href={{url}}
                         target='_blank'
                         rel='noopener noreferrer'
-                      >{{url}}</a>
+                      >{{displayURL url}}</a>
                     </div>
                     <div class='row-actions'>
                       <Button
@@ -712,6 +718,17 @@ export default class HostURLManager extends Component<Signature> {
       }
       .url {
         overflow-wrap: anywhere;
+      }
+      a.url {
+        color: var(--foreground);
+        text-decoration: underline;
+        text-decoration-color: var(--muted-foreground);
+        text-underline-offset: 0.15em;
+      }
+      a.url:hover {
+        color: var(--foreground);
+        text-decoration-color: currentColor;
+        text-decoration-thickness: 2px;
       }
       .target-label {
         font-weight: 600;

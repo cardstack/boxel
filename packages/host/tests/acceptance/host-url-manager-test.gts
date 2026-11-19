@@ -184,7 +184,10 @@ module('Acceptance | host URL manager', function (hooks) {
     await openManager();
     assert
       .dom('[data-test-mount-target="boxel-space"]')
-      .containsText(SPACE_URL);
+      .containsText(SPACE_URL.replace('https://', '').replace(/\/$/, ''));
+    assert
+      .dom('[data-test-mount-target="boxel-space"]')
+      .doesNotContainText('https://', 'the URL is shown without its scheme');
 
     await click('[data-test-mount="boxel-space"]');
     await waitFor(`[data-test-host-url="${SPACE_URL}"]`);
@@ -193,6 +196,12 @@ module('Acceptance | host URL manager', function (hooks) {
     assert
       .dom(`[data-test-host-url="${SPACE_URL}"] a`)
       .hasAttribute('href', SPACE_URL);
+    assert
+      .dom(`[data-test-host-url="${SPACE_URL}"] a`)
+      .hasText(
+        SPACE_URL.replace('https://', '').replace(/\/$/, ''),
+        'the link shows the URL without its scheme or trailing slash',
+      );
     assert
       .dom(`[data-test-host-url="${SPACE_URL}"] [data-test-host-url-canonical]`)
       .exists('the first host URL is canonical');
