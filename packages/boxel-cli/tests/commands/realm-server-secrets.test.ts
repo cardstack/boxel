@@ -169,7 +169,7 @@ describe('boxel realm-server secrets', () => {
     terminal.type(`${VALUE}\r`);
     expect(await reading).toBe(VALUE);
     let written = terminal.written();
-    expect(written).toBe(`Key value: ${'*'.repeat(VALUE.length)}\n`);
+    expect(written).toBe(`Secret value: ${'*'.repeat(VALUE.length)}\n`);
   });
 
   it('reads the value from a file, dropping one trailing newline', async () => {

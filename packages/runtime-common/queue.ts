@@ -231,6 +231,25 @@ export interface QueueWaiter {
   reject: (error: unknown) => void;
 }
 
+// The coalesce rule of a job that takes no arguments and only ever needs one
+// run at a time, such as a periodic sweep: an incoming job joins any job of
+// its type that is queued or already running, since that run does all the
+// incoming one would, and is inserted only when there is none.
+export function joinAnyJobOfSameType(
+  context: QueueCoalesceContext,
+): QueueCoalesceDecision {
+  let { incoming, candidates, inFlightCandidates } = context;
+  let twin =
+    candidates.find((candidate) => candidate.jobType === incoming.jobType) ??
+    inFlightCandidates.find(
+      (candidate) => candidate.jobType === incoming.jobType,
+    );
+  if (!twin) {
+    return { type: 'insert' };
+  }
+  return { type: 'join', jobId: twin.id };
+}
+
 export interface QueueJobDefinition {
   jobType: string;
   coalesce?: (context: QueueCoalesceContext) => QueueCoalesceDecision;

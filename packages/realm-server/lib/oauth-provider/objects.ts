@@ -16,7 +16,8 @@
 //
 // A row past its expiry reads as missing, whether or not it has been deleted.
 // Each store first deletes rows that have expired, so abandoned flows and
-// error pages nobody opened don't pile up.
+// error pages nobody opened don't pile up, and the daily cleanup deletes any
+// left while nothing is being stored (`cleanup.ts`).
 
 import { createHash, randomBytes } from 'crypto';
 import { errors, type Adapter, type AdapterPayload } from 'oidc-provider';
@@ -336,23 +337,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 // Why an authorization request didn't reach consent. Each is a fixed label
-// for telemetry, and tells the error page which of its states to show.
-export type AuthorizationRefusalReason =
+// for telemetry, and tells the error page which of its states to show. The
+// secure origin's `security/oauth-error-states.js` gives each one a state.
+export const AUTHORIZATION_REFUSAL_REASONS = Object.freeze([
   // The library's own refusals, before Boxel could check the client.
-  | 'unknown-client'
-  | 'bad-redirect-uri'
-  | 'library'
+  'unknown-client',
+  'bad-redirect-uri',
+  'library',
   // Boxel's checks before the library (`checkAuthorizationRequest`).
-  | 'unsupported-response-type'
-  | 'pkce-required'
-  | 'prompt-none'
-  | 'malformed'
-  | 'unknown-resource'
-  | 'no-resource-for-scopes'
-  | 'client-not-allowed'
-  | 'unknown-scope'
-  | 'missing-scope'
-  | 'openid';
+  'unsupported-response-type',
+  'pkce-required',
+  'prompt-none',
+  'malformed',
+  'unknown-resource',
+  'no-resource-for-scopes',
+  'client-not-allowed',
+  'unknown-scope',
+  'missing-scope',
+  'openid',
+] as const);
+
+export type AuthorizationRefusalReason =
+  (typeof AUTHORIZATION_REFUSAL_REASONS)[number];
 
 // An authorization error, as Boxel's error page and its "Return" route read
 // it. `redirectUri` and `state` are kept only when the client and the redirect
@@ -433,10 +439,15 @@ export interface ConsentTicketRecord {
 
 // Records a flow's decision and stores the ticket that finishes it, both or
 // neither, and answers the ticket: a long random value that finishes the
-// flow once, in the browser that started it. Answers undefined when the flow
-// already has a decision: a flow is decided once, and has at most one
-// ticket. One statement writes both rows, so a ticket that can't be stored
-// leaves the flow undecided.
+// flow once, in the browser that started it. One statement writes both rows,
+// so a ticket that can't be stored leaves the flow undecided.
+//
+// A flow is decided once. Answers undefined when the flow already has a
+// different decision, or one another user made. The same decision sent again
+// is answered with a new ticket, so a page whose answer was recorded but
+// whose reply never reached it can send it again and still finish the flow.
+// Each ticket finishes the flow only with its decision, which the first one
+// presented spends, so a flow still finishes at most once.
 export async function decideFlow(
   dbAdapter: DBAdapter,
   interactionId: string,
@@ -460,15 +471,23 @@ export async function decideFlow(
     ...ticketRecord,
   });
   let rows = await dbAdapter.execute(
-    `WITH decision AS (
+    `WITH recorded AS (
        INSERT INTO oauth_provider_objects (kind, id_hash, payload, expires_at)
          VALUES ($1, decode($2, 'hex'), $3::jsonb, now() + make_interval(secs => $4))
          ON CONFLICT (kind, id_hash) DO NOTHING
          RETURNING kind
+     ),
+     decision AS (
+       SELECT kind FROM recorded
+       UNION ALL
+       SELECT kind FROM oauth_provider_objects
+         WHERE kind = $1 AND id_hash = decode($2, 'hex')
+           AND payload = $3::jsonb AND expires_at > now()
      )
      INSERT INTO oauth_provider_objects (kind, id_hash, payload, expires_at)
        SELECT $5, decode($6, 'hex'), $7::jsonb, now() + make_interval(secs => $8)
          FROM decision
+         LIMIT 1
        RETURNING kind`,
     {
       bind: [

@@ -1,4 +1,5 @@
 import type {
+  HostRouteFindCard,
   HostRouteLoad,
   HostRouteSearch,
   Realm,
@@ -57,7 +58,11 @@ export function visitorHostRouteLookups({
   realm: Realm;
   // The headers of the page request.
   visitorHeaders: Record<string, string | string[] | undefined>;
-}): { load: HostRouteLoad; search: HostRouteSearch } {
+}): {
+  load: HostRouteLoad;
+  search: HostRouteSearch;
+  findCard: HostRouteFindCard;
+} {
   let headers: Record<string, string> = {};
   for (let name of [CLIENT_IP_HEADER, CLIENT_CLASS_HEADER]) {
     let value = visitorHeaders[name];

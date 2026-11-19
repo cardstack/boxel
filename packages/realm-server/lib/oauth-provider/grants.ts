@@ -8,6 +8,8 @@
 
 import { randomBytes } from 'crypto';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
+import { clientIdForLogs } from './client-metadata-document.ts';
+import { isDynamicClientId } from './dynamic-client-id.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -33,19 +35,36 @@ export interface NewGrant {
   // and what its expiry is measured from: a revocation between the consent
   // and the end of the flow covers the grant.
   consentedAt: Date;
+  // The redirect URI the flow used, which Connected apps names a client that
+  // registered itself by, as consent did (`app-name.ts`).
+  redirectUri?: string;
 }
 
-// Stores a new grant and answers its ID.
+// Stores a new grant and answers its ID. When the grant's client was
+// registered by dynamic client registration and the daily cleanup has since
+// deleted it (`cleanup.ts`), no grant is stored, and the answer is undefined.
+// The check is a plain read, so a cleanup deleting the client at that moment
+// can still let the grant through; the flow then fails where the library
+// next looks the client up. The client counts as connected only once the
+// grant's code is exchanged (`markGrantExchanged`).
 export async function createGrant(
   dbAdapter: DBAdapter,
-  { userId, clientId, resources, renewing, consentedAt }: NewGrant,
-): Promise<string> {
+  { userId, clientId, resources, renewing, consentedAt, redirectUri }: NewGrant,
+): Promise<string | undefined> {
   let id = randomBytes(32).toString('base64url');
-  await dbAdapter.execute(
+  let rows = await dbAdapter.execute(
     `INSERT INTO oauth_provider_grants
-       (id, user_id, client_id, resources, renewing, created_at, expires_at)
-       VALUES ($1, $2, $3, $4::jsonb, $5, $6::timestamptz,
-               $6::timestamptz + make_interval(secs => $7))`,
+       (id, user_id, client_id, resources, renewing, created_at, expires_at,
+        redirect_uri)
+       SELECT $1::varchar, $2::uuid, $3::varchar, $4::jsonb, $5::boolean,
+              $6::timestamptz, $6::timestamptz + make_interval(secs => $7),
+              $9::varchar
+        WHERE NOT $8::boolean
+           OR EXISTS (
+                SELECT 1 FROM oauth_provider_dynamic_clients
+                 WHERE client_id = $3::varchar
+              )
+       RETURNING id`,
     {
       bind: [
         id,
@@ -55,10 +74,38 @@ export async function createGrant(
         renewing,
         consentedAt.toISOString(),
         renewing ? RENEWING_GRANT_TTL_SECONDS : NON_RENEWING_GRANT_TTL_SECONDS,
+        isDynamicClientId(clientId),
+        redirectUri ?? null,
       ],
     },
   );
-  return id;
+  return rows.length > 0 ? id : undefined;
+}
+
+// Records that a grant connected its app: when a token its code exchange
+// issued is stored (`exchanged_at`). A client
+// registered by dynamic client registration is marked connected then too
+// (`last_connected_at`), in the same statement, which the daily cleanup reads
+// (`cleanup.ts`). A cleanup that reaches the client's row after that update
+// re-checks the row and keeps it; one that reaches it first has already
+// deleted it, and the update then changes nothing. Later stores find the
+// grant already marked and change nothing.
+export async function markGrantExchanged(
+  dbAdapter: DBAdapter,
+  grantId: string,
+): Promise<void> {
+  await dbAdapter.execute(
+    `WITH exchanged AS (
+       UPDATE oauth_provider_grants
+          SET exchanged_at = now()
+        WHERE id = $1 AND exchanged_at IS NULL
+        RETURNING client_id
+     )
+     UPDATE oauth_provider_dynamic_clients
+        SET last_connected_at = now()
+      WHERE client_id IN (SELECT client_id FROM exchanged)`,
+    { bind: [grantId] },
+  );
 }
 
 // What a grant decides about the tokens issued from it: whether it renews,
@@ -90,31 +137,65 @@ export async function readGrantTerms(
 // its tokens. A grant ends once: a grant already ended keeps its first
 // reason. Answers whether this call ended it.
 //
+// With an `owner` (the Matrix ID of the user asking, when the grant ID came
+// from them), it ends only a grant of that user's that is still usable: not
+// ended, not expired, and not covered by a revocation of their grants, which
+// keeps its own reason. Any other grant is left exactly as it was, tokens and
+// all, so a grant ID naming someone else's connection changes nothing.
+//
 // The tokens are deleted by a second statement, after the grant's row is
 // updated, so that it sees a token whose store held the row while the update
 // waited for it; one statement would read the tokens as they were when it
-// began.
+// began. Without an owner they are deleted whether or not this call ended the
+// grant, since a grant someone else ended has none to keep. Both paths are one
+// statement; an owner only narrows which grant it may end.
 export async function endGrant(
   dbAdapter: DBAdapter,
   grantId: string,
   reason: GrantEndReason,
+  { owner }: { owner?: string } = {},
 ): Promise<boolean> {
-  let rows = await dbAdapter.execute(
-    `UPDATE oauth_provider_grants
+  let rows = (await dbAdapter.execute(
+    `UPDATE oauth_provider_grants AS g
         SET ended_at = now(), ended_reason = $2
-      WHERE id = $1 AND ended_at IS NULL
-      RETURNING id`,
-    { bind: [grantId, reason] },
-  );
-  await dbAdapter.execute(
-    `DELETE FROM oauth_provider_tokens WHERE grant_id = $1`,
-    { bind: [grantId] },
-  );
+       FROM users AS u
+      WHERE g.id = $1 AND u.id = g.user_id AND g.ended_at IS NULL
+        ${owner === undefined ? '' : `AND u.matrix_user_id = $3 AND ${GRANT_USABLE}`}
+      RETURNING g.client_id`,
+    {
+      bind: owner === undefined ? [grantId, reason] : [grantId, reason, owner],
+    },
+  )) as { client_id: string }[];
   let ended = rows.length > 0;
+  // An owner's request that ended nothing leaves the tokens too: the grant
+  // may be someone else's.
+  if (ended || owner === undefined) {
+    await dbAdapter.execute(
+      `DELETE FROM oauth_provider_tokens WHERE grant_id = $1`,
+      { bind: [grantId] },
+    );
+  }
   if (ended) {
-    log.info(`grant ended: ${reason}`);
+    log.info(
+      `grant ended: ${reason}, client ${clientIdForLogs(rows[0].client_id)}`,
+    );
   }
   return ended;
+}
+
+// Whether a grant, live or not, is the user's (by their Matrix ID).
+export async function isUsersGrant(
+  dbAdapter: DBAdapter,
+  grantId: string,
+  matrixUserId: string,
+): Promise<boolean> {
+  let rows = await dbAdapter.execute(
+    `SELECT 1 FROM oauth_provider_grants AS g
+       JOIN users AS u ON u.id = g.user_id
+      WHERE g.id = $1 AND u.matrix_user_id = $2`,
+    { bind: [grantId, matrixUserId] },
+  );
+  return rows.length > 0;
 }
 
 // Revokes a user's OAuth grants (ADR 021 §1.9): records the cutoff, so that
@@ -221,8 +302,9 @@ async function deleteRevokedGrantsTokens(
   return grantIds.length;
 }
 
-// Deletes a grant no flow finished with. Only such a grant is ever deleted:
-// one that connected an app is ended instead, and kept.
+// Deletes a grant no flow finished with. A grant that connected an app is
+// ended instead, and kept until the daily cleanup deletes it 90 days after it
+// ended (`cleanup.ts`).
 export async function deleteGrant(
   dbAdapter: DBAdapter,
   id: string,
@@ -233,14 +315,24 @@ export async function deleteGrant(
 }
 
 // The grant checks (ADR 021 §1.5), shared by every place a grant is used:
-// the token endpoint, on each code and refresh exchange (`GrantAdapter`), and
-// a resource's lookup of an access token (`lookup.ts`), so the two always
-// agree. A query selects `GRANT_STATE_COLUMNS`, with the grant as `g` and its
-// user as `u`, and hands the row to `grantUsable`.
-export const GRANT_STATE_COLUMNS = `g.ended_at IS NOT NULL AS grant_ended,
-       g.expires_at <= now() AS grant_expired,
-       COALESCE(g.created_at <= u.oauth_grants_revoked_at, false)
-         AS grant_revoked`;
+// the token endpoint, on each code and refresh exchange (`GrantAdapter`), a
+// resource's lookup of an access token (`lookup.ts`), and Connected apps'
+// list and disconnect (`connections.ts`, `endGrant` with an owner), so they
+// always agree. Each is written once, with the grant as `g` and its user as
+// `u`. A query that acts on the result selects `GRANT_STATE_COLUMNS` and
+// hands the row to `grantUsable`; one that only filters uses `GRANT_USABLE`.
+const GRANT_ENDED = 'g.ended_at IS NOT NULL';
+const GRANT_EXPIRED = 'g.expires_at <= now()';
+const GRANT_REVOKED =
+  'COALESCE(g.created_at <= u.oauth_grants_revoked_at, false)';
+
+export const GRANT_STATE_COLUMNS = `${GRANT_ENDED} AS grant_ended,
+       ${GRANT_EXPIRED} AS grant_expired,
+       ${GRANT_REVOKED} AS grant_revoked`;
+
+// The grant checks as a condition: the grant may still be used.
+export const GRANT_USABLE = `NOT (${GRANT_ENDED}) AND NOT (${GRANT_EXPIRED})
+       AND NOT (${GRANT_REVOKED})`;
 
 export interface GrantState {
   grant_ended: boolean;

@@ -19,6 +19,8 @@ import { Heartbeat, startHealthServer } from './src/health.ts';
 import { DEFAULT_BACKGROUND_CONCURRENCY } from './src/background.ts';
 import { probeGit } from './src/git-capabilities.ts';
 import { maintenanceKinds } from './src/maintenance.ts';
+import { sweepKind } from './src/sweeper.ts';
+import { backfillKind } from './src/backfill.ts';
 
 const log = logger('realm-historian');
 
@@ -100,7 +102,11 @@ let historian = new Historian({
   },
   background: {
     concurrency: backgroundConcurrency,
-    kinds: maintenanceKinds({ historyRoot }),
+    kinds: [
+      ...maintenanceKinds({ historyRoot }),
+      sweepKind({ db }),
+      backfillKind({ db }),
+    ],
   },
 });
 

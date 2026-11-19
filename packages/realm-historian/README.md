@@ -30,6 +30,51 @@ degraded: a lost lease, a query failure or an unhandled error logs the reason
 and exits non-zero, and SIGTERM finishes the step in progress, releases the
 lease and exits 0.
 
+## Local development
+
+`mise run dev` starts realm-historian (`mise-tasks/services/realm-historian`),
+as do `dev-all`, `dev-minimal`, `dev-without-matrix` and
+`mise run test-services:realm-server`. It starts once the realm server answers,
+because the realm server migrates the database it reads, and it records the
+stack's own database (`boxel`, or `boxel_<slug>` in environment mode). It runs
+from `packages/realm-server` with:
+
+- the realms root the realm server uses, `realms/localhost_4201`
+  (`realms/<slug>` in environment mode);
+- the history root `~/.local/share/boxel/realm-history/localhost_4201`
+  (`…/realm-history/<slug>`), which is `REALM_HISTORY_ROOT` in
+  `mise-tasks/lib/env-vars.sh`. It belongs to the database, not the checkout:
+  every standard-mode checkout records the one `boxel` database, so they all
+  record into this root, and running the stack from another checkout doesn't
+  stall a recorded realm;
+- its health check on port 4214, which the stack waits on before it reports
+  ready. In environment mode the port is dynamic and isn't waited on.
+
+Its output goes to `/tmp/boxel-logs/realm-historian.log` as well as the
+terminal. Stopping the stack stops it, and so do `mise run kill-all` and
+`mise run stop-environment`.
+
+No realm is recorded until its recording is turned on. From the repo root,
+`mise exec` gives the script the stack's `PG*` variables:
+
+```
+mise exec -- node packages/realm-historian/scripts/enable.ts https://localhost:4201/<user>/<realm>/ on
+```
+
+A bootstrap realm is named by the URL it is registered under, which for the
+base realm is `https://cardstack.com/base/`.
+
+Neither process needs a restart. The realm's first write after recording is
+turned on starts its history: an `Initial snapshot` of the realm's files
+(see [Sweeps and initial snapshots](#sweeps-and-initial-snapshots)), then the
+write's revision, which closes 2 s after the last write in a burst. If
+realm-historian restarts before that write, it takes the snapshot as it
+starts. The script prints the realm's id, which names its repo:
+
+```
+git --git-dir="$HOME/.local/share/boxel/realm-history/localhost_4201/<realm id>.git" log --stat
+```
+
 ## Recording
 
 Each realm the task records gets a recorder (`src/recorder.ts`) when its
@@ -61,8 +106,60 @@ reserve), or a path with a line break. Symlinks are not followed.
 A realm whose repo or files fail is marked `stalled`, and the other realms
 carry on. Setting its `status` back to `ok` takes effect when a task next
 starts or takes over the realm's shard, which reads the realm's events again
-from its cursor. A `scan` or `delete-realm` event records no revision: the
-recorder moves its cursor past it.
+from its cursor. A `delete-realm` event records no revision: the recorder
+moves its cursor past it.
+
+## Sweeps and initial snapshots
+
+A sweep walks a realm's directory and records how it differs from HEAD
+(`src/sweeper.ts`). The walk fingerprints each file with `content-hash.ts` and
+compares it with the path state. A file above 5 MB is fingerprinted from
+bounded reads of its head and tail, and only a file that differs is read
+whole. A differing file becomes a size-only entry when HEAD holds it as one,
+or when it is larger than 50 MB. The walk skips what recording skips, and the
+`*.boxel-partial` staging files of writes in progress.
+
+A sweep never claims a newer write's bytes. The walk runs outside the
+recorder's queue, and its revision waits until the clock is the maximum age
+(30 s) past the walk's end. Then every path with an event after the sweep's
+starting point is left out, because that event's revision records it.
+
+Sweeps happen in these cases:
+
+- **A `scan` event**, appended after a deploy copies files into a realm, and
+  by create-realm for a new realm's first files. The recorder records every
+  earlier event first, then sweeps and records the difference as one
+  revision attributed by the scan. That is `Initial snapshot` by the scan's
+  author for a realm with no HEAD, `Deploy <repo>@<sha7>` for a deploy, and
+  otherwise the generated subject, such as `Update 3 files`. A scan that
+  finds nothing different records nothing. The cursor moves past the scan
+  either way.
+- **A realm with no HEAD whose first event isn't a scan.** The realm gets an
+  `Initial snapshot` by `boxel-system` before the event's revision, leaving
+  out the paths that event and later ones change.
+- **The daily sweep** (`sweep`), which catches edits that bypassed the realm
+  server. It records differences as `Unattributed external changes` by
+  `boxel-system`, and logs a warning that starts with
+  `unattributed external changes in <realm url>`. A sweep with a `scan` event
+  in the journal after its walk began records nothing, and leaves the realm to
+  the scan: a deploy appends its scan only once it has copied its files.
+- **Backfill** (`backfill`, `src/backfill.ts`), when the task loads a realm
+  that has no HEAD and no events to record. It records an `Initial snapshot`
+  by `boxel-system`.
+
+The daily sweep's schedule is kept in `realm_history_state`, so it survives a
+restart. `last_swept_at` is when the last sweep's walk started, and a scan's
+sweep counts. To ask for a sweep of a realm:
+
+```sql
+UPDATE realm_history_state SET sweep_requested_at = now()
+WHERE realm_id = '<realm id>';
+```
+
+At most two walks run at once in a task. A walk that fails doesn't stall the
+realm: a scan's sweep is moved past, an initial snapshot is skipped, and
+either one sets `sweep_requested_at` for the daily sweep's schedule to pick
+up.
 
 ## Background work
 
@@ -75,7 +172,8 @@ Each kind says when it comes due on a realm:
 - once a number of revisions have been committed since then (`afterCommits`),
   optionally only after none for a while (`quietMs`);
 - or when asked (`request`), now or after a delay, or because a run asked to
-  run again (`againAfterMs`).
+  run again (`againAfterMs`). A kind can ask for itself from a query it runs
+  every `pollEveryMs` (`poll`), which keeps its schedule in Postgres.
 
 Only the realms of the shards the task holds are scheduled. At most
 `--backgroundConcurrency` jobs run at once across the task, and one at a time
@@ -86,8 +184,16 @@ Each job runs in its realm's recorder queue, so it never runs between a commit
 and its cursor update. It runs only when the realm has no events in hand. A job
 asked for while the realm has events captured, being handled or queued is
 skipped at once, and one that reaches the front of the queue with events queued
-behind it is skipped then. A skipped job is tried again a moment later. A job
-holds no recording permit.
+behind it is skipped then. So is a job asked for while a sweep is walking or
+waiting to commit, since maintenance would prune the objects the sweep has
+written and not yet committed. A skipped job is tried again a moment later,
+and a kind skipped on a realm for an hour on end logs a warning, once an hour.
+A job holds no recording permit.
+
+A kind can run outside the queue instead (`outsideQueue`), as sweeps and
+backfill do. It is never skipped: it runs alongside the realm's events, and
+its only way into the queue is the sweep it asks for, whose revision commits
+between the realm's revisions.
 
 A job's signal fires when its recorder stops, and when the realm's events fill
 the queue behind it, since a full queue holds up every realm the task records.
@@ -195,6 +301,20 @@ Each `--realm` names a bootstrap realm by the directory its realm server
 mounts. The event is by the realm's Matrix bot, or by `boxel-system` for a
 realm named without one, and carries the repository and commit deployed. A
 realm whose recording is off gets no event.
+
+`scripts/enable.ts` turns recording on or off for one realm:
+
+```
+node scripts/enable.ts <realm url> on|off
+```
+
+`on` sets the realm's `realm_history_state.enabled`, creating its row from
+`realm_registry` when it has none. `off` clears the flag and keeps the row, so
+turning recording back on carries on in the same repo. The script prints the
+realm's recording before and after, and says when the realm is stalled. It
+refuses a published realm, whose source realm's history covers it, and a URL
+no realm is registered at; both exit 1. It is how recording is turned on
+locally and in each deployed environment.
 
 ## Tests
 

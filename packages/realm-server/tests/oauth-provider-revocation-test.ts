@@ -564,13 +564,43 @@ module(basename(import.meta.filename), function () {
     });
 
     // A body sent as written, which `revokeOAuthToken` would encode.
-    function revokeWithBody(body: string) {
+    function revokeWithBody(
+      body: string,
+      contentType = 'application/x-www-form-urlencoded',
+    ) {
       return supertest(server())
         .post('/_oauth-provider/token/revocation')
         .set('Host', OAUTH_TEST_SERVER_URL.host)
-        .set('Content-Type', 'application/x-www-form-urlencoded')
+        .set('Content-Type', contentType)
         .send(body);
     }
+
+    test("a client's own revocation, under a Content-Type the library reads as a form, goes through from a limited address", async function (assert) {
+      let connection = await connect();
+      for (let i = 0; i < 3; i++) {
+        await revokeUnknown(connection.clientId, i);
+      }
+      assert.strictEqual(
+        (await revokeUnknown(connection.clientId, 4)).status,
+        429,
+        'the address is limited',
+      );
+      // The library reads this as a form, and the realm server's own Koa
+      // doesn't.
+      let response = await revokeWithBody(
+        new URLSearchParams({
+          client_id: connection.clientId,
+          token: connection.tokens.refresh_token!,
+        }).toString(),
+        'application/x-www-form-urlencoded;',
+      );
+      assert.strictEqual(response.status, 200, response.text);
+      assert.strictEqual(
+        (await grant(connection.grantId)).ended_reason,
+        'client',
+        'and ends its grant',
+      );
+    });
 
     test('a body that hides an unknown token behind a live one counts as a failed attempt', async function (assert) {
       let connection = await connect();

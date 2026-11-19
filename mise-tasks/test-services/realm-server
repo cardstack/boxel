@@ -21,6 +21,14 @@ esac
 BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PATH}"
 NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
 
+# realm-historian's health check answers GET only, hence `http-get`. In
+# environment mode its port is dynamic and published nowhere, so it isn't
+# waited on.
+PHASE2_URLS="${NODE_TEST_REALM_READY}"
+if [ "${REALM_HISTORIAN_PORT:-0}" != 0 ]; then
+  PHASE2_URLS="${PHASE2_URLS}|http-get://localhost:${REALM_HISTORIAN_PORT}/health"
+fi
+
 # START_SERVER_AND_TEST_INSECURE=1 scopes to the wait-on readiness probe.
 # The realm-server now serves the self-signed mkcert leaf on
 # https://localhost:4201|4202; start-server-and-test forces strictSSL:true
@@ -50,6 +58,6 @@ WAIT_ON_TIMEOUT=900000 \
   start-server-and-test \
     'REALM_SERVER_SKIP_BOOT_INDEX=true run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
     "${BASE_REALM_READY}|${CATALOG_REALM_READY}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
-    'run-p -ln start:worker-test start:test-realms' \
-    "${NODE_TEST_REALM_READY}" \
+    'run-p -ln start:worker-test start:test-realms start:realm-historian' \
+    "${PHASE2_URLS}" \
     'wait'

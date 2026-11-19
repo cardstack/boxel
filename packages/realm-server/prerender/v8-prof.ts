@@ -44,6 +44,17 @@ export function v8ProfJsFlags(): string {
 // Browser-launch wall-clock; logs older than this are from a previous run.
 let v8ProfLaunchAt = 0;
 
+// How far a log's mtime may fall before `v8ProfLaunchAt` and still count as
+// this run's. `Date.now()` and file mtimes come from different clocks: Linux
+// stamps mtimes from its coarse clock, which trails `Date.now()` by up to one
+// timer tick, and some filesystems keep mtimes in whole seconds (truncated
+// down). Without slack, a log written in the first milliseconds after launch
+// can look older than the launch and be dropped as stale. One second covers
+// both cases. A previous run's logs are not at risk: the launch sweep runs
+// after the stamp and deletes every log that exists at that point, so the
+// mtime check only has to reject logs much older than the launch.
+export const V8_PROF_MTIME_SLACK_MS = 1000;
+
 // Call once at browser launch (when armed) to isolate this run's profile
 // logs. The OS temp dir is shared and the container can be reused across
 // deploys, so a stale `--prof` log from an earlier run could otherwise be
@@ -119,14 +130,19 @@ async function pickV8ProfLog(): Promise<
   // and runner-up size; the caller surfaces them and the helper's `--key`
   // lets you symbolize a different one if the largest wasn't the wedge.
   let fromThisRun = withStats.filter(
-    (s) => s.size > 0 && s.mtimeMs >= v8ProfLaunchAt,
+    (s) => s.size > 0 && s.mtimeMs >= v8ProfLaunchAt - V8_PROF_MTIME_SLACK_MS,
   );
   if (fromThisRun.length === 0) {
+    // Each entry gives its mtime relative to the launch stamp, so a log that
+    // was excluded for its age shows how far before the launch it fell.
     let seen = withStats
-      .map((s) => `${path.basename(s.full)}(${s.size}b)`)
+      .map(
+        (s) =>
+          `${path.basename(s.full)}(${s.size}b, mtime ${formatOffsetMs(s.mtimeMs - v8ProfLaunchAt)} vs launch)`,
+      )
       .slice(0, 8);
     return {
-      reason: `<no v8 --prof log from this run; seen: ${seen.join(', ')}>`,
+      reason: `<no v8 --prof log from this run (launch ${new Date(v8ProfLaunchAt).toISOString()}, slack ${V8_PROF_MTIME_SLACK_MS}ms); seen: ${seen.join(', ')}>`,
     };
   }
   fromThisRun.sort((a, b) => b.size - a.size);
@@ -137,6 +153,10 @@ async function pickV8ProfLog(): Promise<
     candidates: fromThisRun.length,
     runnerUpMB: fromThisRun[1] ? toMB(fromThisRun[1].size) : null,
   };
+}
+
+function formatOffsetMs(ms: number): string {
+  return `${ms >= 0 ? '+' : ''}${ms.toFixed(3)}ms`;
 }
 
 // On the render timeout (when armed), ship the pegged isolate's RAW `--prof`
