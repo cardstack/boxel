@@ -307,25 +307,24 @@ class RealmResource {
   private refreshSchedule = new TokenRefreshSchedule();
 
   async login(): Promise<void> {
-    if (this.auth.type === 'logged-in') {
-      await this.subscribe();
-      return;
-    }
-    if (!this.loggingIn) {
-      this.loggingIn = this.loginTask.perform();
-    }
-    await this.loggingIn;
-    // A sign-in that ended without a session leaves nothing to subscribe for.
-    // Subscribing fetches realm info, and a realm that refuses this caller
-    // answers that with a 401 too, which would start a sign-in from inside
-    // the re-authentication that is still waiting on this one.
-    if (!this.token) {
-      return;
+    if (this.auth.type !== 'logged-in') {
+      await this.mintSession();
     }
     await this.subscribe();
   }
 
-  private async subscribe() {
+  // Mints a session for this realm, joining a mint already under way. The only
+  // request it sends the realm is the session request, which the
+  // authorization middleware never re-authenticates, so a re-authentication
+  // waiting on this can't be joined by a request it sent itself.
+  async mintSession(): Promise<void> {
+    if (!this.loggingIn) {
+      this.loggingIn = this.loginTask.perform();
+    }
+    await this.loggingIn;
+  }
+
+  async subscribe() {
     if (this.subscription) {
       return;
     }
@@ -1836,9 +1835,27 @@ export default class RealmService extends Service {
       let resource = this.getOrCreateRealmResource(realmURL);
       // Only this realm's session is discarded; every other realm's stays.
       resource.clearRealmSession();
-      await resource.login();
+      await resource.mintSession();
       let result = resource.token;
+      // Callers waiting on this sign-in take its session as soon as it is
+      // minted. Subscribing to the realm below fetches its info, and a realm
+      // that refuses the new session answers that with a 401 as well, which
+      // joins this sign-in while it is still in progress: the request replays
+      // once with the session and keeps its 401, rather than waiting on the
+      // sign-in it belongs to.
       deferred.fulfill(result);
+      if (result) {
+        try {
+          await resource.subscribe();
+        } catch (e: any) {
+          // The session stands whether or not the realm's info loads, so the
+          // callers waiting on it still replay with it.
+          console.warn(
+            `RealmService - signed in to ${realmURL} but could not subscribe to it: ${e?.message}`,
+            e,
+          );
+        }
+      }
       return result;
     } catch (e) {
       deferred.reject(e);
