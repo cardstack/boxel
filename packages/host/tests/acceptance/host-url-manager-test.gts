@@ -106,6 +106,10 @@ class FakeHostURLs {
     });
     stub('unmountHostURL', async (id: string) => {
       this.calls.push(`unmount ${id}`);
+      // Unmounting a site name frees its claim.
+      if (this.hostURLs.find((h) => h.id === id)?.kind === 'site-name') {
+        this.claimedDomain = null;
+      }
       this.hostURLs = this.hostURLs.filter((h) => h.id !== id);
     });
   }
@@ -279,6 +283,29 @@ module('Acceptance | host URL manager', function (hooks) {
     assert
       .dom('[data-test-host-url-toaster] [data-test-pretui-toast-item]')
       .containsText(`shop.${siteDomain}/ is now the canonical host URL`);
+  });
+
+  test('removing a canonical site name host URL frees the name, and the manager offers to claim one again', async function (assert) {
+    let shopURL = `https://shop.${siteDomain}/`;
+    fake.claimedDomain = {
+      id: 'claim-1',
+      hostname: `shop.${siteDomain}`,
+      subdomain: 'shop',
+      sourceRealmURL: testRealmURL,
+    };
+    fake.hostURLs = [
+      { id: 'a', url: shopURL, kind: 'site-name', isCanonical: true },
+      { id: 'b', url: SPACE_URL, kind: 'boxel-space', isCanonical: false },
+    ];
+    await openManager();
+    await click(`[data-test-remove-host-url="${shopURL}"]`);
+    await waitFor(`[data-test-host-url="${shopURL}"]`, { count: 0 });
+
+    assert.deepEqual(fake.calls, ['canonical b', 'unmount a']);
+    assert
+      .dom('[data-test-mount-target="site-name"]')
+      .doesNotExist('the freed name is not offered for mounting');
+    assert.dom('[data-test-mount-target="site-name-claim"]').exists();
   });
 
   test('to remove the canonical host URL with several others, asks for the new canonical one first', async function (assert) {

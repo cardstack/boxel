@@ -308,6 +308,7 @@ export default class HostURLManager extends Component<Signature> {
       try {
         await this.realmServer.setCanonicalHostURL(next.id);
         await this.realmServer.unmountHostURL(removed.id);
+        await this.afterUnmount(removed);
         this.replacingCanonical = undefined;
         this.newCanonicalId = undefined;
         if (chosenForUser) {
@@ -324,17 +325,22 @@ export default class HostURLManager extends Component<Signature> {
     },
   );
 
+  // Rereads what an unmount changes: the host URLs, and the site name claim,
+  // which unmounting a site name frees.
+  private async afterUnmount(hostURL: HostURL) {
+    await this.refreshHostURLs();
+    if (hostURL.kind === 'site-name') {
+      this.claimedDomain = await this.realmServer.fetchBoxelClaimedDomain(
+        this.args.realmURL,
+      );
+    }
+  }
+
   private unmountTask = task(async (hostURL: HostURL) => {
     this.setError(hostURL.url, undefined);
     try {
       await this.realmServer.unmountHostURL(hostURL.id);
-      await this.refreshHostURLs();
-      if (hostURL.kind === 'site-name') {
-        // Unmounting a site name frees it.
-        this.claimedDomain = await this.realmServer.fetchBoxelClaimedDomain(
-          this.args.realmURL,
-        );
-      }
+      await this.afterUnmount(hostURL);
     } catch (error) {
       this.setError(hostURL.url, error);
     }
