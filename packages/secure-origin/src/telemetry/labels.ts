@@ -31,6 +31,8 @@ const REALM_SERVER_ENDPOINTS = [
   '_oauth/connections/complete',
   '_oauth-provider/consent/:id',
   '_oauth-provider/error/:id',
+  '_oauth-provider/connections',
+  '_oauth-provider/connections/:id',
   '_secure-window/context',
   '_secure-window/realms',
   '_secure-window/cards',
@@ -117,6 +119,7 @@ const PAGES: Record<string, string> = {
   approve: 'approve',
   'review-changes': 'review-changes',
   authorize: 'authorize',
+  'connected-apps': 'connected-apps',
 };
 
 export function pageLabel(routeName: string | undefined): string {
