@@ -4784,7 +4784,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "description": "How long the browser waited on each AI proxy call, from its start until the response headers arrived, from the client's server-request events. A forwarded response sends its headers with the model's first bytes, so this is close to time to first byte, not to the whole answer. It counts every completed call, including ones the realm server refused before admitting them; a call the browser gave up on records no event. So it and the server stage panels cover different sets of calls and are not to be subtracted from each other: to find how long one call waited before the realm server started on it, compare its client start (ts less duration_ms) with the realm:requests arrival line for the same correlation id.",
+            "description": "How long the browser waited on each AI proxy call, from its start until the response headers arrived, from the client's server-request events. A forwarded response sends its headers with the model's first bytes, so this is close to time to first byte, not to the whole answer. It counts every completed call, including ones the realm server refused before admitting them; a call the browser gave up on records no event. So it and the server stage panels cover different sets of calls and are not to be subtracted from each other: to find how long one call waited before the realm server started on it, compare its client start (ts less duration_ms) with the realm:requests arrival line for the same correlation id, in the arrival lines panel below. That gap also holds the browser clock's offset from the server's (ts is the browser's Date.now()), which the same session's fast requests to other endpoints measure the same way.",
             "fieldConfig": {
               "defaults": {
                 "color": {
@@ -5353,6 +5353,44 @@
               }
             ],
             "title": "_request-forward server timing lines (corr)",
+            "type": "logs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "description": "The realm server's realm:requests lines for _request-forward, newest first: <-- when a request arrived and --> when its response ended, with dur. corr=<id> joins them to the client event and the billable call line with that correlation id. A request's arrival time against its client start is how long it waited before the realm server started on it. These lines name no user, so the user variable does not filter them; search for the correlation id instead.",
+            "gridPos": {
+              "h": 10,
+              "w": 24,
+              "x": 0,
+              "y": 107
+            },
+            "id": 119,
+            "options": {
+              "dedupStrategy": "none",
+              "enableLogDetails": true,
+              "prettifyLogMessage": false,
+              "showCommonLabels": false,
+              "showLabels": false,
+              "showTime": true,
+              "sortOrder": "Descending",
+              "wrapLogMessage": true
+            },
+            "targets": [
+              {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki"
+                },
+                "editorMode": "code",
+                "expr": "{service=\"realm-server\", env=\"$env\"} |= \"_request-forward\" |~ \"(<--|-->) \" | json | drop __error__, __error_details__ | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\"",
+                "queryType": "range",
+                "refId": "A"
+              }
+            ],
+            "title": "_request-forward arrival lines (realm:requests)",
             "type": "logs"
           }
         ],

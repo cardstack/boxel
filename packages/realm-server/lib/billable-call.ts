@@ -188,7 +188,9 @@ export async function withBillableCall(
 // way to the realm server or queued in it, is not on this line. It is the gap
 // between the client's start (its `server-request` event's `ts` less
 // `duration_ms`) and the `<--` arrival line `realm:requests` logs for the same
-// `corr`. The client's `duration_ms` and the `-->` line's `dur` cannot be
+// `corr`, less the browser clock's offset from the server's, which the same
+// session's fast requests to other endpoints measure the same way. The
+// client's `duration_ms` and the `-->` line's `dur` cannot be
 // subtracted for it: the client's ends when the response headers arrive, which
 // a forwarded JSON or streamed response sends with its first upstream bytes,
 // and `dur` ends when the response does, after the cost is recorded.
