@@ -54,9 +54,9 @@ interface Signature {
 }
 
 // A host URL as the manager shows it: without `https://`, which every host
-// URL has, and without a trailing slash. Its link still goes to the full URL.
+// URL has. Its link still goes to the full URL.
 function displayURL(url: string): string {
-  return url.replace(/^https:\/\//, '').replace(/\/$/, '');
+  return url.replace(/^https:\/\//, '');
 }
 
 const CANONICAL_EXPLANATION =

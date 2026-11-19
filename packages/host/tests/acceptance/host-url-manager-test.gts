@@ -184,7 +184,7 @@ module('Acceptance | host URL manager', function (hooks) {
     await openManager();
     assert
       .dom('[data-test-mount-target="boxel-space"]')
-      .containsText(SPACE_URL.replace('https://', '').replace(/\/$/, ''));
+      .containsText(SPACE_URL.replace('https://', ''));
     assert
       .dom('[data-test-mount-target="boxel-space"]')
       .doesNotContainText('https://', 'the URL is shown without its scheme');
@@ -199,8 +199,8 @@ module('Acceptance | host URL manager', function (hooks) {
     assert
       .dom(`[data-test-host-url="${SPACE_URL}"] a`)
       .hasText(
-        SPACE_URL.replace('https://', '').replace(/\/$/, ''),
-        'the link shows the URL without its scheme or trailing slash',
+        SPACE_URL.replace('https://', ''),
+        'the link shows the URL without its scheme',
       );
     assert
       .dom(`[data-test-host-url="${SPACE_URL}"] [data-test-host-url-canonical]`)
