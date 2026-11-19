@@ -9,6 +9,7 @@ import { WORKER_REQUEST_SIGNATURE_HEADER } from '@cardstack/runtime-common/worke
 import { DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER } from '@cardstack/runtime-common/user-delegated-realm-server-session';
 import {
   isCredentialHeader,
+  keepMethodAndPathOnlyForEveryRequest,
   registerSecureOriginHost,
   scrubRequestTelemetry,
   withCredentialHeadersMasked,
@@ -117,6 +118,108 @@ module(basename(import.meta.filename), function () {
       );
     });
   });
+
+  module(
+    'an event raised in a process that keeps only the method and path of every request',
+    function (hooks) {
+      let sentry: SentryCapture | undefined;
+      let server: http.Server | undefined;
+
+      hooks.beforeEach(function () {
+        keepMethodAndPathOnlyForEveryRequest();
+      });
+
+      hooks.afterEach(async function () {
+        keepMethodAndPathOnlyForEveryRequest(false);
+        await sentry?.stop();
+        sentry = undefined;
+        await new Promise<void>((resolve) => {
+          if (server) {
+            server.close(() => resolve());
+          } else {
+            resolve();
+          }
+        });
+        server = undefined;
+      });
+
+      test('keeps no body, query string or headers from a render request that carries realm sessions', async function (assert) {
+        sentry = startSentryCapture({ tracing: false, incomingRequests: true });
+        server = http.createServer(async (req, res) => {
+          await new Promise<void>((resolve) => {
+            req.on('data', () => undefined);
+            req.on('end', () => resolve());
+          });
+          Sentry.captureException(new Error('render failed'));
+          res.statusCode = 500;
+          res.end();
+        });
+        await new Promise<void>((resolve) => server!.listen(0, resolve));
+        let origin = `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
+
+        let response = await fetch(
+          `${origin}/prerender-visit?debug=query-marker-5d1e`,
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-boxel-client-request-id': 'header-marker-91c4',
+            },
+            body: JSON.stringify({
+              data: {
+                attributes: {
+                  url: 'https://realm.telemetry.test/card',
+                  auth: '{"https://realm.telemetry.test/":"realm-session-7a20f3"}',
+                },
+              },
+            }),
+          },
+        );
+        let sent = await sentry.flushed();
+        let events = await sentry.flushedEvents();
+
+        assert.strictEqual(response.status, 500);
+        assert.strictEqual(events.length, 1, 'the error reached Sentry');
+        assert.deepEqual(events[0].request as unknown, {
+          method: 'POST',
+          url: `${origin}/prerender-visit`,
+        });
+        for (let marker of [
+          'realm-session-7a20f3',
+          'query-marker-5d1e',
+          'header-marker-91c4',
+        ]) {
+          assert.false(sent.includes(marker), `no envelope carries ${marker}`);
+        }
+      });
+
+      test('applies to every route until it is turned off', function (assert) {
+        let request = {
+          method: 'POST',
+          url: 'https://prerender.telemetry.test/release-batch?a=b',
+          headers: { host: 'prerender.telemetry.test' },
+          data: '{"batchId":"b1"}',
+        };
+        assert.deepEqual(
+          scrubRequestTelemetry({ request }).request as unknown,
+          {
+            method: 'POST',
+            url: 'https://prerender.telemetry.test/release-batch',
+          },
+        );
+
+        keepMethodAndPathOnlyForEveryRequest(false);
+        let kept = scrubRequestTelemetry({ request }).request as {
+          data?: unknown;
+        };
+        assert.strictEqual(
+          kept.data,
+          '{"batchId":"b1"}',
+          'an ordinary route keeps its body again',
+        );
+      });
+    },
+  );
 
   module('the request log at debug', function (hooks) {
     let sentry: SentryCapture | undefined;

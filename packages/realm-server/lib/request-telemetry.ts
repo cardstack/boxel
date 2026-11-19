@@ -430,15 +430,29 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
   return { ...kept, headers: keptHeaders };
 }
 
+let everyRequestKeepsMethodAndPathOnly = false;
+
+// Makes telemetry about every request this process handles or sends keep only
+// its method and the origin and path of its URLs, whatever the route. For a
+// process whose callers are other boxel processes that put realm sessions in
+// the request body, such as the prerender server and the prerender manager.
+// `false` turns it off again.
+export function keepMethodAndPathOnlyForEveryRequest(on = true): void {
+  everyRequestKeepsMethodAndPathOnly = on;
+}
+
 // Whether telemetry about this request keeps only its method and the origin
-// and path of its URLs: a request to the secure origin, to a proxy route, to a
-// system-key route or to a key route (whose bodies can carry a key's value).
-// `url` is the full request URL; `headers` supply the host when they carry
-// one.
+// and path of its URLs: every request in a process that asked for that, and
+// otherwise a request to the secure origin, to a proxy route, to a system-key
+// route or to a key route (whose bodies can carry a key's value). `url` is the
+// full request URL; `headers` supply the host when they carry one.
 export function keepsMethodAndPathOnly(request: {
   url?: string;
   headers?: Record<string, string | string[] | undefined>;
 }): boolean {
+  if (everyRequestKeepsMethodAndPathOnly) {
+    return true;
+  }
   if (isSecureOriginRequestData(request)) {
     return true;
   }
