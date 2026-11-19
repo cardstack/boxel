@@ -210,8 +210,8 @@ the browser's, and keeps policy (retries, auth, which host serves a module)
 where the host can change it without touching module semantics.
 
 §1.4.4 was a stopgap. ADR 032 replaced it: the browser's own module loader
-evaluates modules, and re-evaluation is scoped to the edited module's
-transitive importers.
+evaluates modules, the app never re-evaluates one, and a live edit is
+previewed in a preview jail.
 
 ## 3. Considered options
 

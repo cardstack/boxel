@@ -37,6 +37,8 @@ scope:
   - packages/host/app/resources/file.ts
   - packages/host/public/auth-service-worker.js
   - packages/host/app/utils/auth-service-worker-registration.ts
+  - packages/host/app/utils/realm-sessions.ts
+  - packages/host/app/tools/run-automation.ts
   - packages/host/app/instance-initializers/register-auth-service-worker.ts
   - packages/host/lib/import-meta-loader-plugin.cjs
   - packages/host/vite.config.mjs
@@ -253,6 +255,40 @@ real boundary.
 - Card code that dynamically imports a computed extensionless specifier fails,
   and must name the canonical URL.
 
-## 5. Remediation
+## 5. Open questions
+
+This section MUST be empty, and removed, before this ADR merges (ADR 001
+§1.3). Each answer goes into the Decision or the Rationale.
+
+- **How does an automation run's tab authorize a module import?** The tab
+  holds the run's sessions only in memory and gives none to the auth service
+  worker, because a run's token must stay out of anything that outlives the
+  run (ADR 026 §1.2; `packages/host/app/utils/realm-sessions.ts`). §1.3 makes
+  the service worker the only source of a module request's `Authorization`
+  header, so the tab cannot import a realm module that needs one. Options:
+  - The service worker holds a token for one client (the tab) only, and the
+    tab tells it to forget the token before the run answers. This needs
+    ADR 026 §1.2 to accept the service worker's memory as part of the tab.
+  - A run imports only modules that need no authorization, or a token that
+    authorizes only module reads and ends with the run.
+  - The prerender server, not the page, adds the header to the tab's module
+    requests (for example through request interception).
+- **Which URL does a page on a host URL import a realm's modules from?**
+  ADR 033 serves a realm at host URLs (a Boxel Space path, a site name, a
+  custom domain), and today a host URL answers module requests with module
+  source. That gives each module a second URL, which §1.2 forbids. Questions:
+  - Do modules always come from the realm's URL, with a host URL refusing
+    module requests? If so, a page on a custom domain imports cross-origin,
+    and §1.2's "the app's origin" becomes a list of origins that changes
+    whenever a host URL is added or removed.
+  - Or does the canonical host URL become the module's one URL? Then a
+    module's URL changes when the canonical host URL changes, and the app
+    and a site would hold different instances of one module.
+  - Terminology: §1.2 calls the realm's own URL its "canonical URL", while
+    ADR 033 §1.4 uses "canonical host URL" for the public address. One of the
+    two needs a different name. "The module's realm URL" is a candidate for
+    this ADR.
+
+## 6. Remediation
 
 Known gaps are listed in [remediation/032.md](remediation/032.md).
