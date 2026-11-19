@@ -91,8 +91,9 @@ The server MUST read routes only through `validateHostRoutes`
 (`Realm.getHostRoutes`), as ADR 015 §1.2 requires. A route that fails
 validation MUST be dropped with a warning, with its child routes. A field
 match's type MUST be read through the definitions cache
-(`lookupDefinitionEntry`), as a search reads it, so a request that finds the
-cache empty waits for the read. On a cache miss, the read is a module visit
+(`lookupDefinitionEntry`), as a search reads it. A browser's page request
+for a path the route could answer waits for the read, and any other request
+MAY get 503 while the read runs. On a cache miss, the read is a module visit
 in the prerender server, which ADR 015 §1.1 allows while a request waits. When the
 read fails, the route MUST be dropped for now and the validation marked
 incomplete, and a path the route could answer MUST get 503, not not-found.
