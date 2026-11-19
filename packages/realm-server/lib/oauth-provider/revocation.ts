@@ -1,9 +1,9 @@
 // The revocation endpoint's limit (RFC 7009, ADR 021 §1.4), applied before
 // the library sees a request.
 //
-// The body is read as the library reads it, with `node:querystring`, so both
-// see the same `token` and `client_id`. A request that names either more than
-// once names no single one, and is treated as naming none.
+// The body is read as the library reads it (`readForm` in `token-limit.ts`),
+// so both see the same `token` and `client_id`. A request that names either
+// more than once names no single one, and is treated as naming none.
 //
 // A request that can revoke something names a live token issued to the
 // client it names, and it can do so only once: revoking ends the token's
@@ -41,7 +41,6 @@
 // library, which counts the download on the new-client limit as at the token
 // endpoint; a client whose document can't be fetched can't revoke.
 
-import { parse as parseQuery } from 'node:querystring';
 import type Koa from 'koa';
 import type Provider from 'oidc-provider';
 import {
@@ -56,8 +55,7 @@ import { sha256Hex } from './objects.ts';
 import {
   allowClientOrigin,
   chargeFailure,
-  MAX_BODY_BYTES,
-  readBody,
+  readForm,
   refuse,
   respond,
   type Answer,
@@ -98,31 +96,22 @@ export function revocationHandler({
     });
 
   return async function handleRevocation(ctxt, next) {
-    let body: string | undefined;
-    if (ctxt.is('application/x-www-form-urlencoded')) {
-      try {
-        body = await readBody(ctxt.req);
-      } catch {
-        // It names no client, so its answers carry no CORS.
-        let answer: Answer = async (status, error) =>
-          respond(ctxt, status, error);
-        if (!(await charge(ctxt, answer))) {
-          return;
-        }
-        return respond(ctxt, 400, {
-          error: 'invalid_request',
-          error_description: `a revocation request must be at most ${MAX_BODY_BYTES} bytes`,
-        });
-      }
+    let form = await readForm({
+      ctxt,
+      charge: (answer) => charge(ctxt, answer),
+      endpoint: 'revocation',
+    });
+    if (!form) {
+      return;
     }
-    let params = parseQuery(body ?? '');
-    let clientId = single(params.client_id);
+    let { body, param } = form;
+    let clientId = param('client_id');
     let answer: Answer = async (status, error) => {
-      await allowClientOrigin(ctxt, provider, clientId ?? null);
+      await allowClientOrigin(ctxt, provider, clientId);
       respond(ctxt, status, error);
     };
 
-    let token = single(params.token);
+    let token = param('token');
     let grantId =
       clientId && token
         ? await grantOfClientsLiveToken(dbAdapter, token, clientId)
@@ -153,11 +142,6 @@ export function revocationHandler({
     }
     await next();
   };
-}
-
-// A parameter's value when the body names it exactly once.
-function single(value: string | string[] | undefined): string | undefined {
-  return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
 // The grant of a token, by its value, when it is an access or refresh token

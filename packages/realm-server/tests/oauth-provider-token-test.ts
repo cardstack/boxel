@@ -1237,6 +1237,73 @@ module(basename(import.meta.filename), function () {
         'and a page elsewhere cannot',
       );
     });
+
+    // A body sent as written, which `tokenRequest` would encode.
+    function tokenWithBody(body: string) {
+      return supertest(server())
+        .post('/_oauth-provider/token')
+        .set('Host', OAUTH_TEST_SERVER_URL.host)
+        .set('Content-Type', 'application/x-www-form-urlencoded')
+        .send(body);
+    }
+
+    test('a body that names a live refresh token the library does not act on counts as a failed attempt', async function (assert) {
+      let known = await tokensFor();
+      let live = encodeURIComponent(known.refreshToken);
+      let client = encodeURIComponent(known.clientId);
+      let bodies = {
+        // The library reads the first parameter as `?grant_type`.
+        'a ?-prefixed body': `?grant_type=refresh_token&refresh_token=${live}&client_id=${client}`,
+        'a repeated refresh_token': `grant_type=refresh_token&refresh_token=${live}&refresh_token=not-a-token&client_id=${client}`,
+        'a repeated client_id': `grant_type=refresh_token&refresh_token=${live}&client_id=${client}&client_id=${client}`,
+      };
+      for (let [label, body] of Object.entries(bodies)) {
+        let response = await tokenWithBody(body);
+        assert.strictEqual(response.status, 400, label);
+      }
+      let limited = await refreshOAuthTokens(
+        server(),
+        known.clientId,
+        'not-a-token',
+      );
+      assert.strictEqual(limited.status, 429, 'the address is limited');
+      let refresh = await refreshOAuthTokens(
+        server(),
+        known.clientId,
+        known.refreshToken,
+      );
+      assert.strictEqual(
+        refresh.status,
+        200,
+        "the grant's own limit is untouched, and its refresh token unused",
+      );
+    });
+
+    test('a body too large to read counts as a failed attempt', async function (assert) {
+      let known = await tokensFor();
+      let body = `grant_type=refresh_token&refresh_token=${encodeURIComponent(
+        known.refreshToken,
+      )}&client_id=${encodeURIComponent(known.clientId)}&pad=${'x'.repeat(
+        9 * 1024,
+      )}`;
+      for (let i = 0; i < 3; i++) {
+        let response = await tokenWithBody(body);
+        assert.strictEqual(response.status, 400, `too large ${i + 1}`);
+        assert.strictEqual(response.body.error, 'invalid_request');
+      }
+      let limited = await tokenWithBody(body);
+      assert.strictEqual(limited.status, 429, 'the address is limited');
+      let refresh = await refreshOAuthTokens(
+        server(),
+        known.clientId,
+        known.refreshToken,
+      );
+      assert.strictEqual(
+        refresh.status,
+        200,
+        "the grant's own limit is untouched, and its refresh token unused",
+      );
+    });
   });
 
   module('with a tight network limit', function (hooks) {

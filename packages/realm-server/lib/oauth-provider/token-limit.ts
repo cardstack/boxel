@@ -6,8 +6,9 @@
 //   allows ten times that. Not per address or per client: a hosted client
 //   refreshes every user's tokens from a few server addresses.
 // - Failed attempts, for requests that name no code or refresh token the
-//   provider holds, or a code without the verifier its PKCE challenge needs:
-//   such a request can never succeed, so each counts as it arrives, and a
+//   provider holds, name a code without the verifier its PKCE challenge
+//   needs, don't name their client once, or are too large to read: such a
+//   request can never succeed, so each counts as it arrives, and a
 //   caller with none left is refused, so guessing codes or refresh tokens is
 //   slow. They are counted as the provider's other unsigned endpoints count
 //   requests (`caller-limit.ts`): per address (an IPv4 address or IPv6 /64),
@@ -19,6 +20,11 @@
 //   exchange and the grant's refreshes need, or end the grant as a reuse. A
 //   request that can succeed is bounded by its grant instead. The address is
 //   the one the `clientAddress` middleware works out, never the socket's.
+//
+// The body is read as the library reads it (`readForm`), so Boxel counts the
+// code or refresh token the library acts on. A request that names a parameter
+// more than once names no single one, and is treated as naming none; the
+// library refuses it.
 //
 // Ending a grant deletes its tokens, so a refresh that names a token of an
 // ended grant counts as a failure too. So does a revocation that names one
@@ -35,6 +41,7 @@
 // ends it. A code does so only with its verifier, as in the library.
 
 import { createHash, timingSafeEqual } from 'crypto';
+import { parse as parseQuery } from 'node:querystring';
 import type Koa from 'koa';
 import type Provider from 'oidc-provider';
 import {
@@ -166,28 +173,26 @@ export function tokenHandler({
   let perGrant = tokenBucket(limit.perGrant);
 
   return async function handleToken(ctxt, next) {
-    let body: string | undefined;
-    if (ctxt.is('application/x-www-form-urlencoded')) {
-      try {
-        body = await readBody(ctxt.req);
-      } catch {
-        return respond(ctxt, 400, {
-          error: 'invalid_request',
-          error_description: `a token request must be at most ${MAX_BODY_BYTES} bytes`,
-        });
-      }
+    let charge = (answer: Answer) =>
+      chargeFailure({
+        ctxt,
+        answer,
+        rateLimitStore,
+        limit,
+        alert,
+        endpoint: 'token',
+      });
+    let form = await readForm({ ctxt, charge, endpoint: 'token' });
+    if (!form) {
+      return;
     }
-    let params = new URLSearchParams(body ?? '');
-    let answer = async (
-      status: number,
-      error: { error: string; error_description: string },
-    ) => {
-      await allowClientOrigin(ctxt, provider, params.get('client_id'));
+    let { body, param } = form;
+    let answer: Answer = async (status, error) => {
+      await allowClientOrigin(ctxt, provider, param('client_id'));
       respond(ctxt, status, error);
     };
 
-    let exchange =
-      body === undefined ? undefined : await grantOfExchange(dbAdapter, params);
+    let exchange = await grantOfExchange(dbAdapter, param);
     if (exchange) {
       let taken = await rateLimitStore.take(
         counterKey('oauth-token-grant', exchange.grantId),
@@ -213,16 +218,7 @@ export function tokenHandler({
           'token',
         );
       }
-    } else if (
-      !(await chargeFailure({
-        ctxt,
-        answer,
-        rateLimitStore,
-        limit,
-        alert,
-        endpoint: 'token',
-      }))
-    ) {
+    } else if (!(await charge(answer))) {
       return;
     }
     if (body !== undefined) {
@@ -242,7 +238,7 @@ export function tokenHandler({
 export async function allowClientOrigin(
   ctxt: Koa.Context,
   provider: Provider,
-  clientId: string | null,
+  clientId: string | undefined,
 ) {
   let origin = ctxt.get('Origin');
   if (!origin || !clientId) {
@@ -260,17 +256,22 @@ export async function allowClientOrigin(
 // the provider issued and, for a code, the request proves it with the
 // verifier its PKCE challenge needs; and whether presenting it again ends
 // the grant. A code without its verifier is refused by the library before it
-// checks for reuse, so it names no grant here.
+// checks for reuse, so it names no grant here. Neither does a request that
+// doesn't name its client once: every client here is public, and names
+// itself only by the body's `client_id`.
 async function grantOfExchange(
   dbAdapter: DBAdapter,
-  params: URLSearchParams,
+  param: FormParam,
 ): Promise<
   | { grantId: string; reused: boolean; what: 'code' | 'refresh token' }
   | undefined
 > {
-  let grantType = params.get('grant_type');
+  if (!param('client_id')) {
+    return undefined;
+  }
+  let grantType = param('grant_type');
   if (grantType === 'authorization_code') {
-    let code = params.get('code');
+    let code = param('code');
     if (!code) {
       return undefined;
     }
@@ -289,12 +290,12 @@ async function grantOfExchange(
       reused: boolean;
     }[];
     return row?.grant_id &&
-      pkceCanPass(params.get('code_verifier'), row.challenge, row.method)
+      pkceCanPass(param('code_verifier'), row.challenge, row.method)
       ? { grantId: row.grant_id, reused: row.reused, what: 'code' }
       : undefined;
   }
   if (grantType === 'refresh_token') {
-    let token = params.get('refresh_token');
+    let token = param('refresh_token');
     if (!token) {
       return undefined;
     }
@@ -307,7 +308,7 @@ async function grantOfExchange(
 // The library's PKCE check (`helpers/pkce.js`), as a test rather than a
 // refusal.
 function pkceCanPass(
-  verifier: string | null,
+  verifier: string | undefined,
   challenge: string | null,
   method: string | null,
 ): boolean {
@@ -398,8 +399,63 @@ export async function refuse(
   });
 }
 
+// A body parameter by name, when the body names it exactly once with a
+// value.
+export type FormParam = (name: string) => string | undefined;
+
+// A token or revocation request's body, read as the library reads it.
+export interface Form {
+  // The body as read, for the library; undefined when the request isn't
+  // form-encoded, so the library refuses it without reading one.
+  body: string | undefined;
+  param: FormParam;
+}
+
+// Reads a request's form-encoded body with `node:querystring`, as the library
+// does, for the token and revocation endpoints alike. A parameter named more
+// than once names no single one, and the library refuses the request, so
+// `param` treats it as missing; it treats an empty value the same way.
+//
+// A body over `MAX_BODY_BYTES` can never succeed, so it counts as a failure
+// through `charge` before it is answered 400. It names no client, so neither
+// answer carries CORS. Undefined when the request has been answered.
+export async function readForm({
+  ctxt,
+  charge,
+  endpoint,
+}: {
+  ctxt: Koa.Context;
+  charge: (answer: Answer) => Promise<boolean>;
+  endpoint: 'token' | 'revocation';
+}): Promise<Form | undefined> {
+  if (!ctxt.is('application/x-www-form-urlencoded')) {
+    return { body: undefined, param: () => undefined };
+  }
+  let body: string;
+  try {
+    body = await readBody(ctxt.req);
+  } catch {
+    let answer: Answer = async (status, error) => respond(ctxt, status, error);
+    if (await charge(answer)) {
+      respond(ctxt, 400, {
+        error: 'invalid_request',
+        error_description: `a ${endpoint} request must be at most ${MAX_BODY_BYTES} bytes`,
+      });
+    }
+    return undefined;
+  }
+  let params = parseQuery(body);
+  return {
+    body,
+    param: (name) => {
+      let value = params[name];
+      return typeof value === 'string' && value !== '' ? value : undefined;
+    },
+  };
+}
+
 // Reads a request's body, up to `MAX_BODY_BYTES`.
-export async function readBody(req: Koa.Context['req']): Promise<string> {
+async function readBody(req: Koa.Context['req']): Promise<string> {
   let chunks: Buffer[] = [];
   let received = 0;
   for await (let chunk of req) {
