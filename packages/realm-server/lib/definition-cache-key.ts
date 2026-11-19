@@ -2,7 +2,13 @@ import { createHash } from 'crypto';
 import { execFileSync } from 'child_process';
 import { readdir, readFile } from 'fs/promises';
 import { join, relative } from 'path';
-import { executableExtensions, logger, param } from '@cardstack/runtime-common';
+import {
+  DEFINITION_CACHE_VERSION,
+  executableExtensions,
+  logger,
+  param,
+} from '@cardstack/runtime-common';
+import { TRANSPILE_VERSION } from '@cardstack/runtime-common/transpile';
 import type { PgAdapter } from '@cardstack/postgres';
 
 const log = logger('realm-server:definition-cache-key');
@@ -15,10 +21,18 @@ const log = logger('realm-server:definition-cache-key');
 // and the bootstrap realms' modules that every user module ultimately
 // imports. The key is a digest over those inputs; a boot whose key matches
 // the stored one keeps the table (dropping only error rows), and any other
-// boot clears it, as every boot used to.
+// boot clears it.
 //
 // User-realm modules are not part of the key: a change to one invalidates
 // its own rows at write time, and the rows of the modules that import it.
+//
+// A deployed host shell carries the commit it was built from, and so does a
+// deployed image, so every deploy moves the key; what the table outlives is a
+// restart within one deploy.
+//
+// A realm-server build older than the key clears and refills the table at
+// boot without touching the stored key, so a later boot whose key matches
+// keeps what that build wrote.
 
 // Constant, arbitrarily chosen, stable across deployments. Serializes the
 // compare-and-clear between processes booting against the same database, so
@@ -31,13 +45,14 @@ export interface DefinitionCacheKeyInputs {
   hostShellHash: string;
   transpileVersion: number;
   definitionCacheVersion: number;
-  // A deploy-supplied identifier of the server build, when one is set. Covers
-  // a change to the realm server or prerenderer that moves neither the host
-  // shell nor a bootstrap module.
+  // The commit the server was built from, when one is known (see
+  // `resolveBuildSha`). Covers a change to the realm server or prerenderer
+  // that moves neither the host shell nor a bootstrap module.
   buildSha?: string;
   // A digest of the bootstrap realms' module sources (see
-  // `digestBootstrapRealmModules`).
-  bootstrapModulesDigest: string;
+  // `digestBootstrapRealmModules`), when the build has no image commit (see
+  // `bootDefinitionCacheKeyInputs`).
+  bootstrapModulesDigest?: string;
 }
 
 export function computeDefinitionCacheKey(
@@ -50,7 +65,7 @@ export function computeDefinitionCacheKey(
         inputs.transpileVersion,
         inputs.definitionCacheVersion,
         inputs.buildSha ?? null,
-        inputs.bootstrapModulesDigest,
+        inputs.bootstrapModulesDigest ?? null,
       ]),
     )
     .digest('hex');
@@ -110,16 +125,77 @@ async function executableFilesUnder(root: string): Promise<string[]> {
   return found.sort();
 }
 
+// The build commit folded into the key. A deployed image carries the commit
+// it was built from as `BOXEL_COMMIT` (realm-server.Dockerfile). A server
+// that isn't deployed uses the checkout's HEAD, so a dev server opted into
+// keeping its definitions clears across a commit; the module digest covers
+// its uncommitted edits to a bootstrap realm.
+export function resolveBuildSha(
+  env: Record<string, string | undefined>,
+  deployed: boolean,
+): string | undefined {
+  if (env.BOXEL_COMMIT) {
+    return env.BOXEL_COMMIT;
+  }
+  if (deployed) {
+    return undefined;
+  }
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return undefined;
+  }
+}
+
+export interface BootDefinitionCacheKeySources {
+  env: Record<string, string | undefined>;
+  deployed: boolean;
+  // The host shell (index.html) this server serves.
+  getIndexHTML: () => Promise<string>;
+  // The bootstrap realms' directories (`--path`).
+  bootstrapRealmPaths: string[];
+}
+
+// The key inputs for this process. The bootstrap realms' module sources are
+// read only when the build has no image commit. An image's commit pins the
+// sources the start scripts copy from the image into bootstrap realms, and a
+// realm synced through the realm API invalidates its own rows on each write;
+// on an image the digest would only re-read every module over the shared
+// disk at each boot and hook, and clear the whole table after any module
+// write to a writable bootstrap realm.
+export async function bootDefinitionCacheKeyInputs({
+  env,
+  deployed,
+  getIndexHTML,
+  bootstrapRealmPaths,
+}: BootDefinitionCacheKeySources): Promise<DefinitionCacheKeyInputs> {
+  let imageCommit = env.BOXEL_COMMIT || undefined;
+  return {
+    hostShellHash: createHash('md5')
+      .update(await getIndexHTML())
+      .digest('hex'),
+    transpileVersion: TRANSPILE_VERSION,
+    definitionCacheVersion: DEFINITION_CACHE_VERSION,
+    buildSha: resolveBuildSha(env, deployed),
+    bootstrapModulesDigest: imageCommit
+      ? undefined
+      : await digestBootstrapRealmModules(bootstrapRealmPaths),
+  };
+}
+
 // What a boot does with the modules table.
 //   - 'keep-if-unchanged': compare the boot key; keep the table on a match.
-//   - 'clear': clear it unconditionally (the behavior before the boot key).
+//   - 'clear': clear it unconditionally.
 //   - 'skip': leave it alone entirely, error rows included.
 export type DefinitionCacheStartupMode = 'keep-if-unchanged' | 'clear' | 'skip';
 
 // Resolves the startup mode from the environment.
 //   1. `REALM_SERVER_SKIP_MODULES_CACHE_CLEAR_ON_STARTUP=true` → 'skip'
-//      (the existing opt-out, used by harnesses that restore a known-good
-//      modules table).
+//      (for harnesses that restore a known-good modules table).
 //   2. `REALM_SERVER_DEFINITION_CACHE_ON_STARTUP`, when it names a mode.
 //   3. Otherwise 'keep-if-unchanged' on a deployed server URL and 'clear'
 //      elsewhere: a dev host shell is served unfingerprinted, so a host
@@ -147,31 +223,6 @@ export function definitionCacheStartupMode(
   return deployed ? 'keep-if-unchanged' : 'clear';
 }
 
-// The build identifier folded into the key: the deploy-supplied
-// `REALM_SERVER_BUILD_SHA` when set; on a server that isn't deployed, the
-// checkout's HEAD, so a dev server opted into keeping its definitions still
-// clears across a commit.
-export function resolveBuildSha(
-  env: Record<string, string | undefined>,
-  deployed: boolean,
-): string | undefined {
-  if (env.REALM_SERVER_BUILD_SHA) {
-    return env.REALM_SERVER_BUILD_SHA;
-  }
-  if (deployed) {
-    return undefined;
-  }
-  try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-      .toString()
-      .trim();
-  } catch {
-    return undefined;
-  }
-}
-
 export type DefinitionCacheBootOutcome =
   | { outcome: 'kept'; key: string; errorRowsDropped: number }
   | {
@@ -186,24 +237,30 @@ export type DefinitionCacheBootOutcome =
 
 export interface ReconcileDefinitionCacheArgs {
   dbAdapter: PgAdapter;
-  definitionLookup: { clearAllDefinitions(): Promise<void> };
+  definitionLookup: {
+    clearAllDefinitions(): Promise<void>;
+    clearErrorDefinitions(): Promise<number>;
+  };
   mode: DefinitionCacheStartupMode;
   // Computes the current key. Undefined, or a throw, means it could not be
-  // computed, and the table is cleared, as before the boot key.
+  // computed, and the table is cleared.
   computeKey: () => Promise<string | undefined>;
   // Run from the post-deployment hook rather than at boot. A rolling deploy
   // keeps old-build tasks serving until the deploy is stable, so after a
   // deploy that changed the key they may have written rows derived under the
   // old inputs since the new tasks' boot cleared the table. The first check
-  // after the key changed therefore clears once more, as the hook always
-  // did; a deploy that left the key alone keeps the table.
+  // after the key changed therefore clears once more; a deploy that left the
+  // key alone keeps the table.
   afterDeployment?: boolean;
 }
 
 // Keeps the modules table across a restart when the boot key is unchanged,
-// and clears it otherwise. Runs under a session advisory lock on a pinned
-// connection, so concurrent boots against one database serialize: the first
-// clears and stores the new key, and the ones behind it see the match.
+// and clears it otherwise. Runs under a transaction-scoped advisory lock on a
+// pinned connection, so concurrent checks against one database serialize:
+// the first clears and stores the new key, and the ones behind it see the
+// match. The key row is written in that transaction, so a waiting peer reads
+// a new key only after the clear that goes with it, and the commit or
+// rollback releases the lock whatever happens in between.
 export async function reconcileDefinitionCacheOnBoot({
   dbAdapter,
   definitionLookup,
@@ -226,66 +283,64 @@ export async function reconcileDefinitionCacheOnBoot({
     }
   }
   return await dbAdapter.withConnection(async (queryFn) => {
+    await queryFn(['BEGIN']);
     await queryFn([
-      `SELECT pg_advisory_lock(`,
+      `SELECT pg_advisory_xact_lock(`,
       param(DEFINITION_CACHE_KEY_LOCK_ID),
       `)`,
     ]);
-    try {
-      let rows = (await queryFn([
-        `SELECT key, set_at, settled_set_at FROM definition_cache_key WHERE id = 1`,
-      ])) as {
-        key: string;
-        set_at: string | number;
-        settled_set_at: string | number | null;
-      }[];
-      let previous = rows[0];
-      let previousKey = previous?.key;
-      let now = Date.now();
-      // The hook settles the key it saw: a later hook clears only when the
-      // key changed again after that.
-      let stampDeployment = async () => {
-        if (afterDeployment) {
-          await queryFn([
-            `UPDATE definition_cache_key SET settled_set_at = set_at WHERE id = 1`,
-          ]);
-        }
-      };
-      if (key && previousKey === key) {
-        if (
-          afterDeployment &&
-          (previous.settled_set_at == null ||
-            Number(previous.settled_set_at) !== Number(previous.set_at))
-        ) {
-          log.info(
-            `the deploy changed the definition cache key (${key}); clearing the modules table once more after it`,
-          );
-          await definitionLookup.clearAllDefinitions();
-          await stampDeployment();
-          return {
-            outcome: 'cleared' as const,
-            key,
-            previousKey,
-            deployChangedKey: true as const,
-          };
-        }
-        // A boot is the one moment an error row can be retried without a
-        // request paying for it, and an error recorded under the previous
-        // process (a render timeout, a prerenderer that was going away) is
-        // as likely to be about that process as about the module.
-        let dropped = (await queryFn([
-          `DELETE FROM modules WHERE error_doc IS NOT NULL RETURNING url`,
-        ])) as { url: string }[];
-        await stampDeployment();
-        log.info(
-          `definition cache key unchanged (${key}); kept the modules table, dropped ${dropped.length} error row(s)`,
-        );
-        return {
-          outcome: 'kept' as const,
-          key,
-          errorRowsDropped: dropped.length,
-        };
+    let rows = (await queryFn([
+      `SELECT key, set_at, settled_set_at FROM definition_cache_key WHERE id = 1`,
+    ])) as {
+      key: string;
+      set_at: string | number;
+      settled_set_at: string | number | null;
+    }[];
+    let previous = rows[0];
+    let previousKey = previous?.key;
+    // The hook settles the key it saw: a later hook clears only when the key
+    // changed again after that.
+    let stampDeployment = async () => {
+      if (afterDeployment) {
+        await queryFn([
+          `UPDATE definition_cache_key SET settled_set_at = set_at WHERE id = 1`,
+        ]);
       }
+    };
+    let outcome: DefinitionCacheBootOutcome;
+    if (
+      key &&
+      previousKey === key &&
+      afterDeployment &&
+      (previous.settled_set_at == null ||
+        Number(previous.settled_set_at) !== Number(previous.set_at))
+    ) {
+      log.info(
+        `the deploy changed the definition cache key (${key}); clearing the modules table once more after it`,
+      );
+      await definitionLookup.clearAllDefinitions();
+      await stampDeployment();
+      outcome = {
+        outcome: 'cleared',
+        key,
+        previousKey,
+        deployChangedKey: true,
+      };
+    } else if (key && previousKey === key) {
+      // An error recorded under the previous process (a render timeout, a
+      // prerenderer that was going away) is as likely to be about that
+      // process as about the module, so a kept table drops its error rows and
+      // the next lookup of each module derives it again. A single lookup
+      // expires an error row after ERROR_CACHE_TTL_MS, but batch reads and
+      // the dependency errors folded into a module's own error read error
+      // rows at any age.
+      let dropped = await definitionLookup.clearErrorDefinitions();
+      await stampDeployment();
+      log.info(
+        `definition cache key unchanged (${key}); kept the modules table, dropped ${dropped} error row(s)`,
+      );
+      outcome = { outcome: 'kept', key, errorRowsDropped: dropped };
+    } else {
       log.info(
         key
           ? `definition cache key changed (${previousKey ?? 'none'} → ${key}); clearing the modules table`
@@ -297,7 +352,7 @@ export async function reconcileDefinitionCacheOnBoot({
           `INSERT INTO definition_cache_key (id, key, set_at) VALUES (1,`,
           param(key),
           `,`,
-          param(now),
+          param(Date.now()),
           `) ON CONFLICT (id) DO UPDATE SET key = excluded.key, set_at = excluded.set_at`,
         ]);
         await stampDeployment();
@@ -307,19 +362,30 @@ export async function reconcileDefinitionCacheOnBoot({
         // whatever this boot could not fingerprint.
         await queryFn([`DELETE FROM definition_cache_key WHERE id = 1`]);
       }
-      return { outcome: 'cleared' as const, key, previousKey };
-    } finally {
-      try {
-        await queryFn([
-          `SELECT pg_advisory_unlock(`,
-          param(DEFINITION_CACHE_KEY_LOCK_ID),
-          `)`,
-        ]);
-      } catch (err: unknown) {
-        log.warn(
-          `failed to release the definition cache key advisory lock: ${String(err)}`,
-        );
-      }
+      outcome = { outcome: 'cleared', key, previousKey };
     }
+    await queryFn(['COMMIT']);
+    return outcome;
   });
+}
+
+// The boot check and the post-deployment hook's check for one process. The
+// hook clears where the boot is told to skip: that opt-out keeps a restored
+// table for the process's own boot, and a deploy still replaces what the
+// previous build derived.
+export function definitionCacheReconcilers(
+  args: Omit<ReconcileDefinitionCacheArgs, 'afterDeployment'>,
+): {
+  onBoot: () => Promise<DefinitionCacheBootOutcome>;
+  afterDeployment: () => Promise<DefinitionCacheBootOutcome>;
+} {
+  return {
+    onBoot: () => reconcileDefinitionCacheOnBoot(args),
+    afterDeployment: () =>
+      reconcileDefinitionCacheOnBoot({
+        ...args,
+        mode: args.mode === 'skip' ? 'clear' : args.mode,
+        afterDeployment: true,
+      }),
+  };
 }

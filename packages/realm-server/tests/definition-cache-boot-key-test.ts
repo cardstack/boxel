@@ -6,6 +6,7 @@ import { tmpdir } from 'os';
 import {
   CachingDefinitionLookup,
   DEFINITION_CACHE_VERSION,
+  MODULE_CACHE_INVALIDATED_CHANNEL,
   rri,
   type ModulePrerenderArgs,
   type ModuleRenderResponse,
@@ -20,7 +21,9 @@ import {
   testCreatePrerenderAuth,
 } from './helpers/index.ts';
 import {
+  bootDefinitionCacheKeyInputs,
   computeDefinitionCacheKey,
+  definitionCacheReconcilers,
   definitionCacheStartupMode,
   digestBootstrapRealmModules,
   reconcileDefinitionCacheOnBoot,
@@ -104,6 +107,78 @@ module(basename(import.meta.filename), function () {
         'clear',
         'an unknown mode falls back to the default',
       );
+    });
+  });
+
+  module('bootDefinitionCacheKeyInputs', function (hooks) {
+    let realmDir: string;
+    let indexHTML: string;
+
+    hooks.beforeEach(function () {
+      realmDir = mkdtempSync(join(tmpdir(), 'definition-cache-key-inputs-'));
+      writeFileSync(join(realmDir, 'card-api.gts'), 'export const a = 1;');
+      indexHTML = '<html>shell-a</html>';
+    });
+
+    hooks.afterEach(function () {
+      rmSync(realmDir, { recursive: true, force: true });
+    });
+
+    async function inputsFor(
+      env: Record<string, string | undefined>,
+      deployed = true,
+    ) {
+      return await bootDefinitionCacheKeyInputs({
+        env,
+        deployed,
+        getIndexHTML: async () => indexHTML,
+        bootstrapRealmPaths: [realmDir],
+      });
+    }
+
+    async function keyFor(env: Record<string, string | undefined>) {
+      return computeDefinitionCacheKey(await inputsFor(env));
+    }
+
+    test('a deployed image keys on its commit and reads no module source', async function (assert) {
+      let env = { BOXEL_COMMIT: 'commit-a' };
+      let inputs = await inputsFor(env);
+      assert.strictEqual(inputs.buildSha, 'commit-a');
+      assert.strictEqual(inputs.bootstrapModulesDigest, undefined);
+
+      let key = await keyFor(env);
+      assert.strictEqual(await keyFor(env), key, 'two computations agree');
+      writeFileSync(join(realmDir, 'card-api.gts'), 'export const a = 2;');
+      assert.strictEqual(
+        await keyFor(env),
+        key,
+        'a module write does not move it',
+      );
+      assert.notStrictEqual(
+        await keyFor({ BOXEL_COMMIT: 'commit-b' }),
+        key,
+        'a new commit moves it',
+      );
+      indexHTML = '<html>shell-b</html>';
+      assert.notStrictEqual(
+        await keyFor(env),
+        key,
+        'a new host shell moves it',
+      );
+    });
+
+    test('without an image commit the module sources are in the key', async function (assert) {
+      let inputs = await inputsFor({});
+      assert.strictEqual(
+        inputs.buildSha,
+        undefined,
+        'a deployed server without an image commit has no build commit',
+      );
+      assert.strictEqual(typeof inputs.bootstrapModulesDigest, 'string');
+
+      let key = await keyFor({});
+      writeFileSync(join(realmDir, 'card-api.gts'), 'export const a = 2;');
+      assert.notStrictEqual(await keyFor({}), key, 'a module write moves it');
     });
   });
 
@@ -365,13 +440,41 @@ module(basename(import.meta.filename), function () {
       }
       assert.strictEqual(await moduleRowCount(), 4);
 
+      let payloads: string[] = [];
+      let subscription = await dbAdapter.subscribe(
+        MODULE_CACHE_INVALIDATED_CHANNEL,
+        (notification) => {
+          if (notification.payload) {
+            payloads.push(notification.payload);
+          }
+        },
+      );
       let restarted = bootLookup();
-      let outcome = await boot(restarted, await baseInputs());
+      let generationBefore = restarted.definitionGeneration();
+      let outcome: Awaited<ReturnType<typeof boot>> | undefined;
+      try {
+        outcome = await boot(restarted, await baseInputs());
+        let deadline = Date.now() + 5_000;
+        while (!payloads.length && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      } finally {
+        await subscription.unsubscribe();
+      }
       assert.deepEqual(outcome, {
         outcome: 'kept',
         key: computeDefinitionCacheKey(await baseInputs()),
         errorRowsDropped: 2,
       });
+      assert.ok(
+        restarted.definitionGeneration() > generationBefore,
+        'answers derived from the dropped rows are invalidated here',
+      );
+      assert.deepEqual(
+        payloads,
+        [JSON.stringify({ k: 'global' })],
+        'and in peer processes',
+      );
       assert.strictEqual(
         await moduleRowCount(),
         2,
@@ -407,7 +510,7 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(stored.length, 0, 'no stale key is left behind');
     });
 
-    test("'clear' and 'skip' modes behave as the old switches did", async function (assert) {
+    test("'clear' empties the table and 'skip' leaves it", async function (assert) {
       await populateUnder(await baseInputs());
       let skipped = await reconcileDefinitionCacheOnBoot({
         dbAdapter,
@@ -492,6 +595,74 @@ module(basename(import.meta.filename), function () {
       await lookUp(restarted, 'person');
       await lookUp(restarted, 'pet');
       assert.strictEqual(prerenderModuleCalls, 0, 'nothing is re-derived');
+    });
+
+    test('the hook clears where a boot is told to skip', async function (assert) {
+      await populateUnder(await baseInputs());
+      let { onBoot, afterDeployment } = definitionCacheReconcilers({
+        dbAdapter,
+        definitionLookup: bootLookup(),
+        mode: 'skip',
+        computeKey: async () => computeDefinitionCacheKey(await baseInputs()),
+      });
+      assert.strictEqual((await onBoot()).outcome, 'skipped');
+      assert.strictEqual(
+        await moduleRowCount(),
+        2,
+        'the boot leaves the table',
+      );
+      assert.strictEqual((await afterDeployment()).outcome, 'cleared');
+      assert.strictEqual(await moduleRowCount(), 0, 'the hook clears it');
+    });
+
+    test('a deployed image keeps the table across a restart, and a new image clears it', async function (assert) {
+      // What main.ts composes: the mode for a deployed server URL, and the
+      // key from the image's commit and the host shell.
+      let reconcilersFor = (commit: string, lookup: CachingDefinitionLookup) =>
+        definitionCacheReconcilers({
+          dbAdapter,
+          definitionLookup: lookup,
+          mode: definitionCacheStartupMode({ BOXEL_COMMIT: commit }, true),
+          computeKey: async () =>
+            computeDefinitionCacheKey(
+              await bootDefinitionCacheKeyInputs({
+                env: { BOXEL_COMMIT: commit },
+                deployed: true,
+                getIndexHTML: async () => '<html>shell</html>',
+                bootstrapRealmPaths: [bootstrapDir],
+              }),
+            ),
+        });
+
+      let deployed = bootLookup();
+      assert.strictEqual(
+        (await reconcilersFor('commit-a', deployed).onBoot()).outcome,
+        'cleared',
+      );
+      await lookUp(deployed, 'person');
+      prerenderModuleCalls = 0;
+
+      let restarted = bootLookup();
+      let sameImage = reconcilersFor('commit-a', restarted);
+      assert.strictEqual((await sameImage.onBoot()).outcome, 'kept');
+      await lookUp(restarted, 'person');
+      assert.strictEqual(
+        prerenderModuleCalls,
+        0,
+        'a restart of the same image derives nothing again',
+      );
+
+      let next = bootLookup();
+      assert.strictEqual(
+        (await reconcilersFor('commit-b', next).onBoot()).outcome,
+        'cleared',
+      );
+      await lookUp(next, 'person');
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'a new image derives it again',
+      );
     });
 
     test('concurrent boots with one new key clear once', async function (assert) {

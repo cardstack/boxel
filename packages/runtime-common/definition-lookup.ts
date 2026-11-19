@@ -51,10 +51,11 @@ import type { VirtualNetwork } from './virtual-network.ts';
 const MODULES_TABLE = 'modules';
 // The version of what a modules row holds. The realm server keeps the table
 // across a restart when nothing that derived its rows changed (its boot key),
-// and this is part of that key: a change to how a definition is derived or
-// shaped that moves neither the host shell nor the transpiler must bump this,
-// or rows from before the change outlive it. Bumped by hand, like
-// `TRANSPILE_VERSION`.
+// and this is part of that key. A deployed image's commit is in the key too,
+// so this matters to a server whose key has no build commit: a change to how
+// a definition is derived or shaped that moves neither the host shell nor the
+// transpiler must bump this, or such a server keeps rows from before the
+// change. Bumped by hand, like `TRANSPILE_VERSION`.
 export const DEFINITION_CACHE_VERSION = 1;
 const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
 // Postgres NOTIFY channel for cross-instance module-cache invalidation
@@ -1333,6 +1334,22 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     await this.query(['DELETE FROM', MODULES_TABLE]);
     this.#definitionGeneration++;
     await this.notifyGlobalDefinitionCacheInvalidation();
+  }
+
+  // Deletes every cached module error and keeps the definitions. Answers
+  // derived from the deleted rows, here and in peer processes, are
+  // invalidated as `clearAllDefinitions` invalidates them. In-flight
+  // prerenders here are left to finish: whatever they persist replaces an
+  // error row rather than depending on it. Returns how many rows it deleted.
+  async clearErrorDefinitions(): Promise<number> {
+    let deleted = (await this.query([
+      'DELETE FROM',
+      MODULES_TABLE,
+      'WHERE error_doc IS NOT NULL RETURNING url',
+    ])) as { url: string }[];
+    this.#definitionGeneration++;
+    await this.notifyGlobalDefinitionCacheInvalidation();
+    return deleted.length;
   }
 
   // pg_notify emission helpers. Mirror Realm.#notifyFileChange's best-effort

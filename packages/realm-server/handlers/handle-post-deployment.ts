@@ -37,7 +37,7 @@ export default function handlePostDeployment({
 
     // The same check a boot runs: keep the modules table when nothing that
     // derived its rows changed (dropping its error rows), clear it otherwise.
-    // A server given no check clears, as every deploy used to.
+    // A server given no check clears the table.
     if (reconcileDefinitionCache) {
       await reconcileDefinitionCache();
     } else {

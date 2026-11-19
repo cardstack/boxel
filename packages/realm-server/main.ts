@@ -26,7 +26,6 @@ import {
   parseRateLimitSpec,
   markRealmPublishable,
   ri,
-  DEFINITION_CACHE_VERSION,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
@@ -55,13 +54,11 @@ import {
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file.ts';
 import { runRegistryBackfillWithAdvisoryLock } from './lib/realm-registry-backfill.ts';
 import {
+  bootDefinitionCacheKeyInputs,
   computeDefinitionCacheKey,
+  definitionCacheReconcilers,
   definitionCacheStartupMode,
-  digestBootstrapRealmModules,
-  reconcileDefinitionCacheOnBoot,
-  resolveBuildSha,
 } from './lib/definition-cache-key.ts';
-import { TRANSPILE_VERSION } from '@cardstack/runtime-common/transpile';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
@@ -605,23 +602,17 @@ const smokeTestHostApp = async () => {
 };
 
 // The boot key for the modules table: the host shell this server serves, the
-// transpiler and definition versions, the build, and the bootstrap realms'
-// module sources (lib/definition-cache-key.ts).
-const computeBootDefinitionCacheKey = async () => {
-  let { createHash } = await import('crypto');
-  let deployed = isDeployedServerURL(String(serverURL));
-  return computeDefinitionCacheKey({
-    hostShellHash: createHash('md5')
-      .update(await getIndexHTML())
-      .digest('hex'),
-    transpileVersion: TRANSPILE_VERSION,
-    definitionCacheVersion: DEFINITION_CACHE_VERSION,
-    buildSha: resolveBuildSha(process.env, deployed),
-    bootstrapModulesDigest: await digestBootstrapRealmModules(
-      paths.map((p) => String(p)),
-    ),
-  });
-};
+// transpiler and definition versions, the build commit, and, without an image
+// commit, the bootstrap realms' module sources (lib/definition-cache-key.ts).
+const computeBootDefinitionCacheKey = async () =>
+  computeDefinitionCacheKey(
+    await bootDefinitionCacheKeyInputs({
+      env: process.env,
+      deployed: isDeployedServerURL(String(serverURL)),
+      getIndexHTML,
+      bootstrapRealmPaths: paths.map((p) => String(p)),
+    }),
+  );
 
 // Report the host-shell token this realm server is serving to the prerender
 // manager. The manager echoes it on heartbeat responses so prerender servers
@@ -815,27 +806,18 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let cardDocumentCache = new CardDocumentCache();
 
   // Keep the modules table across this restart when nothing that derived its
-  // rows changed; clear it otherwise (lib/definition-cache-key.ts).
-  let definitionCacheMode = definitionCacheStartupMode(
-    process.env,
-    isDeployedServerURL(String(serverURL)),
-  );
-  await reconcileDefinitionCacheOnBoot({
+  // rows changed; clear it otherwise. The post-deployment hook runs the same
+  // check (lib/definition-cache-key.ts).
+  let definitionCache = definitionCacheReconcilers({
     dbAdapter,
     definitionLookup,
-    mode: definitionCacheMode,
+    mode: definitionCacheStartupMode(
+      process.env,
+      isDeployedServerURL(String(serverURL)),
+    ),
     computeKey: computeBootDefinitionCacheKey,
   });
-  // The post-deployment hook's check. The startup opt-out never applied to
-  // the hook, which always cleared, so under it the hook still clears.
-  const reconcileDefinitionCache = () =>
-    reconcileDefinitionCacheOnBoot({
-      dbAdapter,
-      definitionLookup,
-      mode: definitionCacheMode === 'skip' ? 'clear' : definitionCacheMode,
-      computeKey: computeBootDefinitionCacheKey,
-      afterDeployment: true,
-    });
+  await definitionCache.onBoot();
 
   // Backfill realm_registry from CLI args (bootstrap), on-disk source realms,
   // and on-disk published realms. Runs before Realm construction so the
@@ -1067,7 +1049,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       : undefined,
     prerenderer,
     reportHostShell: () => reportHostShellToManager(dbAdapter),
-    reconcileDefinitionCache,
+    reconcileDefinitionCache: definitionCache.afterDeployment,
     linkShapePolicy,
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
