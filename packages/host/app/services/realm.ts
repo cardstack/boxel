@@ -35,6 +35,7 @@ import type {
   RealmIdentifier,
   RealmPermissions,
   RealmResourceIdentifier,
+  RefusedRequest,
 } from '@cardstack/runtime-common';
 import {
   Deferred,
@@ -58,7 +59,10 @@ import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import ENV from '@cardstack/host/config/environment';
 import { realmURLDisplayText } from '@cardstack/host/lib/realm-utils';
-import { TokenRefreshSchedule } from '@cardstack/host/lib/token-refresh-schedule';
+import {
+  minTokenRefreshIntervalSec,
+  TokenRefreshSchedule,
+} from '@cardstack/host/lib/token-refresh-schedule';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
@@ -107,6 +111,29 @@ const sessionWaiter = buildWaiter('realm:session-login');
 // (e.g. SearchResultSection's render-race diagnostic) can detect the
 // placeholder without duplicating the literal string.
 export const UNKNOWN_REALM_NAME = 'Unknown Workspace';
+
+// How long a realm's refused requests keep their 401, rather than signing in
+// again, after signing in to it failed to help: the same shortest wait the
+// session refresher keeps between two mints of a session.
+export const signInCooldownSec = minTokenRefreshIntervalSec;
+
+// A realm's sign-in while it is in progress. Once it has minted, `minted` is
+// true and `session` is what it minted (undefined when it minted none), while
+// it subscribes to the realm.
+interface Reauthentication {
+  done: Promise<string | undefined>;
+  minted: boolean;
+  session: string | undefined;
+}
+
+// A realm's last sign-in: when it finished, the session it minted (undefined
+// when it minted none), and whether it was the one more sign-in a session the
+// realm refused right after it was minted gets.
+interface LastSignIn {
+  finishedAt: number;
+  session: string | undefined;
+  retry: boolean;
+}
 
 // How long `loadIndexCounts` waits before re-waking consumers to retry realms
 // left stale by a failed/omitted fetch. Long enough that a persistently failing
@@ -818,7 +845,9 @@ export default class RealmService extends Service {
   // tracked reads from `currentKnownRealms` to establish dependencies.
   private _realms: Map<string, RealmResource> = this.restoreSessions();
   private currentKnownRealms = new TrackedSet<string>();
-  private reauthentications = new Map<string, Promise<string | undefined>>();
+  private reauthentications = new Map<string, Reauthentication>();
+  // Each realm's last sign-in, which its sign-in cooldown is measured from.
+  private lastSignIns = new Map<string, LastSignIn>();
   private bulkInfoPromise: Promise<void> | undefined;
   // Lazily-loaded tile counts, keyed by trailing-slashed realm URL. A
   // TrackedMap so a tile re-renders when its counts land. `inFlightIndexCounts`
@@ -864,11 +893,18 @@ export default class RealmService extends Service {
     this._realms = new Map();
     this.currentKnownRealms = new TrackedSet();
     this.reauthentications.clear();
+    this.lastSignIns.clear();
     this.bulkInfoPromise = undefined;
     this.identifyRealmTracker++;
     this.realmPathsCache.clear();
     this.realmOfCache.clear();
     this.lastRestoredSessionsString = null;
+  }
+
+  // A sign-in that failed before the Matrix session started, as one tried
+  // while the app boots does, says nothing about one tried now.
+  sessionStarted() {
+    this.lastSignIns.clear();
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {
@@ -1811,58 +1847,107 @@ export default class RealmService extends Service {
     return undefined;
   }
 
-  async reauthenticate(realmURL: string): Promise<string | undefined> {
+  // `refused` is passed for a request the realm refused, by the authorization
+  // middleware. A caller that signs in on purpose omits it, and always signs
+  // in.
+  async reauthenticate(
+    realmURL: string,
+    refused?: RefusedRequest,
+  ): Promise<string | undefined> {
     // With no Matrix session, signed in or persisted to sign in from, there
     // is no realm session to mint: the caller gets its 401 at once.
     if (!this.matrixService.isLoggedIn && !this.matrixService.persistedUserId) {
       return undefined;
     }
-    let inProgressAuthentication = this.reauthentications.get(realmURL);
-    if (inProgressAuthentication) {
-      return inProgressAuthentication;
+    let inProgress = this.reauthentications.get(realmURL);
+    if (inProgress) {
+      // Once the sign-in has minted, it subscribes to the realm, which fetches
+      // realm info with the new session. A request the realm refuses with
+      // that very session, that realm-info request among them, keeps its 401:
+      // waiting for the sign-in would leave it waiting on itself.
+      if (
+        refused &&
+        inProgress.minted &&
+        refused.token === inProgress.session
+      ) {
+        return undefined;
+      }
+      return inProgress.done;
     }
+    let retry = false;
+    if (refused) {
+      // The realm's session has moved on from the one the request carried,
+      // so the request replays with it rather than signing in again.
+      let current = this.token(realmURL);
+      if (current && current !== refused.token) {
+        return current;
+      }
+      let last = this.lastSignIns.get(realmURL);
+      if (
+        last &&
+        last.session === refused.token &&
+        this.signInCooldownClock() - last.finishedAt < signInCooldownSec * 1000
+      ) {
+        // The realm's last sign-in, moments ago, minted no session, or minted
+        // the very session this request was refused with. A refused session
+        // gets one more sign-in, since the user's permissions may have just
+        // changed. After a sign-in that minted nothing, or a second refusal
+        // that quick, signing in again would go the same way: the 401 stands.
+        if (last.session === undefined || last.retry) {
+          return undefined;
+        }
+        retry = true;
+      }
+    }
+
     let deferred = new Deferred<string | undefined>();
     // Every caller that joins this sign-in awaits the deferred and handles
     // its rejection; this keeps a failure nobody joined from also surfacing
     // as an unhandled rejection.
     deferred.promise.catch(() => {});
-    this.reauthentications.set(realmURL, deferred.promise);
+    let reauthentication: Reauthentication = {
+      done: deferred.promise,
+      minted: false,
+      session: undefined,
+    };
+    this.reauthentications.set(realmURL, reauthentication);
 
     // A sign-in that fails is reported to every caller waiting on it, and
     // clears the in-progress entry as one that succeeds does, so the next
-    // call signs in afresh rather than waiting on this one.
+    // call signs in afresh rather than waiting on this one. A sign-in whose
+    // realm info the realm refuses fails too.
     try {
       let resource = this.getOrCreateRealmResource(realmURL);
       // Only this realm's session is discarded; every other realm's stays.
       resource.clearRealmSession();
       await resource.mintSession();
       let result = resource.token;
-      // Callers waiting on this sign-in take its session as soon as it is
-      // minted. Subscribing to the realm below fetches its info, and a realm
-      // that refuses the new session answers that with a 401 as well, which
-      // joins this sign-in while it is still in progress: the request replays
-      // once with the session and keeps its 401, rather than waiting on the
-      // sign-in it belongs to.
-      deferred.fulfill(result);
+      reauthentication.minted = true;
+      reauthentication.session = result;
+      // A sign-in that minted no session has nothing to subscribe with.
       if (result) {
-        try {
-          await resource.subscribe();
-        } catch (e: any) {
-          // The session stands whether or not the realm's info loads, so the
-          // callers waiting on it still replay with it.
-          console.warn(
-            `RealmService - signed in to ${realmURL} but could not subscribe to it: ${e?.message}`,
-            e,
-          );
-        }
+        await resource.subscribe();
       }
+      deferred.fulfill(result);
       return result;
     } catch (e) {
       deferred.reject(e);
       throw e;
     } finally {
       this.reauthentications.delete(realmURL);
+      this.lastSignIns.set(realmURL, {
+        finishedAt: this.signInCooldownClock(),
+        session: reauthentication.session,
+        retry,
+      });
     }
+  }
+
+  // The clock sign-in cooldowns are measured on. It is the real clock, as
+  // timing reads are (ADR 023 §1.3), so the test clock's pin leaves it
+  // running; a test replaces it to move past a cooldown.
+  signInCooldownClock(): number {
+    return Date.now();
   }
 
   private createRealmResource(

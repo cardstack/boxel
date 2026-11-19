@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
+import { signInCooldownSec } from '@cardstack/host/services/realm';
 
 const REALM = 'http://reauthentication.test/realm/';
 const MEMBER = '@member:localhost';
@@ -37,25 +38,9 @@ async function outcomeOf(request: Promise<Response>): Promise<Outcome> {
   }
 }
 
-// A session token is only read for its claims here, never verified, so a
-// header-and-payload pair is the whole shape that matters.
-function sessionToken(): string {
-  let now = Math.floor(Date.now() / 1000);
-  return `header.${btoa(
-    JSON.stringify({
-      user: MEMBER,
-      realm: REALM,
-      permissions: ['read'],
-      iat: now,
-      exp: now + 24 * 60 * 60,
-    }),
-  )}`;
-}
-
-function failedMint(): string {
-  throw new Error(
-    'must be logged in to matrix before a realm session can be created',
-  );
+// Whether a request failed because its sign-in was refused the realm's info.
+function failedOnRealmInfo(outcome: Outcome): boolean {
+  return 'error' in outcome && /Failed to fetch realm info/.test(outcome.error);
 }
 
 // How a realm refuses a request it wants a session for.
@@ -66,14 +51,48 @@ function refused(): Response {
   });
 }
 
+function realmInfo(): Response {
+  return new Response(
+    JSON.stringify({
+      data: { id: REALM, type: 'realm-info', attributes: { name: 'Realm' } },
+    }),
+    { status: 200 },
+  );
+}
+
 module('Unit | Service | realm | reauthentication', function (hooks) {
   setupTest(hooks);
   setupWindowMock(hooks);
 
   let network: NetworkService;
+  let realm: RealmService;
   let mints: string[];
   let infoRequests: number;
+  let clockMs: number;
   let originalConsoleError: typeof console.error;
+
+  // A session token is only read for its claims here, never verified, so a
+  // header-and-payload pair is the whole shape that matters. Each mint is a
+  // different session.
+  function sessionToken(): string {
+    let now = Math.floor(Date.now() / 1000);
+    return `header.${btoa(
+      JSON.stringify({
+        user: MEMBER,
+        realm: REALM,
+        permissions: ['read'],
+        mint: mints.length,
+        iat: now,
+        exp: now + 24 * 60 * 60,
+      }),
+    )}`;
+  }
+
+  function failedMint(): string {
+    throw new Error(
+      'must be logged in to matrix before a realm session can be created',
+    );
+  }
 
   function setup(
     owner: any,
@@ -99,7 +118,10 @@ module('Unit | Service | realm | reauthentication', function (hooks) {
       },
     );
     network = owner.lookup('service:network') as NetworkService;
-    owner.lookup('service:realm') as RealmService;
+    realm = owner.lookup('service:realm') as RealmService;
+    realm.signInCooldownClock = () => clockMs;
+    // Sessions here last a day; their refresh never comes due in a test.
+    realm.waitForTokenRefresh = () => new Promise<void>(() => {});
   }
 
   // Answers the realm's requests with `respond`. The realm server's own lists
@@ -122,9 +144,14 @@ module('Unit | Service | realm | reauthentication', function (hooks) {
     );
   }
 
+  function passCooldown() {
+    clockMs += signInCooldownSec * 1000;
+  }
+
   hooks.beforeEach(function () {
     mints = [];
     infoRequests = 0;
+    clockMs = 1_000_000;
     originalConsoleError = console.error;
     // The failed sign-in is logged; that is expected here.
     console.error = () => {};
@@ -158,7 +185,7 @@ module('Unit | Service | realm | reauthentication', function (hooks) {
     assert.deepEqual(mints, [], 'no realm session is asked for');
   });
 
-  test('a browser whose realm sign-in fails does not fetch realm info inside it, so its requests settle', async function (assert) {
+  test('a browser whose realm sign-in fails does not fetch realm info inside it, and waits out the cooldown before signing in again', async function (assert) {
     // Persisted Matrix auth, so the sign-in is tried, and it fails.
     setup(this.owner, {
       isLoggedIn: false,
@@ -173,29 +200,35 @@ module('Unit | Service | realm | reauthentication', function (hooks) {
       { settled: true, status: 401 },
       `the refused request settles with 401 (${JSON.stringify(first)})`,
     );
-
-    let second = await outcomeOf(network.authedFetch(`${REALM}card.json`));
-    assert.deepEqual(
-      second,
-      { settled: true, status: 401 },
-      `a later refused request settles with 401 too (${JSON.stringify(second)})`,
-    );
-    assert.deepEqual(
-      mints,
-      [REALM, REALM],
-      'each refused request tries a fresh sign-in',
-    );
+    assert.deepEqual(mints, [REALM], 'it signs in once');
     assert.strictEqual(
       infoRequests,
       0,
       'a failed sign-in fetches no realm info',
     );
+
+    let second = await outcomeOf(network.authedFetch(`${REALM}card.json`));
+    assert.deepEqual(
+      second,
+      { settled: true, status: 401 },
+      `a refused request in the cooldown settles with 401 (${JSON.stringify(second)})`,
+    );
+    assert.deepEqual(mints, [REALM], 'without signing in again');
+
+    passCooldown();
+    let third = await outcomeOf(network.authedFetch(`${REALM}card.json`));
+    assert.deepEqual(
+      third,
+      { settled: true, status: 401 },
+      `a refused request after the cooldown settles with 401 (${JSON.stringify(third)})`,
+    );
+    assert.deepEqual(mints, [REALM, REALM], 'after signing in again');
   });
 
-  test('a signed-in user whose new session the realm also refuses gets the 401, and so does the next request', async function (assert) {
-    // The realm refuses the session it has just issued, as it does when the
-    // user's permissions change between the sign-in and the request. Realm
-    // info, which the sign-in fetches to subscribe, is refused with it.
+  test('a signed-in user whose new sessions the realm also refuses: the sign-in fails, one more is tried, then the 401 stands', async function (assert) {
+    // The realm refuses each session it has just issued, realm info
+    // included, as it does when the user's permissions don't match the
+    // session's.
     setup(this.owner, {
       isLoggedIn: true,
       persistedUserId: MEMBER,
@@ -204,49 +237,131 @@ module('Unit | Service | realm | reauthentication', function (hooks) {
     mountRealm(refused);
 
     let first = await outcomeOf(network.authedFetch(`${REALM}card.json`));
+    assert.true(
+      failedOnRealmInfo(first),
+      `the request settles: its sign-in fails on the realm info it was refused (${JSON.stringify(first)})`,
+    );
+    assert.deepEqual(mints, [REALM], 'the realm is signed in to once');
+
+    let second = await outcomeOf(network.authedFetch(`${REALM}card.json`));
+    assert.true(
+      failedOnRealmInfo(second),
+      `a request refused with that new session gets one more sign-in, which fails the same way (${JSON.stringify(second)})`,
+    );
+    assert.deepEqual(mints, [REALM, REALM], 'the realm is signed in to again');
+
+    let third = await outcomeOf(network.authedFetch(`${REALM}card.json`));
+    assert.deepEqual(
+      third,
+      { settled: true, status: 401 },
+      `a request refused with the second new session keeps its 401 (${JSON.stringify(third)})`,
+    );
+    assert.deepEqual(mints, [REALM, REALM], 'without signing in again');
+  });
+
+  test('a session refused right after it was minted signs in once more, as when the user’s permissions just changed', async function (assert) {
+    let issued: string[] = [];
+    setup(this.owner, {
+      isLoggedIn: true,
+      persistedUserId: MEMBER,
+      mint: () => {
+        let session = sessionToken();
+        issued.push(session);
+        return session;
+      },
+    });
+    // The realm accepts the sessions issued since the user's permissions
+    // last changed, and refuses the rest.
+    let acceptedFrom = 0;
+    mountRealm((request) => {
+      let session = request.headers.get('Authorization');
+      if (!session || issued.indexOf(session) < acceptedFrom) {
+        return refused();
+      }
+      if (request.url.startsWith(`${REALM}_info`)) {
+        return realmInfo();
+      }
+      return new Response(JSON.stringify({ data: {} }), { status: 200 });
+    });
+
+    let first = await outcomeOf(network.authedFetch(`${REALM}card.json`));
     assert.deepEqual(
       first,
-      { settled: true, status: 401 },
-      `the refused request settles with 401 (${JSON.stringify(first)})`,
+      { settled: true, status: 200 },
+      `the request is served with the new session (${JSON.stringify(first)})`,
     );
+
+    // The user's permissions change, so the realm refuses the session it has
+    // just issued.
+    acceptedFrom = issued.length;
 
     let second = await outcomeOf(network.authedFetch(`${REALM}card.json`));
     assert.deepEqual(
       second,
-      { settled: true, status: 401 },
-      `a later refused request settles with 401 too (${JSON.stringify(second)})`,
+      { settled: true, status: 200 },
+      `the refused request is served after one more sign-in (${JSON.stringify(second)})`,
     );
-    assert.deepEqual(
-      mints,
-      [REALM, REALM],
-      'each refused request signs in once',
-    );
+    assert.deepEqual(mints, [REALM, REALM], 'the realm is signed in to twice');
   });
 
-  test('a sign-in whose realm info fails to load still replays the refused request with its new session', async function (assert) {
+  test('a request refused with a session the realm has since replaced replays with the current one, without signing in', async function (assert) {
     setup(this.owner, {
       isLoggedIn: true,
       persistedUserId: MEMBER,
       mint: sessionToken,
     });
-    // The realm serves the card to a session, but its realm info fails.
-    mountRealm((request) => {
-      if (!request.headers.get('Authorization')) {
-        return refused();
-      }
-      if (request.url.startsWith(`${REALM}_info`)) {
-        return new Response('realm info is unavailable', { status: 500 });
-      }
-      return new Response(JSON.stringify({ data: {} }), { status: 200 });
-    });
+    let current = sessionToken();
+    realm.getOrCreateRealmResource(REALM, current);
 
-    let outcome = await outcomeOf(network.authedFetch(`${REALM}card.json`));
-    assert.deepEqual(
-      outcome,
-      { settled: true, status: 200 },
-      `the request is served with the new session (${JSON.stringify(outcome)})`,
+    assert.strictEqual(
+      await realm.reauthenticate(REALM, { token: 'an-earlier-session' }),
+      current,
+      'the request replays with the realm’s current session',
     );
-    assert.deepEqual(mints, [REALM], 'the realm is signed in to once');
-    assert.ok(infoRequests > 0, 'the sign-in asked for realm info');
+    assert.strictEqual(
+      await realm.reauthenticate(REALM, { token: undefined }),
+      current,
+      'as does one sent before the realm had a session',
+    );
+    assert.deepEqual(mints, [], 'no realm session is asked for');
+  });
+
+  test('a sign-in tried on purpose is not held to the cooldown', async function (assert) {
+    setup(this.owner, {
+      isLoggedIn: false,
+      persistedUserId: '@visitor:localhost',
+      mint: failedMint,
+    });
+    mountRealm(refused);
+
+    await outcomeOf(network.authedFetch(`${REALM}card.json`));
+    assert.deepEqual(mints, [REALM], 'the refused request signs in once');
+
+    assert.strictEqual(
+      await realm.reauthenticate(REALM),
+      undefined,
+      'a caller signing in on purpose is told it failed',
+    );
+    assert.deepEqual(mints, [REALM, REALM], 'after signing in again');
+  });
+
+  test('the cooldown ends when a Matrix session starts', async function (assert) {
+    setup(this.owner, {
+      isLoggedIn: false,
+      persistedUserId: '@visitor:localhost',
+      mint: failedMint,
+    });
+    mountRealm(refused);
+
+    await outcomeOf(network.authedFetch(`${REALM}card.json`));
+    assert.deepEqual(mints, [REALM], 'the refused request signs in once');
+
+    realm.sessionStarted();
+    await outcomeOf(network.authedFetch(`${REALM}card.json`));
+    assert.deepEqual(
+      mints,
+      [REALM, REALM],
+      'a refused request signs in again once the session has started',
+    );
   });
 });
