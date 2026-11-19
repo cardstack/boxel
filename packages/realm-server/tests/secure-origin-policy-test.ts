@@ -36,6 +36,8 @@ const KEY_ID = '0b6c1e9e-5a1f-4c47-9d0e-2f5b8f6f1a3c';
 const WINDOW_SIGN_IN =
   'body:not(:has([data-test-secure-cli-sign-in-subtitle], [data-test-secure-cli-auth-subtitle])) [data-test-secure-sign-in-form]';
 const STATE = 'example-state-0123';
+// An OAuth flow the authorize page is sent to, by its interaction ID.
+const INTERACTION = 'policy-flow-1';
 
 // Every page the shell presents, loaded directly at its own path with what it
 // is told, and something only that page draws. A key page signed out draws
@@ -156,6 +158,17 @@ const SHELL_PAGES: { page: string; address: string; marker: string }[] = [
     address:
       'review-changes#card=https%3A%2F%2Frealm.example%2Fcard&operation=list',
     marker: '[data-test-keys-page="review-changes"]',
+  },
+  // Signed out, an app's flow asks for a sign-in on the page itself.
+  {
+    page: 'authorize',
+    address: `authorize?interaction=${INTERACTION}`,
+    marker: '[data-test-authorize-sign-in-intro]',
+  },
+  {
+    page: 'authorize',
+    address: `authorize?interaction=${INTERACTION}&error=expired`,
+    marker: '[data-test-authorize-ended]',
   },
 ];
 
@@ -310,6 +323,56 @@ const POLICY_TEST_KEY = {
     sharedInto: [],
   },
 };
+// A flow's consent, as the stubbed provider answers it: an app that
+// registered itself, asking for two resources, so the page draws every part
+// consent has.
+const POLICY_TEST_CONSENT = {
+  app: {
+    kind: 'dynamic',
+    shown: 'an app on this computer',
+    verified: false,
+    claimedName: 'Example AI app',
+  },
+  outsideApp: true,
+  resources: [
+    {
+      id: 'https://realm-server.test/mcp',
+      name: 'Boxel workspaces',
+      description: 'Lets the app find, read and change cards and files.',
+      coverage: 'This covers every workspace you can open.',
+      scopes: [
+        {
+          name: 'boxel:read',
+          description: 'See the cards and files in your workspaces.',
+          label: 'Read',
+          caution: false,
+        },
+        {
+          name: 'boxel:write',
+          description: 'Create and change cards and files.',
+          label: 'Change',
+          caution: true,
+        },
+      ],
+    },
+    {
+      id: 'https://realm-server.test/billing',
+      name: 'Boxel billing',
+      description: "Lets the app read your account's usage.",
+      coverage: 'This covers your account.',
+      scopes: [
+        {
+          name: 'billing:read',
+          description: "Read your account's usage.",
+          label: 'Read',
+          caution: false,
+        },
+      ],
+    },
+  ],
+  account: { email: 'someone@example.test' },
+  renewalOffered: true,
+};
 const POLICY_TEST_REALMS = [
   ['https://realm-server.test/example-user/notes/', 'Notes'],
   ['https://realm-server.test/example-team/notes/', 'Notes'],
@@ -357,6 +420,17 @@ module(basename(import.meta.filename), function (hooks) {
       }
       if (req.method === 'GET' && pathname === '/_secure-window/realms') {
         return answer(200, { data: POLICY_TEST_REALMS });
+      }
+      if (pathname === `/_oauth-provider/consent/${INTERACTION}`) {
+        return req.method === 'GET'
+          ? answer(200, POLICY_TEST_CONSENT)
+          : answer(201, { ticket: 'policy-test-ticket' });
+      }
+      if (pathname === `/_oauth-provider/interaction/${INTERACTION}/finish`) {
+        // Long enough for the page to show where the browser goes next
+        // before it leaves.
+        setTimeout(() => answer(204), 5000);
+        return;
       }
       if (req.method === 'GET' && pathname.endsWith('/register/available')) {
         // Long enough for the page to show that it is checking.
@@ -663,6 +737,65 @@ module(basename(import.meta.filename), function (hooks) {
       [],
       'handing over, and failing to: no violation',
     );
+    await page.evaluate(() => localStorage.clear());
+  });
+
+  test("an app's consent, and each answer to it, run under the policy", async function (assert) {
+    await page.goto(`${secureOrigin}/secure?mode=none`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.evaluate(() =>
+      localStorage.setItem(
+        'boxel-secure-session',
+        JSON.stringify({
+          token: 'policy-test',
+          user: '@someone:example.test',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        }),
+      ),
+    );
+    for (let answer of ['allow', 'deny']) {
+      let response = await page.goto(
+        `${secureOrigin}/secure/authorize?interaction=${INTERACTION}`,
+        { waitUntil: 'networkidle0' },
+      );
+      assert.ok(
+        response
+          ?.headers()
+          ['content-security-policy']?.includes(`frame-ancestors 'none'`),
+        "the page can't be framed",
+      );
+      await page.waitForSelector('[data-test-authorize-consent]', {
+        timeout: 10000,
+      });
+      await page.click('[data-test-authorize-renew]');
+      await page.waitForSelector('[data-test-authorize-expiry]', {
+        timeout: 10000,
+      });
+      assert.deepEqual(
+        await violationsIn(page),
+        [],
+        `consent, with renewal unchecked: no violation`,
+      );
+      // Allow takes a click only once the page has been in view a moment.
+      await page.waitForSelector(
+        `[data-test-authorize-${answer}]:not([disabled])`,
+        { timeout: 10000 },
+      );
+      await page.click(`[data-test-authorize-${answer}]`);
+      await page.waitForSelector(
+        `[data-test-authorize-outcome="${answer === 'allow' ? 'allowed' : 'denied'}"]`,
+        { timeout: 10000 },
+      );
+      assert.deepEqual(
+        await violationsIn(page),
+        [],
+        `on to finish after ${answer}: no violation`,
+      );
+    }
+    await page.goto(`${secureOrigin}/secure?mode=none`, {
+      waitUntil: 'networkidle0',
+    });
     await page.evaluate(() => localStorage.clear());
   });
 

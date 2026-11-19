@@ -65,8 +65,8 @@ origin and path and dropped unless the path is a script file's, its function
 name and the type of what invoked it, never by the invoker itself, which can
 name an element or a URL with its query. Tests MUST drive every page that
 takes a credential, a secret or a private name (the key pages, sign-in, the CLI
-pages, registration and password reset) with known values, and check that no
-beacon carries what was typed, sent or answered.
+pages, registration, password reset and the authorize page) with known values,
+and check that no beacon carries what was typed, sent or answered.
 
 ### 1.4. Telemetry never fails a page
 
