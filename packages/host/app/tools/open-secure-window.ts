@@ -10,12 +10,15 @@ import {
   type SecureWindowTarget,
 } from '../lib/secure-window';
 
+import type OAuthProviderService from '../services/oauth-provider';
 import type SecureWindowService from '../services/secure-window';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 // Opens the secure window, where the user enters, replaces, shares or swaps in a key,
-// or connects an account at a service by signing in there through an OAuth
-// app. This is the one way the app, a card and the AI assistant start that,
+// connects an account at a service by signing in there through an OAuth
+// app, or sees and disconnects the apps connected to their Boxel account
+// (only while the realm server's OAuth provider is on). This is the one way
+// the app, a card and the AI assistant start that,
 // so a user learns one flow and nothing builds a form of its own for a
 // credential. The caller names what the key is for; it passes no destination
 // and gets no value back, only whether the window opened. When the browser
@@ -26,10 +29,11 @@ export default class OpenSecureWindowTool extends HostBaseTool<
   typeof BaseToolModule.OpenSecureWindowResult
 > {
   @service declare private secureWindow: SecureWindowService;
+  @service declare private oauthProvider: OAuthProviderService;
 
   static actionVerb = 'Open';
 
-  description = `Open Boxel's secure window, the only place a user enters or shares an API key or connects an account at a service. Call it once when an operation is refused "Binding not approved" and the refusal names a credential slot "for the invoking user's own key", or a card says it needs the user's own key, and tell the user in the chat what you are opening and why. A stored key does not by itself fill the slot, so never reopen the window when the same refusal comes back. Never ask the user for a key, token, password or other credential in the chat. mode "enter-key": add a key, for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation). mode "replace-key": replace the key an operation sends, when it is refused "Credential rejected", for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation); the window finds the key from the user's approval, and when a workspace's shared key fills the slot it tells the user who can replace it. mode "share-key": share one of the user's keys into a workspace (realm). Where that workspace's policy lets people who aren't signed in make calls that send a shared key (its realm.json policy card has a grant whose where is actor() == "anonymous" on a callApi whose every slot is {{apiKey}}), sharing a key there means they will use it, and only a key whose owner allows anonymous use (on the key's page) can be shared there: tell the user so in the same reply before opening it. mode "connect": connect the user's account at a service that signs in with OAuth (such as GitHub), where the user signs in at the service itself instead of pasting a key; pass the same cardId and operation, or module, name, realm and operation, as for "enter-key", or a realm alone to offer the apps shared into that workspace. mode "swap-key": put one of the user's keys into a workspace's (realm) suspended share (share, the share's id). mode "share-limits": change the limits of a workspace's (realm) share (share, the share's id) of one of the user's own keys. mode "approve": approve the operation a card is blocked on when its readiness answers "needs-approval", passing that one operation and its cardId (or module, name and realm); the window gathers every other operation on the card that needs approving into the same confirmation, so call it once, never once per operation. mode "review-changes": the same, when readiness answers "needs-reapproval", to review what changed. reason: one short line the window shows as the opener's words. The result says only whether the window opened ("opened") or the browser blocked it and the app shows the user a button that opens it ("blocked"); it never says what the user did there.`;
+  description = `Open Boxel's secure window, the only place a user enters or shares an API key, connects an account at a service, or disconnects an app connected to their Boxel account. Call it once when an operation is refused "Binding not approved" and the refusal names a credential slot "for the invoking user's own key", or a card says it needs the user's own key, and tell the user in the chat what you are opening and why. A stored key does not by itself fill the slot, so never reopen the window when the same refusal comes back. Never ask the user for a key, token, password or other credential in the chat. mode "enter-key": add a key, for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation). mode "replace-key": replace the key an operation sends, when it is refused "Credential rejected", for an operation on a card instance (cardId and operation) or on a card type (module, name, realm and operation); the window finds the key from the user's approval, and when a workspace's shared key fills the slot it tells the user who can replace it. mode "share-key": share one of the user's keys into a workspace (realm). Where that workspace's policy lets people who aren't signed in make calls that send a shared key (its realm.json policy card has a grant whose where is actor() == "anonymous" on a callApi whose every slot is {{apiKey}}), sharing a key there means they will use it, and only a key whose owner allows anonymous use (on the key's page) can be shared there: tell the user so in the same reply before opening it. mode "connect": connect the user's account at a service that signs in with OAuth (such as GitHub), where the user signs in at the service itself instead of pasting a key; pass the same cardId and operation, or module, name, realm and operation, as for "enter-key", or a realm alone to offer the apps shared into that workspace. mode "swap-key": put one of the user's keys into a workspace's (realm) suspended share (share, the share's id). mode "share-limits": change the limits of a workspace's (realm) share (share, the share's id) of one of the user's own keys. mode "approve": approve the operation a card is blocked on when its readiness answers "needs-approval", passing that one operation and its cardId (or module, name and realm); the window gathers every other operation on the card that needs approving into the same confirmation, so call it once, never once per operation. mode "review-changes": the same, when readiness answers "needs-reapproval", to review what changed. mode "connected-apps": show the apps connected to the user's Boxel account (such as an AI assistant or boxel-cli signed in with OAuth), where the user can disconnect one; open it only when the user asks to see or disconnect them, and pass nothing else. reason: one short line the window shows as the opener's words. The result says only whether the window opened ("opened") or the browser blocked it and the app shows the user a button that opens it ("blocked"); it never says what the user did there.`;
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -43,6 +47,14 @@ export default class OpenSecureWindowTool extends HostBaseTool<
     input: BaseToolModule.OpenSecureWindowInput,
   ): Promise<BaseToolModule.OpenSecureWindowResult> {
     let request = secureWindowRequest(input);
+    if (
+      request.mode === 'connected-apps' &&
+      !(await this.oauthProvider.check())
+    ) {
+      throw new Error(
+        'Connected apps is not available on this server: apps cannot connect to Boxel accounts here',
+      );
+    }
     let status = this.secureWindow.open(secureWindowURL(request));
     let commandModule = await this.loadToolModule();
     const { OpenSecureWindowResult } = commandModule;
@@ -58,6 +70,11 @@ function secureWindowRequest(
     throw new Error(
       `mode must be one of ${SECURE_WINDOW_MODES.map((m) => `"${m}"`).join(', ')}`,
     );
+  }
+  if (mode === 'connected-apps') {
+    // The page lists every app on the account, so it is opened for nothing
+    // in particular, and with no line from its opener.
+    return { mode };
   }
   let reason = input.reason?.trim() || undefined;
   if (mode === 'share-key') {
