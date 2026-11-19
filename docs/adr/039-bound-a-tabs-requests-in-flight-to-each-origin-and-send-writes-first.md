@@ -67,6 +67,13 @@ server then waited minutes in the browser before they were sent. The bound
 sits where every request passes, below the auth and telemetry middleware, so
 it counts each attempt once and sees the method it was sent with.
 
+The bound decides the order requests are sent in, not how fast the reads
+finish. On a slow connection the streams stay open because their bodies
+download slowly, so the reads wait about as long in this queue as they did in
+the browser's. What changes is that a write, a session request or a model call
+no longer waits behind them. Making the reads faster means sending fewer
+bytes, which this ADR does not cover.
+
 ## 3. Considered options
 
 - **One limiter around the native fetch in `NetworkService`, per origin, two
@@ -79,6 +86,12 @@ it counts each attempt once and sees the method it was sent with.
 - **A third class that puts searches below card reads.** Rejected for now: two
   classes are enough to keep writes and auth moving, and a search the user
   started would wait behind background reads.
+- **One bound for the whole origin, across tabs, in the auth service worker.**
+  Not chosen for now: a browser shares one HTTP/2 connection per origin
+  between tabs, so several busy tabs can still pass the stream limit with a
+  bound per tab. The incident this ADR comes from was one tab filling the
+  connection, and a request passes through the worker only while it controls
+  the page (a hard reload bypasses it).
 - **Bound only on the server (per-realm admission).** Rejected as the only
   measure: the server answered these requests in milliseconds; the wait was in
   the browser.
