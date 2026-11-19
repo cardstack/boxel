@@ -1037,6 +1037,57 @@ module('Integration | realm policy', function (hooks) {
       .map((el) => el.getAttribute('data-test-policy-grant-status'));
   }
 
+  test('a grant limited to some paths shows them in its views and in an explanation', async function (assert) {
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      permissions: {
+        '*': ['read'],
+        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+      },
+      contents: {
+        'realm.json': realmConfigCardJSON({
+          policy: `${testRealmURL}policies/archive`,
+        }),
+        'classroom.gts': classroomModule,
+        'classrooms/room-204.json': classroom([TEACHER]),
+        'policies/archive.json': policyDocument([
+          {
+            targetType: { module: '../classroom', name: 'Classroom' },
+            grants: [
+              { operation: 'delete', paths: ['archive/'] },
+              { operation: 'update' },
+            ],
+          },
+        ]),
+      },
+    });
+    await getService('realm').login(testRealmURL);
+    getService('operations');
+    let policy = await loadPolicy('policies/archive');
+
+    await renderCard(loader, policy, 'isolated');
+    assert
+      .dom('[data-test-operation-grant-paths]')
+      .exists({ count: 1 }, 'only the grant with paths lists them')
+      .includesText('archive/');
+
+    await ask(TEACHER, `${testRealmURL}classrooms/room-204`, 'delete');
+    assert.dom('[data-test-explanation-decision]').hasText('denied');
+    assert
+      .dom('[data-test-explanation-reason]')
+      .includesText('none of their paths includes this card');
+    assert
+      .dom(
+        '[data-test-explanation-grant="outside-paths"] [data-test-explanation-grant-path]',
+      )
+      .hasText('archive/', 'the grant is shown with the paths that missed');
+
+    await renderCard(loader, policy, 'edit');
+    assert
+      .dom('[data-test-field="paths"]')
+      .exists({ count: 2 }, 'each grant can be given paths while editing');
+  });
+
   test('a grant that does not compile is marked inactive among the live ones, and its issue names its rule and grant', async function (assert) {
     await renderPolicyNamed('policies/mistyped', [
       {

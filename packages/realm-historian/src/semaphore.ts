@@ -14,12 +14,28 @@ export class Semaphore {
   }
 
   // Resolves with the function that gives the permit back. Calling it twice
-  // gives back one permit, not two.
-  async acquire(): Promise<() => void> {
+  // gives back one permit, not two. Aborting `signal` while the permit is
+  // awaited gives up the wait and rejects with the signal's reason.
+  async acquire(signal?: AbortSignal): Promise<() => void> {
+    signal?.throwIfAborted();
     if (this.#available > 0) {
       this.#available--;
     } else {
-      await new Promise<void>((resolve) => this.#waiting.push(resolve));
+      await new Promise<void>((resolve, reject) => {
+        let onAbort = () => {
+          let index = this.#waiting.indexOf(grant);
+          if (index !== -1) {
+            this.#waiting.splice(index, 1);
+          }
+          reject(signal!.reason);
+        };
+        let grant = () => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve();
+        };
+        this.#waiting.push(grant);
+        signal?.addEventListener('abort', onAbort, { once: true });
+      });
     }
     let released = false;
     return () => {

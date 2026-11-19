@@ -18,6 +18,7 @@ scope:
   - packages/secure-origin/src/shell/connected-apps/**
   - packages/secure-origin/src/shell/device/**
   - packages/secure-origin/src/security/oauth-provider*
+  - packages/secure-origin/src/security/oauth-error*
 ---
 
 # 021. Run Boxel's OAuth provider in the realm server, with opaque tokens bound to one resource
@@ -249,6 +250,18 @@ An operator's revocation of a user's sessions, and the first revocation after
 a password change (ADR 005 §1.6), MUST also revoke the user's OAuth grants.
 The later revocation that covers Matrix OpenID tokens MUST NOT, since an
 OpenID token can't create a grant (§1.7).
+
+A grant is live while it passes the grant checks of §1.5: it hasn't ended or
+expired, and no revocation of the user's grants covers it. A user MUST be able
+to see their live grants whose code has been exchanged, and end any one of
+their live grants, from the secure origin's Connected apps page. The routes
+that list and end them MUST answer only a request whose `Origin` is the secure
+origin's, under the secure window's own session, as consent's routes do
+(§1.7). Ending one grant MUST NOT end another, including another grant of the
+same client. Ending a grant of the signed-in user's that is no longer live
+SHOULD be answered as done, so that a repeated request succeeds, and MUST
+change nothing. A grant ID that doesn't name a grant of the signed-in user's
+MUST be answered as unknown, and MUST change nothing.
 
 ## 2. Rationale
 

@@ -99,6 +99,26 @@ export function registerDefaultRoutes() {
   registerAuthRoutes();
   registerArchiveRoutes();
   registerPublishRoutes();
+  registerOAuthProviderRoutes();
+}
+
+// The OAuth provider's discovery document, which the app reads to learn
+// whether the provider is on (`services/oauth-provider.ts`): the profile menu
+// asks when it opens, until the realm server has given a definite answer. The realm server answers 404 while the provider is
+// off, as it is here. A test that turns it on stands in its own route for the
+// test's duration and puts this one back.
+export const OAUTH_DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
+
+function registerOAuthProviderRoutes() {
+  registerRealmServerRoute({
+    path: OAUTH_DISCOVERY_PATH,
+    handler: async (req) => {
+      if (req.method !== 'GET') {
+        return null;
+      }
+      return new Response(null, { status: 404 });
+    },
+  });
 }
 
 // The test environment points `ENV.realmServerURL` at the fake `http://test-realm`

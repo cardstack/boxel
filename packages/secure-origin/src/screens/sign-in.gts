@@ -1,12 +1,18 @@
 // The sign-in screen, as both origins draw it: the title, the Google button
 // when the Matrix server offers Google, the fields the caller puts in its
 // block, the link to reset a forgotten password, Sign In, and the link to
-// create an account. A page that signs in for something other than the app,
-// such as the CLI's, names itself with `@title` and says what signing in
-// grants in its `intro` block, in place of the Google subtitle; the screen
-// sets the intro's type and the space around it. It holds no state and sends
-// nothing; the caller decides what each control does. On the secure origin
-// the fields are its own inputs; in the app they are the credential frame.
+// create an account. A page that signs in for one thing alone, such as an app
+// asking to connect, leaves out the links to reset a password and create an
+// account (`@onForgotPassword`, `@onRegister`), which would leave it, and can
+// offer Cancel (`@onCancel`). A page that signs in for something other than
+// the app, such as the CLI's, names itself with `@title` and says what
+// signing in grants in its `intro` block, in place of the Google subtitle; the
+// screen sets the intro's type and the space around it. A page that falls
+// back to signing in from something the user was working in (`@focusTitle`)
+// moves focus to the title, so a screen reader reads why. It holds no state and
+// sends nothing; the caller decides what each control does. On the secure
+// origin the fields are its own inputs; in the app they are the credential
+// frame.
 // The form's method is `post`, as a password manager expects of a sign-in
 // form, so a submit the caller doesn't prevent puts no field in the address.
 //
@@ -16,12 +22,15 @@ import { on } from '@ember/modifier';
 
 import AuthButton from '../components/auth-button.gts';
 import { Button } from '@cardstack/pretui/components/button';
+import { focusWhen } from '@cardstack/pretui/focus';
 import GoogleColor from '../components/icons/google-color.gts';
 
 interface Signature {
   Args: {
     // The screen's heading; "Sign in to your Boxel Account" when not given.
     title?: string;
+    // Whether the heading takes focus as the screen is drawn.
+    focusTitle?: boolean;
     // Whether the Google button shows.
     google?: boolean;
     // Whether the subtitle inviting a new user to start with Google shows,
@@ -33,18 +42,22 @@ interface Signature {
     error?: string;
     onSubmit: (event: Event) => void;
     onGoogle: (event: Event) => void;
-    onForgotPassword: (event: Event) => void;
-    onRegister: (event: Event) => void;
+    // Each control is drawn only when given its action.
+    onForgotPassword?: (event: Event) => void;
+    onRegister?: (event: Event) => void;
+    onCancel?: (event: Event) => void;
   };
   Blocks: { default: []; intro: [] };
 }
 
 const SignInScreen: TemplateOnlyComponent<Signature> = <template>
-  <h1 class='title' data-test-secure-title data-test-secure-sign-in-title>{{if
-      @title
-      @title
-      'Sign in to your Boxel Account'
-    }}</h1>
+  <h1
+    class='title'
+    tabindex={{if @focusTitle '-1'}}
+    {{focusWhen (if @focusTitle true false)}}
+    data-test-secure-title
+    data-test-secure-sign-in-title
+  >{{if @title @title 'Sign in to your Boxel Account'}}</h1>
   {{#if (has-block 'intro')}}
     <div class='intro'>{{yield to='intro'}}</div>
   {{else if @googleSubtitle}}
@@ -78,16 +91,19 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       </div>
     {{/if}}
     {{yield}}
-    <Button
-      type='button'
-      class='forgot-password'
-      @variant='link'
-      {{on 'click' @onForgotPassword}}
-      data-test-forgot-password
-      data-test-secure-forgot-password
-    >Forgot password?</Button>
+    {{#if @onForgotPassword}}
+      <Button
+        type='button'
+        class='forgot-password'
+        @variant='link'
+        {{on 'click' @onForgotPassword}}
+        data-test-forgot-password
+        data-test-secure-forgot-password
+      >Forgot password?</Button>
+    {{/if}}
     <AuthButton
       type='submit'
+      class={{unless @onForgotPassword 'after-fields'}}
       @variant='primary'
       @disabled={{@submitDisabled}}
       @loading={{@submitting}}
@@ -104,18 +120,31 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
         {{@error}}
       </div>
     {{/if}}
-    <p class='register-prompt'>
-      <span class='register-prompt-text' data-test-secure-register-prompt>Don't
-        have an account?</span>
-      <Button
+    {{#if @onCancel}}
+      <AuthButton
         type='button'
-        class='register-link'
-        @variant='link'
-        {{on 'click' @onRegister}}
-        data-test-register-user
-        data-test-secure-register
-      >Create a new Boxel account</Button>
-    </p>
+        class='cancel'
+        @variant='secondary'
+        {{on 'click' @onCancel}}
+        data-test-secure-sign-in-cancel
+      >Cancel</AuthButton>
+    {{/if}}
+    {{#if @onRegister}}
+      <p class='register-prompt'>
+        <span
+          class='register-prompt-text'
+          data-test-secure-register-prompt
+        >Don't have an account?</span>
+        <Button
+          type='button'
+          class='register-link'
+          @variant='link'
+          {{on 'click' @onRegister}}
+          data-test-register-user
+          data-test-secure-register
+        >Create a new Boxel account</Button>
+      </p>
+    {{/if}}
   </form>
 
   <style scoped>
@@ -128,6 +157,13 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       color: var(--foreground);
       margin: 0 0 var(--boxel-sp-sm);
       padding: 0;
+    }
+    .title:focus {
+      outline: none;
+    }
+    .title:focus-visible {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
     }
     .subtitle {
       margin: 0 0 var(--boxel-sp-lg);
@@ -183,6 +219,13 @@ const SignInScreen: TemplateOnlyComponent<Signature> = <template>
       margin-top: var(--boxel-sp-4xs);
       margin-bottom: var(--boxel-sp-lg);
       margin-inline-start: auto;
+    }
+    /* Without the reset link, Sign In keeps the space that link leaves. */
+    .after-fields {
+      margin-top: var(--boxel-sp-lg);
+    }
+    .cancel {
+      margin-top: var(--boxel-sp-sm);
     }
     .google-button {
       --pretui-button-gap: var(--boxel-sp-xs);

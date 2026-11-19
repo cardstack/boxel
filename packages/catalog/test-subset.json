@@ -82,6 +82,7 @@
       "realm-policy-html-sharing-test",
       "realm-policy-index-read-test",
       "realm-policy-non-grantable-test",
+      "realm-policy-paths-test",
       "realm-policy-publish-test",
       "realm-policy-query-filter-test",
       "realm-policy-query-reach-test",

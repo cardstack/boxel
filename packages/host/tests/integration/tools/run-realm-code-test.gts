@@ -4101,6 +4101,7 @@ module(
     setupRenderingTest(hooks);
     setupLocalIndexing(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
       autostart: true,
       activeRealms: [testRealmURL, readOnlyRealmURL],
       realmPermissions: {
