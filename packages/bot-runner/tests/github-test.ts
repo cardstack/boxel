@@ -406,7 +406,9 @@ module('github client', (hooks) => {
         inFlight--;
       });
 
-      let client = new OctokitGitHubClient('test-token');
+      let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
+      });
       await client.writeFilesToBranch({
         owner: 'cardstack',
         repo: 'boxel-catalog',
@@ -422,6 +424,7 @@ module('github client', (hooks) => {
       let stub = stubWrite([secondaryRateLimit({ 'retry-after': '30' })]);
       let waits: number[] = [];
       let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
         sleep: async (ms) => {
           waits.push(ms);
         },
@@ -449,6 +452,7 @@ module('github client', (hooks) => {
       ]);
       let waits: number[] = [];
       let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
         sleep: async (ms) => {
           waits.push(ms);
         },
@@ -483,6 +487,7 @@ module('github client', (hooks) => {
       ]);
       let waits: number[] = [];
       let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
         sleep: async (ms) => {
           waits.push(ms);
         },
@@ -513,6 +518,7 @@ module('github client', (hooks) => {
       ]);
       let waits: number[] = [];
       let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
         sleep: async (ms) => {
           waits.push(ms);
         },
@@ -544,6 +550,7 @@ module('github client', (hooks) => {
       ]);
       let waits: number[] = [];
       let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
         sleep: async (ms) => {
           waits.push(ms);
         },
@@ -561,6 +568,169 @@ module('github client', (hooks) => {
       );
       assert.deepEqual(waits, [], 'no wait');
       assert.strictEqual(stub.blobCalls(), 1, 'no retry');
+    });
+
+    test('pauses between blob requests', async (assert) => {
+      stubWrite([]);
+      let waits: number[] = [];
+      let client = new OctokitGitHubClient('test-token', {
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      });
+
+      await client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'listing',
+        files,
+        message: 'add listing',
+      });
+
+      assert.deepEqual(waits, [1_000, 1_000], 'a second between the blobs');
+    });
+
+    test('retries a 429', async (assert) => {
+      let stub = stubWrite([
+        () =>
+          new Response(JSON.stringify({ message: 'Too many' }), {
+            status: 429,
+          }),
+      ]);
+      let waits: number[] = [];
+      let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      });
+
+      await client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'listing',
+        files,
+        message: 'add listing',
+      });
+
+      assert.deepEqual(waits, [60_000], 'backs off once');
+      assert.strictEqual(stub.blobCalls(), 4, 'retries the refused blob');
+    });
+
+    test('retries the older abuse-detection wording', async (assert) => {
+      stubWrite([
+        () =>
+          new Response(
+            JSON.stringify({
+              message: 'You have triggered an abuse detection mechanism.',
+            }),
+            { status: 403 },
+          ),
+      ]);
+      let waits: number[] = [];
+      let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      });
+
+      await client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'listing',
+        files,
+        message: 'add listing',
+      });
+
+      assert.deepEqual(waits, [60_000], 'treated as a rate limit');
+    });
+
+    test('ignores an empty retry-after and reads an HTTP-date one', async (assert) => {
+      stubWrite([
+        secondaryRateLimit({ 'retry-after': '' }),
+        secondaryRateLimit({
+          'retry-after': new Date(1_045_000).toUTCString(),
+        }),
+      ]);
+      let waits: number[] = [];
+      let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+        now: () => 1_000_000,
+      });
+
+      await client.writeFilesToBranch({
+        owner: 'cardstack',
+        repo: 'boxel-catalog',
+        branch: 'listing',
+        files,
+        message: 'add listing',
+      });
+
+      assert.deepEqual(
+        waits,
+        [60_000, 45_000],
+        'backs off for the empty header, then waits until the date',
+      );
+    });
+
+    test('fails at once when one wait is longer than the cap', async (assert) => {
+      let stub = stubWrite([secondaryRateLimit({ 'retry-after': '600' })]);
+      let waits: number[] = [];
+      let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      });
+
+      await assert.rejects(
+        client.writeFilesToBranch({
+          owner: 'cardstack',
+          repo: 'boxel-catalog',
+          branch: 'listing',
+          files,
+          message: 'add listing',
+        }),
+        /Failed to create blob \(403\)/,
+      );
+      assert.deepEqual(waits, [], 'no wait');
+      assert.strictEqual(stub.blobCalls(), 1, 'no retry');
+    });
+
+    test('fails when the write has used its total wait budget', async (assert) => {
+      let stub = stubWrite([
+        secondaryRateLimit({ 'retry-after': '240' }),
+        secondaryRateLimit({ 'retry-after': '240' }),
+        secondaryRateLimit({ 'retry-after': '240' }),
+      ]);
+      let waits: number[] = [];
+      let client = new OctokitGitHubClient('test-token', {
+        mutationPauseMs: 0,
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      });
+
+      await assert.rejects(
+        client.writeFilesToBranch({
+          owner: 'cardstack',
+          repo: 'boxel-catalog',
+          branch: 'listing',
+          files,
+          message: 'add listing',
+        }),
+        /Failed to create blob \(403\)/,
+      );
+      assert.deepEqual(
+        waits,
+        [240_000, 240_000],
+        'stops once the next wait would pass ten minutes in all',
+      );
+      assert.strictEqual(stub.blobCalls(), 3);
     });
   });
 });
