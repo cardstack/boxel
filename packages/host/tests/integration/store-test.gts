@@ -71,6 +71,7 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
   registerDefaultRoutes,
   registerRealmServerRoute,
+  unregisterRealmServerRoute,
 } from '../helpers/realm-server-mock/routes';
 import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
@@ -5189,6 +5190,143 @@ module('Integration | Store', function (hooks) {
     assert.ok(
       storeService.getSaveState(url),
       'and it is still autosaving, so the user can keep editing',
+    );
+  });
+
+  // The realm turns a card+json read away while the card's type definition is
+  // still being rendered: a 503 carrying `Retry-After`, with an error that
+  // says nothing about the card. This stands in for that answer to the first
+  // `times` reads of `path`, and lets every other request through to the
+  // realm.
+  function turnAwayCardReads(path: string, times: number) {
+    let routePath = `${new URL(testRealmURL).pathname}${path}`;
+    let turnedAway = 0;
+    registerRealmServerRoute({
+      path: routePath,
+      handler: async (req) => {
+        if (
+          req.method !== 'GET' ||
+          !req.headers.get('Accept')?.includes(SupportedMimeType.CardJson) ||
+          turnedAway >= times
+        ) {
+          return null;
+        }
+        turnedAway++;
+        return new Response(
+          JSON.stringify({
+            errors: [
+              {
+                id: req.url,
+                status: 503,
+                title: 'Definition not ready',
+                message: `the definition of {"module":"${testRealmURL}person","name":"Person"} is still being rendered after 20000 ms; retry shortly`,
+                isCardError: true,
+                additionalErrors: null,
+                meta: { retryAfterSeconds: 0 },
+              },
+            ],
+          }),
+          {
+            status: 503,
+            headers: { 'content-type': 'application/json', 'Retry-After': '0' },
+          },
+        );
+      },
+    });
+    return {
+      get turnedAway() {
+        return turnedAway;
+      },
+      restore() {
+        unregisterRealmServerRoute(routePath);
+      },
+    };
+  }
+
+  test('a card read the realm turns away for now is sent again after the interval it names', async function (assert) {
+    await writePerson('Person/turned-away.json', 'Turned Away');
+    let url = `${testRealmURL}Person/turned-away`;
+    let realm = turnAwayCardReads('Person/turned-away', 2);
+    let card: CardDef | CardErrorJSONAPI;
+    try {
+      card = await storeService.get(url);
+    } finally {
+      realm.restore();
+    }
+    assert.strictEqual(realm.turnedAway, 2, 'the realm turned two reads away');
+    assert.true(isCardInstance(card), 'and the read after them got the card');
+    assert.strictEqual(
+      storeService.peekError(url),
+      undefined,
+      'with no error recorded for it',
+    );
+  });
+
+  test('a card read the realm keeps turning away surfaces its refusal after a bounded number of tries', async function (assert) {
+    await writePerson('Person/still-rendering.json', 'Still Rendering');
+    let url = `${testRealmURL}Person/still-rendering`;
+    let realm = turnAwayCardReads('Person/still-rendering', Infinity);
+    let result: CardDef | CardErrorJSONAPI;
+    try {
+      result = await storeService.get(url);
+    } finally {
+      realm.restore();
+    }
+    assert.strictEqual(
+      realm.turnedAway,
+      4,
+      'the read was sent four times: once, and three retries',
+    );
+    assert.false(isCardInstance(result), 'the card is not served');
+    let error = result as CardErrorJSONAPI;
+    assert.strictEqual(error.status, 503, 'the refusal is the 503 it was');
+    assert.strictEqual(error.title, 'Definition not ready');
+    assert.strictEqual(
+      error.awaitingIndex,
+      undefined,
+      'and nothing says the card is waiting on the index',
+    );
+  });
+
+  test('a running card stays in place when the realm turns its reload away for now', async function (assert) {
+    await writePerson('Person/reload-turned-away.json', 'Running');
+    let url = `${testRealmURL}Person/reload-turned-away`;
+    storeService.addReference(url);
+    await storeService.flush();
+    let instance = storeService.peek(url);
+    assert.true(isCardInstance(instance), 'the card is running');
+
+    let messageService = getService('message-service');
+    let deliverRealmEvents =
+      messageService.relayRealmEvent.bind(messageService);
+    messageService.relayRealmEvent = () => {};
+    let realm = turnAwayCardReads('Person/reload-turned-away', Infinity);
+    try {
+      deliverRealmEvents({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [url],
+        realmURL: testRealmURL,
+      });
+      await settled();
+    } finally {
+      realm.restore();
+      messageService.relayRealmEvent = deliverRealmEvents;
+    }
+
+    assert.true(
+      realm.turnedAway >= 4,
+      `the reload was turned away on every try (${realm.turnedAway})`,
+    );
+    assert.strictEqual(
+      storeService.peek(url),
+      instance,
+      'the running instance is still the one the store hands out',
+    );
+    assert.strictEqual(
+      storeService.peekError(url),
+      undefined,
+      'no error card stands in front of it',
     );
   });
 

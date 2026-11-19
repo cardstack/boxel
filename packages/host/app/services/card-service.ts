@@ -1,6 +1,7 @@
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import { timeout } from 'ember-concurrency';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -26,6 +27,7 @@ import {
 } from '@cardstack/runtime-common/write-size-validation';
 
 import LimitedSet from '../lib/limited-set';
+import { retryAfterDelayMs } from '../lib/retry-after';
 
 import type EnvironmentService from './environment-service';
 import type LoaderService from './loader-service';
@@ -63,6 +65,14 @@ export interface SaveSourceOptions {
 }
 
 type CardServiceRequestInit = RequestInit & { clientRequestId?: string };
+
+// How many times a read the realm turned away for now (a 503 with
+// `Retry-After`) is sent again before the refusal surfaces, and the longest
+// interval between tries. With the realm's five-second interval for a
+// definition still being rendered, that is fifteen seconds of waiting beyond
+// the realm's own deadline.
+const MAX_UNAVAILABLE_READ_RETRIES = 3;
+const MAX_UNAVAILABLE_RETRY_AFTER_SECONDS = 5;
 
 export default class CardService extends Service {
   @service declare private loaderService: LoaderService;
@@ -196,7 +206,7 @@ export default class CardService extends Service {
     }
 
     let response = isReadOperation
-      ? await this.network.authedFetch(url, requestInit)
+      ? await this.#readWithRetries(url, requestInit)
       : await this.sendWrite(url, requestInit);
     if (!response.ok) {
       let responseText = await response.text();
@@ -314,6 +324,41 @@ export default class CardService extends Service {
       content: await response.text(),
       contentType: response.headers.get('content-type'),
     };
+  }
+
+  // Sends a read. A GET the realm turns away for now — a 503 that says when to
+  // come back — is sent again after the interval it names, a bounded number of
+  // times. The realm answers a card read that way while the card's type
+  // definition is still being rendered, and the render keeps going, so the
+  // retry usually finds the definition ready.
+  //
+  // A render tab does not wait. It holds a prerender slot, which the
+  // definition render it would be waiting on may need, so the refusal reaches
+  // it at once.
+  async #readWithRetries(
+    url: string | URL,
+    init: RequestInit,
+  ): Promise<Response> {
+    let isGet = (init.method?.toUpperCase?.() ?? 'GET') === 'GET';
+    let inRender =
+      (globalThis as unknown as { __boxelRenderContext?: boolean })
+        .__boxelRenderContext === true;
+    for (let attempt = 0; ; attempt++) {
+      let response = await this.network.authedFetch(url, init);
+      let retryAfter = response.headers.get('Retry-After');
+      if (
+        !isGet ||
+        inRender ||
+        response.status !== 503 ||
+        retryAfter === null ||
+        attempt >= MAX_UNAVAILABLE_READ_RETRIES
+      ) {
+        return response;
+      }
+      await timeout(
+        retryAfterDelayMs(retryAfter, MAX_UNAVAILABLE_RETRY_AFTER_SECONDS),
+      );
+    }
   }
 
   // Sends a write. One the realm refuses because it saves a policy change

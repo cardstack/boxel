@@ -19208,6 +19208,21 @@ export class Realm {
       // other replica has no such handle on the write.
       return notIndexedYet(request, requestContext);
     }
+    if (assembly.kind === 'definition-not-ready') {
+      // The card's type is still being rendered into the realm's definition
+      // cache. That says nothing about the card, which may be indexed and
+      // healthy, and nothing about the index. The render keeps going, so the
+      // retry `Retry-After` asks for finds the definition cached.
+      let error = new CardError(assembly.detail, {
+        status: 503,
+        title: assembly.title,
+        id: request.url,
+      });
+      if (assembly.retryAfterSeconds !== undefined) {
+        error.meta = { retryAfterSeconds: assembly.retryAfterSeconds };
+      }
+      return responseWithError(error, requestContext);
+    }
     if (assembly.kind === 'redirect') {
       return createResponse({
         requestContext,
@@ -19916,10 +19931,10 @@ export class Realm {
           if (!isOperationFailure(err)) {
             throw err;
           }
-          // A definition the policy names that is not indexed yet is told to
-          // this caller, who may not read the realm, without naming it.
+          // A definition the policy names that is still being rendered is told
+          // to this caller, who may not read the realm, without naming it.
           let error =
-            err.error.code === 'target-not-indexed'
+            err.error.code === 'definition-not-ready'
               ? refusalForNonReader(err.error)
               : err.error;
           return createResponse({
@@ -21413,11 +21428,14 @@ export class Realm {
       );
       return unshareableFormats;
     } catch (err: unknown) {
-      // A type whose definition is not indexed yet withholds every format, as
-      // a type that cannot be resolved does: nothing can say which of its
-      // formats it withholds, and the page is served without markup rather
-      // than refused.
-      if (isOperationFailure(err) && err.error.code === 'target-not-indexed') {
+      // A type whose definition is still being rendered withholds every
+      // format, as a type that cannot be resolved does: nothing can say which
+      // of its formats it withholds, and the page is served without markup
+      // rather than refused.
+      if (
+        isOperationFailure(err) &&
+        err.error.code === 'definition-not-ready'
+      ) {
         return [...PRERENDERED_HTML_FORMATS];
       }
       throw err;
@@ -22856,11 +22874,12 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   return baseRealm.inRealm(parsed);
 }
 
-// A read's refusal, as the card+json GET reports it. Three of the four codes
-// the read can raise name an outcome the handler already had a shape for; a
-// refusal it does not recognize is an error document rather than a guess, so a
-// behavior added to the read later surfaces as a 500 with its own detail
-// instead of a 404 that claims the card is gone.
+// A read's refusal, as the card+json GET reports it. A missing card, a card
+// not indexed yet, and a type definition still being rendered each have a
+// shape of their own; a refusal the handler does not recognize is an error
+// document rather than a guess, so a behavior added to the read later surfaces
+// with its own status and detail instead of a 404 that claims the card is
+// gone.
 function cardJsonAssemblyFromFailure(
   failure: OperationFailure,
 ): Exclude<CardJsonAssembly, { kind: 'document' } | { kind: 'file-meta' }> {
@@ -22870,6 +22889,16 @@ function cardJsonAssemblyFromFailure(
   }
   if (error.code === 'target-not-indexed') {
     return { kind: 'not-indexed' };
+  }
+  if (error.code === 'definition-not-ready') {
+    let retryAfterSeconds = error.meta?.retryAfterSeconds;
+    return {
+      kind: 'definition-not-ready',
+      title: error.title,
+      detail: error.detail,
+      retryAfterSeconds:
+        typeof retryAfterSeconds === 'number' ? retryAfterSeconds : undefined,
+    };
   }
   // The row's own account of what went wrong, so the response body carries the
   // underlying title, message and salvage rather than the sentence the refusal
