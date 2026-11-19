@@ -97,6 +97,9 @@ MAY get 503 while the read runs. On a cache miss, the read is a module visit
 in the prerender server, which ADR 015 §1.1 allows while a request waits. When the
 read fails, the route MUST be dropped for now and the validation marked
 incomplete, and a path the route could answer MUST get 503, not not-found.
+A card's canonical address is known only from every route, so a browser's
+request for an alias also waits for the reads, and while the validation is
+incomplete every alias of the realm MUST answer 503, not 301 and not its card.
 Validation MUST drop each
 dynamic route past `MAX_DYNAMIC_HOST_ROUTES`, with a warning. Validation
 SHOULD warn when a literal or fixed route takes a path that a dynamic sibling

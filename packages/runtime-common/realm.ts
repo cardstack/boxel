@@ -3588,8 +3588,9 @@ export class Realm {
   // caches its result only when the epoch hasn't moved while it ran.
   #hostRoutesEpoch = 0;
   // The validation running now, shared by concurrent calls: the routes
-  // validated without their types, ready once the rules are read, and the
-  // whole validation, ready once the types are read too.
+  // validated with the types the definitions cache already holds, ready
+  // with no module visit, and the whole validation, ready once every type
+  // is read.
   #hostRoutesInFlight:
     | {
         withoutTypes: Promise<HostRoutesValidation | undefined>;
@@ -21481,12 +21482,14 @@ export class Realm {
     return (await full) ?? NO_HOST_ROUTES;
   }
 
-  // The host routes without waiting for the definitions of their types: the
-  // cached validation when there is one, else the routes validated with
-  // every field-match type taken as unavailable, as soon as the rules are
-  // read. The whole validation goes on, and `getHostRoutes` gives it. Only a
-  // field-match route needs its type, so a request no field-match route
-  // could answer doesn't wait for a module visit.
+  // The host routes without waiting for a module visit: the cached
+  // validation when there is one, else the routes validated with the types
+  // the definitions cache already holds, and every other field-match type
+  // taken as unavailable. When the cache holds every type, that is the
+  // whole validation, and it is complete. The whole validation goes on, and
+  // `getHostRoutes` gives it. Only a field-match route needs its type, so a
+  // request no field-match route could answer doesn't wait for a module
+  // visit.
   async getHostRoutesWithoutTypeReads(): Promise<HostRoutesValidation> {
     return (await this.#validateHostRoutes()).withoutTypes ?? NO_HOST_ROUTES;
   }
@@ -21527,8 +21530,8 @@ export class Realm {
   }
 
   // Coalesced: concurrent calls on a cold cache share one validation.
-  // Resolves when the rules are read; `full` resolves when the types are
-  // read too.
+  // Resolves when the rules and the types the definitions cache holds are
+  // read; `full` resolves when every type is read.
   async #validateHostRoutes(): Promise<{
     withoutTypes: HostRoutesValidation | undefined;
     full: Promise<HostRoutesValidation | undefined>;
@@ -21559,10 +21562,7 @@ export class Realm {
                 epoch,
                 generation,
               )
-            : validateHostRoutes(rules, {
-                realmURL: new URL(this.url),
-                lookupType: () => 'unavailable',
-              }),
+            : this.#validateHostRoutesFromCachedTypes(rules),
         () => undefined,
       );
       let started = {
@@ -21596,32 +21596,74 @@ export class Realm {
   async #readHostRouteType(
     ref: ResolvedCodeRef,
   ): Promise<HostRouteTypeInfo | 'unavailable' | undefined> {
-    let typeInfo = (entry: ModuleDefinitionResult) =>
-      hostRouteTypeInfo(entry, (codeRef) =>
-        internalKeyFor(codeRef, undefined, this.#virtualNetwork),
-      );
     try {
-      return typeInfo(await this.#definitionLookup.lookupDefinitionEntry(ref));
+      return this.#hostRouteTypeInfo(
+        await this.#definitionLookup.lookupDefinitionEntry(ref),
+      );
     } catch (e) {
       // The read throws for a missing export as it does for a failed render.
       // The cache it just filled tells the two apart.
-      try {
-        let cached =
-          await this.#definitionLookup.lookupCachedDefinitionEntry(ref);
-        if (cached.status === 'found') {
-          return typeInfo(cached.entry);
-        }
-        if (cached.status === 'missing-export') {
-          return undefined;
-        }
-      } catch {
-        // Reported below with the read's own error.
+      let cached = await this.#readCachedHostRouteType(ref);
+      if (cached === 'unavailable') {
+        this.#log.warn(
+          `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
+        );
       }
-      this.#log.warn(
-        `could not read the definition of ${ref.name} from ${ref.module} for a host route: ${e}`,
-      );
-      return 'unavailable';
+      return cached;
     }
+  }
+
+  #hostRouteTypeInfo(entry: ModuleDefinitionResult): HostRouteTypeInfo {
+    return hostRouteTypeInfo(entry, (codeRef) =>
+      internalKeyFor(codeRef, undefined, this.#virtualNetwork),
+    );
+  }
+
+  // The definition of one host route type as the definitions cache holds
+  // it now, with no module visit. A type the cache doesn't hold, or holds
+  // only a failed render of, is unavailable. A cached module with no such
+  // export is `undefined`.
+  async #readCachedHostRouteType(
+    ref: ResolvedCodeRef,
+  ): Promise<HostRouteTypeInfo | 'unavailable' | undefined> {
+    try {
+      let cached =
+        await this.#definitionLookup.lookupCachedDefinitionEntry(ref);
+      if (cached.status === 'found') {
+        return this.#hostRouteTypeInfo(cached.entry);
+      }
+      if (cached.status === 'missing-export') {
+        return undefined;
+      }
+    } catch {
+      // A cache that can't be read holds no type.
+    }
+    return 'unavailable';
+  }
+
+  // The rules validated with the types the definitions cache holds now.
+  // Nothing here waits for a module visit, so a request that must not wait
+  // for one can use the result: the prerender server's import of a route
+  // type's module is such a request. The result isn't cached: the whole
+  // validation reads each type as a search does, and caches that.
+  async #validateHostRoutesFromCachedTypes(
+    rules: RawHostRoutingRule[],
+  ): Promise<HostRoutesValidation> {
+    let types = new Map(
+      await Promise.all(
+        hostRouteTypeRefs(rules).map(
+          async (ref) =>
+            [
+              typeLookupKey(ref),
+              await this.#readCachedHostRouteType(ref),
+            ] as const,
+        ),
+      ),
+    );
+    return validateHostRoutes(rules, {
+      realmURL: new URL(this.url),
+      lookupType: (ref) => types.get(typeLookupKey(ref)),
+    });
   }
 
   async #readAndValidateHostRoutes(
