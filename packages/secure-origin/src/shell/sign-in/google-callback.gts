@@ -1,6 +1,7 @@
 // Where Google sends the window back to. It finishes whichever sign-in began
 // there: the window's own, which it keeps, or the CLI's, which it hands to the
-// CLI's listener.
+// CLI's listener. A window's sign-in begun on the authorize page goes back to
+// that page's OAuth flow.
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
@@ -18,7 +19,7 @@ import AuthContainer from '../../components/auth-container.gts';
 import BusyMessage from '../../components/busy-message.gts';
 import { navigation } from '../navigation.js';
 import { asSentence } from '../sign-in-copy.js';
-import { pageURL, startURL } from '../urls.js';
+import { authorizeResumeURL, pageURL, startURL } from '../urls.js';
 
 import CliHandoff from './cli-handoff.gts';
 import IncompleteCliLink from './incomplete-cli-link.gts';
@@ -147,6 +148,12 @@ export default class GoogleCallback extends Component {
       return;
     }
     storeSession(session);
+    let authorize = authorizeResumeURL(resume);
+    if (authorize) {
+      // On to the flow's consent, signed in.
+      navigation.replace(authorize);
+      return;
+    }
     // Back to the window's own address, so a reload shows the signed-in window
     // rather than this callback.
     history.replaceState(null, '', pageURL('sign-in'));

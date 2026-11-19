@@ -6,6 +6,8 @@ import {
   SECURE_SESSION_VALUE,
 } from '../security/cli-handoff.js';
 
+import { isInteractionId } from '../security/oauth-provider.ts';
+
 import { splitPagePath } from './pages.js';
 
 // The addresses of the shell's pages. Each page is the same document at its
@@ -77,11 +79,30 @@ export function cliSignInPage(cli) {
   return cli?.profile ? 'cli-auth' : 'cli-sign-in';
 }
 
+// The authorize page for an OAuth flow, by its interaction ID.
+export function authorizeURL(interaction) {
+  return pageURL('authorize', { interaction });
+}
+
+// The authorize page a Google sign-in was started from, when it was started
+// there: the window's own sign-in for a valid OAuth flow. Undefined for any
+// other sign-in.
+export function authorizeResumeURL(resume) {
+  return resume?.client === 'window' && isInteractionId(resume.interaction)
+    ? authorizeURL(resume.interaction)
+    : undefined;
+}
+
 // The page a Google sign-in started from, rebuilt from the `resume` the window
-// kept when it sent the user to Google: the CLI's sign-in, for the same
-// listener and with the same username, or else the window's own. The CLI keeps
-// waiting on its listener while the user starts again there.
+// kept when it sent the user to Google: the authorize page for the same OAuth
+// flow, the CLI's sign-in, for the same listener and with the same username,
+// or else the window's own. The CLI keeps waiting on its listener while the
+// user starts again there.
 export function startURL(resume) {
+  let authorize = authorizeResumeURL(resume);
+  if (authorize) {
+    return authorize;
+  }
   let cli = resume?.client === 'cli' ? resume.cli : undefined;
   let params = cliParams(cli, resume?.username);
   if (!params.port || !params.state) {

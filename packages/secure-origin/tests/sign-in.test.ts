@@ -14,6 +14,7 @@ import {
   tooManyFailedAttempts,
 } from '../src/shell/sign-in-copy.js';
 import {
+  authorizeResumeURL,
   cliParams,
   currentPage,
   isGoogleCallback,
@@ -505,6 +506,21 @@ describe("the shell's addresses", () => {
       startURL({ client: 'cli' }),
       '/secure/sign-in',
       "a CLI sign-in that lost its listener starts the window's own",
+    );
+    assert.equal(
+      startURL({ client: 'window', interaction: 'flow-1_A' }),
+      '/secure/authorize?interaction=flow-1_A',
+      "a sign-in begun on the authorize page returns to that flow's consent",
+    );
+    assert.equal(
+      startURL({ client: 'window', interaction: '../_secure-session' }),
+      '/secure/sign-in',
+      "an interaction ID that isn't one is never carried back",
+    );
+    assert.equal(
+      authorizeResumeURL({ client: 'cli', interaction: 'flow-1_A' }),
+      undefined,
+      "only the window's own sign-in returns to a flow's consent",
     );
   });
 });
