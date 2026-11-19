@@ -2061,6 +2061,7 @@ export * from './host-routes.ts';
 export * from './host-route-resolver.ts';
 export * from './host-route-address.ts';
 export * from './host-route-lookups.ts';
+export * from './host-route-canonical-address.ts';
 export * from './route-pattern.ts';
 export * from './path-specifier.ts';
 

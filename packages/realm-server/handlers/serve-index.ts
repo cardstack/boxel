@@ -17,6 +17,7 @@ import {
   SCOPED_CSS_SERVING_PREFIX,
   foreignQueryParams,
   hasExtension,
+  hostRouteCanonicalAddress,
   isCaptureServingPath,
   isHashedScopedCSSRequest,
   isRedirectRoutingRule,
@@ -678,19 +679,11 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           // `sid` / `clientSecret` are password-reset tokens. The SPA
           // drops the same list on its in-app navigation.
           let { redirectTo, statusCode } = matched.rule;
-          let target = new URL(
-            resolveRedirectTarget(
-              redirectTo,
-              new URL(matched.realm.url).pathname,
-            ),
+          let target = routeRedirectTarget(
+            redirectTo,
+            matched.realm.url,
             requestURL,
           );
-          if (requestURL.search && !target.search) {
-            let forwarded = foreignQueryParams(requestURL.search);
-            if (forwarded) {
-              target.search = forwarded;
-            }
-          }
           ctxt.redirect(target.href);
           ctxt.status = statusCode;
           return;
@@ -756,32 +749,41 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       }
       if (resolved && resolution?.kind === 'redirect') {
         // As for a fixed redirect: straight to the target from either
-        // trailing-slash form, with the request's query string, minus the
-        // host app's own params, when the target has none.
-        let target = new URL(
-          resolveRedirectTarget(
-            resolution.location,
-            new URL(routedRealm.url).pathname,
-          ),
+        // trailing-slash form.
+        let target = routeRedirectTarget(
+          resolution.location,
+          routedRealm.url,
           requestURL,
         );
-        if (requestURL.search && !target.search) {
-          let forwarded = foreignQueryParams(requestURL.search);
-          if (forwarded) {
-            target.search = forwarded;
-          }
-        }
         ctxt.redirect(target.href);
         ctxt.status = resolution.statusCode;
         return;
       }
+      if (resolved && resolution?.kind === 'alias') {
+        let target = await aliasRedirectTarget({
+          requestURL,
+          realm: routedRealm,
+          routes: hostRoutes,
+          routesComplete: hostRoutesComplete,
+          cardHref: resolution.cardHref,
+          canonicalPathname: resolved.canonicalPathname,
+          visitorHeaders: ctxt.req.headers,
+        });
+        if (target) {
+          ctxt.redirect(target.href);
+          ctxt.status = resolution.statusCode;
+          return;
+        }
+      }
+      let lookupError: { error: unknown } | undefined =
+        resolution?.kind === 'error' ? { error: resolution.error } : undefined;
       if (
         resolved &&
+        !lookupError &&
         (resolution?.kind === 'card' || resolution?.kind === 'alias')
       ) {
-        // An alias serves its card here, which is what it does when the
-        // card has no other address. Answering 301 to the card's canonical
-        // address needs the reverse lookup from a card to its address.
+        // An alias whose card has no other address it can be sent to serves
+        // its card here.
         if (requestURL.pathname !== resolved.canonicalPathname) {
           ctxt.redirect(
             new URL(resolved.canonicalPathname + requestURL.search, requestURL)
@@ -796,10 +798,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           id: resolution.cardHref,
         };
       }
-      if (resolution?.kind === 'error') {
+      if (lookupError) {
         // A failed or refused lookup is never answered as not found, so a
         // crawler keeps the page.
-        let error = resolution.error;
+        let { error } = lookupError;
         let status = error instanceof HostRouteLookupError ? error.status : 503;
         hostRoutesLog.warn(
           `host route lookup for ${requestURL.href} failed: ${
@@ -1088,6 +1090,105 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
   };
 
   return { serveIndex, serveHostApp, retrieveIndexHTML };
+}
+
+// Where a redirect route sends the request: the route's target, resolved
+// under the realm's mount path, from either trailing-slash form. The request's
+// query string carries over when the target has none, minus the host app's
+// own params (`foreignQueryParams`).
+function routeRedirectTarget(
+  location: string,
+  realmURL: string,
+  requestURL: URL,
+): URL {
+  let target = new URL(
+    resolveRedirectTarget(location, new URL(realmURL).pathname),
+    requestURL,
+  );
+  if (requestURL.search && !target.search) {
+    let forwarded = foreignQueryParams(requestURL.search);
+    if (forwarded) {
+      target.search = forwarded;
+    }
+  }
+  return target;
+}
+
+// Where an alias sends the request with its 301: the canonical address of
+// the alias's card, worked out from the index as the visitor. `undefined`
+// when the alias serves the card at its own path instead, which it does
+// whenever a permanent redirect could be wrong or can't be worked out:
+// - a route is dropped for now, so the canonical route may be missing;
+// - the card has no canonical address, or it is the alias's own path;
+// - the address resolves to another card, which has the same value;
+// - a lookup fails or is refused.
+async function aliasRedirectTarget({
+  requestURL,
+  realm,
+  routes,
+  routesComplete,
+  cardHref,
+  canonicalPathname,
+  visitorHeaders,
+}: {
+  requestURL: URL;
+  realm: Realm;
+  routes: readonly HostRoute[];
+  routesComplete: boolean;
+  cardHref: string;
+  canonicalPathname: string;
+  visitorHeaders: Record<string, string | string[] | undefined>;
+}): Promise<URL | undefined> {
+  if (!routesComplete) {
+    hostRoutesLog.debug(
+      `alias ${requestURL.pathname} serves its card while a host route is dropped`,
+    );
+    return undefined;
+  }
+  try {
+    let lookups = visitorHostRouteLookups({ realm, visitorHeaders });
+    let canonical = await hostRouteCanonicalAddress(cardHref, {
+      routes,
+      realmURL: new URL(realm.url),
+      ...lookups,
+    });
+    if (!canonical) {
+      return undefined;
+    }
+    let target = routeRedirectTarget(canonical.address, realm.url, requestURL);
+    // Two dynamic routes can give the same path.
+    if (target.pathname === canonicalPathname) {
+      return undefined;
+    }
+    if (canonical.route.kind !== 'fixed-card') {
+      // A field value isn't unique, and the address serves the first card
+      // that has it, so the address is checked against the card it serves.
+      let served = (
+        await resolveDynamicHostRoute(target, realm, routes, lookups)
+      )?.resolution;
+      if (served?.kind !== 'card' || served.cardHref !== cardHref) {
+        hostRoutesLog.warn(
+          `alias ${requestURL.pathname} serves its card: its canonical address ${target.pathname} serves ${
+            served?.kind === 'card'
+              ? served.cardHref
+              : `no card (${served?.kind})`
+          }`,
+        );
+        return undefined;
+      }
+    }
+    hostRoutesLog.debug(
+      `alias ${requestURL.pathname} redirects to ${target.pathname}`,
+    );
+    return target;
+  } catch (error) {
+    hostRoutesLog.warn(
+      `alias ${requestURL.pathname} serves its card: the lookup of its canonical address failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return undefined;
+  }
 }
 
 function truncateLogLines(value: string, maxLines = 3): string {
