@@ -18307,6 +18307,13 @@ export class Realm {
   // create whose type can't be named before the card lands (`target`
   // undefined). Nothing then declares anything, and the create serializes
   // against the type wherever the card lands, or fails there.
+  //
+  // Such a caller also reaches the route's own answer for a URL that names a
+  // file, such as the 415 a card+json request gets for a file's bytes. A file
+  // has no card operation to carry out, and dispatch refuses the names a file
+  // doesn't carry (a `delete`) before the route could say why. A caller the
+  // ACL declined is still gated first, so whatever answers them tells them
+  // nothing the gate hasn't admitted them to.
   async #resolveCardWrite(
     core: OperationCore,
     target: OperationTarget | undefined,
@@ -18318,7 +18325,12 @@ export class Realm {
       definition: { base: name, deterministic: true },
       decision: { kind: 'coarse' },
     };
-    if (!target) {
+    if (
+      !target ||
+      (scope.coarseDeclined === 'none' &&
+        target.kind === 'instance' &&
+        urlNamesFile(new URL(target.url)))
+    ) {
       return builtIn;
     }
     let resolved: GatedOperation;
