@@ -3,7 +3,7 @@ import { click, settled, waitFor, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { testRealmInfo } from '@cardstack/runtime-common';
+import { rri, testRealmInfo } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -21,6 +21,39 @@ import { setupApplicationTest } from '../helpers/setup';
 const ME = '@testuser:localhost';
 const NIGHTLY = `${testRealmURL}automations/nightly`;
 const WEEKLY = `${testRealmURL}automations/weekly`;
+// An automation whose card the realm holds, so the section shows the card's
+// own fitted view for it.
+const DIGEST = `${testRealmURL}automations/digest`;
+
+const digestJSON = {
+  data: {
+    type: 'card',
+    attributes: {
+      cardInfo: { name: 'Issue digest', summary: null },
+      triggers: [],
+      operations: [],
+      caps: {
+        callApiCalls: 0,
+        responseBytes: 0,
+        resolveCalls: 0,
+        writes: 1,
+        seconds: 60,
+        dailyCredits: 5,
+        monthlyCredits: 10,
+        aiCredits: 0,
+      },
+      params: [],
+      batchedAI: false,
+      batchDeadlineMinutes: null,
+    },
+    meta: {
+      adoptsFrom: {
+        module: rri('@cardstack/catalog/automation/automation'),
+        name: 'Automation',
+      },
+    },
+  },
+};
 
 function summary(
   id: string,
@@ -104,6 +137,7 @@ module('Acceptance | realm config | Automations', function (hooks) {
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'realm.json': realmConfigCardJSON({ name: 'Research Notes' }),
+        'automations/digest.json': digestJSON,
       },
     });
     // The realm's automation list answers from the server's automation rows,
@@ -114,6 +148,14 @@ module('Acceptance | realm config | Automations', function (hooks) {
     getService('network').virtualNetwork.mount(
       async (request: Request) => {
         let url = new URL(request.url);
+        // The Automation card reads its own status, which an in-browser
+        // realm has no row for.
+        if (url.pathname.endsWith('/_automation-status')) {
+          return new Response(JSON.stringify({ errors: [] }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
         if (url.href !== `${testRealmURL}_automations`) {
           return null;
         }
@@ -239,6 +281,32 @@ module('Acceptance | realm config | Automations', function (hooks) {
       sendRealmEvent({ eventName: 'automation', automation: WEEKLY });
       await waitFor(`[data-test-realm-automation="${WEEKLY}"]`);
       assert.dom(`[data-test-realm-automation="${NIGHTLY}"]`).doesNotExist();
+    });
+
+    test("an automation whose card the realm holds shows the card's fitted view, and opens in its isolated view", async function (assert) {
+      answer = {
+        status: 200,
+        data: [summary(DIGEST, { title: 'Issue digest' })],
+      };
+      await visitConfig();
+      let slot = `[data-test-automation-slot="${DIGEST}"]`;
+      await waitFor(`${slot} [data-test-automation-slot-fitted]`, {
+        timeout: 10000,
+      });
+      assert
+        .dom(`${slot} [data-test-automation-fitted]`)
+        .containsText('Issue digest', "the card's own fitted view");
+      assert
+        .dom(`${slot} [data-test-realm-automation]`)
+        .doesNotExist('not the one-line summary');
+
+      await click(slot);
+      await waitFor(
+        `[data-test-stack-card="${DIGEST}"] [data-test-card-format="isolated"]`,
+      );
+      assert
+        .dom(`[data-test-stack-card="${DIGEST}"]`)
+        .exists('the click opens the card in its isolated view');
     });
 
     test("New automation opens a new automation in its edit view, in the config card's own stack", async function (assert) {

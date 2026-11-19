@@ -48,10 +48,6 @@ const AUTOMATION_TYPE: ResolvedCodeRef = {
   name: 'Automation',
 };
 
-function errorText(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
 function count(n: number): string {
   return n.toLocaleString('en-US');
 }
@@ -184,8 +180,8 @@ interface RealmAutomationsSignature {
 export default class RealmAutomations extends GlimmerComponent<RealmAutomationsSignature> {
   @tracked private visible = false;
   @tracked private automations: Automation[] = [];
-  @tracked private loadError: string | undefined;
-  @tracked private createError: string | undefined;
+  @tracked private loadFailed = false;
+  @tracked private createFailed = false;
 
   private get toolContext() {
     return this.args.context?.toolContext;
@@ -230,19 +226,19 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
           // and says so, so that viewer sees no section.
           this.visible = document?.meta?.directWriter === true;
           this.automations = this.visible ? [...(document?.data ?? [])] : [];
-          this.loadError = undefined;
+          this.loadFailed = false;
         } else if (result.status === 401 || result.status === 403) {
           this.visible = false;
           this.automations = [];
+          this.loadFailed = false;
         } else {
-          // A read that failed for any reason but the viewer not being a
-          // direct writer says so, rather than hiding the list.
-          this.visible = true;
-          this.loadError = `The workspace answered ${result.status}`;
+          // A failed read says so with a way to try again, but only in a
+          // section already showing: until the realm says the viewer is a
+          // direct writer, the viewer sees no section at all.
+          this.loadFailed = true;
         }
-      } catch (err) {
-        this.visible = true;
-        this.loadError = errorText(err);
+      } catch {
+        this.loadFailed = true;
       }
     },
   );
@@ -257,19 +253,25 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
     if (!realm || !this.args.createCard) {
       return;
     }
-    this.createError = undefined;
+    this.createFailed = false;
     try {
       await this.args.createCard(AUTOMATION_TYPE, undefined, {
         realmURL: new URL(realm),
         cardModeAfterCreation: 'edit',
       });
-    } catch (err) {
-      this.createError = errorText(err);
+    } catch {
+      this.createFailed = true;
     }
   });
 
   private newAutomation = () => {
     this.createAutomation.perform();
+  };
+
+  private retryLoad = () => {
+    if (this.args.realm) {
+      this.load.perform(this.args.realm);
+    }
   };
 
   private rowLabel = (automation: Automation) => automationTitle(automation);
@@ -313,22 +315,42 @@ export default class RealmAutomations extends GlimmerComponent<RealmAutomationsS
             </Button>
           {{/if}}
         </header>
-        {{#if this.createError}}
+        {{#if this.createFailed}}
           <Alert
             @tone='danger'
             @title='Boxel couldn’t make the automation'
             data-test-new-automation-error
           >
-            {{this.createError}}
+            Check your connection, then try again.
+            <:action>
+              <Button
+                @size='s'
+                @busy={{this.createAutomation.isRunning}}
+                {{on 'click' this.newAutomation}}
+                data-test-new-automation-retry
+              >
+                Try again
+              </Button>
+            </:action>
           </Alert>
         {{/if}}
-        {{#if this.loadError}}
+        {{#if this.loadFailed}}
           <Alert
             @tone='danger'
             @title='Boxel couldn’t read the automations'
             data-test-realm-automations-error
           >
-            {{this.loadError}}
+            Check your connection, then try again.
+            <:action>
+              <Button
+                @size='s'
+                @busy={{this.load.isRunning}}
+                {{on 'click' this.retryLoad}}
+                data-test-realm-automations-retry
+              >
+                Try again
+              </Button>
+            </:action>
           </Alert>
         {{else if this.automations.length}}
           <List

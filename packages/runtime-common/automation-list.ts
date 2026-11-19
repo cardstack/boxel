@@ -328,7 +328,10 @@ function iso(value: unknown): string | null {
 }
 
 // Each automation's last run that started and has ended, leaving out
-// Previews, as `readLastRunMilestones` picks it: how it ended and when.
+// Previews, as `readLastRunMilestones` picks it: how it ended and when. A
+// lateral join reads one run per automation through the runs'
+// `(automation_id, finished_at)` index, so the cost doesn't grow with an
+// automation's run history.
 async function readLastRunsOf(
   querier: Querier,
   ids: string[],
@@ -342,12 +345,18 @@ async function readLastRunsOf(
   if (ids.length === 0) {
     return lastRuns;
   }
+  let values = separatedByCommas(
+    ids.map((id) => addExplicitParens([param(id)]) as Expression),
+  );
   let rows = (await querier([
-    'SELECT DISTINCT ON (automation_id) automation_id, state, finished_at',
-    'FROM automation_runs WHERE automation_id IN',
-    ...inList(ids),
+    'SELECT ids.automation_id, r.state, r.finished_at FROM (VALUES',
+    ...values,
+    ') AS ids(automation_id) CROSS JOIN LATERAL (',
+    'SELECT state, finished_at FROM automation_runs',
+    'WHERE automation_id = ids.automation_id',
     'AND finished_at IS NOT NULL AND started_at IS NOT NULL AND NOT dry_run',
-    'ORDER BY automation_id, finished_at DESC, id',
+    'ORDER BY finished_at DESC, id LIMIT 1',
+    ') r',
   ] as Expression)) as {
     automation_id: string;
     state: string;
