@@ -27,7 +27,7 @@ import {
 } from '@cardstack/runtime-common/write-size-validation';
 
 import LimitedSet from '../lib/limited-set';
-import { retryAfterDelayMs } from '../lib/retry-after';
+import { unavailableReadRetryDelayMs } from '../lib/retry-after';
 
 import type EnvironmentService from './environment-service';
 import type LoaderService from './loader-service';
@@ -65,14 +65,6 @@ export interface SaveSourceOptions {
 }
 
 type CardServiceRequestInit = RequestInit & { clientRequestId?: string };
-
-// How many times a read the realm turned away for now (a 503 with
-// `Retry-After`) is sent again before the refusal surfaces, and the longest
-// interval between tries. With the realm's five-second interval for a
-// definition still being rendered, that is fifteen seconds of waiting beyond
-// the realm's own deadline.
-const MAX_UNAVAILABLE_READ_RETRIES = 3;
-const MAX_UNAVAILABLE_RETRY_AFTER_SECONDS = 5;
 
 export default class CardService extends Service {
   @service declare private loaderService: LoaderService;
@@ -327,10 +319,10 @@ export default class CardService extends Service {
   }
 
   // Sends a read. A GET the realm turns away for now — a 503 that says when to
-  // come back — is sent again after the interval it names, a bounded number of
-  // times. The realm answers a card read that way while the card's type
-  // definition is still being rendered, and the render keeps going, so the
-  // retry usually finds the definition ready.
+  // come back — is sent again after the interval it names, within the bounds
+  // `unavailableReadRetryDelayMs` sets. The realm answers a card read that way
+  // while the card's type definition is still being rendered, and the render
+  // keeps going, so the retry usually finds the definition ready.
   //
   // A render tab does not wait. It holds a prerender slot, which the
   // definition render it would be waiting on may need, so the refusal reaches
@@ -343,21 +335,21 @@ export default class CardService extends Service {
     let inRender =
       (globalThis as unknown as { __boxelRenderContext?: boolean })
         .__boxelRenderContext === true;
-    for (let attempt = 0; ; attempt++) {
+    let firstSentAt = Date.now();
+    for (let retriesSent = 0; ; retriesSent++) {
       let response = await this.network.authedFetch(url, init);
-      let retryAfter = response.headers.get('Retry-After');
-      if (
-        !isGet ||
-        inRender ||
-        response.status !== 503 ||
-        retryAfter === null ||
-        attempt >= MAX_UNAVAILABLE_READ_RETRIES
-      ) {
+      if (!isGet || inRender || response.status !== 503) {
         return response;
       }
-      await timeout(
-        retryAfterDelayMs(retryAfter, MAX_UNAVAILABLE_RETRY_AFTER_SECONDS),
+      let delayMs = unavailableReadRetryDelayMs(
+        response.headers.get('Retry-After'),
+        retriesSent,
+        Date.now() - firstSentAt,
       );
+      if (delayMs === undefined) {
+        return response;
+      }
+      await timeout(delayMs);
     }
   }
 
