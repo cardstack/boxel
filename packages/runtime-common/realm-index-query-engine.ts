@@ -105,6 +105,7 @@ import {
 import {
   applyServerSearchPageBound,
   assembledLinkResourceBudget,
+  DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS,
 } from './search-bounds.ts';
 import {
   capturesMetaFromManifest,
@@ -1820,7 +1821,23 @@ export class RealmIndexQueryEngine {
           this.#log.warn(
             `[loadLinks ${invocationId}] layer=${layerIndex} cross-realm fetch failed for ${url} status=${response.status}`,
           );
-          throw await CardError.fromFetchResponse(url, response);
+          let definitionsUnavailable =
+            response.status === 503 &&
+            (await answersDefinitionsUnavailable(response.clone()));
+          let error = await CardError.fromFetchResponse(url, response);
+          // The linked card's realm could not read a definition it needed
+          // just now. That is neither the link missing nor the linked card
+          // unindexed, so it stays the retryable 503 it was, with its
+          // `Retry-After`, for whoever asked for this card.
+          if (definitionsUnavailable) {
+            error.status = 503;
+            error.meta = {
+              ...error.meta,
+              code: 'definitions-unavailable',
+              retryAfterSeconds: DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS,
+            };
+          }
+          throw error;
         }
         // `links.self` should resolve to a card or file document, but a
         // mistake (human or AI-generated) can leave a non-card URL here.
@@ -2881,4 +2898,23 @@ function fileResourceFromIndex(
     },
     links: { self: fileURL.href },
   };
+}
+
+// Whether a realm's error response is its retryable `definitions-unavailable`
+// 503: a definition it needed to answer could not be read just now.
+async function answersDefinitionsUnavailable(
+  response: Response,
+): Promise<boolean> {
+  try {
+    let json = await response.json();
+    let errors = json?.errors;
+    return (
+      Array.isArray(errors) &&
+      errors.some(
+        (error: any) => error?.meta?.code === 'definitions-unavailable',
+      )
+    );
+  } catch {
+    return false;
+  }
 }

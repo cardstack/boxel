@@ -62,6 +62,7 @@ import {
   runWithSearchTimeBudget,
   SearchBoundError,
   isDefinitionsUnavailableError,
+  DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS,
 } from './search-bounds.ts';
 import {
   LinkShapePolicy,
@@ -19209,6 +19210,18 @@ export class Realm {
       // other replica has no such handle on the write.
       return notIndexedYet(request, requestContext);
     }
+    if (assembly.kind === 'definitions-unavailable') {
+      let error = new CardError(assembly.message, {
+        status: 503,
+        title: 'Definitions Unavailable',
+        id: request.url,
+      });
+      error.meta = {
+        code: 'definitions-unavailable',
+        retryAfterSeconds: DEFINITIONS_UNAVAILABLE_RETRY_AFTER_SECONDS,
+      };
+      return responseWithError(error, requestContext);
+    }
     if (assembly.kind === 'redirect') {
       return createResponse({
         requestContext,
@@ -22875,6 +22888,15 @@ function cardJsonAssemblyFromFailure(
   let { error } = failure;
   if (error.code === 'target-not-found') {
     return { kind: 'not-found' };
+  }
+  // A definition the read needed that could not be produced in time — its
+  // module's render missed the request's deadline, timed out, or found the
+  // prerenderer unavailable — carries `target-not-indexed` as a 503. That is
+  // not the card's own row missing, and answering it as the 404 below would
+  // tell a caller (and a realm side-loading this card as a link) that the
+  // card is not there yet. It is the retryable 503 a search gets instead.
+  if (error.code === 'target-not-indexed' && error.status === 503) {
+    return { kind: 'definitions-unavailable', message: error.detail };
   }
   if (error.code === 'target-not-indexed') {
     return { kind: 'not-indexed' };

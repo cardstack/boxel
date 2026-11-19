@@ -7,6 +7,7 @@ import {
   requestDefinitionLookup,
   DEFINITION_RETRY_AFTER_SECONDS,
 } from '@cardstack/runtime-common/card-operations';
+import { FilterRefersToNonexistentTypeError } from '@cardstack/runtime-common/definition-lookup';
 import {
   systemInitiatedPriority,
   userInitiatedPriority,
@@ -118,6 +119,49 @@ module(basename(import.meta.filename), function () {
       } finally {
         process.off('unhandledRejection', onUnhandled);
       }
+    });
+
+    test('a lookup whose module did not finish loading refuses with the same retryable 503', async function (assert) {
+      let { lookup } = lookupAnswering(async () => {
+        throw new FilterRefersToNonexistentTypeError(CODE_REF, {
+          transient: true,
+        });
+      });
+      let requests = requestDefinitionLookup(lookup);
+      for (let read of [
+        () => requests.lookupDefinition(CODE_REF),
+        () => requests.lookupDefinitionEntry(CODE_REF),
+      ]) {
+        try {
+          await read();
+          assert.ok(false, 'expected the lookup to be refused');
+        } catch (err: unknown) {
+          // A reader that turns an unresolvable type into `undefined` passes
+          // an operation refusal through, so this is never read as a type
+          // that does not exist.
+          assert.true(isOperationFailure(err), 'an operation refusal');
+          if (isOperationFailure(err)) {
+            assert.strictEqual(err.error.status, 503);
+            assert.strictEqual(err.error.code, 'target-not-indexed');
+            assert.deepEqual(err.error.meta, {
+              awaitingIndex: true,
+              retryAfterSeconds: DEFINITION_RETRY_AFTER_SECONDS,
+            });
+          }
+        }
+      }
+    });
+
+    test('a type that does not exist still reaches the caller as it was', async function (assert) {
+      let { lookup } = lookupAnswering(async () => {
+        throw new FilterRefersToNonexistentTypeError(CODE_REF);
+      });
+      let requests = requestDefinitionLookup(lookup);
+      await assert.rejects(
+        requests.lookupDefinition(CODE_REF),
+        (err: unknown) =>
+          err instanceof FilterRefersToNonexistentTypeError && !err.transient,
+      );
     });
 
     test('a lookup error inside the deadline reaches the caller as it was', async function (assert) {
