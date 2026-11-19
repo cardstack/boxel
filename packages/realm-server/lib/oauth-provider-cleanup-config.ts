@@ -11,8 +11,9 @@ export const OAUTH_PROVIDER_CLEANUP_CRON_SCHEDULE =
 export const OAUTH_PROVIDER_CLEANUP_CRON_TZ =
   process.env.OAUTH_PROVIDER_CLEANUP_CRON_TZ ?? 'America/New_York';
 
-// The longest gap between two cleanups over the next week of the schedule, in
-// seconds.
+// The longest gap between two cleanups, in seconds: the longest over the next
+// week of the schedule, plus the hour a clock change can add to a gap in the
+// schedule's time zone, since the next week rarely holds one.
 export function longestOAuthProviderCleanupGapSeconds(): number {
   let job = createOAuthProviderCleanupCronJob(() => {});
   let runs = job.nextDates(8).map((date) => date.toMillis());
@@ -20,7 +21,7 @@ export function longestOAuthProviderCleanupGapSeconds(): number {
   for (let i = 1; i < runs.length; i++) {
     longest = Math.max(longest, runs[i] - runs[i - 1]);
   }
-  return longest / 1000;
+  return longest / 1000 + 60 * 60;
 }
 
 export function createOAuthProviderCleanupCronJob(

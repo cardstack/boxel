@@ -674,10 +674,11 @@ module(basename(import.meta.filename), function () {
     });
 
     test('by default sits above what the new-client limit can register while the cleanup keeps a client', function (assert) {
-      // Daily, in a time zone whose clock change makes one gap 25 hours.
-      assert.true(
-        longestOAuthProviderCleanupGapSeconds() <= DAY_SECONDS + 3600,
-      );
+      // Daily, in a time zone whose clock change makes one gap 25 hours: the
+      // gap counts that hour whether or not the next week holds the change.
+      let gap = longestOAuthProviderCleanupGapSeconds();
+      assert.true(gap >= DAY_SECONDS + 3600, `${gap} counts the 25-hour gap`);
+      assert.true(gap <= DAY_SECONDS + 2 * 3600, `${gap} is about a day`);
       assert.strictEqual(
         unconnectedClientCapWarning(
           DEFAULT_UNCONNECTED_CLIENT_CAP,
