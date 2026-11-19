@@ -2127,7 +2127,18 @@ module('Acceptance | host mode tests', function (hooks) {
         globalThis.addEventListener('click', stopNavigation);
         await visit('/test/LinkPage/index');
         // The routed link has its address once the linked post has loaded.
-        await waitFor(`${link('routed')}[href$="/posts/trail-runner"]`);
+        try {
+          await waitFor(`${link('routed')}[href$="/posts/trail-runner"]`);
+        } catch (e) {
+          let routed = document.querySelector(link('routed'));
+          throw new Error(
+            `the routed link has no routed address: href=${routed?.getAttribute(
+              'href',
+            )} page=${document
+              .querySelector('[data-test-host-mode-content]')
+              ?.outerHTML.slice(0, 1500)}`,
+          );
+        }
         await settled();
         lookups = [];
         pageURL = window.location.href;
