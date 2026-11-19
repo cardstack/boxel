@@ -122,7 +122,11 @@ import {
   canonicalRealmIdentifiers,
   dedupeRealmsByIdentity,
 } from '../lib/realm-utils';
-import { isRetryableUnavailable, retryAfterDelayMs } from '../lib/retry-after';
+import {
+  isRetryableUnavailable,
+  MAX_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  retryAfterDelayMs,
+} from '../lib/retry-after';
 import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
@@ -3591,10 +3595,17 @@ export default class StoreService extends Service implements StoreInterface {
   });
 
   private reloadTask = task(
-    async (instance: CardDef, reloadTarget?: ReloadTarget) => {
+    async (
+      instance: CardDef,
+      reloadTarget?: ReloadTarget,
+      opts?: { afterTurnAway?: true },
+    ) => {
       let reloadTracker = this.startTrackingCardLoad(instance.id);
       let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
       let isDelete = false;
+      // The `Retry-After` of a reload the realm turned away for now, which
+      // schedules the read that brings the state this reload was for.
+      let turnedAwayFor: string | null | undefined;
       // The reload belongs to the card identity the instance had when it
       // started. A reset while the read is in flight supersedes it — an
       // in-browser index pass replaces the identity map on its first visit,
@@ -3620,11 +3631,22 @@ export default class StoreService extends Service implements StoreInterface {
             // it is still rendering the card's type definition (a 503 with
             // `Retry-After`, which `fetchJSON` has already retried as far as
             // it goes). Either way the instance this tab is already running
-            // stands — so keep it exactly as it is, autosave and all, and let
-            // a later read bring the fresh state. Treating it as a deletion
-            // would evict a card that still exists; recording it as an error
-            // would stand a placeholder in front of one the user is working in.
+            // stands, so keep it exactly as it is, autosave and all. Treating
+            // it as a deletion would evict a card that still exists; recording
+            // it as an error would stand a placeholder in front of one the
+            // user is working in.
+            //
+            // The fresh state comes with a later read. For a card awaiting
+            // its index row, that is the read the row's own event starts. A
+            // card the realm has indexed gets no further event, so a refusal
+            // for now schedules one more read itself, once the interval the
+            // realm named has passed; see `rereadAfterTurnAwayTask`.
             maybeReloadedInstance = instance;
+            if (!cardError?.awaitingIndex && !opts?.afterTurnAway) {
+              turnedAwayFor = (err.responseHeaders as Headers).get(
+                'Retry-After',
+              );
+            }
           } else if (err.status === 404) {
             // in this case the document was invalidated in the index because the
             // file was deleted
@@ -3660,6 +3682,13 @@ export default class StoreService extends Service implements StoreInterface {
           // reader still holding the card it computed against.
           this.notifyCardReloadSubscribers(instance);
         }
+        if (turnedAwayFor !== undefined) {
+          this.rereadAfterTurnAwayTask.perform(
+            instance,
+            turnedAwayFor,
+            identityEpoch,
+          );
+        }
         if (isDelete) {
           await this.stopAutoSaving(instance);
           // Snapshot the consumers BEFORE removing the deleted instance from
@@ -3690,6 +3719,44 @@ export default class StoreService extends Service implements StoreInterface {
           this.#reloadTargets.delete(localId);
         }
         this.finishTrackingCardLoad(instance.id, reloadTracker);
+      }
+    },
+  );
+
+  // Reads a running card again once the interval the realm named has passed,
+  // after the realm turned away a reload of it for now. The reload was the one
+  // an event asked for, and a card the realm has already indexed gets no
+  // further event, so this is the read that brings the state that event
+  // announced. It is the last one: if the realm turns this read away too, the
+  // card stays as it is until another event names it. It is dropped when a
+  // reset supersedes the identity the card belonged to, or the store no
+  // longer holds this instance. The test waiter spans the wait, so `settled()`
+  // covers the read that follows it.
+  private rereadAfterTurnAwayTask = task(
+    async (
+      instance: CardDef,
+      retryAfter: string | null,
+      identityEpoch: number,
+    ) => {
+      let token = waiter.beginAsync(
+        undefined,
+        `reread ${instance.id} after the realm turned its reload away`,
+      );
+      try {
+        await timeout(
+          retryAfterDelayMs(retryAfter, MAX_UNAVAILABLE_RETRY_AFTER_SECONDS),
+        );
+        if (
+          this.#identityEpoch !== identityEpoch ||
+          this.store.getCard(instance[localIdSymbol]) !== instance
+        ) {
+          return;
+        }
+        await this.reloadTask.perform(instance, undefined, {
+          afterTurnAway: true,
+        });
+      } finally {
+        waiter.endAsync(token);
       }
     },
   );

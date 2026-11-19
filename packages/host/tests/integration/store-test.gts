@@ -5391,6 +5391,56 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a running card is read again after the interval the realm named, once its reload is turned away', async function (assert) {
+    await writePerson('Person/reread-after-turn-away.json', 'Before');
+    let url = `${testRealmURL}Person/reread-after-turn-away`;
+    storeService.addReference(url);
+    await storeService.flush();
+    let instance = storeService.peek(url) as CardDef & { name?: string };
+    assert.true(isCardInstance(instance), 'the card is running');
+
+    // The realm's own broadcasts are held back, so the event below is the
+    // only one the store sees for the write.
+    let events = interceptRealmEvents();
+    let realm: ReturnType<typeof turnAwayCardReads> | undefined;
+    try {
+      await writePerson('Person/reread-after-turn-away.json', 'After');
+      // Every try of the reload the event starts is turned away, and the read
+      // after them is answered.
+      realm = turnAwayCardReads('Person/reread-after-turn-away', 4);
+      events.deliver({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [url],
+        realmURL: testRealmURL,
+      });
+      await waitUntil(() => instance.name === 'After', {
+        timeout: 10_000,
+        timeoutMessage: `the running card never took the state the event announced (turned away ${realm?.turnedAway} times)`,
+      });
+      await settled();
+    } finally {
+      realm?.restore();
+      events.restore();
+    }
+
+    assert.strictEqual(
+      realm!.turnedAway,
+      4,
+      'the reload was turned away on each of its tries',
+    );
+    assert.strictEqual(
+      storeService.peek(url),
+      instance,
+      'the running instance took the new state in place',
+    );
+    assert.strictEqual(
+      storeService.peekError(url),
+      undefined,
+      'with no error recorded for it',
+    );
+  });
+
   test('a full reindex resolves a placeholder whose read was still in flight when it landed', async function (assert) {
     withholdSource('Person/swept-inflight');
     // The sweep a bare `full` event triggers can only find placeholders the
