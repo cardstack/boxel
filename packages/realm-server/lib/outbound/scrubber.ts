@@ -23,9 +23,9 @@
 // share a run of characters with the account's own key, and an id has to come
 // back whole to be usable.
 //
-// Every other match is replaced by `REDACTED`. Text with no match passes through
-// byte for byte, binary included: the scrubber works on bytes, never on a
-// decoded string.
+// Every other match is replaced by `REDACTED`. Text with no match passes
+// through byte for byte, binary included: the scrubber works on bytes, never
+// on a decoded string.
 //
 // The body is scrubbed as a stream. At a chunk boundary the scrubber holds
 // back only a short tail, and only while that tail is made of bytes that
