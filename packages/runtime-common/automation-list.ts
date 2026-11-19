@@ -126,9 +126,12 @@ export interface AutomationListAnswer {
 // automations on, pause them and pay for them. Any other caller the realm ACL
 // lets read, a reader or one a `*` or `users` row admits, is told it isn't a
 // direct writer and listed nothing, and the realm config shows no Automations
-// section. The answer isn't an HTTP refusal: the host takes a 401 or 403 as an
-// auth failure of whatever it is rendering at the time, and the realm config
-// asks while it renders. A caller only a policy grant admits gets the ACL's
+// section. The answer isn't an HTTP refusal: a 401 or 403 that comes back
+// through `authedFetch` sends a `boxel-auth-error` event, and wherever a guard
+// listens for it (the prerender routes, and `CardPrerender`, the in-page
+// indexer tests mount) it fails the loads in flight. The realm config asks
+// while it renders, so a refusal here failed the config card's other loads in
+// the test indexer. A caller only a policy grant admits gets the ACL's
 // refusal, since the route is `ACL_ONLY` and the ACL refuses before the route
 // runs.
 export async function answerAutomationList({
