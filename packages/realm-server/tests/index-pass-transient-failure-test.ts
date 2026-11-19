@@ -5,10 +5,12 @@ import { basename } from 'path';
 import {
   IndexQueryEngine,
   IndexWriter,
+  TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS,
   TRANSIENT_RENDER_FAILURE_RETRY_CAP,
   VirtualNetwork,
   findTransientIndexRetryRows,
   internalKeyFor,
+  markVisitRequestFailure,
   rri,
   type CodeRef,
   type Definition,
@@ -62,7 +64,10 @@ const genuineError: SerializedError = {
   additionalErrors: null,
 };
 
-type LogOutcome = 'good' | 'times-out' | 'aborts' | 'broken';
+// `aborts` is a prerender request that failed transiently, as the prerender
+// client throws it (marked); `refused` is one the prerender path refused, a
+// 4xx (unmarked).
+type LogOutcome = 'good' | 'times-out' | 'aborts' | 'refused' | 'broken';
 
 const postSource = JSON.stringify({
   data: {
@@ -122,8 +127,15 @@ function prerenderer(
       if (args.url === url(logName)) {
         let outcome = logOutcome();
         if (outcome === 'aborts') {
+          throw markVisitRequestFailure(
+            new Error(
+              'Prerender request to http://prerender.test/ aborted after 60000ms (requestId=r1)',
+            ),
+          );
+        }
+        if (outcome === 'refused') {
           throw new Error(
-            'Prerender request to http://prerender.test/ aborted after 60000ms (requestId=r1)',
+            'Prerender request to http://prerender.test/prerender-visit failed with status 400: URL is required',
           );
         }
         if (outcome === 'times-out' || outcome === 'broken') {
@@ -287,10 +299,33 @@ module(basename(import.meta.filename), function (hooks) {
   }
 
   // The URLs the reconcile sweep would re-index, every index row aged past
-  // its backoff.
-  async function retriesDue() {
+  // its backoff. `includeLegacy` is the hourly sweep's.
+  async function retriesDue(opts: { includeLegacy?: boolean } = {}) {
     await adapter.execute(`UPDATE boxel_index SET indexed_at = 0`);
-    return (await findTransientIndexRetryRows(adapter)).get(testRealm) ?? [];
+    return (
+      (await findTransientIndexRetryRows(adapter, opts)).get(testRealm) ?? []
+    );
+  }
+
+  // Records an incremental pass over `name` that finished, `minutesAgo`,
+  // without writing its row, as a rejected or timed-out retry leaves it. Its
+  // id follows the job that wrote the failed attempt, as a retry enqueued
+  // after that write would.
+  async function retryDied(name: string, minutesAgo: number) {
+    await adapter.execute(
+      `INSERT INTO jobs (id, job_type, concurrency_group, args, status, timeout, finished_at)
+       SELECT GREATEST(
+                COALESCE((i.diagnostics ->> 'transientRenderFailureJobId')::int, 0),
+                COALESCE((SELECT MAX(id) FROM jobs), 0)
+              ) + 1,
+              'incremental-index', 'indexing:' || i.realm_url,
+              jsonb_build_object('realmURL', i.realm_url,
+                'changes', jsonb_build_array(jsonb_build_object('url', i.url, 'operation', 'update'))),
+              'rejected', 60, NOW() - ($2 || ' minutes')::interval
+         FROM boxel_index i
+        WHERE i.url = $1 AND i.type = 'file'`,
+      { bind: [url(name), String(minutesAgo)] },
+    );
   }
 
   for (let outcome of ['times-out', 'aborts'] as const) {
@@ -387,6 +422,101 @@ module(basename(import.meta.filename), function (hooks) {
       'the post does not take the log’s timeout as its own error',
     );
     assert.deepEqual(await searchPosts(), [url('Post/p1')]);
+  });
+
+  test('a log whose prerender request is refused is the log’s error, and the linking card inherits it', async function (assert) {
+    await pass(logName, postName);
+    logOutcome = 'refused';
+    await pass(logName);
+    let log = await row(logName, 'file');
+    assert.true(Boolean(log.has_error), 'the refusal is the log’s error');
+    assert.notOk(log.error_doc?.visitRequestFailure, 'not a request failure');
+    assert.notOk(log.diagnostics?.transientRenderFailure, 'nor transient');
+    assert.deepEqual(await retriesDue(), [], 'and nothing retries it');
+
+    await pass(postName);
+    assert.true(
+      Boolean((await row(postName, 'instance')).has_error),
+      'the post inherits it, as it would any error of the log',
+    );
+  });
+
+  test('a failure after the retries ran out starts a new run, with retries of its own', async function (assert) {
+    await pass(logName, postName);
+    logOutcome = 'times-out';
+    for (let i = 0; i <= TRANSIENT_RENDER_FAILURE_RETRY_CAP; i++) {
+      await retriesDue();
+      await pass(logName);
+    }
+    assert.deepEqual(await retriesDue(), [], 'the run is spent');
+
+    // The log is indexed again for its own reason, and times out again.
+    await pass(logName);
+    assert.strictEqual(
+      (await row(logName, 'file')).diagnostics?.transientRenderFailureRenders,
+      1,
+      'a new run',
+    );
+    assert.deepEqual(await retriesDue(), [url(logName)], 'which is retried');
+  });
+
+  test('a retry that dies before writing counts as a failed attempt', async function (assert) {
+    let minutes = TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS / 60_000;
+    await pass(logName, postName);
+    logOutcome = 'times-out';
+    await pass(logName);
+    await retryDied(logName, 2 * minutes - 1);
+    assert.deepEqual(
+      await retriesDue(),
+      [],
+      'the next retry waits out the second interval, timed from the dead one',
+    );
+    await adapter.execute(
+      `UPDATE jobs SET finished_at = NOW() - ($1 || ' minutes')::interval`,
+      { bind: [String(2 * minutes + 1)] },
+    );
+    assert.deepEqual(await retriesDue(), [url(logName)], 'then it is due');
+
+    await retryDied(logName, 60);
+    await retryDied(logName, 60);
+    assert.deepEqual(
+      await retriesDue(),
+      [],
+      'the failure and three dead retries spend the retries',
+    );
+  });
+
+  test('the hourly sweep re-indexes a legacy row’s stored timeout once', async function (assert) {
+    await pass(logName, postName);
+    // A timeout an earlier release stored as the log's error, with no verdict.
+    await adapter.execute(
+      `UPDATE boxel_index
+          SET has_error = TRUE, error_doc = $1::jsonb, diagnostics = NULL
+        WHERE url = $2 AND type = 'file'`,
+      {
+        bind: [
+          JSON.stringify({ ...renderTimeout, renderTimeout: undefined }),
+          url(logName),
+        ],
+      },
+    );
+    assert.deepEqual(
+      await retriesDue(),
+      [],
+      'the every-minute sweep leaves errored rows alone',
+    );
+    assert.deepEqual(
+      await retriesDue({ includeLegacy: true }),
+      [url(logName)],
+      'the hourly sweep re-indexes it',
+    );
+
+    await retryDied(logName, 60);
+    assert.deepEqual(
+      await retriesDue({ includeLegacy: true }),
+      [],
+      'once: after a re-index that died, it is left as it is',
+    );
   });
 
   test('a genuinely broken log still errors, and the linking card still inherits it', async function (assert) {

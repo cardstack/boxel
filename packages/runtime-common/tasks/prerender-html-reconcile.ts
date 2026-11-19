@@ -8,7 +8,11 @@ import {
   systemInitiatedPriority,
 } from '../index.ts';
 import type { QueuePublisher } from '../queue.ts';
-import { joinAnyJobOfSameType, registerQueueJobDefinition } from '../queue.ts';
+import {
+  registerQueueJobDefinition,
+  type QueueCoalesceContext,
+  type QueueCoalesceDecision,
+} from '../queue.ts';
 import {
   enqueuePrerenderHtmlJob,
   skipsPrerenderHtml,
@@ -27,12 +31,30 @@ import {
   findPrerenderHtmlRejectionStreaks,
   findStalePrerenderedHtmlRows,
   findTransientIndexRetryRows,
+  findTransientRetryPrerenderedHtmlRows,
   planPrerenderHtmlRepairs,
   prerenderHtmlRepairBackoffMs,
+  type PrerenderHtmlRejectionStreak,
+  type StalePrerenderedHtmlRow,
 } from '../prerender-html-reconcile.ts';
 
-// The cron enqueues this job with no arguments; it scans every realm.
-type PrerenderHtmlReconcileArgs = JSONTypes.Object;
+// The hourly cron enqueues this job with no arguments: the whole sweep, over
+// every realm. The every-minute cron enqueues it with `transientOnly: true`:
+// only the transient-render-failure retries, on both channels, so a retry
+// starts within about a minute of falling due rather than at the next hourly
+// sweep. That scan reads only the stamped rows (their partial indexes) and the
+// jobs since each one's last write, so it costs little when nothing failed.
+type PrerenderHtmlReconcileArgs = JSONTypes.Object & {
+  transientOnly?: boolean;
+};
+
+function isTransientOnly(args: unknown): boolean {
+  return (
+    !!args &&
+    typeof args === 'object' &&
+    (args as { transientOnly?: unknown }).transientOnly === true
+  );
+}
 
 export interface PrerenderHtmlReconcileResult extends JSONTypes.Object {
   realmsRepaired: number;
@@ -51,11 +73,28 @@ export { prerenderHtmlReconcile };
 
 // The fixed concurrency group already serializes execution to one scan at a
 // time; this additionally collapses a queued tick into any pending or in-flight
-// scan so overlapping cron ticks never pile up. The scan carries no per-realm
-// args, so there is nothing to merge — a twin simply wins.
+// scan that covers it, so overlapping cron ticks never pile up. The scan
+// carries no per-realm args, so there is nothing to merge: a twin covers the
+// tick when its scan is at least as wide. The whole sweep covers a
+// transient-only tick; a transient-only scan does not cover the whole sweep,
+// which is then queued behind it.
+export function choosePrerenderHtmlReconcileCoalesceDecision(
+  context: QueueCoalesceContext,
+): QueueCoalesceDecision {
+  let { incoming, candidates, inFlightCandidates } = context;
+  let covers = (candidate: (typeof candidates)[number]) =>
+    candidate.jobType === incoming.jobType &&
+    (!isTransientOnly(candidate.args) || isTransientOnly(incoming.args));
+  let twin = candidates.find(covers) ?? inFlightCandidates.find(covers);
+  if (!twin) {
+    return { type: 'insert' };
+  }
+  return { type: 'join', jobId: twin.id };
+}
+
 registerQueueJobDefinition({
   jobType: 'prerender-html-reconcile',
-  coalesce: joinAnyJobOfSameType,
+  coalesce: choosePrerenderHtmlReconcileCoalesceDecision,
 });
 
 // Catch-up sweep for the residue the queue's own durability does not cover: a
@@ -87,6 +126,7 @@ const prerenderHtmlReconcile: Task<
 }) =>
   async function (args) {
     let { jobInfo } = args;
+    let transientOnly = isTransientOnly(args);
     reportStatus(jobInfo, 'start');
 
     let indexRetriesEnqueued = await retryTransientIndexFailures({
@@ -95,9 +135,18 @@ const prerenderHtmlReconcile: Task<
       log,
       matrixServerName,
       jobLabel: jobIdentity(jobInfo),
+      // The legacy rows' one re-index reads the errored rows, which is the
+      // hourly sweep's to do.
+      includeLegacy: !transientOnly,
     });
 
-    let staleRows = await findStalePrerenderedHtmlRows(dbAdapter);
+    let transientRows = await findTransientRetryPrerenderedHtmlRows(dbAdapter);
+    let staleRows = transientOnly
+      ? transientRows
+      : withoutDuplicateRows([
+          ...(await findStalePrerenderedHtmlRows(dbAdapter)),
+          ...transientRows,
+        ]);
     if (staleRows.length === 0) {
       log.debug(
         `${jobIdentity(jobInfo)} prerender-html reconcile: no stale rows`,
@@ -126,9 +175,13 @@ const prerenderHtmlReconcile: Task<
       };
     }
 
-    let rejectionStreaks = await findPrerenderHtmlRejectionStreaks(dbAdapter, [
-      ...plan.keys(),
-    ]);
+    // A transient retry's repair that dies counts as one of the row's
+    // attempts (`findTransientRetryPrerenderedHtmlRows`), which bounds it per
+    // row; the realm-wide rejection streak, a scan of two days of finished
+    // jobs, is the hourly sweep's.
+    let rejectionStreaks = transientOnly
+      ? new Map<string, PrerenderHtmlRejectionStreak>()
+      : await findPrerenderHtmlRejectionStreaks(dbAdapter, [...plan.keys()]);
     let generations = await fetchRealmGenerations(dbAdapter);
     let realmOwners = await fetchAllRealmsWithOwners(
       dbAdapter,
@@ -237,7 +290,7 @@ const prerenderHtmlReconcile: Task<
     }
 
     log.info(
-      `${jobIdentity(jobInfo)} prerender-html reconcile: enqueued repair for ${urlsEnqueued} url(s) across ${realmsRepaired} realm(s) (from ${staleRows.length} stale row(s), ${realmsInBackoff} realm(s) in backoff)`,
+      `${jobIdentity(jobInfo)} prerender-html reconcile${transientOnly ? ' (transient retries)' : ''}: enqueued repair for ${urlsEnqueued} url(s) across ${realmsRepaired} realm(s) (from ${staleRows.length} stale row(s), ${realmsInBackoff} realm(s) in backoff)`,
     );
     reportStatus(jobInfo, 'finish');
     return {
@@ -260,8 +313,10 @@ async function retryTransientIndexFailures({
   log,
   matrixServerName,
   jobLabel,
+  includeLegacy,
 }: {
   dbAdapter: Parameters<typeof findTransientIndexRetryRows>[0];
+  includeLegacy: boolean;
   queuePublisher: QueuePublisher;
   log: {
     info(message: string): void;
@@ -270,7 +325,7 @@ async function retryTransientIndexFailures({
   matrixServerName: string;
   jobLabel: string;
 }): Promise<number> {
-  let due = await findTransientIndexRetryRows(dbAdapter);
+  let due = await findTransientIndexRetryRows(dbAdapter, { includeLegacy });
   if (due.size === 0) {
     return 0;
   }
@@ -317,4 +372,20 @@ async function retryTransientIndexFailures({
     `${jobLabel} prerender-html reconcile: enqueued index retries of ${enqueued} url(s) whose visits failed transiently`,
   );
   return enqueued;
+}
+
+// The stale rows and the transient retries overlap when a row is both behind
+// its index row and stamped; it is repaired once.
+function withoutDuplicateRows(
+  rows: StalePrerenderedHtmlRow[],
+): StalePrerenderedHtmlRow[] {
+  let seen = new Set<string>();
+  return rows.filter((row) => {
+    let key = `${row.realmURL} ${row.url}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }

@@ -118,7 +118,8 @@ export interface ErrorEntry {
 // is deliberately not used to classify a persisted error after the fact: the
 // same status can originate from a card render, so classification keys on the
 // marker rather than re-deriving intent from the number. (A render timeout is
-// a 504; `isTransientRenderError` recognizes it by its title.)
+// a 504 too; `isTransientRenderError` recognizes it by its `renderTimeout`
+// marker.)
 export const GATEWAY_ERROR_STATUSES = [502, 503, 504];
 
 export function isGatewayFailureStatus(status: unknown): boolean {
@@ -128,9 +129,10 @@ export function isGatewayFailureStatus(status: unknown): boolean {
 // A render error that records the render failing to finish rather than a
 // verdict about the card, read from its markers: a render that ran out of time
 // (`renderTimeout`, stamped by the prerender server), a visit whose prerender
-// request aborted, timed out, met a 502/503/504 from the prerender path or lost
-// its connection before any response existed (`visitRequestFailure`, stamped
-// by the visit loops), or a fetch that met a gateway or network failure
+// request aborted, met a 5xx from the prerender path or lost its connection
+// before any response existed (`visitRequestFailure`, which the visit loops
+// stamp on a rejection the prerender client marked with
+// `markVisitRequestFailure`), or a fetch that met a gateway or network failure
 // (`gatewayFailure`). The render twin of `isTransientModuleError`
 // (definition-lookup.ts). Never keyed on a bare status, which a card render
 // can produce for its own reasons. A genuine render error (a template that
@@ -173,12 +175,51 @@ export const RENDER_TIMEOUT_MESSAGE_PREFIX = 'Render timed-out after ';
 
 // How many times the reconcile sweep re-renders (or re-indexes) a row whose
 // render failed transiently, after the failure itself. Retry n waits
-// `TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS * 2^(n-1)` after the last attempt
-// (5, 10, 20 minutes), long enough for an overloaded prerender service to
-// drain. A row whose run of failed renders passes the cap keeps its stale
-// content; `_indexing-errors` reports it (`transientRenderRetriesExhausted`).
+// `transientRenderRetryBackoffMs(n)` after the last attempt (5, 10, 20
+// minutes), long enough for an overloaded prerender service to drain. The
+// sweep's transient lane runs every minute, so a retry starts within about a
+// minute of falling due. A row whose run of failed renders passes the cap keeps
+// its stale content; `_indexing-errors` reports it
+// (`transientRenderRetriesExhausted`).
 export const TRANSIENT_RENDER_FAILURE_RETRY_CAP = 3;
 export const TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS = 5 * 60 * 1000;
+
+// How long after a row's `failedRenders`-th failed attempt its next retry
+// falls due. Mirrored in SQL by the reconcile sweep's due test.
+export function transientRenderRetryBackoffMs(failedRenders: number): number {
+  return (
+    TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS * 2 ** Math.max(failedRenders - 1, 0)
+  );
+}
+
+// Whether a failed attempt at a row continues the row's run of transient
+// failures (and so counts toward its cap) or starts a new run with retries of
+// its own. A run is the failure plus the sweep's retries of it, and the sweep
+// retries only a row whose run is within the cap, once its retry is due. So an
+// attempt continues the prior run only when that run still had a retry left and
+// the retry was due. One that comes earlier, or after the retries ran out, was
+// made for its own reason: an edit, a change to something the card depends on,
+// a reindex. A card whose render always times out still converges, since the
+// sweep never retries a row past the cap.
+//
+// "Due" allows half the interval, so a worker clock that runs behind the
+// database clock the sweep measures with still counts the sweep's retry as one.
+export function continuesTransientRenderRun(
+  prior: { failedRenders: unknown; attemptedAt: unknown } | undefined,
+  now: number,
+): boolean {
+  let failedRenders = Number(prior?.failedRenders);
+  let attemptedAt = Number(prior?.attemptedAt);
+  if (
+    !Number.isFinite(failedRenders) ||
+    failedRenders < 1 ||
+    failedRenders > TRANSIENT_RENDER_FAILURE_RETRY_CAP ||
+    !Number.isFinite(attemptedAt)
+  ) {
+    return false;
+  }
+  return now - attemptedAt >= transientRenderRetryBackoffMs(failedRenders) / 2;
+}
 
 // Whether a row's run of transient failures (its diagnostics'
 // `transientRenderFailureRenders`, the failure plus each failed retry) has
@@ -189,10 +230,13 @@ export function transientRenderRetriesExhausted(
   return (failedRenders ?? 0) > TRANSIENT_RENDER_FAILURE_RETRY_CAP;
 }
 
-// Marks an error thrown by a visit's prerender request (it aborted, timed out,
-// met a 5xx from the prerender path or lost its connection) as a failure of
-// the request rather than of the file, so whoever records it can stamp the
-// error doc `visitRequestFailure`. Returns the error for rethrowing.
+// Marks an error a prerender request rejected with as a transient failure of
+// the request rather than a verdict about the file: it aborted, met a 5xx (or a
+// draining server) on the prerender path after its retries, or lost its
+// connection. The prerender client stamps it where it knows the cause. A
+// request refused for its own reasons (a 4xx, an unreadable response) is not
+// marked, and its error is recorded like any other. The visit loops stamp a
+// marked error's doc `visitRequestFailure`. Returns the error for rethrowing.
 const VISIT_REQUEST_FAILURE = Symbol.for('boxel.visitRequestFailure');
 export function markVisitRequestFailure<T>(err: T): T {
   if (err && typeof err === 'object') {
@@ -225,9 +269,10 @@ export function transientRenderErrorSQL(alias: string): string {
 }
 
 // A stored render error the liveness and search gates ignore: a transient
-// failure a writer stored as the row's error before the writers kept the
-// last good row instead. A transient failure written now either leaves no
-// error (it is withheld) or carries `noGoodRowToKeep` and counts.
+// failure stored as the row's error without `noGoodRowToKeep`. The writers
+// never store one that way (they withhold a transient failure, or store it
+// with `noGoodRowToKeep` when there is no good row to keep, and that one
+// counts), so such a row is legacy data, and the reconcile sweep re-renders it.
 export function ungatedRenderErrorSQL(alias: string): string {
   return `(${transientRenderErrorSQL(alias)} AND NOT COALESCE(CAST(${alias}.error_doc ->> 'noGoodRowToKeep' AS TEXT) IN ('true', '1'), FALSE))`;
 }

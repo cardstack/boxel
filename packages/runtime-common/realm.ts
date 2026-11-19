@@ -20823,7 +20823,9 @@ export class Realm {
 
     // Renderings whose transient render failures used up their retries: the
     // HTML channel's twin of the index rows the query above admits by the
-    // same test. Each keeps its last good render; this is where that shows.
+    // same test. One that had a good render keeps it and reads as healthy, so
+    // this is where that shows; one that had none (`noGoodRowToKeep`) shows as
+    // errored as well.
     let staleRenderings = (await query(this.#dbAdapter, [
       `SELECT url, type, diagnostics FROM prerendered_html WHERE realm_url =`,
       param(sourceRealmURL),

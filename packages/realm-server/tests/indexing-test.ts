@@ -14,6 +14,7 @@ import {
   VirtualNetwork,
   userInitiatedPriority,
   diffDoc,
+  markVisitRequestFailure,
   sweepUnreferencedScopedCSS,
 } from '@cardstack/runtime-common';
 import type {
@@ -6238,8 +6239,12 @@ module(basename(import.meta.filename), function () {
         },
         async prerenderVisit(args) {
           if (failVisitsFor && args.url.includes(failVisitsFor)) {
-            throw new Error(
-              'Prerender request to /prerender-visit aborted after 120000ms (simulated transport failure)',
+            // As the prerender client throws it: marked a transient
+            // request failure.
+            throw markVisitRequestFailure(
+              new Error(
+                'Prerender request to /prerender-visit aborted after 120000ms (simulated transport failure)',
+              ),
             );
           }
           return (await delegate()).prerenderVisit(args);

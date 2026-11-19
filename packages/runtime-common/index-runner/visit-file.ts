@@ -23,11 +23,7 @@ import {
   type RenderRouteOptions,
   type RenderVisitResponse,
 } from '../index.ts';
-import {
-  CardError,
-  markVisitRequestFailure,
-  mergeErrorsByGeneration,
-} from '../error.ts';
+import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import {
   readServedFile,
@@ -338,8 +334,9 @@ export async function renderFileForIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} index visit prerender of ${url.href} threw: ${(err as Error)?.message}`,
     );
-    // The request failed, not the file: no render returned a verdict.
-    throw markVisitRequestFailure(err);
+    // A rejection the prerender client found transient carries its
+    // `markVisitRequestFailure` marker, which the error path records.
+    throw err;
   }
 
   // The prerender-html visit chains off the index visit: the extract's
@@ -384,7 +381,7 @@ export async function renderFileForIndexing({
       logWarn(
         `${jobIdentity(jobInfo)} prerender-html visit of ${url.href} threw: ${(err as Error)?.message}`,
       );
-      throw markVisitRequestFailure(err);
+      throw err;
     }
   }
 

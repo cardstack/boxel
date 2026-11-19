@@ -7,6 +7,8 @@ import type {
   Expression,
   IndexWriter,
   Prerenderer,
+  QueueCoalesceCandidate,
+  QueueJobSpec,
   QueuePublisher,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
@@ -17,6 +19,7 @@ import {
   TRANSIENT_RENDER_FAILURE_RETRY_CAP,
   STALE_SHELL_FAILURE_RETRY_CAP,
   findPrerenderHtmlRejectionStreaks,
+  getQueueJobCoalesceHandler,
   insert,
   insertPermissions,
   logger,
@@ -59,7 +62,10 @@ module(basename(import.meta.filename), function (hooks) {
     },
   });
 
-  function runReconcile(skipPrerenderHtmlRealms?: string[]) {
+  function runReconcile(
+    skipPrerenderHtmlRealms?: string[],
+    args: { transientOnly?: boolean } = {},
+  ) {
     return prerenderHtmlReconcile({
       skipPrerenderHtmlRealms,
       reportStatus: () => {},
@@ -77,7 +83,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
       getAuthedFetch: async () => globalThis.fetch,
       createPrerenderAuth: () => '',
-    })({});
+    })(args as Parameters<ReturnType<typeof prerenderHtmlReconcile>>[0]);
   }
 
   async function seedOwner(realmURL: string, userId = '@owner:localhost') {
@@ -1765,6 +1771,134 @@ module(basename(import.meta.filename), function (hooks) {
       again.indexRetriesEnqueued,
       undefined,
       'a URL the queued pass names is left to it',
+    );
+  });
+  test('the every-minute sweep retries the transient failures and leaves the rest to the hourly sweep', async function (assert) {
+    let realmURL = 'http://test-realm/transient-only/';
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 1);
+    // A rendering that never happened: residue for the hourly sweep.
+    await seedIndexRow({
+      url: `${realmURL}absent.json`,
+      realmURL,
+      generation: 1,
+    });
+    // A rendering whose render timed out, kept over its last good render, and
+    // due its first retry.
+    await seedIndexRow({
+      url: `${realmURL}timed-out.json`,
+      realmURL,
+      generation: 1,
+    });
+    await seedPrerenderedHtmlRow({
+      url: `${realmURL}timed-out.json`,
+      realmURL,
+      generation: 1,
+      diagnostics: {
+        transientRenderFailure: ['instance'],
+        transientRenderFailureRenders: 1,
+      },
+      renderedMinutesAgo: 6,
+    });
+    // An index row whose visit timed out, due its first retry.
+    await dbAdapter.execute(
+      `INSERT INTO boxel_index (url, file_alias, realm_url, type, generation, diagnostics, indexed_at)
+       VALUES ($1, $1, $2, 'file', 1, $3::jsonb, 0)`,
+      {
+        bind: [
+          `${realmURL}log.jsonl`,
+          realmURL,
+          JSON.stringify({
+            transientRenderFailure: ['file'],
+            transientRenderFailureRenders: 1,
+          }),
+        ],
+      },
+    );
+
+    let tick = await runReconcile(undefined, { transientOnly: true });
+    assert.strictEqual(
+      tick.indexRetriesEnqueued,
+      1,
+      'the index row is retried',
+    );
+    assert.strictEqual(tick.urlsEnqueued, 1, 'one rendering is retried');
+    let htmlJobs = await prerenderHtmlJobs();
+    assert.deepEqual(
+      htmlJobs.map((job) => job.args.changes.map((change) => change.url)),
+      [[`${realmURL}timed-out.json`]],
+      'the timed-out rendering, not the missing one',
+    );
+
+    let sweep = await runReconcile();
+    assert.strictEqual(
+      sweep.urlsEnqueued,
+      2,
+      'the hourly sweep repairs the two missing renderings; the retry is already queued',
+    );
+    assert.deepEqual(
+      (await prerenderHtmlJobs())
+        .flatMap((job) => job.args.changes.map((change) => change.url))
+        .sort(),
+      [
+        `${realmURL}absent.json`,
+        `${realmURL}log.jsonl`,
+        `${realmURL}timed-out.json`,
+      ],
+      'merged into the queued repair',
+    );
+  });
+
+  test('a queued sweep absorbs a transient-only tick, but a transient-only scan does not absorb the sweep', function (assert) {
+    let coalesce = getQueueJobCoalesceHandler('prerender-html-reconcile')!;
+    let spec = (args: Record<string, unknown>) =>
+      ({
+        jobType: 'prerender-html-reconcile',
+        concurrencyGroup: 'prerender-html-reconcile',
+        timeout: 600,
+        priority: 0,
+        args,
+      }) as unknown as QueueJobSpec;
+    let queued = (id: number, args: Record<string, unknown>) =>
+      ({ id, ...spec(args) }) as QueueCoalesceCandidate;
+    let sweep = queued(1, {});
+    let tick = queued(2, { transientOnly: true });
+
+    assert.deepEqual(
+      coalesce({
+        incoming: spec({ transientOnly: true }),
+        candidates: [sweep],
+        inFlightCandidates: [],
+      }),
+      { type: 'join', jobId: 1 },
+      'a tick joins a queued sweep',
+    );
+    assert.deepEqual(
+      coalesce({
+        incoming: spec({ transientOnly: true }),
+        candidates: [],
+        inFlightCandidates: [tick],
+      }),
+      { type: 'join', jobId: 2 },
+      'a tick joins a running tick',
+    );
+    assert.deepEqual(
+      coalesce({
+        incoming: spec({}),
+        candidates: [tick],
+        inFlightCandidates: [],
+      }),
+      { type: 'insert' },
+      'the sweep is not absorbed by a tick',
+    );
+    assert.deepEqual(
+      coalesce({
+        incoming: spec({}),
+        candidates: [tick, sweep],
+        inFlightCandidates: [],
+      }),
+      { type: 'join', jobId: 1 },
+      'but joins a queued sweep',
     );
   });
 });

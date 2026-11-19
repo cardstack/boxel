@@ -4,7 +4,9 @@ import {
   IndexWriter,
   VirtualNetwork,
   findStalePrerenderedHtmlRows,
+  findTransientRetryPrerenderedHtmlRows,
   internalKeyFor,
+  markVisitRequestFailure,
   rri,
   type CodeRef,
   type Definition,
@@ -120,10 +122,14 @@ export const genuineError: SerializedError = {
   additionalErrors: null,
 };
 
+// `request-fails` is a prerender request that failed transiently, as the
+// prerender client throws it (marked); `request-refused` is one the prerender
+// path refused, a 4xx (unmarked).
 export type Outcome =
   | { kind: 'ok' }
   | { kind: 'card-error'; error: SerializedError }
-  | { kind: 'throws'; message: string };
+  | { kind: 'request-fails'; message: string }
+  | { kind: 'request-refused'; message: string };
 
 function stubPrerenderer(outcomes: Map<string, Outcome>): Prerenderer {
   let rendering = (html: string) => ({
@@ -138,7 +144,10 @@ function stubPrerenderer(outcomes: Map<string, Outcome>): Prerenderer {
   return {
     async prerenderVisit(args: { url: string }) {
       let outcome = outcomes.get(args.url) ?? { kind: 'ok' };
-      if (outcome.kind === 'throws') {
+      if (outcome.kind === 'request-fails') {
+        throw markVisitRequestFailure(new Error(outcome.message));
+      }
+      if (outcome.kind === 'request-refused') {
         throw new Error(outcome.message);
       }
       let card =
@@ -190,9 +199,16 @@ export interface TransientRenderFixture {
     generation: number | string;
     index_generation: number | string;
   }>;
-  // Which notes the reconcile sweep would re-render, every rendering aged by
-  // `ageMs` (all the way back, when not given).
+  // Which notes the hourly reconcile sweep would re-render (its stale rows and
+  // the transient retries), every rendering aged by `ageMs` (all the way back,
+  // when not given).
   sweepFinds(ageMs?: number): Promise<string[]>;
+  // Which notes the every-minute sweep, the transient retries alone, would
+  // re-render, aged the same way.
+  transientSweepFinds(ageMs?: number): Promise<string[]>;
+  // Records a prerender_html repair of a note that finished, `minutesAgo`,
+  // without writing its rendering, as a rejected or timed-out job leaves it.
+  repairDied(name: string, minutesAgo: number): Promise<void>;
   // Stores `error` as a note's render error at its row's generation.
   storeRenderError(name: string, error: SerializedError): Promise<void>;
   // Removes a note's renderings, as if it had never rendered.
@@ -247,6 +263,14 @@ export function setupTransientRenderFixture(
   hooks.afterEach(async function () {
     await closeTestPgAdapter(adapter);
   });
+
+  async function age(ageMs: number | undefined) {
+    await adapter.execute(
+      ageMs === undefined
+        ? `UPDATE prerendered_html SET rendered_at = 0`
+        : `UPDATE prerendered_html SET rendered_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint - ${ageMs}`,
+    );
+  }
 
   return {
     get adapter() {
@@ -305,16 +329,41 @@ export function setupTransientRenderFixture(
       return row;
     },
     async sweepFinds(ageMs) {
-      await adapter.execute(
-        ageMs === undefined
-          ? `UPDATE prerendered_html SET rendered_at = 0`
-          : `UPDATE prerendered_html SET rendered_at = (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint - ${ageMs}`,
-      );
-      let rows = await findStalePrerenderedHtmlRows(adapter);
-      return rows
+      await age(ageMs);
+      let rows = [
+        ...(await findStalePrerenderedHtmlRows(adapter)),
+        ...(await findTransientRetryPrerenderedHtmlRows(adapter)),
+      ];
+      return [
+        ...new Set(
+          rows.filter((r) => r.realmURL === testRealm).map((r) => r.url),
+        ),
+      ].sort();
+    },
+    async transientSweepFinds(ageMs) {
+      await age(ageMs);
+      return (await findTransientRetryPrerenderedHtmlRows(adapter))
         .filter((r) => r.realmURL === testRealm)
         .map((r) => r.url)
         .sort();
+    },
+    async repairDied(name, minutesAgo) {
+      // Its id follows the job that wrote the failed attempt, as a repair
+      // enqueued after that write would.
+      await adapter.execute(
+        `INSERT INTO jobs (id, job_type, concurrency_group, args, status, timeout, finished_at)
+         SELECT GREATEST(
+                  (ph.diagnostics ->> 'transientRenderFailureJobId')::int,
+                  COALESCE((SELECT MAX(id) FROM jobs), 0)
+                ) + 1,
+                'prerender_html', 'prerender-html:' || ph.realm_url,
+                jsonb_build_object('realmURL', ph.realm_url,
+                  'changes', jsonb_build_array(jsonb_build_object('url', ph.url, 'operation', 'update'))),
+                'rejected', 60, NOW() - ($2 || ' minutes')::interval
+           FROM prerendered_html ph
+          WHERE ph.url = $1 AND ph.type = 'instance'`,
+        { bind: [cardURL(name), String(minutesAgo)] },
+      );
     },
     async storeRenderError(name, error) {
       await adapter.execute(

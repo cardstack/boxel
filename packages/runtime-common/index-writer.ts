@@ -36,6 +36,7 @@ import {
 } from './expression.ts';
 import {
   clampSerializedError,
+  continuesTransientRenderRun,
   isTransientRenderError,
   renderErrorSummary,
   TRANSIENT_RENDER_FAILURE_RETRY_CAP,
@@ -355,23 +356,35 @@ export function verdictCoversRow(
 }
 
 // The transient-failure verdict for a row about to be written: the row type,
-// what failed, and the run of failed renders it extends (the prior row's run,
-// when that row recorded one, plus this render). The run is what the reconcile
-// sweep's bounded, backed-off retries key on, and what `_indexing-errors`
-// reports once it passes `TRANSIENT_RENDER_FAILURE_RETRY_CAP`. A successful
-// render replaces the row's diagnostics and so ends the run.
+// what failed, and the run of failed renders it belongs to. The run is what the
+// reconcile sweep's bounded, backed-off retries key on, and what
+// `_indexing-errors` reports once it passes `TRANSIENT_RENDER_FAILURE_RETRY_CAP`.
+// This render extends the prior row's run when it is that run's due retry
+// (`continuesTransientRenderRun`), and otherwise starts a run of its own. A
+// successful render replaces the row's diagnostics and so ends the run. The
+// job that wrote the attempt is recorded so the sweep can tell a later retry
+// job that died before writing (`transientRenderFailureJobId`).
 function stampTransientRenderFailure(
   diagnostics: Diagnostics,
   type: 'instance' | 'file',
   error: SerializedError,
-  prior: Diagnostics | null | undefined,
+  prior: { diagnostics: Diagnostics | null; attemptedAt: unknown } | undefined,
+  jobInfo: JobInfo | undefined,
 ): Diagnostics {
+  let priorRun = prior?.diagnostics?.transientRenderFailureRenders;
   return {
     ...diagnostics,
     transientRenderFailure: [type],
-    transientRenderFailureRenders:
-      (prior?.transientRenderFailureRenders ?? 0) + 1,
+    transientRenderFailureRenders: continuesTransientRenderRun(
+      { failedRenders: priorRun, attemptedAt: prior?.attemptedAt },
+      Date.now(),
+    )
+      ? Number(priorRun) + 1
+      : 1,
     transientRenderError: renderErrorSummary(error),
+    ...(jobInfo && jobInfo.jobId >= 0
+      ? { transientRenderFailureJobId: jobInfo.jobId }
+      : {}),
   };
 }
 
@@ -970,9 +983,12 @@ export class Batch {
     // transient failure (renderer hang, network blip, OOM) gets a
     // second chance — preserving the prior error row would freeze
     // the URL in the failed state until some unrelated change kicks
-    // a different job. Tombstones (`is_deleted = true`) are
-    // similarly excluded so the deletion intent flows through to
-    // `applyBatchUpdates` instead of being skipped as resumed work.
+    // a different job. A transient render failure the writer withheld
+    // reads as healthy (`has_error` false, the last good content kept),
+    // so it is excluded by its verdict for the same reason. Tombstones
+    // (`is_deleted = true`) are similarly excluded so the deletion
+    // intent flows through to `applyBatchUpdates` instead of being
+    // skipped as resumed work.
     let rows = (await this.#query([
       `SELECT url, last_modified, types FROM boxel_index_pending WHERE`,
       ...every([
@@ -980,6 +996,7 @@ export class Batch {
         ['staging_id =', param(this.#stagingId)],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         any([['has_error = false'], ['has_error IS NULL']]),
+        [`diagnostics -> 'transientRenderFailure' IS NULL`],
       ]),
     ] as Expression)) as Pick<
       BoxelIndexTable,
@@ -1016,7 +1033,9 @@ export class Batch {
   // prior attempt of this same job already rendered. Tombstones are excluded
   // so the deletion intent flows through to the swap, and error rows are
   // excluded so a transient render failure gets a second chance (the table
-  // has no `has_error` column; an error row is `error_doc IS NOT NULL`).
+  // has no `has_error` column; an error row is `error_doc IS NOT NULL`), as
+  // is a transient render failure the writer withheld, which keeps the prior
+  // render and no error and is told apart by its verdict.
   // There is no mtime to record — `args.changes` is the job's deterministic
   // seed, so a resumed row is always authoritative for this job.
   private async loadResumedPrerenderedHtmlRows(): Promise<void> {
@@ -1031,6 +1050,7 @@ export class Batch {
         ['staging_id =', param(this.#stagingId)],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         ['error_doc IS NULL'],
+        [`diagnostics -> 'transientRenderFailure' IS NULL`],
       ]),
     ] as Expression)) as Pick<PrerenderedHtmlTable, 'url'>[];
     for (let { url } of rows) {
@@ -1806,7 +1826,8 @@ export class Batch {
             diagnostics,
             baseTypeFromError(entry),
             entry.error,
-            await this.#priorRowDiagnostics(url, baseTypeFromError(entry)),
+            await this.#priorTransientAttempt(url, baseTypeFromError(entry)),
+            this.jobInfo,
           );
           this.#noteTransientRetriesExhausted(url, diagnostics);
         }
@@ -2263,13 +2284,26 @@ export class Batch {
         // stays; `_indexing-errors` lists the row. With no render to keep, the
         // failure is stored as the row's error at once (`noGoodRowToKeep`),
         // and counts like any other, so the card shows as errored.
+        //
+        // When the prerender server's own verdict (a stale shell, a gateway
+        // failure) already withholds the render, that verdict's reconcile
+        // lane owns the retries, so the transient one is not stamped beside
+        // it: one lane, one schedule and one cap per row.
         let transient = isTransientRenderError(entry.error);
-        if (transient) {
+        let withheldByServerVerdict =
+          verdictCoversRow(diagnostics, type) && hasPriorRender;
+        if (transient && !withheldByServerVerdict) {
           diagnostics = stampTransientRenderFailure(
             diagnostics,
             type,
             entry.error,
-            production?.diagnostics as Diagnostics | null,
+            production
+              ? {
+                  diagnostics: production.diagnostics as Diagnostics | null,
+                  attemptedAt: production.rendered_at,
+                }
+              : undefined,
+            this.jobInfo,
           );
           this.#noteTransientRetriesExhausted(url, diagnostics);
         }
@@ -5367,14 +5401,18 @@ export class Batch {
     return url;
   }
 
-  // The diagnostics of the row's current production row, errored or not: the
-  // run of transient failures a new one extends is on it either way.
-  async #priorRowDiagnostics(
+  // The diagnostics of the row's current production row, errored or not, and
+  // when it was written: the run of transient failures a new one may extend is
+  // on it either way, and the write time says whether the new one is that
+  // run's due retry.
+  async #priorTransientAttempt(
     url: URL,
     type: BoxelIndexTable['type'],
-  ): Promise<Diagnostics | null> {
+  ): Promise<
+    { diagnostics: Diagnostics | null; attemptedAt: unknown } | undefined
+  > {
     let [row] = (await this.#query([
-      'SELECT diagnostics FROM boxel_index WHERE',
+      'SELECT diagnostics, indexed_at FROM boxel_index WHERE',
       ...every([
         any([
           ['url =', param(url.href)],
@@ -5382,8 +5420,13 @@ export class Batch {
         ]),
         ['type =', param(type)],
       ]),
-    ] as Expression)) as { diagnostics: Diagnostics | null }[];
-    return row?.diagnostics ?? null;
+    ] as Expression)) as {
+      diagnostics: Diagnostics | null;
+      indexed_at: number | string | null;
+    }[];
+    return row
+      ? { diagnostics: row.diagnostics ?? null, attemptedAt: row.indexed_at }
+      : undefined;
   }
 
   // The render that used up a row's transient-failure retries: say so where

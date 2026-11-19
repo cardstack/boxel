@@ -1280,11 +1280,13 @@ export class IndexRunner {
           }),
         );
     error.message = message;
-    // The visit's prerender request itself failed (it aborted, timed out or
-    // lost its connection; `markVisitRequestFailure`): the failure describes
-    // the request, not the file, so it is transient (`isTransientRenderError`).
-    // The writer keeps the file's last good row instead of an error row, and a
-    // card linking the file does not inherit it.
+    // The visit's prerender request failed transiently: it aborted, met a 5xx
+    // on the prerender path or lost its connection, as the prerender client
+    // marks it (`markVisitRequestFailure`). The failure describes the request,
+    // not the file (`isTransientRenderError`), so the writer keeps the file's
+    // last good row instead of an error row, and a card linking the file does
+    // not inherit it. A request refused for its own reasons carries no marker
+    // and is the file's error.
     if (isVisitRequestFailure(err)) {
       error.visitRequestFailure = true;
     }

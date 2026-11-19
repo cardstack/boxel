@@ -470,12 +470,18 @@ export interface PrerenderMetaDiagnostics extends BuildModelDiagnostics {
   // reconcile sweep re-drives these — and this bounds that, for a gateway
   // failure that keeps recurring rather than clearing on the next render.
   gatewayFailureRenders?: number;
-  // The transient-render-failure twin: consecutive renders (or index visits)
-  // of this row that failed transiently, the failure plus each failed retry.
-  // The reconcile sweep retries the row with backoff while this is at most
-  // `TRANSIENT_RENDER_FAILURE_RETRY_CAP`; past it the row keeps its stale
-  // content and `_indexing-errors` lists it. A success ends the run.
+  // The transient-render-failure twin: the renders (or index visits) of this
+  // row in its current run of transient failures, the failure plus each of the
+  // reconcile sweep's retries that failed. The sweep retries the row with
+  // backoff while this is at most `TRANSIENT_RENDER_FAILURE_RETRY_CAP`; past it
+  // the row keeps its stale content and `_indexing-errors` lists it. A success
+  // ends the run, and a visit made for another reason starts a new one
+  // (`continuesTransientRenderRun`).
   transientRenderFailureRenders?: number;
+  // The queue job whose attempt wrote that failure. A retry job enqueued
+  // after it, which finished without rewriting the row, died; the reconcile
+  // sweep counts such a job as a failed attempt.
+  transientRenderFailureJobId?: number;
   // Per-slot wall-clock of the declared captures this visit
   // performed, keyed by slot name — the per-name decomposition of the
   // `renderFormatsMs.card.captures` aggregate, so a slow capture is
@@ -1774,6 +1780,8 @@ export {
   type RenderErrorSummary,
   renderErrorSummary,
   isTransientRenderError,
+  markVisitRequestFailure,
+  isVisitRequestFailure,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
