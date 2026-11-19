@@ -2223,8 +2223,9 @@ function readPredicate(
 }
 
 // A grant's `paths` as the policy card stores it: a list of path prefixes
-// (ADR 037). Absent, null or empty means no path limit, which is undefined
-// here. A value that isn't a list of strings, or a list holding a prefix the
+// (ADR 037). Absent, null, empty, or holding a prefix that names the realm's
+// root means no path limit, which is undefined here, as the search lowering
+// of the same specifier has none. A value that isn't a list of strings, or a list holding a prefix the
 // specifier refuses, is recorded and makes the grant `'invalid'`, so the
 // caller leaves the whole grant out: a malformed value must never read as
 // absent, which would widen the grant to every path.
@@ -2255,7 +2256,11 @@ function readGrantPaths(
     }
     return 'invalid';
   }
-  return parsed.specifier.prefixes.length > 0 ? parsed.specifier : undefined;
+  let { prefixes } = parsed.specifier;
+  return prefixes.length > 0 &&
+    !prefixes.some((prefix) => prefix.segments.length === 0)
+    ? parsed.specifier
+    : undefined;
 }
 
 // The request-context calls a policy predicate reads. The `policy` profile

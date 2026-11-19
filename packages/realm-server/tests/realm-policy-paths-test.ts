@@ -847,6 +847,21 @@ module(basename(import.meta.filename), function (hooks) {
         [],
         'a read with no path limit covers its own type',
       );
+
+      await usePolicy([
+        { targetType: POST, grants: [{ operation: 'read', paths: ['/'] }] },
+      ]);
+      let policy = await compiled();
+      assert.deepEqual(
+        reachIssues(policy),
+        [],
+        'a read under `/` covers its own type, like one with no path limit',
+      );
+      assert.strictEqual(
+        policy.rules[0].grants[0].paths,
+        undefined,
+        '`/` compiles to no path limit',
+      );
     });
   });
 
