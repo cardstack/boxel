@@ -5,6 +5,7 @@ import {
   currentURL,
   scrollTo,
   settled,
+  triggerEvent,
   triggerKeyEvent,
   visit,
   waitFor,
@@ -20,6 +21,7 @@ import {
   Deferred,
   validateHostRoutes,
   type HostRoute,
+  type HostRouteTypeInfo,
   type HostRoutingRule,
   type RawHostRoutingRule,
 } from '@cardstack/runtime-common';
@@ -44,6 +46,8 @@ import {
 import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+
+import type * as HrefToModule from '@cardstack/base/href-to';
 
 let testHostModeRealmURLWithoutRealm = testHostModeRealmURL.replace(
   /\/test\/?$/,
@@ -124,21 +128,33 @@ const DYNAMIC_ROUTE_RULES: RawHostRoutingRule[] = [
   { path: '/files/:name', card: './:name' },
   // Matches a card's own path, `/Pet/<id>`, but names no card there.
   { path: '/Pet/:pet', card: './Pets/:pet' },
+  {
+    path: '/posts/:slug',
+    type: { module: `${testHostModeRealmURL}post`, name: 'Post' },
+    match: { slug: ':slug' },
+  },
 ];
 
 function dynamicRoutes(): readonly HostRoute[] {
   let petKey = `${testHostModeRealmURL}pet/Pet`;
+  let postKey = `${testHostModeRealmURL}post/Post`;
+  let types: Record<string, HostRouteTypeInfo> = {
+    [petKey]: {
+      key: petKey,
+      types: [petKey],
+      isCardType: true,
+      fields: { name: { type: 'contains', isPrimitive: true } },
+    },
+    [postKey]: {
+      key: postKey,
+      types: [postKey],
+      isCardType: true,
+      fields: { slug: { type: 'contains', isPrimitive: true } },
+    },
+  };
   let { routes, warnings } = validateHostRoutes(DYNAMIC_ROUTE_RULES, {
     realmURL: new URL(testHostModeRealmURL),
-    lookupType: (ref) =>
-      ref.module === `${testHostModeRealmURL}pet` && ref.name === 'Pet'
-        ? {
-            key: petKey,
-            types: [petKey],
-            isCardType: true,
-            fields: { name: { type: 'contains', isPrimitive: true } },
-          }
-        : undefined,
+    lookupType: (ref) => types[`${ref.module}/${ref.name}`],
   });
   let dropped = warnings.filter((w) => w.dropped);
   if (dropped.length > 0) {
@@ -212,8 +228,11 @@ module('Acceptance | host mode tests', function (hooks) {
     cardApi = await loader.import('@cardstack/base/card-api');
     string = await loader.import('@cardstack/base/string');
 
-    let { field, contains, CardDef, Component } = cardApi;
+    let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringField } = string;
+    let { hrefTo } = await loader.import<typeof HrefToModule>(
+      '@cardstack/base/href-to',
+    );
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -386,6 +405,92 @@ module('Acceptance | host mode tests', function (hooks) {
       };
     }
 
+    class Post extends CardDef {
+      static displayName = 'Post';
+      @field slug = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Post) {
+          return this.slug;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-post-isolated={{@model.slug}}><@fields.slug /></h2>
+        </template>
+      };
+    }
+    // A page of links, one for each way a click on a link can go.
+    class LinkPage extends CardDef {
+      static displayName = 'Link Page';
+      @field post = linksTo(Post);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        realm = testHostModeRealmURL;
+        handle = (event: Event) => event.preventDefault();
+
+        <template>
+          <nav>
+            <a data-test-link='routed' href={{hrefTo @model.post}}>Routed</a>
+            <a
+              data-test-link='by-hand'
+              href='{{this.realm}}posts/trail-runner'
+            >By hand</a>
+            <a data-test-link='own-url' href='{{this.realm}}Pet/mango'>Own URL</a>
+            <a data-test-link='fixed' href='{{this.realm}}terms'>Fixed</a>
+            <a
+              data-test-link='redirect'
+              href='{{this.realm}}old-pets/mango'
+            >Redirect</a>
+            <a
+              data-test-link='missing'
+              href='{{this.realm}}posts/no-such-post'
+            >Missing</a>
+            <a
+              data-test-link='failing'
+              href='{{this.realm}}pets/unavailable'
+            >Failing</a>
+            <a
+              data-test-link='new-tab'
+              target='_blank'
+              rel='noopener noreferrer'
+              href='{{this.realm}}posts/trail-runner'
+            >New tab</a>
+            <a
+              data-test-link='download'
+              download
+              href='{{this.realm}}posts/trail-runner'
+            >Download</a>
+            <a
+              data-test-link='query'
+              href='{{this.realm}}posts/trail-runner?ref=list'
+            >Query</a>
+            <a
+              data-test-link='fragment'
+              href='{{this.realm}}posts/trail-runner#comments'
+            >Fragment</a>
+            <a data-test-link='same-page-fragment' href='#links'>Same page</a>
+            <a
+              data-test-link='file'
+              href='{{this.realm}}spring-guide.md'
+            >File</a>
+            <a
+              data-test-link='other-realm'
+              href='http://test-realm/user/other/posts/trail-runner'
+            >Other realm</a>
+            <a
+              data-test-link='other-site'
+              href='https://boxel.example/posts/trail-runner'
+            >Other site</a>
+            <a
+              data-test-link='handled'
+              href='{{this.realm}}posts/trail-runner'
+              {{on 'click' this.handle}}
+            >Handled</a>
+          </nav>
+        </template>
+      };
+    }
+
     await setupAcceptanceTestRealm({
       realmURL: testHostModeRealmURL,
       mockMatrixUtils,
@@ -395,6 +500,34 @@ module('Acceptance | host mode tests', function (hooks) {
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'pet.gts': { Pet },
+        'post.gts': { Post },
+        'link-page.gts': { LinkPage },
+        'Post/trail-runner.json': {
+          data: {
+            attributes: { slug: 'trail-runner' },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}post`,
+                name: 'Post',
+              },
+            },
+          },
+        },
+        'LinkPage/index.json': {
+          data: {
+            relationships: {
+              post: {
+                links: { self: `${testHostModeRealmURL}Post/trail-runner` },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}link-page`,
+                name: 'LinkPage',
+              },
+            },
+          },
+        },
         'whitepaper.gts': { Whitepaper },
         'view-card-demo.gts': viewCardDemoCardSource,
         'tall-stack-card.gts': { TallStackCard },
@@ -1914,6 +2047,221 @@ module('Acceptance | host mode tests', function (hooks) {
       await waitFor('[data-test-host-mode-404]');
       assert.dom('[data-test-host-mode-404]').exists();
       assert.dom('[data-card-error]').doesNotExist();
+    });
+
+    module('link clicks', function (hooks) {
+      // The links of `LinkPage`. A click the app does not take over would
+      // load another page in the test's own tab, so a listener that runs
+      // after the app's records each such click and stops it there.
+      let leftToBrowser: string[];
+      let stopNavigation = (event: MouseEvent) => {
+        if (event.defaultPrevented) {
+          return;
+        }
+        let anchor = (event.target as Element).closest('[data-test-link]');
+        leftToBrowser.push(anchor?.getAttribute('data-test-link') ?? '');
+        event.preventDefault();
+      };
+      let link = (name: string) => `[data-test-link="${name}"]`;
+      let post = `[data-test-host-mode-card="${testHostModeRealmURL}Post/trail-runner"]`;
+      let searches = () => lookups.filter((l) => l.endsWith('_search')).length;
+      let pageURL: string;
+
+      hooks.beforeEach(async function () {
+        leftToBrowser = [];
+        globalThis.addEventListener('click', stopNavigation);
+        await visit('/test/LinkPage/index');
+        // The routed link has its address once the linked post has loaded.
+        await waitFor(`${link('routed')}[href$="/posts/trail-runner"]`);
+        await settled();
+        lookups = [];
+        pageURL = window.location.href;
+      });
+
+      hooks.afterEach(function () {
+        globalThis.removeEventListener('click', stopNavigation);
+      });
+
+      test('a click on a routed link opens its card with no lookup and no page load', async function (assert) {
+        // A keyboard activation of a link arrives as a click too.
+        await click(link('routed'));
+
+        assert.dom(post).exists();
+        assert.dom('[data-test-post-isolated="trail-runner"]').exists();
+        assert.strictEqual(currentURL(), '/test/posts/trail-runner');
+        assert.strictEqual(searches(), 0, 'the link knew its card');
+        assert.deepEqual(leftToBrowser, [], 'the app took the click');
+        assert.strictEqual(window.location.href, pageURL, 'no page load');
+      });
+
+      test('the new page takes focus', async function (assert) {
+        await click(link('routed'));
+        await waitFor(post);
+        await settled();
+
+        assert.ok(
+          document.activeElement?.matches(
+            '[data-test-host-mode-content] > [data-test-host-mode-card-loaded]',
+          ),
+          'focus is on the page that was navigated to',
+        );
+      });
+
+      test('a link written by hand resolves through the routes', async function (assert) {
+        await click(link('by-hand'));
+
+        assert.dom(post).exists();
+        assert.strictEqual(currentURL(), '/test/posts/trail-runner');
+        assert.strictEqual(searches(), 1, 'the route searched once');
+        assert.deepEqual(leftToBrowser, []);
+      });
+
+      test("a link to a card's own URL opens the card", async function (assert) {
+        await click(link('own-url'));
+
+        assert
+          .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+          .exists();
+        assert.strictEqual(currentURL(), '/test/Pet/mango');
+        assert.deepEqual(leftToBrowser, []);
+      });
+
+      test('a link to a fixed route opens its card', async function (assert) {
+        await click(link('fixed'));
+
+        assert
+          .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
+          .exists();
+        assert.strictEqual(currentURL(), '/test/terms');
+        assert.deepEqual(leftToBrowser, []);
+      });
+
+      test('Back and Forward move between the pages', async function (assert) {
+        let linkPage = `[data-test-host-mode-card="${testHostModeRealmURL}LinkPage/index"]`;
+        await click(link('routed'));
+        await waitFor(post);
+
+        // Back and Forward are transitions to the URLs either side.
+        await visit('/test/LinkPage/index');
+        assert.dom(linkPage).exists('Back shows the page the link was on');
+        assert.dom(post).doesNotExist();
+
+        await visit('/test/posts/trail-runner');
+        assert.dom(post).exists('Forward shows the linked page');
+        assert.strictEqual(
+          searches(),
+          1,
+          'a URL the visitor did not follow a link to is resolved',
+        );
+      });
+
+      for (let [name, why] of [
+        ['redirect', 'a redirect route, which the server answers'],
+        ['missing', 'a path that resolves to nothing'],
+        ['failing', 'a path whose lookup fails'],
+      ]) {
+        test(`a link to ${why} is loaded by the browser`, async function (assert) {
+          let href = (document.querySelector(link(name!)) as HTMLAnchorElement)
+            .href;
+
+          await click(link(name!));
+
+          assert.strictEqual(
+            window.location.href,
+            href,
+            'the browser was sent to the address',
+          );
+          assert.strictEqual(currentURL(), '/test/LinkPage/index');
+          assert.dom('[data-test-host-mode-404]').doesNotExist();
+          assert.dom('[data-card-error]').doesNotExist();
+        });
+      }
+
+      for (let name of [
+        'new-tab',
+        'download',
+        'query',
+        'fragment',
+        'same-page-fragment',
+        'file',
+        'other-realm',
+        'other-site',
+      ]) {
+        test(`a click on the ${name} link is left to the browser`, async function (assert) {
+          await click(link(name));
+
+          assert.deepEqual(leftToBrowser, [name]);
+          assert.strictEqual(currentURL(), '/test/LinkPage/index');
+          assert.strictEqual(window.location.href, pageURL);
+          assert.strictEqual(searches(), 0);
+        });
+      }
+
+      for (let [what, options] of [
+        ['the meta key', { metaKey: true }],
+        ['the control key', { ctrlKey: true }],
+        ['the shift key', { shiftKey: true }],
+        ['the alt key', { altKey: true }],
+        ['another button', { button: 1 }],
+      ] as const) {
+        test(`a click with ${what} is left to the browser`, async function (assert) {
+          await click(link('routed'), options);
+
+          assert.deepEqual(leftToBrowser, ['routed']);
+          assert.strictEqual(currentURL(), '/test/LinkPage/index');
+        });
+      }
+
+      test('a click that the card handled is left alone', async function (assert) {
+        await click(link('handled'));
+
+        assert.deepEqual(leftToBrowser, []);
+        assert.strictEqual(currentURL(), '/test/LinkPage/index');
+        assert.strictEqual(window.location.href, pageURL);
+        assert.strictEqual(searches(), 0);
+      });
+
+      test('a link that is hovered is resolved once, and the click uses it', async function (assert) {
+        await triggerEvent(link('by-hand'), 'mouseover');
+        await waitUntil(() => searches() === 1);
+        await settled();
+        assert.strictEqual(currentURL(), '/test/LinkPage/index');
+
+        await triggerEvent(link('by-hand'), 'mouseover');
+
+        assert.strictEqual(searches(), 1, 'a second hover loads nothing');
+
+        await click(link('by-hand'));
+        assert.dom(post).exists();
+        assert.strictEqual(currentURL(), '/test/posts/trail-runner');
+        assert.strictEqual(searches(), 1, 'the click ran no lookup');
+      });
+
+      test('a link that takes focus is resolved', async function (assert) {
+        await triggerEvent(link('by-hand'), 'focusin');
+        await waitUntil(() => searches() === 1);
+
+        assert.strictEqual(currentURL(), '/test/LinkPage/index');
+      });
+
+      test('hovering a link the browser handles loads nothing', async function (assert) {
+        await triggerEvent(link('query'), 'mouseover');
+        await triggerEvent(link('other-site'), 'mouseover');
+
+        assert.strictEqual(searches(), 0);
+      });
+
+      test('a failed prefetch leaves the page as it is', async function (assert) {
+        await triggerEvent(link('failing'), 'mouseover');
+        await waitUntil(() =>
+          lookups.some((l) => l === `GET ${failingCardURL}`),
+        );
+        await settled();
+
+        assert.strictEqual(currentURL(), '/test/LinkPage/index');
+        assert.dom(link('failing')).exists();
+        assert.dom('[data-card-error]').doesNotExist();
+      });
     });
 
     test('a fixed route renders its card without running a lookup', async function (assert) {
