@@ -105,8 +105,12 @@ scopes. It is checked in one place, `resolveOAuthAccessToken`
 (`lookup.ts`), which reads the token, its grant and the user on every request
 and caches nothing, and only a resource's controller (`resource.ts`) calls
 it: the token must come in the `Authorization` header, be for that resource,
-and carry a scope that maps the route. A refusal answers 401 `invalid_token`
-whatever the reason, or 403 `insufficient_scope`. The caller it yields never
+and carry a scope that maps the route. A token the lookup refuses, or one on
+a route no scope maps, is answered 401 `invalid_token` whatever the reason; a
+scope the grant lacks, 403 `insufficient_scope`; a token sent in the query
+string or a form body, 400; a form body too large to read, 413. No
+production resource mounts the controller yet: tokens are issued for the MCP
+resource, and nothing serves `/mcp`. The caller it yields never
 carries `secureSession` and is never turned into session claims. Nothing else
 accepts one yet: a realm (`Realm.#verifySession`), `jwtMiddleware` and
 `multiRealmAuthorization` refuse it as an invalid JWT (ADR 021's remediation

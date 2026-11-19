@@ -43,10 +43,11 @@ import type { OAuthResourceDefinition } from '../lib/oauth-provider/registry.ts'
 import { registerUser } from '../synapse.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 
-// One whole connection, from an app registering to the user disconnecting
-// it, driven with known values: none of the secret values the flow hands
-// out may reach the realm server's logs or Sentry, or be stored readable in
-// any of the provider's tables (ADR 021 §1.2). Each endpoint's own test
+// Two whole connections, from an app registering to its tokens ending,
+// driven with known values: none of the secret values the flows hand out
+// may reach the request log (`realm:requests`), the provider's log channel
+// (`boxel:oauth-provider`) or Sentry, or be stored readable in any of the
+// provider's tables at any step (ADR 021 §1.2). Each endpoint's own test
 // checks its values one step at a time; this one checks them all together,
 // on every table, including any added later.
 
@@ -145,8 +146,9 @@ module(basename(import.meta.filename), function (hooks) {
     return grant_id;
   }
 
-  // Every row of every `oauth_provider_*` table, as text, found by name so
-  // that a table added later is checked without listing it here.
+  // Every row of every `oauth_provider_*` table, one line each, prefixed
+  // with its table's name, found by name so that a table added later is
+  // checked without listing it here.
   async function storedRows(): Promise<{ tables: string[]; rows: string }> {
     let tables = (
       (await db.execute(
@@ -166,6 +168,17 @@ module(basename(import.meta.filename), function (hooks) {
     return { tables, rows: rows.join('\n') };
   }
 
+  // Whether a table holds a row whose text has every one of `parts`.
+  function holds(rows: string, table: string, ...parts: string[]): boolean {
+    return rows
+      .split('\n')
+      .some(
+        (row) =>
+          row.startsWith(`${table}: `) &&
+          parts.every((part) => row.includes(part)),
+      );
+  }
+
   test('no secret of a whole connection is logged, sent to Sentry, or stored readable', async function (assert) {
     let who = await user();
     let values = {} as {
@@ -182,6 +195,13 @@ module(basename(import.meta.filename), function (hooks) {
       secondTokens: OAuthTokenResponse;
       secondGrantId: string;
     };
+    // The tables as they stood at each step, read while that step's values
+    // are still stored: ending a grant deletes its tokens, and finishing a
+    // flow takes its ticket and decision.
+    let snapshots = new Map<string, string>();
+    async function snapshot(step: string) {
+      snapshots.set(step, (await storedRows()).rows);
+    }
 
     let telemetry = await telemetryDuring(async () => {
       // The first app: registered, authorized, consented to, finished,
@@ -194,6 +214,7 @@ module(basename(import.meta.filename), function (hooks) {
         resources: [RESOURCE],
         codeChallenge: OAUTH_TEST_CODE_CHALLENGE,
       });
+      await snapshot('started');
       let details = await supertest(server!)
         .get(`/_oauth-provider/consent/${values.interactionId}`)
         .set('Host', HOST)
@@ -205,11 +226,13 @@ module(basename(import.meta.filename), function (hooks) {
         values.interactionId,
         who.session,
       );
+      await snapshot('decided');
       values.code = await finishOAuthFlow(
         browser,
         values.interactionId,
         values.ticket,
       );
+      await snapshot('finished');
       values.tokens = exchanged(
         await exchangeOAuthCode(server!, values.clientId, values.code),
       );
@@ -226,6 +249,7 @@ module(basename(import.meta.filename), function (hooks) {
         .set('Host', HOST)
         .set('Authorization', `Bearer ${values.refreshed.access_token}`);
       assert.strictEqual(call.status, 200, 'the access token makes a call');
+      await snapshot('refreshed');
       let revoked = await revokeOAuthToken(server!, {
         client_id: values.clientId,
         token: values.refreshed.refresh_token,
@@ -261,14 +285,15 @@ module(basename(import.meta.filename), function (hooks) {
         throw new Error(`no error reference: ${refused.headers.location}`);
       }
       values.errorReference = reference;
+      await snapshot('refused');
       let error = await supertest(server!)
         .get(`/_oauth-provider/error/${values.errorReference}`)
         .set('Host', HOST)
         .set('Origin', SECURE_ORIGIN);
       assert.strictEqual(error.status, 200, 'the authorize page reads it');
 
-      // The second app: connected, then disconnected by the user from
-      // Connected apps.
+      // The second app: connected, then disconnected by the user through
+      // the route Connected apps calls.
       values.secondClientId = await registerOAuthClient(server!, {
         clientName: 'Second Secrecy App',
       });
@@ -286,6 +311,7 @@ module(basename(import.meta.filename), function (hooks) {
         ),
       );
       values.secondGrantId = await grantOf(values.secondTokens.access_token);
+      await snapshot('second connected');
       let disconnected = await supertest(server!)
         .delete(`/_oauth-provider/connections/${values.secondGrantId}`)
         .set('Host', HOST)
@@ -317,6 +343,7 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     let { tables, rows } = await storedRows();
+    snapshots.set('end', rows);
     for (let table of [
       'oauth_provider_dynamic_clients',
       'oauth_provider_grants',
@@ -330,8 +357,42 @@ module(basename(import.meta.filename), function (hooks) {
       rows.includes(values.secondGrantId),
       "and the second app's grant",
     );
-    for (let [name, value] of Object.entries(secrets)) {
-      assert.false(rows.includes(value), `no row holds the ${name}`);
+    // Each snapshot holds the rows its step's values live in, so the checks
+    // below can't pass on tables already emptied.
+    let stored: [string, string, string[]][] = [
+      ['started', 'oauth_provider_objects', ['(Interaction,']],
+      ['decided', 'oauth_provider_objects', ['(ConsentTicket,']],
+      ['finished', 'oauth_provider_objects', ['(AuthorizationCode,']],
+      [
+        'refreshed',
+        'oauth_provider_tokens',
+        [',AccessToken,', `,${values.grantId},`],
+      ],
+      [
+        'refreshed',
+        'oauth_provider_tokens',
+        [',RefreshToken,', `,${values.grantId},`],
+      ],
+      ['refused', 'oauth_provider_objects', ['(ErrorReference,']],
+      [
+        'second connected',
+        'oauth_provider_tokens',
+        [',AccessToken,', `,${values.secondGrantId},`],
+      ],
+    ];
+    for (let [step, table, parts] of stored) {
+      assert.true(
+        holds(snapshots.get(step)!, table, ...parts),
+        `${step}: ${table} holds ${parts.join(' ')}`,
+      );
+    }
+    for (let [step, stepRows] of snapshots) {
+      for (let [name, value] of Object.entries(secrets)) {
+        assert.false(
+          stepRows.includes(value),
+          `${step}: no row holds the ${name}`,
+        );
+      }
     }
 
     // The capture saw the flow, so the checks above can't pass on an

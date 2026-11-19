@@ -111,9 +111,10 @@ Two of these also end the user's OAuth connections, the outside apps they
 let sign in to Boxel (ADR 021 §1.9). Revoking all sessions (the operator's
 `POST /_grafana-revoke-user-sessions`) ends every grant of the user with
 `sessions-revoked`. Changing the password does too, through its device sweep
-(below). Signing out, of a session or of the app, leaves them: a user ends one
-app's connection from Connected apps (`DELETE
-/_oauth-provider/connections/:grantId`). An ended grant doesn't come back by
+(below). Signing out, of a session or of the app, leaves them. One app's
+connection is ended through `DELETE /_oauth-provider/connections/:grantId`,
+which the secure origin's Connected apps page will call; the page isn't built
+yet, so for now an operator ends one by hand. An ended grant doesn't come back by
 itself; the app's next refresh fails and the user approves it again. The
 `oauth-provider` skill covers the grants.
 
