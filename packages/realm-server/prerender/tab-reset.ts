@@ -1,5 +1,6 @@
 import { logger } from '@cardstack/runtime-common';
 import type { Page } from 'puppeteer';
+import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
 
 const log = logger('prerenderer');
 
@@ -36,7 +37,20 @@ const log = logger('prerenderer');
 // leave the render route. Either way the tab is not fit to be handed to the
 // next render, and the caller retires it.
 
-export const DEFAULT_POST_RENDER_RESET_MS = 3000;
+// The visit waits out the reset before it answers, and a render queued for
+// the same tab waits behind it, so the budget is paid in full on every
+// render whose card holds its tab's main thread: the case the reset exists
+// for. A healthy reset is one route transition and one component teardown,
+// well inside a second; the budget leaves headroom over that for a loaded
+// machine, where a false timeout costs the realm a warm tab (its replacement
+// keeps the BrowserContext and its HTTP cache). `postRenderResetMs` in a
+// row's diagnostics records what each reset actually took.
+export const DEFAULT_POST_RENDER_RESET_MS = 1000;
+// Floor for an operator-supplied budget, as for the reuse probe's
+// (`MIN_TAB_HEALTH_PROBE_MS` in `page-pool.ts`): below it the budget is
+// under the CDP round trip and transition it is timing, so every reset
+// fails and the pool retires its whole warm fleet.
+const MIN_POST_RENDER_RESET_MS = 250;
 
 export type TabResetOutcome =
   | { status: 'reset'; elapsedMs: number }
@@ -49,8 +63,11 @@ export type TabResetOutcome =
   | { status: 'timed-out'; elapsedMs: number };
 
 // `PRERENDER_POST_RENDER_RESET_MS`: the budget for the reset. `0` turns the
-// reset off (the kill switch); anything else that isn't a positive integer
-// falls back to the default.
+// reset off (the kill switch). Anything else outside
+// [`MIN_POST_RENDER_RESET_MS`, render timeout) falls back to the default
+// rather than to the boundary, as the reuse probe's budget does: below the
+// floor every reset fails, and at or above the render timeout a stuck reset
+// holds the tab longer than the render it follows was allowed to take.
 export function parsePostRenderResetMs(): number {
   let raw = process.env.PRERENDER_POST_RENDER_RESET_MS;
   if (raw === undefined || raw.trim() === '') {
@@ -60,6 +77,15 @@ export function parsePostRenderResetMs(): number {
   if (!Number.isInteger(n) || n < 0) {
     log.warn(
       `PRERENDER_POST_RENDER_RESET_MS=${raw} invalid (must be an integer >= 0; 0 disables the post-render reset); using ${DEFAULT_POST_RENDER_RESET_MS}`,
+    );
+    return DEFAULT_POST_RENDER_RESET_MS;
+  }
+  if (n === 0) {
+    return 0;
+  }
+  if (n < MIN_POST_RENDER_RESET_MS || n >= prerenderRenderTimeoutMs) {
+    log.warn(
+      `PRERENDER_POST_RENDER_RESET_MS=${n} out of range (must be 0, or between ${MIN_POST_RENDER_RESET_MS} and ${prerenderRenderTimeoutMs - 1}ms); using ${DEFAULT_POST_RENDER_RESET_MS}`,
     );
     return DEFAULT_POST_RENDER_RESET_MS;
   }

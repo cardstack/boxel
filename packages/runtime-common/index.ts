@@ -644,6 +644,13 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
   renderElapsedMs?: number;
   // Sum of launch + render elapsed (server-observed).
   totalElapsedMs?: number;
+  // How long the visit, after its render, waited for its tab to go back to
+  // the host's standby route before answering. Kept out of
+  // `renderElapsedMs`; `totalElapsedMs` includes it. Near the budget
+  // (`PRERENDER_POST_RENDER_RESET_MS`) means the reset didn't land and the
+  // tab was retired: the card was still holding the tab's main thread after
+  // its render. Absent when no reset ran.
+  postRenderResetMs?: number;
   // Capture renders only: the components of `renderElapsedMs`, measured
   // inside `runCapture`. Navigation (route transition +
   // path settle), the prerender settle wait, the image/font paint wait, and

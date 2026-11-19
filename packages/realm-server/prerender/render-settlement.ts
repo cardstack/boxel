@@ -229,6 +229,7 @@ export function decorateRenderErrorsWithTimings(
     launchMs: number;
     renderMs: number;
     waits: RenderTimeoutDiagnostics['waits'];
+    resetMs?: number;
   },
   totalMs: number,
   meta: RenderSettlementMeta = {},
@@ -273,6 +274,9 @@ export function decorateRenderErrorsWithTimings(
     waits: timings.waits,
     renderElapsedMs: timings.renderMs,
     totalElapsedMs: totalMs,
+    ...(timings.resetMs !== undefined
+      ? { postRenderResetMs: timings.resetMs }
+      : {}),
     ...unattributedRenderMs(existingMeta.diagnostics, timings.renderMs),
     ...(affinitySnapshot ? { affinitySnapshot } : {}),
     ...(priority !== undefined ? { priority } : {}),

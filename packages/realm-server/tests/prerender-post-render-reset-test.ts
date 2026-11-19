@@ -6,7 +6,12 @@ import { rri } from '@cardstack/runtime-common';
 import type { Page } from 'puppeteer';
 import type { Prerenderer } from '../prerender/index.ts';
 import { PagePool } from '../prerender/page-pool.ts';
-import { resetTabToStandby } from '../prerender/tab-reset.ts';
+import {
+  DEFAULT_POST_RENDER_RESET_MS,
+  parsePostRenderResetMs,
+  resetTabToStandby,
+} from '../prerender/tab-reset.ts';
+import { prerenderRenderTimeoutMs } from '../prerender/prerender-constants.ts';
 import {
   setupPermissionedRealmsCached,
   testCreatePrerenderAuth,
@@ -185,6 +190,54 @@ module(basename(import.meta.filename), function () {
         0,
         'an already-cancelled caller does not touch the page',
       );
+    });
+  });
+
+  module('parsePostRenderResetMs', function (hooks) {
+    let saved: string | undefined;
+    hooks.beforeEach(() => {
+      saved = process.env.PRERENDER_POST_RENDER_RESET_MS;
+    });
+    hooks.afterEach(() => {
+      if (saved === undefined) {
+        delete process.env.PRERENDER_POST_RENDER_RESET_MS;
+      } else {
+        process.env.PRERENDER_POST_RENDER_RESET_MS = saved;
+      }
+    });
+
+    let parse = (raw: string | undefined) => {
+      if (raw === undefined) {
+        delete process.env.PRERENDER_POST_RENDER_RESET_MS;
+      } else {
+        process.env.PRERENDER_POST_RENDER_RESET_MS = raw;
+      }
+      return parsePostRenderResetMs();
+    };
+
+    test('an unset or blank budget takes the default', async function (assert) {
+      assert.strictEqual(parse(undefined), DEFAULT_POST_RENDER_RESET_MS);
+      assert.strictEqual(parse(''), DEFAULT_POST_RENDER_RESET_MS);
+      assert.strictEqual(parse('  '), DEFAULT_POST_RENDER_RESET_MS);
+    });
+
+    test('0 turns the reset off, and an in-range budget is honoured', async function (assert) {
+      assert.strictEqual(parse('0'), 0);
+      assert.strictEqual(parse('250'), 250);
+      assert.strictEqual(parse('2000'), 2000);
+    });
+
+    test('a budget no reset could meet, or one past the render timeout, takes the default', async function (assert) {
+      for (let raw of [
+        '1',
+        '249',
+        String(prerenderRenderTimeoutMs),
+        '-5',
+        '1.5',
+        'soon',
+      ]) {
+        assert.strictEqual(parse(raw), DEFAULT_POST_RENDER_RESET_MS, raw);
+      }
     });
   });
 
@@ -417,13 +470,23 @@ module(basename(import.meta.filename), function () {
     }
 
     test("a captured card's loop stops before its tab goes back to the pool", async function (assert) {
-      let { response, pool } = await prerenderer.prerenderCapture({
+      let { response, pool, timings } = await prerenderer.prerenderCapture({
         realm: realmURL,
         url: `${realmURL}ticker-card`,
         auth: auth(),
         format: 'isolated',
       });
       assert.strictEqual(response.status, 'ready', 'the capture succeeded');
+      assert.strictEqual(
+        typeof timings.resetMs,
+        'number',
+        'the capture reports the reset it waited out',
+      );
+      assert.strictEqual(
+        response.meta?.diagnostics?.postRenderResetMs,
+        timings.resetMs,
+        "the reset's time rides on the response's diagnostics",
+      );
       let page = pagesById.get(pool.pageId);
       assert.ok(page, 'the capture tab was recorded');
 
@@ -482,6 +545,16 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         first.response.serialized?.data.attributes?.name,
         'Maple',
+      );
+      let resetMs = first.timings.resetMs;
+      assert.strictEqual(
+        typeof resetMs,
+        'number',
+        'the visit reports the reset it waited out',
+      );
+      assert.true(
+        resetMs! < DEFAULT_POST_RENDER_RESET_MS,
+        `the reset landed inside its budget (${resetMs}ms)`,
       );
       let page = pagesById.get(first.pool.pageId);
       assert.true(

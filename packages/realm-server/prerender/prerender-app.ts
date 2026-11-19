@@ -1046,8 +1046,10 @@ export function buildPrerenderApp(options: {
           .join(', ');
         let poolFlagSuffix =
           poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
+        let resetSuffix =
+          timings.resetMs !== undefined ? ` reset=${timings.resetMs}ms` : '';
         log.info(
-          '%s %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms, tabProbe=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+          '%s %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms, tabProbe=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s%s',
           options.infoLabel,
           parsed.logTarget,
           requestId,
@@ -1063,6 +1065,7 @@ export function buildPrerenderApp(options: {
           pool.affinityType,
           pool.affinityValue,
           poolFlagSuffix,
+          resetSuffix,
         );
         decorateRenderErrorDiagnostics(response, requestId);
         // Timings are already embedded inside `response.meta.diagnostics`
@@ -1076,6 +1079,9 @@ export function buildPrerenderApp(options: {
           renderMs: timings.renderMs,
           totalMs,
           waits: timings.waits,
+          ...(timings.resetMs !== undefined
+            ? { resetMs: timings.resetMs }
+            : {}),
         };
         ctxt.status = 201;
         ctxt.set('Content-Type', 'application/vnd.api+json');
@@ -1610,8 +1616,10 @@ export function buildPrerenderApp(options: {
       // the renders that succeed, not only on the one that tips the task over.
       let memoryText = formatVisitMemory(memory);
       let memorySuffix = memoryText.length > 0 ? ` ${memoryText}` : '';
+      let resetSuffix =
+        timings.resetMs !== undefined ? ` reset=${timings.resetMs}ms` : '';
       log.info(
-        'visit prerendered %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms, tabProbe=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s%s',
+        'visit prerendered %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms, tabProbe=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s%s%s',
         url,
         requestId,
         priority ?? 0,
@@ -1626,6 +1634,7 @@ export function buildPrerenderApp(options: {
         pool.affinityType,
         pool.affinityValue,
         poolFlagSuffix,
+        resetSuffix,
         memorySuffix,
       );
       // A gateway/network failure is a statement about the network, not the
@@ -1660,6 +1669,7 @@ export function buildPrerenderApp(options: {
         renderMs: timings.renderMs,
         totalMs,
         waits: timings.waits,
+        ...(timings.resetMs !== undefined ? { resetMs: timings.resetMs } : {}),
       };
       ctxt.status = 201;
       ctxt.set('Content-Type', 'application/vnd.api+json');
