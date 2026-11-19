@@ -7,6 +7,20 @@ import { PgAdapter } from '@cardstack/postgres';
 import { Deferred, param } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
 
+// Wait until a hold reaches `opened`. A hold that settles first fails the
+// test with its own error rather than leaving it to the suite's timeout.
+async function untilOpened(
+  opened: Deferred<void>,
+  hold: Promise<unknown>,
+): Promise<void> {
+  await Promise.race([
+    opened.promise,
+    hold.then(() => {
+      throw new Error('the hold finished before it opened');
+    }),
+  ]);
+}
+
 module(basename(import.meta.filename), function () {
   module('PgAdapter.withTransaction', function (hooks) {
     let dbAdapter: PgAdapter;
@@ -251,7 +265,7 @@ module(basename(import.meta.filename), function () {
           await gate;
           return await query(['SELECT 2']);
         });
-        await opened.promise;
+        await untilOpened(opened, hold);
         let waiter = adapter.execute('SELECT 1');
         await new Promise((r) => setTimeout(r, 20));
         assert.deepEqual(idle(adapter), { inUse: 1, holds: 1, waiting: 1 });
@@ -307,7 +321,7 @@ module(basename(import.meta.filename), function () {
           nestedRan = true;
           return await query(['SELECT 3']);
         });
-        await opened.promise;
+        await untilOpened(opened, hold);
         await new Promise((r) => setTimeout(r, 20));
         assert.deepEqual(idle(adapter), { inUse: 1, holds: 1, waiting: 1 });
 
@@ -352,7 +366,7 @@ module(basename(import.meta.filename), function () {
           order.push('dead hold');
           return await query(['SELECT 3']);
         });
-        await opened.promise;
+        await untilOpened(opened, hold);
         let callers = [1, 2].map((n) =>
           adapter.execute('SELECT 1').then(() => {
             order.push(`caller ${n}`);
@@ -400,7 +414,7 @@ module(basename(import.meta.filename), function () {
         return await query(['SELECT 2']);
       });
       try {
-        await opened.promise;
+        await untilOpened(opened, hold);
         assert.strictEqual(dbAdapter.connectionStats.holds, holdsBefore + 1);
 
         let deadline = Date.now() + 5_000;
