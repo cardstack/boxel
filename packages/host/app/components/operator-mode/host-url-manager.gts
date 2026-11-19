@@ -532,9 +532,11 @@ export default class HostURLManager extends Component<Signature> {
               {{/if}}
             {{/if}}
             <p class='muted' data-test-visibility-note>
-              Visitors who are not signed in can read and run what the realm’s
-              permissions and policy let them. The pages show what you can read,
-              including cards from other realms.
+              Visitors who are not signed in can read the cards and run the
+              actions that this realm’s permissions and policy open to everyone.
+              A page they may read is served as the realm’s owner rendered it,
+              so it can include content from other realms that the owner can
+              read and visitors can’t.
             </p>
           </section>
 

@@ -177,7 +177,9 @@ module('Acceptance | host URL manager', function (hooks) {
     assert.dom('[data-test-unlisted-link-checkbox]').doesNotExist();
     assert.dom('[data-test-no-host-urls]').exists();
     assert.dom('[data-test-home-page-viewable]').exists();
-    assert.dom('[data-test-visibility-note]').containsText('other realms');
+    assert
+      .dom('[data-test-visibility-note]')
+      .containsText('the realm’s owner rendered it');
   });
 
   test('mounts the realm in the Boxel Space, and lists the host URL as canonical', async function (assert) {
