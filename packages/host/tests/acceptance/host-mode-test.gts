@@ -19,6 +19,7 @@ import { module, test } from 'qunit';
 
 import {
   Deferred,
+  hostRouteAddress,
   validateHostRoutes,
   type HostRoute,
   type HostRouteTypeInfo,
@@ -47,6 +48,8 @@ import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 import type * as HrefToModule from '@cardstack/base/href-to';
 
 let testHostModeRealmURLWithoutRealm = testHostModeRealmURL.replace(
@@ -194,6 +197,13 @@ class StubMalformedDynamicRoutingHostModeService extends StubDynamicRoutingHostM
 }
 
 module('Acceptance | host mode tests', function (hooks) {
+  // The `hrefTo` helper of the loader the app renders with, which the link
+  // page's routed link calls. Set by the tests that use that page.
+  let linkHrefTo: (typeof HrefToModule)['hrefTo'] | undefined;
+  hooks.afterEach(function () {
+    linkHrefTo = undefined;
+  });
+
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -232,9 +242,6 @@ module('Acceptance | host mode tests', function (hooks) {
 
     let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringField } = string;
-    let { hrefTo } = await loader.import<typeof HrefToModule>(
-      '@cardstack/base/href-to',
-    );
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -429,10 +436,15 @@ module('Acceptance | host mode tests', function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         realm = testHostModeRealmURL;
         handle = (event: Event) => event.preventDefault();
+        routedHref = (card: CardDefType | null | undefined) =>
+          linkHrefTo?.(card);
 
         <template>
           <nav>
-            <a data-test-link='routed' href={{hrefTo @model.post}}>Routed</a>
+            <a
+              data-test-link='routed'
+              href={{this.routedHref @model.post}}
+            >Routed</a>
             <a
               data-test-link='by-hand'
               href='{{this.realm}}posts/trail-runner'
@@ -2072,18 +2084,40 @@ module('Acceptance | host mode tests', function (hooks) {
       hooks.beforeEach(async function () {
         leftToBrowser = [];
         globalThis.addEventListener('click', stopNavigation);
+        let loader = getService('loader-service').loader;
+        ({ hrefTo: linkHrefTo } = await loader.import<typeof HrefToModule>(
+          '@cardstack/base/href-to',
+        ));
         await visit('/test/LinkPage/index');
         // The routed link has its address once the linked post has loaded.
         try {
           await waitFor(`${link('routed')}[href$="/posts/trail-runner"]`);
-        } catch (e) {
+        } catch {
+          // Says why the reverse lookup gave the post no address.
           let routed = document.querySelector(link('routed'));
+          let card = await getService('store').get(
+            `${testHostModeRealmURL}Post/trail-runner`,
+          );
+          let api = await loader.import<typeof CardAPI>(
+            '@cardstack/base/card-api',
+          );
+          let result = hostRouteAddress(
+            { kind: 'cards', cards: [card as CardDefType] },
+            {
+              routes: dynamicRoutes(),
+              realmURL: new URL(testHostModeRealmURL),
+              api: {
+                ...api,
+                virtualNetwork: getService('network').virtualNetwork,
+              },
+            },
+          );
           throw new Error(
             `the routed link has no routed address: href=${routed?.getAttribute(
               'href',
-            )} page=${document
-              .querySelector('[data-test-host-mode-content]')
-              ?.outerHTML.slice(0, 1500)}`,
+            )} lookup=${JSON.stringify(result, (key, value) =>
+              key === 'route' ? value?.fullPath : value,
+            )}`,
           );
         }
         await settled();
