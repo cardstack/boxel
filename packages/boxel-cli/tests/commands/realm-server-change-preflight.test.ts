@@ -97,6 +97,22 @@ describe('boxel realm-server changes refuse missing input before asking for the 
     expect(resolveRealmSecretSeed).not.toHaveBeenCalled();
   });
 
+  it('keys delete --kind oauth-client without --yes, when stdin is not a terminal', async () => {
+    let errors = await run([
+      'keys',
+      'delete',
+      ...SERVER,
+      '--kind',
+      'oauth-client',
+      '--name',
+      'a-client',
+      '--note',
+      'a note',
+    ]);
+    expect(errors).toContain('Pass --yes to delete a platform client');
+    expect(resolveRealmSecretSeed).not.toHaveBeenCalled();
+  });
+
   it('keys replace with an empty --note', async () => {
     let errors = await run([
       'keys',

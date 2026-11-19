@@ -296,6 +296,26 @@ export async function deletePlatformClient(
  * back. So the command shows the client and asks first, unless `--yes` says
  * not to; without a terminal to ask in, `--yes` is required.
  */
+/**
+ * Refuses a platform client delete that `confirmPlatformClientDelete` could
+ * not ask to confirm: no `--yes`, and `--json` or no terminal to ask on.
+ */
+export function checkConfirmSource({
+  yes,
+  json,
+  isTTY = Boolean(process.stdin.isTTY),
+}: {
+  yes?: boolean;
+  json?: boolean;
+  isTTY?: boolean;
+}): void {
+  if (!yes && (json || !isTTY)) {
+    throw new Error(
+      'Pass --yes to delete a platform client without a terminal to confirm in',
+    );
+  }
+}
+
 export async function confirmPlatformClientDelete(
   options: SystemKeysOptions,
   name: string,
@@ -312,13 +332,9 @@ export async function confirmPlatformClientDelete(
     confirm?: (question: string) => Promise<boolean>;
   },
 ): Promise<void> {
+  checkConfirmSource({ yes, json, isTTY });
   if (yes) {
     return;
-  }
-  if (json || !isTTY) {
-    throw new Error(
-      'Pass --yes to delete a platform client without a terminal to confirm in',
-    );
   }
   let shown;
   try {
@@ -849,6 +865,7 @@ export function registerKeysCommand(realmServer: Command): void {
       run(async () => {
         if (kindOf(options) === 'oauth-client') {
           let name = clientName(options);
+          checkConfirmSource(options);
           checkChangeSources(options, { value: false });
           let seed = await seedOptions(options);
           await confirmPlatformClientDelete(seed, name, options);
