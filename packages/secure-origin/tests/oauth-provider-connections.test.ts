@@ -77,6 +77,45 @@ describe("the Connected apps page's reading of the connection list", () => {
     assert.equal(read?.renewing, false);
   });
 
+  test('keeps the mark on a phrase standing in for a name, and drops one it does not know', () => {
+    let read = readConnections({
+      connections: [
+        connection({
+          id: 'loopback',
+          app: {
+            kind: 'dynamic',
+            shown: 'an app on this computer',
+            verified: false,
+            standIn: 'loopback',
+          },
+        }),
+        connection({
+          id: 'unknown',
+          app: {
+            kind: 'dynamic',
+            shown: 'an unknown app',
+            verified: false,
+            standIn: 'unknown',
+          },
+        }),
+        connection({
+          id: 'odd',
+          app: {
+            kind: 'dynamic',
+            shown: 'example.com',
+            verified: false,
+            standIn: 'elsewhere',
+          },
+        }),
+      ],
+    });
+    assert.deepEqual(
+      read.map((c) => c.app.standIn),
+      ['loopback', 'unknown', undefined],
+    );
+    assert.ok(!('standIn' in read[2]!.app));
+  });
+
   test("leaves out a connection it can't read, and keeps the rest", () => {
     let broken = [
       connection({ id: '' }),

@@ -57,20 +57,19 @@ const DISCONNECT_FAILED =
 const TICK_MS = 60 * 1000;
 
 // The app as a sentence names it: the name Boxel can check, or the name an
-// app that registered itself gave, quoted. An app that registered itself
-// without a name has none to put in a sentence, only a description of where
-// it returns to ("an app on this computer"), so a sentence leaves it out.
+// app that registered itself gave, quoted. Where the server has only a phrase
+// standing in for a name ("an app on this computer"), a sentence leaves it
+// out; the server marks those, so the page never compares the phrase.
 function nameInSentence(app: AppName): string | undefined {
-  if (app.kind === 'dynamic' && !app.claimedName) {
-    return undefined;
+  if (app.kind === 'dynamic' && app.claimedName) {
+    return appNameShown(app);
   }
-  return appNameShown(app);
+  return app.standIn ? undefined : app.shown;
 }
 
-// The app as its group's heading names it. An app that registered itself
-// without a name is described rather than named ("an app on this computer"),
-// and a heading starts that description with a capital; a name, such as a
-// domain, is shown as it is.
+// The app as its group's heading names it. A phrase standing in for a name
+// starts with a capital in a heading; a name, such as a domain, is shown as
+// it is.
 function appHeading(app: AppName): string {
   let name = appNameShown(app);
   return nameInSentence(app) === undefined
@@ -281,7 +280,7 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
                               @connection={{connection}}
                               @headingId={{this.confirmId connection}}
                               @disconnecting={{this.state.disconnecting}}
-                              @error={{this.state.disconnectError}}
+                              @error={{this.errorFor connection}}
                               @onCancel={{this.cancel}}
                               @onDisconnect={{fn this.disconnect connection}}
                             />
@@ -414,7 +413,9 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
     // The connection whose Disconnect is being confirmed.
     confirming: undefined as string | undefined,
     disconnecting: false,
-    disconnectError: undefined as string | undefined,
+    // A disconnect that failed, with the connection it belongs to, so it is
+    // only ever shown under that one.
+    disconnectError: undefined as { id: string; text: string } | undefined,
     // What the page last told a screen reader, politely.
     announcement: '',
     now: new Date(),
@@ -433,7 +434,10 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
     super(owner, args);
     this.load();
     this.tick = setInterval(() => {
+      let previous = this.state.connections;
+      let before = this.shownIds();
       this.state.now = new Date();
+      this.closeIfGone(previous, before);
     }, TICK_MS);
     document.addEventListener('visibilitychange', this.reread);
     window.addEventListener('focus', this.reread);
@@ -450,6 +454,13 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
     let now = this.state.now;
     return groupByApp(
       this.state.connections.filter((connection) => !hasEnded(connection, now)),
+    );
+  }
+
+  // The connections the page shows, in the order it shows them.
+  private shownIds(): string[] {
+    return this.groups.flatMap((group) =>
+      group.connections.map((connection) => connection.id),
     );
   }
 
@@ -478,10 +489,15 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
   private isUnverified = (group: AppGroup): boolean => !group.app.verified;
 
   // For an app that named itself, where it returns to: the address Boxel can
-  // check, or "an app on this computer".
+  // check, or "an app on this computer". With no redirect to go by there's
+  // nothing to say.
   private returnsTo = (group: AppGroup): string | undefined => {
     let { app } = group;
-    if (app.kind !== 'dynamic' || !app.claimedName) {
+    if (
+      app.kind !== 'dynamic' ||
+      !app.claimedName ||
+      app.standIn === 'unknown'
+    ) {
       return undefined;
     }
     return `Returns to ${app.shown}`;
@@ -498,6 +514,11 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
   private isConfirming = (connection: Connection) =>
     this.state.confirming === connection.id;
 
+  private errorFor = (connection: Connection) =>
+    this.state.disconnectError?.id === connection.id
+      ? this.state.disconnectError.text
+      : undefined;
+
   private async load() {
     let read = ++this.reads;
     try {
@@ -505,12 +526,15 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
       if (read !== this.reads) {
         return;
       }
+      let previous = this.state.connections;
+      let before = this.shownIds();
       this.state.connections = connections;
       this.state.now = new Date();
       if (!this.loaded) {
         this.loaded = true;
         this.args.api.visit.loaded();
       }
+      this.closeIfGone(previous, before);
     } catch (e) {
       if (read !== this.reads) {
         return;
@@ -546,7 +570,11 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
     this.load();
   };
 
+  // One disconnect at a time: while one is under way, no other opens.
   private confirm = (connection: Connection) => {
+    if (this.state.disconnecting) {
+      return;
+    }
     this.state.disconnectError = undefined;
     this.state.confirming = connection.id;
   };
@@ -563,60 +591,94 @@ class ConnectedApps extends Component<ConnectedAppsSignature> {
     }
   };
 
+  // The disconnect is under way only until the server answers it; the list
+  // is read again after that, without holding the confirmation busy.
   private disconnect = async (connection: Connection) => {
     if (this.state.disconnecting) {
       return;
     }
-    let order = this.groups.flatMap((group) =>
-      group.connections.map((c) => c.id),
-    );
-    let at = order.indexOf(connection.id);
-    let neighbours = [...order.slice(at + 1), ...order.slice(0, at).reverse()];
+    let before = this.shownIds();
     this.state.disconnecting = true;
     this.state.disconnectError = undefined;
-    let done = false;
     try {
       await disconnectConnection(this.args.api.config, connection.id);
-      done = true;
     } catch (e) {
+      this.state.disconnecting = false;
       if (isSignedOut(e)) {
-        this.state.disconnecting = false;
         this.args.api.signedOut();
         return;
       }
-      this.state.disconnectError = DISCONNECT_FAILED;
+      this.state.disconnectError = {
+        id: connection.id,
+        text: DISCONNECT_FAILED,
+      };
+      // If the list no longer has the connection, it closes as one that has
+      // ended; otherwise it stays, with the error, to try again.
+      await this.load();
+      return;
     }
-    if (done) {
-      // Gone at once, whatever the list read next says.
-      this.state.connections = this.state.connections.filter(
-        (c) => c.id !== connection.id,
-      );
-      this.state.confirming = undefined;
-      let name = nameInSentence(connection.app);
-      this.announce(
-        name
-          ? `Disconnected the ${name} connection.`
-          : 'Disconnected the connection.',
-      );
-    }
-    await this.load();
     this.state.disconnecting = false;
-    if (done) {
-      let next = neighbours.find((id) =>
-        this.state.connections.some((c) => c.id === id),
-      );
-      this.focusAfterRemoval(next);
-    }
+    // Gone at once, whatever the list read next says.
+    this.state.connections = this.state.connections.filter(
+      (c) => c.id !== connection.id,
+    );
+    let name = nameInSentence(connection.app);
+    this.removed(
+      connection.id,
+      before,
+      name
+        ? `Disconnected the ${name} connection.`
+        : 'Disconnected the connection.',
+    );
+    await this.load();
   };
+
+  // When the connection being confirmed is no longer shown, because it ended
+  // some other way or the server doesn't have it, its confirmation closes and
+  // the page says the connection has ended.
+  private closeIfGone(previous: Connection[], before: string[]) {
+    let id = this.state.confirming;
+    if (id === undefined || this.shownIds().includes(id)) {
+      return;
+    }
+    let gone = previous.find((c) => c.id === id);
+    let name = gone ? nameInSentence(gone.app) : undefined;
+    this.removed(
+      id,
+      before,
+      name ? `The ${name} connection has ended.` : 'The connection has ended.',
+    );
+  }
+
+  // A connection the page showed is gone: its confirmation closes, the page
+  // says what happened, and focus moves on from it.
+  private removed(id: string, before: string[], message: string) {
+    this.state.confirming = undefined;
+    this.state.disconnectError = undefined;
+    this.announce(message);
+    let shown = this.shownIds();
+    let at = before.indexOf(id);
+    let neighbours =
+      at === -1
+        ? []
+        : [...before.slice(at + 1), ...before.slice(0, at).reverse()];
+    this.focusAfterRemoval(neighbours.find((n) => shown.includes(n)));
+  }
 
   private announce(text: string) {
     this.state.announcement = `${text}${++this.announcements % 2 ? '' : '\u00a0'}`;
   }
 
   // Focus goes to the Disconnect of the connection that took the removed
-  // one's place, or of the one before it, or to the empty list.
+  // one's place, or of the one before it, or to the empty list. It moves only
+  // when it went with the removed connection, never from where the user has
+  // since taken it.
   private focusAfterRemoval(next: string | undefined) {
     schedule('afterRender', () => {
+      let active = document.activeElement;
+      if (active && active !== document.body && active.isConnected) {
+        return;
+      }
       let target = next
         ? document.querySelector<HTMLElement>(
             `[data-disconnect-for="${CSS.escape(next)}"]`,

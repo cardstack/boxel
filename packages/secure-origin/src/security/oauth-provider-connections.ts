@@ -33,6 +33,7 @@ export interface Connection {
 }
 
 const KINDS = new Set(['pre-registered', 'metadata-document', 'dynamic']);
+const STAND_INS = new Set(['loopback', 'unknown']);
 
 function malformed(): SecureSessionError {
   return new SecureSessionError(
@@ -65,11 +66,17 @@ function readApp(value: unknown): AppName | undefined {
     return undefined;
   }
   let claimedName = text(app.claimedName);
+  let standIn = text(app.standIn);
   return {
     kind: kind as AppName['kind'],
     shown,
     verified: app.verified === true,
     ...(claimedName ? { claimedName } : {}),
+    // A stand-in the page doesn't know is dropped, so `shown` reads as a
+    // name, as it would from a server that sends none.
+    ...(standIn && STAND_INS.has(standIn)
+      ? { standIn: standIn as NonNullable<AppName['standIn']> }
+      : {}),
   };
 }
 

@@ -70,8 +70,14 @@ const AGENT = {
   shown: 'an app on this computer',
   verified: false,
   claimedName: AGENT_NAME,
+  standIn: 'loopback',
 };
-const UNKNOWN = { kind: 'dynamic', shown: 'an unknown app', verified: false };
+const UNKNOWN = {
+  kind: 'dynamic',
+  shown: 'an unknown app',
+  verified: false,
+  standIn: 'unknown',
+};
 
 function iso(offset: number) {
   return new Date(Date.now() + offset).toISOString();
@@ -387,6 +393,7 @@ module('Integration | connected apps', function (hooks) {
         kind: 'dynamic',
         shown: 'an app on this computer',
         verified: false,
+        standIn: 'loopback',
       }),
     ]);
     await open();
@@ -398,6 +405,30 @@ module('Integration | connected apps', function (hooks) {
       .dom('[data-test-connected-apps-confirm]')
       .includesText('Disconnect this connection?')
       .includesText('To use it again, connect it from the app.');
+  });
+
+  test('an app that registered itself without a name, returning to a website, is named by its domain', async function (assert) {
+    signedIn();
+    serveList([
+      connection('grant-site', {
+        kind: 'dynamic',
+        shown: 'example.com',
+        verified: false,
+      }),
+    ]);
+    serveDisconnect('grant-site');
+    await open();
+    assert.dom('[data-test-connected-app-name]').hasText('example.com');
+    assert.dom('[data-test-connected-app-unverified]').exists();
+    await click('[data-test-connection-disconnect]');
+    assert
+      .dom('[data-test-connected-apps-confirm]')
+      .includesText('Disconnect this example.com connection?')
+      .includesText('To use it again, connect it from example.com.');
+    await click('[data-test-connected-apps-confirm-disconnect]');
+    assert
+      .dom('[data-test-connected-apps-announcement]')
+      .hasText('Disconnected the example.com connection.');
   });
 
   test("each Disconnect is described by its connection's details", async function (assert) {
@@ -535,6 +566,128 @@ module('Integration | connected apps', function (hooks) {
     await click('[data-test-connected-apps-confirm-disconnect]');
     assert.dom(row('grant-chatgpt')).exists('the list still has it');
     assert.dom('[data-test-connected-apps-disconnect-error]').exists();
+  });
+
+  test('a refused disconnect of a connection the list no longer has closes it, and says it has ended', async function (assert) {
+    signedIn();
+    serveList(everyApp());
+    serveDisconnect('grant-chatgpt', {
+      status: 404,
+      body: { error: 'not-found' },
+    });
+    await open();
+    // It ended some other way after the page read the list.
+    listed = listed.filter((c) => c.id !== 'grant-chatgpt');
+    await click(`${row('grant-chatgpt')} [data-test-connection-disconnect]`);
+    await click('[data-test-connected-apps-confirm-disconnect]');
+    assert.dom(row('grant-chatgpt')).doesNotExist();
+    assert.dom('[data-test-connected-apps-confirm]').doesNotExist();
+    assert.dom('[data-test-connected-apps-disconnect-error]').doesNotExist();
+    assert
+      .dom('[data-test-connected-apps-announcement]')
+      .hasText('The chatgpt.com connection has ended.');
+    assert
+      .dom(`${row('grant-claude-old')} [data-test-connection-disconnect]`)
+      .isFocused('focus moves on, as after a disconnect');
+
+    await click(`${row('grant-claude-old')} [data-test-connection-disconnect]`);
+    assert
+      .dom('[data-test-connected-apps-confirm]')
+      .exists('another connection can be confirmed');
+  });
+
+  test('a connection that ends while its Disconnect is being confirmed closes the confirmation', async function (assert) {
+    signedIn();
+    serveList(everyApp());
+    await open();
+    await click(`${row('grant-chatgpt')} [data-test-connection-disconnect]`);
+    listed = listed.filter((c) => c.id !== 'grant-chatgpt');
+    window.dispatchEvent(new Event('focus'));
+    await settled();
+    assert.dom(row('grant-chatgpt')).doesNotExist();
+    assert.dom('[data-test-connected-apps-confirm]').doesNotExist();
+    assert
+      .dom('[data-test-connected-apps-announcement]')
+      .hasText('The chatgpt.com connection has ended.');
+    assert
+      .dom(`${row('grant-claude-old')} [data-test-connection-disconnect]`)
+      .isFocused();
+    assert.strictEqual(disconnects().length, 0, 'nothing was asked to end');
+  });
+
+  test("while one disconnect is under way, another connection's can't be confirmed", async function (assert) {
+    signedIn();
+    serveList(everyApp());
+    let release!: () => void;
+    servers.realmServer(
+      'DELETE _oauth-provider/connections/grant-chatgpt',
+      () =>
+        new Promise<Answer>((resolve) => {
+          release = () => resolve({ status: 500, body: { error: 'failed' } });
+        }),
+    );
+    await open();
+    await click(`${row('grant-chatgpt')} [data-test-connection-disconnect]`);
+    (
+      find('[data-test-connected-apps-confirm-disconnect]') as HTMLElement
+    ).click();
+    await waitUntil(() => disconnects().length === 1);
+
+    (
+      find(
+        `${row('grant-claude-new')} [data-test-connection-disconnect]`,
+      ) as HTMLElement
+    ).click();
+    // Anything the click changed has rendered by the next task.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert
+      .dom(`${row('grant-claude-new')} [data-test-connected-apps-confirm]`)
+      .doesNotExist('no second confirmation opens');
+    assert
+      .dom(`${row('grant-chatgpt')} [data-test-connected-apps-confirm]`)
+      .exists('the first stays open');
+
+    release();
+    await settled();
+    assert
+      .dom(
+        `${row('grant-chatgpt')} [data-test-connected-apps-disconnect-error]`,
+      )
+      .exists('the failure shows under its own connection');
+    assert
+      .dom('[data-test-connected-apps-disconnect-error]')
+      .exists({ count: 1 });
+  });
+
+  test('a disconnect is done when the server answers it, before the list is read again', async function (assert) {
+    signedIn();
+    serveList(everyApp());
+    serveDisconnect('grant-chatgpt');
+    await open();
+    let release!: () => void;
+    let reads = 0;
+    servers.realmServer(LIST, () => {
+      reads++;
+      return new Promise<Answer>((resolve) => {
+        release = () => resolve({ connections: listed });
+      });
+    });
+    await click(`${row('grant-chatgpt')} [data-test-connection-disconnect]`);
+    (
+      find('[data-test-connected-apps-confirm-disconnect]') as HTMLElement
+    ).click();
+    await waitUntil(() => reads === 1);
+    await waitUntil(() => !find(row('grant-chatgpt')));
+    assert
+      .dom('[data-test-connected-apps-announcement]')
+      .hasText('Disconnected the chatgpt.com connection.');
+    assert
+      .dom(`${row('grant-claude-old')} [data-test-connection-disconnect]`)
+      .isFocused('focus has moved on while the list is still being read');
+
+    release();
+    await settled();
+    assert.dom(row('grant-claude-old')).exists();
   });
 
   test('a disconnect of a connection that has ended meanwhile is done', async function (assert) {

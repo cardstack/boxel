@@ -2103,7 +2103,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 619873,
+      "bytes": 620658,
       "modules": [
         {
           "package": "@cardstack/boxel-icons@0.0.0",
@@ -2561,7 +2561,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/oauth-provider-connections.ts",
-          "size": 2657
+          "size": 2800
         },
         {
           "package": "@cardstack/secure-origin",
@@ -2621,7 +2621,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/connected-apps/connected-apps-page.gts",
-          "size": 15408
+          "size": 16477
         },
         {
           "package": "@cardstack/secure-origin",
