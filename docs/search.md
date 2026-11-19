@@ -19,6 +19,7 @@ The Query object may have a `filter` property, which controls which cards are in
 - `every`: allows an "AND" union of other filters
 - `not`: allow negating another filter
 - `contains`: allows you to specify a card that has a field value containing a specific value.
+- `paths`: limits results to those stored under a list of path prefixes (ADR 037), such as `{ "paths": ["blog/"] }`. A prefix ending in `/` names a directory and one without names a single file, such as `"blog.json"`. Prefixes are relative to each realm the search reads, and match card rows and file rows alike.
 
 - `on`: may be used with `eq`,`range` and `every` to limit results to a particular card type. `on` provides the card type context for a field. This is how we can disambiguate, for example, between a `Company.name` field and a `Country.name` field. Simply providing a predicate to filter by the `name` field isnt enough. You need to say which card's name field you want to filter by -- this is the function of `on`.
 

@@ -421,6 +421,37 @@ module(basename(import.meta.filename), function () {
     scheduler.dispose();
   });
 
+  test('nested work still waiting when its hold ends waits its turn behind work that asked before it', async function (assert) {
+    let scheduler = new ConnectionScheduler({
+      limit: 1,
+      tenantShare: 1,
+      overflow: 0,
+    });
+    let holding = markConnectionHeld();
+    let releaseHold = await scheduler.acquire({ hold: holding });
+    let order: string[] = [];
+    let served = (name: string, acquisition: Promise<() => void>) =>
+      acquisition.then((release) => {
+        order.push(name);
+        release();
+      });
+    let first = served('first', scheduler.acquire());
+    let nested = served(
+      'nested',
+      holding.run(() => scheduler.acquire()),
+    );
+    let second = served('second', scheduler.acquire());
+    assert.strictEqual(scheduler.waiting, 3);
+
+    // as the adapter does when the hold's connection is lost
+    holding.end();
+    releaseHold();
+    await Promise.all([first, nested, second]);
+    assert.deepEqual(order, ['first', 'nested', 'second']);
+    assert.strictEqual(scheduler.inUse, 0);
+    scheduler.dispose();
+  });
+
   test('shared work inside a tenant’s scope stays that tenant’s but is held to no share', async function (assert) {
     let scheduler = new ConnectionScheduler({ limit: 4, tenantShare: 1 });
     let a = openScope(REALM_A);

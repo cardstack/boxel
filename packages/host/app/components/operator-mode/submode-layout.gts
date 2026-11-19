@@ -1,6 +1,7 @@
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 
 import { service } from '@ember/service';
 
@@ -59,6 +60,7 @@ import type AiAssistantPanelService from '../../services/ai-assistant-panel-serv
 import type AssistantQuickLookService from '../../services/assistant-quick-look';
 import type KeyNoticesService from '../../services/key-notices';
 import type MatrixService from '../../services/matrix-service';
+import type OAuthProviderService from '../../services/oauth-provider';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type SearchSheetStateService from '../../services/search-sheet-state';
@@ -145,6 +147,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
   @service declare private keyNotices: KeyNoticesService;
+  @service declare private oauthProvider: OAuthProviderService;
   @service declare private store: StoreService;
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service('assistant-quick-look')
@@ -152,6 +155,15 @@ export default class SubmodeLayout extends Component<Signature> {
   @service declare private recentCardsService: RecentCardsService;
   @service('search-sheet-state')
   declare private searchSheetState: SearchSheetStateService;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    // The profile menu offers Connected apps only while the realm server's
+    // OAuth provider is on. Asking as the profile button renders means the
+    // answer is in before the menu first opens, and the item doesn't appear
+    // in a menu the user is already reading.
+    void this.oauthProvider.check();
+  }
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;

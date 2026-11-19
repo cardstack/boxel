@@ -63,6 +63,7 @@ import {
   meteredChargesFor,
   recordCurrentPricing,
 } from './lib/metered-charge.ts';
+import { deleteExpiredOAuthProviderRows } from './lib/oauth-provider/cleanup.ts';
 import { buildMintRunToken } from './lib/run-token.ts';
 import { aiBatchSettlementFor } from './lib/ai-batch-settle.ts';
 import { buildAutomationAdmissionChecks } from './lib/automation-admission-checks.ts';
@@ -299,6 +300,7 @@ let autoMigrate = migrateDB || undefined;
     skipPrerenderHtmlRealms: skipPrerenderHtmlRealms.map(String),
     mediaCacheAdapter: createMediaCacheAdapterFromEnv(),
     meteredCharges: meteredChargesFor(dbAdapter),
+    oauthProviderCleanup: () => deleteExpiredOAuthProviderRows(dbAdapter),
     aiBatchSettlement: aiBatchSettlementFor(dbAdapter),
   });
 

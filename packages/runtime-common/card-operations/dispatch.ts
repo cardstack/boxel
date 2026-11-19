@@ -25,15 +25,22 @@ import {
   GATE_REFUSED,
   gateOperation,
   gateRefusal,
+  grantCoversPath,
+  grantsNaming,
   leavesToLock,
   loadPolicy,
+  noteTargetRead,
   recordPolicyLoadFailure,
+  type CreateLanding,
   type GateSubject,
+  type TargetPath,
   notPermitted,
+  targetPathOf,
   type GateDecision,
   type LoadedPolicy,
   type OperationPolicyAccess,
 } from './gate.ts';
+import { createLanding } from './executors.ts';
 import { AnonymousRequest } from './anonymous-request.ts';
 import type { GateTrace } from './gate-trace.ts';
 import { INTERNAL_ROUTE, type PolicyRoute } from './telemetry.ts';
@@ -50,6 +57,7 @@ import {
   isHeadResult,
   isCallApiResult,
   travelsAsWrite,
+  isDefinitionFreeBaseOperation,
   type BaseOperation,
   type OperationDefinition,
   type OperationResult,
@@ -529,6 +537,7 @@ export function newOperationScope(
       // Always with errors: an errored row is still a row, and the readers
       // that care about the difference check `type` themselves. Asking one
       // way keeps the memo to a single entry per URL.
+      noteTargetRead(core);
       cached = core.indexQueryEngine.instance(url, { includeErrors: true });
       rows.set(url.href, cached);
     }
@@ -868,6 +877,32 @@ function admittedDefinition(
 
 // An operation resolved for a target, with what the policy gate decided about
 // invoking it.
+//
+// Where a create's card will be stored, for the operation `definition`
+// resolved to: the gate matches a grant's paths against it. Called with no
+// definition before the operation resolves, where it answers only if what the
+// create sends places it whatever it resolves to.
+export type LandingFor = (
+  definition: OperationDefinition | undefined,
+) => CreateLanding | undefined;
+
+// Where a create asked about without its document lands: at the realm's root,
+// under the type its declaration mints, or for the base create the type the
+// question names. A capability check and an explain ask about a create this
+// way.
+export function rootLanding(
+  core: OperationCore,
+  target: OperationTarget,
+): LandingFor {
+  return (definition) => {
+    let type =
+      definition?.of ?? (target.kind === 'type' ? target.codeRef : undefined);
+    return type
+      ? createLanding(type, undefined, undefined, pathsFor(core))
+      : undefined;
+  };
+}
+
 export interface GatedOperation {
   definition: OperationDefinition;
   decision: GateDecision;
@@ -888,13 +923,17 @@ export interface GatedOperation {
 // what the gate's refusal is written not to say. For the same reason such a
 // caller's policy is loaded before the target resolves, so a policy the realm
 // cannot load is answered the same way for every target.
+//
+// `landing` says where a create's card will be stored, which the gate matches
+// a grant's paths against.
 export async function resolveGatedOperation(
   core: OperationCore,
   target: OperationTarget,
   name: string,
   scope: OperationScope = newOperationScope(core),
+  opts: { landing?: LandingFor } = {},
 ): Promise<GatedOperation> {
-  return await resolveAndGate(core, target, name, scope);
+  return await resolveAndGate(core, target, name, scope, opts);
 }
 
 // What the policy gate decides about a write one of the card verbs carries
@@ -931,7 +970,9 @@ export async function resolveFacadeWrite(
   target: OperationTarget,
   base: 'create' | 'update' | 'delete',
   scope: OperationScope,
-  opts: { asFile?: true } = {},
+  // `loaded` is the realm's policy, where the caller already loaded it with
+  // `loadPolicyToGate`.
+  opts: { asFile?: true; landing?: LandingFor; loaded?: LoadedPolicy } = {},
 ): Promise<GateDecision> {
   let { decision } = await resolveAndGate(core, target, base, scope, {
     builtInOnly: true,
@@ -945,6 +986,23 @@ export async function resolveFacadeWrite(
   return decision;
 }
 
+// Load the realm's policy for a caller the realm ACL declined outright, ahead
+// of the gate's decision on `name`, which then counts the load as part of it.
+// A load that fails is recorded as that decision.
+export async function loadPolicyToGate(
+  core: OperationCore,
+  scope: OperationScope,
+  name: string,
+): Promise<LoadedPolicy> {
+  let started = performance.now();
+  try {
+    return { ...(await loadPolicy(core)), started };
+  } catch (e: unknown) {
+    recordPolicyLoadFailure(core, scope, name, started, e);
+    throw e;
+  }
+}
+
 async function resolveAndGate(
   core: OperationCore,
   target: OperationTarget,
@@ -952,8 +1010,13 @@ async function resolveAndGate(
   scope: OperationScope,
   // Refuse a name the target's type declares, for a caller the ACL declined,
   // before the gate runs, and judge the target as a file (see
-  // `resolveFacadeWrite`).
-  opts: { builtInOnly?: true; asFile?: true } = {},
+  // `resolveFacadeWrite`). `landing` is where a create's card will be stored.
+  opts: {
+    builtInOnly?: true;
+    asFile?: true;
+    landing?: LandingFor;
+    loaded?: LoadedPolicy;
+  } = {},
 ): Promise<GatedOperation> {
   let refusal = (e: unknown): unknown =>
     scope.coarseDeclined === 'all' && isOperationFailure(e)
@@ -969,12 +1032,28 @@ async function resolveAndGate(
     } catch (e: unknown) {
       throw refusal(e);
     }
-    let started = performance.now();
-    try {
-      loaded = { ...(await loadPolicy(core)), started };
-    } catch (e: unknown) {
-      recordPolicyLoadFailure(core, scope, name, started, e);
-      throw e;
+    loaded = opts.loaded ?? (await loadPolicyToGate(core, scope, name));
+    // Resolving the operation reads the target's index row, so an operation
+    // no grant can admit at the target's path is refused first (ADR 038
+    // §1.3). A grant is matched on the name the caller invokes, so a name no
+    // grant names needs nothing resolved. Where the target is placed before
+    // anything resolves, so do its paths. The gate makes the same checks once
+    // the operation resolves, and makes them alone for an explain, after the
+    // reads that let it report which rules match.
+    if (loaded.policy && !scope.trace?.explains) {
+      let named = grantsNaming(loaded.policy, name);
+      let path = placedBeforeResolving(core, target, name, opts);
+      if (named.length === 0) {
+        scope.trace?.refused('no-grant');
+        throw notPermitted(target, name);
+      }
+      if (
+        path !== 'unplaced' &&
+        !named.some((grant) => grantCoversPath(grant, path))
+      ) {
+        scope.trace?.refused('outside-paths');
+        throw notPermitted(target, name);
+      }
     }
   }
   let resolved: Awaited<ReturnType<typeof resolveUngated>>;
@@ -997,9 +1076,12 @@ async function resolveAndGate(
   try {
     decision = await gateOperation(
       core,
-      opts.asFile && target.kind === 'instance'
-        ? fileSubject(target.url)
-        : gateSubject(target, typeChain),
+      subjectOf(
+        target,
+        typeChain,
+        definition.base === 'create' ? opts.landing?.(definition) : undefined,
+        opts.asFile,
+      ),
       name,
       definition,
       typeDefinition,
@@ -1031,17 +1113,66 @@ async function resolveAndGate(
 function gateSubject(
   target: OperationTarget,
   typeChain: string[] | undefined,
+  landing: CreateLanding | undefined,
 ): GateSubject {
   if (target.kind === 'type') {
     return typeChain
-      ? { kind: 'type', types: typeChain }
+      ? { kind: 'type', types: typeChain, ...(landing ? { landing } : {}) }
       : { kind: 'unmatched' };
   }
   let url = parseTargetURL(target.url);
   if (!url) {
     return { kind: 'unmatched' };
   }
-  return urlNamesFile(url) ? { kind: 'file', url } : { kind: 'card', url };
+  return urlNamesFile(url)
+    ? { kind: 'file', url }
+    : { kind: 'card', url, ...(landing ? { landing } : {}) };
+}
+
+// Where the gate will place a target, worked out before the operation
+// resolves, or `'unplaced'` where that waits on resolving it. A create is
+// placed where its card lands, and any other operation at its target. Which
+// one a name is depends on the base its declaration builds on, so a target is
+// placed here only where the base is known from the name: the card verbs,
+// which perform the built-in behavior they are named for, and a definition-
+// free operation. A card verb's create is placed where its landing can be
+// worked out from what it sends. A type target is resolved without reading
+// any stored card, so leaving one unplaced costs no target read.
+function placedBeforeResolving(
+  core: OperationCore,
+  target: OperationTarget,
+  name: string,
+  opts: { builtInOnly?: true; asFile?: true; landing?: LandingFor },
+): TargetPath | undefined | 'unplaced' {
+  let baseKnown = opts.builtInOnly || isDefinitionFreeBaseOperation(name);
+  if (!baseKnown) {
+    return 'unplaced';
+  }
+  if (target.kind === 'type') {
+    let landing = name === 'create' ? opts.landing?.(undefined) : undefined;
+    return landing
+      ? targetPathOf(core, { kind: 'type', types: [], landing }, 'create')
+      : 'unplaced';
+  }
+  if (name === 'create') {
+    return 'unplaced';
+  }
+  return targetPathOf(
+    core,
+    subjectOf(target, [], undefined, opts.asFile),
+    name as BaseOperation,
+  );
+}
+
+function subjectOf(
+  target: OperationTarget,
+  typeChain: string[] | undefined,
+  landing: CreateLanding | undefined,
+  asFile: true | undefined,
+): GateSubject {
+  return asFile && target.kind === 'instance'
+    ? fileSubject(target.url)
+    : gateSubject(target, typeChain, landing);
 }
 
 function fileSubject(url: string): GateSubject {

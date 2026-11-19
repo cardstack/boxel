@@ -33,8 +33,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   ABSENT_OR_NULL_CLIENT_REQUEST_ID,
   expectIncrementalIndexEvent,
-  maxPrerenderHtmlJobId,
-  settlePrerenderHtmlJobs,
+  writeAndSettlePrerenderHtml,
 } from './helpers/indexing.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
@@ -243,13 +242,8 @@ module(basename(import.meta.filename), function () {
           // channel after every write, keyed off a pre-write baseline so the
           // fire-and-forget enqueue can't be missed, leaving no such job in
           // flight during the assertions.
-          let beforeInitial = await maxPrerenderHtmlJobId(
-            dbAdapter,
-            testRealm.url,
-          );
-          await testRealm.write(cacheTestPath, initialContent);
-          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url, {
-            afterJobId: beforeInitial,
+          await writeAndSettlePrerenderHtml(dbAdapter, testRealm, {
+            [cacheTestPath]: initialContent,
           });
 
           await request
@@ -257,13 +251,8 @@ module(basename(import.meta.filename), function () {
             .set('Accept', 'application/vnd.card+source');
 
           let updatedContent = `${initialContent}\n// updated by test`;
-          let beforeUpdate = await maxPrerenderHtmlJobId(
-            dbAdapter,
-            testRealm.url,
-          );
-          await testRealm.write(cacheTestPath, updatedContent);
-          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url, {
-            afterJobId: beforeUpdate,
+          await writeAndSettlePrerenderHtml(dbAdapter, testRealm, {
+            [cacheTestPath]: updatedContent,
           });
 
           let noCacheResponse = await request
@@ -318,16 +307,8 @@ module(basename(import.meta.filename), function () {
           // spurious hit rather than the miss this test asserts. The baseline
           // keys the settle to the job this write spawns so the fire-and-forget
           // enqueue can't be missed.
-          let beforeWrite = await maxPrerenderHtmlJobId(
-            dbAdapter,
-            testRealm.url,
-          );
-          await testRealm.write(
-            cacheTestPath,
-            '// clear-local-caches initial content',
-          );
-          await settlePrerenderHtmlJobs(dbAdapter, testRealm.url, {
-            afterJobId: beforeWrite,
+          await writeAndSettlePrerenderHtml(dbAdapter, testRealm, {
+            [cacheTestPath]: '// clear-local-caches initial content',
           });
 
           await request

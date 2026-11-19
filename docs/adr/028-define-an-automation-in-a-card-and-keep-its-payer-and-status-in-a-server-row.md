@@ -47,8 +47,8 @@ that a switched-on automation names.
 
 ### 1.3. The payer and the status live in a server row
 
-The payer, the status (active, paused with a reason, waiting for credits, or
-done), the next run, each trigger's run count and the caps snapshot MUST be
+The payer, the status (active, paused with a reason, waiting for credits,
+waiting for key approval (ADR 039), or done), the next run, each trigger's run count and the caps snapshot MUST be
 kept in a server row, one per switched-on automation, and MUST NOT be card
 fields. The payer MUST be set only by a direct writer's call to the route
 that switches an automation on or resumes it, and that caller MUST become the
@@ -92,7 +92,8 @@ the next tick finds the same run and the same job.
 A reconcile pass MUST run at startup and periodically. It MUST enqueue a
 make-up run for a trigger whose due time passed with nothing enqueued, or
 whose run never finished with no live job left, and at most one make-up run
-per trigger.
+per trigger. It MUST NOT enqueue one for an automation that is paused or
+waiting for key approval.
 
 ## 2. Rationale
 

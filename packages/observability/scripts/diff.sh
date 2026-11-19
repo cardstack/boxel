@@ -157,13 +157,6 @@ source ./scripts/grafanactl-env.sh "$env_name"
 # staging/production ad-hoc runs, the operator must export the same
 # value apply.sh uses (CI fetches it from /<env>/boxel-grafana/realm_server_url
 # — see observability-apply-${env_name}.yml).
-#
-# No committed dashboard has a `grafana_secret` variable any more, but a
-# live dashboard applied before operator actions moved to the
-# realm-server-operator datasource proxy still carries the real secret in
-# one. The diff that removes it would print that secret into the PR
-# comment diff.sh's output is rendered into, so the pulled side is still
-# redacted — see the `grafana_secret` arm of JQ_NORMALIZE below.
 case "$env_name" in
   local) realm_server_url="${REALM_SERVER_URL:-https://localhost:4201/}" ;;
   *)
@@ -278,13 +271,6 @@ normalize folders Folder
 #      live URL (never the placeholder), so real drift between
 #      $REALM_SERVER_URL and what's actually provisioned in Grafana
 #      surfaces in the diff.
-#   4b. `grafana_secret` redaction. Dashboards once carried the
-#      realm-server shared secret in a `grafana_secret` constant template
-#      variable, substituted at apply time. A live dashboard applied
-#      before that ended still has it, and the diff.yml workflow renders
-#      this output into a PR comment (no Actions log masking on PR comment
-#      bodies). So any `grafana_secret` constant template variable is
-#      redacted to a fixed placeholder ("REDACTED"), whatever its `.query`.
 #   5. Default `"value": null` on threshold step zero (CS-10991). Grafana
 #      fills in `value: null` on the lowest threshold step (the implicit
 #      `-Infinity` floor) when it stores a dashboard. AMG-era exports
@@ -302,14 +288,6 @@ JQ_NORMALIZE='
     then
       .query = $url
       | (if .current then .current.value = $url | .current.text = $url else . end)
-    elif type == "object"
-       and .name? == "grafana_secret"
-       and .type? == "constant"
-    then
-      # Redact both sides — see the long comment under "Normalize JSON
-      # content" above for why this is unconditional rather than guarded.
-      .query = "REDACTED"
-      | (if .current then .current.value = "REDACTED" | .current.text = "REDACTED" else . end)
     else . end
   )
   | walk(
