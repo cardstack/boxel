@@ -18,6 +18,7 @@ import type Transition from '@ember/routing/transition';
 import { schedule } from '@ember/runloop';
 
 import AuthorizePage from './authorize/authorize-page.gts';
+import ConnectedAppsPage from './connected-apps/connected-apps-page.gts';
 import { ApprovePage, ReviewChangesPage } from './keys/approve-page.gts';
 import ConnectPage from './keys/connect-page.gts';
 import ConnectedPage from './keys/connected-page.gts';
@@ -76,6 +77,7 @@ Router.map(function () {
   this.route('approve');
   this.route('review-changes');
   this.route('authorize');
+  this.route('connected-apps');
 });
 
 // The application route starts once, on the document's first transition: it
@@ -145,6 +147,7 @@ const registry: Record<string, unknown> = {
   'template:approve': ApprovePage,
   'template:review-changes': ReviewChangesPage,
   'template:authorize': AuthorizePage,
+  'template:connected-apps': ConnectedAppsPage,
 };
 
 class ShellApplication extends Application {

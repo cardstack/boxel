@@ -364,20 +364,27 @@ export class TokenAdapter extends OAuthProviderAdapter {
 // Whether a refresh token, by its value, has been used in a way that ends
 // its grant if it is presented (`refreshTokenUse`), as `TokenAdapter.consume`
 // decides it, read without the grant's lock, for a request refused before
-// the library sees it. Undefined for a token the provider doesn't hold.
+// the library sees it, with the client it was issued to. Undefined for a
+// token the provider doesn't hold.
 export async function presentedRefreshToken(
   dbAdapter: DBAdapter,
   token: string,
-): Promise<{ grantId: string; reused: boolean } | undefined> {
+): Promise<{ grantId: string; clientId: string; reused: boolean } | undefined> {
   let [row] = (await dbAdapter.execute(
-    `SELECT t.grant_id, t.expires_at > now() AS current, ${REFRESH_USE_COLUMNS}
+    `SELECT t.grant_id, t.payload->>'clientId' AS client_id,
+            t.expires_at > now() AS current, ${REFRESH_USE_COLUMNS}
        FROM oauth_provider_tokens AS t
       WHERE t.kind = 'RefreshToken' AND t.id_hash = decode($1, 'hex')`,
     { bind: [sha256Hex(token)] },
-  )) as unknown as (RefreshUse & { grant_id: string; current: boolean })[];
+  )) as unknown as (RefreshUse & {
+    grant_id: string;
+    client_id: string;
+    current: boolean;
+  })[];
   return row
     ? {
         grantId: row.grant_id,
+        clientId: row.client_id,
         reused: row.current && refreshTokenUse(row) === 'reuse',
       }
     : undefined;

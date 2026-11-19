@@ -69,12 +69,35 @@ describe('resolveRealmSecretSeed', () => {
     await expect(resolveRealmSecretSeed(true)).resolves.toBe('env-seed');
   });
 
-  it('throws when the flag is requested but stdin is not a TTY', async () => {
-    // In the vitest runner stdin is never a TTY, which is exactly the
-    // non-interactive case (CI, piped shells) we want to fail fast on.
+  it('throws when the flag is requested and there is no terminal to prompt on', async () => {
+    // In the vitest runner stdin is never a TTY, so the seed would come from
+    // the controlling terminal; a process without one (CI) fails fast.
     expect(process.stdin.isTTY).toBeFalsy();
-    await expect(resolveRealmSecretSeed(true)).rejects.toThrow(
-      /stdin is not a TTY/,
-    );
+    await expect(
+      resolveRealmSecretSeed(true, { openTerminal: () => undefined }),
+    ).rejects.toThrow(/there is no terminal to prompt on/);
+  });
+
+  it('prompts on the controlling terminal when stdin carries other input', async () => {
+    expect(process.stdin.isTTY).toBeFalsy();
+    let input = Object.assign(new PassThrough(), {
+      isTTY: true,
+      setRawMode: () => input,
+    }) as unknown as NodeJS.ReadStream & PassThrough;
+    let output = new PassThrough();
+    let closed = false;
+    let seed = resolveRealmSecretSeed(true, {
+      openTerminal: () => ({
+        input,
+        output,
+        close: () => {
+          closed = true;
+        },
+      }),
+    });
+    input.write('terminal-seed\n');
+    await expect(seed).resolves.toBe('terminal-seed');
+    expect(String(output.read())).toContain('Realm secret seed: ');
+    expect(closed).toBe(true);
   });
 });

@@ -53,6 +53,10 @@ export interface AppName {
   shown: string;
   verified: boolean;
   claimedName?: string;
+  // Set when `shown` is a phrase standing in for a name Boxel doesn't have
+  // ("an app on this computer", "an unknown app"), rather than a name. A
+  // page words the app by this, never by comparing the phrase.
+  standIn?: 'loopback' | 'unknown';
 }
 
 export interface ConsentScope {

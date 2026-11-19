@@ -2,7 +2,7 @@ import type { MatrixEvent } from '@cardstack/base/matrix-event';
 import { findRealmEvent, waitUntil } from './index.ts';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { trimJsonExtension } from '@cardstack/runtime-common';
-import type { DBAdapter, Expression } from '@cardstack/runtime-common';
+import type { DBAdapter, Expression, Realm } from '@cardstack/runtime-common';
 import { every, param, query } from '@cardstack/runtime-common';
 import { laneFamilyPredicate } from '@cardstack/runtime-common/jobs/lane-family';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
@@ -336,6 +336,28 @@ export async function rejectedPrerenderHtmlJobIds(
     ...laneFamilyPredicate(concurrencyGroup, 'j'),
   ] as Expression)) as { id: number }[];
   return rows.map((row) => row.id);
+}
+
+// Writes `files` in one commit, then waits for the `prerender_html` job that
+// commit starts. `write()` waits for the index pass but not for that job, and
+// the job reads each written file through the `card+source` route and can load
+// a module. A test that counts reads, compiles or cache hits after a write uses
+// this, so that work does not land in what it counts.
+//
+// One commit starts one render job, so a job newer than the baseline taken
+// before the commit is that job. Separate writes would each start their own
+// job, inserted without being awaited, and a settle could see the first job
+// resolved before the last one exists.
+export async function writeAndSettlePrerenderHtml(
+  dbAdapter: DBAdapter,
+  realm: Realm,
+  files: Record<string, string>,
+): Promise<void> {
+  let baseline = await maxPrerenderHtmlJobId(dbAdapter, realm.url);
+  await realm.writeMany(new Map(Object.entries(files)));
+  await settlePrerenderHtmlJobs(dbAdapter, realm.url, {
+    afterJobId: baseline,
+  });
 }
 
 // HTML lands on its own channel: the index pass fires a `prerender_html`

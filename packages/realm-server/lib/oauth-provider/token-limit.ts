@@ -6,8 +6,10 @@
 //   allows ten times that. Not per address or per client: a hosted client
 //   refreshes every user's tokens from a few server addresses.
 // - Failed attempts, for requests that name no code or refresh token the
-//   provider holds, or a code without the verifier its PKCE challenge needs:
-//   such a request can never succeed, so each counts as it arrives, and a
+//   provider issued to the client they name, name a code without the
+//   verifier its PKCE challenge needs or with another redirect URI, don't
+//   name their client once, or are too large to read: such a
+//   request can never succeed, so each counts as it arrives, and a
 //   caller with none left is refused, so guessing codes or refresh tokens is
 //   slow. They are counted as the provider's other unsigned endpoints count
 //   requests (`caller-limit.ts`): per address (an IPv4 address or IPv6 /64),
@@ -19,6 +21,11 @@
 //   exchange and the grant's refreshes need, or end the grant as a reuse. A
 //   request that can succeed is bounded by its grant instead. The address is
 //   the one the `clientAddress` middleware works out, never the socket's.
+//
+// The body is read as the library reads it (`readForm`), so Boxel counts the
+// code or refresh token the library acts on. A request that names a code,
+// verifier, refresh token or client more than once names no single one, and
+// is treated as naming none; the library refuses it.
 //
 // Ending a grant deletes its tokens, so a refresh that names a token of an
 // ended grant counts as a failure too. So does a revocation that names one
@@ -32,9 +39,11 @@
 // A code or refresh token presented again after it was used ends its grant
 // (§1.9) even when the grant is over its limit: the limit is checked after
 // that, so a grant whose limit is kept spent can't put off the reuse that
-// ends it. A code does so only with its verifier, as in the library.
+// ends it. Either does so only from the client it was issued to, and a code
+// only with its verifier and its redirect URI, as in the library.
 
 import { createHash, timingSafeEqual } from 'crypto';
+import { parse as parseQuery } from 'node:querystring';
 import type Koa from 'koa';
 import type Provider from 'oidc-provider';
 import {
@@ -166,28 +175,26 @@ export function tokenHandler({
   let perGrant = tokenBucket(limit.perGrant);
 
   return async function handleToken(ctxt, next) {
-    let body: string | undefined;
-    if (ctxt.is('application/x-www-form-urlencoded')) {
-      try {
-        body = await readBody(ctxt.req);
-      } catch {
-        return respond(ctxt, 400, {
-          error: 'invalid_request',
-          error_description: `a token request must be at most ${MAX_BODY_BYTES} bytes`,
-        });
-      }
+    let charge = (answer: Answer) =>
+      chargeFailure({
+        ctxt,
+        answer,
+        rateLimitStore,
+        limit,
+        alert,
+        endpoint: 'token',
+      });
+    let form = await readForm({ ctxt, provider, charge, endpoint: 'token' });
+    if (!form) {
+      return;
     }
-    let params = new URLSearchParams(body ?? '');
-    let answer = async (
-      status: number,
-      error: { error: string; error_description: string },
-    ) => {
-      await allowClientOrigin(ctxt, provider, params.get('client_id'));
+    let { body, param } = form;
+    let answer: Answer = async (status, error) => {
+      await allowClientOrigin(ctxt, provider, param('client_id'));
       respond(ctxt, status, error);
     };
 
-    let exchange =
-      body === undefined ? undefined : await grantOfExchange(dbAdapter, params);
+    let exchange = await grantOfExchange(dbAdapter, form);
     if (exchange) {
       let taken = await rateLimitStore.take(
         counterKey('oauth-token-grant', exchange.grantId),
@@ -213,16 +220,7 @@ export function tokenHandler({
           'token',
         );
       }
-    } else if (
-      !(await chargeFailure({
-        ctxt,
-        answer,
-        rateLimitStore,
-        limit,
-        alert,
-        endpoint: 'token',
-      }))
-    ) {
+    } else if (!(await charge(answer))) {
       return;
     }
     if (body !== undefined) {
@@ -242,7 +240,7 @@ export function tokenHandler({
 export async function allowClientOrigin(
   ctxt: Koa.Context,
   provider: Provider,
-  clientId: string | null,
+  clientId: string | undefined,
 ) {
   let origin = ctxt.get('Origin');
   if (!origin || !clientId) {
@@ -257,25 +255,38 @@ export async function allowClientOrigin(
 }
 
 // The grant a code or refresh exchange names, if the code or token is one
-// the provider issued and, for a code, the request proves it with the
-// verifier its PKCE challenge needs; and whether presenting it again ends
-// the grant. A code without its verifier is refused by the library before it
-// checks for reuse, so it names no grant here.
+// the provider issued to the client the request names and, for a code, the
+// request proves it with the verifier its PKCE challenge needs and names no
+// other redirect URI; and whether presenting it again ends the grant.
+//
+// The library refuses each of those requests before it checks for reuse, so
+// they name no grant here and count as failures. That includes a request that
+// doesn't name its client once: every client here is public, and names
+// itself only by the body's `client_id`. A code exchange that leaves out
+// `redirect_uri` still names its grant, since the library fills in the
+// client's one registered redirect URI, when it has only one, and Boxel
+// doesn't look up the client.
 async function grantOfExchange(
   dbAdapter: DBAdapter,
-  params: URLSearchParams,
+  { param, named }: Form,
 ): Promise<
   | { grantId: string; reused: boolean; what: 'code' | 'refresh token' }
   | undefined
 > {
-  let grantType = params.get('grant_type');
+  let clientId = param('client_id');
+  if (!clientId) {
+    return undefined;
+  }
+  let grantType = param('grant_type');
   if (grantType === 'authorization_code') {
-    let code = params.get('code');
+    let code = param('code');
     if (!code) {
       return undefined;
     }
     let [row] = (await dbAdapter.execute(
       `SELECT payload->>'grantId' AS grant_id,
+              payload->>'clientId' AS client_id,
+              payload->>'redirectUri' AS redirect_uri,
               payload->>'codeChallenge' AS challenge,
               payload->>'codeChallengeMethod' AS method,
               payload->'consumed' IS NOT NULL AND expires_at > now() AS reused
@@ -284,22 +295,32 @@ async function grantOfExchange(
       { bind: [sha256Hex(code)] },
     )) as {
       grant_id: string | null;
+      client_id: string | null;
+      redirect_uri: string | null;
       challenge: string | null;
       method: string | null;
       reused: boolean;
     }[];
     return row?.grant_id &&
-      pkceCanPass(params.get('code_verifier'), row.challenge, row.method)
+      row.client_id === clientId &&
+      (!named('redirect_uri') || param('redirect_uri') === row.redirect_uri) &&
+      pkceCanPass(param('code_verifier'), row.challenge, row.method)
       ? { grantId: row.grant_id, reused: row.reused, what: 'code' }
       : undefined;
   }
   if (grantType === 'refresh_token') {
-    let token = params.get('refresh_token');
+    let token = param('refresh_token');
     if (!token) {
       return undefined;
     }
     let presented = await presentedRefreshToken(dbAdapter, token);
-    return presented ? { ...presented, what: 'refresh token' } : undefined;
+    return presented?.clientId === clientId
+      ? {
+          grantId: presented.grantId,
+          reused: presented.reused,
+          what: 'refresh token',
+        }
+      : undefined;
   }
   return undefined;
 }
@@ -307,7 +328,7 @@ async function grantOfExchange(
 // The library's PKCE check (`helpers/pkce.js`), as a test rather than a
 // refusal.
 function pkceCanPass(
-  verifier: string | null,
+  verifier: string | undefined,
   challenge: string | null,
   method: string | null,
 ): boolean {
@@ -398,11 +419,83 @@ export async function refuse(
   });
 }
 
+// A body parameter by name, when the body names it exactly once with a
+// value.
+export type FormParam = (name: string) => string | undefined;
+
+// A token or revocation request's body, read as the library reads it.
+export interface Form {
+  // The body as read, for the library; undefined when the library wouldn't
+  // read it as a form, so it refuses the request for its missing parameters.
+  body: string | undefined;
+  param: FormParam;
+  // Whether the body names a parameter at all, with any value.
+  named: (name: string) => boolean;
+}
+
+// Reads a request's form-encoded body with `node:querystring`, as the library
+// does, for the token and revocation endpoints alike. Whether a body is a form
+// is decided by the library's own Koa, through a context it creates: the
+// realm server's Koa matches some `Content-Type` headers differently (one with
+// a trailing `;`, for example), and the library would read a body Boxel
+// skipped. A parameter named more than once names no single one, so `param`
+// treats it as missing, and treats an empty value the same way. The library
+// refuses a repeated parameter among those `param` is asked for: a code, its
+// verifier, a refresh token, a client or a token to revoke.
+//
+// A body over `MAX_BODY_BYTES` can never succeed, so it counts as a failure
+// through `charge` before it is answered 400. It names no client, so neither
+// answer carries CORS. Undefined when the request has been answered.
+export async function readForm({
+  ctxt,
+  provider,
+  charge,
+  endpoint,
+}: {
+  ctxt: Koa.Context;
+  provider: Provider;
+  charge: (answer: Answer) => Promise<boolean>;
+  endpoint: 'token' | 'revocation';
+}): Promise<Form | undefined> {
+  if (
+    !provider
+      .createContext(ctxt.req, ctxt.res)
+      .is('application/x-www-form-urlencoded')
+  ) {
+    return { body: undefined, param: () => undefined, named: () => false };
+  }
+  let body: string;
+  try {
+    body = await readBody(ctxt.req);
+  } catch {
+    let answer: Answer = async (status, error) => respond(ctxt, status, error);
+    if (await charge(answer)) {
+      respond(ctxt, 400, {
+        error: 'invalid_request',
+        error_description: `a ${endpoint} request must be at most ${MAX_BODY_BYTES} bytes`,
+      });
+    }
+    return undefined;
+  }
+  let params = parseQuery(body);
+  return {
+    body,
+    param: (name) => {
+      let value = params[name];
+      return typeof value === 'string' && value !== '' ? value : undefined;
+    },
+    named: (name) => Object.hasOwn(params, name),
+  };
+}
+
 // Reads a request's body, up to `MAX_BODY_BYTES`.
-export async function readBody(req: Koa.Context['req']): Promise<string> {
+async function readBody(req: Koa.Context['req']): Promise<string> {
   let chunks: Buffer[] = [];
   let received = 0;
-  for await (let chunk of req) {
+  // Stopping early leaves the request open, as the library's own reader
+  // does, so the answer to a body too large is written to a request that is
+  // still open.
+  for await (let chunk of req.iterator({ destroyOnReturn: false })) {
     let buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     received += buffer.length;
     if (received > MAX_BODY_BYTES) {

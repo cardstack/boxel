@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import { cliLog } from '../../lib/cli-log.ts';
 import { FG_GREEN, RESET } from '../../lib/colors.ts';
-import { readKeyValue } from '../../lib/key-value.ts';
+import { checkKeyValueSource, readKeyValue } from '../../lib/key-value.ts';
 import { prompt, resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import { operatorRequest } from '../../lib/seed-auth.ts';
 
@@ -296,6 +296,26 @@ export async function deletePlatformClient(
  * back. So the command shows the client and asks first, unless `--yes` says
  * not to; without a terminal to ask in, `--yes` is required.
  */
+/**
+ * Refuses a platform client delete that `confirmPlatformClientDelete` could
+ * not ask to confirm: no `--yes`, and `--json` or no terminal to ask on.
+ */
+export function checkConfirmSource({
+  yes,
+  json,
+  isTTY = Boolean(process.stdin.isTTY),
+}: {
+  yes?: boolean;
+  json?: boolean;
+  isTTY?: boolean;
+}): void {
+  if (!yes && (json || !isTTY)) {
+    throw new Error(
+      'Pass --yes to delete a platform client without a terminal to confirm in',
+    );
+  }
+}
+
 export async function confirmPlatformClientDelete(
   options: SystemKeysOptions,
   name: string,
@@ -312,13 +332,9 @@ export async function confirmPlatformClientDelete(
     confirm?: (question: string) => Promise<boolean>;
   },
 ): Promise<void> {
+  checkConfirmSource({ yes, json, isTTY });
   if (yes) {
     return;
-  }
-  if (json || !isTTY) {
-    throw new Error(
-      'Pass --yes to delete a platform client without a terminal to confirm in',
-    );
   }
   let shown;
   try {
@@ -370,6 +386,45 @@ export async function resolveSystemKeyId(
 }
 
 /**
+ * Refuses an operator note that `readNote` would refuse without asking
+ * anything: an empty `--note`, or none where there is no prompt to ask on.
+ */
+export function checkNoteSource(
+  note: string | undefined,
+  { stdinUsed }: { stdinUsed: boolean },
+  input: { isTTY?: boolean } = process.stdin,
+): void {
+  if (note !== undefined) {
+    if (!note.trim()) {
+      throw new Error('The operator note is empty');
+    }
+    return;
+  }
+  if (stdinUsed || !input.isTTY) {
+    throw new Error(
+      'Pass --note: the operator note, recorded in the history, says who made the change and why. A name in it is recorded as given, not verified',
+    );
+  }
+}
+
+/**
+ * Refuses, before the seed is asked for, a change whose value or note can't
+ * be read: the operator learns about a missing flag before typing the seed,
+ * not after.
+ */
+export function checkChangeSources(
+  options: { stdin?: boolean; keyFile?: string; note?: string },
+  { value, noun }: { value: boolean; noun?: string },
+): void {
+  if (value) {
+    checkKeyValueSource(options, process.stdin, noun);
+  }
+  checkNoteSource(options.note, {
+    stdinUsed: value && Boolean(options.stdin),
+  });
+}
+
+/**
  * The operator note for a change: `--note`, or a prompt when stdin is a
  * terminal that the value didn't come through.
  */
@@ -377,16 +432,9 @@ export async function readNote(
   note: string | undefined,
   { stdinUsed }: { stdinUsed: boolean },
 ): Promise<string> {
+  checkNoteSource(note, { stdinUsed });
   if (note !== undefined) {
-    if (!note.trim()) {
-      throw new Error('The operator note is empty');
-    }
     return note;
-  }
-  if (stdinUsed || !process.stdin.isTTY) {
-    throw new Error(
-      'Pass --note: the operator note, recorded in the history, says who made the change and why. A name in it is recorded as given, not verified',
-    );
   }
   let answer = await prompt(
     'Operator note (who and why; a name here is recorded as given, not verified): ',
@@ -721,6 +769,7 @@ export function registerKeysCommand(realmServer: Command): void {
         if (!['header', 'url-parameter'].includes(auth)) {
           throw new Error('--auth must be header or url-parameter');
         }
+        checkChangeSources(options, { value: true });
         let seed = await seedOptions(options);
         let value = await readKeyValue(options);
         let note = await readNote(options.note, {
@@ -759,6 +808,7 @@ export function registerKeysCommand(realmServer: Command): void {
       run(async () => {
         if (kindOf(options) === 'oauth-client') {
           let name = clientName(options);
+          checkChangeSources(options, { value: true });
           let seed = await seedOptions(options);
           let secret = await readKeyValue(options);
           let note = await readNote(options.note, {
@@ -777,6 +827,7 @@ export function registerKeysCommand(realmServer: Command): void {
           return;
         }
         refuseClientOptions(options);
+        checkChangeSources(options, { value: true });
         let seed = await seedOptions(options);
         let id = await resolveSystemKeyId(seed, options);
         let value = await readKeyValue(options);
@@ -814,6 +865,8 @@ export function registerKeysCommand(realmServer: Command): void {
       run(async () => {
         if (kindOf(options) === 'oauth-client') {
           let name = clientName(options);
+          checkConfirmSource(options);
+          checkChangeSources(options, { value: false });
           let seed = await seedOptions(options);
           await confirmPlatformClientDelete(seed, name, options);
           let note = await readNote(options.note, { stdinUsed: false });
@@ -826,6 +879,7 @@ export function registerKeysCommand(realmServer: Command): void {
           return;
         }
         refuseClientOptions(options);
+        checkChangeSources(options, { value: false });
         let seed = await seedOptions(options);
         let id = await resolveSystemKeyId(seed, options);
         let note = await readNote(options.note, { stdinUsed: false });
@@ -863,6 +917,7 @@ export function registerKeysCommand(realmServer: Command): void {
           throw new Error('Pass the cap in bytes, or --clear');
         }
         let bytes = options.clear ? null : parseResponseCapBytes(raw!);
+        checkChangeSources(options, { value: false });
         let seed = await seedOptions(options);
         let id = await resolveSystemKeyId(seed, options);
         let note = await readNote(options.note, { stdinUsed: false });
@@ -920,6 +975,7 @@ async function addClientCommand(options: KeysCliOptions): Promise<void> {
       '--token-auth must be client_secret_post or client_secret_basic',
     );
   }
+  checkChangeSources(options, { value: true });
   let seed = await seedOptions(options);
   let secret = await readKeyValue(options);
   let note = await readNote(options.note, {

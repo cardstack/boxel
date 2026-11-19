@@ -3,7 +3,7 @@ const { module, test } = QUnit;
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { computeContentHash } from '@cardstack/runtime-common';
+import { computeContentHash, logger } from '@cardstack/runtime-common';
 import {
   BackgroundScheduler,
   type BackgroundKind,
@@ -52,6 +52,9 @@ function realmsOf(...realms: RecordedRealm[]): Map<string, RecordedRealm> {
 // A recorder that runs each job at once, or ends it as `outcome` says.
 class FakeRecorder implements ManagedRecorder {
   jobs: string[] = [];
+  // The jobs that asked for a sweep, and whether each ran outside the queue.
+  sweeps: string[] = [];
+  outsideQueue: string[] = [];
   outcome: () => BackgroundOutcome | 'run' = () => 'run';
   async record(): Promise<void> {}
   async runBackground(job: BackgroundJob): Promise<BackgroundOutcome> {
@@ -60,10 +63,16 @@ class FakeRecorder implements ManagedRecorder {
       return outcome;
     }
     this.jobs.push(job.kind);
+    if (job.outsideQueue) {
+      this.outsideQueue.push(job.kind);
+    }
     await job.run({
       gitDir: '/history/realm.git',
       head: undefined,
       signal: new AbortController().signal,
+      sweep: async () => {
+        this.sweeps.push(job.kind);
+      },
     });
     return 'ran';
   }
@@ -549,6 +558,7 @@ module('background scheduler', (hooks) => {
       [{ name: 'k', afterCommits: 1.5, run }, /afterCommits/],
       [{ name: 'k', everyMs: 0, run }, /everyMs/],
       [{ name: 'k', retryAfterMs: 0, run }, /retryAfterMs/],
+      [{ name: 'k', pollEveryMs: 0, run }, /pollEveryMs/],
       [{ name: 'k', quietMs: MINUTE, run }, /quietMs/],
       [{ name: 'k', afterCommits: 1, quietMs: -1, run }, /quietMs/],
     ] as [BackgroundKind, RegExp][]) {
@@ -556,6 +566,101 @@ module('background scheduler', (hooks) => {
     }
     scheduler([{ name: 'k', afterCommits: 1, quietMs: 0, everyMs: 1, run }]);
     assert.true(true, 'sound timings are accepted');
+  });
+
+  test('a kind that polls is requested on the realms its poll names, once every `pollEveryMs`', async (assert) => {
+    let polled: string[][] = [];
+    let due = ['id-a', 'id-not-recorded-here'];
+    let target = scheduler([
+      {
+        name: 'polled',
+        outsideQueue: true,
+        pollEveryMs: MINUTE,
+        poll: async (realmIds) => {
+          polled.push(realmIds);
+          return due;
+        },
+        run: (_realm, { sweep }) => sweep(),
+      },
+    ]);
+    let [a, b] = ['a', 'b'].map(realmNamed);
+    target.setRealms(realmsOf(a, b));
+
+    target.dispatch();
+    await waitUntil(() => ran()['id-a']?.length === 1, {
+      what: 'the polled realm to run',
+    });
+    await drained(target);
+    assert.deepEqual(polled, [['id-a', 'id-b']]);
+    assert.deepEqual(ran(), { 'id-a': ['polled'] });
+    let recorder = recorders.get('id-a')!;
+    assert.deepEqual(
+      recorder.outsideQueue,
+      ['polled'],
+      'it runs outside the queue',
+    );
+    assert.deepEqual(recorder.sweeps, ['polled']);
+
+    target.dispatch();
+    await sleep(20);
+    assert.strictEqual(polled.length, 1, 'no poll before `pollEveryMs`');
+
+    clock += MINUTE;
+    due = ['id-b'];
+    target.dispatch();
+    await waitUntil(() => ran()['id-b']?.length === 1, {
+      what: 'the realm the second poll names to run',
+    });
+    assert.strictEqual(polled.length, 2);
+    assert.deepEqual(ran(), { 'id-a': ['polled'], 'id-b': ['polled'] });
+  });
+
+  test('a kind skipped on a realm for an hour on end warns, and again an hour later', async (assert) => {
+    let warnings: string[] = [];
+    let backgroundLog = logger('realm-historian:background');
+    let original = backgroundLog.warn;
+    backgroundLog.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+    try {
+      let target = scheduler([
+        { name: 'busy', atStart: true, everyMs: MINUTE, run: async () => {} },
+      ]);
+      let realm = realmNamed('a');
+      target.setRealms(realmsOf(realm));
+      recorderOf(realm).outcome = () => 'skipped';
+      let skippedWarnings = () =>
+        warnings.filter((line) => /busy on .* has been skipped for/.test(line));
+
+      for (let minutes = 0; minutes <= 130; minutes += 10) {
+        target.dispatch();
+        await drained(target);
+        clock += 10 * MINUTE;
+      }
+      assert.strictEqual(
+        skippedWarnings().length,
+        2,
+        'one warning at an hour, and one more an hour after it',
+      );
+      assert.true(/skipped for 60 minutes/.test(skippedWarnings()[0]));
+
+      recorderOf(realm).outcome = () => 'run';
+      target.dispatch();
+      await drained(target);
+      recorderOf(realm).outcome = () => 'skipped';
+      for (let minutes = 0; minutes < 60; minutes += 10) {
+        clock += 10 * MINUTE;
+        target.dispatch();
+        await drained(target);
+      }
+      assert.strictEqual(
+        skippedWarnings().length,
+        2,
+        'a run starts the hour again',
+      );
+    } finally {
+      backgroundLog.warn = original;
+    }
   });
 
   test('a stopped scheduler starts nothing more and waits for the jobs running', async (assert) => {

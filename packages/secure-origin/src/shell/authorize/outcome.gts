@@ -1,7 +1,8 @@
 // What the authorize page shows once the user has answered, while the browser
 // goes on to finish the flow: that the app wasn't connected, or that the
-// browser is on its way back to it. The OAuth grant doesn't exist yet, so
-// nothing here says when it ends.
+// browser is on its way back to it, and where its connection can be seen and
+// disconnected later. The OAuth grant doesn't exist yet, so nothing here says
+// when it ends.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import { eq } from '@cardstack/pretui/helpers';
@@ -29,6 +30,7 @@ const Outcome: TemplateOnlyComponent<Signature> = <template>
     {{else}}
       <MessagePage
         @heading='Returning you to {{@returnsTo}}…'
+        @info='You can see and disconnect your apps in Connected apps.'
         @focus={{true}}
       />
     {{/if}}

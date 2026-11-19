@@ -123,6 +123,11 @@ import {
   canonicalRealmIdentifiers,
   dedupeRealmsByIdentity,
 } from '../lib/realm-utils';
+import {
+  isRetryableUnavailable,
+  MAX_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  retryAfterDelayMs,
+} from '../lib/retry-after';
 import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
@@ -335,18 +340,6 @@ const CARD_FACING_STORE_METHODS: ReadonlySet<string> = new Set([
   'getSaveState',
 ]);
 
-// The wait a shed response asks for, in ms, with jitter so the clients a burst
-// shed together don't all come back together. A missing or unparseable header
-// (the HTTP-date form, say) counts as one second.
-function shedRetryDelayMs(retryAfter: string | null): number {
-  let seconds = Number(retryAfter);
-  if (!Number.isFinite(seconds) || seconds < 0) {
-    seconds = 1;
-  }
-  seconds = Math.min(seconds, MAX_SHED_RETRY_AFTER_SECONDS);
-  return seconds * 1000 + Math.random() * 250;
-}
-
 // The knobs every search takes. `scope` drives the element type, so it is a
 // type parameter rather than a field the return type has to be kept in sync
 // with by hand.
@@ -424,9 +417,12 @@ export default class StoreService extends Service implements StoreInterface {
   private inflightGetCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
     new Map();
   // Local ids of the instances built from their stored source because the
-  // realm had no index row for them when they were read. Nothing names these
-  // cards when a from-scratch index pass lands — it announces itself with a
-  // bare `full` event — so this is how that event finds them to re-read.
+  // realm could not serve their card+json when they were read: it had no
+  // index row for them, or it turned the read away for now while it rendered
+  // their type's definition. An event naming one of these cards re-reads it
+  // in place. Nothing names them when a from-scratch index pass lands — it
+  // announces itself with a bare `full` event — so this is how that event
+  // finds them to re-read.
   #builtFromSource = new Set<string>();
   // The ids of the cards being built from their source right now, as
   // `getCardInstance` normalizes them. The instance is in the identity map
@@ -1378,9 +1374,11 @@ export default class StoreService extends Service implements StoreInterface {
     return result as InstanceForReadType[K] | CardErrorJSONAPI;
   }
 
-  // Bypass cached state and fetch from source of truth. A card the realm has
-  // not indexed comes back as the awaiting-index error, so a caller reading
-  // through here learns the index's state rather than a stand-in for it.
+  // Bypass cached state and fetch from source of truth. A card the realm
+  // cannot serve right now comes back as the realm's answer — the
+  // awaiting-index error, or the 503 it turns a read away with while it
+  // renders the card's type definition — so a caller reading through here
+  // learns the realm's state rather than a stand-in for it.
   async getWithoutCache<K extends StoreReadType = 'card'>(
     id: string,
     opts?: { type?: K },
@@ -2267,7 +2265,12 @@ export default class StoreService extends Service implements StoreInterface {
       if (response.status !== 429 || attempt >= MAX_SHED_SEARCH_RETRIES) {
         break;
       }
-      await timeout(shedRetryDelayMs(response.headers.get('Retry-After')));
+      await timeout(
+        retryAfterDelayMs(
+          response.headers.get('Retry-After'),
+          MAX_SHED_RETRY_AFTER_SECONDS,
+        ),
+      );
     }
     if (!response.ok) {
       let responseText = await response.text();
@@ -3697,10 +3700,17 @@ export default class StoreService extends Service implements StoreInterface {
   });
 
   private reloadTask = task(
-    async (instance: CardDef, reloadTarget?: ReloadTarget) => {
+    async (
+      instance: CardDef,
+      reloadTarget?: ReloadTarget,
+      opts?: { afterTurnAway?: true },
+    ) => {
       let reloadTracker = this.startTrackingCardLoad(instance.id);
       let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
       let isDelete = false;
+      // The `Retry-After` of a reload the realm turned away for now, which
+      // schedules the read that brings the state this reload was for.
+      let turnedAwayFor: string | null | undefined;
       // The reload belongs to the card identity the instance had when it
       // started. A reset while the read is in flight supersedes it — an
       // in-browser index pass replaces the identity map on its first visit,
@@ -3720,15 +3730,28 @@ export default class StoreService extends Service implements StoreInterface {
           );
         } catch (err: any) {
           let cardError = processCardError(instance.id, err).errors[0];
-          if (cardError?.awaitingIndex) {
-            // The realm holds this card's source and has not indexed it yet.
-            // That is a statement about the index, not about the instance this
-            // tab is already running — so keep it exactly as it is, autosave and
-            // all, and let the index event that follows bring the fresh state.
-            // Treating it as a deletion would evict a card that still exists;
-            // recording it as an error would stand a placeholder in front of one
-            // the user is working in.
+          if (cardError?.awaitingIndex || isRetryableUnavailable(err)) {
+            // The realm turned the read away without saying anything about the
+            // card: it holds the card's source and has not indexed it yet, or
+            // it is still rendering the card's type definition (a 503 with
+            // `Retry-After`, which `fetchJSON` has already retried as far as
+            // it goes). Either way the instance this tab is already running
+            // stands, so keep it exactly as it is, autosave and all. Treating
+            // it as a deletion would evict a card that still exists; recording
+            // it as an error would stand a placeholder in front of one the
+            // user is working in.
+            //
+            // The fresh state comes with a later read. For a card awaiting
+            // its index row, that is the read the row's own event starts. A
+            // card the realm has indexed gets no further event, so a refusal
+            // for now schedules one more read itself, once the interval the
+            // realm named has passed; see `rereadAfterTurnAwayTask`.
             maybeReloadedInstance = instance;
+            if (!cardError?.awaitingIndex && !opts?.afterTurnAway) {
+              turnedAwayFor = (err.responseHeaders as Headers).get(
+                'Retry-After',
+              );
+            }
           } else if (err.status === 404) {
             // in this case the document was invalidated in the index because the
             // file was deleted
@@ -3764,6 +3787,13 @@ export default class StoreService extends Service implements StoreInterface {
           // reader still holding the card it computed against.
           this.notifyCardReloadSubscribers(instance);
         }
+        if (turnedAwayFor !== undefined) {
+          this.rereadAfterTurnAwayTask.perform(
+            instance,
+            turnedAwayFor,
+            identityEpoch,
+          );
+        }
         if (isDelete) {
           await this.stopAutoSaving(instance);
           // Snapshot the consumers BEFORE removing the deleted instance from
@@ -3794,6 +3824,44 @@ export default class StoreService extends Service implements StoreInterface {
           this.#reloadTargets.delete(localId);
         }
         this.finishTrackingCardLoad(instance.id, reloadTracker);
+      }
+    },
+  );
+
+  // Reads a running card again once the interval the realm named has passed,
+  // after the realm turned away a reload of it for now. The reload was the one
+  // an event asked for, and a card the realm has already indexed gets no
+  // further event, so this is the read that brings the state that event
+  // announced. It is the last one: if the realm turns this read away too, the
+  // card stays as it is until another event names it. It is dropped when a
+  // reset supersedes the identity the card belonged to, or the store no
+  // longer holds this instance. The test waiter spans the wait, so `settled()`
+  // covers the read that follows it.
+  private rereadAfterTurnAwayTask = task(
+    async (
+      instance: CardDef,
+      retryAfter: string | null,
+      identityEpoch: number,
+    ) => {
+      let token = waiter.beginAsync(
+        undefined,
+        `reread ${instance.id} after the realm turned its reload away`,
+      );
+      try {
+        await timeout(
+          retryAfterDelayMs(retryAfter, MAX_UNAVAILABLE_RETRY_AFTER_SECONDS),
+        );
+        if (
+          this.#identityEpoch !== identityEpoch ||
+          this.store.getCard(instance[localIdSymbol]) !== instance
+        ) {
+          return;
+        }
+        await this.reloadTask.perform(instance, undefined, {
+          afterTurnAway: true,
+        });
+      } finally {
+        waiter.endAsync(token);
       }
     },
   );
@@ -4049,18 +4117,24 @@ export default class StoreService extends Service implements StoreInterface {
     this.autoSaveStates.delete(instance[localIdSymbol]);
   }
 
-  // The document to build a card from when its card+json read failed because
-  // the realm has not indexed it yet. The realm serves a card's stored source
-  // from its file system whatever state its index is in, and this is the same
-  // read a linked card resolves through, so the card comes up exactly as it
-  // would as the target of a link: its computed fields evaluate in this tab.
-  // Undefined for any other failure, and when the source cannot be read
-  // either, which leaves the awaiting-index error to stand.
-  async #unindexedCardSource(
+  // The document to build a card from when the realm could not serve its
+  // card+json: it has not indexed the card yet, or it turned the read away for
+  // now (a 503 with `Retry-After`, which `fetchJSON` has already retried as
+  // far as it goes) while it renders the card's type definition. The realm
+  // serves a card's stored source from its file system whatever state its
+  // index and its definitions are in, and this is the same read a linked card
+  // resolves through, so the card comes up exactly as it would as the target
+  // of a link: its computed fields evaluate in this tab. Undefined for any
+  // other failure, and when the source cannot be read either, which leaves
+  // the realm's answer to stand.
+  async #storedCardSource(
     url: string,
     error: unknown,
   ): Promise<SingleCardDocument | undefined> {
-    if (!processCardError(url, error).errors[0]?.awaitingIndex) {
+    if (
+      !processCardError(url, error).errors[0]?.awaitingIndex &&
+      !isRetryableUnavailable(error)
+    ) {
       return undefined;
     }
     let doc: SingleCardDocument | CardError;
@@ -4090,9 +4164,10 @@ export default class StoreService extends Service implements StoreInterface {
       noCache?: boolean;
       localDir?: string;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
-      // Answer a card the realm has not indexed with the awaiting-index error
+      // Answer a card the realm cannot serve right now with the realm's answer
+      // (the awaiting-index error, or the 503 it turns a read away with)
       // rather than an instance built from its stored source. For a caller
-      // whose question is the index's state, not the card's content.
+      // whose question is the realm's state, not the card's content.
       reportUnindexed?: true;
     };
   }): Promise<T | CardErrorJSONAPI> {
@@ -4205,7 +4280,7 @@ export default class StoreService extends Service implements StoreInterface {
             let source =
               opts?.reportUnindexed || this.store.getCard(id)
                 ? undefined
-                : await this.#unindexedCardSource(url, error);
+                : await this.#storedCardSource(url, error);
             if (!source) {
               throw error;
             }
@@ -4297,13 +4372,18 @@ export default class StoreService extends Service implements StoreInterface {
       let errorResponse = processCardError(id, error);
       let cardError = errorResponse.errors[0];
       // A card this tab is already running outranks the realm's report that it
-      // has not indexed it yet — see `setIdentityContext`. A cache-bypassing
-      // read is the one that gets here with an instance already in hand.
+      // has not indexed it yet — see `setIdentityContext` — and a read the
+      // realm turned away for now, which says nothing about the card. A
+      // cache-bypassing read is the one that gets here with an instance
+      // already in hand.
       let running =
-        cardError?.awaitingIndex && id ? this.store.getCard(id) : undefined;
-      // A card built from its source is the store standing in for the missing
-      // row, which is exactly what a read reporting the index's state is asking
-      // about, so that read gets the realm's answer instead.
+        (cardError?.awaitingIndex || isRetryableUnavailable(error)) && id
+          ? this.store.getCard(id)
+          : undefined;
+      // A card built from its source is the store standing in for the
+      // document the realm could not serve, which is exactly what a read
+      // reporting the realm's state is asking about, so that read gets the
+      // realm's answer instead.
       if (
         running &&
         opts?.reportUnindexed &&
@@ -4317,10 +4397,16 @@ export default class StoreService extends Service implements StoreInterface {
         return running as T;
       }
       deferred?.fulfill(cardError);
-      // The awaiting-index answer to such a read is the caller's alone: what
-      // the store records is what every other read of the card is handed, and
-      // for them the card is built from its source.
-      if (!(opts?.reportUnindexed && cardError?.awaitingIndex)) {
+      // The realm's answer to such a read, when it says the card cannot be
+      // served right now, is the caller's alone: what the store records is
+      // what every other read of the card is handed, and for them the card is
+      // built from its source.
+      if (
+        !(
+          opts?.reportUnindexed &&
+          (cardError?.awaitingIndex || isRetryableUnavailable(error))
+        )
+      ) {
         this.setIdentityContext(cardError);
       }
       let status = cardError?.status ?? error?.status;

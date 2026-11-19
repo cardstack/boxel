@@ -20,6 +20,9 @@ export interface KeyValueIO {
   // What the masked prompt reveals after Enter (see `promptPassword`).
   revealLast?: number;
   revealNoneAtOrBelow?: number;
+  // What the value is called at the prompt and in refusals: "key value" unless
+  // the command stores something else, such as a platform secret.
+  noun?: string;
 }
 
 /**
@@ -30,13 +33,14 @@ export interface KeyValueIO {
 export function checkKeyValueSource(
   source: KeyValueSource,
   input: { isTTY?: boolean } = process.stdin,
+  noun = 'key value',
 ): void {
   if (source.stdin && source.keyFile) {
     throw new Error('Pass --stdin or --key-file, not both');
   }
   if (!source.stdin && !source.keyFile && !input.isTTY) {
     throw new Error(
-      'Cannot prompt for the key value: stdin is not a terminal. Pass --stdin or --key-file',
+      `Cannot prompt for the ${noun}: stdin is not a terminal. Pass --stdin or --key-file`,
     );
   }
 }
@@ -52,7 +56,8 @@ export async function readKeyValue(
   io: KeyValueIO = {},
 ): Promise<string> {
   let input = io.input ?? process.stdin;
-  checkKeyValueSource(source, input);
+  let noun = io.noun ?? 'key value';
+  checkKeyValueSource(source, input, noun);
   let value: string;
   if (source.keyFile) {
     value = stripOneTrailingNewline(await readFile(source.keyFile, 'utf8'));
@@ -63,7 +68,7 @@ export async function readKeyValue(
     }
     value = stripOneTrailingNewline(Buffer.concat(chunks).toString('utf8'));
   } else {
-    value = await promptPassword('Key value: ', {
+    value = await promptPassword(`${noun[0].toUpperCase()}${noun.slice(1)}: `, {
       revealLast: io.revealLast ?? 4,
       revealNoneAtOrBelow: io.revealNoneAtOrBelow,
       input,
@@ -71,7 +76,7 @@ export async function readKeyValue(
     });
   }
   if (!value) {
-    throw new Error('The key value is empty');
+    throw new Error(`The ${noun} is empty`);
   }
   return value;
 }
