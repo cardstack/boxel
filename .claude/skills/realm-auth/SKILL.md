@@ -5,12 +5,19 @@ description: Architecture of realm and realm-server authentication — the token
 
 # Realm auth — token families and their invariants
 
-**The governing fact: every boxel token except the matrix access token is a
-stateless bearer JWT.** Verification is a signature check, an expiry check, and
-a small number of claim comparisons against live database state. There is no
-session table and no token store, so nothing can be looked up, listed, or
+**The governing fact: every boxel token except the matrix access token and the
+OAuth access token is a stateless bearer JWT.** Verification is a signature
+check, an expiry check, and a small number of claim comparisons against live
+database state. No table holds these JWTs, so none can be looked up, listed, or
 counted — only signed and later re-derived. Every design consequence below
-follows from that.
+follows from that. (A secure window session's JWT names a row of
+`secure_sessions`, which its verification checks, but the token itself is
+still signed, not stored.)
+
+The OAuth access token that outside apps call with is the exception: an
+opaque value, stored by its hash in `oauth_provider_tokens` and looked up there
+on every call, so it can be listed and deleted. The paragraph on it below, and
+the `oauth-provider` skill, cover it.
 
 Matrix is the root authority. Minting any boxel token requires proving control
 of a matrix account (an openid token exchange), and Synapse is the only party

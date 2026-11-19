@@ -267,7 +267,9 @@ UPDATE oauth_provider_grants
 DELETE FROM oauth_provider_tokens WHERE grant_id = '<grant id>';
 ```
 
-The grant's next call or refresh fails, and nothing is logged for it.
+Ending a grant by hand writes no `grant ended` line. The app's next
+refresh shows as `token refused: invalid_grant, client …`, and its next
+call as `token refused: unknown, resource …`.
 
 ## Rotating keys
 

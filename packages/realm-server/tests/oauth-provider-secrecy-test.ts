@@ -22,7 +22,6 @@ import {
   OAUTH_TEST_SERVER_URL,
   OAUTH_TEST_STATE,
   OAUTH_TEST_WEB_REDIRECT_URI,
-  codeForOAuthClient,
   decideOAuthFlow,
   exchangeOAuthCode,
   finishOAuthFlow,
@@ -31,6 +30,7 @@ import {
   revokeOAuthToken,
   startOAuthFlow,
   startOAuthProviderServer,
+  type OAuthRequester,
   type OAuthTokenResponse,
 } from './helpers/oauth-provider-flow.ts';
 import {
@@ -191,6 +191,8 @@ module(basename(import.meta.filename), function (hooks) {
       clientId: string;
       grantId: string;
       secondClientId: string;
+      secondInteractionId: string;
+      secondTicket: string;
       secondCode: string;
       secondTokens: OAuthTokenResponse;
       secondGrantId: string;
@@ -203,13 +205,34 @@ module(basename(import.meta.filename), function (hooks) {
       snapshots.set(step, (await storedRows()).rows);
     }
 
+    // The values of the cookies the library sets in the browser: its
+    // interaction and session IDs. A cookie's `.sig` is a signature, not
+    // a secret, and an expired cookie is set empty.
+    let cookies: string[] = [];
+    function browserKeepingCookies(): OAuthRequester {
+      let agent = supertest.agent(server!);
+      return {
+        get: (url: string) =>
+          agent.get(url).on('response', (response) => {
+            for (let header of ([] as string[]).concat(
+              response.headers['set-cookie'] ?? [],
+            )) {
+              let [, name, value] = /^([^=]+)=([^;]*)/.exec(header) ?? [];
+              if (name && value && !name.endsWith('.sig')) {
+                cookies.push(`${name}=${value}`);
+              }
+            }
+          }),
+      };
+    }
+
     let telemetry = await telemetryDuring(async () => {
       // The first app: registered, authorized, consented to, finished,
       // exchanged, refreshed, used, and revoked by the app.
       values.clientId = await registerOAuthClient(server!, {
         clientName: 'Secrecy App',
       });
-      let browser = supertest.agent(server!);
+      let browser = browserKeepingCookies();
       values.interactionId = await startOAuthFlow(browser, values.clientId, {
         resources: [RESOURCE],
         codeChallenge: OAUTH_TEST_CODE_CHALLENGE,
@@ -291,17 +314,38 @@ module(basename(import.meta.filename), function (hooks) {
         .set('Host', HOST)
         .set('Origin', SECURE_ORIGIN);
       assert.strictEqual(error.status, 200, 'the authorize page reads it');
+      let returned = await supertest(server!)
+        .get(`/_oauth-provider/error/${values.errorReference}/return`)
+        .set('Host', HOST);
+      assert.strictEqual(returned.status, 303, 'and returns it to the app');
+      assert.strictEqual(
+        new URL(returned.headers.location).searchParams.get('error'),
+        'invalid_request',
+        'with its error',
+      );
 
       // The second app: connected, then disconnected by the user through
       // the route Connected apps calls.
       values.secondClientId = await registerOAuthClient(server!, {
         clientName: 'Second Secrecy App',
       });
-      values.secondCode = await codeForOAuthClient(
-        server!,
+      let secondBrowser = browserKeepingCookies();
+      values.secondInteractionId = await startOAuthFlow(
+        secondBrowser,
         values.secondClientId,
+        { resources: [RESOURCE], codeChallenge: OAUTH_TEST_CODE_CHALLENGE },
+      );
+      await snapshot('second started');
+      values.secondTicket = await decideOAuthFlow(
+        server!,
+        values.secondInteractionId,
         who.session,
-        { resources: [RESOURCE] },
+      );
+      await snapshot('second decided');
+      values.secondCode = await finishOAuthFlow(
+        secondBrowser,
+        values.secondInteractionId,
+        values.secondTicket,
       );
       values.secondTokens = exchanged(
         await exchangeOAuthCode(
@@ -330,11 +374,28 @@ module(basename(import.meta.filename), function (hooks) {
       'refreshed access token': values.refreshed.access_token,
       'refreshed refresh token': values.refreshed.refresh_token!,
       'error reference': values.errorReference,
+      "second app's interaction ID": values.secondInteractionId,
+      "second app's ticket": values.secondTicket,
       "second app's code": values.secondCode,
       "second app's access token": values.secondTokens.access_token,
       "second app's refresh token": values.secondTokens.refresh_token!,
     };
+    for (let name of ['_interaction', '_session']) {
+      assert.true(
+        cookies.some((cookie) => cookie.startsWith(`${name}=`)),
+        `the browser was set a ${name} cookie`,
+      );
+    }
+    cookies.forEach((cookie, index) => {
+      let [name, value] = cookie.split('=');
+      secrets[`${name} cookie (${index + 1})`] = value;
+    });
     assertNoSecrets(assert, telemetry, secrets);
+    // The user's secure window session is sent on the consent and
+    // connections requests, and is stored in none of the provider's tables.
+    assertNoSecrets(assert, telemetry, {
+      'secure window session': who.session.replace(/^Bearer /, ''),
+    });
     // A grant ID is no secret, and is stored, but the provider's telemetry
     // never names one (`grant ended` names the client).
     assertNoSecrets(assert, telemetry, {
@@ -363,6 +424,7 @@ module(basename(import.meta.filename), function (hooks) {
       ['started', 'oauth_provider_objects', ['(Interaction,']],
       ['decided', 'oauth_provider_objects', ['(ConsentTicket,']],
       ['finished', 'oauth_provider_objects', ['(AuthorizationCode,']],
+      ['finished', 'oauth_provider_objects', ['(Session,']],
       [
         'refreshed',
         'oauth_provider_tokens',
@@ -374,6 +436,8 @@ module(basename(import.meta.filename), function (hooks) {
         [',RefreshToken,', `,${values.grantId},`],
       ],
       ['refused', 'oauth_provider_objects', ['(ErrorReference,']],
+      ['second started', 'oauth_provider_objects', ['(Interaction,']],
+      ['second decided', 'oauth_provider_objects', ['(ConsentTicket,']],
       [
         'second connected',
         'oauth_provider_tokens',
@@ -399,6 +463,7 @@ module(basename(import.meta.filename), function (hooks) {
     // empty log.
     for (let line of [
       'consent shown:',
+      'authorization error returned to the client:',
       `grant ended: client, client ${values.clientId}`,
       `grant ended: user, client ${values.secondClientId}`,
     ]) {
