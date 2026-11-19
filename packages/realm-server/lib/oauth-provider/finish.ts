@@ -145,6 +145,10 @@ export function finishHandler({
       resources: decision.scopes,
       renewing: decision.renew,
       consentedAt: decision.decidedAt,
+      redirectUri:
+        typeof interaction.params.redirect_uri === 'string'
+          ? interaction.params.redirect_uri
+          : undefined,
     });
     if (!grantId) {
       return refuse('deleted-client');
