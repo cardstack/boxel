@@ -304,9 +304,9 @@ module(basename(import.meta.filename), function () {
         ['the full key', `{"echo":"${STRIPE_KEY}"}`, STRIPE_SECRET],
         ['the secret part', `{"echo":"${STRIPE_SECRET}"}`, STRIPE_SECRET],
         [
-          'a run longer than an id carries, inside an id',
-          `{"id":"${stripeId('price_', STRIPE_SECRET.slice(30, 47))}"}`,
-          STRIPE_SECRET.slice(30, 47),
+          'a run from further into the secret, inside an id',
+          `{"id":"${stripeId('price_', STRIPE_SECRET.slice(40, 51))}"}`,
+          STRIPE_SECRET.slice(40, 51),
         ],
         [
           'the whole secret inside an id',
@@ -317,6 +317,25 @@ module(basename(import.meta.filename), function () {
         let output = scrubber.scrubText(text);
         assert.false(leaked(output, leakedRun), `${name}: ${output}`);
         assert.true(output.includes(REDACTED), `${name}: ${output}`);
+      }
+    });
+
+    test('returns nothing past the start of the secret, however many ids carry runs of it', function (assert) {
+      let scrubber = scrubberFor(STRIPE_KEY);
+      let chunks: string[] = [];
+      for (let at = 0; at < STRIPE_SECRET.length; at += 12) {
+        chunks.push(STRIPE_SECRET.slice(at, at + 12));
+      }
+      let rest = STRIPE_SECRET.slice(24);
+      for (let [name, text] of [
+        [
+          'one chunk per id',
+          JSON.stringify({ ids: chunks.map((chunk) => `price_${chunk}`) }),
+        ],
+        ['every chunk in one id', `{"id":"price_${chunks.join('Q')}"}`],
+      ]) {
+        let output = scrubber.scrubText(text);
+        assert.false(leaked(output, rest), `${name}: ${output}`);
       }
     });
 

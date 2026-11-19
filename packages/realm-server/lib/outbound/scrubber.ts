@@ -18,10 +18,10 @@
 //   case too, which lets one pass over the text find every form; a chance
 //   match of that length in ordinary text is vanishingly unlikely.
 //
-// A short raw run of a key inside one of its vendor's public object ids is
-// left in place (see `PUBLIC_ID_PREFIXES`): Stripe's ids share a run of
-// characters with the account's own key, and an id has to come back whole to
-// be usable.
+// A raw run from the start of a key's secret part, inside one of its vendor's
+// public object ids, is left in place (see `PUBLIC_ID_PREFIXES`): Stripe's ids
+// share a run of characters with the account's own key, and an id has to come
+// back whole to be usable.
 //
 // Every other match is replaced by `REDACTED`. Text with no match passes through
 // byte for byte, binary included: the scrubber works on bytes, never on a
@@ -58,20 +58,23 @@ export function publicPrefix(value: string): string {
 
 // The object ids a vendor returns, by the prefixes of the keys it issues.
 // A Stripe object id (`price_1Ud8kn…`) carries a run of characters that the
-// account's secret key carries too. That run identifies the account, not the
-// secret, and the id is unusable without it. So a match inside one of these
-// ids is kept, as long as it is:
+// account's secret key carries too, from the part of the key that names the
+// account. That run identifies the account, not the secret, and the id is
+// unusable without it. So a match inside one of these ids is kept, as long as
+// it is:
 //
-// - a raw run of a registered key of that vendor (never an encoded form);
-// - at most `MAX_ID_FRAGMENT_LENGTH` bytes long;
+// - a raw run (never an encoded form) of the first `ID_WINDOW_LENGTH`
+//   characters of a registered key's secret part, for a key of that vendor.
+//   However many ids a response holds, and however many responses there are,
+//   no more of the secret than that window is ever returned;
 // - inside the id's body: only letters and digits from the id's prefix up to
 //   the end of the match, the prefix itself following a byte that can't be
 //   part of an id, and no more than `MAX_ID_LENGTH` bytes from the start of
 //   the prefix to the end of the match;
 // - from a key whose secret part is at least `MIN_ID_KEY_SECRET_LENGTH`
-//   long, so what an id can show is a small part of it.
+//   long, so the window is a small part of it.
 //
-// Any longer run, or one anywhere else, is still removed.
+// Any other run, or one anywhere else, is still removed.
 const PUBLIC_ID_PREFIXES: readonly {
   keyPrefixes: readonly string[];
   idPrefixes: readonly string[];
@@ -110,10 +113,11 @@ const PUBLIC_ID_PREFIXES: readonly {
   },
 ];
 
-// The longest run of a key kept inside a public id. Stripe ids share 10 or 11
-// characters with the account's key; past this length the run is treated as
-// an echo of the key, wherever it sits.
-const MAX_ID_FRAGMENT_LENGTH = 16;
+// How much of the start of a key's secret part may be kept inside a public id.
+// A Stripe secret key's secret part opens with one character and the
+// account's 16-character id body, and its ids share 10 or 11 characters with
+// that stretch.
+const ID_WINDOW_LENGTH = 24;
 
 // The longest stretch of an id, from its prefix to the end of a kept match.
 // Stripe's ids are well under it. The stream keeps at least this much of
@@ -121,10 +125,9 @@ const MAX_ID_FRAGMENT_LENGTH = 16;
 const MAX_ID_LENGTH = 128;
 
 // The shortest secret part a key may have for runs of it to be kept inside an
-// id: four times `MAX_ID_FRAGMENT_LENGTH`, so at least three quarters of the
-// secret stays out of any one id. A current Stripe secret key's is about 99
-// characters.
-const MIN_ID_KEY_SECRET_LENGTH = 4 * MAX_ID_FRAGMENT_LENGTH;
+// id: so that at least 40 characters past `ID_WINDOW_LENGTH` are never
+// returned. A current Stripe secret key's is about 99 characters.
+const MIN_ID_KEY_SECRET_LENGTH = ID_WINDOW_LENGTH + 40;
 
 // The longest escape sequence the decoded view understands, in bytes:
 // `&#x` plus eight hex digits and `;`, or a `\uXXXX\uXXXX` surrogate pair.
@@ -518,8 +521,9 @@ export class CredentialScrubber {
   private heldBytes = new Set<number>();
   private registered = new Set<string>();
   // The registered keys whose runs may be kept inside their vendor's public
-  // ids: each key's secret part, folded, beside that vendor's id prefixes.
-  private idKeys: { idPrefixes: readonly string[]; secret: string }[] = [];
+  // ids: the start of each key's secret part (`ID_WINDOW_LENGTH` characters,
+  // folded), beside that vendor's id prefixes.
+  private idKeys: { idPrefixes: readonly string[]; window: string }[] = [];
 
   constructor() {
     for (let byte of Buffer.from(ESCAPE_SYNTAX, 'latin1')) {
@@ -555,16 +559,18 @@ export class CredentialScrubber {
     if (vendor && secret.length >= MIN_ID_KEY_SECRET_LENGTH) {
       this.idKeys.push({
         idPrefixes: vendor.idPrefixes,
-        secret: latin1(folded(Buffer.from(secret, 'latin1'))),
+        window: latin1(
+          folded(Buffer.from(secret.slice(0, ID_WINDOW_LENGTH), 'latin1')),
+        ),
       });
     }
   }
 
-  // Whether the match `bytes[start, end)` is a short raw run of a registered
-  // key inside one of its vendor's public ids, and so stays (see
+  // Whether the match `bytes[start, end)` is a raw run from the start of a
+  // registered key's secret part inside one of its vendor's public ids, and so stays (see
   // `PUBLIC_ID_PREFIXES`).
   private isInPublicId(bytes: Uint8Array, [start, end]: [number, number]) {
-    if (this.idKeys.length === 0 || end - start > MAX_ID_FRAGMENT_LENGTH) {
+    if (this.idKeys.length === 0 || end - start > ID_WINDOW_LENGTH) {
       return false;
     }
     for (let i = start; i < end; i++) {
@@ -576,8 +582,8 @@ export class CredentialScrubber {
     while (body > limit && isLetterOrDigit(bytes[body - 1])) body--;
     let run = latin1(folded(bytes.subarray(start, end)));
     return this.idKeys.some(
-      ({ idPrefixes, secret }) =>
-        secret.includes(run) &&
+      ({ idPrefixes, window }) =>
+        window.includes(run) &&
         idPrefixes.some((idPrefix) => {
           let from = body - idPrefix.length;
           return (
