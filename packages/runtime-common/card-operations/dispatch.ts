@@ -1133,13 +1133,17 @@ function placedBeforeResolving(
   if (target.kind === 'type') {
     let landing = name === 'create' ? opts.landing?.(undefined) : undefined;
     return landing
-      ? targetPathOf(core, { kind: 'type', types: [], landing })
+      ? targetPathOf(core, { kind: 'type', types: [], landing }, 'create')
       : 'unplaced';
   }
   if (name === 'create') {
     return 'unplaced';
   }
-  return targetPathOf(core, subjectOf(target, [], undefined, opts.asFile));
+  return targetPathOf(
+    core,
+    subjectOf(target, [], undefined, opts.asFile),
+    name as BaseOperation,
+  );
 }
 
 function subjectOf(

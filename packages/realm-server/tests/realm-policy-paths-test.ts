@@ -68,8 +68,8 @@ type Grant = { operation: string; where?: unknown; paths?: unknown };
 type Rule = { targetType: { module: string; name: string }; grants: Grant[] };
 
 // `read`, `update` and `create` on posts under `blog/`, and a search that
-// finds posts under `blog/` and `with space/`. Files under `notes/` can be
-// downloaded.
+// finds posts under `blog/` and `with space/`. Files under `notes/` and
+// `styles/` can be downloaded.
 const RULES: Rule[] = [
   {
     targetType: POST,
@@ -82,7 +82,7 @@ const RULES: Rule[] = [
   },
   {
     targetType: FILE_DEF,
-    grants: [{ operation: 'readSource', paths: ['notes/'] }],
+    grants: [{ operation: 'readSource', paths: ['notes/', 'styles/'] }],
   },
 ];
 
@@ -165,6 +165,7 @@ module(basename(import.meta.filename), function (hooks) {
             'with space/Post/5.json': post('In a directory with a space'),
             'notes/readme.txt': 'Read me',
             'misc/other.txt': 'Something else',
+            'styles/site.css': 'body { margin: 0; }',
           },
           permissions: {
             [ADMIN]: ['read', 'write', 'realm-owner'],
@@ -540,6 +541,10 @@ module(basename(import.meta.filename), function (hooks) {
         'refused without reading its bytes',
       );
       assert.true(await served(NOTE_FILE), 'a file under notes/');
+      assert.true(
+        await served(`${EDUCATION}styles/site.css`),
+        'a file is read at its own path whatever its extension, under styles/',
+      );
     });
 
     test('a grant on `/` reaches neither the realm’s config card nor a path the realm ignores', async function (assert) {

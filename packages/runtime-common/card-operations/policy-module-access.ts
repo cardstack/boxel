@@ -179,14 +179,17 @@ export async function moduleAccessIssues(
 
 // Whether a code grant's paths cover a module. A module is named as its
 // identifier, which can leave out the extension of the file it is stored
-// in, so one named that way is covered where its `.gts` or `.ts` file is.
+// in, so one named that way is covered where a file it may be stored in
+// is: its `.gts`, `.gjs`, `.ts` or `.js`.
 function underPaths(grant: CompiledOperationGrant, module: string): boolean {
   if (!grant.paths) {
     return true;
   }
   let files = hasExecutableExtension(module)
     ? [module]
-    : [module, `${module}.gts`, `${module}.ts`];
+    : ['.gts', '.gjs', '.ts', '.js'].map(
+        (extension) => `${module}${extension}`,
+      );
   return files.some((file) => pathSpecifierMatches(grant.paths!, file, 'file'));
 }
 

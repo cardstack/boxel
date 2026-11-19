@@ -685,7 +685,7 @@ async function decide(
   if (!policy) {
     return refuse('no-grant');
   }
-  let target = targetPathOf(core, subject);
+  let target = targetPathOf(core, subject, base);
   // A target no grant naming the operation covers is refused here, with no
   // row or byte read, so a request outside every grant's paths costs nothing
   // and its timing doesn't tell whether the target is there. An explain reads
@@ -2155,37 +2155,44 @@ export function grantCoversPath(
   );
 }
 
-// Where a subject's target is in the realm, or undefined where the realm
-// can't place it: a URL outside the realm, a create with no landing, or an
-// unmatched target. A create is placed where its card lands, whether it is
-// invoked on a type or anchored on a card. A card is placed at its stored
-// `.json`, the realm's root naming its index card.
+// Where a subject's target is in the realm for an operation on `base`, or
+// undefined where the realm can't place it: a URL outside the realm, an
+// unmatched target, or a create with no landing. A create is placed where its
+// card lands, whether it is invoked on a type or anchored on a card, and never
+// at its anchor. A read of stored bytes is placed at the path it reads, which
+// is the target's own, whatever its extension. Anything else on a card is
+// placed at the card's stored `.json`, the realm's root naming its index card,
+// and on a file at the file's path.
 export function targetPathOf(
   core: OperationCore,
   subject: GateSubject,
+  base: BaseOperation,
 ): TargetPath | undefined {
-  if ((subject.kind === 'type' || subject.kind === 'card') && subject.landing) {
-    return subject.landing.file !== undefined
-      ? { path: subject.landing.file, kind: 'file' }
-      : { path: subject.landing.directory, kind: 'directory' };
-  }
-  switch (subject.kind) {
-    case 'card':
-    case 'file': {
-      let local: string;
-      try {
-        local = localPathFor(core, subject.url);
-      } catch {
-        return undefined;
-      }
-      if (subject.kind === 'file') {
-        return local === '' ? undefined : { path: local, kind: 'file' };
-      }
-      return { path: `${local === '' ? 'index' : local}.json`, kind: 'file' };
-    }
-    default:
+  if (base === 'create') {
+    let landing =
+      subject.kind === 'type' || subject.kind === 'card'
+        ? subject.landing
+        : undefined;
+    if (!landing) {
       return undefined;
+    }
+    return landing.file !== undefined
+      ? { path: landing.file, kind: 'file' }
+      : { path: landing.directory, kind: 'directory' };
   }
+  if (subject.kind !== 'card' && subject.kind !== 'file') {
+    return undefined;
+  }
+  let local: string;
+  try {
+    local = localPathFor(core, subject.url);
+  } catch {
+    return undefined;
+  }
+  if (subject.kind === 'file' || base === 'readSource') {
+    return local === '' ? undefined : { path: local, kind: 'file' };
+  }
+  return { path: `${local === '' ? 'index' : local}.json`, kind: 'file' };
 }
 
 // Each rule's position in its policy, under every key its type is recorded
