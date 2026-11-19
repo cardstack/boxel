@@ -325,7 +325,9 @@ module('Acceptance | host URL manager', function (hooks) {
     await openManager();
     await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
 
-    assert.dom('[data-test-replace-canonical]').exists();
+    assert
+      .dom(`[data-test-host-url="${SPACE_URL}"] [data-test-replace-canonical]`)
+      .exists('the chooser opens in the row being unmounted');
     assert.deepEqual(fake.calls, [], 'nothing is removed yet');
     assert.dom('[data-test-confirm-replace-canonical]').isDisabled();
 

@@ -205,6 +205,9 @@ export default class HostURLManager extends Component<Signature> {
 
   private errorFor = (url: string) => this.errors.get(url);
 
+  private isReplacing = (hostURL: HostURL) =>
+    this.replacingCanonical?.id === hostURL.id;
+
   private setError(url: string, error: unknown) {
     let errors = new Map(this.errors);
     if (error === undefined) {
@@ -475,6 +478,48 @@ export default class HostURLManager extends Component<Signature> {
                         >{{error}}</p>
                       {{/if}}
                     {{/let}}
+                    {{#if (this.isReplacing hostURL)}}
+                      <Alert
+                        class='replace-canonical'
+                        @tone='warning'
+                        @title='Choose a new canonical host URL'
+                        data-test-replace-canonical
+                      >
+                        <:default>
+                          <p
+                            id='host-urls-new-canonical'
+                            class='replace-prompt'
+                          >
+                            {{displayURL hostURL.url}}
+                            is canonical. Choose which host URL takes over
+                            before you unmount it.
+                          </p>
+                          <RadioGroup
+                            @options={{this.newCanonicalOptions}}
+                            @value={{this.newCanonicalId}}
+                            @onValueChange={{this.chooseNewCanonical}}
+                            aria-labelledby='host-urls-new-canonical'
+                            data-test-new-canonical
+                          />
+                        </:default>
+                        <:action>
+                          <Button
+                            @variant='ghost'
+                            @size='sm'
+                            {{on 'click' this.cancelReplacingCanonical}}
+                            data-test-cancel-replace-canonical
+                          >Cancel</Button>
+                          <Button
+                            @variant='destructive'
+                            @size='sm'
+                            @disabled={{this.isReplaceDisabled}}
+                            @busy={{this.replaceCanonicalTask.isRunning}}
+                            {{on 'click' this.confirmReplaceCanonical}}
+                            data-test-confirm-replace-canonical
+                          >Unmount</Button>
+                        </:action>
+                      </Alert>
+                    {{/if}}
                   </li>
                 {{/each}}
               </ul>
@@ -484,38 +529,6 @@ export default class HostURLManager extends Component<Signature> {
               </p>
             {{/if}}
 
-            {{#if this.replacingCanonical}}
-              <div class='replace-canonical' data-test-replace-canonical>
-                <p id='host-urls-new-canonical' class='replace-prompt'>
-                  {{displayURL this.replacingCanonical.url}}
-                  is canonical. Choose the new canonical host URL before you
-                  unmount it.
-                </p>
-                <RadioGroup
-                  @options={{this.newCanonicalOptions}}
-                  @value={{this.newCanonicalId}}
-                  @onValueChange={{this.chooseNewCanonical}}
-                  aria-labelledby='host-urls-new-canonical'
-                  data-test-new-canonical
-                />
-                <div class='row-actions'>
-                  <Button
-                    @variant='ghost'
-                    @size='sm'
-                    {{on 'click' this.cancelReplacingCanonical}}
-                    data-test-cancel-replace-canonical
-                  >Cancel</Button>
-                  <Button
-                    @variant='destructive'
-                    @size='sm'
-                    @disabled={{this.isReplaceDisabled}}
-                    @busy={{this.replaceCanonicalTask.isRunning}}
-                    {{on 'click' this.confirmReplaceCanonical}}
-                    data-test-confirm-replace-canonical
-                  >Unmount</Button>
-                </div>
-              </div>
-            {{/if}}
           </section>
 
           <section class='section' aria-labelledby='host-urls-home-page'>
@@ -784,19 +797,14 @@ export default class HostURLManager extends Component<Signature> {
         --pretui-tooltip-measure: 20rem;
       }
       .replace-canonical {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-sm);
-        border: 1px solid var(--border);
-        border-radius: var(--boxel-border-radius);
+        grid-column: 1 / -1;
       }
       .grant {
         display: flex;
         justify-content: flex-end;
       }
       .replace-prompt {
-        margin: 0;
+        margin: 0 0 var(--boxel-sp-xs);
         overflow-wrap: anywhere;
       }
     </style>
