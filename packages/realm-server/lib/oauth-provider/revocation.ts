@@ -98,6 +98,7 @@ export function revocationHandler({
   return async function handleRevocation(ctxt, next) {
     let form = await readForm({
       ctxt,
+      provider,
       charge: (answer) => charge(ctxt, answer),
       endpoint: 'revocation',
     });

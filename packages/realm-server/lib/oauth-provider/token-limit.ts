@@ -22,9 +22,9 @@
 //   the one the `clientAddress` middleware works out, never the socket's.
 //
 // The body is read as the library reads it (`readForm`), so Boxel counts the
-// code or refresh token the library acts on. A request that names a parameter
-// more than once names no single one, and is treated as naming none; the
-// library refuses it.
+// code or refresh token the library acts on. A request that names a code,
+// verifier, refresh token or client more than once names no single one, and
+// is treated as naming none; the library refuses it.
 //
 // Ending a grant deletes its tokens, so a refresh that names a token of an
 // ended grant counts as a failure too. So does a revocation that names one
@@ -182,7 +182,7 @@ export function tokenHandler({
         alert,
         endpoint: 'token',
       });
-    let form = await readForm({ ctxt, charge, endpoint: 'token' });
+    let form = await readForm({ ctxt, provider, charge, endpoint: 'token' });
     if (!form) {
       return;
     }
@@ -405,30 +405,41 @@ export type FormParam = (name: string) => string | undefined;
 
 // A token or revocation request's body, read as the library reads it.
 export interface Form {
-  // The body as read, for the library; undefined when the request isn't
-  // form-encoded, so the library refuses it without reading one.
+  // The body as read, for the library; undefined when the library wouldn't
+  // read it as a form, so it refuses the request for its missing parameters.
   body: string | undefined;
   param: FormParam;
 }
 
 // Reads a request's form-encoded body with `node:querystring`, as the library
-// does, for the token and revocation endpoints alike. A parameter named more
-// than once names no single one, and the library refuses the request, so
-// `param` treats it as missing; it treats an empty value the same way.
+// does, for the token and revocation endpoints alike. Whether a body is a form
+// is decided by the library's own Koa, through a context it creates: the
+// realm server's Koa matches some `Content-Type` headers differently (one with
+// a trailing `;`, for example), and the library would read a body Boxel
+// skipped. A parameter named more than once names no single one, so `param`
+// treats it as missing, and treats an empty value the same way. The library
+// refuses a repeated parameter among those `param` is asked for: a code, its
+// verifier, a refresh token, a client or a token to revoke.
 //
 // A body over `MAX_BODY_BYTES` can never succeed, so it counts as a failure
 // through `charge` before it is answered 400. It names no client, so neither
 // answer carries CORS. Undefined when the request has been answered.
 export async function readForm({
   ctxt,
+  provider,
   charge,
   endpoint,
 }: {
   ctxt: Koa.Context;
+  provider: Provider;
   charge: (answer: Answer) => Promise<boolean>;
   endpoint: 'token' | 'revocation';
 }): Promise<Form | undefined> {
-  if (!ctxt.is('application/x-www-form-urlencoded')) {
+  if (
+    !provider
+      .createContext(ctxt.req, ctxt.res)
+      .is('application/x-www-form-urlencoded')
+  ) {
     return { body: undefined, param: () => undefined };
   }
   let body: string;

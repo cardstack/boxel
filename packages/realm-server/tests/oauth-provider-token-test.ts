@@ -1239,13 +1239,45 @@ module(basename(import.meta.filename), function () {
     });
 
     // A body sent as written, which `tokenRequest` would encode.
-    function tokenWithBody(body: string) {
+    function tokenWithBody(
+      body: string,
+      contentType = 'application/x-www-form-urlencoded',
+    ) {
       return supertest(server())
         .post('/_oauth-provider/token')
         .set('Host', OAUTH_TEST_SERVER_URL.host)
-        .set('Content-Type', 'application/x-www-form-urlencoded')
+        .set('Content-Type', contentType)
         .send(body);
     }
+
+    test('a form whose Content-Type the library accepts is read as a form, so its refresh counts against its grant', async function (assert) {
+      let known = await tokensFor();
+      await failThrice(known.clientId);
+      let token = known.refreshToken;
+      // Content-Types the library reads as a form, and the realm server's
+      // own Koa doesn't.
+      for (let contentType of [
+        'application/x-www-form-urlencoded;',
+        'application/x-www-form-urlencoded; charset=utf-8;',
+      ]) {
+        let response = await tokenWithBody(
+          new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: known.clientId,
+            refresh_token: token,
+          }).toString(),
+          contentType,
+        );
+        assert.strictEqual(response.status, 200, contentType);
+        token = response.body.refresh_token;
+      }
+      let over = await refreshOAuthTokens(server(), known.clientId, token);
+      assert.strictEqual(
+        over.status,
+        429,
+        "and the grant's limit counted both refreshes",
+      );
+    });
 
     test('a body that names a live refresh token the library does not act on counts as a failed attempt', async function (assert) {
       let known = await tokensFor();
