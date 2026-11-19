@@ -241,6 +241,12 @@ module(basename(import.meta.filename), function (hooks) {
   // An incremental pass over `names` alone, its dependents left out so each
   // test says which visits the pass makes.
   async function pass(...names: string[]) {
+    // The pass's job follows every job recorded so far, as a job enqueued
+    // after them would.
+    let [{ next_id }] = (await adapter.execute(
+      `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM jobs`,
+    )) as { next_id: number | string }[];
+    jobCounter = Math.max(jobCounter, Number(next_id));
     let runner = new IndexRunner({
       realmURL: new URL(testRealm),
       jobInfo: {
@@ -484,6 +490,27 @@ module(basename(import.meta.filename), function (hooks) {
       [],
       'the failure and three dead retries spend the retries',
     );
+  });
+
+  test('a retry that fails after retries that died carries them in its run', async function (assert) {
+    await pass(logName, postName);
+    logOutcome = 'times-out';
+    await pass(logName);
+    await retryDied(logName, 24 * 60);
+    await retryDied(logName, 24 * 60);
+    assert.deepEqual(
+      await retriesDue(),
+      [url(logName)],
+      'the last retry is due',
+    );
+
+    await pass(logName);
+    assert.strictEqual(
+      (await row(logName, 'file')).diagnostics?.transientRenderFailureRenders,
+      TRANSIENT_RENDER_FAILURE_RETRY_CAP + 1,
+      'the failure, the two retries that died and this one',
+    );
+    assert.deepEqual(await retriesDue(), [], 'the retries are spent');
   });
 
   test('the hourly sweep re-indexes a legacy row’s stored timeout once', async function (assert) {

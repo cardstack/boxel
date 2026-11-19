@@ -1377,9 +1377,9 @@ async function visitForPrerenderedHtml({
 // The marker makes the failure transient (`isTransientRenderError`): the
 // writer keeps a prior good render in place of the error, and the reconcile
 // sweep's transient lane retries the row with backoff up to
-// `TRANSIENT_RENDER_FAILURE_RETRY_CAP` times. With no render to keep, the
-// error row also gets the visit-failure lane's retries, at most
-// `PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP` consecutive ones. The bounds are
+// `TRANSIENT_RENDER_FAILURE_RETRY_CAP` times, with no render to keep as well.
+// The visit-failure lane (`PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP`) retries
+// only a row recorded without the transient verdict. The bounds are
 // what protect the fleet — each retry of a genuinely pathological visit burns
 // its realm's prerender affinity lane for the full request timeout, so retries
 // must converge to "recorded outcome, move on" rather than repeat

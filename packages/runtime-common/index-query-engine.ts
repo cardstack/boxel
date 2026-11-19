@@ -2730,7 +2730,8 @@ export function prerenderedJoin(opts?: WIPOptions) {
 // last good render over one instead of storing it as an error, and one stored
 // on a row with no good render to keep (`noGoodRowToKeep`) counts. A transient
 // error stored without that mark is legacy data, which this ignores
-// (`ungatedRenderErrorSQL`) and the reconcile sweep re-renders.
+// (`ungatedRenderErrorSQL`, apart from a visit-request failure) and the
+// reconcile sweep re-renders.
 const RENDER_ERROR_IS_CURRENT = `(ph.url IS NOT NULL AND ph.error_doc IS NOT NULL AND ph.generation >= i.generation AND NOT ${ungatedRenderErrorSQL('ph')})`;
 
 const INDEX_HAS_ERROR = `COALESCE(i.has_error, FALSE)`;

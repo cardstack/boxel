@@ -1227,7 +1227,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('a visit-request failure at the retry cap is terminal', async function (assert) {
+  test('a visit-request failure at the retry cap is re-rendered once more', async function (assert) {
     const realmURL = 'http://example.com/retry-capped/';
     await seedOwner(realmURL);
     await seedRealmGeneration(realmURL, 5);
@@ -1248,13 +1248,17 @@ module(basename(import.meta.filename), function (hooks) {
       renderedMinutesAgo: 600,
     });
 
+    // Recorded without the transient verdict, the failure may have been a
+    // refused request as well as a transient one. One more render tells them
+    // apart: it records a refusal as the card's error and a transient failure
+    // under the verdict, and either way the row leaves this lane.
     let result = await runReconcile();
     assert.deepEqual(
       result,
-      { realmsRepaired: 0, urlsEnqueued: 0, realmsInBackoff: 0 },
-      'a capped run stands as the recorded outcome — the sweep stops burning the affinity lane on it',
+      { realmsRepaired: 1, urlsEnqueued: 1, realmsInBackoff: 0 },
+      'the capped run is re-rendered once more',
     );
-    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 0);
+    assert.strictEqual((await prerenderHtmlJobs(realmURL)).length, 1);
   });
 
   test('a visit-request failure younger than the minimum age is not retried yet', async function (assert) {

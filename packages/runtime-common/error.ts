@@ -202,8 +202,13 @@ export function transientRenderRetryBackoffMs(failedRenders: number): number {
 // a reindex. A card whose render always times out still converges, since the
 // sweep never retries a row past the cap.
 //
-// "Due" allows half the interval, so a worker clock that runs behind the
-// database clock the sweep measures with still counts the sweep's retry as one.
+// The prior run's failed attempts include the sweep's retries that died
+// without writing the row, and its last attempt is the latest of those, as the
+// sweep counts them (`unwrittenTransientAttempts`). "Due" allows
+// `TRANSIENT_RENDER_RETRY_CLOCK_SLACK_MS`, so a worker clock that runs behind
+// the database clock the sweep measures with still counts the sweep's retry as
+// one; an attempt earlier than that is not the retry.
+export const TRANSIENT_RENDER_RETRY_CLOCK_SLACK_MS = 60 * 1000;
 export function continuesTransientRenderRun(
   prior: { failedRenders: unknown; attemptedAt: unknown } | undefined,
   now: number,
@@ -218,7 +223,11 @@ export function continuesTransientRenderRun(
   ) {
     return false;
   }
-  return now - attemptedAt >= transientRenderRetryBackoffMs(failedRenders) / 2;
+  return (
+    now - attemptedAt >=
+    transientRenderRetryBackoffMs(failedRenders) -
+      TRANSIENT_RENDER_RETRY_CLOCK_SLACK_MS
+  );
 }
 
 // Whether a row's run of transient failures (its diagnostics'
@@ -269,12 +278,20 @@ export function transientRenderErrorSQL(alias: string): string {
 }
 
 // A stored render error the liveness and search gates ignore: a transient
-// failure stored as the row's error without `noGoodRowToKeep`. The writers
-// never store one that way (they withhold a transient failure, or store it
-// with `noGoodRowToKeep` when there is no good row to keep, and that one
-// counts), so such a row is legacy data, and the reconcile sweep re-renders it.
+// failure stored as the row's error without `noGoodRowToKeep`. The writers never store one that way (they
+// withhold a transient failure, or store it with `noGoodRowToKeep` when there
+// is no good row to keep, and that one counts), so such a row is legacy data,
+// and the reconcile sweep re-renders it.
+//
+// A `visitRequestFailure` error is the exception, and still counts: a visit
+// loop that recorded one without the transient verdict marked every rejected
+// prerender request, a refused request and an unreadable response included, so
+// the marker does not say the failure was transient. The sweep re-renders it
+// once as well, after its own lane's retries.
 export function ungatedRenderErrorSQL(alias: string): string {
-  return `(${transientRenderErrorSQL(alias)} AND NOT COALESCE(CAST(${alias}.error_doc ->> 'noGoodRowToKeep' AS TEXT) IN ('true', '1'), FALSE))`;
+  let flag = (key: string) =>
+    `COALESCE(CAST(${alias}.error_doc ->> '${key}' AS TEXT) IN ('true', '1'), FALSE)`;
+  return `(${transientRenderErrorSQL(alias)} AND NOT ${flag('noGoodRowToKeep')} AND NOT ${flag('visitRequestFailure')})`;
 }
 
 // Postgres `jsonb` containers store child offsets in 28 bits, so a

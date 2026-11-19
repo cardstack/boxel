@@ -3,8 +3,10 @@ const { module, test } = QUnit;
 import { basename } from 'path';
 
 import {
+  PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP,
   TRANSIENT_RENDER_FAILURE_RETRY_BASE_MS,
   TRANSIENT_RENDER_FAILURE_RETRY_CAP,
+  findStalePrerenderedHtmlRows,
   isTransientRenderError,
 } from '@cardstack/runtime-common';
 
@@ -32,6 +34,18 @@ const timesOut = (name: string) =>
   new Map<string, Outcome>([
     [cardURL(name), { kind: 'card-error', error: renderTimeout }],
   ]);
+
+const requestFails: Outcome = {
+  kind: 'request-fails',
+  message:
+    'Prerender request to http://prerender.test/ aborted after 60000ms (requestId=r1)',
+};
+
+const requestRefused: Outcome = {
+  kind: 'request-refused',
+  message:
+    'Prerender request to http://prerender.test/prerender-visit failed with status 400: URL is required',
+};
 
 module(basename(import.meta.filename), function (hooks) {
   let fixture = setupTransientRenderFixture(hooks);
@@ -262,7 +276,9 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('a render before its retry was due starts a new run rather than spending a retry', async function (assert) {
     await fixture.htmlPass(timesOut('n2'));
-    // Rendered again at once, for its own reason, and timed out again.
+    // Rendered again for its own reason, an edit say, three minutes into the
+    // five-minute backoff, and timed out again.
+    await fixture.transientSweepFinds(3 * 60_000);
     await fixture.htmlPass(timesOut('n2'));
     assert.strictEqual(
       (await fixture.htmlRow('n2')).diagnostics?.transientRenderFailureRenders,
@@ -311,6 +327,32 @@ module(basename(import.meta.filename), function (hooks) {
       (await fixture.htmlRow('n2')).diagnostics?.transientRenderFailureRenders,
       1,
       'the row records only its own failed render',
+    );
+  });
+
+  test('a retry that fails after retries that died carries them in its run', async function (assert) {
+    await fixture.htmlPass(timesOut('n2'));
+    await fixture.repairDied('n2', 0);
+    await fixture.repairDied('n2', 0);
+    await fixture.adapter.execute(
+      `UPDATE jobs SET finished_at = NOW() - INTERVAL '1 day'`,
+    );
+    assert.deepEqual(
+      await fixture.transientSweepFinds(),
+      [cardURL('n2')],
+      'the last retry is due',
+    );
+
+    await fixture.htmlPass(timesOut('n2'));
+    assert.strictEqual(
+      (await fixture.htmlRow('n2')).diagnostics?.transientRenderFailureRenders,
+      TRANSIENT_RENDER_FAILURE_RETRY_CAP + 1,
+      'the failure, the two retries that died and this one',
+    );
+    assert.deepEqual(
+      await fixture.transientSweepFinds(),
+      [],
+      'the retries are spent',
     );
   });
 
@@ -394,6 +436,77 @@ module(basename(import.meta.filename), function (hooks) {
       'the re-render replaced the stored timeout',
     );
     assert.deepEqual(await fixture.sweepFinds(), []);
+  });
+
+  test('a request failure with no render to keep is retried by the transient lane alone', async function (assert) {
+    await fixture.dropRenderings('n3');
+    await fixture.htmlPass(new Map([[cardURL('n3'), requestFails]]));
+    let row = await fixture.htmlRow('n3');
+    assert.true(row.error_doc?.visitRequestFailure, 'a request failure');
+    assert.true(row.error_doc?.noGoodRowToKeep, 'with nothing to keep');
+    assert.deepEqual(row.diagnostics?.transientRenderFailure, ['instance']);
+
+    assert.deepEqual(
+      await fixture.transientSweepFinds(60 * 60_000),
+      [cardURL('n3')],
+      'the transient lane retries it',
+    );
+    assert.deepEqual(
+      (await findStalePrerenderedHtmlRows(fixture.adapter))
+        .map((r) => r.url)
+        .filter((url) => url === cardURL('n3')),
+      [],
+      'the visit-failure lane leaves it to that lane',
+    );
+    await fixture.htmlPass(new Map());
+  });
+
+  test('a legacy row’s request failure still gates search, and is re-rendered once after its own lane’s retries', async function (assert) {
+    // A rendering with nothing to keep, then a request failure an earlier
+    // release stored on it: marked on every rejected request, without the
+    // transient verdict.
+    await fixture.dropRenderings('n3');
+    await fixture.htmlPass(new Map([[cardURL('n3'), requestRefused]]));
+    let legacyFailure = (consecutiveVisitFailures: number) => ({
+      status: 500,
+      message:
+        'Prerender request to http://prerender.test/prerender-visit failed with status 400: URL is required',
+      additionalErrors: null,
+      visitRequestFailure: true as const,
+      consecutiveVisitFailures,
+    });
+    await fixture.storeRenderError('n3', legacyFailure(1));
+    assert.deepEqual(
+      (await fixture.search()).ids,
+      idsWithout('n3'),
+      'it may be a deterministic failure, so it still counts',
+    );
+    assert.deepEqual(
+      await fixture.sweepFinds(10 * 60_000),
+      [],
+      'within its own lane’s cap, it waits for that lane',
+    );
+
+    await fixture.storeRenderError(
+      'n3',
+      legacyFailure(PRERENDER_HTML_VISIT_FAILURE_RETRY_CAP),
+    );
+    assert.deepEqual((await fixture.search()).ids, idsWithout('n3'));
+    assert.deepEqual(
+      await fixture.sweepFinds(10 * 60_000),
+      [cardURL('n3')],
+      'past that lane’s cap, the sweep re-renders it',
+    );
+
+    await fixture.htmlPass(new Map([[cardURL('n3'), requestRefused]]));
+    assert.deepEqual(
+      (await fixture.search()).ids,
+      idsWithout('n3'),
+      'a refusal is the card’s error',
+    );
+    assert.deepEqual(await fixture.sweepFinds(), [], 'once');
+    await fixture.htmlPass(new Map());
+    assert.deepEqual((await fixture.search()).ids, allIds);
   });
 
   test('a genuine render error stored the same way still gates search', async function (assert) {

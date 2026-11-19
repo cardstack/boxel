@@ -370,8 +370,10 @@ export class IndexBackedDependencyErrors {
         // would duplicate diagnostics rather than add to them. Module-deps
         // reachable through this instance still resolve below.
         // A dependency whose render did not finish (a timeout, an aborted
-        // prerender request) is not broken, so its error is not passed on:
-        // the consumer rendered against it and is fine.
+        // prerender request) is not broken, so its error is not passed on,
+        // with or without a good row of its own (`noGoodRowToKeep`): the
+        // consumer's own render succeeded, and the dependency's row shows its
+        // failure itself.
         if (
           selected.hasError &&
           selected.errorDoc &&
@@ -449,7 +451,8 @@ export class IndexBackedDependencyErrors {
       }
       // A transient failure of the dependency (its render timed out, its
       // prerender request aborted) says nothing about it, so the consumer
-      // does not inherit it as its own error.
+      // does not inherit it as its own error, even when the dependency had no
+      // good row to keep (`noGoodRowToKeep`) and shows as errored itself.
       if (isTransientRenderError(selected.errorDoc)) {
         continue;
       }

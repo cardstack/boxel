@@ -281,6 +281,12 @@ export function setupTransientRenderFixture(
         `SELECT current_generation FROM realm_generations WHERE realm_url = $1`,
         { bind: [testRealm] },
       )) as { current_generation: number | string }[];
+      // The pass's job follows every job recorded so far, as a job enqueued
+      // after them would.
+      let [{ next_id }] = (await adapter.execute(
+        `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM jobs`,
+      )) as { next_id: number | string }[];
+      jobId = Math.max(jobId, Number(next_id));
       await runPrerenderHtmlPass({
         realmURL: new URL(testRealm),
         changes: names.map((name) => ({
