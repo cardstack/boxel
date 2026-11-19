@@ -36,6 +36,7 @@ import {
   setupDashboardTest,
   operatorModeState,
 } from '../helpers/dashboard';
+import { TEST_CLOCK_INSTANT } from '../helpers/test-clock';
 
 import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
 
@@ -609,8 +610,10 @@ module('Acceptance | dashboard workspace', function (hooks) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       let restore = withUpdatedRealmInfo(realmAURL, {
-        createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-        updatedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+        createdAt: new Date(
+          TEST_CLOCK_INSTANT - 3 * 60 * 60 * 1000,
+        ).toISOString(),
+        updatedAt: new Date(TEST_CLOCK_INSTANT - 5 * 60 * 1000).toISOString(),
       });
       try {
         await settled();

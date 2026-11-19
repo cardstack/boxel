@@ -290,6 +290,9 @@ export default class CopyAndEditTool extends HostBaseTool<
     // `cardInfo.theme`) by walking the declared field structure, not a
     // serialization: the target we're linking into is typically unset, so it
     // may not appear in the card's serialized relationships at all.
+    // A field type is searched once: its fields are the same at every path,
+    // and a field that contains itself would otherwise recurse without end.
+    let visited = new Set<typeof CardAPI.BaseDef>();
     let search = (
       owner: CardAPI.BaseDef | typeof CardAPI.BaseDef,
       prefix: string,
@@ -315,8 +318,10 @@ export default class CopyAndEditTool extends HostBaseTool<
           (field.fieldType === 'contains' ||
             field.fieldType === 'containsMany') &&
           'card' in field &&
-          field.card
+          field.card &&
+          !visited.has(field.card)
         ) {
+          visited.add(field.card);
           let nested = search(field.card, path);
           if (nested) {
             return nested;

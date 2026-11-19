@@ -14,6 +14,12 @@ export interface AgeSignature {
   };
 }
 
+const BIRTH_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+});
+
 export class Age extends GlimmerComponent<AgeSignature> {
   get config(): AgeConfiguration | undefined {
     return this.args.config as AgeConfiguration | undefined;
@@ -110,11 +116,7 @@ export class Age extends GlimmerComponent<AgeSignature> {
     if (!this.birthDate) return '';
 
     try {
-      return new Date(this.birthDate).toLocaleDateString('en-US', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      });
+      return BIRTH_DATE_FORMAT.format(new Date(this.birthDate));
     } catch {
       return '';
     }

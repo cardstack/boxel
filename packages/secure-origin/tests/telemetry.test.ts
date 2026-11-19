@@ -42,6 +42,14 @@ describe('endpoint labels', () => {
       ],
       ['_oauth/connections', '_oauth/connections'],
       ['_oauth/connections/complete', '_oauth/connections/complete'],
+      [
+        '_oauth-provider/consent/an-interaction-id',
+        '_oauth-provider/consent/:id',
+      ],
+      [
+        '_oauth-provider/error/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        '_oauth-provider/error/:id',
+      ],
       ['_secure-window/context', '_secure-window/context'],
       ['_secure-window/realms', '_secure-window/realms'],
       ['_secure-origin', '_secure-origin'],
@@ -99,6 +107,7 @@ describe('endpoint labels', () => {
     assert.equal(pageLabel('sign-in'), 'sign-in');
     assert.equal(pageLabel('connect'), 'connect');
     assert.equal(pageLabel('connected'), 'connected');
+    assert.equal(pageLabel('authorize'), 'authorize');
     assert.equal(pageLabel('nowhere'), 'other');
     assert.equal(pageLabel('constructor'), 'other');
     assert.equal(pageLabel(undefined), 'other');

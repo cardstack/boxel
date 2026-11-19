@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
 import fsExtra from 'fs-extra';
-const { existsSync, readJSONSync } = fsExtra;
+const { existsSync, readFileSync, readJSONSync } = fsExtra;
 import type { Test, SuperTest } from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -233,6 +233,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             },
           },
           'realm.json card holds card-owned fields',
+        );
+        assert.ok(
+          readFileSync(join(realmPath, 'realm.json'), 'utf8').includes('\n  '),
+          'realm.json is written with indentation',
         );
         assert.ok(
           existsSync(join(realmPath, 'index.json')),

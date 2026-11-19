@@ -102,7 +102,11 @@ module(basename(import.meta.filename), function (hooks) {
       ['Classroom'],
       'the next read compiles the rule',
     );
-    assert.deepEqual(policy?.issues, []);
+    assert.deepEqual(
+      policy?.issues.filter(({ code }) => code !== 'module-not-granted'),
+      [],
+      'the realm grants no one the code that defines the type, which `realm-policy-module-access-test` covers',
+    );
   });
 
   test('a type with no definition is recorded and kept', async function (assert) {
@@ -360,9 +364,9 @@ module(basename(import.meta.filename), function (hooks) {
   function reachedVia(
     policy: Awaited<ReturnType<RealmPolicyCache['get']>>,
   ): (string | undefined)[] {
-    return (policy?.issues ?? []).map(
-      ({ message }) => /linked through `([^`]+)`/.exec(message)?.[1],
-    );
+    return (policy?.issues ?? [])
+      .filter(({ code }) => code !== 'module-not-granted')
+      .map(({ message }) => /linked through `([^`]+)`/.exec(message)?.[1]);
   }
 
   test('a type the reach check cannot read leaves its branch unwalked, and is walked once it can be read', async function (assert) {

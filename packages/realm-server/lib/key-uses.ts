@@ -6,11 +6,12 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import { matrixServerNameFromEnv } from '../utils/matrix-server-name.ts';
-import type {
-  CallApiSlotLookup,
-  CallApiUse,
-  CallApiUseSubject,
-  OperationFailure,
+import {
+  subjectOfRefusal,
+  type CallApiSlotLookup,
+  type CallApiUse,
+  type CallApiUseSubject,
+  type OperationFailure,
 } from '@cardstack/runtime-common/card-operations';
 import { ANONYMOUS_ACTOR } from '@cardstack/runtime-common/card-operations/anonymous-actor';
 import { budgetUse, type BudgetUse } from './key-limits.ts';
@@ -20,7 +21,6 @@ import {
   type KeyLimitsView,
 } from './key-limit-settings.ts';
 import { isUUID, namedToViewer } from './named-users.ts';
-import { subjectOfRefusal } from './key-use-subject.ts';
 import { UserKeyError } from './user-keys.ts';
 
 // The record of each use of a share or a personal key, and the usage view
@@ -33,11 +33,12 @@ import { UserKeyError } from './user-keys.ts';
 // slots were filled from records it (`key_uses`). A call that was sent, or
 // failed, is a row of its own. A refusal is collapsed into the row of the
 // same refusal in the same minute (same share or key, realm, operation,
-// caller, mode, code, status and host), whose `count` it adds one to, so a
+// caller, mode, code, status and host, and for an automation's call the
+// same run), whose `count` it adds one to, so a
 // caller who keeps calling past a limit adds a row a minute, not a row a
 // call. Every count below sums `count`. A refusal raised
 // while the slots were being filled is written against the one share or key
-// that refused it (`lib/key-use-subject.ts`); one that came before any
+// that refused it (`refusedFrom` in `card-operations/call-api.ts`); one that came before any
 // binding was found, such as `binding-not-approved`, names no key, and is
 // recorded nowhere but the key-use log line.
 //
@@ -82,10 +83,13 @@ function hostOf(url: string | null): string | null {
 // one to its minute's row (`refusal_window`, the start of that UTC minute, by
 // the database's clock) and moves the row's `created_at` forward to it, never
 // back, so the row reads as its latest refusal even when an earlier statement
-// takes the row's lock after a later one. The unique index on the row's
-// identity (the migration that adds `refusal_window`) makes that atomic
-// however many refusals arrive at once; the ON CONFLICT target names its
-// columns and expressions exactly. A refusal of
+// takes the row's lock after a later one. A unique index on the row's
+// identity makes that atomic however many refusals arrive at once: a run's
+// refusal keys the run (`key_uses_refusal_window_run_idx`, over rows with a
+// `run_id`) and an interactive one does not
+// (`key_uses_refusal_window_interactive_idx`, over rows without). The ON
+// CONFLICT target names that index's columns, expressions and predicate
+// exactly. A refusal of
 // `credential-rejected` made once the request was built is the vendor's 401
 // (a rejection known beforehand refuses before any URL exists), so it is
 // recorded with that status among the vendor's answers.
@@ -98,7 +102,7 @@ export async function recordKeyUses(
     (use.code === 'credential-rejected' && use.url ? 401 : undefined);
   for (let subject of use.countsAgainst) {
     await query(dbAdapter, [
-      `INSERT INTO key_uses (share_id, key_id, realm_url, operation, caller, mode, outcome, code, status, host, refusal_window) VALUES (`,
+      `INSERT INTO key_uses (share_id, key_id, realm_url, operation, caller, mode, run_id, outcome, code, status, host, refusal_window) VALUES (`,
       param(subject.kind === 'share' ? subject.id : null),
       `, `,
       param(subject.kind === 'key' ? subject.id : null),
@@ -111,6 +115,8 @@ export async function recordKeyUses(
       `, `,
       param(use.mode),
       `, `,
+      param(use.runId ?? null),
+      `, `,
       param(use.outcome),
       `, `,
       param(use.code ?? null),
@@ -120,7 +126,11 @@ export async function recordKeyUses(
       param(hostOf(use.url)),
       ...(use.outcome === 'refused'
         ? [
-            `, date_trunc('minute', NOW())) ON CONFLICT (share_id, key_id, md5(realm_url), md5(operation), md5(caller), mode, code, status, host, refusal_window) WHERE refusal_window IS NOT NULL DO UPDATE SET count = key_uses.count + 1, created_at = GREATEST(key_uses.created_at, EXCLUDED.created_at)`,
+            `, date_trunc('minute', NOW())) ON CONFLICT `,
+            use.runId
+              ? `(share_id, key_id, md5(realm_url), md5(operation), md5(caller), mode, run_id, code, status, host, refusal_window) WHERE refusal_window IS NOT NULL AND run_id IS NOT NULL`
+              : `(share_id, key_id, md5(realm_url), md5(operation), md5(caller), mode, code, status, host, refusal_window) WHERE refusal_window IS NOT NULL AND run_id IS NULL`,
+            ` DO UPDATE SET count = key_uses.count + 1, created_at = GREATEST(key_uses.created_at, EXCLUDED.created_at)`,
           ]
         : [`, NULL)`]),
     ]);
@@ -178,6 +188,7 @@ export async function recordFillRefusal(
       operation: lookup.operation,
       caller: recordedCaller(lookup.caller),
       mode: lookup.mode,
+      ...(lookup.runId ? { runId: lookup.runId } : {}),
       url: null,
       outcome: 'refused',
       code: failure.error.code,

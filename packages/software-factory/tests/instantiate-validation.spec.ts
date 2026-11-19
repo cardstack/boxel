@@ -10,6 +10,7 @@ import {
   overwriteTagsExampleWithBadShape,
 } from './helpers/instantiate-test-fixtures.ts';
 import { buildTestClient } from './helpers/test-client.ts';
+import { syncWorkspaceToRealm } from './helpers/write-realm-file.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
@@ -54,7 +55,7 @@ test.describe('instantiate-validation e2e', () => {
 
       let result = await step.run(realmUrl);
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Must pass — valid card with valid example instance
@@ -122,7 +123,7 @@ test.describe('instantiate-validation e2e', () => {
 
       let result = await step.run(realmUrl);
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Must fail — containsMany field received a string instead of an array

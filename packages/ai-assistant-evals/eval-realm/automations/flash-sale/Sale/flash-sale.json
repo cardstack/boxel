@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Flash sale: 30% off every mug",
+      "discountPercent": 30,
+      "status": "active",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sale",
+        "name": "Sale"
+      }
+    }
+  }
+}

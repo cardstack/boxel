@@ -131,6 +131,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 @disabled={{this.aiAssistantPanelService.displayRoomError}}
                 {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
                 data-test-past-sessions-button
+                data-test-rooms-loading={{if pastSessionsLoading 'true'}}
                 data-test-has-active-sessions={{this.hasOtherActiveSessions}}
                 aria-expanded='{{this.aiAssistantPanelService.isShowingPastSessions}}'
               />

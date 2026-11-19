@@ -449,13 +449,14 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             {{#if this.created}}
               <div class='insp-row'>
                 <dt>Created</dt>
-                {{! Reads realm_file_meta.created_at — written as `Date.now()`
-                the first time a path is indexed, and pinned by nothing, so two
-                runs on different days disagree and Percy reports a diff.
-                Hidden rather than normalised: it is a database column rather
-                than a file attribute, and a capture is the wrong place to
-                verify a timestamp. The label stays visible, so the row and the
-                layout around it are still compared.
+                {{! Reads realm_file_meta.created_at, stamped through the clock
+                seam the first time a path is indexed. The host suite pins
+                that clock, but the realm server does not, and it indexed the
+                realms the suite serves from the index cache. There the value
+                is the real time of the index build, so two builds disagree
+                and Percy reports a diff (ADR 023 §1.5). The label stays
+                visible, so the row and the layout around it are still
+                compared.
 
                 Modified is hidden too, for a different reason. CI does
                 normalise its mtime to a function of file content, which makes

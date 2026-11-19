@@ -9,9 +9,15 @@ import {
   isRealmArchived,
   param,
   query,
+  ri,
+  rri,
   systemInitiatedPriority,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
+import {
+  getAutomation,
+  switchOnAutomation,
+} from '@cardstack/runtime-common/automations';
 import { realmSecretSeed } from '../helpers/index.ts';
 import {
   insertSourceRealmInRegistry,
@@ -54,6 +60,28 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
     }
 
+    test('POST /_archive-realm lets a platform service account archive a realm under its own name, and no other', async function (assert) {
+      const serviceAccount = '@sync_writer:localhost';
+      const ownRealmURL = `${testRealmURL.origin}/sync_writer/archive-${uuidv4()}/`;
+      const sharedRealmURL = makeRealmURL();
+      await seedSourceRealm(ownRealmURL, {
+        [serviceAccount]: ['read', 'write', 'realm-owner'],
+      });
+      await seedSourceRealm(sharedRealmURL, {
+        [serviceAccount]: ['read', 'write'],
+      });
+      let archive = (realmURL: string) =>
+        context.request
+          .post('/_archive-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', authHeader(serviceAccount))
+          .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+
+      assert.strictEqual((await archive(ownRealmURL)).status, 200);
+      assert.strictEqual((await archive(sharedRealmURL)).status, 403);
+    });
+
     test('POST /_archive-realm lets an owner archive a realm', async function (assert) {
       const owner = '@archive-owner:localhost';
       const realmURL = makeRealmURL();
@@ -78,6 +106,67 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         await isRealmArchived(context.dbAdapter, new URL(realmURL)),
         'realm is archived in the database',
       );
+    });
+
+    test("POST /_archive-realm pauses the realm's automations", async function (assert) {
+      const owner = '@archive-owner:localhost';
+      const realmURL = makeRealmURL();
+      await seedSourceRealm(realmURL, {
+        [owner]: ['read', 'write', 'realm-owner'],
+      });
+      let automationId = rri(`${realmURL}Automation/nightly`);
+      let switchedOn = await switchOnAutomation(
+        context.dbAdapter,
+        {
+          automationId,
+          realm: ri(realmURL),
+          user: owner,
+          declaration: {
+            url: automationId,
+            realmURL,
+            script: rri(`${realmURL}scripts/nightly.js`),
+            triggers: [
+              {
+                kind: 'cron',
+                label: 'daily',
+                expression: '30 5 * * *',
+                timeZone: 'America/Chicago',
+              },
+            ],
+            operations: [],
+            caps: {
+              callApiCalls: 1,
+              responseBytes: 1000,
+              resolveCalls: 1,
+              writes: 1,
+              seconds: 60,
+              aiCredits: 0,
+              dailyCredits: 10,
+              monthlyCredits: null,
+            },
+            params: {},
+            batchedAI: false,
+            batchDeadlineMinutes: 60,
+          },
+        },
+        {
+          matrixServerName: 'localhost',
+          virtualNetwork: context.virtualNetwork,
+        },
+      );
+      assert.true(switchedOn.ok, 'the automation is switched on');
+
+      let response = await context.request
+        .post('/_archive-realm')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', authHeader(owner))
+        .send(JSON.stringify({ data: { type: 'realm', id: realmURL } }));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let automation = await getAutomation(context.dbAdapter, automationId);
+      assert.strictEqual(automation?.state, 'paused');
+      assert.strictEqual(automation?.pauseReason, 'realm-archived');
     });
 
     test('POST /_unarchive-realm lets an owner restore a realm and enqueues a full reindex', async function (assert) {

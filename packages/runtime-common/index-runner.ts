@@ -219,6 +219,8 @@ export class IndexRunner {
     changes: IncrementalChange[],
     ignoreData: Record<string, string>,
   ) => IncrementalArgs;
+  // See the constructor's `aroundPeerRevisit`.
+  #aroundPeerRevisit?: <T>(revisit: () => Promise<T>) => Promise<T>;
   // URLs this pass's commit validation added to its invalidation set, in the
   // order the rounds added them. Reported with the pass's invalidations, so
   // the event announcing the pass names them too.
@@ -280,6 +282,7 @@ export class IndexRunner {
     onProgress,
     onInvalidationsReady,
     followUpJobArgs,
+    aroundPeerRevisit,
     prerenderer,
     auth,
     fetch,
@@ -324,6 +327,9 @@ export class IndexRunner {
       changes: IncrementalChange[],
       ignoreData: Record<string, string>,
     ): IncrementalArgs;
+    // Wraps each commit-validation round that re-visits what a peer's commit
+    // left stale, so the caller can tell that work apart from the pass's own.
+    aroundPeerRevisit?<T>(revisit: () => Promise<T>): Promise<T>;
   }) {
     this.#indexWriter = indexWriter;
     this.#realmPaths = new RealmPaths(realmURL, virtualNetwork);
@@ -345,6 +351,7 @@ export class IndexRunner {
     this.#onProgress = onProgress;
     this.#onInvalidationsReady = onInvalidationsReady;
     this.#followUpJobArgs = followUpJobArgs;
+    this.#aroundPeerRevisit = aroundPeerRevisit;
     this.#prerenderer = prerenderer;
     this.#auth = auth;
     this.#fetch = fetch;
@@ -948,8 +955,12 @@ export class IndexRunner {
   ): CommitValidation {
     let followUpJobArgs = this.#followUpJobArgs;
     return {
-      revisit: async (round) =>
-        await this.#revisitForPeers(round, deletes, progress),
+      revisit: async (round) => {
+        let revisit = () => this.#revisitForPeers(round, deletes, progress);
+        return await (this.#aroundPeerRevisit
+          ? this.#aroundPeerRevisit(revisit)
+          : revisit());
+      },
       ...(followUpJobArgs
         ? {
             followUpJobArgs: (urls: string[]) =>

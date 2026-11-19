@@ -104,7 +104,9 @@ export type SpendCharge = Extract<
 
 // A unit of usage a charge priced. The metered units match the units the
 // pricing variables price (ADR 029 §1.2); `ai_provider_usd` is the cost the AI
-// provider reported, which AI charges are billed at.
+// provider reported, which AI charges are billed at, and `ai_estimated_usd`
+// the estimate a batched AI charge is billed at when its provider reported no
+// cost.
 export type UsageUnit =
   | 'prerender_tab_seconds'
   | 'worker_process_seconds'
@@ -112,6 +114,7 @@ export type UsageUnit =
   | 'file_storage_gb_months'
   | 'database_storage_gb_months'
   | 'ai_provider_usd'
+  | 'ai_estimated_usd'
   | 'ai_input_tokens'
   | 'ai_output_tokens';
 

@@ -9,6 +9,10 @@ import {
   VALID_MODULE_GTS,
 } from './helpers/parse-test-fixtures.ts';
 import { buildTestClient } from './helpers/test-client.ts';
+import {
+  syncWorkspaceToRealm,
+  writeRealmFile,
+} from './helpers/write-realm-file.ts';
 import { createTestWorkspace } from './helpers/workspace-fixture.ts';
 
 const fixtureRealmDir = resolve(
@@ -38,12 +42,12 @@ test.describe('parse-validation e2e', () => {
 
     try {
       // Write a valid card module
-      let writeResult = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'parse-test-card.gts',
         VALID_MODULE_GTS,
       );
-      expect(writeResult.ok).toBe(true);
 
       await client.waitForFile(realmUrl, 'parse-test-card.gts', {
         pollMs: 300,
@@ -63,12 +67,12 @@ test.describe('parse-validation e2e', () => {
           },
         },
       };
-      let exampleWrite = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'ParseTestCard/example-1.json',
         JSON.stringify(exampleDoc, null, 2),
       );
-      expect(exampleWrite.ok).toBe(true);
 
       await client.waitForFile(realmUrl, 'ParseTestCard/example-1.json', {
         pollMs: 300,
@@ -99,12 +103,12 @@ test.describe('parse-validation e2e', () => {
           },
         },
       };
-      let specWrite = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'Spec/parse-test-spec.json',
         JSON.stringify(specDoc, null, 2),
       );
-      expect(specWrite.ok).toBe(true);
 
       await client.waitForFile(realmUrl, 'Spec/parse-test-spec.json', {
         pollMs: 300,
@@ -130,7 +134,7 @@ test.describe('parse-validation e2e', () => {
 
       let result = await step.run(realmUrl);
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Must pass — valid GTS + valid JSON example
@@ -180,12 +184,12 @@ test.describe('parse-validation e2e', () => {
 
     try {
       // Write a GTS file with an unclosed template tag
-      let writeResult = await client.write(
+      await writeRealmFile(
+        client,
         realmUrl,
         'broken-card.gts',
         BROKEN_TEMPLATE_GTS,
       );
-      expect(writeResult.ok).toBe(true);
 
       await client.waitForFile(realmUrl, 'broken-card.gts', {
         pollMs: 300,
@@ -207,7 +211,7 @@ test.describe('parse-validation e2e', () => {
 
       let result = await step.run(realmUrl);
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Must fail — unclosed template tag

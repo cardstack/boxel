@@ -23,3 +23,12 @@ export function toBranchName(listingName: string): string {
   let hash = generateHash();
   return listingSlug ? `${hash}-${listingSlug}` : hash;
 }
+
+// The branch names `toBranchName` makes. A submission's files land in a
+// folder of this name, so a name of any other shape could aim them at a
+// folder that is not a submission's.
+const SUBMISSION_BRANCH_NAME = /^[0-9a-f]{6}(-[a-z0-9]+)*$/;
+
+export function isSubmissionBranchName(branchName: string): boolean {
+  return SUBMISSION_BRANCH_NAME.test(branchName);
+}

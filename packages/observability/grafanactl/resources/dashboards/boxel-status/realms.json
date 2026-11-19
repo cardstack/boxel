@@ -493,7 +493,169 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Permissions for this realm. Set the Matrix Username and Permission Level above, then click the Grant Permission button.",
+        "description": "Operator action: take a user's `read` or `read/write` access to this realm away. Pick from the users that hold a permission row on this realm (sourced from `realm_user_permissions`; the list leaves out the realm owner and the realm-wide `*` and `users` grants, which the endpoint refuses). POSTs to `/_grafana-remove-realm-user-permission` through the realm-server-operator datasource proxy. The removal deletes the user's permission row, takes the realm out of the user's workspace list, and refuses the user's existing realm sessions on the next request. The removal does not touch access the user holds through a `*` or `users` grant or a realm policy, and does not touch the user's Matrix account.",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 24,
+          "x": 0,
+          "y": 12
+        },
+        "id": 10,
+        "options": {
+          "buttonGroup": {
+            "orientation": "center",
+            "size": "md"
+          },
+          "confirmModal": {
+            "body": "Please confirm the action.",
+            "cancel": "Cancel",
+            "columns": {
+              "include": [
+                "name",
+                "newValue"
+              ],
+              "name": "Field",
+              "newValue": "Value",
+              "oldValue": "Previous"
+            },
+            "confirm": "Confirm",
+            "elementDisplayMode": "modified",
+            "title": "Confirm operator action"
+          },
+          "elements": [
+            {
+              "id": "matrix_username",
+              "type": "select",
+              "title": "Matrix username",
+              "tooltip": "Users that hold a permission row on this realm. The list leaves out the realm owner and the realm-wide `*` and `users` grants.",
+              "labelWidth": 28,
+              "section": "input",
+              "value": "",
+              "options": [],
+              "optionsSource": "Query",
+              "queryOptions": {
+                "source": "B",
+                "value": "username",
+                "label": "username"
+              }
+            },
+            {
+              "id": "btn_remove",
+              "type": "button",
+              "title": "",
+              "buttonLabel": "Remove from ${realm_url:text}",
+              "tooltip": "POST /_grafana-remove-realm-user-permission?realm=...&user=...",
+              "labelWidth": 28,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "destructive",
+              "value": "",
+              "customCode": "const realm = ${realm_url:doublequote};\nconst username = (context.panel.elements.find(function(e){return e.id==='matrix_username';})||{}).value || '';\nconst trimmed = String(username).trim();\nif (!trimmed) {\n  context.grafana.notifyWarning(['Username required', 'Pick a user that holds a permission on this realm.']);\n  return;\n}\nif (!window.confirm('Remove ' + trimmed + ' from ' + realm + '?\\n\\nThe removal deletes the user\\'s permission row on this realm and refuses the user\\'s existing realm sessions. The removal does not touch access the user holds through a * or users grant or a realm policy, and does not touch the user\\'s Matrix account.')) { return; }\n(async () => {\ntry {\n  const url = '/api/datasources/proxy/uid/realm-server-operator/_grafana-remove-realm-user-permission?realm=' + encodeURIComponent(realm)\n            + '&user=' + encodeURIComponent(trimmed);\n  const r = await fetch(url, { method: 'POST' });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Permission removed', (await r.json()).message]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Remove failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Remove failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+            }
+          ],
+          "initial": {
+            "code": "",
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "highlight": false,
+            "method": "query",
+            "payload": {}
+          },
+          "layout": {
+            "orientation": "horizontal",
+            "padding": 10,
+            "sectionVariant": "default",
+            "sections": [
+              {
+                "id": "input",
+                "name": "Remove"
+              },
+              {
+                "id": "actions",
+                "name": "Action"
+              }
+            ],
+            "variant": "split"
+          },
+          "reset": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "process",
+            "text": "Refresh",
+            "variant": "hidden"
+          },
+          "resetAction": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "mode": "initial",
+            "payload": {}
+          },
+          "saveDefault": {
+            "icon": "save",
+            "text": "Save Default",
+            "variant": "hidden"
+          },
+          "submit": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "cloud-upload",
+            "text": "Submit",
+            "variant": "hidden"
+          },
+          "sync": false,
+          "update": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "payload": {},
+            "payloadMode": "all"
+          },
+          "updateEnabled": "disabled"
+        },
+        "pluginVersion": "6.2.0",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT 1 AS noop;",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT username FROM realm_user_permissions WHERE realm_url = ${realm_url:sqlstring} AND realm_owner = false AND username LIKE '@%:%' ORDER BY username;",
+            "refId": "B"
+          }
+        ],
+        "title": "Remove Permission",
+        "type": "volkovlabs-form-panel"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Permissions for this realm. To add or change a user's access, set the Matrix username and permission level in Grant Permission and click the Grant button. To take a user's access away, pick the user in Remove Permission and click the Remove button.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -561,7 +723,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 12
+          "y": 18
         },
         "id": 6,
         "options": {
@@ -605,6 +767,663 @@
           }
         ],
         "title": "Realm Permissions",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Each automation in the realm: the automation's payer and state now, and the runs the automation started and the credits the automation's charges drew in the time range. State reads \"switched off\" when an automation charged in the time range and someone has since switched the automation off. Credits charged adds up the run, run indexing, storage, AI and batched AI charges that name the automation or one of the automation's runs, whoever paid.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true,
+              "minWidth": 80
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "text"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "automation"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Automation"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 190
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "automation_id"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "payer"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Payer"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 170
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open this user on the Users dashboard",
+                      "url": "/d/boxelusers0001?var-matrix_user_id=${__value.raw:percentencode}&orgId=1&${__url_time_range}"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "state"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "State"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "active": {
+                          "color": "green",
+                          "index": 0
+                        },
+                        "paused": {
+                          "color": "orange",
+                          "index": 1
+                        },
+                        "waiting-for-credits": {
+                          "color": "red",
+                          "index": 2
+                        },
+                        "done": {
+                          "color": "blue",
+                          "index": 3
+                        },
+                        "switched off": {
+                          "color": "text",
+                          "index": 4
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pause_reason"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Pause reason"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "next_run"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Next run"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "last_finished_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Last run finished"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "last_result"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Last result"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "switched_on_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Switched on"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "runs"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Runs"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "errors"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Errored runs"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "credits"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Credits charged"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 28
+        },
+        "id": 11,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH charged AS (\n  SELECT COALESCE(l.automation_id, r.automation_id) AS automation_id,\n         MAX(l.realm) AS realm,\n         -SUM(l.credit_amount) AS credits\n    FROM credits_ledger l\n    LEFT JOIN automation_runs r ON r.id = l.run_id\n   WHERE l.realm IN (SELECT ${realm_url:sqlstring}\n                  UNION\n                  SELECT '@cardstack/' || substring(url from '([^/]+)/$') || '/' FROM realm_registry\n                   WHERE url = ${realm_url:sqlstring} AND kind = 'bootstrap')\n     AND (l.run_id IS NOT NULL OR l.automation_id IS NOT NULL)\n     AND $__unixEpochFilter(l.created_at)\n   GROUP BY 1\n),\nlisted AS (\n  SELECT automation_id FROM automations WHERE realm IN (SELECT ${realm_url:sqlstring}\n                  UNION\n                  SELECT '@cardstack/' || substring(url from '([^/]+)/$') || '/' FROM realm_registry\n                   WHERE url = ${realm_url:sqlstring} AND kind = 'bootstrap')\n  UNION\n  SELECT automation_id FROM charged WHERE automation_id IS NOT NULL\n),\nran AS (\n  SELECT r.automation_id,\n         COUNT(*) AS runs,\n         COUNT(*) FILTER (WHERE r.state = 'error') AS errors\n    FROM automation_runs r\n   WHERE r.realm IN (SELECT ${realm_url:sqlstring}\n                  UNION\n                  SELECT '@cardstack/' || substring(url from '([^/]+)/$') || '/' FROM realm_registry\n                   WHERE url = ${realm_url:sqlstring} AND kind = 'bootstrap')\n     AND $__timeFilter(r.created_at)\n   GROUP BY 1\n)\nSELECT CASE WHEN starts_with(listed.automation_id, COALESCE(a.realm, c.realm)) THEN substr(listed.automation_id, length(COALESCE(a.realm, c.realm)) + 1) ELSE listed.automation_id END AS automation,\n       listed.automation_id,\n       a.payer,\n       COALESCE(a.state, 'switched off') AS state,\n       COALESCE(ran.runs, 0) AS runs,\n       COALESCE(ran.errors, 0) AS errors,\n       COALESCE(c.credits, 0) AS credits,\n       a.pause_reason,\n       a.next_run,\n       a.last_finished_at,\n       a.last_result,\n       a.switched_on_at\n  FROM listed\n  LEFT JOIN automations a USING (automation_id)\n  LEFT JOIN charged c USING (automation_id)\n  LEFT JOIN ran USING (automation_id)\n ORDER BY (a.automation_id IS NOT NULL) DESC, credits DESC, automation\n LIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Automations in this realm",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "The credit ledger entries that name the realm in the time range, by charge kind and payer. Charges counts each charge once, however many credit buckets the charge drew on. Only consumption entries name a realm: run, run indexing, storage and batched AI entries always name the realm, and an AI entry names the realm when the AI request's caller named the realm.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true,
+              "minWidth": 80
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "text"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "kind"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Charge kind"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "payer"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Payer"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 170
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open this user on the Users dashboard",
+                      "url": "/d/boxelusers0001?var-matrix_user_id=${__value.raw:percentencode}&orgId=1&${__url_time_range}"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "charges"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Charges"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "charged"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Credits charged"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "last_charged"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Last entry"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 36
+        },
+        "id": 12,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT l.charge_kind AS kind,\n       u.matrix_user_id AS payer,\n       COUNT(DISTINCT COALESCE(l.charge_id, l.id)) AS charges,\n       COALESCE(-SUM(l.credit_amount) FILTER (WHERE l.credit_amount < 0), 0) AS charged,\n       to_timestamp(MAX(l.created_at)) AS last_charged\n  FROM credits_ledger l\n  LEFT JOIN users u ON u.id = l.user_id\n WHERE l.realm IN (SELECT ${realm_url:sqlstring}\n                  UNION\n                  SELECT '@cardstack/' || substring(url from '([^/]+)/$') || '/' FROM realm_registry\n                   WHERE url = ${realm_url:sqlstring} AND kind = 'bootstrap')\n   AND $__unixEpochFilter(l.created_at)\n GROUP BY 1, 2\n ORDER BY charged DESC, kind, payer;",
+            "refId": "A"
+          }
+        ],
+        "title": "Credits charged in this realm by charge kind",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Every charge that names the realm in the time range, newest first, with the payer. Credits charged shows the credits the charge drew from the payer's balance. Credit buckets shows how the charge split across the payer's plan allowance, daily credit and extra credit. The reference columns show what the charge paid for: the run's automation and trigger, the run, the AI batch, or the storage day. Usage priced lists the usage that the charge's pricing version priced: tab-seconds, worker-seconds, GB downloaded, GB-months, and the AI provider's cost and tokens.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true,
+              "minWidth": 80
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "text"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "time"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Time"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 170
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "kind"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Charge kind"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "charged"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Credits charged"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 140
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "buckets"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Credit buckets"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 220
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "payer"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Payer"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 170
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open this user on the Users dashboard",
+                      "url": "/d/boxelusers0001?var-matrix_user_id=${__value.raw:percentencode}&orgId=1&${__url_time_range}"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "automation"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Automation"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 180
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "trigger"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Trigger"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "run_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Run"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "batch_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Batch"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "charge_day"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Storage day"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pricing_version"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Pricing version"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "usage"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Usage priced"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 260
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 12,
+          "w": 24,
+          "x": 0,
+          "y": 45
+        },
+        "id": 13,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH charges AS (\n  SELECT COALESCE(l.charge_id, l.id) AS charge,\n         MIN(l.created_at) AS created_at,\n         l.charge_kind AS kind,\n         l.user_id,\n         l.realm,\n         l.run_id,\n         l.batch_id,\n         l.automation_id,\n         l.charge_day,\n         l.pricing_version,\n         COALESCE(-SUM(l.credit_amount) FILTER (WHERE l.credit_amount < 0), 0) AS charged,\n         string_agg(l.credit_type::text || ' ' || abs(l.credit_amount), ', ' ORDER BY l.credit_type::text) AS buckets\n    FROM credits_ledger l\n   WHERE l.realm IN (SELECT ${realm_url:sqlstring}\n                  UNION\n                  SELECT '@cardstack/' || substring(url from '([^/]+)/$') || '/' FROM realm_registry\n                   WHERE url = ${realm_url:sqlstring} AND kind = 'bootstrap')\n     AND $__unixEpochFilter(l.created_at)\n   GROUP BY 1, 3, 4, 5, 6, 7, 8, 9, 10\n)\nSELECT to_timestamp(c.created_at) AS time,\n       c.kind,\n       u.matrix_user_id AS payer,\n       c.charged,\n       c.buckets,\n       CASE WHEN starts_with(COALESCE(c.automation_id, r.automation_id), c.realm) THEN substr(COALESCE(c.automation_id, r.automation_id), length(c.realm) + 1) ELSE COALESCE(c.automation_id, r.automation_id) END AS automation,\n       r.trigger,\n       (SELECT string_agg(g.unit || ' ' || trim_scale(round(g.quantity, 6))::text, ', ' ORDER BY g.unit)\n          FROM credit_charge_usage g\n         WHERE g.charge_id = c.charge) AS usage,\n       c.run_id,\n       c.batch_id,\n       c.charge_day::text AS charge_day,\n       c.pricing_version\n  FROM charges c\n  LEFT JOIN automation_runs r ON r.id = c.run_id\n  LEFT JOIN users u ON u.id = c.user_id\n ORDER BY c.created_at DESC\n LIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Credit ledger for this realm",
         "type": "table"
       },
       {
@@ -726,7 +1545,7 @@
           "h": 4,
           "w": 24,
           "x": 0,
-          "y": 22
+          "y": 57
         },
         "id": 7,
         "options": {
@@ -772,7 +1591,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 26
+          "y": 61
         },
         "id": 100,
         "options": {
@@ -961,7 +1780,7 @@
           "h": 7,
           "w": 24,
           "x": 0,
-          "y": 34
+          "y": 69
         },
         "id": 101,
         "options": {
@@ -1209,7 +2028,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 41
+          "y": 76
         },
         "id": 8,
         "options": {
@@ -1515,7 +2334,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 51
+          "y": 86
         },
         "id": 9,
         "options": {

@@ -16,6 +16,8 @@ import type { CodeRef } from '@cardstack/runtime-common/code-ref';
 import {
   notApproved,
   OperationFailure,
+  refusedFrom,
+  subjectOfRefusal,
   type CallApiFilledSlot,
   type CallApiSlot,
   type CallApiSlotLookup,
@@ -69,7 +71,6 @@ import {
   validateLimitChanges,
   type LimitSubject,
 } from './key-limits.ts';
-import { refusedFrom, subjectOfRefusal } from './key-use-subject.ts';
 import { recordFillRefusal } from './key-uses.ts';
 
 // Bindings: a key owner's approval for one `callApi` operation, in one realm,
@@ -96,9 +97,9 @@ import { recordFillRefusal } from './key-uses.ts';
 //   definition cache lowers the operation to now. A binding whose request has
 //   changed goes to `needs-reapproval`, its owner gets one notice, and nothing
 //   is sent until they approve the new request.
-// - **Automations, and interactive use when approved for it.** An automation the
-//   realm server runs as its payer (`Realm.handleAutomation`) is served by any
-//   active binding. An interactive invocation — a card in the browser, the AI
+// - **Automations, and interactive use when approved for it.** An automation
+//   run's call, which carries the run's token and acts as the run's identity
+//   (`Realm.handleAutomation`), is served by any active binding. An interactive invocation — a card in the browser, the AI
 //   assistant, the CLI — is served only by a binding approved `interactive`,
 //   and refused `interactive-use-not-approved` by one approved for automations
 //   only. Approving interactive use is the owner's choice for the whole
@@ -1860,9 +1861,10 @@ async function fillCheckedSlot(
     countsAgainst: limitSubjectOf(binding),
     // A vendor's 401 to a stored key rejects the grant it was sent under. A
     // minted token's refusal is its connection's to judge when it next
-    // refreshes, so a 401 to one is only the vendor's answer.
+    // refreshes, so a 401 to one is only the vendor's answer, which an
+    // automation run's call asks once more with the token minted then.
     ...(mints
-      ? {}
+      ? { mints: true }
       : {
           grant: {
             id: binding.grant_id!,

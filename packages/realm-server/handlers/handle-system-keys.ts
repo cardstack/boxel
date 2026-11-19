@@ -39,8 +39,10 @@ class BodyTooLarge extends Error {}
 
 // Reads the JSON body, refusing it as soon as its declared length or the bytes
 // received so far exceed the limit, so an oversized body is never buffered
-// whole.
-async function readJSONBody(ctxt: Koa.Context): Promise<Record<string, any>> {
+// whole. The platform secrets routes read their bodies the same way.
+export async function readJSONBody(
+  ctxt: Koa.Context,
+): Promise<Record<string, any>> {
   let declared = Number(ctxt.req.headers['content-length']);
   if (Number.isFinite(declared) && declared > MAX_SYSTEM_KEY_BODY_BYTES) {
     throw new BodyTooLarge();
@@ -79,16 +81,29 @@ export function operatorCaller(ctxt: Koa.Context): SystemKeyCaller {
   };
 }
 
-function handle(
+// A refusal an operator route answers with its own status and message: one
+// whose message names no value.
+type OperatorRefusal = new (...args: any[]) => Error & { status: number };
+
+// Wraps an operator route: answers with what `fn` returns, a refusal with its
+// status, and an oversized body with 413. Any other error is left to the
+// server's error handling. The platform secrets routes share it, adding their
+// own refusal.
+export function handle(
   fn: (ctxt: Koa.Context) => Promise<{ status: number; body: unknown }>,
+  refusals: OperatorRefusal[] = [],
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context) {
     try {
       let { status, body } = await fn(ctxt);
       await respond(ctxt, status, body);
     } catch (e) {
-      if (e instanceof SystemKeyError) {
-        await respond(ctxt, e.status, { errors: [e.message] });
+      if (
+        e instanceof SystemKeyError ||
+        refusals.some((refusal) => e instanceof refusal)
+      ) {
+        let refusal = e as Error & { status: number };
+        await respond(ctxt, refusal.status, { errors: [refusal.message] });
         return;
       }
       if (e instanceof BodyTooLarge) {

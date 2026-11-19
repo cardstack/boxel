@@ -8,6 +8,7 @@ import {
   type TestRunRealmOptions,
 } from '../src/factory-test-realm.ts';
 import { buildTestClient } from './helpers/test-client.ts';
+import { syncWorkspaceToRealm } from './helpers/write-realm-file.ts';
 import { createMockClient } from './helpers/mock-client.ts';
 import {
   FAILING_TEST_GTS,
@@ -73,7 +74,7 @@ test.describe('factory-test-realm e2e', () => {
 
       // Push the TestRun card to the realm so the client.read assertion
       // below finds it via HTTP.
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Handle assertions
@@ -149,7 +150,7 @@ test.describe('factory-test-realm e2e', () => {
         hostAppUrl: realm.hostAppUrl,
       });
 
-      await client.sync(realmUrl, workspace.dir, { preferLocal: true });
+      await syncWorkspaceToRealm(client, realmUrl, workspace.dir);
       workspace.cleanup();
 
       // Handle assertions

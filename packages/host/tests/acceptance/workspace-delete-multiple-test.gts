@@ -157,7 +157,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       .exists('Delete confirmation modal appears');
     assert
       .dom('[data-test-delete-modal="bulk-delete"]')
-      .containsText('2 cards');
+      .containsText('2 items');
 
     await click('[data-test-confirm-delete-button]');
 
@@ -376,7 +376,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       .exists('Delete confirmation modal appears');
     assert
       .dom('[data-test-delete-modal="bulk-delete"]')
-      .containsText('2 cards');
+      .containsText('2 items');
 
     // Cancel the delete operation
     await click('[data-test-confirm-cancel-button]');

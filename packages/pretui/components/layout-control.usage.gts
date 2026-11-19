@@ -26,6 +26,7 @@ const SEARCH_FORMS = F(['field', 14], ['field-s', 9], ['icon', 2], ['menu', 0]);
 const STAGE_FORMS = F(['chips', 22], ['dropdown', 9], ['menu', 0]);
 const VIEW_FORMS = F(['text', 8], ['icon', 4.5], ['menu', 0]);
 const SORT_FORMS = F(['label', 9], ['icon', 2], ['menu', 0]);
+const ORDER_STAGE_FORMS = F(['chips', 22], ['menu', 0]);
 const ADD_FORMS = F(['label', 9], ['short', 5], ['icon', 2]);
 
 const STAGES = ['All', 'Applied', 'Screen', 'Interview', 'Offer'];
@@ -86,7 +87,7 @@ class LayoutControlUsage extends Component {
     return (
       "<LayoutControl @label='" + this.label + "' as |lc|>\n" +
       "  <lc.Slot @id='stage' @priority={{2}} @forms={{STAGE_FORMS}} @label='Stage' @menuItems={{this.stageChoices}} as |form|>…</lc.Slot>\n" +
-      "  <lc.Slot @id='add' @priority={{0}} @forms={{ADD_FORMS}} @pinned={{true}} as |form|>…</lc.Slot>\n" +
+      "  <lc.Slot @id='add' @priority={{0}} @forms={{ADD_FORMS}} @pinned={{true}} @align='end' as |form|>…</lc.Slot>\n" +
       '</LayoutControl>'
     );
   }
@@ -94,7 +95,7 @@ class LayoutControlUsage extends Component {
   <template>
     <FreestyleUsage
       @name='LayoutControl'
-      @description='A toolbar row that fits its controls to its own width. Each Slot lists the forms its control can take, richest first; the bar measures itself, steps slots down evenly (least important first on a tie), and folds what is left into one ⋯ menu. The pinned primary action never folds. Drag the box corner narrower, down to about 400px or the page width.'
+      @description='A toolbar row that fits its controls to its own width. Each Slot lists the forms its control can take, richest first; the bar measures itself, steps every slot down its shorter forms evenly (least important first on a tie), and only when none can shorten further folds slots into one ⋯ menu, least important first. The pinned primary action never folds. A slot with @align set to end sits in the end group, with ⋯ right after it. Drag the box corner narrower, down to about 400px or the page width.'
       @source={{this.usage}}
     >
       <:example>
@@ -158,7 +159,6 @@ class LayoutControlUsage extends Component {
               {{/if}}
             </lc.Slot>
 
-            <span class='lc-usage-spacer'></span>
 
             <lc.Slot
               @id='view'
@@ -225,6 +225,50 @@ class LayoutControlUsage extends Component {
               @priority={{0}}
               @forms={{ADD_FORMS}}
               @pinned={{true}}
+              @align='end'
+              as |form|
+            >
+              {{#if (eq form 'icon')}}
+                <IconButton
+                  @label='Add candidate'
+                  @icon={{this.icon 'plus'}}
+                  @tone='primary'
+                  @appearance='filled'
+                />
+              {{else}}
+                <Button @tone='primary'>{{if
+                    (eq form 'label')
+                    'Add candidate'
+                    'Add'
+                  }}</Button>
+              {{/if}}
+            </lc.Slot>
+          </LayoutControl>
+        </div>
+        <h4 class='lc-usage-heading'>Narrowing order</h4>
+        <p class='lc-usage-note'>A filter slot that may fold and a pinned, end-aligned action. Narrowing: the action goes label, short, icon while the chips stay; the chips fold into ⋯ only after that.</p>
+        <div class='lc-usage-box lc-usage-box-s'>
+          <LayoutControl @label='Narrowing order' as |lc|>
+            <lc.Slot
+              @id='order-stage'
+              @priority={{2}}
+              @forms={{ORDER_STAGE_FORMS}}
+              @label='Stage'
+              @menuItems={{this.stageChoices}}
+            >
+              <FilterChips
+                @label='Stage'
+                @options={{this.stageOptions}}
+                @value={{this.stage}}
+                @onValueChange={{this.setStage}}
+              />
+            </lc.Slot>
+            <lc.Slot
+              @id='order-add'
+              @priority={{0}}
+              @forms={{ADD_FORMS}}
+              @pinned={{true}}
+              @align='end'
               as |form|
             >
               {{#if (eq form 'icon')}}
@@ -265,7 +309,7 @@ class LayoutControlUsage extends Component {
           @description='Any CSS length; sets --pretui-row-h and --control-height on the bar. SegmentedControl, FilterChips, Select, Button, IconButton, Input (and the typed inputs, not Textarea), SearchInput and InputGroup size themselves from --pretui-row-h and share that height.'
         />
         <Args.Yield
-          @description='Yields { Slot, overflow: { active, folded } }. Slot takes @id, @priority (0 most important), @forms ({ name, minWidth in rem }[], richest first, ending in menu to allow folding), @label, @menuItems (native ⋯ items while folded) and @pinned (never folds), and yields the chosen form name.'
+          @description='Yields { Slot, overflow: { active, folded } }. Slot takes @id, @priority (0 most important), @forms ({ name, minWidth in rem }[], richest first, ending in menu to allow folding), @label, @menuItems (native ⋯ items while folded) and @pinned (never folds), @align (end puts the slot in the end group: the first end-aligned slot takes the free space before it and ⋯ follows it) and yields the chosen form name.'
           @hideControls={{true}}
         />
       </:api>
@@ -298,19 +342,22 @@ class LayoutControlUsage extends Component {
         border: 1px dashed var(--border);
         border-radius: var(--boxel-border-radius);
       }
+      .lc-usage-box-s {
+        inline-size: 36rem;
+      }
+      .lc-usage-heading {
+        margin: var(--boxel-sp) 0 var(--boxel-sp-4xs);
+      }
+      .lc-usage-note {
+        margin: 0 0 var(--boxel-sp-xs);
+        color: var(--muted-foreground);
+      }
       .lc-usage-search {
         display: block;
         inline-size: 14rem;
       }
       .lc-usage-search[data-form='field-s'] {
         inline-size: 9rem;
-      }
-      /* The chooser counts one gap between slots; the spacer is a flex item
-         with a gap on each side, so half-gap negative margins make a
-         zero-width spacer cost exactly one gap. */
-      .lc-usage-spacer {
-        flex-grow: 1;
-        margin-inline: calc(var(--pretui-lc-gap, var(--boxel-sp-xs)) / -2);
       }
       .lc-usage-pair {
         display: inline-flex;

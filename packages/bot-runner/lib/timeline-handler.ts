@@ -8,6 +8,7 @@ import * as Sentry from '@sentry/node';
 import { CommandRunner, makeEnqueueRunCommand } from './command-runner.ts';
 import { makeLintSubmissionFiles } from './pr-listing/lint-submission-files.ts';
 import { PrListingWorkflowHandler } from './pr-listing/pr-listing-workflow-handler.ts';
+import { isSubmissionRejection } from './submission-rejected-error.ts';
 import type { GitHubClient } from './github.ts';
 import type { DBAdapter, QueuePublisher } from '@cardstack/runtime-common';
 import type { MatrixEvent, Room } from 'matrix-js-sdk';
@@ -25,6 +26,7 @@ export interface TimelineHandlerOptions {
   queuePublisher: QueuePublisher;
   githubClient: GitHubClient;
   startTime: number;
+  captureException?: (error: unknown) => void;
 }
 
 export function onTimelineEvent({
@@ -33,6 +35,7 @@ export function onTimelineEvent({
   queuePublisher,
   githubClient,
   startTime,
+  captureException = (error) => Sentry.captureException(error),
 }: TimelineHandlerOptions) {
   let workflowHandler = new PrListingWorkflowHandler({
     submissionBotUserId: authUserId,
@@ -115,8 +118,13 @@ export function onTimelineEvent({
         );
       }
     } catch (error) {
+      // A rejected submission is already shown to the user on the workflow
+      // card, and CommandRunner has logged it.
+      if (isSubmissionRejection(error)) {
+        return;
+      }
       log.error('error handling timeline event', error);
-      Sentry.captureException(error);
+      captureException(error);
     }
   };
 }

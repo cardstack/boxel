@@ -1,4 +1,4 @@
-import { waitFor, waitUntil, click } from '@ember/test-helpers';
+import { waitFor, waitUntil, click, settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import {
@@ -211,6 +211,85 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     await click(`[data-test-past-session-options-button="${roomId}"]`);
     assert.dom('[data-test-past-sessions]').exists();
     await click('[data-test-message-field]');
+    assert.dom('[data-test-past-sessions]').doesNotExist();
+  });
+
+  test('a past-sessions list opened while the panel loads its rooms stays open', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let panelService = getService('ai-assistant-panel-service');
+    panelService.closePanel();
+    await settled();
+
+    // Open the list before the panel has selected its room, as a click on the
+    // Past Sessions button does while it shows its loading spinner.
+    let opening = panelService.openPanel();
+    panelService.displayPastSessions();
+    await opening;
+    await settled();
+
+    assert.dom(`[data-test-room="${roomId}"]`).exists();
+    assert.dom('[data-test-past-sessions]').exists();
+    assert.dom(`[data-test-enter-room="${roomId}"]`).exists();
+  });
+
+  test('a room entered from the past-sessions list while the panel loads its rooms stays current', async function (assert) {
+    await renderAiAssistantPanel();
+    let panelService = getService('ai-assistant-panel-service');
+    let pickedRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Picked Room',
+    });
+    let latestRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Latest Room',
+    });
+    simulateRemoteMessage(
+      latestRoomId,
+      '@aibot:localhost',
+      {
+        body: 'The most recent activity.',
+        msgtype: 'm.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      { origin_server_ts: Date.now() },
+    );
+    await settled();
+    assert.strictEqual(
+      panelService.latestRoom?.roomId,
+      latestRoomId,
+      'without the pick, the panel would select the latest room',
+    );
+    panelService.closePanel();
+    await settled();
+    // The persisted room isn't in the room list, so the panel waits up to 2 s
+    // for it before it selects the latest room.
+    getService('local-persistence-service').setCurrentRoomId(
+      '!not-in-the-room-list:localhost',
+    );
+
+    let opening = panelService.openPanel();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    // The user enters a room from the list while the panel waits.
+    panelService.enterRoom(pickedRoomId);
+    await opening;
+    await settled();
+
+    assert.dom(`[data-test-room="${pickedRoomId}"]`).exists();
+    assert.dom(`[data-test-room="${latestRoomId}"]`).doesNotExist();
+  });
+
+  test('the past-sessions list is closed when the panel opens', async function (assert) {
+    await renderAiAssistantPanel();
+    let panelService = getService('ai-assistant-panel-service');
+    await click('[data-test-past-sessions-button]');
+    assert.dom('[data-test-past-sessions]').exists();
+
+    panelService.closePanel();
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-settled]');
+
     assert.dom('[data-test-past-sessions]').doesNotExist();
   });
 

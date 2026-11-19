@@ -1,4 +1,5 @@
 import { task } from 'ember-concurrency';
+import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { scheduleOnce } from '@ember/runloop';
 import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -36,6 +37,7 @@ import {
   getComponent,
 } from '../card-api';
 import { CardContextConsumer } from '../field-component';
+import { isLiveRender } from '../render-context';
 function wrapTablesHtml(html: string | null | undefined): string {
   if (!html) return '';
   // Fast path when there are no tables to wrap.
@@ -115,11 +117,50 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   // navigation where linkedCards is already cached, we detect this by
   // checking linkedCards.length > 0 on the first run.
   private _modifierHasRun = false;
-  get isPrerenderContext() {
-    return Boolean((globalThis as any).__boxelRenderContext);
+
+  // Whether this markdown renders for someone looking at it rather than for
+  // the indexer. Only a live render loads Monaco, KaTeX and Mermaid. Before the
+  // element is placed, the render context answers as it stands, so a render
+  // that starts while the host tab runs its own index render reads as not
+  // live. Once placed, the element's own answer decides every later render, so
+  // markdown outside the index render's element keeps its highlighting, math
+  // and diagrams even when it re-renders while that index render runs.
+  //
+  // The element's answer is recorded untracked, and the render is invalidated
+  // only when that answer differs from what the placing render read, so
+  // markdown whose first render already had it right is not parsed a second
+  // time.
+  private placedLive: boolean | undefined;
+  @tracked private liveRevision = 0;
+
+  get isLive(): boolean {
+    void this.liveRevision;
+    return this.placedLive ?? isLiveRender();
   }
+
+  // Installed in the same render that read `isLive`, so `this.isLive` here is
+  // the answer that render used.
+  placeRender = modifier((element: HTMLElement) => {
+    let live = isLiveRender(element);
+    let renderedLive = this.isLive;
+    this.placedLive = live;
+    if (live === renderedLive) {
+      return;
+    }
+    let cancelled = false;
+    // After the render that installed this modifier, which read `isLive`.
+    queueMicrotask(() => {
+      if (!cancelled && !isDestroying(this) && !isDestroyed(this)) {
+        this.liveRevision++;
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+
   get monacoContext() {
-    if (this.isPrerenderContext) {
+    if (!this.isLive) {
       return undefined;
     }
     if (!this.monacoContextInternal && this.prepareMonacoContextTask) {
@@ -128,7 +169,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     return this.monacoContextInternal;
   }
   prepareMonacoContextTask = task({ drop: true }, async () => {
-    if (this.isPrerenderContext) {
+    if (!this.isLive) {
       return;
     }
     let loadMonacoForMarkdown = (globalThis as any).__loadMonacoForMarkdown;
@@ -415,7 +456,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   @tracked _katex: any = null;
 
   get katexModule() {
-    if (this.isPrerenderContext) {
+    if (!this.isLive) {
       return null;
     }
     if (!this._katex) {
@@ -442,7 +483,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   private _mermaidIdCounter = 0;
 
   get mermaidSvgs() {
-    if (this.isPrerenderContext) {
+    if (!this.isLive) {
       return this._mermaidSvgs;
     }
     if (!this._mermaidSvgs.size) {
@@ -496,6 +537,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   <template>
     <MarkdownContentShell
       class='monaco-code-surface'
+      {{this.placeRender}}
       {{this.captureCardSlots this.renderedHtml @linkedCards @linkedFiles}}
     >
       {{this.renderedHtml}}

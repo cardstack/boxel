@@ -561,6 +561,77 @@ module('Unit | ai-function-generation-test', function (hooks) {
     });
   });
 
+  test(`a field that contains itself gets a schema that ends`, async function (assert) {
+    let { field, contains, containsMany, linksTo, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
+    class PetCard extends CardDef {
+      @field name = contains(StringField);
+    }
+    class TreeNodeField extends FieldDef {
+      static displayName = 'Tree Node';
+      @field label = contains(StringField);
+      @field pet = linksTo(PetCard);
+      // A thunk, because the field contains itself.
+      @field children: TreeNodeField[] = containsMany(
+        (() => TreeNodeField) as unknown as typeof TreeNodeField,
+      );
+    }
+    class TreeCard extends CardDef {
+      @field root = contains(TreeNodeField);
+    }
+
+    let schema = generateJsonSchemaForCardType(TreeCard, cardApi, mappings);
+
+    let attributes: ObjectSchema = {
+      type: 'object',
+      properties: {
+        ...cardDefAttributesProperties,
+        root: {
+          type: 'object',
+          properties: {
+            label: { type: 'string' },
+            children: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {},
+                description: 'Same fields as the enclosing Tree Node',
+              },
+            },
+          },
+        },
+      },
+    };
+    let relationships: RelationshipsSchema = {
+      type: 'object',
+      properties: {
+        'root.pet': linkedRelationship,
+        ...cardDefRelationshipsProperties,
+      },
+    };
+    assert.deepEqual(schema, { attributes, relationships });
+  });
+
+  test(`a JSON field subclass gets the JSON object schema`, async function (assert) {
+    let { field, contains, CardDef } = cardApi;
+    let { RouteJsonField } = await loader.import<
+      typeof import('@cardstack/base/realm-config')
+    >('@cardstack/base/realm-config');
+
+    class RouteCard extends CardDef {
+      @field where = contains(RouteJsonField);
+    }
+
+    let schema = generateJsonSchemaForCardType(RouteCard, cardApi, mappings);
+
+    assert.deepEqual(
+      (schema.attributes as ObjectSchema).properties.where,
+      { type: 'object', properties: {}, additionalProperties: true },
+      'where resolves to the JsonField mapping',
+    );
+  });
+
   test(`generates correct schema for nested linksTo and linksToMany fields`, async function (assert) {
     let { field, contains, linksTo, linksToMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;

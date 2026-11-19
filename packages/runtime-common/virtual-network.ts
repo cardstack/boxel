@@ -23,6 +23,10 @@ import { createEnvironmentAwareFetch } from '#fetch';
 
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
+  // True when the response serves a file's stored bytes, or tells the caller
+  // that their copy of them is current. A layer between the realm and the
+  // caller must pass such a body on as it is.
+  servesStoredBytes?: true;
 }
 
 export type Handler = (req: Request) => Promise<Response | null>;

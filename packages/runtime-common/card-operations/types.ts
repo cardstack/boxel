@@ -586,6 +586,14 @@ export type PolicyIssueCode =
   // under, so this is recorded independently of
   // `grant-reaches-ungranted-type`. The grant is kept, for the same reason.
   | 'render-reaches-ungranted-type'
+  // A `read` or `query` grant on cards of a type the governed realm defines,
+  // in a policy whose `readSource` grants reach none of the realm's code: no
+  // rule on `TsFileDef` or `GtsFileDef` grants it. A caller who reaches the
+  // realm only through the policy can read or find such a card, and can't load
+  // the module that renders it. Also such a grant that opens to callers who
+  // aren't signed in, where no code grant opens to them. The grant is kept: it
+  // does what it says, and this tells the author what else the callers need.
+  | 'module-not-granted'
   // A grant whose `where` names the caller who isn't signed in
   // (`"anonymous"`) on an operation whose base isn't one of
   // `ANONYMOUS_ELIGIBLE_OPERATIONS`, or on a named query. An operation a type
@@ -663,6 +671,7 @@ export const ANONYMOUS_ELIGIBLE_OPERATIONS: readonly BaseOperationName[] = [
 export const KEEPS_ITS_PART: ReadonlySet<PolicyIssueCode> = new Set([
   'grant-reaches-ungranted-type',
   'render-reaches-ungranted-type',
+  'module-not-granted',
   'anonymous-write-without-acting-user',
   'anonymous-grant-reads-actor',
   'anonymous-grant-user-key',
@@ -1293,8 +1302,10 @@ export interface ExplainedGrant {
   tier?: 'stored' | 'snapshot';
   outcome: ExplainedGrantOutcome;
   // On the search lane, whether the grant compiled to a search filter, which
-  // is what it composes into the search. One whose predicate has none admits
-  // no search (`policy-not-filterable`). Absent on the direct lane.
+  // is what it composes into the search: as it is, or, for a predicate that
+  // reads nothing of the card, only where its `outcome` is `held`. One whose
+  // predicate has none admits no search (`policy-not-filterable`). Absent on
+  // the direct lane.
   filterable?: boolean;
   // Present where the grant's `where` names the caller who isn't signed in:
   // each of its expressions as written, and what it produced.
@@ -1353,9 +1364,11 @@ export type ExplainedGrantOutcome =
   | 'did-not-hold'
   | 'threw'
   // The gate decided without evaluating it: an earlier grant admitted the
-  // invocation, or a refusal came first. On the search lane every predicate is
-  // this: a search runs a grant's filter over the index rather than evaluating
-  // its predicate per card. It is also a predicate the realm failed to
+  // invocation, or a refusal came first. On the search lane every predicate
+  // that reads the card is this: a search runs a grant's filter over the index
+  // rather than evaluating its predicate per card. One that reads nothing of
+  // the card is settled once for the actor, and answers `held`,
+  // `did-not-hold` or `threw`. It is also a predicate the realm failed to
   // evaluate, by failing to load the evaluator or to read the settings or
   // index row the predicate reads, where another grant admitted the
   // invocation. Where none did, the explain fails as the gate did.
@@ -1699,6 +1712,27 @@ export type OperationErrorCode =
   // it is planned and run on the search engine, so reaching the operation core
   // with one means the caller used the wrong entry point.
   | 'wrong-entry-point'
+  // An automation run's batch removes a file, or writes a realm the run may
+  // only read. A run's writes are staged in its own realm's overlay, which
+  // holds a file's bytes with nothing to mark a removal. Carries a 403.
+  // Nothing was staged.
+  | 'run-write-not-staged'
+  // An automation run's batch whose result its overlay refuses for a reason
+  // the run's commit has no code of its own for: the overlay's byte bound,
+  // or a run that is no longer running (401). Nothing was staged.
+  | 'run-write-refused'
+  // An automation run's batch writes a file the run's commit would refuse
+  // for its path: a reserved path, `realm.json`, a module, the realm's policy
+  // card, a RealmPolicy card or an automation card. Carries a 403, as the
+  // commit does. Nothing was staged.
+  | 'forbidden-path'
+  // An automation run's batch writes a file where the realm, or the run's
+  // own staged files, hold a file or directory that would make one path both.
+  // Carries a 409, as the commit does. Nothing was staged.
+  | 'path-clash'
+  // An automation run's batch stages more files than the run's `writes` cap
+  // allows. Carries a 403, as the commit does. Nothing was staged.
+  | 'writes-cap'
   // Two entries of one parallel group stage a change to the same file. The
   // members of a parallel group are evaluated against the state the group
   // started from, so neither of the two composes over the other and only one
@@ -1771,6 +1805,15 @@ export type OperationErrorCode =
   // The vendor's response was larger than the realm server carries for a
   // `callApi`.
   | 'response-too-large'
+  // An automation run's `callApi` for an operation its automation doesn't
+  // declare, or whose declaration can't be read. Nothing was sent.
+  | 'operation-not-declared'
+  // An automation run's call past one of the run's caps, named in `meta.cap`.
+  // The run has ended as an error, reason `hit-a-cap`.
+  | 'run-cap-reached'
+  // An automation run's call made once the run had stopped running, or after
+  // another attempt took it over.
+  | 'run-not-running'
   // The operation could not be carried out for a reason that is not the
   // caller's — an unreadable definition, an errored index row, a failure
   // inside the executor.

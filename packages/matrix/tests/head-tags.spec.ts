@@ -3,7 +3,6 @@ import type { Page } from '@playwright/test';
 import { randomUUID } from 'crypto';
 import { appURL } from '../support/isolated-realm-server.ts';
 import {
-  clearLocalStorage,
   createRealm,
   createSubscribedUserAndLogin,
   enterWorkspace,
@@ -28,7 +27,6 @@ test.describe('Head tags', () => {
     } = {},
   ) {
     let serverIndexUrl = new URL(appURL).origin;
-    await clearLocalStorage(page, serverIndexUrl);
 
     user = await createSubscribedUserAndLogin(page, prefix, serverIndexUrl);
 

@@ -1,20 +1,19 @@
 import type Koa from 'koa';
-import {
-  logger,
-  revokeUserSessions,
-  SupportedMimeType,
-} from '@cardstack/runtime-common';
+import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import {
   sendResponseForBadRequest,
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import { revokeUserSessionsAndOAuthGrants } from '../lib/oauth-provider/grants.ts';
 
 const log = logger('realm-server');
 
 // Retires every session token already issued to a user. Both token families are
 // covered — the realm-server session and the per-realm sessions — because both
-// are checked against the same recorded revocation instant.
+// are checked against the same recorded revocation instant. It also ends the
+// user's OAuth connections: every OAuth grant created until now (ADR 021
+// §1.9), in the same statement and at the same instant.
 //
 // This does not end the user's access on its own. A client that still holds a
 // valid matrix session re-authenticates and receives fresh tokens, by design:
@@ -40,7 +39,7 @@ export default function handleRevokeUserSessions({
       return;
     }
 
-    let revokedAt = await revokeUserSessions(dbAdapter, user);
+    let revokedAt = await revokeUserSessionsAndOAuthGrants(dbAdapter, user);
     log.info(
       `[revoke-user-sessions] revoked sessions for ${user} issued before ${revokedAt}`,
     );

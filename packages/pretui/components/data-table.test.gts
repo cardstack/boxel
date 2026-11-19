@@ -9,7 +9,7 @@
 // usage page, not here.
 import { on } from '@ember/modifier';
 import { module, test } from 'qunit';
-import { click, focus, render, triggerKeyEvent } from '@ember/test-helpers';
+import { click, fillIn, focus, render, triggerKeyEvent } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { DataTable } from './data-table';
 import { Menu } from './menu';
@@ -87,7 +87,11 @@ module('Pretui | components/data-table', function (hooks) {
     );
     assert.strictEqual(sizeOf('[data-test-dt-s]'), 's');
     assert.strictEqual(sizeOf('[data-test-dt-m]'), 'm');
-    assert.strictEqual(sizeOf('[data-test-dt-lg]'), 'l', 'lg is a spelling of l');
+    assert.strictEqual(
+      sizeOf('[data-test-dt-lg]'),
+      'l',
+      'lg is a spelling of l',
+    );
   });
 
   test('the usage page documents both size knobs', async function (assert) {
@@ -182,7 +186,12 @@ module('Pretui | components/data-table', function (hooks) {
           @onActivate={{onActivate}}
         >
           <:cell as |text|>
-            <div role='slider' tabindex='0' aria-valuenow='0' data-test-cell-widget>{{text}}</div>
+            <div
+              role='slider'
+              tabindex='0'
+              aria-valuenow='0'
+              data-test-cell-widget
+            >{{text}}</div>
           </:cell>
         </DataTable>
       </template>,
@@ -307,6 +316,96 @@ module('Pretui | components/data-table', function (hooks) {
       .isChecked('and leaves the selection');
   });
 
+  test('@onActivate: the rows are one Tab stop with arrow keys, Space selects', async function (assert) {
+    let rows: Row[] = [
+      { id: 'a', name: 'Assam' },
+      { id: 'b', name: 'Bancha' },
+      { id: 'c', name: 'Ceylon' },
+    ];
+    let calls: string[] = [];
+    let onActivate = (row: Row, index: number) =>
+      calls.push(row.id + '@' + String(index));
+    await render(
+      <template>
+        <DataTable
+          @columns={{COLUMNS}}
+          @rows={{rows}}
+          @key={{rowKey}}
+          @selectionMode='multi'
+          @onActivate={{onActivate}}
+        />
+      </template>,
+    );
+    let row = (n: number) => `[data-test-pretui-dt-row]:nth-child(${n})`;
+    let stops = () =>
+      [...document.querySelectorAll('[data-test-pretui-dt-row]')].map((el) =>
+        el.getAttribute('tabindex'),
+      );
+    assert.deepEqual(
+      stops(),
+      ['0', '-1', '-1'],
+      'only the first row is a Tab stop',
+    );
+    await focus(row(1));
+    await triggerKeyEvent(row(1), 'keydown', 'ArrowDown');
+    assert.dom(row(2)).isFocused('ArrowDown moves focus to the next row');
+    assert.deepEqual(stops(), ['-1', '0', '-1'], 'the Tab stop follows');
+    await triggerKeyEvent(row(2), 'keydown', 'End');
+    assert.dom(row(3)).isFocused('End goes to the last row');
+    await triggerKeyEvent(row(3), 'keydown', 'Home');
+    assert.dom(row(1)).isFocused('Home goes to the first row');
+    await triggerKeyEvent(row(1), 'keydown', ' ');
+    assert.dom(row(1)).hasAttribute('aria-selected', 'true', 'Space selects');
+    await triggerKeyEvent(row(1), 'keydown', 'Enter');
+    assert.deepEqual(calls, ['a@0'], 'Enter activates the focused row');
+  });
+
+  test('@onActivate: after arrowing, the toolbar, sort and pager keep focus', async function (assert) {
+    let rows: Row[] = ['Assam', 'Bancha', 'Ceylon', 'Darjeeling'].map(
+      (name) => ({ id: name, name }),
+    );
+    let columns: DataColumn<Row>[] = [
+      { key: 'name', label: 'Name', sortable: true, filter: { kind: 'text' } },
+    ];
+    let onActivate = () => {};
+    await render(
+      <template>
+        <DataTable
+          @columns={{columns}}
+          @rows={{rows}}
+          @key={{rowKey}}
+          @pageSize={{2}}
+          @onActivate={{onActivate}}
+        />
+      </template>,
+    );
+    let row = (n: number) => `[data-test-pretui-dt-row]:nth-child(${n})`;
+    await focus(row(1));
+    await triggerKeyEvent(row(1), 'keydown', 'ArrowDown');
+    assert.dom(row(2)).isFocused('arrowing moves focus within the rows');
+
+    await click('[data-test-pretui-pagination] [aria-label="Next"]');
+    assert
+      .dom('[data-test-pretui-pagination] [aria-label="Next"]')
+      .isFocused('paging does not pull focus back to a row');
+
+    await focus(row(1));
+    await triggerKeyEvent(row(1), 'keydown', 'ArrowDown');
+    await click('[data-test-pretui-dt-sort]');
+    assert
+      .dom('[data-test-pretui-dt-sort]')
+      .isFocused('sorting does not pull focus back to a row');
+
+    await focus(row(1));
+    await triggerKeyEvent(row(1), 'keydown', 'ArrowDown');
+    await fillIn('[data-test-pretui-dt-filter]', 'a');
+    await fillIn('[data-test-pretui-dt-filter]', 'an');
+    assert
+      .dom('[data-test-pretui-dt-filter]')
+      .isFocused('typing in the filter keeps focus in the input');
+    assert.dom('[data-test-pretui-dt-filter]').hasValue('an');
+  });
+
   test('without @onActivate rows are not focusable', async function (assert) {
     await render(
       <template>
@@ -314,6 +413,8 @@ module('Pretui | components/data-table', function (hooks) {
       </template>,
     );
     assert.dom('[data-test-pretui-dt-row]').doesNotHaveAttribute('tabindex');
-    assert.dom('[data-test-pretui-dt-row]').doesNotHaveAttribute('data-activatable');
+    assert
+      .dom('[data-test-pretui-dt-row]')
+      .doesNotHaveAttribute('data-activatable');
   });
 });

@@ -8,6 +8,7 @@ import {
   callApiOperation,
   type AnonymousCallApiCaller,
   type CallApiMode,
+  type CallApiRunMeter,
   type CallApiSender,
 } from './call-api.ts';
 import { readSourceOperation } from './read-source.ts';
@@ -348,9 +349,15 @@ export interface RunOperationOptions {
   duringPrerender?: boolean;
   // How a `callApi` invocation arrived, which decides whether a binding
   // approved for automations only fills its slots. Absent is `interactive`: the
-  // realm sets `automation` only for a run it makes on its own, never for a
-  // request off the network.
+  // realm sets `automation` only for a call carrying an automation run's
+  // token.
   callApiMode?: CallApiMode;
+  // The automation run an `automation` invocation belongs to, which each use
+  // of a key it makes is recorded under.
+  automationRunId?: string;
+  // Holds an `automation` invocation to its automation's declaration and its
+  // run's caps (see `CallApiRunMeter`).
+  callApiRunMeter?: CallApiRunMeter;
   // Where a `callApi` invoked by a caller who isn't signed in was admitted
   // from, which the share filling its slots counts them by. A request the
   // realm admitted without a session from an address it couldn't place sets
@@ -913,14 +920,22 @@ export async function resolveGatedOperation(
 // A caller the realm ACL allowed is answered as the gate answers them, without
 // the policy, and the verb performs the built-in behavior for them whatever the
 // type declares.
+//
+// `asFile` judges an instance target as the file stored at its URL rather than
+// as whatever its extension names. A verbatim write sets it for a path that
+// holds no card document: the extension table does not name every file a
+// realm stores (a `.css`, a `.yml`), and a path it doesn't name would
+// otherwise be judged as a card.
 export async function resolveFacadeWrite(
   core: OperationCore,
   target: OperationTarget,
   base: 'create' | 'update' | 'delete',
   scope: OperationScope,
+  opts: { asFile?: true } = {},
 ): Promise<GateDecision> {
   let { decision } = await resolveAndGate(core, target, base, scope, {
     builtInOnly: true,
+    ...opts,
   });
   // The verb writes, and a write the ACL declined is never the ACL's to allow,
   // so for such a caller the gate's answer is a grant or a refusal.
@@ -936,8 +951,9 @@ async function resolveAndGate(
   name: string,
   scope: OperationScope,
   // Refuse a name the target's type declares, for a caller the ACL declined,
-  // before the gate runs (see `resolveFacadeWrite`).
-  opts: { builtInOnly?: true } = {},
+  // before the gate runs, and judge the target as a file (see
+  // `resolveFacadeWrite`).
+  opts: { builtInOnly?: true; asFile?: true } = {},
 ): Promise<GatedOperation> {
   let refusal = (e: unknown): unknown =>
     scope.coarseDeclined === 'all' && isOperationFailure(e)
@@ -981,7 +997,9 @@ async function resolveAndGate(
   try {
     decision = await gateOperation(
       core,
-      gateSubject(target, typeChain),
+      opts.asFile && target.kind === 'instance'
+        ? fileSubject(target.url)
+        : gateSubject(target, typeChain),
       name,
       definition,
       typeDefinition,
@@ -1024,6 +1042,11 @@ function gateSubject(
     return { kind: 'unmatched' };
   }
   return urlNamesFile(url) ? { kind: 'file', url } : { kind: 'card', url };
+}
+
+function fileSubject(url: string): GateSubject {
+  let parsed = parseTargetURL(url);
+  return parsed ? { kind: 'file', url: parsed } : { kind: 'unmatched' };
 }
 
 async function resolveUngated(
@@ -1613,6 +1636,8 @@ async function runBaseOperation(
         realmURL: core.realmURL,
         duringPrerender: opts.duringPrerender ?? false,
         mode: opts.callApiMode ?? 'interactive',
+        ...(opts.automationRunId ? { runId: opts.automationRunId } : {}),
+        ...(opts.callApiRunMeter ? { runMeter: opts.callApiRunMeter } : {}),
         sender: core.callApi,
         ...(opts.callApiAnonymous ? { anonymous: opts.callApiAnonymous } : {}),
         type: () => resolvedTypeOf(core, canonical.target, scope),

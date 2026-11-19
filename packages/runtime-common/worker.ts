@@ -27,8 +27,12 @@ import {
 } from './index.ts';
 import { MatrixClient } from './matrix-client.ts';
 import type { MediaCacheAdapter } from './media-cache.ts';
+import type { MeteredCharges } from './metered-charges.ts';
+import type { OAuthProviderCleanup } from './tasks/oauth-provider-cleanup.ts';
+import type { AIBatchSettlement } from './ai-batches.ts';
 import * as Tasks from './tasks/index.ts';
-import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
+import type { WorkerArgs, TaskArgs, MintRunToken } from './tasks/index.ts';
+import type { AutomationAdmissionChecks } from './automation-admission.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { heartbeatJob } from './queue.ts';
 
@@ -229,6 +233,11 @@ export class Worker {
   #skipPrerenderHtmlRealms: string[];
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #createPrerenderAuth: CreatePrerenderAuth;
+  #mintRunToken: MintRunToken | undefined;
+  #automationAdmissionChecks: AutomationAdmissionChecks | undefined;
+  #meteredCharges: MeteredCharges | undefined;
+  #oauthProviderCleanup: OAuthProviderCleanup | undefined;
+  #aiBatchSettlement: AIBatchSettlement | undefined;
 
   constructor({
     indexWriter,
@@ -245,9 +254,14 @@ export class Worker {
     reportRealmEvent,
     prerenderer,
     createPrerenderAuth,
+    mintRunToken,
+    automationAdmissionChecks,
     indexJobsOnly,
     skipPrerenderHtmlRealms,
     mediaCacheAdapter,
+    meteredCharges,
+    oauthProviderCleanup,
+    aiBatchSettlement,
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
@@ -272,6 +286,16 @@ export class Worker {
     // configured (media-cache tasks then no-op).
     mediaCacheAdapter?: MediaCacheAdapter;
     createPrerenderAuth: CreatePrerenderAuth;
+    // See `TaskArgs.mintRunToken`.
+    mintRunToken?: MintRunToken;
+    // See `TaskArgs.automationAdmissionChecks`.
+    automationAdmissionChecks?: AutomationAdmissionChecks;
+    // See `TaskArgs.meteredCharges`.
+    meteredCharges?: MeteredCharges;
+    // See `TaskArgs.oauthProviderCleanup`.
+    oauthProviderCleanup?: OAuthProviderCleanup;
+    // See `TaskArgs.aiBatchSettlement`.
+    aiBatchSettlement?: AIBatchSettlement;
   }) {
     this.#queue = queue;
     this.#indexWriter = indexWriter;
@@ -287,9 +311,14 @@ export class Worker {
     this.#queuePublisher = queuePublisher;
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
+    this.#mintRunToken = mintRunToken;
+    this.#automationAdmissionChecks = automationAdmissionChecks;
     this.#indexJobsOnly = indexJobsOnly ?? false;
     this.#skipPrerenderHtmlRealms = skipPrerenderHtmlRealms ?? [];
     this.#mediaCacheAdapter = mediaCacheAdapter;
+    this.#meteredCharges = meteredCharges;
+    this.#oauthProviderCleanup = oauthProviderCleanup;
+    this.#aiBatchSettlement = aiBatchSettlement;
   }
 
   async run() {
@@ -315,8 +344,13 @@ export class Worker {
       reportProgress: this.reportProgress.bind(this),
       reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
+      mintRunToken: this.#mintRunToken,
+      automationAdmissionChecks: this.#automationAdmissionChecks,
       mediaCacheAdapter: this.#mediaCacheAdapter,
       skipPrerenderHtmlRealms: this.#skipPrerenderHtmlRealms,
+      meteredCharges: this.#meteredCharges,
+      oauthProviderCleanup: this.#oauthProviderCleanup,
+      aiBatchSettlement: this.#aiBatchSettlement,
     };
 
     let registrations: Record<string, () => Promise<unknown> | unknown> = {
@@ -344,6 +378,11 @@ export class Worker {
         this.#queue.register(`media-cache-gc`, Tasks['mediaCacheGc'](taskArgs)),
       'scoped-css-gc': () =>
         this.#queue.register(`scoped-css-gc`, Tasks['scopedCssGc'](taskArgs)),
+      'oauth-provider-cleanup': () =>
+        this.#queue.register(
+          `oauth-provider-cleanup`,
+          Tasks['oauthProviderCleanup'](taskArgs),
+        ),
       'lint-source': () =>
         this.#queue.register(`lint-source`, Tasks['lintSource'](taskArgs)),
       'full-reindex': () =>
@@ -352,6 +391,26 @@ export class Worker {
         this.#queue.register(
           `daily-credit-grant`,
           Tasks['dailyCreditGrant'](taskArgs),
+        ),
+      'automation-storage-charge': () =>
+        this.#queue.register(
+          `automation-storage-charge`,
+          Tasks['automationStorageCharge'](taskArgs),
+        ),
+      'automation-tick': () =>
+        this.#queue.register(
+          `automation-tick`,
+          Tasks['automationTick'](taskArgs),
+        ),
+      'automation-reconcile': () =>
+        this.#queue.register(
+          `automation-reconcile`,
+          Tasks['automationReconcile'](taskArgs),
+        ),
+      'ai-batch-settle': () =>
+        this.#queue.register(
+          `ai-batch-settle`,
+          Tasks['aiBatchSettle'](taskArgs),
         ),
       'run-command': () =>
         this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),

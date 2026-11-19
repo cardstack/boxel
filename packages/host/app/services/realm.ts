@@ -41,6 +41,7 @@ import {
   ensureTrailingSlash,
   fetchPublishabilityReport,
   logger,
+  nowDate,
   ReadinessTimeoutError,
   ri,
   rri,
@@ -49,6 +50,10 @@ import {
   type RealmInfo,
   RealmPaths,
 } from '@cardstack/runtime-common';
+import {
+  clearInMemorySessions,
+  inMemorySessions,
+} from '@cardstack/runtime-common/in-memory-sessions';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import ENV from '@cardstack/host/config/environment';
@@ -63,6 +68,11 @@ import {
   clearServiceWorkerTokens,
 } from '../utils/auth-service-worker-registration';
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
+import {
+  readRealmSessions,
+  readRealmSessionsString,
+  writeRealmSessions,
+} from '../utils/realm-sessions';
 
 import { realmClaimsFromRawToken } from './realm-server';
 
@@ -379,7 +389,7 @@ class RealmResource {
               // writes, and only source realms actually move (a non-source realm
               // would self-correct on that next load).
               if (data.indexType === 'incremental' && this.info) {
-                this.info.updatedAt = new Date().toISOString();
+                this.info.updatedAt = nowDate().toISOString();
               }
               // Tile counts derive from the index, so any completed index makes
               // them stale — no need to narrow to the config card as above, and
@@ -1103,7 +1113,7 @@ export default class RealmService extends Service {
   restoreSessionsFromStorage({
     startingVisit = false,
   }: { startingVisit?: boolean } = {}): void {
-    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
+    let sessionsString = readRealmSessionsString();
     if (!startingVisit && sessionsString === this.lastRestoredSessionsString) {
       return;
     }
@@ -1119,6 +1129,12 @@ export default class RealmService extends Service {
     // poison it and suppress a later retry.
     this.lastRestoredSessionsString = sessionsString;
     if (startingVisit) {
+      // A tab handed its sessions in memory may have come from another
+      // affinity, whose sessions the auth service worker still holds and
+      // would add to this visit's requests. It forgets them all.
+      if (inMemorySessions()) {
+        clearServiceWorkerTokens();
+      }
       this.dropSessionsNotCarriedBy(tokens);
     }
     for (let [realmURL, token] of Object.entries(tokens)) {
@@ -1129,6 +1145,24 @@ export default class RealmService extends Service {
         resource.token = token;
       }
     }
+  }
+
+  // Forgets the sessions an automation run's tab was handed in memory, and
+  // every realm holding one, so no session of the run outlives its answer.
+  // A run's tab holds no session but the run's own, so every realm holding a
+  // session got it from the run. Does nothing in a tab whose sessions are in
+  // storage.
+  dropInMemorySessions(): void {
+    if (!inMemorySessions()) {
+      return;
+    }
+    for (let [realmURL, resource] of [...this._realms]) {
+      if (resource.token) {
+        this.removeRealm(realmURL);
+      }
+    }
+    clearInMemorySessions();
+    this.lastRestoredSessionsString = null;
   }
 
   // Only realms holding a session go: one this tab identified without a
@@ -1286,6 +1320,25 @@ export default class RealmService extends Service {
     return this.knownRealm(this.toLookupURL(realm))?.info !== undefined;
   };
 
+  // Whether the realm admits the user only through its policy: they hold a
+  // session with it, its permissions give them neither read nor write, and its
+  // policy judges them. A realm answers its info to a caller its permissions
+  // don't let read only when its policy judges them, so info the host holds
+  // for such a user is the sign. Info outlives the session it was fetched
+  // under, through re-authentication, sign-out and a switch of account, so
+  // without a session this answers false. A session minted after the user's
+  // permissions changed still reads info fetched under the earlier ones. The
+  // realm decides each request such a user makes.
+  admitsOnlyThroughPolicy = (realm: RealmIdentifier): boolean => {
+    let resource = this.knownRealm(this.toLookupURL(realm));
+    return (
+      resource?.claims !== undefined &&
+      !resource.canRead &&
+      !resource.canWrite &&
+      resource.info !== undefined
+    );
+  };
+
   url = (url: string): string | undefined => {
     return this.knownRealm(url)?.url;
   };
@@ -1423,7 +1476,8 @@ export default class RealmService extends Service {
   token = (url: string): string | undefined => {
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource && (globalThis as any).__boxelRenderContext && !isTesting()) {
-      // prerender contexts should always reflect localStorage session state
+      // prerender contexts should always reflect the sessions the prerender
+      // server handed the tab
       this.restoreSessionsFromStorage();
       resource = this.knownRealm(url, { tracked: false });
     }
@@ -1896,35 +1950,25 @@ export function claimsFromRawToken(rawToken: string): JWTPayload {
 
 let SessionStorage = {
   getAll(): Record<string, string> | undefined {
-    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
-    if (sessionsString) {
-      return JSON.parse(sessionsString);
-    }
-    return undefined;
+    return readRealmSessions();
   },
   persist(realmURL: string, token: string | undefined) {
-    let sessionStr =
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
-    let session = JSON.parse(sessionStr);
+    let session = { ...(readRealmSessions() ?? {}) };
     if (session[realmURL] !== token) {
-      session[realmURL] = token;
-      window.localStorage.setItem(
-        SessionLocalStorageKey,
-        JSON.stringify(session),
-      );
+      if (token === undefined) {
+        delete session[realmURL];
+      } else {
+        session[realmURL] = token;
+      }
+      writeRealmSessions(session);
     }
     syncTokenToServiceWorker(realmURL, token);
   },
   remove(realmURL: string) {
-    let sessionStr =
-      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
-    let session = JSON.parse(sessionStr);
+    let session = { ...(readRealmSessions() ?? {}) };
     if (realmURL in session) {
       delete session[realmURL];
-      window.localStorage.setItem(
-        SessionLocalStorageKey,
-        JSON.stringify(session),
-      );
+      writeRealmSessions(session);
     }
   },
 };

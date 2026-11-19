@@ -97,6 +97,13 @@ function statusText(status: string | undefined, outcome?: string): string {
 
 const COUNT = new Intl.NumberFormat('en-US');
 
+// A formatter throws on an invalid date where toLocaleString would print
+// "Invalid Date"; an unparseable timestamp reads as absent instead.
+function formatDate(format: Intl.DateTimeFormat, iso: string | undefined) {
+  let date = iso ? new Date(iso) : undefined;
+  return date && !Number.isNaN(date.getTime()) ? format.format(date) : '';
+}
+
 function count(n: number | undefined): string {
   return COUNT.format(n ?? 0);
 }
@@ -105,13 +112,13 @@ function calls(n: number | undefined): string {
   return `${count(n)} ${n === 1 ? 'call' : 'calls'}`;
 }
 
+const WHEN_FORMAT = new Intl.DateTimeFormat('en-US', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
 function when(iso: string | undefined): string {
-  return iso
-    ? new Date(iso).toLocaleString('en-US', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      })
-    : '';
+  return formatDate(WHEN_FORMAT, iso);
 }
 
 // Who called, by Matrix id. Someone the user isn't shown, since no
@@ -123,13 +130,13 @@ function capped(used: number | undefined, budget: number | undefined): number {
   return Math.min(used ?? 0, budget ?? 0);
 }
 
+const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+});
+
 function shortDate(iso: string | undefined): string {
-  return iso
-    ? new Date(iso).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      })
-    : '';
+  return formatDate(SHORT_DATE_FORMAT, iso);
 }
 
 // A destination as the key pages name it: its host and path, the prefix a

@@ -9,6 +9,7 @@ import {
   getRelationshipMembershipState,
   instanceRealmId,
   linksTo,
+  queryableValue,
   realmURL,
   type CardContext,
   type CardCrudFunctions,
@@ -18,6 +19,7 @@ import BooleanField from './boolean';
 import NumberField from './number';
 import StringField from './string';
 import { JsonField } from './json-field';
+import CodeRefField from './code-ref';
 import {
   operation,
   operations,
@@ -391,6 +393,17 @@ class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
   </template>
 }
 
+// A JSON object kept as written: a route's `where` filter and `match` map.
+// Unlike its `JsonField` parent, its value goes into the search document
+// whole, because the server reads routing rules from the indexed realm.json
+// and nowhere else. Extending `JsonField` gives it the same generated schema.
+export class RouteJsonField extends JsonField {
+  static displayName = 'Route JSON';
+  static [queryableValue](value: any): any {
+    return value;
+  }
+}
+
 export class RoutingRuleField extends FieldDef {
   static displayName = 'Routing Rule';
   static icon = LinkIcon;
@@ -413,6 +426,46 @@ export class RoutingRuleField extends FieldDef {
     description:
       'HTTP status for a redirect rule: 301 (permanent) or 302 (temporary, the default)',
   });
+
+  @field name = contains(StringField, {
+    description:
+      'Optional name of the route, unique in the realm. Card templates use it to link to the route by name',
+  });
+
+  @field card = contains(StringField, {
+    description:
+      'Card id pattern the path resolves to, e.g. `./Person/:person_id`; each `:name` takes the value of the path parameter with that name',
+  });
+
+  @field type = contains(CodeRefField, {
+    description:
+      'Card type the route serves (module and name). A field-match route searches cards of this type',
+  });
+
+  @field where = contains(RouteJsonField, {
+    description:
+      'Boxel query filter that narrows the cards a field-match route searches',
+  });
+
+  @field match = contains(RouteJsonField, {
+    description:
+      'Field-match map: card field name to a path parameter, e.g. { "slug": ":slug" }',
+  });
+
+  @field parent = contains(StringField, {
+    description:
+      "Name of the link field that connects a child route's card type and its parent route's card type: a linksTo on the child or a linksToMany on the parent. Optional when exactly one such link exists",
+  });
+
+  // A thunk, because the field contains itself. `containsMany` resolves a
+  // thunk at runtime but its type accepts only the class, hence the cast.
+  @field routes: RoutingRuleField[] = containsMany(
+    (() => RoutingRuleField) as unknown as typeof RoutingRuleField,
+    {
+      description:
+        "Child routes. Each child's path is relative to this route's path",
+    },
+  );
 
   static atom = RoutingRuleAtom;
   static edit = RoutingRuleEdit;

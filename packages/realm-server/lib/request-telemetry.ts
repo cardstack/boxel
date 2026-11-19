@@ -89,6 +89,9 @@ const keyRoutePaths = [
 export const SYSTEM_KEYS_PATH = '/_system-keys';
 // The operator routes that store the platform's own OAuth clients.
 export const PLATFORM_OAUTH_CLIENTS_PATH = '/_platform-oauth-clients';
+// The operator routes that store platform secrets, the secrets the platform
+// keeps and only reads.
+export const PLATFORM_SECRETS_PATH = '/_platform-secrets';
 
 // The headers whose value is a credential: the caller's session token, its
 // cookies, the HMAC signatures that authenticate a worker request
@@ -214,11 +217,15 @@ export function isKeyRoutePath(pathname: string): boolean {
   );
 }
 
-// The operator routes that store a platform secret: system keys, and the
-// platform's own OAuth clients.
+// The operator routes that store a secret of the platform's own: system keys,
+// the platform's own OAuth clients, and platform secrets.
 function isSystemKeysPath(pathname: string): boolean {
   let path = pathname.toLowerCase();
-  return [SYSTEM_KEYS_PATH, PLATFORM_OAUTH_CLIENTS_PATH].some(
+  return [
+    SYSTEM_KEYS_PATH,
+    PLATFORM_OAUTH_CLIENTS_PATH,
+    PLATFORM_SECRETS_PATH,
+  ].some(
     (operatorPath) =>
       path === operatorPath || path.startsWith(`${operatorPath}/`),
   );
@@ -241,6 +248,62 @@ const keyRouteQuery = new RegExp(
   `(${keyRoutePaths.map(escapeRegExp).join('|')})((?:/[^\\s?#"'<>]*)?)\\?[^\\s"'<>]*`,
   'gi',
 );
+
+// The OAuth provider's routes whose path names a bearer secret: a flow's
+// interaction ID (the interaction route and those beneath it, the library's
+// resume route, and consent's details and decision) and an error reference.
+// Also Connected apps' disconnect, whose path names a grant: no secret, but
+// the provider's own log lines never name a grant either. Telemetry names
+// each such route by a fixed label in place of the value, wherever its path
+// is written.
+const oauthProviderSecretSegment = new RegExp(
+  `(${escapeRegExp(OAUTH_PROVIDER_PATH)}/(interaction|auth|error|consent|connections)/)[^/\\s?#"'<>]+`,
+  'gi',
+);
+
+const OAUTH_PROVIDER_SEGMENT_LABELS: Record<string, string> = {
+  error: ':ref',
+  connections: ':grantId',
+};
+
+export function withOAuthProviderSecretsLabeled(value: string): string {
+  return value.replace(
+    oauthProviderSecretSegment,
+    (_match, prefix: string, route: string) =>
+      `${prefix}${OAUTH_PROVIDER_SEGMENT_LABELS[route.toLowerCase()] ?? ':uid'}`,
+  );
+}
+
+// Every string in an event, labeled as above. An event is plain data, so this
+// walks it whole, down to a depth no event reaches.
+function withOAuthProviderSecretsLabeledDeep(
+  value: unknown,
+  depth = 0,
+): unknown {
+  if (typeof value === 'string') {
+    return withOAuthProviderSecretsLabeled(value);
+  }
+  if (depth > 16 || value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      withOAuthProviderSecretsLabeledDeep(item, depth + 1),
+    );
+  }
+  // Only plain data: anything else (a class instance the SDK keeps for its own
+  // processing) is never sent as it is.
+  let prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      withOAuthProviderSecretsLabeledDeep(item, depth + 1),
+    ]),
+  );
+}
 
 function withoutProxyRouteQueries(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') {
@@ -269,9 +332,11 @@ interface Breadcrumb {
 
 // The query parameters that carry a bearer credential on ordinary routes: a
 // `token` (a capture-URL token, or a session JWT on a `_download-realm` link)
-// and a `loginToken` (the single-use Matrix login token handed to the app
-// page). Masked the same way the request log masks them.
-const TOKEN_PARAMS = ['token', 'loginToken'];
+// a `loginToken` (the single-use Matrix login token handed to the app
+// page), and an `access_token` (an OAuth access token a client put in the
+// query string, which a resource refuses unread). Masked the same way the
+// request log masks them.
+const TOKEN_PARAMS = ['token', 'loginToken', 'access_token'];
 const MASKED = 'REDACTED';
 
 function withTokenMasked(url: string | undefined): string | undefined {
@@ -287,13 +352,18 @@ function withTokenMasked(url: string | undefined): string | undefined {
   return parsed.href;
 }
 
-function queryWithTokenMasked(query: unknown): unknown {
+// Masks `names` in a query string or a form-encoded body, whichever shape
+// Sentry recorded it in: a string, a list of pairs, or an object.
+function queryWithTokenMasked(
+  query: unknown,
+  names: readonly string[] = TOKEN_PARAMS,
+): unknown {
   if (typeof query === 'string') {
     let params = new URLSearchParams(query);
-    if (!TOKEN_PARAMS.some((name) => params.has(name))) {
+    if (!names.some((name) => params.has(name))) {
       return query;
     }
-    for (let name of TOKEN_PARAMS) {
+    for (let name of names) {
       if (params.has(name)) {
         params.set(name, MASKED);
       }
@@ -302,13 +372,11 @@ function queryWithTokenMasked(query: unknown): unknown {
   }
   if (Array.isArray(query)) {
     return query.map((pair) =>
-      Array.isArray(pair) && TOKEN_PARAMS.includes(pair[0])
-        ? [pair[0], MASKED]
-        : pair,
+      Array.isArray(pair) && names.includes(pair[0]) ? [pair[0], MASKED] : pair,
     );
   }
   if (query && typeof query === 'object') {
-    let present = TOKEN_PARAMS.filter((name) => name in query);
+    let present = names.filter((name) => name in query);
     if (present.length > 0) {
       return {
         ...query,
@@ -319,6 +387,34 @@ function queryWithTokenMasked(query: unknown): unknown {
   return query;
 }
 
+// The body fields that carry a bearer credential: an OAuth access token a
+// client put in a form-encoded body, which a resource refuses unread. Sentry
+// records a request body only from `data` listeners, and a resource's
+// controller reads the body without one, so this masks the token for any
+// other reader of such a body.
+//
+// Only a form-encoded body is masked, and the rest of it is kept: RFC 6750
+// defines a token in a body only in that form, and no resource reads one
+// from any other, so a JSON or text body is left exactly as recorded.
+const BODY_TOKEN_PARAMS = ['access_token'];
+
+function bodyWithTokenMasked(request: SentryRequestData): unknown {
+  let { data, headers } = request;
+  if (typeof data !== 'string') {
+    return queryWithTokenMasked(data, BODY_TOKEN_PARAMS);
+  }
+  let contentType = Object.entries(headers ?? {}).find(
+    ([name]) => name.toLowerCase() === 'content-type',
+  )?.[1];
+  let type = String(contentType ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  return type === 'application/x-www-form-urlencoded'
+    ? queryWithTokenMasked(data, BODY_TOKEN_PARAMS)
+    : data;
+}
+
 function withoutCredentials(request: SentryRequestData): SentryRequestData {
   let { cookies: _cookies, headers, ...rest } = request;
   let kept: SentryRequestData = {
@@ -327,6 +423,7 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
     ...(rest.query_string !== undefined
       ? { query_string: queryWithTokenMasked(rest.query_string) }
       : {}),
+    ...(rest.data !== undefined ? { data: bodyWithTokenMasked(request) } : {}),
   };
   if (!headers) {
     return kept;
@@ -522,15 +619,14 @@ export function scrubRequestTelemetry<
     );
   }
   scrubSpans(event, methodAndPathOnly);
-  if (!request) {
-    return event;
+  if (request) {
+    let parsed = parseURL(request.url);
+    (event as { request?: SentryRequestData }).request = methodAndPathOnly
+      ? {
+          ...(request.method ? { method: request.method } : {}),
+          ...(parsed ? { url: `${parsed.origin}${parsed.pathname}` } : {}),
+        }
+      : withoutCredentials(request);
   }
-  let parsed = parseURL(request.url);
-  (event as { request?: SentryRequestData }).request = methodAndPathOnly
-    ? {
-        ...(request.method ? { method: request.method } : {}),
-        ...(parsed ? { url: `${parsed.origin}${parsed.pathname}` } : {}),
-      }
-    : withoutCredentials(request);
-  return event;
+  return withOAuthProviderSecretsLabeledDeep(event) as E;
 }

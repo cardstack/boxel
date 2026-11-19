@@ -18,12 +18,12 @@ Wraps `boxel search`, which sends a query to the realm-server's `_federated-sear
 
 ## Discovery: list first, then search
 
-To see what a realm holds — or to find the module URL a `type`/`on` filter needs — use **`boxel file list --realm <url>`**, not `search`. It's a flat file listing (the realm's `_mtimes`), far cheaper than a query, and it gives you exactly what discovery needs:
+To see what a realm holds — or to find the module a `type`/`on` filter needs — use **`boxel file list --realm <url>`**, not `search`. It's a flat file listing (the realm's `_mtimes`), far cheaper than a query, and it gives you exactly what discovery needs:
 
-- The **`.gts` paths are the card definitions** — each one is a card type. Its module URL for a `type` filter is just `<realm-url><path-without-.gts>`.
+- The **`.gts` paths are the card definitions** — each one is a card type. Its module for a `type` filter is just `<realm-url><path-without-.gts>`.
 - The `.json` paths are the instances.
 
-`boxel search` is for **querying** card data once you know the type/field you want — not for "list everything." Reach for it after `boxel file list` has told you the module URL.
+`boxel search` is for **querying** card data once you know the type/field you want — not for "list everything." Reach for it after `boxel file list` has told you the module.
 
 ## Query shape
 
@@ -76,7 +76,7 @@ Federated search across realms using a JSON query
 
 ## Pitfalls
 
-- **Discovery first.** Writing a `type` or `on` filter requires the card's full module URL. If you don't know it yet, run **`boxel file list`** to see the realm's `.gts` modules — don't guess the URL, and don't use `search` to enumerate.
+- **Discovery first.** Writing a `type` or `on` filter requires the card's module. If you don't know it yet, run **`boxel file list`** to see the realm's `.gts` modules — don't guess the module, and don't use `search` to enumerate.
 - **Field filters need an `on` scope.** `eq` / `contains` / `range` must be wrapped with `on: { module, name }` (see the field-filter example) — a bare `{"filter":{"eq":{...}}}` has no card type to resolve the field against.
-- `module` in a `type` filter must be the **full HTTPS URL** of the card definition (no relative paths). Compose it from the realm URL plus the kebab-case file name without `.gts`.
+- `module` in a `type` filter must be an **absolute id** of the card definition (no relative paths). Compose it from the realm id plus the kebab-case file name without `.gts`. A realm with a registered prefix can be named either way: `@cardstack/catalog/blog-post` and the catalog's URL plus `blog-post` find the same cards.
 - Federated search only sees realms the active profile has read access to. If a realm is missing from results, check `boxel profile` and `boxel realm list`.

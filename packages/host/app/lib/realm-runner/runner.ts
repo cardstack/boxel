@@ -8,6 +8,7 @@ import WorkerURL from './worker?worker&url';
 
 import type {
   RealmScriptErrorInfo,
+  RealmScriptLocation,
   RealmRunnerCallHandler,
   RealmRunnerRequest,
   RealmRunnerResponse,
@@ -81,8 +82,25 @@ export class RealmScriptError extends Error {
   }
 }
 
+// What a run rejects with when a realm call failed and the script let its
+// error through: the message is the call's.
+export class RealmCallFailure extends Error {}
+
+const scriptLocations = new WeakMap<Error, RealmScriptLocation>();
+
+// Where in the script the error a run rejected with came from, when the
+// script threw it: its line and its stack in the script's own lines.
+export function scriptLocationOf(
+  error: unknown,
+): RealmScriptLocation | undefined {
+  return error instanceof Error ? scriptLocations.get(error) : undefined;
+}
+
 // `onCall` does the work of each `realm.*` call the script makes. Its answer,
-// or the message of what it throws, goes back into the sandbox.
+// or the message of what it throws, goes back into the sandbox. A one-way
+// call (progress, console) reaches `onCall` too, and its answer goes nowhere.
+// `onDropped` hears how many one-way calls the worker has dropped past the
+// run's limit so far.
 // `signal` ends the run from outside: the worker stops and the promise
 // rejects with the signal's reason, so a caller with its own deadline is never
 // outlived by the run.
@@ -93,6 +111,7 @@ export default function runRealmCode(
   >,
   onCall: RealmRunnerCallHandler,
   signal?: AbortSignal,
+  onDropped?: (count: number) => void,
 ): Promise<RealmRunnerResult> {
   return new Promise((resolve, reject) => {
     let workerURL = resolveAssetURL(WorkerURL);
@@ -202,6 +221,14 @@ export default function runRealmCode(
         );
         return;
       }
+      if (message.type === 'notify') {
+        onCall(message.method, message.args).catch(() => undefined);
+        return;
+      }
+      if (message.type === 'dropped') {
+        onDropped?.(message.count);
+        return;
+      }
       if (message.type === 'ready') {
         // The sandbox is up, so the script's own allowance starts here. The
         // extra second covers the message round trip; QuickJS enforces
@@ -213,11 +240,15 @@ export default function runRealmCode(
       }
       settle(() => {
         if (message.type === 'error') {
-          reject(
-            message.scriptError
-              ? new RealmScriptError(message.error, message.scriptError)
-              : new Error(message.error),
-          );
+          let error = message.scriptError
+            ? new RealmScriptError(message.error, message.scriptError)
+            : message.realmCallFailed
+              ? new RealmCallFailure(message.error)
+              : new Error(message.error);
+          if (message.scriptLocation) {
+            scriptLocations.set(error, message.scriptLocation);
+          }
+          reject(error);
         } else {
           resolve(message.result);
         }

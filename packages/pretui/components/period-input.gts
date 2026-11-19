@@ -46,6 +46,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
+import { cachedDateTimeFormat } from '../internal/intl-cache';
 
 // ═══════════════════════════════════════════════════════════════════════
 // The pure layer. No DOM, no clock.
@@ -221,7 +222,7 @@ function monthVocabulary(locale: string): Map<string, number> {
     for (let style of ['long', 'short'] as const) {
       let format: Intl.DateTimeFormat;
       try {
-        format = new Intl.DateTimeFormat(tag, { month: style, timeZone: 'UTC' });
+        format = cachedDateTimeFormat(tag, { month: style, timeZone: 'UTC' });
       } catch {
         continue;
       }
@@ -341,7 +342,7 @@ export function makePeriod(
     id = pad(year, 4) + '-' + pad(index, 2);
     try {
       label =
-        new Intl.DateTimeFormat(locale, {
+        cachedDateTimeFormat(locale, {
           month: 'long',
           year: 'numeric',
           timeZone: 'UTC',
@@ -386,7 +387,7 @@ function dayPeriod(iso: string, options: PeriodOptions): Period | undefined {
   let locale = options.locale ?? 'en-US';
   let label = iso;
   try {
-    label = new Intl.DateTimeFormat(locale, {
+    label = cachedDateTimeFormat(locale, {
       dateStyle: 'medium',
       timeZone: 'UTC',
     }).format(new Date(isoToDay(iso) as number));
@@ -623,7 +624,7 @@ export function periodRangeText(period: Period, locale = 'en-US'): string {
     return period.start + ' – ' + period.end;
   }
   try {
-    let format = new Intl.DateTimeFormat(locale, {
+    let format = cachedDateTimeFormat(locale, {
       dateStyle: 'medium',
       timeZone: 'UTC',
     });

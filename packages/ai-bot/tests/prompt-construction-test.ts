@@ -72,13 +72,17 @@ import {
   toolSourceEventIdsToCarry,
   isMarkdownSkillFile,
   parseMarkdownSkill,
+  realmsOfDisabledFeatures,
   sessionSkillFeatures,
+  SKILL_FEATURE_REALMS,
+  SKILL_FEATURES,
   skillCardsToMessages,
   SKILL_INSTRUCTIONS_MESSAGE,
   TRAILING_CONTEXT_PREAMBLE,
   VIEW_ATTACHMENT_TOOL_NAME,
 } from '@cardstack/runtime-common/ai';
 import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
+import { CATALOG_REALM_PREFIX } from '@cardstack/runtime-common/realm-prefixes';
 import { fulfillViewAttachmentCall } from '../lib/bot-tools/view-attachment/fulfillment.ts';
 import { roomAttachments } from '../lib/bot-tools/view-attachment/view.ts';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
@@ -419,9 +423,9 @@ Current date and time: 2025-06-11T11:43:00.533Z
       );
       assert.true(
         context.includes(
-          'where the workspace holds no card of that type yet, neither tool can run it',
+          'An operation on a type, such as a create, needs no card of that type: name the type by its module and export',
         ),
-        'and that a create needs an existing card of its type to run through',
+        'and that a create runs on its type where no card of it exists',
       );
     });
 
@@ -480,6 +484,12 @@ Current date and time: 2025-06-11T11:43:00.533Z
         context.includes('edits to its cards and files will be rejected'),
         'the workspace is not described as refusing every change',
       );
+      assert.true(
+        context.includes(
+          "The user can't read this workspace directly either. The realm serves them only what its policy grants, and each read needs its own grant: realm.cards.get a read, realm.cards.search a query, and realm.fs.readText (a card's .json too) a readSource. It answers anything no grant reaches as not found, so realm.fs.exists can't tell a missing file from one the user can't read, and throws rather than answer false.",
+        ),
+        'and the assistant is told what a read the policy does not grant comes back as',
+      );
     });
 
     test('keeps a condition on its own list line, in a code span its backticks cannot close', async () => {
@@ -528,16 +538,46 @@ Current date and time: 2025-06-11T11:43:00.533Z
       };
       for (let [policy, context] of Object.entries(notes)) {
         assert.true(context.includes(ASKS), `the note for ${policy} names it`);
+        assert.false(
+          context.includes("can't read this workspace directly"),
+          `and the note for ${policy} does not tell a reader their reads are limited`,
+        );
       }
       assert.false(
         (await contextFor()).includes('realm.operations.capabilities'),
         'a workspace whose realm names no policy has nothing to ask about',
       );
+      assert.true(
+        (await contextFor({}, { canRead: false })).includes(ASKS),
+        'the note for a user the realm admits only through its policy names it, since the policy is all that admits them',
+      );
+    });
+
+    test('says the realm judges a direct write as the operation it amounts to', async () => {
+      const JUDGES =
+        "realm.cards.update or a realm.fs write of a card's .json is the card's update (keeping its type) or create";
+      let notes = {
+        'a policy whose grants are listed': await contextFor({
+          card: POLICY,
+          rules: [
+            {
+              targetType: { module: LIBRARY, name: 'Book' },
+              grants: [{ operation: 'update' }],
+            },
+          ],
+        }),
+        'a policy that could not be read': await contextFor({ card: POLICY }),
+        'a policy too large to list': await contextFor({
+          card: POLICY,
+          tooLarge: true,
+        }),
+      };
+      for (let [policy, context] of Object.entries(notes)) {
+        assert.true(context.includes(JUDGES), `the note for ${policy} says so`);
+      }
       assert.false(
-        (await contextFor({}, { canRead: false })).includes(
-          'realm.operations.capabilities',
-        ),
-        'nor is it named to a user the realm admits only through its policy, whom run-realm-code does not run for',
+        (await contextFor()).includes(JUDGES),
+        'a workspace whose realm names no policy refuses every write',
       );
     });
 
@@ -11641,14 +11681,40 @@ module('absolutizeSkillLinks', () => {
   });
 });
 
-module('skill feature sections', () => {
+module('skill feature sections', (hooks) => {
+  // The tests register a stand-in feature of their own, so they hold whatever
+  // features are registered, and put back what the registries held for it.
+  // They are read-only by type.
+  const FEATURE = 'stand-in-feature';
+  let features = SKILL_FEATURES as Record<string, string>;
+  let featureRealms = SKILL_FEATURE_REALMS as Record<string, string[]>;
+  let savedFeature: string | undefined;
+  let savedRealms: string[] | undefined;
+  hooks.beforeEach(() => {
+    savedFeature = features[FEATURE];
+    savedRealms = featureRealms[FEATURE];
+    features[FEATURE] = 'Does nothing.';
+  });
+  hooks.afterEach(() => {
+    if (savedFeature) {
+      features[FEATURE] = savedFeature;
+    } else {
+      delete features[FEATURE];
+    }
+    if (savedRealms) {
+      featureRealms[FEATURE] = savedRealms;
+    } else {
+      delete featureRealms[FEATURE];
+    }
+  });
+
   const INDEX = 'https://localhost:4201/skills/index.md';
   const instructions = [
     'Before.',
     '',
-    '<!-- feature:catalog-reuse -->',
+    `<!-- feature:${FEATURE} -->`,
     'Search the catalog first.',
-    '<!-- /feature:catalog-reuse -->',
+    `<!-- /feature:${FEATURE} -->`,
     '',
     'After.',
   ].join('\n');
@@ -11666,7 +11732,7 @@ module('skill feature sections', () => {
   });
 
   test('keeps a feature section, without its markers, when its feature is enabled', () => {
-    let [message] = skillCardsToMessages([skill], ['catalog-reuse']);
+    let [message] = skillCardsToMessages([skill], [FEATURE]);
     assert.true(message.includes('Search the catalog first.'));
     assert.false(message.includes('feature:'), 'the markers are removed');
   });
@@ -11682,16 +11748,16 @@ module('skill feature sections', () => {
     assert.deepEqual(sessionSkillFeatures([], bot), []);
     assert.deepEqual(
       sessionSkillFeatures(
-        [message(user, 'boxel-debug:feature:enable:catalog-reuse')],
+        [message(user, `boxel-debug:feature:enable:${FEATURE}`)],
         bot,
       ),
-      ['catalog-reuse'],
+      [FEATURE],
     );
     assert.deepEqual(
       sessionSkillFeatures(
         [
-          message(user, 'boxel-debug:feature:enable:catalog-reuse'),
-          message(user, 'boxel-debug:feature:disable:catalog-reuse'),
+          message(user, `boxel-debug:feature:enable:${FEATURE}`),
+          message(user, `boxel-debug:feature:disable:${FEATURE}`),
         ],
         bot,
       ),
@@ -11700,11 +11766,42 @@ module('skill feature sections', () => {
     );
     assert.deepEqual(
       sessionSkillFeatures(
-        [message(bot, 'boxel-debug:feature:enable:catalog-reuse')],
+        [message(bot, `boxel-debug:feature:enable:${FEATURE}`)],
         bot,
       ),
       [],
       'the bot cannot enable a feature',
     );
+    assert.deepEqual(
+      sessionSkillFeatures(
+        [message(user, 'boxel-debug:feature:enable:constructor')],
+        bot,
+      ),
+      [],
+      'a name inherited from Object.prototype is not a feature',
+    );
+  });
+
+  // The type of SKILL_FEATURE_REALMS rejects an unregistered key only while
+  // SKILL_FEATURES has an entry: against an empty registry TypeScript skips
+  // the excess-property check. A realm under an unregistered key would be
+  // left out of every room's searches, with no command that can enable it.
+  test('every feature that gates realms is a registered feature', () => {
+    assert.deepEqual(
+      Object.keys(SKILL_FEATURE_REALMS).filter(
+        (feature) => !Object.hasOwn(SKILL_FEATURES, feature),
+      ),
+      [],
+    );
+  });
+
+  test('the catalog is searched in a room that enabled no feature', () => {
+    assert.false(realmsOfDisabledFeatures([]).includes(CATALOG_REALM_PREFIX));
+  });
+
+  test("a feature's realms are left out until the room enables it", () => {
+    featureRealms[FEATURE] = ['@cardstack/some-realm/'];
+    assert.deepEqual(realmsOfDisabledFeatures([]), ['@cardstack/some-realm/']);
+    assert.deepEqual(realmsOfDisabledFeatures([FEATURE]), []);
   });
 });
