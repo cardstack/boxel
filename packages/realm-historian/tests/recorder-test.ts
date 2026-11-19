@@ -24,6 +24,7 @@ import {
   type RecorderStep,
 } from '../src/recorder.ts';
 import { Semaphore } from '../src/semaphore.ts';
+import { needsBackfill } from '../src/backfill.ts';
 import { LeaseLostError } from '../src/lease.ts';
 import { DEFAULT_GROUPING_LIMITS } from '../src/grouper.ts';
 import { Historian } from '../src/historian.ts';
@@ -129,6 +130,7 @@ module('recorder', (hooks) => {
       maxQueuedEvents?: number;
       before?: (step: RecorderStep) => Promise<void>;
       io?: Semaphore;
+      walks?: Semaphore;
       onCommits?: (count: number) => void;
     } = {},
   ): Recorder {
@@ -138,6 +140,7 @@ module('recorder', (hooks) => {
       historyRoot,
       holder: options.holder ?? HOLDER,
       io: options.io ?? new Semaphore(4),
+      walks: options.walks,
       onFatal: options.onFatal ?? ((error) => fatals.push(error)),
       onCommits: options.onCommits,
       sizeOnlyThresholdBytes: options.sizeOnlyThresholdBytes,
@@ -872,9 +875,16 @@ module('recorder', (hooks) => {
     });
     await setCursor(database.db, realm, { xid: before.xid, seq: before.seq });
     let target = recorder();
-    await feed(target, [before, after, before], T0 + 100 + quietPeriodMs);
-    let [revision, ...rest] = await history();
+    // A clock past the initial snapshot's walk, which runs on the database's.
+    await feed(target, [before, after, before], Date.now() + 2 * maxAgeMs);
+    let [snapshot, revision, ...rest] = await history();
     assert.deepEqual(rest, []);
+    assert.strictEqual(subjectOf(snapshot), 'Initial snapshot');
+    assert.deepEqual(
+      snapshot.changedPaths,
+      ['old.json'],
+      'the realm has no HEAD, so its files are snapshotted first',
+    );
     assert.deepEqual(revision.trailers.journalSeq, [`${after.seq}`]);
     assert.deepEqual(revision.changedPaths, ['new.json']);
   });
@@ -1712,6 +1722,475 @@ module('recorder', (hooks) => {
     let [revision] = await history();
     assert.deepEqual(await state(), { cursorSeq: edit.seq, head: revision.id });
     assert.deepEqual(fatals, []);
+  });
+  module('sweeps', () => {
+    const BOT = '@deploy_bot:localhost';
+    const CREATOR = '@realm-creator:localhost';
+    const COMMIT = 'abc1234def5678abc1234def5678abc1234def56';
+    const SCAN = {
+      kind: 'scan',
+      source: 'cardstack/boxel',
+      commit: COMMIT,
+    } as const;
+    const sweepJob = {
+      kind: 'sweep',
+      outsideQueue: true,
+      run: (context: BackgroundContext) => context.sweep(),
+    };
+
+    // A tick past any walk a test has made: a sweep waits for the clock to
+    // pass its walk's end, on the database's clock, by the maximum age.
+    function past(): number {
+      return Date.now() + 2 * maxAgeMs;
+    }
+
+    // Changes the realm's file with no event, as an edit that bypasses the
+    // realm server does.
+    async function onDisk(path: string, content: string): Promise<void> {
+      let full = join(realmDir, path);
+      await mkdir(dirname(full), { recursive: true });
+      await writeFile(full, content);
+    }
+
+    async function sweepTimes(): Promise<{
+      lastSweptAt: Date | null;
+      sweepRequestedAt: Date | null;
+    }> {
+      let [row] = await database.db.execute(
+        `SELECT last_swept_at, sweep_requested_at FROM realm_history_state
+         WHERE realm_id = $1`,
+        { bind: [realm.id] },
+      );
+      return {
+        lastSweptAt: (row.last_swept_at as Date | null) ?? null,
+        sweepRequestedAt: (row.sweep_requested_at as Date | null) ?? null,
+      };
+    }
+
+    function deployScan(occurredAt: Date): Promise<ChangeEvent> {
+      return event({
+        author: BOT,
+        channel: 'deploy',
+        intent: SCAN,
+        changes: [],
+        occurredAt,
+      });
+    }
+
+    test('a sweep records a file changed on disk with no event as unattributed external changes', async (assert) => {
+      let target = recorder();
+      let initial = await recordInitial(target);
+      await onDisk('Author/fixed.json', '{"fixed":true}');
+      await onDisk(PATH, '{"v":"edited on disk"}');
+
+      assert.strictEqual(await target.runBackground(sweepJob), 'ran');
+      target.tick(Date.now() - maxAgeMs);
+      await target.settled();
+      assert.strictEqual(
+        (await history()).length,
+        1,
+        'the sweep waits for the clock to pass its walk by the maximum age',
+      );
+
+      target.tick(past());
+      await target.settled();
+      let [, swept, ...rest] = await history();
+      assert.deepEqual(rest, []);
+      assert.strictEqual(subjectOf(swept), 'Unattributed external changes');
+      assert.deepEqual(swept.changedPaths, ['Author/fixed.json', PATH]);
+      assert.deepEqual(swept.trailers.channel, ['system']);
+      assert.deepEqual(swept.trailers.writeCount, ['0']);
+      assert.strictEqual(swept.trailers.journalSeq, undefined);
+      assert.strictEqual((await authorOf(swept.id)).name, 'boxel-system');
+      assert.strictEqual(await show(swept.id, PATH), '{"v":"edited on disk"}');
+      assert.deepEqual(
+        await state(),
+        { cursorSeq: initial.seq, head: swept.id },
+        'the cursor stays where it was',
+      );
+      let paths = await pathState();
+      assert.strictEqual(
+        paths['Author/fixed.json'].hash,
+        computeContentHash('{"fixed":true}'),
+      );
+      let { lastSweptAt } = await sweepTimes();
+      assert.notStrictEqual(lastSweptAt, null, 'the sweep is recorded');
+
+      assert.strictEqual(await target.runBackground(sweepJob), 'ran');
+      target.tick(past());
+      await target.settled();
+      assert.strictEqual(
+        (await history()).length,
+        2,
+        'a sweep that finds nothing different records nothing',
+      );
+      assert.true(
+        (await sweepTimes()).lastSweptAt!.getTime() > lastSweptAt!.getTime(),
+        'and records when it ran',
+      );
+      assert.deepEqual(fatals, []);
+    });
+
+    test('a sweep runs while the realm has events in hand, and leaves out the paths they change', async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      let edit = await event({
+        author: ALICE,
+        changes: [await put(PATH, '{"v":"alice"}')],
+        occurredAt: at(0),
+      });
+      await feed(target, [edit]);
+      await onDisk('fixed.json', '{}');
+
+      assert.strictEqual(
+        await target.runBackground(sweepJob),
+        'ran',
+        'the open group does not skip the sweep',
+      );
+      target.tick(past());
+      await target.settled();
+      let [, swept, recorded, ...rest] = await history();
+      assert.deepEqual(rest, []);
+      assert.strictEqual(subjectOf(swept), 'Unattributed external changes');
+      assert.deepEqual(swept.changedPaths, ['fixed.json']);
+      assert.deepEqual(recorded.changedPaths, [PATH]);
+      assert.deepEqual(recorded.trailers.journalSeq, [`${edit.seq}`]);
+      assert.strictEqual((await authorOf(recorded.id)).name, ALICE);
+    });
+
+    test("a sweep that walked a deploy's files gives way to the deploy's scan, which reaches the journal before the sweep commits", async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      await onDisk('deploy/a.json', '{"a":1}');
+      assert.strictEqual(await target.runBackground(sweepJob), 'ran');
+      // The deploy appends its scan once its copy is done, after the walk.
+      let scan = await deployScan(at(1000));
+      target.tick(past());
+      await target.settled();
+      assert.strictEqual(
+        (await history()).length,
+        1,
+        'the sweep records nothing as unattributed',
+      );
+
+      await feed(target, [scan], past());
+      let [, deploy, ...rest] = await history();
+      assert.deepEqual(rest, []);
+      assert.strictEqual(subjectOf(deploy), 'Deploy cardstack/boxel@abc1234');
+      assert.deepEqual(deploy.changedPaths, ['deploy/a.json']);
+    });
+
+    test("a deploy scan records only the deploy's changes, leaving a write that lands while it walks to that write's revision", async (assert) => {
+      let racing: ChangeEvent | undefined;
+      let armed = false;
+      let target = recorder({
+        before: async (step) => {
+          if (step === 'walk' && armed) {
+            armed = false;
+            racing = await event({
+              author: ALICE,
+              changes: [await put(PATH, '{"v":"alice"}')],
+              occurredAt: at(2000),
+            });
+          }
+        },
+      });
+      await recordInitial(target);
+      await onDisk('deploy/a.json', '{"a":1}');
+      await onDisk('deploy/b.json', '{"b":1}');
+      let scan = await deployScan(at(1000));
+      armed = true;
+
+      await feed(target, [scan]);
+      assert.notStrictEqual(racing, undefined, 'the write landed mid-sweep');
+      await feed(target, [racing!], past());
+
+      let [, deploy, edit, ...rest] = await history();
+      assert.deepEqual(rest, []);
+      assert.strictEqual(subjectOf(deploy), 'Deploy cardstack/boxel@abc1234');
+      assert.deepEqual(deploy.changedPaths, ['deploy/a.json', 'deploy/b.json']);
+      assert.deepEqual(deploy.trailers.channel, ['deploy']);
+      assert.deepEqual(deploy.trailers.journalSeq, [`${scan.seq}`]);
+      assert.strictEqual((await authorOf(deploy.id)).name, BOT);
+      assert.deepEqual(edit.changedPaths, [PATH]);
+      assert.deepEqual(edit.trailers.journalSeq, [`${racing!.seq}`]);
+      assert.strictEqual(await show(edit.id, PATH), '{"v":"alice"}');
+      assert.deepEqual(await state(), {
+        cursorSeq: racing!.seq,
+        head: edit.id,
+      });
+      assert.notStrictEqual(
+        (await sweepTimes()).lastSweptAt,
+        null,
+        "the scan's sweep counts as the realm's sweep",
+      );
+    });
+
+    test("a write whose event lands after the scan but before its sweep starts is left out of the scan's revision", async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      await onDisk('deploy/a.json', '{"a":1}');
+      let scan = await deployScan(at(1000));
+      // In a rolling deploy, an old task's write lands at S+1.
+      let late = await event({
+        author: ALICE,
+        changes: [await put(PATH, '{"v":"old task"}')],
+        occurredAt: at(1001),
+      });
+
+      await feed(target, [scan, late], past());
+      let [, deploy, edit, ...rest] = await history();
+      assert.deepEqual(rest, []);
+      assert.deepEqual(deploy.changedPaths, ['deploy/a.json']);
+      assert.deepEqual(edit.changedPaths, [PATH]);
+      assert.deepEqual(edit.trailers.journalSeq, [`${late.seq}`]);
+      assert.strictEqual(await show(edit.id, PATH), '{"v":"old task"}');
+    });
+
+    test('a write that lands during the walk, whose event commits after the walk ends, is left out', async (assert) => {
+      let landed: ChangeEventChange | undefined;
+      let armed = false;
+      let target = recorder({
+        before: async (step) => {
+          if (step === 'walk' && armed) {
+            armed = false;
+            landed = await put(PATH, '{"v":"racing"}');
+          }
+        },
+      });
+      await recordInitial(target);
+      await onDisk('deploy/a.json', '{"a":1}');
+      let scan = await deployScan(at(1000));
+      armed = true;
+      await feed(target, [scan]);
+      assert.strictEqual(
+        (await history()).length,
+        1,
+        'the scan waits for the clock to pass its walk',
+      );
+
+      let racing = await event({
+        author: ALICE,
+        changes: [landed!],
+        occurredAt: at(1500),
+      });
+      await feed(target, [racing], past());
+      let [, deploy, edit, ...rest] = await history();
+      assert.deepEqual(rest, []);
+      assert.deepEqual(deploy.changedPaths, ['deploy/a.json']);
+      assert.deepEqual(edit.changedPaths, [PATH]);
+      assert.strictEqual((await authorOf(edit.id)).name, ALICE);
+    });
+
+    test('a second identical deploy scan records nothing and moves the cursor past itself', async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      await onDisk('deploy/a.json', '{"a":1}');
+      let first = await deployScan(at(1000));
+      await feed(target, [first], past());
+      let second = await deployScan(at(2000));
+      await feed(target, [second], past());
+
+      let [, deploy, ...rest] = await history();
+      assert.deepEqual(rest, [], 'the second scan records no revision');
+      assert.deepEqual(deploy.trailers.journalSeq, [`${first.seq}`]);
+      assert.deepEqual(await state(), {
+        cursorSeq: second.seq,
+        head: deploy.id,
+      });
+    });
+
+    test("a new realm's create-realm scan records an initial snapshot by its creator", async (assert) => {
+      await onDisk('realm.json', '{"name":"A new realm"}');
+      await onDisk('README.md', '# Hello');
+      await onDisk('index.json', '{}');
+      let target = recorder();
+      let scan = await event({
+        author: CREATOR,
+        channel: 'system',
+        intent: { kind: 'scan' },
+        changes: [],
+        occurredAt: at(0),
+      });
+      await feed(target, [scan], past());
+      let edit = await event({
+        author: CREATOR,
+        changes: [await put('README.md', '# Hello, world')],
+        occurredAt: at(5000),
+      });
+      await feed(target, [edit], past());
+
+      let [snapshot, second, ...rest] = await history();
+      assert.deepEqual(rest, []);
+      assert.strictEqual(subjectOf(snapshot), 'Initial snapshot');
+      assert.strictEqual((await authorOf(snapshot.id)).name, CREATOR);
+      assert.deepEqual(snapshot.changedPaths, [
+        'README.md',
+        'index.json',
+        'realm.json',
+      ]);
+      assert.deepEqual(snapshot.trailers.journalSeq, [`${scan.seq}`]);
+      assert.deepEqual(snapshot.trailers.channel, ['system']);
+      assert.strictEqual(subjectOf(second), 'Update README.md');
+      assert.strictEqual((await authorOf(second.id)).name, CREATOR);
+    });
+
+    test('a realm with no HEAD whose first event is a write gets an initial snapshot by boxel-system first', async (assert) => {
+      await onDisk('old.json', '{"old":true}');
+      await onDisk(PATH, '{"v":"before recording"}');
+      let target = recorder();
+      let edit = await event({
+        author: ALICE,
+        changes: [await put(PATH, '{"v":"first edit"}')],
+        occurredAt: at(0),
+      });
+      await feed(target, [edit], past());
+
+      let [snapshot, revision, ...rest] = await history();
+      assert.deepEqual(rest, []);
+      assert.strictEqual(subjectOf(snapshot), 'Initial snapshot');
+      assert.strictEqual((await authorOf(snapshot.id)).name, 'boxel-system');
+      assert.deepEqual(
+        snapshot.changedPaths,
+        ['old.json'],
+        "the write's path is left to its own revision",
+      );
+      assert.strictEqual(snapshot.trailers.journalSeq, undefined);
+      assert.deepEqual(revision.changedPaths, [PATH]);
+      assert.deepEqual(revision.trailers.journalSeq, [`${edit.seq}`]);
+      assert.strictEqual(await show(revision.id, PATH), '{"v":"first edit"}');
+    });
+
+    test('a realm deletion on a realm with no HEAD takes no initial snapshot', async (assert) => {
+      await onDisk('a.json', '{"a":1}');
+      let target = recorder();
+      let deletion = await event({
+        author: ALICE,
+        channel: 'system',
+        intent: { kind: 'delete-realm' },
+        changes: [],
+        occurredAt: at(0),
+      });
+      await feed(target, [deletion], past());
+      assert.strictEqual(await readMain(gitDir), undefined);
+      assert.deepEqual(await state(), { cursorSeq: deletion.seq, head: null });
+      assert.strictEqual((await sweepTimes()).sweepRequestedAt, null);
+    });
+
+    test('a backfill records an initial snapshot by boxel-system without moving the cursor', async (assert) => {
+      await onDisk('a.json', '{"a":1}');
+      await onDisk('dir/b.json', '{"b":1}');
+      assert.true(await needsBackfill(database.db, realm.id));
+      let target = recorder();
+      assert.strictEqual(
+        await target.runBackground({ ...sweepJob, kind: 'backfill' }),
+        'ran',
+      );
+      target.tick(past());
+      await target.settled();
+
+      let [snapshot, ...rest] = await history();
+      assert.deepEqual(rest, []);
+      assert.strictEqual(subjectOf(snapshot), 'Initial snapshot');
+      assert.strictEqual((await authorOf(snapshot.id)).name, 'boxel-system');
+      assert.deepEqual(snapshot.changedPaths, ['a.json', 'dir/b.json']);
+      assert.deepEqual(await state(), { cursorSeq: 0, head: snapshot.id });
+      assert.deepEqual(Object.keys(await pathState()), [
+        'a.json',
+        'dir/b.json',
+      ]);
+      assert.false(
+        await needsBackfill(database.db, realm.id),
+        'a realm with a HEAD needs no backfill',
+      );
+    });
+
+    test('a scan whose sweep fails is moved past without stalling the realm, and asks for a sweep', async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      await rm(realmDir, { recursive: true, force: true });
+      let scan = await deployScan(at(1000));
+      await feed(target, [scan], past());
+
+      assert.strictEqual(target.state, 'running');
+      assert.strictEqual(await statusOf(), 'ok');
+      assert.strictEqual((await history()).length, 1);
+      assert.strictEqual((await state()).cursorSeq, scan.seq);
+      assert.notStrictEqual((await sweepTimes()).sweepRequestedAt, null);
+      assert.deepEqual(fatals, []);
+    });
+
+    test('a job in the queue is skipped while a sweep waits to commit, so maintenance never prunes its objects', async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      await onDisk('fixed.json', '{}');
+      assert.strictEqual(await target.runBackground(sweepJob), 'ran');
+      let ran = 0;
+      let maintenance = { kind: 'maintain', run: async () => void ran++ };
+      assert.strictEqual(await target.runBackground(maintenance), 'skipped');
+
+      target.tick(past());
+      await target.settled();
+      assert.strictEqual(
+        subjectOf((await history())[1]),
+        'Unattributed external changes',
+      );
+      assert.strictEqual(await target.runBackground(maintenance), 'ran');
+      assert.strictEqual(ran, 1);
+    });
+
+    test('stopping a recorder whose walk waits for a slot another realm holds does not wait for that realm', async (assert) => {
+      let walks = new Semaphore(1);
+      let target = recorder({ walks });
+      await recordInitial(target);
+      let elsewhere = await walks.acquire();
+      let sweeping = target.runBackground(sweepJob);
+      await sleep(20);
+      let stopped = false;
+      let stopping = target.stop().then(() => (stopped = true));
+      await waitUntil(() => stopped, { what: 'the recorder to stop' });
+      await stopping;
+      assert.strictEqual(await sweeping, 'unavailable');
+      elsewhere();
+    });
+
+    test('a job outside the queue that fails stalls the realm when its kind says so', async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      await assert.rejects(
+        target.runBackground({
+          kind: 'failing',
+          outsideQueue: true,
+          stallOnFailure: true,
+          run: async () => {
+            throw new Error('the job failed');
+          },
+        }),
+        /the job failed/,
+      );
+      assert.strictEqual(target.state, 'stalled');
+      assert.strictEqual(await statusOf(), 'stalled');
+      assert.strictEqual(target.idleSince(), undefined);
+      assert.deepEqual(fatals, []);
+    });
+
+    test('stopping a recorder ends its walks and drops the sweeps waiting to commit', async (assert) => {
+      let target = recorder();
+      await recordInitial(target);
+      await onDisk('fixed.json', '{}');
+      assert.strictEqual(await target.runBackground(sweepJob), 'ran');
+      assert.strictEqual(
+        target.idleSince(),
+        undefined,
+        'a recorder with a sweep waiting is not idle',
+      );
+      let before = await state();
+      await target.stop();
+      target.tick(past());
+      await target.settled();
+      assert.deepEqual(await state(), before);
+      assert.strictEqual((await history()).length, 1);
+    });
   });
 });
 
