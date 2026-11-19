@@ -1350,6 +1350,11 @@ export class SearchResource<
               dependencyTrackingContext,
               cardInitiated: this.#cardInitiated,
               throttled: this.#throttled,
+              // A live resource re-runs on every realm event for the realms
+              // it searches, which is what lets its search share an answer
+              // with every identical live search in the tab: a newly built
+              // resource asking what another just asked sends nothing.
+              live: this.#isLive,
               // A search that queued behind the concurrency ceiling can outlive
               // its reason to run: a newer query restarts this task, or the
               // resource is torn down with the request still waiting. Either

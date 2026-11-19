@@ -47,6 +47,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 import type { CardDocFiles } from '../../helpers';
 import type { CardDef } from '@cardstack/base/card-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 class StubRealmService extends RealmService {
   realmOf(_input: URL | string) {
@@ -1908,6 +1909,117 @@ module(`Integration | search resource`, function (hooks) {
 
       releaseFetch.fulfill();
       await Promise.all([p1, p2]);
+    });
+
+    module(`live searches outside a prerender`, function () {
+      function indexEventFor(realmURL: string): RealmEventContent {
+        return {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [],
+          realmURL,
+        } as unknown as RealmEventContent;
+      }
+
+      test(`concurrent identical live searches share a single fetch`, async function (assert) {
+        let p1 = storeService.search(bookQuery, [testRealmURL], { live: true });
+        let p2 = storeService.search(bookQuery, [testRealmURL], { live: true });
+        assert.strictEqual(fetchCalls, 1, 'the second live search joined');
+
+        releaseFetch.fulfill();
+        let [r1, r2] = await Promise.all([p1, p2]);
+        assert.deepEqual(
+          r2.map((i) => i.id),
+          r1.map((i) => i.id),
+          'both callers receive the same instances',
+        );
+        assert.ok(r1.length > 0, 'the shared answer carries the results');
+      });
+
+      test(`a settled live search satisfies a later identical live search`, async function (assert) {
+        releaseFetch.fulfill();
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+        assert.strictEqual(fetchCalls, 1, 'the later search sent nothing');
+      });
+
+      test(`a realm event for a searched realm stops the answer being shared`, async function (assert) {
+        releaseFetch.fulfill();
+        let messageService = getService('message-service');
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+
+        messageService.relayRealmEvent(
+          indexEventFor('http://localhost:4201/some-other-realm/'),
+        );
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'an event for a realm the search does not cover changes nothing',
+        );
+
+        messageService.relayRealmEvent(indexEventFor(testRealmURL));
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+        assert.strictEqual(fetchCalls, 2, 'the search after the event is sent');
+      });
+
+      test(`an event arriving while a live search is in flight keeps later searches off it`, async function (assert) {
+        let messageService = getService('message-service');
+        let p1 = storeService.search(bookQuery, [testRealmURL], { live: true });
+        messageService.relayRealmEvent(indexEventFor(testRealmURL));
+        let p2 = storeService.search(bookQuery, [testRealmURL], { live: true });
+        assert.strictEqual(
+          fetchCalls,
+          2,
+          'a search asked after the event does not join one sent before it',
+        );
+        releaseFetch.fulfill();
+        await Promise.all([p1, p2]);
+      });
+
+      test(`a write that settles stops the answer being shared`, async function (assert) {
+        releaseFetch.fulfill();
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+        await assert.rejects(
+          getService('card-service').deleteSource(
+            new URL(`${testRealmURL}no-such-file.txt`),
+          ),
+          'the write fails, which still counts as a write that settled',
+        );
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+        assert.strictEqual(fetchCalls, 2, 'the search after the write is sent');
+      });
+
+      test(`a one-shot search never takes a shared live answer`, async function (assert) {
+        releaseFetch.fulfill();
+        await storeService.search(bookQuery, [testRealmURL], { live: true });
+        await storeService.search(bookQuery, [testRealmURL]);
+        assert.strictEqual(fetchCalls, 2, 'the one-shot search is sent');
+      });
+
+      test(`a newly built live resource asking what another just asked sends nothing`, async function (assert) {
+        releaseFetch.fulfill();
+        let named = {
+          query: bookQuery,
+          realms: [testRealmURL],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        } satisfies SearchResourceArgs['named'];
+        let first = getSearchResourceForTest(loaderService, () => ({ named }));
+        await first.loaded;
+        let second = getSearchResourceForTest(loaderService, () => ({
+          named,
+        }));
+        await second.loaded;
+
+        assert.strictEqual(fetchCalls, 1, 'one request served both resources');
+        assert.deepEqual(
+          second.instances.map((i) => i.id),
+          first.instances.map((i) => i.id),
+        );
+      });
     });
   });
 

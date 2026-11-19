@@ -91,6 +91,14 @@ export default class CardService extends Service {
     Promise<typeof Searchable>
   >;
   declare clientRequestIds: LimitedSet<string>;
+  // How many writes this tab has sent to a realm and seen settle, whether
+  // they succeeded or not. Monotonic, and never reset: a reader compares two
+  // readings to learn whether a write settled between them.
+  #writeCount = 0;
+
+  get writeCount(): number {
+    return this.#writeCount;
+  }
 
   constructor(owner: Owner) {
     super(owner);
@@ -325,6 +333,17 @@ export default class CardService extends Service {
     url: string | URL,
     init: RequestInit,
   ): Promise<Response> {
+    try {
+      return await this.sendWriteConfirmingPolicyAudit(url, init);
+    } finally {
+      this.#writeCount++;
+    }
+  }
+
+  private async sendWriteConfirmingPolicyAudit(
+    url: string | URL,
+    init: RequestInit,
+  ): Promise<Response> {
     let response = await this.network.authedFetch(url, init);
     if (response.status !== 409) {
       return response;
@@ -431,12 +450,17 @@ export default class CardService extends Service {
 
   async deleteSource(id: RealmResourceIdentifier | URL) {
     let url = this.toURL(id);
-    let response = await this.network.authedFetch(url, {
-      method: 'DELETE',
-      headers: {
-        Accept: 'application/vnd.card+source',
-      },
-    });
+    let response: Response;
+    try {
+      response = await this.network.authedFetch(url, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      });
+    } finally {
+      this.#writeCount++;
+    }
 
     if (!response.ok) {
       let errorMessage = `Could not delete file ${url}, status ${
