@@ -15,7 +15,9 @@
 // cases release at the headers instead: a response with no body, and a
 // streamed one (`text/event-stream`), which may stay open for minutes. A
 // caller can also drop a response without reading its body, so a slot whose
-// body has not ended `bodyGraceMs` after its headers is released anyway.
+// body nobody has pulled from for `bodyGraceMs` is released anyway. The
+// time counts only while no read is waiting on the network: a body that
+// downloads slowly keeps its slot for as long as its caller keeps reading.
 
 export type RequestPriority = 'urgent' | 'normal';
 
@@ -25,8 +27,8 @@ export interface RequestLimiterOptions {
   // Slots of `maxInFlight` that only urgent requests take, so an urgent
   // request finds a free slot while reads fill the rest.
   urgentReserve: number;
-  // How long after its headers a response may hold its slot while its body
-  // is still open.
+  // How long a response may hold its slot while its body is open and nobody
+  // is reading it.
   bodyGraceMs: number;
   now?: () => number;
   setTimer?: (callback: () => void, ms: number) => unknown;
@@ -218,15 +220,27 @@ export class RequestLimiter {
   ): Response {
     let released = false;
     let timer: unknown;
+    let stopTimer = () => {
+      if (timer !== undefined) {
+        this.#clearTimer(timer);
+        timer = undefined;
+      }
+    };
     let release = () => {
       if (released) {
         return;
       }
       released = true;
-      if (timer !== undefined) {
-        this.#clearTimer(timer);
-      }
+      stopTimer();
       this.#release(origin, lane);
+    };
+    // Counts only while no read is waiting on the network, so it fires when
+    // the caller has stopped pulling, not when the download is slow.
+    let startTimer = () => {
+      stopTimer();
+      if (!released) {
+        timer = this.#setTimer(release, this.#opts.bodyGraceMs);
+      }
     };
 
     let source = response.body;
@@ -239,6 +253,7 @@ export class RequestLimiter {
     let reader = source.getReader();
     let body = new ReadableStream<Uint8Array>({
       async pull(controller) {
+        stopTimer();
         try {
           let { done, value } = await reader.read();
           if (done) {
@@ -246,6 +261,7 @@ export class RequestLimiter {
             controller.close();
           } else {
             controller.enqueue(value);
+            startTimer();
           }
         } catch (e) {
           release();
@@ -257,7 +273,7 @@ export class RequestLimiter {
         return reader.cancel(reason);
       },
     });
-    timer = this.#setTimer(release, this.#opts.bodyGraceMs);
+    startTimer();
 
     let wrapped = new Response(body, {
       status: response.status,

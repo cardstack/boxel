@@ -42,9 +42,11 @@ requests, so one finds a free slot while reads fill the rest.
 
 A slot MUST be held until the response body ends (read to the end, cancelled,
 or failed). A streamed response (`text/event-stream`) and a response with no
-body MUST release their slot at the headers. A slot whose body has not ended a
-fixed time after its headers MUST be released, so a caller that drops a
-response cannot hold a slot for the life of the tab.
+body MUST release their slot at the headers. A slot whose body nobody has read
+from for a fixed time MUST be released, so a caller that drops a response
+cannot hold a slot for the life of the tab. That time MUST NOT count while a
+read is waiting on the network, so a body that downloads slowly keeps its
+slot.
 
 ### 1.5. Abandoned requests
 

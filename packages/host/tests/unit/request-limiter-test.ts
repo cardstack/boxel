@@ -250,6 +250,61 @@ module('Unit | request-limiter', function () {
     assert.deepEqual(network.sentPaths(), ['GET /a', 'GET /b']);
   });
 
+  test('a body that downloads slowly keeps its slot past the grace period', async function (assert) {
+    let { network, timers, limiter } = setup({
+      maxInFlight: 1,
+      urgentReserve: 0,
+    });
+    let a = limiter.fetch(get('/a'));
+    limiter.fetch(get('/b'));
+    await settle();
+    let source!: ReadableStreamDefaultController<Uint8Array>;
+    network.respond(
+      '/a',
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            source = controller;
+          },
+        }),
+      ),
+    );
+    let reader = (await a).body!.getReader();
+    let encoder = new TextEncoder();
+
+    let first = reader.read();
+    await settle();
+    assert.strictEqual(
+      timers.count,
+      0,
+      'no grace timer runs while a read waits on the network',
+    );
+    timers.fireAll();
+    source.enqueue(encoder.encode('one'));
+    assert.false((await first).done);
+    await settle();
+    assert.deepEqual(
+      network.sentPaths(),
+      ['GET /a'],
+      'a body still being read holds its slot',
+    );
+
+    assert.strictEqual(
+      timers.count,
+      0,
+      'reading ahead for the next chunk keeps the grace timer stopped',
+    );
+
+    source.close();
+    await settle();
+    assert.deepEqual(
+      network.sentPaths(),
+      ['GET /a', 'GET /b'],
+      'the slot frees once the body has downloaded',
+    );
+    assert.true((await reader.read()).done);
+  });
+
   test('a streamed response frees its slot at the headers', async function (assert) {
     let { network, limiter } = setup({ maxInFlight: 1, urgentReserve: 0 });
     let a = limiter.fetch(post('/_request-forward'));
