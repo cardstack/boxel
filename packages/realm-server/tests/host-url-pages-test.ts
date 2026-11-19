@@ -594,6 +594,42 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test("a published realm's publish-time ETag never answers a 304 on a host URL", async function (assert) {
+    await db.execute(
+      `UPDATE realm_registry SET kind = 'published', last_published_at = '1700000000000'
+       WHERE url = $1`,
+      { bind: [OPEN] },
+    );
+    let onRealmURL = await request
+      .get(`${new URL(OPEN).pathname}landing`)
+      .set('Accept', 'text/html');
+    let publishTag = onRealmURL.headers['etag'];
+    assert.true(
+      (publishTag ?? '').startsWith('"1700000000000-'),
+      `the realm's own URL has the publish-time ETag (${publishTag})`,
+    );
+
+    let onHostURL = await page('/landing', OPEN_HOST);
+    let pageTag = onHostURL.headers['etag'];
+    assert.false(
+      (pageTag ?? '').startsWith('"1700000000000-'),
+      `the host URL has the page-hash ETag (${pageTag})`,
+    );
+    // The publish-time tag as the host URL's boundary would have sent it, with
+    // the suffix that names its translation.
+    let suffix = pageTag.match(/(\.h[^"]+)"$/)?.[1];
+    assert.ok(suffix, 'the host URL ETag carries the translation suffix');
+    let conditional = await page('/landing', OPEN_HOST).set(
+      'If-None-Match',
+      publishTag.replace(/"$/, `${suffix}"`),
+    );
+    assert.strictEqual(
+      conditional.status,
+      200,
+      'the publish-time tag does not match the page',
+    );
+  });
+
   test('a not-found page on a host URL has no ETag', async function (assert) {
     let response = await page('/docs/missing', GOVERNED_HOST);
     assert.strictEqual(response.status, 404, response.text.slice(0, 300));

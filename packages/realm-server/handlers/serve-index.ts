@@ -769,7 +769,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     if (!publishedRealmInfoFetched) {
       publishedRealmInfo = await getPublishedRealmInfo(requestURL, routingDeps);
     }
-    let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
+    // A page on a host URL is validated only by the hash of the page as
+    // built (see below), never by this publish-time tag, which would answer
+    // a 304 before the page and its access decisions are worked out.
+    let lastPublishedAt = hostURL
+      ? undefined
+      : publishedRealmInfo?.lastPublishedAt;
     let etag =
       lastPublishedAt && indexHTMLHash
         ? `"${lastPublishedAt}-${indexHTMLHash}"`
