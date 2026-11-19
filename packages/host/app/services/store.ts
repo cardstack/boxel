@@ -110,6 +110,7 @@ import CardStore, {
   type ReferenceCount,
 } from '../lib/gc-card-store';
 
+import { LiveSearchCoalescer } from '../lib/live-search-coalescer';
 import {
   consumingRealmHeader,
   duringPrerenderHeaders,
@@ -363,6 +364,14 @@ interface SearchOptions<S extends SearchEntryScope = 'cards'> {
   // it; an unthrottled search never waits long enough for the answer to
   // change.
   isObsolete?: () => boolean;
+  // The caller holds the result live: it re-runs the search on the realm
+  // events that could change its result. Such a search shares its answer with
+  // every identical live search the tab sends (see `LiveSearchCoalescer`),
+  // which is sound because any event for a searched realm stops the answer
+  // being shared, so no caller is handed an answer older than an event that
+  // would have re-run it. A caller that reads the result once leaves this
+  // unset, and its search always goes to the realm server.
+  live?: boolean;
   // Pin which index rows the search returns: 'cards' (instance rows),
   // 'files' (FileDef rows), or 'all' (both). When omitted, the scope is
   // inferred from the filter — an untyped query defaults to 'cards'. Prefer
@@ -474,6 +483,9 @@ export default class StoreService extends Service implements StoreInterface {
   // unchanged outside prerender. Entries self-clear on `.finally()` via
   // identity check.
   private inflightSearch: Map<string, Promise<SearchEntryResults>> = new Map();
+  // Shares identical live searches outside a prerender (see `fetchSearchDoc`).
+  // Keyed like `inflightSearch`.
+  #liveSearches = new LiveSearchCoalescer<SearchEntryResults>();
   // Resolved-doc cache for same-realm `_federated-search` calls during
   // a prerender. Layered *above* `inflightSearch`: a cache hit skips
   // the network round-trip entirely; a miss falls through to the
@@ -656,6 +668,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardLoads = new Map();
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
+    this.#liveSearches.clear();
     this.searchCache = new Map();
     this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
@@ -750,6 +763,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardLoads = new Map();
     this.#reloadTargets = new Map();
     this.inflightSearch = new Map();
+    this.#liveSearches.clear();
     this.searchCache = new Map();
     this.searchCacheScope = undefined;
     this.searchCacheGeneration++;
@@ -1596,12 +1610,24 @@ export default class StoreService extends Service implements StoreInterface {
       assertRealmsBound(searchRealms);
       query = applySearchPageBound(query);
     }
+    // A live search whose identical twin is in flight or just settled takes
+    // that answer, and with it no throttle slot: it sends nothing.
+    let shared = opts?.live
+      ? this.#sharedLiveSearchDoc(query, searchRealms, opts?.scope)
+      : undefined;
+    if (shared) {
+      return await this.hydrateSearchDoc<ElementForScope[S]>(
+        await shared,
+        opts?.dependencyTrackingContext,
+      );
+    }
     let run = () =>
       this.fetchAndHydrateSearchResults<ElementForScope[S]>(
         query,
         searchRealms,
         opts?.dependencyTrackingContext,
         opts?.scope,
+        opts?.live,
       );
     let lane: SearchThrottleLane | undefined = opts?.cardInitiated
       ? 'card'
@@ -1833,9 +1859,22 @@ export default class StoreService extends Service implements StoreInterface {
     realms: string[],
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
     scope?: SearchEntryScope,
+    live?: boolean,
   ): Promise<{ instances: T[]; meta: SearchEntryResults['meta'] }> {
-    let collectionDoc = await this.fetchSearchDoc(query, realms, scope);
+    let collectionDoc = await this.fetchSearchDoc(query, realms, scope, live);
+    return await this.hydrateSearchDoc<T>(
+      collectionDoc,
+      dependencyTrackingContext,
+    );
+  }
 
+  // A search document's results as store instances. A document may be shared
+  // between callers (see `fetchSearchDoc`), so hydration only reads it: each
+  // caller resolves the same entries against the same included resources.
+  private async hydrateSearchDoc<T extends CardDef | FileDef = CardDef>(
+    collectionDoc: SearchEntryResults,
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+  ): Promise<{ instances: T[]; meta: SearchEntryResults['meta'] }> {
     // Hydrate each result into the store. The data-only entry doc
     // carries one full `item` (`card`/`file-meta`) serialization per entry in
     // `included`, reached through the entry's `item` relationship. An item
@@ -1925,14 +1964,33 @@ export default class StoreService extends Service implements StoreInterface {
   // realm is one realm: the consuming realm is the realm registry's key (the
   // alias for base) while `realms` keeps the caller's spelling.
   //
-  // Outside a prerender both layers are bypassed so live-SPA
-  // write-then-read flows keep their current freshness semantics.
+  // Outside a prerender both layers are bypassed. A live search (`live`)
+  // takes a third layer of its own instead, `#liveSearches`: identical live
+  // searches share one request for a short window after it is sent, in flight
+  // or settled, as long as no realm event for a searched realm and no write
+  // from this tab has arrived since it was sent. Every other search
+  // goes to the realm server, so a caller that writes and then reads once
+  // reads what the realm holds after its write.
   private async fetchSearchDoc(
     query: Query,
     realms: string[],
     scope?: SearchEntryScope,
+    live?: boolean,
   ): Promise<SearchEntryResults> {
     let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
+    if (!inPrerender && live) {
+      let shareable = this.#liveSearchIdentity(query, realms, scope);
+      if (shareable) {
+        let { key, fingerprint } = shareable;
+        return await this.#liveSearches.run(key, fingerprint, () =>
+          this.fetchSearchDocUncoalesced(
+            query,
+            realms,
+            this.resolveWireScope(query, scope),
+          ),
+        );
+      }
+    }
     let renderScope = inPrerender ? currentRenderScope() : undefined;
     let consumingRealm = inPrerender
       ? ((globalThis as any).__boxelConsumingRealm as string | undefined)
@@ -2030,6 +2088,53 @@ export default class StoreService extends Service implements StoreInterface {
       this.searchCache.set(cacheKey, doc);
     }
     return doc;
+  }
+
+  // The answer an identical live search already holds, if it may be shared:
+  // see `fetchSearchDoc`.
+  #sharedLiveSearchDoc(
+    query: Query,
+    realms: string[],
+    scope?: SearchEntryScope,
+  ): Promise<SearchEntryResults> | undefined {
+    if ((globalThis as any).__boxelRenderContext) {
+      return undefined;
+    }
+    let shareable = this.#liveSearchIdentity(query, realms, scope);
+    return shareable
+      ? this.#liveSearches.peek(shareable.key, shareable.fingerprint)
+      : undefined;
+  }
+
+  // What a live search shares by (`key`: the request that goes on the wire)
+  // and what it may be shared under (`fingerprint`: how many realm events
+  // this tab has received for each searched realm, and how many writes it has
+  // seen settle). Undefined when the request has no stable key, in which case
+  // the search is sent unshared.
+  #liveSearchIdentity(
+    query: Query,
+    realms: string[],
+    scope?: SearchEntryScope,
+  ): { key: string; fingerprint: string } | undefined {
+    let canonicalRealms = canonicalRealmIdentifiers(
+      this.network.virtualNetwork,
+      realms,
+    );
+    let key = searchInFlightKey(
+      canonicalRealms,
+      query,
+      this.resolveWireScope(query, scope),
+    );
+    if (key === undefined) {
+      return undefined;
+    }
+    let fingerprint = JSON.stringify([
+      this.network.writeCount,
+      canonicalRealms.map((realm) =>
+        this.messageService.realmEventCount(realm),
+      ),
+    ]);
+    return { key, fingerprint };
   }
 
   // Resolve the caller's optional explicit scope + the query's filter shape to
@@ -3941,14 +4046,18 @@ export default class StoreService extends Service implements StoreInterface {
     // canonical (RRI prefix form for mapped realms). Fold the id to canonical
     // form here so an instance's identity — and everything keyed off it, like
     // the markdown pill slots — doesn't depend on which path hydrated it.
+    //
+    // The fold goes into a copy. The resource belongs to a search document
+    // that other callers may hydrate too, and they find it by matching each
+    // entry's `item` reference, which carries the URL form, against its id.
     let canonicalId = this.network.virtualNetwork.unresolveURL(resource.id);
     if (canonicalId !== resource.id) {
-      (resource as { id: string }).id = canonicalId;
+      resource = { ...resource, id: canonicalId };
     }
 
     // Handle file-meta resources
     if (isFileMetaResource(resource)) {
-      let existingInstance = this.peek(resource.id, { type: 'file-meta' });
+      let existingInstance = this.peek(canonicalId, { type: 'file-meta' });
       if (existingInstance && isFileDefInstance(existingInstance)) {
         return existingInstance as T;
       }
@@ -3956,13 +4065,13 @@ export default class StoreService extends Service implements StoreInterface {
       return this.createFileMetaFromSerialized(
         resource,
         doc,
-        resource.id,
+        canonicalId,
         dependencyTrackingContext,
       ) as Promise<T>;
     }
 
     // Handle card resources
-    let existingInstance = this.peek(resource.id);
+    let existingInstance = this.peek(canonicalId);
     if (existingInstance && isCardInstance(existingInstance)) {
       return existingInstance as T;
     }
@@ -3970,7 +4079,7 @@ export default class StoreService extends Service implements StoreInterface {
     // distinguish unresolved empty seeds from explicit empty card-GET results.
     (resource as any)[queryFieldSeedFromSearchSymbol] = true;
     return this.addWithoutPersisting({ data: resource } as SingleCardDocument, {
-      relativeTo: resource.id,
+      relativeTo: canonicalId,
       dependencyTrackingContext,
     }) as Promise<T>;
   }

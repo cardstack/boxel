@@ -126,6 +126,30 @@ module('Integration | message-service | realm subscriptions', function (hooks) {
       virtualNetwork.removeRealmMapping('@test/mapped/');
     }
   });
+
+  test('a realm event count advances, under every spelling, before subscribers hear the event', function (assert) {
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+    let messageService = getService('message-service');
+    let countHeard: number | undefined;
+    let unsubscribe = messageService.subscribe(testRealmURL, () => {
+      countHeard = messageService.realmEventCount('@test/mapped/');
+    });
+    try {
+      let before = messageService.realmEventCount(testRealmURL);
+      let otherBefore = messageService.realmEventCount(baseRealm.url);
+      messageService.relayRealmEvent(indexEvent(testRealmURL));
+      assert.strictEqual(countHeard, before + 1, 'advanced when heard');
+      assert.strictEqual(
+        messageService.realmEventCount(baseRealm.url),
+        otherBefore,
+        "another realm's count is untouched",
+      );
+    } finally {
+      unsubscribe();
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
 });
 
 // A private realm sends its realm events into a room of its own, which the

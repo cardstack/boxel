@@ -102,12 +102,21 @@ export default class NetworkService extends Service {
     return this.virtualNetwork.resolveImport;
   }
 
-  get authedFetch() {
+  // How many writes sent through `authedFetch` have settled, whether they
+  // succeeded or not. Monotonic, and never reset: a reader compares two
+  // readings to learn whether a write settled between them.
+  #writeCount = 0;
+
+  get writeCount(): number {
+    return this.#writeCount;
+  }
+
+  get authedFetch(): typeof globalThis.fetch {
     // The timing middleware is innermost (last): it wraps each real network
     // attempt, so an auth-retry (the authorization middleware re-running the
     // chain on a 401) is observed as a separate, retried-flagged attempt. It
     // is a passive no-op whenever telemetry is disabled.
-    return fetcher(
+    let authed = fetcher(
       this.fetch,
       [
         authorizationMiddleware(this.realm),
@@ -116,6 +125,16 @@ export default class NetworkService extends Service {
       ],
       this.virtualNetwork,
     );
+    return async (input, init) => {
+      if (!isWriteRequest(input, init)) {
+        return await authed(input, init);
+      }
+      try {
+        return await authed(input, init);
+      } finally {
+        this.#writeCount++;
+      }
+    };
   }
 
   // Calls `watcher` with each fetch's URL and what it ended with, until the
@@ -226,4 +245,19 @@ declare module '@ember/service' {
 
 function withTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
+}
+
+// A request that can change what a realm holds: any method but the reads,
+// where a POST carrying a QUERY method override is a read.
+function isWriteRequest(input: RequestInfo | URL, init?: RequestInit): boolean {
+  let method = (
+    init?.method ?? (input instanceof Request ? input.method : 'GET')
+  ).toUpperCase();
+  if (['GET', 'HEAD', 'OPTIONS', 'QUERY'].includes(method)) {
+    return false;
+  }
+  let headers = new Headers(
+    init?.headers ?? (input instanceof Request ? input.headers : undefined),
+  );
+  return headers.get('X-HTTP-Method-Override')?.toUpperCase() !== 'QUERY';
 }
