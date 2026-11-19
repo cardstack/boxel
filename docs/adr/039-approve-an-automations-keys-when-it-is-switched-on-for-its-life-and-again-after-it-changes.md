@@ -141,7 +141,7 @@ resume that changes the payer changes the version, so it asks again too.
 A change to the vendor request an operation sends is a change to the binding,
 not to the automation. It follows the API Keys rules, which move the binding
 to `needs-reapproval`. The server learns of that only at a call, so that run
-is refused.
+is refused, and §1.7 applies.
 
 ### 1.7. Admission checks every run
 
@@ -151,7 +151,9 @@ the script that the attempt reads. A run MUST be refused when an approval it
 needs has ended or doesn't match that version. Such a refusal means that an
 approval ended or the automation changed after it was approved, or that the
 binding needs re-approval. It never means that the approval was not asked
-for.
+for. Such a refusal MUST NOT count toward the run of failures that pauses an
+automation. When the server learns of it, the server MUST move the automation
+to _waiting for key approval_ and send the notices of §1.4.
 
 Preview and Run now act as the direct writer who starts them (ADR 026 §1.1).
 Each slot they fill MUST use a key that person owns, a binding approved for
@@ -166,13 +168,19 @@ the card or the script file can change what that run does. So the approval
 has to name the automation and the version the owner agreed to. Then an edit
 that changes what the key is spent on goes back to the owner.
 
-The version holds everything that decides how much of the key is spent, on
-what, and for whom. The script, the operations and the params decide what a
-call sends. The triggers and the `callApiCalls` cap decide how often. A label
+The version holds what the key's owner can judge when approving: how much of
+the key is spent, through which requests, and for whom. The operations fix
+each vendor request, and the script and the params decide how the run fills
+it. The triggers and the `callApiCalls` cap decide how often. A label
 is in it because renaming a trigger restarts its run count (ADR 028 §1.4).
 The payer is in it because a run acts as, and is paid for by, the payer
 (ADR 026 §1.1), and a key owner agrees to that person's use. A lower cap
 spends less, so it doesn't ask again.
+
+The version leaves out the realm data the script reads. A writer who edits a
+card the script reads, such as a list of places to look up, changes the
+inputs of a call. Those inputs stay inside requests the owner approved, at a
+rate the triggers and the cap bound, so they don't ask again.
 
 A version change only stops an approval matching. The card saves itself while
 someone edits it, so an approval that ended on every save would cost each
@@ -220,6 +228,9 @@ approval keeps the edit-then-run path from spending someone else's key.
   ask every key owner again.
 - **Let Preview and Run now use any binding approved for automations.** Any
   direct writer could edit the script and spend another owner's key at once.
+- **Include the realm data the script reads in the version.** What a run
+  reads is known only once it runs, so no approval could name it in advance,
+  and every ordinary edit to the realm would ask every key owner again.
 
 ## 4. Remediation
 
