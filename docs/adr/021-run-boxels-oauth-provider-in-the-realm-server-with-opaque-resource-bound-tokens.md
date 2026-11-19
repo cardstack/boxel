@@ -149,6 +149,14 @@ be keyed on the caller's address alone, since a hosted client refreshes every
 user's tokens from a few addresses. A client registered by DCR SHOULD be
 deleted once it has gone unused for a set period.
 
+The provider MUST keep at most a set number of DCR clients that have never
+connected, counted as clients none of whose grants has had its code
+exchanged. At that number, registration MUST be refused until some are
+deleted or connect. The provider MUST NOT delete a client to make room. The
+number SHOULD sit above what the registration rate limit can admit while the
+cleanup keeps a client that never connected, so a flood within the limit
+can't reach it.
+
 ### 1.5. Validating a token
 
 A resource MUST check an OAuth token only through the provider's shared
@@ -344,6 +352,14 @@ reader can't use what it reads. The user code is short by design, so its entry
 is rate-limited and it expires in minutes. The envelope would protect nothing
 more.
 
+Registration needs no sign-in, so anyone can make the provider store a
+client. The rate limit bounds how fast clients arrive and the cleanup how long
+an unused one stays, but how many are kept then depends on the cleanup running
+and the limit staying as set. The cap bounds it without either. Refusing at
+the cap shuts out every new app until the cleanup frees room, which can take
+days, so the cap sits where only a stopped cleanup or a raised limit reaches
+it, and the provider warns before it does.
+
 ## 3. Considered options
 
 - **`oidc-provider` in the realm server (chosen).** It is the only option
@@ -412,6 +428,12 @@ more.
   the connection, and the user would have to connect the app again.
 - **A grace window that keeps every token it issues.** A stolen refresh token
   and the real one would each keep a live chain, so reuse would never be seen.
+- **Deleting the oldest never-connected client to make room at the cap.**
+  Someone registering clients in a loop could delete a real app between its
+  registration and its user's consent.
+- **A cap below what the rate limit admits while the cleanup keeps a client.**
+  A day-long flood within the limit would fill it, and registration would stay
+  refused for everyone for up to the cleanup's retention.
 
 ## 4. Sources
 

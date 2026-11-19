@@ -7,6 +7,7 @@ import {
   readTokenLimit,
   readNewClientLimit,
   readOAuthProviderConfig,
+  readUnconnectedClientCap,
 } from './lib/oauth-provider/config.ts';
 import { writeSync } from 'node:fs';
 import {
@@ -500,6 +501,9 @@ const oauthProvider = readOAuthProviderConfig(process.env, {
 });
 const oauthNewClientLimit = oauthProvider
   ? readNewClientLimit(process.env)
+  : undefined;
+const oauthUnconnectedClientCap = oauthProvider
+  ? readUnconnectedClientCap(process.env)
   : undefined;
 const oauthAuthorizationLimit = oauthProvider
   ? readAuthorizationLimit(process.env)
@@ -1029,6 +1033,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       ? {
           oauthProvider,
           oauthNewClientLimit,
+          oauthUnconnectedClientCap,
           oauthAuthorizationLimit,
           oauthTokenLimit,
         }

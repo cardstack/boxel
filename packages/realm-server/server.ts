@@ -794,6 +794,7 @@ export class RealmServer {
     googleSignIn,
     oauthProvider,
     oauthNewClientLimit,
+    oauthUnconnectedClientCap,
     oauthAuthorizationLimit,
     oauthTokenLimit,
     __testOnlyOAuthResources,
@@ -875,6 +876,10 @@ export class RealmServer {
     // The provider's limit on new clients. Unset, the default
     // (`new-client-limit.ts`).
     oauthNewClientLimit?: NewClientLimit;
+    // How many clients registered by dynamic client registration that never
+    // connected the provider keeps before it refuses registration. Unset, the
+    // default (`unconnected-client-cap.ts`).
+    oauthUnconnectedClientCap?: number;
     // The provider's limit on starting a flow. Unset, the default
     // (`authorization.ts`).
     oauthAuthorizationLimit?: CallerLimit;
@@ -977,6 +982,7 @@ export class RealmServer {
           domainsForPublishedRealms?.boxelSpace,
         ].filter((domain): domain is string => Boolean(domain)),
         newClientLimit: oauthNewClientLimit,
+        unconnectedClientCap: oauthUnconnectedClientCap,
         authorizationLimit: oauthAuthorizationLimit,
         tokenLimit: oauthTokenLimit,
         testOnlyResources: __testOnlyOAuthResources,

@@ -55,6 +55,7 @@ import { boxelHosts } from './redirect-uris.ts';
 import { revocationHandler } from './revocation.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { registrationHandler } from './registration.ts';
+import { DEFAULT_UNCONNECTED_CLIENT_CAP } from './unconnected-client-cap.ts';
 import { oauthResourceController } from './resource.ts';
 import {
   DEFAULT_TOKEN_LIMIT,
@@ -188,6 +189,7 @@ export function startOAuthProvider({
   appOrigins = [],
   publishedDomains = [],
   newClientLimit = DEFAULT_NEW_CLIENT_LIMIT,
+  unconnectedClientCap = DEFAULT_UNCONNECTED_CLIENT_CAP,
   authorizationLimit = DEFAULT_AUTHORIZATION_LIMIT,
   tokenLimit = DEFAULT_TOKEN_LIMIT,
   rateLimitStore = new DBRateLimitStore(dbAdapter),
@@ -201,6 +203,7 @@ export function startOAuthProvider({
   appOrigins?: readonly string[];
   publishedDomains?: readonly string[];
   newClientLimit?: NewClientLimit;
+  unconnectedClientCap?: number;
   authorizationLimit?: CallerLimit;
   tokenLimit?: TokenLimit;
   rateLimitStore?: RateLimitStore;
@@ -315,8 +318,10 @@ export function startOAuthProvider({
     handleRegistration: registrationHandler({
       hosts,
       scopes,
+      dbAdapter,
       rateLimitStore,
       newClientLimit,
+      unconnectedClientCap,
     }),
   };
 }
