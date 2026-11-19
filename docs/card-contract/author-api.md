@@ -60,7 +60,9 @@ The reason is a user-visible property, not a testing preference: a card that
 renders "3 days ago" renders differently each time it is indexed, so a visual
 comparison of it over unchanged data is meaningless, and a person editing a card
 sees its age change for a reason they cannot see. Reading through the seam lets
-a runtime pin the instant.
+a runtime pin the instant. [ADR 023](../adr/023-read-the-current-time-for-rendering-through-a-clock-tests-pin.md)
+records how the reference runtime provides and pins the seam. See finding
+[B-18](boundary-findings.md#b-18).
 
 **§1.8** A card's templates MUST NOT select on `data-test-*` attributes, in
 styles or in code. `data-test-*` is a test hook. A runtime strips it from what

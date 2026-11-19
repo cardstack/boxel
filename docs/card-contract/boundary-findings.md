@@ -42,7 +42,7 @@ stays here with status `fixed`, so the boundary it protects is not re-broken.
 | [B-15](#b-15) | Per-instance field overrides have no stated semantics                            | gap   | proposed |
 | [B-16](#b-16) | `cardInfo`, `cardTitle`, and `cardDescription` have no owner                     | gap   | open     |
 | [B-17](#b-17) | `capturesMeta` exposes the capture pipeline                                      | leak  | proposed |
-| [B-18](#b-18) | The clock seam is a lint rule, not an API                                        | gap   | proposed |
+| [B-18](#b-18) | The clock seam is stated for this repository's card code, not for cards          | gap   | proposed |
 | [B-19](#b-19) | The erasable-TypeScript rule for card code is a lint rule, not a contract        | gap   | proposed |
 | [B-20](#b-20) | The reserved field-name list covers two members of a large provided surface      | gap   | open     |
 | [B-21](#b-21) | A platform import rule reads like an author rule                                 | note  | proposed |
@@ -650,7 +650,7 @@ name fewer for [B-20](#b-20).
 
 ## B-18
 
-**The clock seam is a lint rule, not an API**
+**The clock seam is stated for this repository's card code, not for cards**
 
 **Class:** gap · **Status:** proposed
 
@@ -659,14 +659,21 @@ name fewer for [B-20](#b-20).
 The rule is right, and its reason is user-visible: a card that renders an elapsed
 time changes without anyone editing it.
 
-But the seam exists because a lint rule says so. Nothing in the card API states
-that a card reads the clock through it, and nothing states what a runtime does
-when it pins the instant.
+[ADR 023](../adr/023-read-the-current-time-for-rendering-through-a-clock-tests-pin.md)
+records the seam as a decision, but for this repository's code, not for cards.
+Its card-code rule (§1.7) covers `packages/base` and
+`packages/school-example-realm` only. Its only pin is the host test suite's
+(§1.4). Its rationale is visual testing. It says nothing about a card in
+another realm, and nothing about what a runtime does with the instant outside a
+test. The seam is a global, `globalThis.__boxelNow`, so the card loader's
+separate module instances share it: a cross-runtime channel of the kind
+[B-08](#b-08) describes, with no stated owner.
 
 **Proposal.** State it in [author API §1.7](author-api.md) as a contract
-requirement, and state the runtime side: a runtime MUST provide a clock seam a
-caller can pin, MUST route a card's reads through it, and MUST say which instant
-a rendering used. The lint rule then enforces a contract instead of inventing one.
+requirement for every card, and state the runtime side: a runtime MUST provide a
+clock seam a caller can pin, MUST route a card's reads through it, and MUST say
+which instant a rendering used. ADR 023 then becomes the reference runtime's way
+of meeting it, and the lint rule enforces a contract instead of inventing one.
 
 ---
 
@@ -903,7 +910,10 @@ the gaps are known and none of them gets mistaken for a decision.
    the queue) is reachable, and catalog cards import a few dozen names from it:
    mostly `Command` ([B-05](#b-05)), `identifyCard`, `codeRef`, the `realmURL`
    symbol, `rri`, and the query types, but also `Loader`, `loadCardDef`,
-   `logger`, `subscribeToRealm`, and a wire-format converter. Every host tool is
+   `logger`, `subscribeToRealm`, and a wire-format converter. Its subpaths keep
+   being added for cards: `@cardstack/runtime-common/automation-cron-rule` was
+   shimmed so the automation card's editor checks a cron trigger with the rule
+   the server reads it with. Every host tool is
    reachable under `@cardstack/boxel-host/commands/*` and `tools/*`
    ([B-28](#b-28)), and so are three host internals under
    `@cardstack/boxel-host/lib/`.
@@ -1081,6 +1091,14 @@ to start creating one of a type. Remove `@editCard` and `@saveCard` from the
 template arguments and `CardCrudFunctions`, and remove `deleteCard` (a write
 path). Add the two catalog cards that read `context.actions` to the list a
 codemod fixes.
+
+**Open question Q-15.** [ADR 036 §1.8](../adr/036-route-dynamic-host-paths-through-two-declarative-route-forms-and-one-shared-resolver.md)
+commits card templates to a link helper, `{{hrefTo …}}`, that turns a card, a
+type with field values, or a route name into an address the rendering realm
+works out. It is not implemented yet, and the author API does not list it. Is
+it a third navigation member beside `@viewCard` and `@createCard`, and if so,
+which author API module provides it, and what does a runtime with no routes
+give it?
 
 ---
 
@@ -1328,6 +1346,7 @@ grep -rn "Open question Q-[0-9]" docs/card-contract
 | Q-12 | [B-32](#b-32) | Does a card need a way to pass a value to the cards it renders, beyond a component argument?          |
 | Q-13 | [B-34](#b-34) | Is the operation or the tool the card author's unit of behavior?                                      |
 | Q-14 | [B-36](#b-36) | Does the testing API commit to QUnit's `module` / `test` / `assert` shape, or define its own?         |
+| Q-15 | [B-31](#b-31) | Is ADR 036's `hrefTo` link helper part of the author API, and from which module?                      |
 
 **Rules.** A new open question takes the next unused ID, gets a paragraph in its
 finding and a row here, in the same change. A chapter that depends on one cites
