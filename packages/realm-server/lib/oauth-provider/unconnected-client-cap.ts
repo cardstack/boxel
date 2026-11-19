@@ -18,11 +18,15 @@
 // warns well before then.
 //
 // The count is a soft bound: registrations counted at the same moment can
-// each be admitted, so the provider can hold a few more than `cap`.
+// each be admitted, and a process reuses a count below the alert mark for up
+// to a minute (`UnconnectedClientCap`), so the provider can hold a few more
+// than `cap`.
 
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import { OperatorAlert } from './caller-limit.ts';
+import { UNCONNECTED_CLIENT_RETENTION_SECONDS } from './cleanup.ts';
 import { EXCHANGED_GRANT } from './grants.ts';
+import type { NewClientLimit } from './new-client-limit.ts';
 
 const log = logger('boxel:oauth-provider');
 
@@ -38,6 +42,9 @@ export const UNCONNECTED_CLIENT_RETRY_AFTER_SECONDS = 60 * 60;
 // Boxel warns once this share of the cap is taken.
 const ALERT_SHARE = 0.8;
 
+// How long a process reuses a count it read below the alert mark.
+const COUNT_REUSE_MS = 60_000;
+
 export type UnconnectedClientOutcome =
   // `busy` once the alert mark is passed.
   | { admitted: true; busy: boolean }
@@ -45,15 +52,100 @@ export type UnconnectedClientOutcome =
   // The count couldn't be read: refused rather than let through uncounted.
   | { admitted: false; reason: 'unavailable' };
 
-// Whether the provider has room for another client that hasn't connected. A
-// client counts as never connected when it has no `last_connected_at` and no
-// exchanged grant, the clients the cleanup deletes 7 days after they register.
-// Counting stops at the cap, so a full table is never read whole.
+// Whether the provider has room for another client that hasn't connected,
+// read from the database every time.
 export async function checkUnconnectedClientCap(
   dbAdapter: DBAdapter,
   cap: number,
 ): Promise<UnconnectedClientOutcome> {
-  let count: number;
+  let count = await countUnconnectedClients(dbAdapter, cap);
+  return count === undefined
+    ? { admitted: false, reason: 'unavailable' }
+    : outcomeFor(count, cap);
+}
+
+// The cap as one process checks it on each registration. Below the alert mark
+// it reuses the count it last read for up to a minute, adding the clients it
+// has admitted since, so a flood within the new-client limit doesn't recount
+// the table on every registration. Past the mark, where the cap is near, it
+// counts every time. Other processes' registrations go unseen for up to that
+// minute, and the new-client limit admits far fewer in a minute than the gap
+// between the mark and the cap.
+export class UnconnectedClientCap {
+  #dbAdapter: DBAdapter;
+  #cap: number;
+  #now: () => number;
+  #lastCount: { count: number; at: number } | undefined;
+  #admittedSince = 0;
+
+  constructor(
+    dbAdapter: DBAdapter,
+    cap: number,
+    { now = Date.now }: { now?: () => number } = {},
+  ) {
+    this.#dbAdapter = dbAdapter;
+    this.#cap = cap;
+    this.#now = now;
+  }
+
+  async check(): Promise<UnconnectedClientOutcome> {
+    let now = this.#now();
+    if (
+      this.#lastCount &&
+      now - this.#lastCount.at < COUNT_REUSE_MS &&
+      this.#lastCount.count + this.#admittedSince + 1 <= alertMark(this.#cap)
+    ) {
+      this.#admittedSince++;
+      return { admitted: true, busy: false };
+    }
+    let count = await countUnconnectedClients(this.#dbAdapter, this.#cap);
+    if (count === undefined) {
+      this.#lastCount = undefined;
+      return { admitted: false, reason: 'unavailable' };
+    }
+    let outcome = outcomeFor(count, this.#cap);
+    this.#lastCount = { count, at: now };
+    this.#admittedSince = outcome.admitted ? 1 : 0;
+    return outcome;
+  }
+}
+
+// How many clients the new-client limit's overall bucket can register while
+// the cleanup keeps one that never connected: a full bucket at once, then its
+// refill over the retention and the longest gap between cleanups. Answers a
+// warning when the cap is no more than that, since a flood within the limit
+// could then fill it and refuse registration for everyone until the cleanup
+// frees room.
+export function unconnectedClientCapWarning(
+  cap: number,
+  limit: NewClientLimit,
+  cleanupGapSeconds: number,
+): string | undefined {
+  let seconds = UNCONNECTED_CLIENT_RETENTION_SECONDS + cleanupGapSeconds;
+  let reachable =
+    limit.overall.requests +
+    Math.floor(
+      (limit.overall.requests * seconds) / limit.overall.windowSeconds,
+    );
+  if (cap > reachable) {
+    return undefined;
+  }
+  return (
+    `${OAUTH_UNCONNECTED_CLIENT_CAP_VAR} is ${cap}, but the new-client limit can register ` +
+    `${reachable} OAuth clients while the cleanup keeps one that never connected: ` +
+    `a flood within the limit can fill the cap and refuse registration for everyone`
+  );
+}
+
+// How many clients have never connected, counted up to `cap`, or undefined
+// when the count can't be read. A client counts as never connected when it has
+// no `last_connected_at` and no exchanged grant, the clients the cleanup
+// deletes 7 days after they register. Counting stops at the cap, so a full
+// table is never read whole.
+async function countUnconnectedClients(
+  dbAdapter: DBAdapter,
+  cap: number,
+): Promise<number | undefined> {
   try {
     let [row] = await dbAdapter.execute(
       `SELECT count(*)::int AS count FROM (
@@ -68,15 +160,18 @@ export async function checkUnconnectedClientCap(
        ) AS unconnected`,
       { bind: [cap] },
     );
-    count = Number(row.count);
+    return Number(row.count);
   } catch (e) {
     log.warn(
       `couldn't count the OAuth clients that never connected, refusing registration: ${
         e instanceof Error ? e.message : String(e)
       }`,
     );
-    return { admitted: false, reason: 'unavailable' };
+    return undefined;
   }
+}
+
+function outcomeFor(count: number, cap: number): UnconnectedClientOutcome {
   if (count >= cap) {
     return { admitted: false, reason: 'full' };
   }

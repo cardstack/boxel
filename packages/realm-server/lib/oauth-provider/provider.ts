@@ -55,7 +55,11 @@ import { boxelHosts } from './redirect-uris.ts';
 import { revocationHandler } from './revocation.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { registrationHandler } from './registration.ts';
-import { DEFAULT_UNCONNECTED_CLIENT_CAP } from './unconnected-client-cap.ts';
+import {
+  DEFAULT_UNCONNECTED_CLIENT_CAP,
+  unconnectedClientCapWarning,
+} from './unconnected-client-cap.ts';
+import { longestOAuthProviderCleanupGapSeconds } from '../oauth-provider-cleanup-config.ts';
 import { oauthResourceController } from './resource.ts';
 import {
   DEFAULT_TOKEN_LIMIT,
@@ -222,6 +226,14 @@ export function startOAuthProvider({
     throw new OAuthProviderConfigError(
       `the OAuth provider's issuer is the realm server's URL, which must have no path: ${serverURL.href}`,
     );
+  }
+  let capWarning = unconnectedClientCapWarning(
+    unconnectedClientCap,
+    newClientLimit,
+    longestOAuthProviderCleanupGapSeconds(),
+  );
+  if (capWarning) {
+    log.warn(capWarning);
   }
   let issuer = oauthIssuer(serverURL);
   let registry = buildRegistry(issuer, testOnlyResources);

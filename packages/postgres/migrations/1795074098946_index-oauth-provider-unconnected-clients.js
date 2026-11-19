@@ -1,12 +1,13 @@
 // An index over the clients registered by dynamic client registration that
 // have never connected (`last_connected_at` is NULL). Registration counts them
 // before storing another, and refuses once the provider holds as many as it
-// keeps; the daily cleanup deletes them 7 days after they register.
+// keeps. The count looks each one's grants up by `client_id`, so the index
+// holds that and the count reads no table rows to find them.
 
 exports.up = (pgm) => {
   pgm.sql(`
     CREATE INDEX IF NOT EXISTS oauth_provider_dynamic_clients_unconnected_index
-      ON oauth_provider_dynamic_clients (created_at)
+      ON oauth_provider_dynamic_clients (client_id)
       WHERE last_connected_at IS NULL
   `);
 };

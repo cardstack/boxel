@@ -23,8 +23,8 @@ import {
   type BoxelHosts,
 } from './redirect-uris.ts';
 import {
-  checkUnconnectedClientCap,
   UnconnectedClientAlert,
+  UnconnectedClientCap,
   UNCONNECTED_CLIENT_RETRY_AFTER_SECONDS,
 } from './unconnected-client-cap.ts';
 
@@ -174,6 +174,7 @@ export function registrationHandler({
   unconnectedClientCap: number;
 }) {
   let alert = new NewClientAlert(newClientLimit);
+  let cap = new UnconnectedClientCap(dbAdapter, unconnectedClientCap);
   let capAlert = new UnconnectedClientAlert(unconnectedClientCap);
   return async function handleRegistration(ctxt: Koa.Context, next: Koa.Next) {
     let address = ctxt.req.headers[CLIENT_IP_HEADER];
@@ -204,7 +205,7 @@ export function registrationHandler({
       }
     }
 
-    let room = await checkUnconnectedClientCap(dbAdapter, unconnectedClientCap);
+    let room = await cap.check();
     capAlert.note(room);
     if (!room.admitted) {
       if (room.reason === 'full') {

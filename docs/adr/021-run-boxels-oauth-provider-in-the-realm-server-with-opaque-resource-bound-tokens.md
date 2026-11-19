@@ -149,13 +149,14 @@ be keyed on the caller's address alone, since a hosted client refreshes every
 user's tokens from a few addresses. A client registered by DCR SHOULD be
 deleted once it has gone unused for a set period.
 
-The provider MUST keep at most a set number of DCR clients that have never
-connected, counted as clients none of whose grants has had its code
-exchanged. At that number, registration MUST be refused until some are
-deleted or connect. The provider MUST NOT delete a client to make room. The
-number SHOULD sit above what the registration rate limit can admit while the
-cleanup keeps a client that never connected, so a flood within the limit
-can't reach it.
+A DCR client has never connected while it has no record of a connection and
+none of its grants has had its code exchanged. Registration MUST be refused
+while the provider holds a set number of such clients, until some are deleted
+or connect. The count MAY be approximate, so registrations admitted together
+can take the provider a little past that number. The provider MUST NOT delete
+a client to make room. The number SHOULD sit above what the registration rate
+limit can admit while the cleanup keeps a client that never connected, so a
+flood within the limit can't reach it.
 
 ### 1.5. Validating a token
 

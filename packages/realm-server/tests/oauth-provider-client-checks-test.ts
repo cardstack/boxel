@@ -37,9 +37,12 @@ import {
 import {
   DEFAULT_UNCONNECTED_CLIENT_CAP,
   UnconnectedClientAlert,
+  UnconnectedClientCap,
   checkUnconnectedClientCap,
   parseUnconnectedClientCap,
+  unconnectedClientCapWarning,
 } from '../lib/oauth-provider/unconnected-client-cap.ts';
+import { longestOAuthProviderCleanupGapSeconds } from '../lib/oauth-provider-cleanup-config.ts';
 import { newDynamicClientId } from '../lib/oauth-provider/dynamic-client-id.ts';
 import {
   DEFAULT_TOKEN_LIMIT,
@@ -58,6 +61,8 @@ const hosts = boxelHosts({
   ],
   publishedDomains: ['boxel.site', 'boxel.space'],
 });
+
+const DAY_SECONDS = 24 * 60 * 60;
 
 module(basename(import.meta.filename), function () {
   module("Boxel's own hosts", function () {
@@ -668,12 +673,43 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('sits above what the new-client limit can register while the cleanup keeps a client', function (assert) {
-      // Seven days kept, and up to a day more between cleanups.
-      let perDay =
-        (DEFAULT_NEW_CLIENT_LIMIT.overall.requests * 24 * 60 * 60) /
-        DEFAULT_NEW_CLIENT_LIMIT.overall.windowSeconds;
-      assert.true(DEFAULT_UNCONNECTED_CLIENT_CAP > perDay * 8);
+    test('by default sits above what the new-client limit can register while the cleanup keeps a client', function (assert) {
+      // Daily, in a time zone whose clock change makes one gap 25 hours.
+      assert.true(
+        longestOAuthProviderCleanupGapSeconds() <= DAY_SECONDS + 3600,
+      );
+      assert.strictEqual(
+        unconnectedClientCapWarning(
+          DEFAULT_UNCONNECTED_CLIENT_CAP,
+          DEFAULT_NEW_CLIENT_LIMIT,
+          longestOAuthProviderCleanupGapSeconds(),
+        ),
+        undefined,
+      );
+    });
+
+    test('warns when a raised limit or a sparser cleanup lets a flood within the limit fill the cap', function (assert) {
+      let raised = {
+        ...DEFAULT_NEW_CLIENT_LIMIT,
+        overall: { requests: 3000, windowSeconds: 3600 },
+      };
+      assert.strictEqual(
+        unconnectedClientCapWarning(
+          DEFAULT_UNCONNECTED_CLIENT_CAP,
+          raised,
+          DAY_SECONDS,
+        ),
+        'BOXEL_OAUTH_UNCONNECTED_CLIENT_CAP is 500000, but the new-client limit can register 579000 OAuth clients while the cleanup keeps one that never connected: a flood within the limit can fill the cap and refuse registration for everyone',
+      );
+      assert.notStrictEqual(
+        unconnectedClientCapWarning(
+          DEFAULT_UNCONNECTED_CLIENT_CAP,
+          DEFAULT_NEW_CLIENT_LIMIT,
+          7 * DAY_SECONDS,
+        ),
+        undefined,
+        'a weekly cleanup',
+      );
     });
 
     module('counting', function (hooks) {
@@ -735,6 +771,51 @@ module(basename(import.meta.filename), function () {
           { admitted: true, busy: false },
           { admitted: true, busy: false },
           { admitted: true, busy: false },
+          { admitted: true, busy: true },
+          { admitted: false, reason: 'full' },
+        ]);
+      });
+
+      async function insertClients(count: number): Promise<void> {
+        for (let i = 0; i < count; i++) {
+          await insertClient();
+        }
+      }
+
+      test('a process reuses a count below the alert mark for up to a minute', async function (assert) {
+        let nowMs = 0;
+        // Ten kept, busy past eight.
+        let cap = new UnconnectedClientCap(dbAdapter, 10, {
+          now: () => nowMs,
+        });
+        let outcomes = [await cap.check()];
+        // Registered through other processes, unseen until it counts again.
+        await insertClients(8);
+        outcomes.push(await cap.check());
+        nowMs += 59_999;
+        outcomes.push(await cap.check());
+        nowMs += 1;
+        outcomes.push(await cap.check());
+        assert.deepEqual(outcomes, [
+          { admitted: true, busy: false },
+          { admitted: true, busy: false },
+          { admitted: true, busy: false },
+          { admitted: true, busy: true },
+        ]);
+      });
+
+      test('a process counts every time past the alert mark', async function (assert) {
+        let nowMs = 0;
+        let cap = new UnconnectedClientCap(dbAdapter, 10, {
+          now: () => nowMs,
+        });
+        await insertClients(8);
+        let outcomes = [await cap.check(), await cap.check()];
+        // Registered through other processes, seen at once.
+        await insertClients(2);
+        outcomes.push(await cap.check());
+        assert.deepEqual(outcomes, [
+          { admitted: true, busy: true },
           { admitted: true, busy: true },
           { admitted: false, reason: 'full' },
         ]);

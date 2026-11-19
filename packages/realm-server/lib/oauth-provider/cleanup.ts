@@ -2,11 +2,15 @@
 // more, from its four tables. The `oauth-provider-cleanup` job runs it once a
 // day for the whole environment (`cron-scheduler.ts`).
 //
-// Correctness never depends on it. A short-lived object or a token past its
-// expiry, and a grant that has ended or expired, already read as missing,
-// whether or not they have been deleted. The cleanup only saves space, with
-// one exception: a client registered by dynamic client registration that it
-// deletes is unknown from then on, and has to register again.
+// No read depends on it. A short-lived object or a token past its expiry, and
+// a grant that has ended or expired, already read as missing, whether or not
+// they have been deleted. A client registered by dynamic client registration
+// that it deletes is unknown from then on, and has to register again.
+//
+// Registration does depend on it. The provider refuses new registrations
+// while it holds as many never-connected clients as it keeps
+// (`unconnected-client-cap.ts`), and only this cleanup deletes them, so if it
+// stops running, registration is refused for everyone once they pile up.
 //
 // - Short-lived objects and tokens are deleted once they expire. Their stores
 //   delete expired rows too, but only while rows are being stored.
