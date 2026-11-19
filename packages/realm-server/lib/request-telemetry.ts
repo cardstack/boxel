@@ -298,8 +298,30 @@ function withOAuthProviderSecretsLabeledDeep(
   );
 }
 
+let everyRequestKeepsMethodAndPathOnly = false;
+
+// Makes telemetry about every request this process handles or sends keep only
+// its method and the origin and path of its URLs, whatever the route. For a
+// process whose callers are other boxel processes that put realm sessions in
+// the request body, such as the prerender server and the prerender manager.
+// `false` turns it off again.
+export function keepMethodAndPathOnlyForEveryRequest(on = true): void {
+  everyRequestKeepsMethodAndPathOnly = on;
+}
+
+// Any URL or absolute path followed by a query string, for a process in which
+// every request keeps only its method and path.
+const anyURLQuery =
+  /((?:https?:\/\/[^\s/?#"'<>]+)?\/[^\s?#"'<>]*)\?[^\s"'<>]*/gi;
+
+// A string with the query strings removed from the URLs it names: those of
+// proxy routes and key routes, and of every URL in a process that keeps only
+// the method and path of every request.
 function withoutProxyRouteQueries(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') {
+    if (everyRequestKeepsMethodAndPathOnly) {
+      return value.replace(anyURLQuery, '$1');
+    }
     return value
       .replace(proxyRouteQuery, '$1$2')
       .replace(keyRouteQuery, '$1$2');
@@ -428,17 +450,6 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
     }
   }
   return { ...kept, headers: keptHeaders };
-}
-
-let everyRequestKeepsMethodAndPathOnly = false;
-
-// Makes telemetry about every request this process handles or sends keep only
-// its method and the origin and path of its URLs, whatever the route. For a
-// process whose callers are other boxel processes that put realm sessions in
-// the request body, such as the prerender server and the prerender manager.
-// `false` turns it off again.
-export function keepMethodAndPathOnlyForEveryRequest(on = true): void {
-  everyRequestKeepsMethodAndPathOnly = on;
 }
 
 // Whether telemetry about this request keeps only its method and the origin

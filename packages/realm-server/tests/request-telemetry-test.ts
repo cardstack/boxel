@@ -193,6 +193,35 @@ module(basename(import.meta.filename), function () {
         }
       });
 
+      test('a breadcrumb loses the query string of every URL it names', function (assert) {
+        let event = scrubRequestTelemetry({
+          breadcrumbs: [
+            {
+              message:
+                '<-- POST */* https://prerender.telemetry.test/prerender-visit?debug=query-marker-5d1e [job: 1]',
+            },
+            {
+              message: 'rendering /render/card?nonce=query-marker-2b8c',
+            },
+            {
+              message: 'module request',
+              data: { note: 'GET /prerender-module?q=query-marker-c41a' },
+            },
+          ],
+        });
+        assert.deepEqual(event.breadcrumbs as unknown, [
+          {
+            message:
+              '<-- POST */* https://prerender.telemetry.test/prerender-visit [job: 1]',
+          },
+          { message: 'rendering /render/card' },
+          {
+            message: 'module request',
+            data: { note: 'GET /prerender-module' },
+          },
+        ]);
+      });
+
       test('applies to every route until it is turned off', function (assert) {
         let request = {
           method: 'POST',
