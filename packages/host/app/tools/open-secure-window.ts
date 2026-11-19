@@ -47,13 +47,18 @@ export default class OpenSecureWindowTool extends HostBaseTool<
     input: BaseToolModule.OpenSecureWindowInput,
   ): Promise<BaseToolModule.OpenSecureWindowResult> {
     let request = secureWindowRequest(input);
-    if (
-      request.mode === 'connected-apps' &&
-      !(await this.oauthProvider.check())
-    ) {
-      throw new Error(
-        'Connected apps is not available on this server: apps cannot connect to Boxel accounts here',
-      );
+    if (request.mode === 'connected-apps') {
+      let isOn = await this.oauthProvider.check();
+      if (isOn === undefined) {
+        throw new Error(
+          'Could not check whether Connected apps is available: the realm server did not answer. Try again',
+        );
+      }
+      if (!isOn) {
+        throw new Error(
+          'Connected apps is not available on this server: apps cannot connect to Boxel accounts here',
+        );
+      }
     }
     let status = this.secureWindow.open(secureWindowURL(request));
     let commandModule = await this.loadToolModule();

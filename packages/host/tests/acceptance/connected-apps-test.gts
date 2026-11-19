@@ -165,18 +165,32 @@ module('Acceptance | Connected apps', function (hooks) {
     }
   });
 
-  test('a realm server that can’t answer is asked again when the menu opens next', async function (assert) {
+  test('the item is in the profile menu as soon as it opens', async function (assert) {
+    discovery = stubDiscovery('on');
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}realm`, format: 'isolated' }]],
+    });
+    await waitUntil(() => getService('oauth-provider').isOn !== undefined);
+    assert.strictEqual(discovery.reads, 1, 'asked before the menu opened');
+
+    await click('[data-test-profile-icon-button]');
+    assert
+      .dom('[data-test-profile-connected-apps-button]')
+      .exists('no wait for the realm server once the menu is open');
+  });
+
+  test('a realm server that can’t answer is asked again when the menu opens', async function (assert) {
     discovery = stubDiscovery('unavailable', 'on');
-    await openProfileMenu();
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}realm`, format: 'isolated' }]],
+    });
     await waitUntil(() => discovery!.reads === 1);
-    assert.dom('[data-test-profile-connected-apps-button]').doesNotExist();
     assert.strictEqual(
       getService('oauth-provider').isOn,
       undefined,
       'nothing is remembered from a failed check',
     );
 
-    await closeProfileMenu();
     await click('[data-test-profile-icon-button]');
     await waitFor('[data-test-profile-connected-apps-button]');
     assert.strictEqual(discovery.reads, 2, 'asked again');
@@ -215,6 +229,32 @@ module('Acceptance | Connected apps', function (hooks) {
       windowOpen.calls.map((call) => call.url),
       [connectedAppsPage],
       'opened with nothing the caller wrote, and no reason',
+    );
+  });
+
+  test('the tool asks for another try when the realm server can’t answer', async function (assert) {
+    discovery = stubDiscovery('unavailable');
+    let windowOpen = stubWindowOpen(window);
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}realm`, format: 'isolated' }]],
+    });
+    await waitUntil(() => discovery!.reads > 0);
+    let { toolContext } = getService('tool-service');
+    let tool = new OpenSecureWindowTool(toolContext);
+    await assert.rejects(
+      tool.execute({ mode: 'connected-apps' }),
+      /Could not check whether Connected apps is available.*Try again/,
+      'told to try again, not that the server has no Connected apps',
+    );
+    assert.strictEqual(windowOpen.calls.length, 0, 'no window opened');
+
+    discovery.restore();
+    discovery = stubDiscovery('on');
+    let result = await tool.execute({ mode: 'connected-apps' });
+    assert.strictEqual(result.status, 'opened', 'the next try asks again');
+    assert.deepEqual(
+      windowOpen.calls.map((call) => call.url),
+      [connectedAppsPage],
     );
   });
 });

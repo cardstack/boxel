@@ -253,7 +253,9 @@ export default class ProfileInfoPopover extends Component<ProfileInfoPopoverSign
   constructor(owner: Owner, args: ProfileInfoPopoverSignature['Args']) {
     super(owner, args);
     // Connected apps is offered only while the realm server's OAuth provider
-    // is on; the item appears once the realm server has said so.
+    // is on. The layout around the profile button asks when it renders, so
+    // the answer is usually in before the menu opens; this asks again when
+    // the realm server couldn't answer then.
     void this.oauthProvider.check();
   }
 

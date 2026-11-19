@@ -18,10 +18,12 @@ const DISCOVERY_PATH = '/.well-known/oauth-authorization-server';
 // keeps no setting of its own. The provider is on when the document is JSON
 // naming this realm server as its issuer.
 //
-// The answer doesn't change while the realm server runs, so a definite one
-// (the document, or a 404 or anything else that isn't it) is kept for the
-// app's lifetime. A request that fails, or a 5xx, leaves it unknown, and the
-// next check asks again.
+// The setting changes only when the realm server restarts with another one,
+// so a definite answer (the document, or a 404 or anything else that isn't
+// it) is kept until the app reloads. A tab left open across a restart that
+// turns the provider off therefore keeps offering Connected apps, and the
+// page it opens can't list any. A request that fails, or a 5xx, leaves the
+// answer unknown, and the next check asks again.
 export default class OAuthProviderService extends Service {
   @service declare private network: NetworkService;
   @service declare private realmServer: RealmServerService;
