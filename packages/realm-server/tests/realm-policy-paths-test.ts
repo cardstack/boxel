@@ -567,6 +567,8 @@ module(basename(import.meta.filename), function (hooks) {
         'Rewritten',
       );
       assert.strictEqual(updated.status, 201, 'an update under blog/');
+      // `/_atomic` answers once its writes are durable, before they're indexed.
+      await education.incrementalIndexing();
       assert.strictEqual(await titleOf(IN_BLOG), 'Rewritten');
       assertNotPermitted(
         assert,
