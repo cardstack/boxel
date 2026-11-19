@@ -396,6 +396,7 @@ export default class HostURLManager extends Component<Signature> {
                           <Chip
                             @label='Canonical'
                             @tone='success'
+                            @dot={{false}}
                             data-test-host-url-canonical
                           />
                         </Tooltip>
