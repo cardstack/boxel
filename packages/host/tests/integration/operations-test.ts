@@ -941,6 +941,76 @@ module('Integration | operations', function (hooks) {
     }
   });
 
+  test("a card's create, update and delete carry no output", function (assert) {
+    // A card's write routes carry out these three names and answer as they
+    // always do, so a projection would reshape an /_operations call's answer
+    // and no other route's.
+    let { field, contains } = cardAPI;
+    let rejected: [string, () => unknown][] = [
+      [
+        'a create',
+        () => {
+          class Memo extends CardDef {
+            @field status = contains(StringField);
+            @operation static create = {
+              base: 'create',
+              of: () => Memo,
+              output: { id: bxl`.data.id` },
+            };
+          }
+          return Memo;
+        },
+      ],
+      [
+        'an update',
+        () => {
+          class Memo extends CardDef {
+            @field status = contains(StringField);
+            @operation static update = {
+              base: 'update',
+              output: { status: bxl`.data.attributes.status` },
+            };
+          }
+          return Memo;
+        },
+      ],
+      [
+        'a delete built on transform',
+        () => {
+          class Memo extends CardDef {
+            @field status = contains(StringField);
+            @operation static delete = {
+              base: 'transform',
+              set: { status: 'withdrawn' },
+              output: { status: bxl`.data.attributes.status` },
+            };
+          }
+          return Memo;
+        },
+      ],
+    ];
+    for (let [name, build] of rejected) {
+      assert.throws(
+        build,
+        /is the operation a card's write routes carry out.*so it carries no `output`/,
+        `${name} with an output is refused`,
+      );
+    }
+
+    class Memo extends CardDef {
+      @field status = contains(StringField);
+      @operation static archive = {
+        base: 'transform',
+        set: { status: 'archived' },
+        output: { status: bxl`.data.attributes.status` },
+      };
+    }
+    assert.ok(
+      getDeclaredOperations(Memo).archive?.output,
+      'a write under any other name is invoked only through /_operations, so it keeps its output',
+    );
+  });
+
   test('a declaration that runs no program carries no raw one', function (assert) {
     // A program stored where nothing runs it is worse than a refusal: it reads
     // as work the operation does.

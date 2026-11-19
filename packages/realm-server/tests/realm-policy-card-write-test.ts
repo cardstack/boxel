@@ -958,37 +958,27 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('a verb reaches the built-in behavior only, so a type that declares its own is refused', async function (assert) {
+    test('a verb carries out the operation the card’s type declares, as the envelope does', async function (assert) {
       let reader = await deleteCard(NOTICE_1, AUTH.reader());
       assert.strictEqual(
         reader.status,
-        403,
-        'a DELETE of a notice, whose type declares its delete',
-      );
-      assert.strictEqual(
-        (await deleteCard(NOTICE_1, AUTH.teacher())).status,
-        404,
-        'to a caller who may not read the realm',
+        204,
+        'a DELETE of a notice, whose type declares its delete, by a caller who may read the realm',
       );
       assert.deepEqual(
         await stored(education, NOTICE_1),
-        { body: 'Assembly', status: 'posted' },
-        'the notice is untouched',
-      );
-      let enveloped = await operations(
-        EDUCATION,
-        AUTH.teacher(),
-        invoke('delete', { href: NOTICE_1 }),
+        { body: 'Assembly', status: 'withdrawn' },
+        'withdraws the notice rather than removing it',
       );
       assert.strictEqual(
-        enveloped.status,
-        200,
-        'the envelope carries out the delete the type declares',
+        (await deleteCard(NOTICE_1, AUTH.teacher())).status,
+        204,
+        'and so does one by a caller who may not read the realm',
       );
-      assert.strictEqual(
-        (await stored(education, NOTICE_1))?.status,
-        'withdrawn',
-        'which withdraws the notice rather than removing it',
+      assert.deepEqual(
+        await stored(education, NOTICE_1),
+        { body: 'Assembly', status: 'withdrawn' },
+        'leaving the notice withdrawn',
       );
     });
 
@@ -1473,9 +1463,13 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(
         (await deleteCard(NOTICE_1, AUTH.admin())).status,
         204,
-        'DELETE, which removes a notice whatever its type declares',
+        'DELETE',
       );
-      assert.strictEqual(await stored(education, NOTICE_1), undefined);
+      assert.deepEqual(
+        await stored(education, NOTICE_1),
+        { body: 'Assembly', status: 'withdrawn' },
+        'which carries out the delete the notice’s type declares',
+      );
       assert.deepEqual(gateStats(), {
         policyLoads: 0,
         predicateEvaluations: 0,

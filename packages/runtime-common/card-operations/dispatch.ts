@@ -888,61 +888,62 @@ export interface GatedOperation {
 // what the gate's refusal is written not to say. For the same reason such a
 // caller's policy is loaded before the target resolves, so a policy the realm
 // cannot load is answered the same way for every target.
-export async function resolveGatedOperation(
-  core: OperationCore,
-  target: OperationTarget,
-  name: string,
-  scope: OperationScope = newOperationScope(core),
-): Promise<GatedOperation> {
-  return await resolveAndGate(core, target, name, scope);
-}
-
-// What the policy gate decides about a write one of the card verbs carries
-// out: a card+json `POST` creating a card, a `PATCH` updating one, or a
-// `DELETE` removing one.
 //
-// A verb performs the built-in behavior it is named for, on the document it
-// was sent, whatever the target's type declares under that name. A declaration
-// is how an author specializes the behavior: an `update` with an `input`
-// stage, a `delete` rebound onto `transform` as a soft delete. A grant on the
-// name admits what the declaration does, and the verb would do something else.
-// So a grant reaches a verb only where the name means the built-in behavior,
-// and a write to a type that declares the name is refused as one no grant
-// admits. The operations envelope runs the declaration, and is where such a
-// grant is used.
-//
-// That refusal is made before the gate judges anything, for every caller the
-// realm ACL declined. The gate judges an operation by the base its declaration
-// builds on, and the verb writes whatever that base is: a declared `update`
-// built on `read` would read to the gate as a read the ACL allowed a reader,
-// and the verb would then write for them with no grant at all.
-//
-// A caller the realm ACL allowed is answered as the gate answers them, without
-// the policy, and the verb performs the built-in behavior for them whatever the
-// type declares.
+// Every route that writes a card resolves its write here, under the name its
+// verb carries out: a card+json `POST` is the card's `create`, a `PATCH` its
+// `update` and a `DELETE` its `delete`, and a verbatim write of a card's
+// document is its `create` or `update`, its removal its `delete`. So a write
+// does what the target's type declares under that name for every caller, and
+// how the caller was admitted decides only whether the gate judges them.
 //
 // `asFile` judges an instance target as the file stored at its URL rather than
 // as whatever its extension names. A verbatim write sets it for a path that
 // holds no card document: the extension table does not name every file a
 // realm stores (a `.css`, a `.yml`), and a path it doesn't name would
 // otherwise be judged as a card.
-export async function resolveFacadeWrite(
+export async function resolveGatedOperation(
   core: OperationCore,
   target: OperationTarget,
-  base: 'create' | 'update' | 'delete',
-  scope: OperationScope,
+  name: string,
+  scope: OperationScope = newOperationScope(core),
   opts: { asFile?: true } = {},
-): Promise<GateDecision> {
-  let { decision } = await resolveAndGate(core, target, base, scope, {
-    builtInOnly: true,
-    ...opts,
-  });
-  // The verb writes, and a write the ACL declined is never the ACL's to allow,
-  // so for such a caller the gate's answer is a grant or a refusal.
-  if (decision.kind === 'coarse' && scope.coarseDeclined !== 'none') {
-    throw notPermitted(target, base);
-  }
-  return decision;
+): Promise<GatedOperation> {
+  return await resolveAndGate(core, target, name, scope, opts);
+}
+
+// The members of a definition that describe an operation without changing
+// what it does: how it is shown, whether it is deterministic, whether it reads
+// its caller, and whether a policy may grant it.
+const DESCRIPTIVE_MEMBERS = new Set<keyof OperationDefinition>([
+  'base',
+  'label',
+  'optimistic',
+  'deterministic',
+  'readsActor',
+  'nonGrantable',
+]);
+
+// Whether `definition`, which `name` resolved to, does exactly what the
+// built-in behavior of that name does: it is the built-in itself, or a
+// declaration that builds on it and adds nothing but description, as a
+// declaration that only marks the operation non-grantable does.
+//
+// A route that writes a card carries out such a write along its own path,
+// which is the built-in behavior with the route's own conventions: the
+// card+json merge and side-loads, and the bytes a verbatim write is given.
+// Any other definition is carried out as the operations envelope carries out
+// an entry of that name.
+export function performsBuiltIn(
+  name: string,
+  definition: OperationDefinition,
+): boolean {
+  return (
+    definition.base === name &&
+    (Object.keys(definition) as (keyof OperationDefinition)[]).every(
+      (member) =>
+        DESCRIPTIVE_MEMBERS.has(member) || definition[member] === undefined,
+    )
+  );
 }
 
 async function resolveAndGate(
@@ -950,10 +951,8 @@ async function resolveAndGate(
   target: OperationTarget,
   name: string,
   scope: OperationScope,
-  // Refuse a name the target's type declares, for a caller the ACL declined,
-  // before the gate runs, and judge the target as a file (see
-  // `resolveFacadeWrite`).
-  opts: { builtInOnly?: true; asFile?: true } = {},
+  // Judge the target as a file (see `resolveGatedOperation`).
+  opts: { asFile?: true } = {},
 ): Promise<GatedOperation> {
   let refusal = (e: unknown): unknown =>
     scope.coarseDeclined === 'all' && isOperationFailure(e)
@@ -986,10 +985,7 @@ async function resolveAndGate(
     }
     throw refusal(e);
   }
-  let { definition, typeDefinition, typeChain, declared } = resolved;
-  if (opts.builtInOnly && declared && scope.coarseDeclined !== 'none') {
-    throw notPermitted(target, name);
-  }
+  let { definition, typeDefinition, typeChain } = resolved;
   // A refusal the gate's own reads raise is told as resolution's are: a
   // definition that is not ready names the type a stored document adopts,
   // which a caller the ACL declined may not learn.
