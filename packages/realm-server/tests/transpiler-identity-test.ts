@@ -78,24 +78,55 @@ function withoutComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
-// The bare specifiers a file loads at run time: static imports other than
-// `import type`, and dynamic imports.
-function runtimeBareImports(file: string): string[] {
+// The specifiers a file loads at run time: static imports other than
+// `import type`, side-effect imports, re-exports other than `export type`, and
+// dynamic imports.
+function runtimeSpecifiers(file: string): string[] {
   let source = withoutComments(readFileSync(file, 'utf8'));
   let specifiers = new Set<string>();
-  let staticImport = /^import\s+(?!type\b)[^;]*?from\s+['"]([^'"]+)['"]/gms;
-  let dynamicImport = /import\(\s*['"]([^'"]+)['"]\s*\)/g;
-  for (let pattern of [staticImport, dynamicImport]) {
+  let patterns = [
+    /^\s*import\s+(?!type\b)[^;]*?\sfrom\s+['"]([^'"]+)['"]/gms,
+    /^\s*import\s+['"]([^'"]+)['"]/gm,
+    /^\s*export\s+(?!type\b)[^;]*?\sfrom\s+['"]([^'"]+)['"]/gms,
+    /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g,
+  ];
+  for (let pattern of patterns) {
     for (let match of source.matchAll(pattern)) {
       specifiers.add(match[1]);
     }
   }
-  return [...specifiers]
-    .filter((specifier) => !specifier.startsWith('.'))
-    .map((specifier) => {
-      let parts = specifier.split('/');
-      return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
-    });
+  return [...specifiers];
+}
+
+function packageName(specifier: string): string {
+  let parts = specifier.split('/');
+  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+}
+
+// The files `entry` loads at run time, itself included, found by following
+// relative specifiers, and the packages those files load.
+function runtimeClosure(entry: string): {
+  files: Set<string>;
+  packages: Map<string, string>;
+} {
+  let files = new Set<string>();
+  let packages = new Map<string, string>();
+  let pending = [entry];
+  while (pending.length > 0) {
+    let file = pending.pop()!;
+    if (files.has(file)) {
+      continue;
+    }
+    files.add(file);
+    for (let specifier of runtimeSpecifiers(file)) {
+      if (specifier.startsWith('.')) {
+        pending.push(join(dirname(file), specifier));
+      } else if (!packages.has(packageName(specifier))) {
+        packages.set(packageName(specifier), file);
+      }
+    }
+  }
+  return { files, packages };
 }
 
 module(basename(import.meta.filename), function () {
@@ -192,20 +223,19 @@ module(basename(import.meta.filename), function () {
     });
 
     test('lists every package the transpiler loads', function (assert) {
-      let files = [
-        'transpile.ts',
-        'content-tag-loader.ts',
-        'loader-plugin.ts',
-        'export-identity-plugin.ts',
-      ];
+      let { files, packages } = runtimeClosure(
+        join(runtimeCommonDir, 'transpile.ts'),
+      );
+      assert.true(
+        files.has(join(runtimeCommonDir, 'loader-plugin.ts')),
+        'the files transpile.ts loads are read too',
+      );
       let listed = new Set<string>(TRANSPILER_PACKAGES);
-      for (let file of files) {
-        for (let name of runtimeBareImports(join(runtimeCommonDir, file))) {
-          assert.true(
-            listed.has(name),
-            `${name}, which ${file} loads, is in TRANSPILER_PACKAGES`,
-          );
-        }
+      for (let [name, file] of packages) {
+        assert.true(
+          listed.has(name),
+          `${name}, which ${basename(file)} loads, is in TRANSPILER_PACKAGES`,
+        );
       }
     });
 

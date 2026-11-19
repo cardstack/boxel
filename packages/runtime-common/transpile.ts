@@ -66,9 +66,9 @@ export const TRANSPILE_VERSION = 4;
 // given source. The realm server derives a transpiler identity from what is
 // installed for each of them (see `realm-server/lib/transpiler-identity.ts`),
 // so upgrading or patching one changes the module validator without a bump of
-// `TRANSPILE_VERSION`. Every package that this file, `content-tag-loader.ts`,
-// `loader-plugin.ts` and `export-identity-plugin.ts` load is listed here; a
-// realm-server test checks that.
+// `TRANSPILE_VERSION`. Every package that this file loads, directly or
+// through the files it imports, is listed here; a realm-server test checks
+// that.
 export const TRANSPILER_PACKAGES = [
   '@babel/core',
   '@babel/plugin-transform-typescript',
