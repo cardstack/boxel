@@ -398,6 +398,14 @@ async function waitForRoutePathSuffix(
       expectedId: string | null,
       expectedNonce: string | null,
     ) => {
+      // `expectedId` is the normalized card id (a card render strips the
+      // `.json` before comparing it against `data-prerender-id`), while the
+      // route segment is the raw url the transition was given — which for an
+      // index visit still carries `.json`. Normalize both ends or every
+      // visit would wait out its timeout here.
+      let withoutJson = (value: string) => value.replace(/\.json$/i, '');
+      // Set when the page is at the expected sub-route of another render.
+      let pathIsAnotherRender = false;
       if (window.location.pathname.endsWith(targetSuffix)) {
         // The suffix names the sub-route (`/html/isolated/0`, `/icon`, …) and
         // nothing else, so every card's render route ends the same way. A
@@ -432,12 +440,6 @@ async function waitForRoutePathSuffix(
             return value;
           }
         };
-        // `expectedId` is the normalized card id (a card render strips the
-        // `.json` before comparing it against `data-prerender-id`), while the
-        // route segment is the raw url the transition was given — which for an
-        // index visit still carries `.json`. Normalize both ends or every
-        // visit would wait out its timeout here.
-        let withoutJson = (value: string) => value.replace(/\.json$/i, '');
         let pathIsThisRender =
           (!expectedId ||
             withoutJson(decodeSegment(idSegment)) ===
@@ -451,8 +453,26 @@ async function waitForRoutePathSuffix(
         // example, the card's module doesn't compile), the router aborts it
         // and shows the error route without changing the URL. The path then
         // never carries this render's id and nonce, and only the terminal
-        // check below can see the error.
+        // check below can see the error. That check must then accept only an
+        // error that names this render: the page can still show the previous
+        // render's error, which must not end this wait.
+        pathIsAnotherRender = true;
       }
+      let isThisRender = (element: HTMLElement) => {
+        let id = element.dataset.prerenderId;
+        let nonce = element.dataset.prerenderNonce;
+        if (pathIsAnotherRender) {
+          return (
+            (!expectedId ||
+              (id != null && withoutJson(id) === withoutJson(expectedId))) &&
+            (!expectedNonce || nonce === expectedNonce)
+          );
+        }
+        return (
+          (!expectedId || !id || id === expectedId) &&
+          (!expectedNonce || !nonce || nonce === expectedNonce)
+        );
+      };
 
       // If the render has already entered a terminal state (error/unusable),
       // do not wait for a route suffix that may never arrive.
@@ -463,7 +483,10 @@ async function waitForRoutePathSuffix(
         let errorElement = document.querySelector(
           '[data-prerender-error]',
         ) as HTMLElement | null;
-        if (!errorElement) {
+        if (
+          !errorElement ||
+          (pathIsAnotherRender && !isThisRender(errorElement))
+        ) {
           return false;
         }
         let raw = errorElement.textContent ?? errorElement.innerHTML ?? '';
@@ -484,18 +507,7 @@ async function waitForRoutePathSuffix(
         if (!isTerminal) {
           continue;
         }
-        if (
-          expectedId &&
-          element.dataset.prerenderId &&
-          element.dataset.prerenderId !== expectedId
-        ) {
-          continue;
-        }
-        if (
-          expectedNonce &&
-          element.dataset.prerenderNonce &&
-          element.dataset.prerenderNonce !== expectedNonce
-        ) {
+        if (!isThisRender(element)) {
           continue;
         }
         return true;

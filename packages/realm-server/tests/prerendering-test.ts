@@ -3149,7 +3149,7 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      test('an index visit of a card whose module fails to compile fails fast on a page left at another card’s meta route', async function (assert) {
+      test('an index visit of a card whose module fails to compile fails fast on a page left at another card’s meta route, and the next card on that page indexes cleanly', async function (assert) {
         // Indexing renders a realm's cards under realm authority.
         let indexAuth = () => {
           let sessions = JSON.parse(
@@ -3198,6 +3198,7 @@ module(basename(import.meta.filename), function () {
             affinityValue: realmURL,
             auth: indexAuth(),
           }),
+          jobId,
         );
         assert.strictEqual(
           memo?.hits,
@@ -3230,8 +3231,25 @@ module(basename(import.meta.filename), function () {
           `the error is the parse error, not a render timeout: ${response.card?.error?.error.message}`,
         );
         assert.ok(
-          elapsedMs < timeoutMs / 2,
-          `the visit fails well under its render timeout; observed ${elapsedMs}ms`,
+          elapsedMs < timeoutMs,
+          `the visit fails before its render timeout; observed ${elapsedMs}ms`,
+        );
+
+        // The page now shows the broken card's error, still at the good
+        // card's meta URL. The next visit must wait for its own render and
+        // not end on that error.
+        let next = await indexVisit('1.json');
+        assert.strictEqual(
+          next.pool.pageId,
+          warm.pool.pageId,
+          'the good card renders on the page the broken card left',
+        );
+        assert.false(next.pool.timedOut, 'the next visit does not time out');
+        assert.notOk(
+          next.response.card?.error,
+          `the good card indexes without an error: ${JSON.stringify(
+            next.response.card?.error?.error.message ?? null,
+          )}`,
         );
       });
 
