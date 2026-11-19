@@ -900,7 +900,8 @@ export class PgAdapter implements DBAdapter {
       }
     };
     // A hold whose connection is gone holds nothing a waiter could be
-    // deadlocked behind, so the rest of its work stops counting as nested.
+    // deadlocked behind, so the rest of its work, including any already
+    // waiting for a turn, stops counting as nested.
     let lost = false;
     let onLost = (e: Error) => {
       lost = true;

@@ -385,6 +385,46 @@ module(basename(import.meta.filename), function () {
         await adapter.close();
       }
     });
+
+    test('nested work a dead hold left waiting goes behind the callers that asked before it', async function (assert) {
+      let { adapter, pool } = stubbedAdapter({
+        PG_POOL_MAX: '1',
+        PG_POOL_OVERFLOW: '0',
+      });
+      try {
+        let order: string[] = [];
+        let nestedWork = new Deferred<void>();
+        let opened = new Deferred<void>();
+        let hold = adapter.withConnection(async (query) => {
+          await query(['SELECT 1']);
+          opened.fulfill();
+          await nestedWork.promise;
+          await adapter.execute('SELECT 2');
+          order.push('dead hold');
+          return await query(['SELECT 3']);
+        });
+        await untilOpened(opened, hold);
+        let settle = () => new Promise((r) => setTimeout(r, 20));
+        let caller = (n: number) =>
+          adapter.execute('SELECT 1').then(() => {
+            order.push(`caller ${n}`);
+          });
+        let first = caller(1);
+        await settle();
+        nestedWork.fulfill();
+        await settle();
+        let second = caller(2);
+        await settle();
+        // caller 1, then the hold's nested work, then caller 2
+        assert.deepEqual(idle(adapter), { inUse: 1, holds: 1, waiting: 3 });
+
+        pool.clients[0].lose();
+        await Promise.allSettled([hold, first, second]);
+        assert.deepEqual(order, ['caller 1', 'dead hold', 'caller 2']);
+      } finally {
+        await adapter.close();
+      }
+    });
   });
 
   // The stand-in pool above assumes `pg` reports a checked-out connection's
