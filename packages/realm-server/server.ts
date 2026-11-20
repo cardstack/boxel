@@ -69,13 +69,12 @@ import {
   type SecureOrigin,
 } from './lib/secure-origin.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
-import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import { HostURLResolver, resolveHostURLs } from './lib/realm-host-urls.ts';
 import {
-  HostURLResolver,
+  HostURLDomains,
   hostURLDomainFilter,
-  resolveHostURLs,
-} from './lib/realm-host-urls.ts';
+} from './lib/realm-host-urls-domains.ts';
 import { translateAtHostURLs } from './lib/realm-host-urls-boundary.ts';
 import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
 
@@ -746,6 +745,9 @@ export class RealmServer {
         boxelSite?: string;
       }
     | undefined;
+  // The domains a host URL can be on. The resolver and the code that writes
+  // host URLs both read it.
+  private hostURLDomains: HostURLDomains;
   private prerenderer: Prerenderer | undefined;
   private reportHostShell: (() => Promise<void>) | undefined;
   private reconciler: RealmRegistryReconciler;
@@ -941,6 +943,9 @@ export class RealmServer {
     this.matrixAdminPassword = matrixAdminPassword;
     this.getRegistrationSecret = getRegistrationSecret;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
+    this.hostURLDomains = HostURLDomains.fromDeployment(
+      domainsForPublishedRealms,
+    );
     // Pass-by-reference: handlers and the reconciler both mutate this
     // array. Copying it would create two divergent views of mounted
     // realms — a bug under multi-instance Phase 3 semantics. The legacy
@@ -1039,14 +1044,7 @@ export class RealmServer {
       .use(
         resolveHostURLs(
           new HostURLResolver(this.dbAdapter, {
-            mayHaveHostURLs: hostURLDomainFilter({
-              ...this.domainsForPublishedRealms,
-              customDomains: Object.values(
-                getPublishedRealmDomainOverrides(
-                  process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
-                ),
-              ),
-            }),
+            mayHaveHostURLs: hostURLDomainFilter(this.hostURLDomains),
           }),
         ),
       )
