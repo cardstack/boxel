@@ -166,9 +166,10 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   get publishButtonLabel() {
-    // With Host Mode v2 the realm is mounted at host URLs, not published.
+    // With Host Mode v2 the realm is mounted at host URLs, not published, so
+    // the button names the dialog it opens.
     if (this.isHostModeV2) {
-      return 'Mount Workspace';
+      return 'Host URLs';
     }
     return this.hasPublishedSites ? 'Republish Site' : 'Publish Site';
   }
