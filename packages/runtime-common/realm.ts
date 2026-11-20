@@ -732,6 +732,12 @@ import {
   cancelAllJobsInLaneFamily,
   cancelRunningJobsInLaneFamily,
 } from './job-utils.ts';
+import {
+  admitsRoute,
+  isOAuthAccessTokenShaped,
+  realmPermissionCeiling,
+  type RealmOAuthResource,
+} from './oauth-route-admission.ts';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -3184,6 +3190,17 @@ export type RequestContext = {
   // or definition lookup's in-process fetch), which never reaches the realm
   // ACL and so records no identity. Every other context, including one a
   // route builds for itself, is treated as an outside caller.
+  // The verified caller of an OAuth access token (ADR 021 §1.5), which the
+  // request was judged as: the user its grant is for, read with that user's
+  // permissions, and never more than its scopes allow in a realm
+  // (`permissionCeiling`). Its token was removed from the request once it
+  // was checked.
+  oauthCaller?: {
+    user: string;
+    clientId: string;
+    scopes: readonly string[];
+    permissionCeiling: 'read' | 'write' | undefined;
+  };
   realmInternal?: true;
 };
 
@@ -3191,6 +3208,12 @@ export type RequestContext = {
 // and whether it consumes the realm ACL's recorded outcome.
 interface RequestDispatch {
   consumesCoarseOutcome: boolean;
+  // The route that answers, as its router registered it, which an OAuth
+  // token's scopes are matched against (ADR 021 §1.3): a router route, or the
+  // fallback file and module serve (`path` and `mimeType` `*`). A dispatch on
+  // the request's path alone (a capture, a hashed stylesheet, a reserved or
+  // partially written path) has none, and no OAuth token reaches it.
+  route?: { method: string; mimeType: string; path: string };
   coarseReadOnly?: boolean;
   appliesArchivedSeal?: boolean;
   // The dispatch admits a verified user the ACL refused in a realm with no
@@ -3501,6 +3524,7 @@ export class Realm {
   #realmFor: ((url: URL) => Promise<ServedRealm | undefined>) | undefined;
   #callApi: CallApiSender | undefined;
   #policyWriteAuditor: PolicyWriteAuditor | undefined;
+  #oauth: RealmOAuthResource | undefined;
   #mediaCacheAdapter: MediaCacheAdapter | undefined;
   // The change journal every write appends to, and the reader the history
   // operations read from. Absent in a realm that records no history, such as
@@ -3721,6 +3745,7 @@ export class Realm {
       anonymousRateLimiter,
       callApi,
       policyWriteAuditor,
+      oauth,
       history,
     }: {
       url: string;
@@ -3782,6 +3807,11 @@ export class Realm {
       // in the realms that policy governs (see `policy-share-audit.ts`).
       // Without it, a write is never audited.
       policyWriteAuditor?: PolicyWriteAuditor;
+      // The OAuth resource whose access tokens this realm accepts, as the
+      // realm server hands it over (ADR 021 §1.3, §1.5): the realm routes its
+      // scopes map, and the shared lookup. Without it, the realm refuses an
+      // OAuth token as an invalid JWT.
+      oauth?: RealmOAuthResource;
       // The change journal every write appends to, in the transaction that
       // updates its file meta, and the reader the history operations use.
       // Without it, the realm records no history.
@@ -3802,6 +3832,7 @@ export class Realm {
     this.#realmFor = realmFor;
     this.#callApi = callApi;
     this.#policyWriteAuditor = policyWriteAuditor;
+    this.#oauth = oauth;
     this.#history = history;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#skipBootIndex = opts?.skipBootIndex ?? false;
@@ -6006,6 +6037,110 @@ export class Realm {
     return audited.audit;
   }
 
+  // What an OAuth caller's commit would change about what a realm's policy
+  // admits, named for a person, or undefined when it changes nothing of that
+  // (ADR 021 §1.6): `realm.json`'s `policy` or `config` (its name, icon and
+  // the rest stay the caller's to edit), the card the realm's policy pointer
+  // names, or any RealmPolicy card, as written or as the realm stores it,
+  // since a policy card here may govern another realm. Removing `realm.json`
+  // or such a card changes it too. A file only appended to is judged by its
+  // path alone.
+  async #oauthPolicyChange(
+    writes: Map<LocalPath, WriteContent>,
+    appended: LocalPath[],
+    deletes: LocalPath[],
+  ): Promise<string | undefined> {
+    for (let path of [...appended, ...deletes]) {
+      if (path === 'realm.json') {
+        return 'realm.json';
+      }
+      if (await this.#isPolicyCardPath(path)) {
+        return 'a policy card';
+      }
+    }
+    for (let [path, content] of writes) {
+      if (path === 'realm.json') {
+        if (await this.#changesRealmPolicySettings(content)) {
+          return "realm.json's policy or config";
+        }
+        continue;
+      }
+      if (!path.endsWith('.json')) {
+        continue;
+      }
+      if (
+        (await this.#isPolicyCardPath(path)) ||
+        (await this.#writesPolicyCard(
+          path,
+          await this.#writeContentText(content),
+        ))
+      ) {
+        return 'a policy card';
+      }
+    }
+    return undefined;
+  }
+
+  // Whether the card stored at `path` is the one the realm's policy pointer
+  // names, or a RealmPolicy card.
+  async #isPolicyCardPath(path: LocalPath): Promise<boolean> {
+    if (!path.endsWith('.json')) {
+      return false;
+    }
+    let policy = await this.getRealmPolicy();
+    if (policy) {
+      let cardURL = this.paths.fileURL(path.slice(0, -'.json'.length)).href;
+      try {
+        if (
+          new URL(this.#virtualNetwork.toURL(policy.card).href, this.url)
+            .href === cardURL
+        ) {
+          return true;
+        }
+      } catch {
+        // A pointer that names nothing protects no path.
+      }
+    }
+    let stored = (await this.readFileAsText(path))?.content;
+    return stored !== undefined && (await this.#writesPolicyCard(path, stored));
+  }
+
+  // Whether writing `content` as `realm.json` changes its `policy` or
+  // `config` from what the realm stores. Content that isn't a JSON object
+  // changes them, since the realm would no longer read either.
+  async #changesRealmPolicySettings(content: WriteContent): Promise<boolean> {
+    let settingsOf = (text: string | undefined) => {
+      if (text === undefined) {
+        return { policy: undefined, config: undefined };
+      }
+      let parsed: unknown = JSON.parse(text);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('realm.json is not a JSON object');
+      }
+      let { policy, config } = parsed as Record<string, unknown>;
+      return { policy, config };
+    };
+    let next: { policy: unknown; config: unknown };
+    try {
+      next = settingsOf(await this.#writeContentText(content));
+    } catch {
+      return true;
+    }
+    let current: { policy: unknown; config: unknown };
+    try {
+      current = settingsOf((await this.readFileAsText('realm.json'))?.content);
+    } catch {
+      // A stored realm.json the realm can't read carries no policy or
+      // config to keep, so only a write that adds neither leaves them as
+      // they are.
+      current = { policy: undefined, config: undefined };
+    }
+    return (
+      canonicalJSON(next.policy) !== canonicalJSON(current.policy) ||
+      canonicalJSON(next.config) !== canonicalJSON(current.config)
+    );
+  }
+
   async #auditedContentOf(
     files: Map<LocalPath, WriteContent>,
     path: LocalPath,
@@ -6223,6 +6358,21 @@ export class Realm {
       // left to wait for here is a pass that registered after their last
       // re-check, not the bulk of a long pass.
       stageCursor?.mark('drain');
+    }
+    // An OAuth caller's commit is refused whole, before any byte is written,
+    // if it would change what a realm's policy admits (ADR 021 §1.6).
+    if (options?.policyAudit?.oauthCaller) {
+      let refusal = await this.#oauthPolicyChange(
+        files,
+        [...appends.keys()],
+        deletes,
+      );
+      if (refusal) {
+        throw new CardError(
+          `An app connected with OAuth may not change ${refusal}`,
+          { status: 403, title: 'Forbidden' },
+        );
+      }
     }
     // Audited once the drain has settled what the realm resolves against and
     // before any byte is written, so a refusal leaves the realm as it was.
@@ -7759,6 +7909,7 @@ export class Realm {
               policyAudit: policyAuditOptionsFor(
                 request,
                 requestContext.authenticatedUser,
+                { oauthCaller: Boolean(requestContext.oauthCaller) },
               ),
             });
           } catch (e: any) {
@@ -9552,6 +9703,7 @@ export class Realm {
       policyAudit: policyAuditOptionsFor(
         request,
         requestContext.authenticatedUser,
+        { oauthCaller: Boolean(requestContext.oauthCaller) },
       ),
     };
   }
@@ -9963,6 +10115,17 @@ export class Realm {
         );
       }
       let dispatch = this.#routeRequest(request, localPath, requestContext);
+      if (!isLocal && !automation) {
+        let oauthRefusal = await this.#admitOAuthToken(
+          request,
+          requestContext,
+          dispatch,
+          requiredPermission,
+        );
+        if (oauthRefusal) {
+          return oauthRefusal;
+        }
+      }
       // A run's writes are staged, never written to the realm while it runs
       // (ADR 027 §1.2), so a run's write reaches only a route that stages
       // it, or one that answers why it can't (a card or file removal). Any
@@ -10320,9 +10483,13 @@ export class Realm {
       let matched: Route = route;
       let serve = () => this.#router.handle(request, requestContext, matched);
       if (matched.grantableBytes && namesGrantableBytes(localPath)) {
-        return this.#grantableBytesDispatch(request, requestContext, serve);
+        return {
+          ...this.#grantableBytesDispatch(request, requestContext, serve),
+          route: matched.registered,
+        };
       }
       return {
+        route: matched.registered,
         consumesCoarseOutcome: matched.consumesCoarseOutcome,
         coarseReadOnly: matched.coarseReadOnly,
         appliesArchivedSeal: matched.appliesArchivedSeal,
@@ -10363,10 +10530,15 @@ export class Realm {
     // coarse-read-only route gives.
     let serve = () => this.fallbackHandle(request, requestContext);
     let reads = request.method === 'GET' || request.method === 'HEAD';
+    let fallbackRoute = { method: request.method, mimeType: '*', path: '*' };
     if (reads && namesGrantableBytes(localPath)) {
-      return this.#grantableBytesDispatch(request, requestContext, serve);
+      return {
+        ...this.#grantableBytesDispatch(request, requestContext, serve),
+        route: fallbackRoute,
+      };
     }
     return {
+      route: fallbackRoute,
       consumesCoarseOutcome: false,
       coarseReadOnly: reads,
       handle: serve,
@@ -13259,6 +13431,17 @@ export class Realm {
         this.#log.warn(message);
       }
     };
+    let oauthCaller = requestContext.oauthCaller;
+    if (oauthCaller) {
+      await this.#checkOAuthCallerPermission(
+        request,
+        requestContext,
+        oauthCaller,
+        requiredPermission,
+        warnRefusal,
+      );
+      return;
+    }
     let run = requestContext.automationRun;
     if (run) {
       await this.#checkRunPermission(
@@ -13749,6 +13932,192 @@ export class Realm {
   // own key, any other under the realm secret seed. The token's own claim
   // picks the key, so one that claims to be a diagnostic session and is not
   // fails verification.
+  // The realm as one of the Boxel API's controllers (ADR 021 §1.3, §1.5). A
+  // bearer token that isn't one of Boxel's session JWTs is looked up through
+  // the shared lookup the realm server handed over, once, and must be for
+  // that resource, on a route one of its scopes maps, as the router selected
+  // it. The caller it yields is recorded on the request context, and its
+  // token is removed from the request, so nothing past this point (a
+  // handler, a log, a request the realm sends on) sees it.
+  //
+  // Answers, as RFC 6750 §3.1 says: a token in the query string, `400`
+  // without a lookup; one the lookup refuses, or on a route no scope maps,
+  // `401 invalid_token`, whatever the reason, which a refusal on a public
+  // realm also gets rather than falling back to an anonymous read; one whose
+  // scopes don't reach the route or the permission it needs, `403
+  // insufficient_scope`. Undefined when the request carries no OAuth token,
+  // or carries one that was admitted.
+  async #admitOAuthToken(
+    request: Request,
+    requestContext: RequestContext,
+    dispatch: RequestDispatch,
+    requiredPermission: RequiredPermission,
+  ): Promise<Response | undefined> {
+    let oauth = this.#oauth;
+    if (!oauth) {
+      return undefined;
+    }
+    let refuse = (
+      status: 400 | 401 | 403,
+      error: 'invalid_request' | 'invalid_token' | 'insufficient_scope',
+      challenge: string,
+    ) =>
+      createResponse({
+        body: JSON.stringify({ error }),
+        init: {
+          status,
+          headers: {
+            'content-type': SupportedMimeType.JSON,
+            'WWW-Authenticate': challenge,
+          },
+        },
+        requestContext,
+      });
+    if (new URL(request.url).searchParams.has('access_token')) {
+      this.#log.info(
+        `OAuth token refused for ${request.method} ${maskLoggedURL(request.url)}: not in the header`,
+      );
+      return refuse(400, 'invalid_request', 'Bearer error="invalid_request"');
+    }
+    let bearer = /^Bearer[ ]+(\S+)[ ]*$/i.exec(
+      request.headers.get('Authorization') ?? '',
+    )?.[1];
+    if (!bearer || !isOAuthAccessTokenShaped(bearer)) {
+      return undefined;
+    }
+    let result = await oauth.resolve(bearer);
+    if (!result.ok) {
+      return refuse(
+        401,
+        'invalid_token',
+        oauth.challenge({ error: 'invalid_token' }),
+      );
+    }
+    let { caller } = result;
+    let described = `${request.method} ${maskLoggedURL(request.url)}, client ${caller.clientId}`;
+    let admitted = dispatch.route
+      ? admitsRoute(oauth.scopes, caller, { on: 'realm', ...dispatch.route })
+      : { admitted: false as const, scopes: [] as string[] };
+    if (!admitted.admitted) {
+      if (admitted.scopes.length === 0) {
+        this.#log.info(
+          `OAuth token refused for ${described}: route not mapped`,
+        );
+        return refuse(
+          401,
+          'invalid_token',
+          oauth.challenge({ error: 'invalid_token' }),
+        );
+      }
+      this.#log.info(
+        `OAuth token refused for ${described}: insufficient scope`,
+      );
+      return refuse(
+        403,
+        'insufficient_scope',
+        oauth.challenge({
+          error: 'insufficient_scope',
+          scope: admitted.scopes,
+        }),
+      );
+    }
+    // The scopes are a ceiling on what the realm requires of the caller,
+    // over and above the route map, so a route the map admits can't be
+    // reached for more than the token allows. Nothing admits administering
+    // the realm.
+    let permissionCeiling = realmPermissionCeiling(oauth.scopes, caller.scopes);
+    if (
+      requiredPermission === 'administer' ||
+      !permissionCeiling ||
+      (requiredPermission === 'write' && permissionCeiling !== 'write')
+    ) {
+      this.#log.info(
+        `OAuth token refused for ${described}: requires ${requiredPermission}, scopes allow ${permissionCeiling ?? 'nothing'}`,
+      );
+      return refuse(
+        403,
+        'insufficient_scope',
+        oauth.challenge({
+          error: 'insufficient_scope',
+          scope: oauth.scopes
+            .filter(
+              ({ realmPermission }) =>
+                requiredPermission !== 'administer' &&
+                (realmPermission === 'write' ||
+                  (realmPermission === 'read' &&
+                    requiredPermission === 'read')),
+            )
+            .map(({ name }) => name),
+        }),
+      );
+    }
+    // An OAuth caller acts as its own user and no one else.
+    if (request.headers.get('X-Boxel-Assume-User')) {
+      this.#log.info(
+        `OAuth token refused for ${described}: it can't assume another user`,
+      );
+      return refuse(
+        401,
+        'invalid_token',
+        oauth.challenge({ error: 'invalid_token' }),
+      );
+    }
+    requestContext.oauthCaller = {
+      user: caller.user,
+      clientId: caller.clientId,
+      scopes: caller.scopes,
+      permissionCeiling,
+    };
+    request.headers.delete('Authorization');
+    return undefined;
+  }
+
+  // The realm ACL's decision for an OAuth caller (`#admitOAuthToken`): the
+  // caller's user, with that user's effective permissions, read fresh, as a
+  // session's user is. Its grant was checked by the lookup, against the
+  // user's OAuth cutoff, so `isSessionRevoked` is never asked about it (ADR
+  // 021 §1.9). A probe for more than its scopes allow is refused outright,
+  // so no policy can admit it either.
+  async #checkOAuthCallerPermission(
+    request: Request,
+    requestContext: RequestContext,
+    caller: NonNullable<RequestContext['oauthCaller']>,
+    requiredPermission: RequiredPermission,
+    warnRefusal: (message: string) => void,
+  ): Promise<void> {
+    let described = `${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')})`;
+    if (
+      requiredPermission === 'administer' ||
+      !caller.permissionCeiling ||
+      (requiredPermission === 'write' && caller.permissionCeiling !== 'write')
+    ) {
+      warnRefusal(
+        `auth failed for ${described}, OAuth client ${caller.clientId} for user ${caller.user} asked for ${requiredPermission}, which its scopes don't allow`,
+      );
+      throw new AuthorizationError(
+        'This OAuth token does not allow this action',
+      );
+    }
+    let realmPermissionChecker = new RealmPermissionChecker(
+      requestContext.permissions,
+      this.#dbAdapter,
+      this.#matrixClient.serverName,
+    );
+    requestContext.authenticatedUser = caller.user;
+    if (!(await realmPermissionChecker.can(caller.user, requiredPermission))) {
+      warnRefusal(
+        `auth failed for ${described}, OAuth client ${caller.clientId} for user ${caller.user}: permissions insufficient, requires ${requiredPermission}`,
+      );
+      // The user is known; only their permission fell short. The realm's
+      // policy judges such a caller by who they are, as it judges a
+      // session's user, so the identity is kept with the refusal.
+      throw new CoarsePermissionInsufficient(
+        'Insufficient permissions to perform this action',
+      );
+    }
+    requestContext.principal = caller.user;
+  }
+
   #verifySession(
     tokenString: string,
   ): TokenClaims & { iat: number; exp: number } {
@@ -15650,6 +16019,7 @@ export class Realm {
           policyAudit: policyAuditOptionsFor(
             request,
             requestContext.authenticatedUser,
+            { oauthCaller: Boolean(requestContext.oauthCaller) },
           ),
           beforeCommit: () => admission.locked(),
         },
@@ -16056,6 +16426,20 @@ export class Realm {
     let declined = this.#coarseDeclined(requestContext) !== 'none';
     if (!handle && !declined) {
       return notFound(request, requestContext, `${localName} not found`);
+    }
+    // An OAuth caller may not remove what decides a realm's policy (ADR 021
+    // §1.6).
+    if (requestContext.oauthCaller && handle) {
+      let refusal = await this.#oauthPolicyChange(new Map(), [], [handle.path]);
+      if (refusal) {
+        return responseWithError(
+          new CardError(
+            `An app connected with OAuth may not change ${refusal}`,
+            { status: 403, title: 'Forbidden' },
+          ),
+          requestContext,
+        );
+      }
     }
     let options = {
       waitForIndex: false,
@@ -16884,6 +17268,7 @@ export class Realm {
             policyAudit: policyAuditOptionsFor(
               request,
               requestContext.authenticatedUser,
+              { oauthCaller: Boolean(requestContext.oauthCaller) },
             ),
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
@@ -17444,6 +17829,7 @@ export class Realm {
             policyAudit: policyAuditOptionsFor(
               request,
               requestContext.authenticatedUser,
+              { oauthCaller: Boolean(requestContext.oauthCaller) },
             ),
             ...(requestContext.authenticatedUser
               ? { actor: requestContext.authenticatedUser }
@@ -19689,6 +20075,18 @@ export class Realm {
           ...indexWaitOptions(request, { bounded: true }),
           ...(requestContext.authenticatedUser
             ? { actor: requestContext.authenticatedUser }
+            : {}),
+          // An OAuth caller's removal is held to what it may not change
+          // (ADR 021 §1.6). A removal writes no bytes, so nothing is audited
+          // for the shares it opens.
+          ...(requestContext.oauthCaller
+            ? {
+                policyAudit: policyAuditOptionsFor(
+                  request,
+                  requestContext.authenticatedUser,
+                  { oauthCaller: true },
+                ),
+              }
             : {}),
           ...(precondition ? { precondition } : {}),
         },
@@ -23356,4 +23754,25 @@ async function* lazyIterable(
   pending: Promise<AsyncIterable<Uint8Array>>,
 ): AsyncIterable<Uint8Array> {
   yield* await pending;
+}
+
+// A JSON value written with its object keys sorted, so two values that differ
+// only in key order compare as equal. `undefined` stands for a key that is
+// absent.
+function canonicalJSON(value: unknown): string {
+  if (value === undefined) {
+    return 'undefined';
+  }
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJSON).join(',')}]`;
+  }
+  let entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, member]) => member !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries
+    .map(([key, member]) => `${JSON.stringify(key)}:${canonicalJSON(member)}`)
+    .join(',')}}`;
 }

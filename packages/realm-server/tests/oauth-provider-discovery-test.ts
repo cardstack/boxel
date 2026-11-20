@@ -352,12 +352,14 @@ module(basename(import.meta.filename), function () {
         registry.map(({ id }) => id),
         [
           'https://realms.example.test/mcp',
+          // The Boxel API is identified by the issuer itself.
+          'https://realms.example.test',
           'https://realms.example.test/_test-resource',
         ],
       );
       assert.deepEqual(
         registry.map(({ testOnly }) => testOnly === true),
-        [false, true],
+        [false, false, true],
         'only the resource a test added is marked test-only',
       );
     });

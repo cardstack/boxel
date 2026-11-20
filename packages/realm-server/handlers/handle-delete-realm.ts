@@ -23,10 +23,10 @@ import {
   sendResponseForSystemError,
   sendResponseForUnprocessableEntity,
   setContextResponse,
+  requestUser,
 } from '../middleware/index.ts';
 import { notifyRealmsListUpdated } from './archive-realm-utils.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   removeRealmDatabaseArtifacts,
   removeRealmFiles,
@@ -54,8 +54,8 @@ export default function handleDeleteRealm({
   serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token) {
+    let user = requestUser(ctxt);
+    if (!user) {
       await sendResponseForSystemError(
         ctxt,
         'token is required to delete realm',
@@ -138,7 +138,7 @@ export default function handleDeleteRealm({
       }
 
       let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
-      let { user: ownerUserId } = token;
+      let ownerUserId = user;
       if (
         !isRealmAdministrator(
           permissions,

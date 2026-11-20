@@ -16,9 +16,9 @@ import {
   sendResponseForNotFound,
   sendResponseForUnprocessableEntity,
   sendResponseForSystemError,
+  requestUser,
 } from '../middleware/index.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
-import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 
 export interface ArchiveTarget {
@@ -45,8 +45,8 @@ export async function resolveAndAuthorizeArchiveTarget(
   matrixServerName: string,
   serverURL: string,
 ): Promise<ArchiveTarget | null> {
-  let token = ctxt.state.token as RealmServerTokenClaim;
-  if (!token) {
+  let user = requestUser(ctxt);
+  if (!user) {
     await sendResponseForSystemError(
       ctxt,
       `token is required to ${action} realm`,
@@ -113,7 +113,7 @@ export async function resolveAndAuthorizeArchiveTarget(
     return null;
   }
 
-  let { user: requesterUserId } = token;
+  let requesterUserId = user;
   let permissions = await fetchRealmPermissions(dbAdapter, parsedRealmURL);
 
   if (

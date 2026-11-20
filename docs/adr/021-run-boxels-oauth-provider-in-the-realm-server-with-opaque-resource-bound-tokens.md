@@ -187,13 +187,18 @@ token's scopes MUST only narrow what its caller may do: the
 user's current realm permissions MUST still decide each call, and a scope MUST
 NOT grant what they don't (ADR 006). An OAuth token MUST NOT be exchanged for a
 realm-server session, a realm session, a delegated session or a Matrix login.
+A session the realm server mints in process for work a route starts, such as
+publishing a realm, is not an exchange when it never reaches the caller and
+acts only for that work.
 
 ### 1.6. What an OAuth token never reaches
 
 A verified caller MUST NOT carry `secureSession` (ADR 005 §1.2). An entry
 MUST NOT map a scope to key management, reads included, to a route that needs a
 secure session, to a route that mints a token or a signed URL, or to a route
-that changes a realm's permissions. Each of these refusals MUST be tested on
+that changes a realm's permissions. Creating a realm, which writes only its
+creator's own permissions on a realm that didn't exist, doesn't change a
+realm's permissions. Each of these refusals MUST be tested on
 the realm server, and each that names a realm route in the realm too.
 
 An OAuth token MUST NOT change what a realm's policy admits (ADR 006 §1.3): a
