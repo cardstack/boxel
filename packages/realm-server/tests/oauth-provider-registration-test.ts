@@ -315,6 +315,23 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(mixed.body.error, 'invalid_redirect_uri');
     });
 
+    test('a client may register only the code response type', async function (assert) {
+      for (let response_types of [[], ['token'], ['code', 'code'], 'code']) {
+        let response = await server.register({
+          ...loopbackClient,
+          response_types,
+        });
+        let name = JSON.stringify(response_types);
+        assert.strictEqual(response.status, 400, name);
+        assert.strictEqual(
+          response.body.error,
+          'invalid_client_metadata',
+          name,
+        );
+      }
+      assert.strictEqual(await server.storedClientCount(), 0, 'none stored');
+    });
+
     test("a registration Boxel allows and the library refuses gets the library's JSON error, and nothing is stored", async function (assert) {
       let response = await server.register({
         ...loopbackClient,

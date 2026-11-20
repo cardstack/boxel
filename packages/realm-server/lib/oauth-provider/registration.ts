@@ -101,6 +101,23 @@ export function checkRegistration(
   if (refusal) {
     return refuse('invalid_redirect_uri', refusal);
   }
+  // Only the code flow is served. The library would accept an empty list,
+  // and then refuse every authorization request from the client with an
+  // error it sends to the redirect URI (ADR 021 §1.8).
+  let responseTypes = body.response_types;
+  if (
+    responseTypes !== undefined &&
+    !(
+      Array.isArray(responseTypes) &&
+      responseTypes.length === 1 &&
+      responseTypes[0] === 'code'
+    )
+  ) {
+    return refuse(
+      'invalid_client_metadata',
+      'response_types must be ["code"]: this provider serves only the authorization code flow',
+    );
+  }
   if (body.scope !== undefined && typeof body.scope !== 'string') {
     return refuse('invalid_client_metadata', 'scope must be a string');
   }

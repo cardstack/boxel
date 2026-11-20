@@ -705,7 +705,7 @@ module(basename(import.meta.filename), function () {
         await server.authorize(
           validParams(clientId, {
             nonce: 'nonce-marker-3f9e',
-            'access_token=token-marker-81c2': 'x',
+            'access_token=tokenmarker81c2': 'x',
             'Token-Marker-6d07': 'x',
           }),
         );
@@ -773,6 +773,23 @@ module(basename(import.meta.filename), function () {
         returned.searchParams.get('state'),
         'state-marker-5a1c',
       );
+    });
+
+    test('a parameter after a thousand others is still checked', async function (assert) {
+      let clientId = await server.register();
+      for (let [extra, reason] of [
+        ['request=x', 'unsupported-parameter'],
+        ['prompt=none', 'prompt-none'],
+      ]) {
+        let response = await server.get(
+          `${AUTHORIZATION}?${queryString(validParams(clientId))}${'&'.repeat(1000)}&${extra}`,
+        );
+        assert.strictEqual(response.status, 303, `${extra}: ${response.text}`);
+        let found = await details(
+          errorReference(assert, response.headers.location),
+        );
+        assert.strictEqual(found.body.reason, reason, extra);
+      }
     });
 
     test('a repeated parameter is refused as malformed, and a repeated redirect URI or state offers nothing to return to', async function (assert) {

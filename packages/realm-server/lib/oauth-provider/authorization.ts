@@ -82,10 +82,15 @@ type Query = Record<string, string | string[] | undefined>;
 interface Refusal {
   error: string;
   reason: AuthorizationRefusalReason;
-  // What an `unsupported-parameter` refusal refused: each parameter's name,
-  // or `prompt=` and the prompt asked for. The client chose them, so a log
-  // line shows them only through `unsupportedForLogs`.
-  unsupported?: string[];
+  // What an `unsupported-parameter` refusal refused: parameters by name, or
+  // prompts. The client chose them, so a log line shows them only through
+  // `unsupportedForLogs`.
+  unsupported?: Unsupported[];
+}
+
+interface Unsupported {
+  kind: 'parameter' | 'prompt';
+  value: string;
 }
 
 // The parts of the library's client that Boxel's own routes read.
@@ -135,6 +140,28 @@ export async function findClient(
     // A stored client the library can no longer load is no client.
     return undefined;
   }
+}
+
+// A request's query as the library reads it: its Koa parses with
+// `URLSearchParams`, which reads every pair, while the realm server's Koa
+// parses with `node:querystring`, which stops after 1,000. Boxel's checks
+// read this instead of `ctxt.query`, so a parameter can't hide from them
+// behind padding the library reads past.
+function queryAsTheLibraryReadsIt(querystring: string): Query {
+  let params = new URLSearchParams(querystring);
+  let query: Query = {};
+  for (let name of new Set(params.keys())) {
+    let values = params.getAll(name);
+    // Defined rather than assigned, so a name such as `__proto__` is a
+    // parameter like any other.
+    Object.defineProperty(query, name, {
+      value: values.length === 1 ? values[0] : values,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  return query;
 }
 
 // Stands for a parameter that may appear once but appeared more often.
@@ -223,7 +250,11 @@ export function checkAuthorizationRequest(
     (name) => !ACCEPTED_PARAMETERS.has(name),
   );
   if (unsupported.length > 0) {
-    return refuse('invalid_request', 'unsupported-parameter', unsupported);
+    return refuse(
+      'invalid_request',
+      'unsupported-parameter',
+      unsupported.map((value) => ({ kind: 'parameter', value })),
+    );
   }
 
   // Shape.
@@ -269,7 +300,7 @@ export function checkAuthorizationRequest(
     return refuse(
       'invalid_request',
       'unsupported-parameter',
-      unsupportedPrompts.map((value) => `prompt=${value}`),
+      unsupportedPrompts.map((value) => ({ kind: 'prompt', value })),
     );
   }
   if (scopeParam !== undefined && !SCOPE_LIST.test(scopeParam)) {
@@ -359,25 +390,29 @@ export function checkAuthorizationRequest(
 function refuse(
   error: string,
   reason: AuthorizationRefusalReason,
-  unsupported?: string[],
+  unsupported?: Unsupported[],
 ): { refused: true } & Refusal {
   return unsupported
     ? { refused: true, error, reason, unsupported }
     : { refused: true, error, reason };
 }
 
-// A name a log line may show as it is. Anything else the client sent shows
-// as `other`, since it can carry anything, a token included.
-const PLAIN_NAME = /^[a-z][a-z0-9_]{0,31}(?:=[a-z][a-z0-9_]{0,31})?$/;
+// A parameter name or prompt a log line may show as it is. Anything else
+// the client sent shows as `other`, since it can carry anything, a token
+// included.
+const PLAIN_NAME = /^[a-z][a-z0-9_]{0,31}$/;
 const MAX_UNSUPPORTED_IN_LOGS = 10;
 
 // How a log line names what an `unsupported-parameter` refusal refused, so a
 // real client that sends a parameter Boxel doesn't accept can be told from
 // its logs.
-function unsupportedForLogs(unsupported: readonly string[]): string {
+function unsupportedForLogs(unsupported: readonly Unsupported[]): string {
   let names = [
     ...new Set(
-      unsupported.map((name) => (PLAIN_NAME.test(name) ? name : 'other')),
+      unsupported.map(({ kind, value }) => {
+        let shown = PLAIN_NAME.test(value) ? value : 'other';
+        return kind === 'prompt' ? `prompt=${shown}` : shown;
+      }),
     ),
   ];
   let shown = names.slice(0, MAX_UNSUPPORTED_IN_LOGS).join(', ');
@@ -465,7 +500,7 @@ export function authorizationHandler({
     // the library remembered would sign this flow in as whoever it names.
     dropCookies(ctxt, sessionCookies);
 
-    let query = ctxt.query as Query;
+    let query = queryAsTheLibraryReadsIt(ctxt.querystring);
     let clientId = single(query, 'client_id');
     let client =
       clientId === REPEATED ? undefined : await findClient(provider, clientId);
