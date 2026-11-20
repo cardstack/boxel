@@ -72,13 +72,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # CI HACK, DO NOT MERGE: four independent repro runs.
         shard:
           - index: 1
-            total: 3
+            total: 4
           - index: 2
-            total: 3
+            total: 4
           - index: 3
-            total: 3
+            total: 4
+          - index: 4
+            total: 4
     concurrency:
       group: ci-software-factory-shard-${{ matrix.shard.index }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -122,7 +125,7 @@ jobs:
         run: pnpm exec playwright install --only-shell chromium
         working-directory: packages/software-factory
       - name: Run Node tests
-        if: ${{ matrix.shard.index == 1 }}
+        if: ${{ false }}
         run: pnpm test:node
         working-directory: packages/software-factory
       - name: Serve boxel-icons
@@ -137,7 +140,18 @@ jobs:
           mise run services:icons &
           timeout 60 bash -c 'until curl -sf http://localhost:4206 > /dev/null; do sleep 1; done'
       - name: Run Playwright tests
-        run: pnpm test:playwright:shard ${{ matrix.shard.index }}/${{ matrix.shard.total }}
+        # CI HACK, DO NOT MERGE: the keep-alive race sweep, then the flaky spec
+        # three times. Both always run; the step fails if either failed.
+        run: |
+          pnpm --filter @cardstack/boxel-cli build:api
+          pnpm --filter @cardstack/boxel-cli fetch:skills
+          set +e
+          pnpm exec playwright test tests/ci-hack-keepalive-race.spec.ts
+          sweep=$?
+          pnpm exec playwright test tests/run-parse-in-memory.spec.ts --repeat-each=3
+          spec=$?
+          echo "[ci-hack] sweep exit=$sweep, run-parse-in-memory x3 exit=$spec"
+          [ "$sweep" -eq 0 ] && [ "$spec" -eq 0 ]
         working-directory: packages/software-factory
       # Traces are evidence for a human reading a failed spec. Nothing
       # downstream consumes them, so a failed upload does not fail the shard.
