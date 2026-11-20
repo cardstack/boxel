@@ -1,5 +1,7 @@
 import type { ResolvedCodeRef } from '../code-ref.ts';
 import { FILEDEF_CODE_REF_BY_EXTENSION } from '../file-def-code-ref.ts';
+import { hasExecutableExtension } from '../index.ts';
+import { pathSpecifierMatches } from '../path-specifier.ts';
 import type { BaseOperation } from './types.ts';
 import type { CompiledOperationGrant, CompiledPolicyRule } from './policy.ts';
 
@@ -32,11 +34,11 @@ import type { CompiledOperationGrant, CompiledPolicyRule } from './policy.ts';
 // the warning arrives with the realm's first such card.
 //
 // It is a diagnostic, and it doesn't evaluate a code grant's `where`: a live
-// `readSource` grant on a code type counts as covering the realm's modules for
-// every kind of caller it can admit. One whose `where` can never hold for a
-// signed-in caller, as `actor() == "anonymous"` can't, covers only callers who
-// aren't signed in, and one that doesn't name them covers only signed-in
-// callers. Nor can it tell a module's extension from its identifier, so a
+// `readSource` grant on a code type counts as covering the realm's modules
+// under its paths for every kind of caller it can admit. One whose `where`
+// can never hold for a signed-in caller, as `actor() == "anonymous"` can't,
+// covers only callers who aren't signed in, and one that doesn't name them
+// covers only signed-in callers. Nor can it tell a module's extension from its identifier, so a
 // `GtsFileDef` grant counts as covering a `.ts` module too. A caller a `where`
 // leaves out, or a card defined in a `.ts` module, can still meet a module no
 // grant reaches.
@@ -92,56 +94,43 @@ export async function moduleAccessIssues(
   env: ModuleAccessEnvironment,
 ): Promise<ModuleAccessIssue[]> {
   let codeKeys = new Set(CODE_TYPES.map((ref) => env.typeKey(ref)));
-  let signedInCovered = false;
-  let anonymousCovered = false;
+  let codeGrants: ModuleAccessRule['grants'] = [];
   for (let { rule, types, grants } of rules) {
     let onCode =
       codeKeys.has(env.typeKey(rule.targetType)) ||
       (types[0] !== undefined && codeKeys.has(types[0]));
-    if (!onCode) {
-      continue;
-    }
-    for (let { base, opensToSignedIn, opensToAnonymous } of grants) {
-      if (base !== 'readSource') {
-        continue;
-      }
-      signedInCovered ||= opensToSignedIn;
-      anonymousCovered ||= opensToAnonymous;
+    if (onCode) {
+      codeGrants.push(...grants.filter(({ base }) => base === 'readSource'));
     }
   }
-  if (signedInCovered && anonymousCovered) {
+  // Whether some code grant covers a module for a kind of caller.
+  let covers = (module: string, kind: 'signedIn' | 'anonymous') =>
+    codeGrants.some(
+      (entry) =>
+        (kind === 'signedIn'
+          ? entry.opensToSignedIn
+          : entry.opensToAnonymous) && underPaths(entry.grant, module),
+    );
+  let everywhere = (kind: 'signedIn' | 'anonymous') =>
+    codeGrants.some(
+      (entry) =>
+        !entry.grant.paths &&
+        (kind === 'signedIn' ? entry.opensToSignedIn : entry.opensToAnonymous),
+    );
+  if (everywhere('signedIn') && everywhere('anonymous')) {
     return [];
   }
 
-  // The callers a grant admits that no code grant covers, as the message
-  // names them. It names one kind where a code grant covers the other, so the
-  // fix is to open code to that kind too, and otherwise all of them.
-  let uncovered = ({
-    opensToSignedIn,
-    opensToAnonymous,
-  }: ModuleAccessRule['grants'][number]): Callers | undefined => {
-    let signedIn = opensToSignedIn && !signedInCovered;
-    let anonymous = opensToAnonymous && !anonymousCovered;
-    if (signedIn && anonymous) {
-      return 'any';
-    }
-    if (anonymous) {
-      return signedInCovered ? 'anonymous' : 'any';
-    }
-    if (signedIn) {
-      return anonymousCovered ? 'signed-in' : 'any';
-    }
-    return undefined;
-  };
   let issues: ModuleAccessIssue[] = [];
   for (let { rule, types, grants } of rules) {
-    let reading = grants.flatMap((entry) => {
-      let callers =
-        entry.base === 'read' || entry.base === 'query'
-          ? uncovered(entry)
-          : undefined;
-      return callers ? [{ ...entry, callers }] : [];
-    });
+    // A grant whose callers a code grant with no paths covers needs no
+    // module looked up.
+    let reading = grants.filter(
+      ({ base, opensToSignedIn, opensToAnonymous }) =>
+        (base === 'read' || base === 'query') &&
+        ((opensToSignedIn && !everywhere('signedIn')) ||
+          (opensToAnonymous && !everywhere('anonymous'))),
+    );
     if (reading.length === 0) {
       continue;
     }
@@ -149,7 +138,33 @@ export async function moduleAccessIssues(
     if (modules.length === 0) {
       continue;
     }
-    for (let { grant, base, callers } of reading) {
+    for (let { grant, base, opensToSignedIn, opensToAnonymous } of reading) {
+      let signedIn = opensToSignedIn
+        ? modules.filter((module) => !covers(module, 'signedIn'))
+        : [];
+      let anonymous = opensToAnonymous
+        ? modules.filter((module) => !covers(module, 'anonymous'))
+        : [];
+      if (signedIn.length === 0 && anonymous.length === 0) {
+        continue;
+      }
+      // The callers no code grant covers, as the message names them. It
+      // names one kind where a code grant covers those modules for the
+      // other, so the fix is to open code to that kind too, and otherwise
+      // all of them.
+      let callers: Callers =
+        signedIn.length > 0 && anonymous.length > 0
+          ? 'any'
+          : anonymous.length > 0
+            ? anonymous.every((module) => covers(module, 'signedIn'))
+              ? 'anonymous'
+              : 'any'
+            : signedIn.every((module) => covers(module, 'anonymous'))
+              ? 'signed-in'
+              : 'any';
+      let missing = modules.filter(
+        (module) => signedIn.includes(module) || anonymous.includes(module),
+      );
       issues.push({
         code: 'module-not-granted',
         path: grant.path,
@@ -157,12 +172,28 @@ export async function moduleAccessIssues(
           rule,
           base === 'query' ? 'find' : 'read',
           callers,
-          modules,
+          missing,
         ),
       });
     }
   }
   return issues;
+}
+
+// Whether a code grant's paths cover a module. A module is named as its
+// identifier, which can leave out the extension of the file it is stored
+// in, so one named that way is covered where a file it may be stored in
+// is: its `.gts`, `.gjs`, `.ts` or `.js`.
+function underPaths(grant: CompiledOperationGrant, module: string): boolean {
+  if (!grant.paths) {
+    return true;
+  }
+  let files = hasExecutableExtension(module)
+    ? [module]
+    : ['.gts', '.gjs', '.ts', '.js'].map(
+        (extension) => `${module}${extension}`,
+      );
+  return files.some((file) => pathSpecifierMatches(grant.paths!, file, 'file'));
 }
 
 // The governed realm's modules the cards a rule admits are defined in: its

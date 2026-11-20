@@ -20,6 +20,11 @@ import {
   tokenLimitFormat,
   type TokenLimit,
 } from './token-limit.ts';
+import {
+  DEFAULT_UNCONNECTED_CLIENT_CAP,
+  OAUTH_UNCONNECTED_CLIENT_CAP_VAR,
+  parseUnconnectedClientCap,
+} from './unconnected-client-cap.ts';
 
 // What the OAuth provider needs from its environment. The provider runs only
 // where `BOXEL_OAUTH_PROVIDER_ENABLED=true`; anywhere else nothing here is
@@ -91,6 +96,25 @@ export function readNewClientLimit(
     );
   }
   return limit;
+}
+
+// The cap on never-connected clients (see `unconnected-client-cap.ts`). Read
+// only when the provider is on. Unset, the default; a value that is not a
+// whole number of clients stops the server.
+export function readUnconnectedClientCap(
+  env: Record<string, string | undefined>,
+): number {
+  let spec = env[OAUTH_UNCONNECTED_CLIENT_CAP_VAR]?.trim();
+  if (!spec) {
+    return DEFAULT_UNCONNECTED_CLIENT_CAP;
+  }
+  let cap = parseUnconnectedClientCap(spec);
+  if (cap === undefined) {
+    throw new OAuthProviderConfigError(
+      `${OAUTH_UNCONNECTED_CLIENT_CAP_VAR} must be a whole number of clients, at least 1, not "${spec}"`,
+    );
+  }
+  return cap;
 }
 
 export function parseOAuthProviderConfig(value: unknown): OAuthProviderConfig {

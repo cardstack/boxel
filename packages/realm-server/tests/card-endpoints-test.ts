@@ -26,6 +26,10 @@ import {
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
+import {
+  DEFINITION_RETRY_AFTER_SECONDS,
+  definitionNotReady,
+} from '@cardstack/runtime-common/card-operations';
 import { parse } from 'qs';
 import {
   setupPermissionedRealmCached,
@@ -1076,7 +1080,7 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(
             response.get('vary'),
-            'Accept, x-boxel-link-shape',
+            'Accept, x-boxel-link-shape, Accept-Encoding',
             'caches key on the negotiated type and on the link shape, which are the two request members that select which representation of this URL is returned',
           );
         });
@@ -1100,7 +1104,7 @@ module(basename(import.meta.filename), function () {
           assert.notOk(response.text, 'the 304 carries no body');
           assert.strictEqual(
             response.get('vary'),
-            'Accept, x-boxel-link-shape',
+            'Accept, x-boxel-link-shape, Accept-Encoding',
             'a 304 has to carry the same key as the 200 it revalidates, or a cache stores the response under a narrower one',
           );
         });
@@ -1221,6 +1225,56 @@ module(basename(import.meta.filename), function () {
             undefined,
             'nothing suggests the card is on its way',
           );
+        });
+
+        // A card's type definition comes from the realm's definition cache,
+        // not from the index. A read whose definition render outlasts the
+        // request's deadline is refused over the definition alone: the card
+        // here is indexed and healthy, and the lookup refusing stands in for
+        // that render.
+        test('a card whose type definition is still being rendered answers a retryable 503, not the awaiting-index 404', async function (assert) {
+          let lookup = testRealm.operationCore.definitionLookup;
+          let original = lookup.lookupDefinition;
+          lookup.lookupDefinition = async (codeRef) => {
+            throw definitionNotReady(undefined, codeRef);
+          };
+          try {
+            let response = await request
+              .get('/person-1')
+              .set('Accept', 'application/vnd.card+json');
+            assert.strictEqual(
+              response.status,
+              503,
+              `HTTP 503 status: ${response.text}`,
+            );
+            assert.strictEqual(
+              response.get('Retry-After'),
+              String(DEFINITION_RETRY_AFTER_SECONDS),
+              'the response says when to retry',
+            );
+            let [error] = response.body.errors;
+            assert.strictEqual(error.title, 'Definition not ready');
+            assert.true(
+              /still being rendered/.test(error.message),
+              `the detail says the definition is rendering: ${error.message}`,
+            );
+            assert.strictEqual(
+              error.awaitingIndex,
+              undefined,
+              'nothing suggests the card is waiting on the index',
+            );
+
+            let head = await request
+              .head('/person-1')
+              .set('Accept', 'application/vnd.card+json');
+            assert.strictEqual(head.status, 503, 'a HEAD answers the same');
+            assert.strictEqual(
+              head.get('Retry-After'),
+              String(DEFINITION_RETRY_AFTER_SECONDS),
+            );
+          } finally {
+            lookup.lookupDefinition = original;
+          }
         });
       });
 
@@ -2166,7 +2220,7 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(
             response.get('vary'),
-            'Accept',
+            'Accept, Accept-Encoding',
             'the response varies on Accept',
           );
         });
@@ -6162,7 +6216,7 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(
             response.get('vary'),
-            'Accept',
+            'Accept, Accept-Encoding',
             'the response varies on Accept',
           );
         });
@@ -6234,7 +6288,7 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(
             response.get('vary'),
-            'Accept',
+            'Accept, Accept-Encoding',
             'the no-op response varies on Accept',
           );
         });

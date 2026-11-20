@@ -1083,19 +1083,41 @@ const tests: SharedTests<unknown> = Object.freeze({
         routes,
         warnings,
         complete: isComplete,
+        unavailableRoutePatterns,
       } = validate([
         { path: '/', instance: instance('home') },
-        fieldMatch('/later/:slug', 'Pending', { slug: ':slug' }),
+        fieldMatch(
+          '/later/:slug',
+          'Pending',
+          { slug: ':slug' },
+          { routes: [fieldMatch('/:venue', 'Venue', { slug: ':venue' })] },
+        ),
         fieldMatch('/posts/:slug', 'Post', { slug: ':slug' }),
       ]);
       assert.false(isComplete, 'the validation is not final');
+      assert.deepEqual(
+        unavailableRoutePatterns.map((pattern) => pattern.source),
+        ['/later/:slug', '/later/:slug/:venue'],
+        'the dropped route and the route under it may answer later',
+      );
       assert.deepEqual(paths(routes), ['/', '/posts/:slug']);
       assert.deepEqual(codes(warnings), [
         { code: 'type-unavailable', path: '/later/:slug', dropped: true },
+        {
+          code: 'parent-dropped',
+          path: '/later/:slug/:venue',
+          dropped: true,
+        },
       ]);
       assert.deepEqual(hostRoutingMapFromRoutes(routes), [
         { path: '/', id: `${REALM}home` },
       ]);
+      assert.deepEqual(
+        validate([fieldMatch('/posts/:slug', 'Post', { slug: ':slug' })])
+          .unavailableRoutePatterns,
+        [],
+        'a complete validation has none',
+      );
     },
   'validateHostRoutes: a link to a type the parent descends from counts':
     async (assert) => {

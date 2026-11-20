@@ -897,7 +897,13 @@ module(basename(import.meta.filename), function (hooks) {
       headers: Record<string, string> = {},
     ) {
       let { pathname, search } = new URL(url);
-      let req = request[method](`${pathname}${search}`).set('Accept', accept);
+      // Identity bodies: the answers compared here are for two different
+      // paths, whose bodies differ only in the path they repeat back. The
+      // same bodies compressed can differ in length by a byte, which would
+      // read as a different Content-Length.
+      let req = request[method](`${pathname}${search}`)
+        .set('Accept', accept)
+        .set('Accept-Encoding', 'identity');
       for (let [name, value] of Object.entries(headers)) {
         req = req.set(name, value);
       }

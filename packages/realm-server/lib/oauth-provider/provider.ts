@@ -56,6 +56,15 @@ import { boxelHosts } from './redirect-uris.ts';
 import { revocationHandler } from './revocation.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { registrationHandler } from './registration.ts';
+import {
+  DEFAULT_UNCONNECTED_CLIENT_CAP,
+  unconnectedClientCapWarning,
+} from './unconnected-client-cap.ts';
+import { longestOAuthProviderCleanupGapSeconds } from '../oauth-provider-cleanup-config.ts';
+import {
+  connectionsDisconnectHandler,
+  connectionsListHandler,
+} from './connections.ts';
 import { oauthResourceController } from './resource.ts';
 import {
   DEFAULT_TOKEN_LIMIT,
@@ -163,6 +172,11 @@ export interface OAuthProviderService {
     handleConsentDetails: Koa.Middleware;
     handleConsentDecision: Koa.Middleware;
   };
+  // Connected apps' list and disconnect, behind the same check as consent.
+  connectionsHandlers(deps: Pick<ConsentRouteDeps, 'realmSecretSeed'>): {
+    handleConnectionsList: Koa.Middleware;
+    handleConnectionsDisconnect: Koa.Middleware;
+  };
   // The issuer, and the resources it issues tokens for (`registry.ts`).
   issuer: string;
   registry: readonly OAuthResource[];
@@ -189,6 +203,7 @@ export function startOAuthProvider({
   appOrigins = [],
   publishedDomains = [],
   newClientLimit = DEFAULT_NEW_CLIENT_LIMIT,
+  unconnectedClientCap = DEFAULT_UNCONNECTED_CLIENT_CAP,
   authorizationLimit = DEFAULT_AUTHORIZATION_LIMIT,
   tokenLimit = DEFAULT_TOKEN_LIMIT,
   rateLimitStore = new DBRateLimitStore(dbAdapter),
@@ -202,6 +217,7 @@ export function startOAuthProvider({
   appOrigins?: readonly string[];
   publishedDomains?: readonly string[];
   newClientLimit?: NewClientLimit;
+  unconnectedClientCap?: number;
   authorizationLimit?: CallerLimit;
   tokenLimit?: TokenLimit;
   rateLimitStore?: RateLimitStore;
@@ -220,6 +236,14 @@ export function startOAuthProvider({
     throw new OAuthProviderConfigError(
       `the OAuth provider's issuer is the realm server's URL, which must have no path: ${serverURL.href}`,
     );
+  }
+  let capWarning = unconnectedClientCapWarning(
+    unconnectedClientCap,
+    newClientLimit,
+    longestOAuthProviderCleanupGapSeconds(),
+  );
+  if (capWarning) {
+    log.warn(capWarning);
   }
   let issuer = oauthIssuer(serverURL);
   let registry = buildRegistry(issuer, testOnlyResources);
@@ -316,11 +340,26 @@ export function startOAuthProvider({
         handleConsentDecision: consentDecisionHandler(deps),
       };
     },
+    connectionsHandlers: ({ realmSecretSeed }) => {
+      let deps = {
+        registry,
+        preRegistered,
+        dbAdapter,
+        secureOriginURL,
+        realmSecretSeed,
+      };
+      return {
+        handleConnectionsList: connectionsListHandler(deps),
+        handleConnectionsDisconnect: connectionsDisconnectHandler(deps),
+      };
+    },
     handleRegistration: registrationHandler({
       hosts,
       scopes,
+      dbAdapter,
       rateLimitStore,
       newClientLimit,
+      unconnectedClientCap,
     }),
   };
 }

@@ -250,9 +250,10 @@ _kill_tree_walk() {
 #
 # The patterns:
 #   - mise-tasks/services/* — the bash service entrypoints
-#   - node <entry>.ts (main / worker-manager / prerender/*-server) — the
-#     native-Node grandchildren that actually hold the realm/worker/prerender
-#     ports (4201/4202, 4210/4211, 4221/4222). They run with
+#   - node <entry>.ts (main / worker-manager / prerender/*-server /
+#     realm-historian/main) — the native-Node grandchildren that actually
+#     hold the realm/worker/prerender/realm-historian ports (4201/4202,
+#     4210/4211, 4221/4222, 4214). They run with
 #     cwd=packages/realm-server and relative argv, so $REPO_ROOT can't anchor
 #     the match; the entry names plus a distinctive flag keep it
 #     Boxel-specific, and the early-return guard above prevents
@@ -305,7 +306,7 @@ sweep_orphaned_services() {
     return 0
   fi
   REPO_ROOT_RE="$(printf '%s' "$REPO_ROOT" | sed -E 's/[][\\.*^$+?(){}|]/\\&/g')"
-  REALM_NODE_RE="(main\.ts .*--realmsRootPath|worker-manager\.ts .*--allPriorityCount|prerender/(prerender|manager)-server\.ts)"
+  REALM_NODE_RE="(main\.ts .*--realmsRootPath|worker-manager\.ts .*--allPriorityCount|prerender/(prerender|manager)-server\.ts|realm-historian/main\.ts .*--historyRoot)"
   VITE_SERVE_RE="scripts/vite-serve\.js"
   VITE_BIN_RE="${REPO_ROOT_RE}/packages/host/.*vite/bin/vite\.js"
   SAT_RE="${REPO_ROOT_RE}/.*node_modules/.*start-server-and-test/src/bin/start\.js"
@@ -361,8 +362,15 @@ PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/softw
 
 PHASE1_URLS="${PHASE1_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}"
 
-# Phase 2 readiness URL
+# Phase 2 readiness URLs
 NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
+PHASE2_URLS="${NODE_TEST_REALM_READY}"
+# realm-historian's health check answers GET only, hence `http-get`. In
+# environment mode its port is dynamic and published nowhere, so it isn't
+# waited on.
+if [ "${REALM_HISTORIAN_PORT:-0}" != 0 ]; then
+  PHASE2_URLS="${PHASE2_URLS}|http-get://localhost:${REALM_HISTORIAN_PORT}/health"
+fi
 
 # In environment mode, bootstrap infra before starting services. The cleanup
 # guardian loads this file only for its functions, after the stack has exited,

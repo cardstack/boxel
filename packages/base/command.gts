@@ -244,7 +244,8 @@ export class SwitchSubmodeResult extends CardDef {
 
 // What the secure window is opened for. Every field names something; none
 // carries a value. `mode` is `enter-key`, `replace-key`, `share-key`,
-// `swap-key`, `share-limits`, `connect`, `approve` or `review-changes`. A key is entered, the
+// `swap-key`, `share-limits`, `connect`, `approve`, `review-changes` or
+// `connected-apps`. A key is entered, the
 // key an operation sends is replaced, an account connected, or a card's
 // requests approved or their changes reviewed, for an operation on a card
 // instance (`cardId`) or on a card type (`module`, `name` and `realm`);
@@ -253,7 +254,8 @@ export class SwitchSubmodeResult extends CardDef {
 // card's others. A key is shared with `realm`; one of the user's
 // keys is swapped into the suspended share `share` of `realm`; the limits of
 // the share `share` of `realm` are changed by the owner of its key; and an
-// account may also be connected for `realm` alone.
+// account may also be connected for `realm` alone. `connected-apps` lists the
+// apps connected to the user's Boxel account and takes nothing else.
 // `reason` is one line the window shows as written by whoever opened it.
 export class OpenSecureWindowInput extends CardDef {
   @field mode = contains(StringField);

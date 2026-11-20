@@ -12,9 +12,11 @@ import './health-test.ts';
 import './historian-test.ts';
 import './recorder-test.ts';
 import './background-test.ts';
+import './sweeper-test.ts';
 import './maintenance-test.ts';
 import './reader-test.ts';
 import './process-test.ts';
 import './scan-test.ts';
+import './enable-test.ts';
 
 QUnit.start();

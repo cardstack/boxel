@@ -20,14 +20,16 @@ A secure session is a realm-server JWT with `user`, `sessionRoom` and
 `secureSession`: the id of a `secure_sessions` row. It works anywhere the
 user's session does, and additionally:
 
-| Gate                                 | Requires                                                                                                            |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `POST /_key-write-tickets`           | `isSecureSession`: the claim, naming a row of the token's user, not expired                                         |
-| `GET /_secure-session`               | The same; answers 204, or 401 `signed-out`                                                                          |
-| `POST /_secure-session/login-token`  | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user                    |
-| `POST /_secure-session/renewal`      | `Origin` the secure origin's, a `window` row that hasn't ended, and the row's current token, which may have expired |
-| `GET /_oauth-provider/consent/:uid`  | `Origin` the secure origin's, a session that verifies and isn't revoked, and a `window` row that hasn't ended       |
-| `POST /_oauth-provider/consent/:uid` | The same; records the flow's decision once and answers its ticket                                                   |
+| Gate                                           | Requires                                                                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `POST /_key-write-tickets`                     | `isSecureSession`: the claim, naming a row of the token's user, not expired                                         |
+| `GET /_secure-session`                         | The same; answers 204, or 401 `signed-out`                                                                          |
+| `POST /_secure-session/login-token`            | The same, and `Origin` the secure origin's; answers a single-use Matrix login token for the user                    |
+| `POST /_secure-session/renewal`                | `Origin` the secure origin's, a `window` row that hasn't ended, and the row's current token, which may have expired |
+| `GET /_oauth-provider/consent/:uid`            | `Origin` the secure origin's, a session that verifies and isn't revoked, and a `window` row that hasn't ended       |
+| `POST /_oauth-provider/consent/:uid`           | The same; records the flow's decision once and answers its ticket                                                   |
+| `GET /_oauth-provider/connections`             | The same; lists the user's live OAuth grants (Connected apps)                                                       |
+| `DELETE /_oauth-provider/connections/:grantId` | The same; ends one of the user's live grants (`user`), or answers 404 for any other ID                              |
 
 Minting also still requires the request's `Origin` to be the secure origin's
 or absent (the CLI). Only `createSecureSessionJWT` mints the claim (ADR 005
@@ -104,6 +106,17 @@ renewal finds the device gone.
 | Signing out of the app | `DELETE /_secure-sessions?client=window` | Every unended `window` row of the token's user                      |
 | Changing the password  | `POST /_secure-sessions/password-change` | Every unended row of the account, `cli` included, once it is set    |
 | Revoking all sessions  | —                                        | Every session of the user (`isSessionRevoked`)                      |
+
+Two of these also end the user's OAuth connections, the outside apps they
+let sign in to Boxel (ADR 021 §1.9). Revoking all sessions (the operator's
+`POST /_grafana-revoke-user-sessions`) ends every grant of the user with
+`sessions-revoked`. Changing the password does too, through its device sweep
+(below). Signing out, of a session or of the app, leaves them. One app's
+connection is ended through `DELETE /_oauth-provider/connections/:grantId`,
+which the secure origin's Connected apps page will call; the page isn't built
+yet, so for now an operator ends one by hand. An ended grant doesn't come back by
+itself; the app's next refresh fails and the user approves it again. The
+`oauth-provider` skill covers the grants.
 
 The app's sign-out (`MatrixService.logout()`) calls `DELETE
 /_secure-sessions?client=window` with the outgoing account's realm-server

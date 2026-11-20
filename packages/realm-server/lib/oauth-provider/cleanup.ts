@@ -2,11 +2,15 @@
 // more, from its four tables. The `oauth-provider-cleanup` job runs it once a
 // day for the whole environment (`cron-scheduler.ts`).
 //
-// Correctness never depends on it. A short-lived object or a token past its
-// expiry, and a grant that has ended or expired, already read as missing,
-// whether or not they have been deleted. The cleanup only saves space, with
-// one exception: a client registered by dynamic client registration that it
-// deletes is unknown from then on, and has to register again.
+// No read depends on it. A short-lived object or a token past its expiry, and
+// a grant that has ended or expired, already read as missing, whether or not
+// they have been deleted. A client registered by dynamic client registration
+// that it deletes is unknown from then on, and has to register again.
+//
+// Registration does depend on it. The provider refuses new registrations
+// while it holds as many never-connected clients as it keeps
+// (`unconnected-client-cap.ts`), and only this cleanup deletes them, so if it
+// stops running, registration is refused for everyone once they pile up.
 //
 // - Short-lived objects and tokens are deleted once they expire. Their stores
 //   delete expired rows too, but only while rows are being stored.
@@ -24,7 +28,7 @@ import type {
   DBAdapter,
   OAuthProviderCleanupResult,
 } from '@cardstack/runtime-common';
-import { RENEWING_GRANT_TTL_SECONDS } from './grants.ts';
+import { EXCHANGED_GRANT, RENEWING_GRANT_TTL_SECONDS } from './grants.ts';
 
 const DAY_SECONDS = 24 * 60 * 60;
 
@@ -107,11 +111,6 @@ async function deleteEndedGrants(dbAdapter: DBAdapter): Promise<number> {
   return rows.length;
 }
 
-// A grant connected its app once its code was exchanged (`exchanged_at`). A
-// grant with a token row counts too: a realm server still on the previous
-// revision stores tokens without marking the exchange. A grant the user
-// approved but whose code was never exchanged connected nothing.
-//
 // A client that never connected has no `last_connected_at`, and no exchanged
 // grant. A connected client's last connection ended when its latest
 // exchanged grant ended. Once its grants have been deleted (with their user,
@@ -133,11 +132,6 @@ async function deleteEndedGrants(dbAdapter: DBAdapter): Promise<number> {
 //   is a plain read, so a delete under way can pass it.
 // Either way one flow or connection is lost, for a client unused for 7 or 30
 // days, and the app registers again.
-const EXCHANGED_GRANT = `(
-  g.exchanged_at IS NOT NULL
-  OR EXISTS (SELECT 1 FROM oauth_provider_tokens AS t WHERE t.grant_id = g.id)
-)`;
-
 async function deleteUnusedDynamicClients(
   dbAdapter: DBAdapter,
 ): Promise<number> {

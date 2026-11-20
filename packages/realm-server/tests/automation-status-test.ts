@@ -1,9 +1,14 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
+import { randomUUID } from 'crypto';
 import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
 import jsonwebtoken from 'jsonwebtoken';
 import type { PgAdapter } from '@cardstack/postgres';
+import {
+  addToCreditsLedger,
+  getUserByMatrixUserId,
+} from '@cardstack/billing/billing-queries';
 import {
   insertPermissions,
   internalKeyFor,
@@ -23,6 +28,7 @@ import {
 } from '@cardstack/runtime-common/automation-declaration';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
 import type { AutomationStatusDocument } from '@cardstack/runtime-common/automation-status';
+import type { AutomationListDocument } from '@cardstack/runtime-common/automation-list';
 import { appendRunLog } from '@cardstack/runtime-common/automation-run-log';
 import {
   createAutomationRun,
@@ -39,11 +45,13 @@ import {
   closeServer,
   createJWT,
   createVirtualNetwork,
+  ensureTestUser,
   insertIncomingWebhookRow,
   insertUser,
   realmSecretSeed,
   setupPermissionedRealmCached,
   setupSecretsKeyring,
+  testPricing,
 } from './helpers/index.ts';
 import { setupCatalogTestSubset } from './helpers/catalog-test-subset.ts';
 
@@ -292,8 +300,10 @@ module(basename(import.meta.filename), function (hooks) {
             webhookDeliveriesStartRuns: false,
             lastRun: null,
             currentRun: null,
+            lastRunUsage: null,
           },
         },
+        meta: { directWriter: true },
       });
     });
 
@@ -377,7 +387,11 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(on.lastRun?.runId, runId);
 
       let reader = await statusOf(READER, ['read']);
-      assert.strictEqual(reader.status, 403, 'a reader never sees a run');
+      assert.deepEqual(
+        reader.body,
+        { data: null, meta: { directWriter: false } },
+        'a reader never sees a run',
+      );
     });
 
     test('a Preview never reads as the last run or the run in progress', async function (assert) {
@@ -696,15 +710,30 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(status.switchedOn ? status.payer : undefined, PAYER);
     });
 
-    test('a reader and an anonymous caller are refused', async function (assert) {
+    test('a reader is shown nothing, and an anonymous caller is refused', async function (assert) {
       await writeAutomation();
       await switchOn();
       let reader = await statusOf(READER, ['read']);
-      assert.strictEqual(reader.status, 403, 'a reader gets HTTP 403');
-      assert.notOk(
-        JSON.stringify(reader.body).includes(PAYER),
-        "a reader's refusal doesn't name the payer",
+      assert.strictEqual(
+        reader.status,
+        200,
+        "a reader isn't refused, since the host takes a refusal as an auth failure of what it renders",
       );
+      assert.deepEqual(
+        reader.body,
+        { data: null, meta: { directWriter: false } },
+        'a reader is told it is not a direct writer, and shown nothing',
+      );
+      // The route checks the `automation` parameter only for a direct
+      // writer, so a reader learns nothing from it either.
+      for (let automation of [null, `${ELSEWHERE}automations/nightly`]) {
+        let unchecked = await statusOf(READER, ['read'], automation);
+        assert.deepEqual(
+          [unchecked.status, unchecked.body],
+          [200, { data: null, meta: { directWriter: false } }],
+          `a reader naming ${automation ?? 'no card'} is told the same`,
+        );
+      }
 
       let anonymous = await request
         .get(
@@ -837,6 +866,7 @@ module(basename(import.meta.filename), function (hooks) {
           },
         ]);
         assert.deepEqual(response.body.meta, {
+          directWriter: true,
           webhookDeliveriesStartRuns: false,
         });
         assert.notOk(
@@ -845,16 +875,373 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
-      test('a reader and an anonymous caller are refused the list', async function (assert) {
+      test('a reader is listed no webhooks, and an anonymous caller is refused', async function (assert) {
         await insertPayerWebhook();
         let reader = await webhooksOf(READER, ['read']);
-        assert.strictEqual(reader.status, 403, 'a reader gets HTTP 403');
-        assert.notOk(
-          JSON.stringify(reader.body).includes('github-push'),
-          "a reader's refusal names no webhook",
+        assert.strictEqual(
+          reader.status,
+          200,
+          "a reader isn't refused, since the host takes a refusal as an auth failure of what it renders",
+        );
+        assert.deepEqual(
+          reader.body,
+          { data: [], meta: { directWriter: false } },
+          'a reader is told it is not a direct writer, and listed no webhook',
         );
         let anonymous = await request
           .get('/_automation-webhooks')
+          .set('Accept', SupportedMimeType.JSON);
+        assert.strictEqual(
+          anonymous.status,
+          401,
+          'an anonymous caller gets 401',
+        );
+      });
+    });
+
+    // The route the realm config's Automations entry and the automations
+    // console list a realm's automations from.
+    module("the realm's automation list", function () {
+      function list(user: string, permissions: ('read' | 'write')[]) {
+        return request
+          .get('/_automations')
+          .set('Accept', SupportedMimeType.JSON)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, user, permissions)}`,
+          );
+      }
+
+      async function entries(user = ADMIN) {
+        let response = await list(user, ['read', 'write']);
+        if (response.status !== 200) {
+          throw new Error(
+            `expected the list, got ${response.status}: ${response.text}`,
+          );
+        }
+        return (response.body as AutomationListDocument).data;
+      }
+
+      // A second automation card, never switched on, named `name`.
+      async function writeOtherAutomation(name: string) {
+        await testRealm.write(
+          'automations/weekly.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                ...attributes,
+                cardInfo: { name },
+                caps: { ...attributes.caps, monthlyCredits: 80 },
+                triggers: [attributes.triggers[1]],
+              },
+              relationships: {
+                script: { links: { self: '../scripts/nightly-import.js' } },
+              },
+              meta: { adoptsFrom: automationRef },
+            },
+          }),
+        );
+      }
+
+      // Charges the payer `credits` for a run of the automation, dated
+      // `seconds` (unix).
+      async function chargeRun(credits: number, seconds: number) {
+        let run = await createAutomationRun(dbAdapter, {
+          automationId: rri(automationURL()),
+          realm: ri(testRealm.url),
+          trigger: 'nightly',
+          slot: randomUUID(),
+          actsAs: PAYER,
+        });
+        await ensureTestUser(dbAdapter as PgAdapter, PAYER);
+        let { id: userId } = (await getUserByMatrixUserId(dbAdapter, PAYER))!;
+        let chargeId = randomUUID();
+        await addToCreditsLedger(dbAdapter, {
+          userId,
+          creditAmount: -credits,
+          creditType: 'extra_credit_used',
+          subscriptionCycleId: null,
+          charge: {
+            kind: 'run',
+            realm: ri(testRealm.url),
+            runId: run.id,
+            pricingVersion: testPricing().version,
+          },
+          chargeId,
+        });
+        await query(dbAdapter, [
+          'UPDATE credits_ledger SET created_at =',
+          param(seconds),
+          'WHERE charge_id =',
+          param(chargeId),
+        ]);
+      }
+
+      test('a realm with no automations lists none', async function (assert) {
+        let response = await list(ADMIN, ['read', 'write']);
+        assert.strictEqual(response.status, 200, 'HTTP 200');
+        assert.strictEqual(response.headers['cache-control'], 'no-store');
+        assert.deepEqual(response.body, {
+          data: [],
+          meta: { directWriter: true },
+        });
+      });
+
+      test('every automation card is listed by name, switched on or not, with its triggers and monthly cap', async function (assert) {
+        await writeAutomation();
+        await writeOtherAutomation('A weekly digest');
+        let [weekly, nightly] = await entries();
+        assert.deepEqual(
+          [weekly.id, nightly.id],
+          [`${testRealm.url}automations/weekly`, automationURL()],
+          'in order of name',
+        );
+        assert.deepEqual(weekly.attributes, {
+          title: 'A weekly digest',
+          switchedOn: false,
+          state: null,
+          pauseReason: null,
+          triggers: [
+            {
+              label: 'hourly',
+              kind: 'cron',
+              expression: '0 * * * *',
+              timeZone: 'America/Chicago',
+            },
+          ],
+          nextRun: null,
+          payer: null,
+          viewerIsPayer: false,
+          monthlyCredits: 80,
+          spentThisMonth: 0,
+          lastResult: null,
+          lastFinishedAt: null,
+          currentRun: null,
+        });
+        assert.deepEqual(
+          nightly.attributes.triggers.map(({ label, kind }) => [label, kind]),
+          [
+            ['nightly', 'cron'],
+            ['hourly', 'cron'],
+            ['launch', 'once'],
+            ['push', 'webhook'],
+          ],
+          "each trigger the card declares, in the card's order",
+        );
+        assert.deepEqual(nightly.attributes.triggers[2], {
+          label: 'launch',
+          kind: 'once',
+          date: '2026-11-20',
+          time: '15:00',
+          timeZone: 'America/Chicago',
+        });
+        assert.deepEqual(nightly.attributes.triggers[3], {
+          label: 'push',
+          kind: 'webhook',
+          webhookPath: 'github-push',
+        });
+      });
+
+      test('a switched-on automation lists its state, next run, payer, the cap the payer agreed to and its spend this month', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        // This month's charges count; last month's don't.
+        await chargeRun(30, NOW - 60);
+        await chargeRun(12, NOW - 3_600);
+        await chargeRun(500, Date.UTC(2026, 9, 31, 23) / 1000);
+
+        let [nightly] = await entries(PAYER);
+        let status = (
+          (await statusOf(PAYER, ['read', 'write']))
+            .body as AutomationStatusDocument
+        ).data.attributes;
+        assert.true(nightly.attributes.switchedOn);
+        assert.strictEqual(nightly.attributes.state, 'active');
+        assert.strictEqual(
+          nightly.attributes.nextRun,
+          status.switchedOn ? status.nextRun : undefined,
+          "the row's next run, as the card's status reads it",
+        );
+        assert.strictEqual(nightly.attributes.payer, PAYER);
+        assert.true(nightly.attributes.viewerIsPayer);
+        assert.strictEqual(nightly.attributes.monthlyCredits, 500);
+        assert.strictEqual(nightly.attributes.spentThisMonth, 42);
+        assert.deepEqual(
+          status.switchedOn
+            ? [status.monthlyCredits, status.spentThisMonth]
+            : [],
+          [500, 42],
+          "the card's status reads the same cap and spend",
+        );
+      });
+
+      test('a paused, waiting or done automation lists that state, and a running one the milestone its run is in', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        let paused = await pauseAutomation(
+          dbAdapter,
+          { automationId: rri(automationURL()), user: ADMIN },
+          options(),
+        );
+        assert.true(paused.ok, 'the automation pauses');
+        let [entry] = await entries();
+        assert.deepEqual(
+          [entry.attributes.state, entry.attributes.pauseReason],
+          ['paused', 'requested'],
+        );
+
+        for (let state of ['waiting-for-credits', 'done', 'active']) {
+          await query(dbAdapter, [
+            `UPDATE automations SET pause_reason = NULL, paused_by = NULL, state =`,
+            param(state),
+            `WHERE automation_id =`,
+            param(automationURL()),
+          ]);
+          [entry] = await entries();
+          assert.deepEqual(
+            [entry.attributes.state, entry.attributes.pauseReason],
+            [state, null],
+            `lists as ${state}`,
+          );
+        }
+
+        let created = await createAutomationRun(dbAdapter, {
+          automationId: rri(automationURL()),
+          realm: ri(testRealm.url),
+          trigger: 'nightly',
+          slot: 'running-slot',
+          actsAs: PAYER,
+        });
+        await startAutomationRunAttempt(dbAdapter, created.id, 1);
+        let at = Date.parse('2026-11-10T18:00:00.000Z');
+        await appendRunLog(dbAdapter, created.id, [
+          {
+            at,
+            source: 'script',
+            kind: 'plan',
+            message: 'Plan: Import → Index',
+            data: { milestones: ['Import', 'Index'] },
+          },
+          {
+            at,
+            source: 'script',
+            kind: 'milestone',
+            message: 'Milestone: Import',
+            data: { name: 'Import' },
+          },
+          {
+            at,
+            source: 'script',
+            kind: 'count',
+            message: '3 of 9',
+            data: { done: 3, total: 9 },
+          },
+        ]);
+        [entry] = await entries();
+        assert.deepEqual(entry.attributes.currentRun, {
+          runId: created.id,
+          startedAt: entry.attributes.currentRun?.startedAt ?? null,
+          milestone: 'Import',
+          done: 3,
+          total: 9,
+        });
+        assert.ok(entry.attributes.currentRun?.startedAt, 'with its start');
+      });
+
+      test('an automation lists how its last run ended, switched on or not, and the status reads the same', async function (assert) {
+        await writeAutomation();
+        let run = await createAutomationRun(dbAdapter, {
+          automationId: rri(automationURL()),
+          realm: ri(testRealm.url),
+          trigger: 'manual',
+          slot: 'run-now-slot',
+          actsAs: ADMIN,
+        });
+        await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        await finishAutomationRun(dbAdapter, run.id, 1, {
+          state: 'error',
+          reason: 'script-error',
+          message: 'Error: the feed was empty',
+        });
+        let [entry] = await entries();
+        assert.false(entry.attributes.switchedOn);
+        assert.strictEqual(entry.attributes.lastResult, 'error');
+        assert.ok(entry.attributes.lastFinishedAt, 'with when it ended');
+
+        await switchOn();
+        [entry] = await entries();
+        assert.true(entry.attributes.switchedOn);
+        assert.strictEqual(
+          entry.attributes.lastResult,
+          'error',
+          'a switched-on automation lists its last run too',
+        );
+        let status = (
+          (await statusOf(ADMIN, ['read', 'write']))
+            .body as AutomationStatusDocument
+        ).data.attributes;
+        assert.deepEqual(
+          status.switchedOn ? [status.lastResult, status.lastFinishedAt] : [],
+          ['error', entry.attributes.lastFinishedAt],
+          "the card's status reads the same last run",
+        );
+      });
+
+      test('a direct writer who shares no realm grant with the payer learns that someone pays, not who', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await query(dbAdapter, [
+          `DELETE FROM realm_user_permissions WHERE username =`,
+          param(PAYER),
+          `AND realm_url =`,
+          param(testRealm.url),
+        ]);
+        let [entry] = await entries();
+        assert.deepEqual(
+          [entry.attributes.payer, entry.attributes.viewerIsPayer],
+          [null, false],
+        );
+      });
+
+      test('a switched-on automation whose card the index lacks is listed from its row', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        await setRuns('nightly', 4);
+        await query(dbAdapter, [
+          `UPDATE boxel_index SET is_deleted = TRUE WHERE url =`,
+          param(`${automationURL()}.json`),
+          `OR file_alias =`,
+          param(automationURL()),
+        ]);
+        let [entry] = await entries();
+        assert.strictEqual(entry.id, automationURL());
+        assert.strictEqual(entry.attributes.title, null);
+        assert.strictEqual(entry.attributes.state, 'active');
+        assert.true(
+          entry.attributes.triggers.some(
+            ({ label, kind }) => label === 'nightly' && kind === null,
+          ),
+          'each trigger the row has counted, by its label',
+        );
+      });
+
+      test('a reader is listed nothing, and an anonymous caller is refused', async function (assert) {
+        await writeAutomation();
+        await switchOn();
+        let reader = await list(READER, ['read']);
+        assert.strictEqual(
+          reader.status,
+          200,
+          "a reader isn't refused, since the host takes a refusal as an auth failure of what it renders",
+        );
+        assert.deepEqual(
+          reader.body,
+          { data: [], meta: { directWriter: false } },
+          'a reader is told it is not a direct writer, and listed nothing',
+        );
+        let anonymous = await request
+          .get('/_automations')
           .set('Accept', SupportedMimeType.JSON);
         assert.strictEqual(
           anonymous.status,
@@ -889,7 +1276,7 @@ module(basename(import.meta.filename), function (hooks) {
       },
     });
 
-    test('a writer the users grant admits is refused, since the grant names no one', async function (assert) {
+    test("a writer the users grant admits is shown no automation's status, since the grant names no one", async function (assert) {
       // The users row covers people with a Boxel account.
       await insertUser(usersDB, STRANGER, 'cus_stranger', null);
       let response = await usersRequest
@@ -903,7 +1290,51 @@ module(basename(import.meta.filename), function (hooks) {
           'Authorization',
           `Bearer ${createJWT(usersRealm, STRANGER, ['read', 'write'])}`,
         );
-      assert.strictEqual(response.status, 403, 'HTTP 403');
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      assert.deepEqual(
+        response.body,
+        { data: null, meta: { directWriter: false } },
+        'the grant names no one, so the writer is not a direct writer',
+      );
+    });
+
+    test('a writer the users grant admits is listed no webhooks', async function (assert) {
+      await ensureTestUser(usersDB, STRANGER);
+      await insertIncomingWebhookRow(usersDB, {
+        username: STRANGER,
+        webhookPath: 'users-grant-hook',
+        signingSecret: 'users-grant-secret',
+      });
+      let response = await usersRequest
+        .get('/_automation-webhooks')
+        .set('Accept', SupportedMimeType.JSON)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(usersRealm, STRANGER, ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      assert.deepEqual(
+        response.body,
+        { data: [], meta: { directWriter: false } },
+        'the grant names no one, so the writer is not a direct writer',
+      );
+    });
+
+    test('a writer the users grant admits is listed no automations', async function (assert) {
+      await ensureTestUser(usersDB, STRANGER);
+      let response = await usersRequest
+        .get('/_automations')
+        .set('Accept', SupportedMimeType.JSON)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(usersRealm, STRANGER, ['read', 'write'])}`,
+        );
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      assert.deepEqual(
+        response.body,
+        { data: [], meta: { directWriter: false } },
+        'the grant names no one, so the writer is not a direct writer',
+      );
     });
   });
 
@@ -963,8 +1394,13 @@ module(basename(import.meta.filename), function (hooks) {
         : request;
     }
 
-    test('an anonymous reader is refused', async function (assert) {
-      assert.strictEqual((await status()).status, 403);
+    test('an anonymous reader is shown nothing', async function (assert) {
+      let response = await status();
+      assert.strictEqual(response.status, 200, 'HTTP 200');
+      assert.deepEqual(response.body, {
+        data: null,
+        meta: { directWriter: false },
+      });
     });
 
     test("a direct writer's revoked session asks as no one", async function (assert) {
@@ -975,10 +1411,10 @@ module(basename(import.meta.filename), function (hooks) {
         'the session answers before it is revoked',
       );
       await revokeUserSessions(publicDB, ADMIN);
-      assert.strictEqual(
-        (await status(`Bearer ${session}`)).status,
-        403,
-        'the revoked session is refused',
+      assert.deepEqual(
+        (await status(`Bearer ${session}`)).body,
+        { data: null, meta: { directWriter: false } },
+        'the revoked session asks as no one, and is shown nothing',
       );
     });
   });

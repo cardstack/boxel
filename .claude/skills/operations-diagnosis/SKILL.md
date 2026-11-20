@@ -161,7 +161,7 @@ The fault line is plain text, so its filter needs no unwrap. `--no-follow` retur
 The fields that answer "why" (cost fields are `policy-performance`'s):
 
 - `outcome` — `allow`, `deny`, `error`, or `pending` (trap 5).
-- `reason` — `granted`; `pending`; a refusal before any predicate ran: `non-grantable` (the operation is declared `nonGrantable`, or is an explain or a validate), `query-lane` (a query, which only the search lane grants), `authorization-infrastructure` (the realm's policy card or config card, or any policy card), `unmatchable-target` (a card whose index row is an error row, a type for anything but `create`, a file for anything but `readSource`, or stored bytes no rule could type, such as a path that holds nothing or one the realm ignores), `no-grant` (no rule on the type has a grant for the operation, or the realm names no policy at all), `reads-actor` (a grant opens the operation to a caller who isn't signed in, but the operation as the target's type declares it reads `actor()`); `predicate` (every matching grant's predicate ran and none held); `target-missing` (no index row); `stored-card-refused` (under the lock: the card is gone, stored as another type, or stored as a policy card); `policy-unavailable` (the policy did not compile); `predicate-threw`; `gate-failed` (anything else that threw).
+- `reason` — `granted`; `pending`; a refusal before any predicate ran: `non-grantable` (the operation is declared `nonGrantable`, or is an explain or a validate), `query-lane` (a query, which only the search lane grants), `authorization-infrastructure` (the realm's policy card or config card, or any policy card), `unmatchable-target` (a card whose index row is an error row, a type for anything but `create`, a file for anything but `readSource`, or stored bytes no rule could type, such as a path that holds nothing or one the realm ignores, or a create whose card would land in a directory the realm ignores), `outside-paths` (grants name the operation, but none whose `paths` cover the target's path; with no read of the target when it's refused before matching), `no-grant` (no rule on the type has a grant for the operation, or the realm names no policy at all), `reads-actor` (a grant opens the operation to a caller who isn't signed in, but the operation as the target's type declares it reads `actor()`); `predicate` (every matching grant's predicate ran and none held); `target-missing` (no index row); `stored-card-refused` (under the lock: the card is gone, stored as another type, or stored as a policy card); `policy-unavailable` (the policy did not compile); `predicate-threw`; `gate-failed` (anything else that threw).
 - `rules` / `grants` — every rule matched on the target's type and every grant in them for the operation, comma-separated in policy order: what a denial was judged by. Empty `rules` means no rule governs the type; `rules` with empty `grants` means a rule governs it but grants nothing under that name.
 - `rule` / `grant` — the one that admitted the invocation; null on anything but an allow.
 - `tier` — `none` (no predicate ran), `stored` (the card's own source), `snapshot` (at least one read the index row).
@@ -193,6 +193,7 @@ None at that moment → trap 1: whatever refused them was not the policy. A 401,
 **Step 3 — read the reason against the status** (trap 2):
 
 - `deny` / `no-grant` — the policy grants nothing for that operation on that type. If `rules` is empty, no rule names the type or a type it descends from, or the realm names no policy.
+- `deny` / `outside-paths` — grants name the operation, but their `paths` don't cover the target. Compare the target's path with each grant's `paths` on the policy card; explain shows which grants it fell outside.
 - `deny` / `predicate` — the listed grants matched and their predicates didn't hold for this actor and card. _Why_ they didn't hold is explain's question, not the logs'.
 - `deny` / `non-grantable`, `authorization-infrastructure`, `query-lane`, `unmatchable-target` — refused by design whatever the policy holds. `unmatchable-target` on a card usually means its index row is an error row; `indexing-diagnostics` reads that.
 - `error` / `predicate-threw` — step 4.
@@ -228,7 +229,7 @@ sum by (realmURL, outcome, uncompilable) (count_over_time(<ops> | kind="policy-c
 {service="realm-server", env="$env"} |= "compiled with issues that leave part of it inactive" |= "realms.example.com/alice/"
 ```
 
-Whole-policy codes (path `(card)`): `policy-card-missing` (the pointer names a card the index doesn't hold), `policy-card-unloadable` (the index holds it only as an error, or its latest visit was withheld), `not-a-policy`, `invalid-rule` at the top level. Rule- and grant-level codes name a path like `rules[1].targetType` or `rules[1].grants[0].where`: `unresolved-type`, `invalid-grant`, `unknown-operation`, `grants-invalid-operation`, `grants-authorization-infrastructure`, `invalid-predicate`, `partial-match`, `policy-not-filterable`, `unsnapshotted-policy-read`. The full list with meanings is `PolicyIssueCode` in `card-operations/types.ts`. A grant left out for one of these admits nothing; the rest of the policy still applies.
+Whole-policy codes (path `(card)`): `policy-card-missing` (the pointer names a card the index doesn't hold), `policy-card-unloadable` (the index holds it only as an error, or its latest visit was withheld), `not-a-policy`, `invalid-rule` at the top level. Rule- and grant-level codes name a path like `rules[1].targetType` or `rules[1].grants[0].where`: `unresolved-type`, `invalid-grant`, `invalid-paths` (at `rules[1].grants[0].paths[2]`, a prefix the path specifier refuses), `unknown-operation`, `grants-invalid-operation`, `grants-authorization-infrastructure`, `invalid-predicate`, `partial-match`, `policy-not-filterable`, `unsnapshotted-policy-read`. The full list with meanings is `PolicyIssueCode` in `card-operations/types.ts`. A grant left out for one of these admits nothing; the rest of the policy still applies.
 
 **Step 3 — `policy-card-unloadable` after a healthy edit is usually a withheld visit.** When an index visit of the policy card fails with the failure kept off its row, the row reads as healthy but what it holds is an earlier visit's, so the card compiles to no rules and every declined caller gets a 500. Nothing else would visit it again, so the cache asks for a fresh visit itself the moment it reads such a row, and then at most once a minute while the cause lasts. Expect the policy back within about a minute of the cause clearing, plus however long the visit waits in the queue. A visit that fails outright logs `could not be indexed again after its latest visit was withheld`. If it stays unloadable, the card itself won't index: `indexing-diagnostics`.
 
@@ -461,12 +462,27 @@ The telemetry answers questions about traffic: who was refused, how often, under
 
 So: use the logs to find the realm, the actor, the operation, the grant path and the time; then hand off to the boxel-skills **`realm-policy-authoring`** skill, which covers calling explain and validate and reading their answers. Explain decisions show up on this channel with `hypothetical: true` — that is your own explain, not a user's traffic.
 
+## Calls from outside apps
+
+An outside app will call Boxel with an OAuth access token, not a session
+(the `realm-auth` skill). No production resource accepts one yet: tokens are
+issued for the MCP resource, and nothing serves `/mcp`. So a request carrying
+one today never reaches an operation, and writes nothing here. Once a
+resource does serve calls, its controller checks the token before any
+operation gate runs, so a call it refuses (401 `invalid_token`, 403
+`insufficient_scope`) still writes no line on this channel. Look for it on
+`boxel:oauth-provider`: `token refused: <reason>, resource …` or `token
+refused: insufficient scope, …`, plain-text lines found by their text (the
+`tail-logs` skill). The `oauth-provider` skill lists every line on that
+channel and how to trace an app's connection from registration to its calls.
+
 ## Related skills
 
 - **`policy-performance`** — what the policy costs: `evaluationMs`, `predicateMs`, compile durations, the before/after method, and asserting on these records in realm-server tests through their sinks.
 - **`realm-policy-authoring`** (boxel-skills) — explain and validate, for one actor and one card.
 - **`call-api`** — a `callApi` refused or answering unexpectedly: which stage refused it, and the `boxel:key-use` line each invocation writes.
 - **`realm-auth`** — a 401, or a 403 with no decision line: tokens, sessions, the ACL itself.
+- **`oauth-provider`** — an outside app's call refused, or its connection failing: the `boxel:oauth-provider` lines.
 - **`indexing-diagnostics`** — a policy card that won't index, or a target whose error row makes it unmatchable.
 - **`search-shape-diagnosis`** — the federated search's own line, including `incomplete`, for a search missing rows.
 - **`tail-logs`** / **`aws-access`** — reaching staging and production Loki.
