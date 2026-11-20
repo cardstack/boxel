@@ -61,6 +61,7 @@ import type { DefinitionLookup } from '@cardstack/runtime-common';
 import { zonedDateTimeToUnixSeconds } from '@cardstack/runtime-common/automation-schedule';
 import type { ChangedAutomation } from '@cardstack/runtime-common/automation-change-events';
 import {
+  admitAnyPayer,
   createVirtualNetwork,
   insertIncomingWebhookRow,
   setupDB,
@@ -436,7 +437,12 @@ module(basename(import.meta.filename), function () {
         );
         let resumed = await resumeAutomation(
           dbAdapter,
-          { automationId: AUTOMATION, user: ADMIN, declaration: declaration() },
+          {
+            automationId: AUTOMATION,
+            user: ADMIN,
+            declaration: declaration(),
+            admit: admitAnyPayer,
+          },
           options,
         );
         assert.true(resumed.ok);
@@ -770,6 +776,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: OWNER,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -1023,7 +1030,12 @@ module(basename(import.meta.filename), function () {
         );
         let resumed = await resumeAutomation(
           dbAdapter,
-          { automationId: AUTOMATION, user: ADMIN, declaration: other },
+          {
+            automationId: AUTOMATION,
+            user: ADMIN,
+            declaration: other,
+            admit: admitAnyPayer,
+          },
           options,
         );
         assert.deepEqual(resumed, { ok: false, reason: 'other-card' });
@@ -1056,6 +1068,7 @@ module(basename(import.meta.filename), function () {
               automationId: AUTOMATION,
               user: OUTSIDER,
               declaration: declaration(),
+              admit: admitAnyPayer,
             },
             options,
           ),
@@ -1229,6 +1242,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: ADMIN,
             declaration: declaration({ caps: lowered, batchedAI: true }),
+            admit: admitAnyPayer,
           },
           { ...options, now: later },
         );
@@ -1268,6 +1282,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: ADMIN,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -1291,10 +1306,143 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: READER,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
         assert.deepEqual(result, { ok: false, reason: 'not-a-direct-writer' });
+        let automation = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(automation?.state, 'paused');
+        assert.strictEqual(automation?.payer, OWNER);
+      });
+
+      test('a resume whose admission refuses its caller leaves the automation paused under its payer', async function (assert) {
+        await switchOn(OWNER);
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        let asked: [string, { at: number | null }][] = [];
+        let result = await resumeAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            user: ADMIN,
+            declaration: declaration(),
+            admit: async (payer, firstRun) => {
+              asked.push([payer, firstRun]);
+              return { reason: 'insufficient-credits', message: 'short' };
+            },
+          },
+          options,
+        );
+        assert.deepEqual(result, {
+          ok: false,
+          reason: 'not-admitted',
+          refusal: { reason: 'insufficient-credits', message: 'short' },
+        });
+        assert.deepEqual(
+          asked,
+          [[ADMIN, { at: NEXT_DAILY }]],
+          'admission is asked once, of the caller, with when the first run after the resume would start',
+        );
+        let automation = await getAutomation(dbAdapter, AUTOMATION);
+        assert.strictEqual(automation?.state, 'paused');
+        assert.strictEqual(automation?.payer, OWNER);
+      });
+
+      test('admission is not asked of a resume refused for another reason', async function (assert) {
+        await switchOn(OWNER);
+        let asked = 0;
+        let admit = async () => {
+          asked++;
+          return undefined;
+        };
+        let active = await resumeAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            user: ADMIN,
+            declaration: declaration(),
+            admit,
+          },
+          options,
+        );
+        assert.strictEqual((active as { reason: string }).reason, 'not-paused');
+        await pauseAutomation(
+          dbAdapter,
+          { automationId: AUTOMATION, user: OWNER },
+          options,
+        );
+        let reader = await resumeAutomation(
+          dbAdapter,
+          {
+            automationId: AUTOMATION,
+            user: READER,
+            declaration: declaration(),
+            admit,
+          },
+          options,
+        );
+        assert.strictEqual(
+          (reader as { reason: string }).reason,
+          'not-a-direct-writer',
+        );
+        assert.strictEqual(asked, 0);
+      });
+
+      test('a pause that commits after the resume read the automation as active still has the caller admitted', async function (assert) {
+        await switchOn(OWNER);
+        // The pause commits just before the resume's transaction starts: the
+        // resume read the automation as active, so it didn't admit anyone.
+        let pausedFirst = false;
+        let racing = new Proxy(dbAdapter, {
+          get(target, property) {
+            if (property === 'withTransaction') {
+              return async (...args: unknown[]) => {
+                if (!pausedFirst) {
+                  pausedFirst = true;
+                  await pauseAutomation(
+                    dbAdapter,
+                    { automationId: AUTOMATION, user: OWNER },
+                    options,
+                  );
+                }
+                return (target.withTransaction as Function).apply(target, args);
+              };
+            }
+            let value = Reflect.get(target, property, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        }) as DBAdapter;
+        let asked = 0;
+        let result = await resumeAutomation(
+          racing,
+          {
+            automationId: AUTOMATION,
+            user: ADMIN,
+            declaration: declaration(),
+            admit: async () => {
+              asked++;
+              return { reason: 'binding-not-approved', message: 'no key' };
+            },
+          },
+          options,
+        );
+        assert.true(
+          pausedFirst,
+          'the pause committed between the read and the transaction',
+        );
+        assert.strictEqual(
+          asked,
+          1,
+          'the caller was admitted once the transaction found it paused',
+        );
+        assert.strictEqual(
+          (result as { reason: string }).reason,
+          'not-admitted',
+        );
         let automation = await getAutomation(dbAdapter, AUTOMATION);
         assert.strictEqual(automation?.state, 'paused');
         assert.strictEqual(automation?.payer, OWNER);
@@ -1480,6 +1628,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: OWNER,
             declaration: declaration({ caps: raised }),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -1555,6 +1704,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: ADMIN,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -1577,6 +1727,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: OWNER,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -2271,6 +2422,7 @@ module(basename(import.meta.filename), function () {
               automationId: AUTOMATION,
               user: OWNER,
               declaration: webhookDeclaration(OUTSIDER_WEBHOOK),
+              admit: admitAnyPayer,
             },
             options,
           );
@@ -2286,6 +2438,7 @@ module(basename(import.meta.filename), function () {
               automationId: AUTOMATION,
               user: ADMIN,
               declaration: webhookDeclaration(ADMIN_WEBHOOK),
+              admit: admitAnyPayer,
             },
             options,
           );
@@ -2479,6 +2632,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: ADMIN,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -2570,6 +2724,7 @@ module(basename(import.meta.filename), function () {
             automationId: AUTOMATION,
             user: ADMIN,
             declaration: declaration(),
+            admit: admitAnyPayer,
           },
           options,
         );
@@ -2620,6 +2775,7 @@ module(basename(import.meta.filename), function () {
               automationId: AUTOMATION,
               user: OWNER,
               declaration: declaration(),
+              admit: admitAnyPayer,
             },
             options,
           ),

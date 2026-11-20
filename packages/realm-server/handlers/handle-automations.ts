@@ -45,6 +45,7 @@ import {
   type RunLogLevel,
 } from '@cardstack/runtime-common/automation-run-log';
 import { switchOnNotices } from '@cardstack/runtime-common/automation-webhooks';
+import { admitPayer } from '@cardstack/runtime-common/automation-admission';
 import type { AutomationDeclaration } from '@cardstack/runtime-common/automation-declaration';
 import {
   AUTOMATION_ESTIMATE_RESOURCE_TYPE,
@@ -75,6 +76,8 @@ import {
   estimateAutomationCost,
   type AutomationEstimate,
 } from '../lib/automation-estimate.ts';
+import { buildAdmitPayerSpending } from '../lib/automation-spending.ts';
+import { findOrMountRealm } from '../lib/realm-routing.ts';
 import { exactMeteredCredits } from '../lib/metered-charge.ts';
 import { currentPricing } from '../lib/pricing.ts';
 import {
@@ -473,6 +476,13 @@ async function answerChange(
         change.problems.map(({ message }) => message).join('; '),
       );
     }
+    if (change.reason === 'not-admitted') {
+      await sendJSON(ctxt, 422, {
+        errors: [change.refusal.message],
+        meta: { code: change.refusal.reason },
+      });
+      return;
+    }
     refuse(change.reason);
   }
   await sendJSON(ctxt, status, {
@@ -704,16 +714,51 @@ export function handleAutomationPause(args: CreateRoutesArgs): Handler {
 // `POST /_automation-resume`: resumes a paused automation, whatever paused
 // it. The caller becomes its payer, with a new snapshot of the card's caps,
 // so the body's `monthlyCredits` must be the card's monthly credit cap, as
-// at switch-on.
+// at switch-on. The caller is admitted as the payer first, as the
+// automation's next run would admit them (`admitPayer`): a refusal answers
+// 422 with the run's refusal code in `meta.code`, and the automation stays
+// paused.
 export function handleAutomationResume(args: CreateRoutesArgs): Handler {
   return automationHandler(async (ctxt) => {
     let { caller, realmURL, automationId, attributes } =
       await automationRequest(ctxt, args);
     let declaration = await declarationOf(args, automationId, realmURL);
     agreedMonthlyCap(attributes, declaration);
+    let admitSpending = buildAdmitPayerSpending({ dbAdapter: args.dbAdapter });
     let change = await resumeAutomation(
       args.dbAdapter,
-      { automationId, user: caller, declaration },
+      {
+        automationId,
+        user: caller,
+        declaration,
+        admit: (payer, firstRun) =>
+          admitPayer(
+            {
+              accountStanding: args.automationAccountStanding,
+              admitInRealm: async (payer) => {
+                // A realm no request has reached since this process started
+                // isn't mounted yet; mounting it is what serving its first
+                // request would do.
+                let realm = await findOrMountRealm(realmURL, args);
+                return realm?.url === realmURL.href
+                  ? await realm.admitAutomationPayer({ declaration, payer })
+                  : {
+                      reason: 'run-admission-unavailable',
+                      message: `${realmURL.href} isn't served here, so its automation's operations can't be checked`,
+                    };
+              },
+              admitSpending: (payer) =>
+                admitSpending({
+                  payer,
+                  automationId,
+                  caps: declaration.caps,
+                  batchedAI: declaration.batchedAI,
+                  firstRunAt: firstRun.at,
+                }),
+            },
+            payer,
+          ),
+      },
       actorOptions(args),
     );
     await answerChange(ctxt, args, change, caller, 200, {

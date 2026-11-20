@@ -57,6 +57,7 @@ import {
   type AutomationProblem,
   type AutomationTriggerDeclaration,
 } from './automation-declaration.ts';
+import type { AdmissionRefusal } from './automation-admission.ts';
 import {
   reportAutomationChanges,
   type ChangedAutomation,
@@ -83,7 +84,10 @@ import {
   unusableWebhookProblems,
 } from './automation-webhooks.ts';
 import type { DBAdapter } from './db.ts';
-import { isDirectWriterLocked } from './db-queries/realm-permission-queries.ts';
+import {
+  isDirectWriter,
+  isDirectWriterLocked,
+} from './db-queries/realm-permission-queries.ts';
 import {
   dbAdapterQuerier,
   param,
@@ -276,6 +280,9 @@ export interface AutomationActorOptions extends AutomationReporters {
 // - `unusable-webhook`: switch-on or resume found a webhook trigger naming a
 //   webhook the realm can't use (see `automation-webhooks.ts`). `problems`
 //   says which trigger and why.
+// - `not-admitted`: resume's admission of the caller as the payer refused
+//   them (see `admitPayer`). `refusal` holds the code their first run would
+//   end with, and why.
 export type AutomationRefusal =
   | {
       ok: false;
@@ -295,6 +302,11 @@ export type AutomationRefusal =
       ok: false;
       reason: 'unusable-webhook';
       problems: AutomationProblem[];
+    }
+  | {
+      ok: false;
+      reason: 'not-admitted';
+      refusal: AdmissionRefusal;
     };
 
 export type AutomationChange =
@@ -428,16 +440,33 @@ export async function pauseAutomation(
 // while it was paused don't run. Each trigger keeps its run count. Its
 // failure streak starts afresh: runs created before the resume no longer
 // count toward a pause for repeated failures.
+//
+// `admit` admits `user` as the payer the way a run of the automation's
+// triggers would be admitted (`admitPayer`), told when the automation's
+// first run after the resume could start (`firstRunAfterResume`), and its
+// refusal leaves the automation paused (`not-admitted`). It asks the Matrix
+// server and the realm, so it is asked before the change's transaction, of a
+// resume that would otherwise go ahead: the automation is paused, `user`
+// directly writes its realm and the realm isn't archived. Any other resume
+// gets the refusal that says why, from the checks the transaction makes
+// again under its locks. A transaction that finds the automation paused
+// though `admit` wasn't asked (a pause committed after the first read) asks
+// it then and starts again, so a resume never makes a payer it didn't admit.
 export async function resumeAutomation(
   dbAdapter: DBAdapter,
   {
     automationId,
     user,
     declaration,
+    admit,
   }: {
     automationId: RealmResourceIdentifier;
     user: string;
     declaration: AutomationDeclaration;
+    admit: (
+      payer: string,
+      firstRun: { at: number | null },
+    ) => Promise<AdmissionRefusal | undefined>;
   },
   options: AutomationActorOptions,
 ): Promise<AutomationChange> {
@@ -445,6 +474,99 @@ export async function resumeAutomation(
     return { ok: false, reason: 'other-card' };
   }
   let now = options.now ?? currentUnixSeconds();
+  let admitted = false;
+  // The first attempt admits only a resume that would go ahead as read. When
+  // its transaction answers `admit-first`, the second attempt admits whatever
+  // it reads, so its transaction never answers `admit-first`: either `admit`
+  // ran, or the row is gone and the transaction answers `missing`.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let current = await getAutomation(dbAdapter, automationId);
+    if (
+      current &&
+      (attempt > 0 || (await wouldResume(dbAdapter, current, user, options)))
+    ) {
+      let refusal = await admit(user, {
+        at: firstRunAfterResume(declaration, current.triggerRuns, now),
+      });
+      if (refusal) {
+        return { ok: false, reason: 'not-admitted', refusal };
+      }
+      admitted = true;
+    }
+    let change = await resumeInTransaction(dbAdapter, {
+      automationId,
+      user,
+      declaration,
+      admitted,
+      now,
+      options,
+    });
+    if (change !== 'admit-first') {
+      return change;
+    }
+  }
+  throw new Error(
+    `resuming ${automationId} asked for admission after its second attempt, which admits whatever it reads`,
+  );
+}
+
+// Whether a resume of `current` by `user` would go ahead, read outside any
+// transaction: it is paused, `user` directly writes its realm, and the realm
+// isn't archived.
+async function wouldResume(
+  dbAdapter: DBAdapter,
+  current: AutomationRow,
+  user: string,
+  options: AutomationActorOptions,
+): Promise<boolean> {
+  return (
+    current.state === 'paused' &&
+    (await isDirectWriter(
+      dbAdapter,
+      options.virtualNetwork.toURL(current.realm),
+      user,
+      options.matrixServerName,
+    )) &&
+    !(await isArchived(dbAdapterQuerier(dbAdapter), current.realm, options))
+  );
+}
+
+// When the first run after resuming at `now` could start, in unix seconds:
+// `now` for an automation with a webhook trigger, which a delivery can fire
+// at any time; otherwise the schedule's next run; null when nothing would
+// run.
+export function firstRunAfterResume(
+  declaration: AutomationDeclaration,
+  triggerRuns: Record<string, AutomationTriggerRuns>,
+  now: number,
+): number | null {
+  if (declaration.triggers.some((trigger) => trigger.kind === 'webhook')) {
+    return now;
+  }
+  let { nextRun } = startSchedule(declaration, now, triggerRuns);
+  return nextRun === null ? null : Math.floor(Date.parse(nextRun) / 1000);
+}
+
+// The resume's transaction. Answers `admit-first` when it finds the
+// automation ready to resume but its payer wasn't admitted.
+async function resumeInTransaction(
+  dbAdapter: DBAdapter,
+  {
+    automationId,
+    user,
+    declaration,
+    admitted,
+    now,
+    options,
+  }: {
+    automationId: RealmResourceIdentifier;
+    user: string;
+    declaration: AutomationDeclaration;
+    admitted: boolean;
+    now: number;
+    options: AutomationActorOptions;
+  },
+): Promise<AutomationChange | 'admit-first'> {
   return await withChanges(dbAdapter, options, async (txQuery, changes) => {
     // The realm's automation lock comes before the permission and automation
     // rows, the order archiving's pause takes it in (see
@@ -480,6 +602,9 @@ export async function resumeAutomation(
     }
     if (problems.length) {
       return { ok: false, reason: 'unusable-webhook', problems };
+    }
+    if (!admitted) {
+      return 'admit-first';
     }
     let schedule = startSchedule(
       declaration,
