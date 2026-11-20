@@ -1,5 +1,7 @@
-// An automation's runs, newest first, for the realm's direct writers: what
-// the Automation card's isolated view lists under Runs. Each run says what
+// An automation's runs that have started, newest first, a page at a time,
+// for the realm's direct writers: what the Automation card's isolated view
+// lists under Runs. A run still waiting in the queue for its first attempt
+// isn't listed until an attempt starts the run. Each run says what
 // started it (one of the card's triggers, a Preview or a Run now), where it
 // is, how it ended and why, who canceled it, and which of its trigger's later
 // slots joined it while it waited (the slots the tick reports as skipped).
@@ -17,6 +19,10 @@ import {
   automationRunStep,
   type AutomationRunStep,
 } from './automation-run-events.ts';
+import {
+  readRunMilestones,
+  type RunMilestones,
+} from './automation-run-milestones.ts';
 import {
   listAutomationRuns,
   type AutomationRun,
@@ -37,7 +43,7 @@ import type { VirtualNetwork } from './virtual-network.ts';
 
 export const AUTOMATION_RUN_LIST_PATH = '_automation-runs';
 export const AUTOMATION_RUN_LIST_AUTOMATION_PARAM = 'automation';
-export const AUTOMATION_RUN_LIST_BEFORE_PARAM = 'before';
+export const AUTOMATION_RUN_LIST_PAGE_PARAM = 'page';
 export const AUTOMATION_RUN_LIST_LIMIT_PARAM = 'limit';
 export const AUTOMATION_RUN_LIST_ITEM_TYPE = 'automation-run-item';
 
@@ -67,10 +73,11 @@ export interface AutomationRunItemAttributes {
   // instant as an ISO time, or a webhook delivery's id. Null for a Preview or
   // Run now.
   slot: string | null;
+  // `running`, or how the run ended. A listed run has started, so it is
+  // never `pending`.
   state: AutomationRunState;
   // The step the run is in, or for an ended run the step it got to: an error
-  // at `admission` is a run that never started its script. Null for a run no
-  // attempt has started.
+  // at `admission` is a run that never started its script.
   step: AutomationRunStep | null;
   // For an error, its code (`script-error`, `timed-out`, `hit-a-cap`, an
   // admission refusal such as `insufficient-credits`, …). For a run a pause
@@ -97,6 +104,10 @@ export interface AutomationRunItemAttributes {
   finishedAt: string | null;
   // The trigger's later slots that joined the run, in the order they joined.
   joined: AutomationRunJoinedSlot[];
+  // The milestones the run's script planned and reached: the one a running
+  // run is in, and the one a failed run failed in (see
+  // `automation-run-milestones.ts`).
+  milestones: RunMilestones | null;
 }
 
 export interface AutomationRunItem {
@@ -110,9 +121,12 @@ export interface AutomationRunListDocument {
   data: AutomationRunItem[];
   meta: {
     directWriter: true;
-    // The `before` for the next page of older runs, or null when this page
-    // holds the oldest.
-    next: string | null;
+    // The page this is, counting from 1; how many pages the runs fill (at
+    // least 1, so an automation with no runs has one empty page); and how
+    // many runs there are in all.
+    page: number;
+    pages: number;
+    total: number;
   };
 }
 
@@ -131,7 +145,7 @@ export type AutomationRunListAnswer =
   | { status: 400; message: string };
 
 // Answers `GET <realm>/_automation-runs?automation=<card URL>` for `viewer`,
-// one page at a time (`before`, `limit`). Only a direct writer of the realm is
+// one page at a time (`page`, `limit`). Only a direct writer of the realm is
 // listed the runs, as only a direct writer is shown the automation's row. Any
 // other caller the realm ACL lets read is told it isn't a direct writer and
 // listed nothing, rather than refused, for the reason `answerAutomationStatus`
@@ -145,7 +159,7 @@ export async function answerAutomationRunList({
   virtualNetwork,
   viewer,
   automation,
-  before,
+  page,
   limit,
 }: {
   dbAdapter: DBAdapter;
@@ -156,7 +170,7 @@ export async function answerAutomationRunList({
   viewer: string | undefined;
   // The query parameters.
   automation: string | null;
-  before: string | null;
+  page: string | null;
   limit: string | null;
 }): Promise<AutomationRunListAnswer> {
   if (
@@ -195,11 +209,22 @@ export async function answerAutomationRunList({
     }
   }
 
+  let pageNumber = 1;
+  if (page !== null) {
+    pageNumber = Number(page);
+    if (!/^\d+$/.test(page) || pageNumber < 1) {
+      return {
+        status: 400,
+        message: `"${AUTOMATION_RUN_LIST_PAGE_PARAM}" must be a whole number from 1`,
+      };
+    }
+  }
+
   let querier = dbAdapterQuerier(dbAdapter);
-  let { runs, more } = await listAutomationRuns(
+  let { runs, total } = await listAutomationRuns(
     querier,
     virtualNetwork.unresolveURL(url.href),
-    { before: before ?? undefined, limit: pageSize },
+    { page: pageNumber, limit: pageSize },
   );
   let joined = await readJoinedSlots(
     querier,
@@ -238,6 +263,7 @@ export async function answerAutomationRunList({
           startedAt: run.startedAt,
           finishedAt: run.finishedAt,
           joined: joined.get(run.id) ?? [],
+          milestones: (await readRunMilestones(dbAdapter, run.id)) ?? null,
         },
       }),
     ),
@@ -248,7 +274,9 @@ export async function answerAutomationRunList({
       data,
       meta: {
         directWriter: true,
-        next: more && runs.length > 0 ? runs[runs.length - 1].id : null,
+        page: pageNumber,
+        pages: Math.max(1, Math.ceil(total / pageSize)),
+        total,
       },
     },
   };

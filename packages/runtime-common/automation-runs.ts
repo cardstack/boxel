@@ -248,45 +248,34 @@ export async function getAutomationRun(
   return row ? runFromRow(row) : undefined;
 }
 
-// One page of an automation's runs, newest first: the order they were made
-// in, Previews and Run nows included. `before` names the run the page starts
-// after, the last run of the page before; a run that isn't the automation's
-// starts the list from the newest. `more` says older runs follow the page.
-// The read walks the runs' `(automation_id, created_at)` index, so a page
-// costs the same however long the automation's history.
+// One page of an automation's runs that have started, newest first by when
+// they were made, Previews and Run nows included: a run still waiting in the
+// queue for its first attempt isn't one of them. `page` counts from 1, and
+// `total` is how many such runs the automation has, so a reader can tell how
+// many pages there are. Both reads walk the runs' `(automation_id,
+// created_at)` index.
 export async function listAutomationRuns(
   querier: Querier,
   automationId: RealmResourceIdentifier,
-  { before, limit }: { before?: string; limit: number },
-): Promise<{ runs: AutomationRun[]; more: boolean }> {
-  let after: Expression = [];
-  if (before && isAutomationRunId(before)) {
-    let [cursor] = (await querier([
-      'SELECT created_at FROM automation_runs WHERE id =',
-      param(before),
-      'AND automation_id =',
-      param(automationId),
-    ] as Expression)) as { created_at: PgPrimitive }[];
-    if (cursor) {
-      after = [
-        'AND (created_at, id) < (',
-        param(cursor.created_at),
-        ',',
-        param(before),
-        ')',
-      ] as Expression;
-    }
-  }
+  { page, limit }: { page: number; limit: number },
+): Promise<{ runs: AutomationRun[]; total: number }> {
+  let [counted] = (await querier([
+    'SELECT count(*) AS total FROM automation_runs WHERE automation_id =',
+    param(automationId),
+    'AND started_at IS NOT NULL',
+  ] as Expression)) as { total: PgPrimitive }[];
   let rows = (await querier([
     'SELECT * FROM automation_runs WHERE automation_id =',
     param(automationId),
-    ...after,
+    'AND started_at IS NOT NULL',
     'ORDER BY created_at DESC, id DESC LIMIT',
-    param(limit + 1),
+    param(limit),
+    'OFFSET',
+    param((page - 1) * limit),
   ] as Expression)) as Record<string, PgPrimitive>[];
   return {
-    runs: rows.slice(0, limit).map(runFromRow),
-    more: rows.length > limit,
+    runs: rows.map(runFromRow),
+    total: Number(counted?.total ?? 0),
   };
 }
 

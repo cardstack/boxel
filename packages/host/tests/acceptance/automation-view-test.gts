@@ -1279,13 +1279,19 @@ module('Acceptance | automation view', function (hooks) {
   // an in-browser test realm can't answer: each test says what the route
   // lists.
   module('runs', function (hooks) {
-    let pages: Map<string, { runs: Run[]; next: string | null }>;
+    // What the route lists on each page, by page number, and how many runs
+    // there are in all.
+    let pages: Map<string, Run[]>;
+    let total: number;
+    let pageCount: number;
     let directWriter: boolean;
     let runsAsked: URL[];
 
     hooks.beforeEach(function () {
       directWriter = true;
-      pages = new Map([['', { runs: [], next: null }]]);
+      pages = new Map([['1', []]]);
+      total = 0;
+      pageCount = 1;
       runsAsked = [];
       getService('network').virtualNetwork.mount(
         async (request: Request) => {
@@ -1294,20 +1300,23 @@ module('Acceptance | automation view', function (hooks) {
             return null;
           }
           runsAsked.push(url);
-          let page = pages.get(url.searchParams.get('before') ?? '') ?? {
-            runs: [],
-            next: null,
-          };
+          let page = url.searchParams.get('page') ?? '1';
+          let runs = pages.get(page) ?? [];
           return new Response(
             JSON.stringify(
               directWriter
                 ? {
-                    data: page.runs.map(({ id, ...attributes }) => ({
+                    data: runs.map(({ id, ...attributes }) => ({
                       type: 'automation-run-item',
                       id,
                       attributes,
                     })),
-                    meta: { directWriter: true, next: page.next },
+                    meta: {
+                      directWriter: true,
+                      page: Number(page),
+                      pages: pageCount,
+                      total,
+                    },
                   }
                 : { data: [], meta: { directWriter: false } },
             ),
@@ -1318,14 +1327,21 @@ module('Acceptance | automation view', function (hooks) {
       );
     });
 
-    function list(runs: Run[], next: string | null = null) {
-      pages.set('', { runs, next });
+    function list(runs: Run[]) {
+      pages.set('1', runs);
+      total = runs.length;
+      pageCount = 1;
     }
 
+    // The Runs section starts closed, so a card with many runs doesn't bury
+    // the rest of the card; this opens the section.
     async function openRuns() {
       await openIsolated();
       await waitFor('[data-test-automation-runs-section]', { timeout: 10000 });
       await settled();
+      await click(
+        '[data-test-automation-runs-section] [data-test-pretui-section-toggle]',
+      );
     }
 
     function runText(id: string) {
@@ -1354,7 +1370,7 @@ module('Acceptance | automation view', function (hooks) {
 
     test('each run shows its state and what started the run, newest first', async function (assert) {
       list([
-        run('waiting', { state: 'pending', step: null, trigger: 'hourly' }),
+        run('hourly', { state: 'running', trigger: 'hourly' }),
         run('running', {
           state: 'running',
           step: 'script',
@@ -1378,7 +1394,7 @@ module('Acceptance | automation view', function (hooks) {
           ],
         ),
         [
-          ['waiting', 'Waiting'],
+          ['hourly', 'Running'],
           ['running', 'Running'],
           ['preview', 'Complete'],
           ['by-hand', 'Complete'],
@@ -1386,9 +1402,9 @@ module('Acceptance | automation view', function (hooks) {
           ['done', 'Complete'],
         ],
       );
-      assert.ok(runText('waiting').includes('hourly'), 'the trigger by label');
+      assert.ok(runText('hourly').includes('hourly'), 'the trigger by label');
       assert.ok(
-        runText('waiting').includes('The schedule started the run for'),
+        runText('hourly').includes('The schedule started the run for'),
         'a schedule names the slot the run is for',
       );
       assert.ok(
@@ -1574,11 +1590,10 @@ module('Acceptance | automation view', function (hooks) {
       );
     });
 
-    test('a slot that joined a waiting run shows as skipped, naming the run the slot joined', async function (assert) {
+    test('a slot that joined a run before the run started shows as skipped, naming the run the slot joined', async function (assert) {
       list([
-        run('waiting', {
-          state: 'pending',
-          step: null,
+        run('joined', {
+          state: 'running',
           trigger: 'hourly',
           slot: '2030-01-01T09:00:00.000Z',
           joined: [
@@ -1607,7 +1622,7 @@ module('Acceptance | automation view', function (hooks) {
       );
       assert.deepEqual(
         rows,
-        ['2030-01-01T11:00:00.000Z', '2030-01-01T10:00:00.000Z', 'waiting'],
+        ['2030-01-01T11:00:00.000Z', '2030-01-01T10:00:00.000Z', 'joined'],
         'each skipped slot sits above the run the slot joined, newest first',
       );
       let skipped =
@@ -1615,9 +1630,11 @@ module('Acceptance | automation view', function (hooks) {
       assert.ok(skipped.includes('Skipped'), skipped);
       assert.ok(skipped.includes('Boxel started no run for the'), skipped);
       assert.ok(
-        skipped.includes(
-          'the slot joined the hourly run still waiting to start for',
-        ),
+        skipped.includes('because the hourly run for'),
+        'names the run the slot joined',
+      );
+      assert.ok(
+        skipped.includes('hadn’t started yet. The slot joined that run.'),
         skipped,
       );
     });
@@ -1651,20 +1668,131 @@ module('Acceptance | automation view', function (hooks) {
         .hasAttribute('data-test-automation-run-state', 'Running');
     });
 
-    test('older runs load a page at a time', async function (assert) {
-      list([run('newer')], 'newer');
-      pages.set('newer', { runs: [run('older')], next: null });
-      await openRuns();
-      assert.dom('[data-test-automation-run="older"]').doesNotExist();
-      await click('[data-test-automation-runs-older]');
-      await waitFor('[data-test-automation-run="older"]', { timeout: 10000 });
+    test('the section starts closed, with how many runs the automation has', async function (assert) {
+      list([run('first'), run('second')]);
+      await openIsolated();
+      await waitFor('[data-test-automation-runs-section]', { timeout: 10000 });
+      await settled();
       assert
-        .dom('[data-test-automation-runs-older]')
-        .doesNotExist('the oldest page offers no more');
+        .dom(
+          '[data-test-automation-runs-section] [data-test-pretui-section-toggle]',
+        )
+        .hasAttribute('aria-expanded', 'false');
+      assert
+        .dom('[data-test-automation-runs-section]')
+        .includesText('2 runs', 'the count shows while the section is closed');
+      assert.dom('[data-test-automation-run]').doesNotExist();
+    });
+
+    test('runs come a page at a time, and the pager shows another page', async function (assert) {
+      pages.set('1', [run('newer')]);
+      pages.set('2', [run('older')]);
+      total = 21;
+      pageCount = 2;
+      await openRuns();
+      assert.dom('[data-test-automation-run="newer"]').exists();
+      assert.dom('[data-test-automation-run="older"]').doesNotExist();
       assert.strictEqual(
-        runsAsked[runsAsked.length - 1].searchParams.get('before'),
-        'newer',
+        runsAsked[0]?.searchParams.get('limit'),
+        '20',
+        'the view asks for one page of 20 runs',
       );
+      await click('[data-test-automation-runs-pager] [aria-label="Page 2"]');
+      await waitFor('[data-test-automation-run="older"]', { timeout: 10000 });
+      assert.dom('[data-test-automation-run="newer"]').doesNotExist();
+      assert.strictEqual(
+        runsAsked[runsAsked.length - 1].searchParams.get('page'),
+        '2',
+      );
+    });
+
+    test("each run shows how far the run got through the script's milestones, and opens to the timeline", async function (assert) {
+      let plan = ['Fetch open issues', 'Group by label', 'Write digest'];
+      let milestone = (name: string, extra: Record<string, unknown> = {}) => ({
+        name,
+        planned: true,
+        startedAt: '2030-01-01T08:30:10.000Z',
+        endedAt: null,
+        ms: 1000,
+        ...extra,
+      });
+      list([
+        run('running', {
+          state: 'running',
+          finishedAt: null,
+          milestones: {
+            runId: 'running',
+            state: 'running',
+            startedAt: '2030-01-01T08:30:05.000Z',
+            finishedAt: null,
+            plan,
+            milestones: [
+              milestone('Fetch open issues', {
+                endedAt: '2030-01-01T08:30:11.000Z',
+              }),
+              milestone('Group by label', { done: 40, total: 120 }),
+            ],
+            current: 'Group by label',
+            ahead: ['Write digest'],
+            failedIn: null,
+            dropped: 0,
+          },
+        }),
+        run('failed', {
+          state: 'error',
+          errorReason: 'script-error',
+          errorMessage: 'TypeError: labels is undefined',
+          scriptLine: 12,
+          milestones: {
+            runId: 'failed',
+            state: 'error',
+            startedAt: '2030-01-01T08:30:05.000Z',
+            finishedAt: '2030-01-01T08:31:00.000Z',
+            plan,
+            milestones: [
+              milestone('Fetch open issues', {
+                endedAt: '2030-01-01T08:30:11.000Z',
+              }),
+              milestone('Group by label', {
+                endedAt: '2030-01-01T08:31:00.000Z',
+              }),
+            ],
+            current: null,
+            ahead: ['Write digest'],
+            failedIn: 'Group by label',
+            dropped: 0,
+          },
+        }),
+        run('none'),
+      ]);
+      await openRuns();
+      assert
+        .dom(
+          '[data-test-automation-run="running"] [data-test-automation-run-progress]',
+        )
+        .hasText('Milestone 2 of 3: Group by label (40 of 120)');
+      assert
+        .dom(
+          '[data-test-automation-run="failed"] [data-test-automation-run-progress]',
+        )
+        .hasText('Failed in milestone 2 of 3: Group by label');
+      assert
+        .dom(
+          '[data-test-automation-run="none"] [data-test-automation-run-progress]',
+        )
+        .doesNotExist('a run whose script reported no milestones says nothing');
+
+      assert.dom('[data-test-automation-run-milestones]').doesNotExist();
+      await click('[aria-label="Expand nightly run, Running"]');
+      await waitFor('[data-test-automation-run-milestones]', {
+        timeout: 10000,
+      });
+      assert
+        .dom('[data-test-automation-run-milestones]')
+        .includesText('Fetch open issues');
+      assert
+        .dom('[data-test-automation-run-milestones]')
+        .includesText('Write digest');
     });
   });
 });

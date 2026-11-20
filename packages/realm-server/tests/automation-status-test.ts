@@ -943,12 +943,14 @@ module(basename(import.meta.filename), function (hooks) {
       }
 
       // A run of the automation, made `minutesAgo` minutes before the others
-      // so the list's order is the order the test made them in.
+      // so the list's order is the order the test made them in, and started
+      // by its first attempt unless `waiting`, since the list holds only runs
+      // that have started.
       async function made(
         trigger: string,
         slot: string,
         minutesAgo: number,
-        extra: { dryRun?: boolean; actsAs?: string } = {},
+        extra: { dryRun?: boolean; actsAs?: string; waiting?: boolean } = {},
       ) {
         let run = await createAutomationRun(dbAdapter, {
           automationId: rri(automationURL()),
@@ -964,6 +966,9 @@ module(basename(import.meta.filename), function (hooks) {
           `) WHERE id =`,
           param(run.id),
         ]);
+        if (!extra.waiting) {
+          await startAutomationRunAttempt(dbAdapter, run.id, 1);
+        }
         return run;
       }
 
@@ -988,20 +993,19 @@ module(basename(import.meta.filename), function (hooks) {
         assert.strictEqual(response.headers['cache-control'], 'no-store');
         assert.deepEqual(response.body, {
           data: [],
-          meta: { directWriter: true, next: null },
+          meta: { directWriter: true, page: 1, pages: 1, total: 0 },
         });
       });
 
-      test('each run lists what started it, its state and step, newest first', async function (assert) {
+      test('each run that has started lists what started it, its state and step, newest first', async function (assert) {
         await writeAutomation();
         let scheduled = await made('nightly', '2026-11-10T08:30:00.000Z', 40);
         await ended(scheduled.id, { state: 'complete' });
         let preview = await made('manual', randomUUID(), 30, { dryRun: true });
         await ended(preview.id, { state: 'complete' });
         let runNow = await made('manual', randomUUID(), 20);
-        await startAutomationRunAttempt(dbAdapter, runNow.id, 1);
         await recordAutomationRunAdmitted(dbAdapter, runNow.id, 1);
-        let pending = await made('hourly', '2026-11-10T18:00:00.000Z', 10);
+        await made('hourly', '2026-11-10T18:00:00.000Z', 10, { waiting: true });
 
         let { data, meta } = await listed();
         assert.deepEqual(
@@ -1014,14 +1018,6 @@ module(basename(import.meta.filename), function (hooks) {
             a.step,
           ]),
           [
-            [
-              pending.id,
-              'trigger',
-              'hourly',
-              '2026-11-10T18:00:00.000Z',
-              'pending',
-              null,
-            ],
             [runNow.id, 'run-now', null, null, 'running', 'script'],
             [preview.id, 'preview', null, null, 'complete', 'script'],
             [
@@ -1033,10 +1029,14 @@ module(basename(import.meta.filename), function (hooks) {
               'script',
             ],
           ],
-          "a click's slot means nothing to a person, so a Preview and a Run now list none",
+          "a run waiting for its first attempt isn't listed, and a click's slot means nothing to a person, so a Preview and a Run now list none",
         );
-        assert.strictEqual(meta.next, null, 'one page holds them all');
-        let complete = data[3].attributes;
+        assert.deepEqual(
+          [meta.page, meta.pages, meta.total],
+          [1, 1, 3],
+          'one page holds them all',
+        );
+        let complete = data[2].attributes;
         assert.ok(complete.startedAt, 'with when it started');
         assert.ok(complete.finishedAt, 'and when it ended');
         assert.strictEqual(complete.errorReason, null);
@@ -1112,6 +1112,62 @@ module(basename(import.meta.filename), function (hooks) {
             ],
           ],
           'a run admission refused stays at the admission step: its script never started',
+        );
+      });
+
+      test('each run lists its milestones: the one a running run is in, and the one a failed run failed in', async function (assert) {
+        await writeAutomation();
+        let plan = ['Fetch open issues', 'Group by label', 'Write digest'];
+        async function reached(runId: string, names: string[]) {
+          let at = Date.parse('2026-11-10T18:00:00.000Z');
+          await appendRunLog(dbAdapter, runId, [
+            {
+              at,
+              source: 'script',
+              kind: 'plan',
+              message: `Plan: ${plan.join(' → ')}`,
+              data: { milestones: plan },
+            },
+            ...names.map((name, index) => ({
+              at: at + index * 1_000,
+              source: 'script' as const,
+              kind: 'milestone' as const,
+              message: `Milestone: ${name}`,
+              data: { name },
+            })),
+          ]);
+        }
+        let failed = await made('nightly', '2026-11-09T08:30:00.000Z', 20);
+        await recordAutomationRunAdmitted(dbAdapter, failed.id, 1);
+        await reached(failed.id, ['Fetch open issues', 'Group by label']);
+        await finishAutomationRun(dbAdapter, failed.id, 1, {
+          state: 'error',
+          reason: 'script-error',
+          message: scriptErrorText('TypeError: labels is undefined', 12),
+        });
+        let running = await made('nightly', '2026-11-10T08:30:00.000Z', 10);
+        await recordAutomationRunAdmitted(dbAdapter, running.id, 1);
+        await reached(running.id, ['Fetch open issues']);
+
+        let { data } = await listed();
+        let [inProgress, ended] = data.map(({ attributes }) => attributes);
+        assert.deepEqual(
+          [
+            inProgress.milestones?.current,
+            inProgress.milestones?.milestones.map(({ name }) => name),
+            inProgress.milestones?.ahead,
+          ],
+          [
+            'Fetch open issues',
+            ['Fetch open issues'],
+            ['Group by label', 'Write digest'],
+          ],
+          'a running run is in its last milestone, with the rest of the plan ahead',
+        );
+        assert.deepEqual(
+          [ended.milestones?.failedIn, ended.milestones?.ahead],
+          ['Group by label', ['Write digest']],
+          'a failed run names the milestone it failed in',
         );
       });
 
@@ -1193,7 +1249,7 @@ module(basename(import.meta.filename), function (hooks) {
         );
       });
 
-      test('a slot that joined a pending run lists under that run', async function (assert) {
+      test('a slot that joined a run still waiting to start lists under that run once the run starts', async function (assert) {
         await writeAutomation();
         await switchOn();
         let declaration = await indexedDeclaration();
@@ -1217,13 +1273,23 @@ module(basename(import.meta.filename), function (hooks) {
         } finally {
           await publisher.destroy();
         }
+        assert.deepEqual(
+          (await listed()).data,
+          [],
+          'the run still waits for its first attempt, so the list holds nothing yet',
+        );
+        let [waiting] = await query(dbAdapter, [
+          'SELECT id FROM automation_runs WHERE automation_id =',
+          param(automationURL()),
+        ]);
+        await startAutomationRunAttempt(dbAdapter, String(waiting.id), 1);
 
         let { data } = await listed();
         assert.strictEqual(data.length, 1, 'the joined slot started no run');
         let [run] = data;
         assert.deepEqual(
           [run.attributes.trigger, run.attributes.slot, run.attributes.state],
-          ['hourly', '2026-11-10T19:00:00.000Z', 'pending'],
+          ['hourly', '2026-11-10T19:00:00.000Z', 'running'],
         );
         assert.deepEqual(
           run.attributes.joined.map(({ trigger, slot }) => ({ trigger, slot })),
@@ -1233,43 +1299,39 @@ module(basename(import.meta.filename), function (hooks) {
         assert.ok(run.attributes.joined[0].at, 'with when it joined');
       });
 
-      test('the runs come a page at a time, each page naming the next', async function (assert) {
+      test('the runs come a page at a time, with how many pages they fill', async function (assert) {
         await writeAutomation();
         let runs = [];
         for (let i = 0; i < 5; i++) {
           runs.push(await made('manual', randomUUID(), 50 - i * 10));
         }
         let newestFirst = runs.map((run) => run.id).reverse();
-        let first = await listed(ADMIN, { limit: '2' });
-        assert.deepEqual(
-          first.data.map(({ id }) => id),
-          newestFirst.slice(0, 2),
-        );
-        assert.strictEqual(first.meta.next, newestFirst[1]);
-        let second = await listed(ADMIN, {
-          limit: '2',
-          before: first.meta.next!,
-        });
-        assert.deepEqual(
-          second.data.map(({ id }) => id),
-          newestFirst.slice(2, 4),
-        );
-        let last = await listed(ADMIN, {
-          limit: '2',
-          before: second.meta.next!,
-        });
-        assert.deepEqual(
-          last.data.map(({ id }) => id),
-          newestFirst.slice(4),
-        );
-        assert.strictEqual(last.meta.next, null, 'the last page names none');
+        for (let [page, ids] of [
+          ['1', newestFirst.slice(0, 2)],
+          ['2', newestFirst.slice(2, 4)],
+          ['3', newestFirst.slice(4)],
+          ['4', []],
+        ] as const) {
+          let { data, meta } = await listed(ADMIN, { limit: '2', page });
+          assert.deepEqual(
+            [data.map(({ id }) => id), meta.page, meta.pages, meta.total],
+            [ids, Number(page), 3, 5],
+            `page ${page}`,
+          );
+        }
 
-        for (let limit of ['0', '101', 'ten']) {
+        for (let [name, value] of [
+          ['limit', '0'],
+          ['limit', '101'],
+          ['limit', 'ten'],
+          ['page', '0'],
+          ['page', 'two'],
+        ]) {
           let response = await runsOf(ADMIN, ['read', 'write'], {
             automation: automationURL(),
-            limit,
+            [name]: value,
           });
-          assert.strictEqual(response.status, 400, `a limit of ${limit}`);
+          assert.strictEqual(response.status, 400, `a ${name} of ${value}`);
         }
       });
 
@@ -1283,17 +1345,9 @@ module(basename(import.meta.filename), function (hooks) {
           slot: randomUUID(),
           actsAs: ADMIN,
         });
-        let { data } = await listed();
-        assert.deepEqual(
-          data.map(({ id }) => id),
-          [own.id],
-        );
-        let { data: afterOther } = await listed(ADMIN, { before: other.id });
-        assert.deepEqual(
-          afterOther.map(({ id }) => id),
-          [own.id],
-          "a cursor naming another automation's run starts from the newest",
-        );
+        await startAutomationRunAttempt(dbAdapter, other.id, 1);
+        let { data, meta } = await listed();
+        assert.deepEqual([data.map(({ id }) => id), meta.total], [[own.id], 1]);
       });
 
       test('a reader is listed nothing, a malformed request is refused, and an anonymous caller gets 401', async function (assert) {

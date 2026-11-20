@@ -4024,8 +4024,8 @@ export class Realm {
         this.automationList.bind(this),
         ACL_ONLY,
       )
-      // An automation's runs, newest first, a page at a time, for the
-      // Automation card's isolated view. Answered on the realm ACL; a caller
+      // An automation's runs that have started, newest first, a page at a
+      // time, for the Automation card's isolated view. Answered on the realm ACL; a caller
       // who isn't a direct writer is listed nothing (see
       // `automation-run-list.ts`).
       .get(
@@ -21107,7 +21107,7 @@ export class Realm {
     let {
       answerAutomationRunList,
       AUTOMATION_RUN_LIST_AUTOMATION_PARAM,
-      AUTOMATION_RUN_LIST_BEFORE_PARAM,
+      AUTOMATION_RUN_LIST_PAGE_PARAM,
       AUTOMATION_RUN_LIST_LIMIT_PARAM,
     } = await import('./automation-run-list.ts');
     let params = new URL(request.url).searchParams;
@@ -21118,7 +21118,7 @@ export class Realm {
       virtualNetwork: this.#virtualNetwork,
       viewer: await this.#statusViewer(requestContext),
       automation: params.get(AUTOMATION_RUN_LIST_AUTOMATION_PARAM),
-      before: params.get(AUTOMATION_RUN_LIST_BEFORE_PARAM),
+      page: params.get(AUTOMATION_RUN_LIST_PAGE_PARAM),
       limit: params.get(AUTOMATION_RUN_LIST_LIMIT_PARAM),
     });
     if (answer.status !== 200) {
