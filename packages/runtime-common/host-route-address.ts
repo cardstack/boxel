@@ -22,10 +22,11 @@
 //   canonical field-match route on that type, or one it descends from,
 //   whose `match` fields are exactly the given ones. No card is checked
 //   against the route's `where`.
-// - A route name and arguments (`{{hrefTo "people" person}}`): that route,
-//   whatever its kind. Each argument fills the next dynamic level: a card or
-//   id fills its level as above, and a string or number fills one segment
-//   as is (it is a value, never an id).
+// - A route name, given as a named argument, and arguments
+//   (`{{hrefTo route="people" person}}`): that route, whatever its kind.
+//   Each argument fills the next dynamic level: a card fills its level as
+//   above, and a string or number fills one segment as is (it is a value,
+//   never an id).
 //
 // The address is the path from the realm root (`/posts/hello-world`), each
 // segment encoded with the canonical encoding of `fillRoutePathPattern`.
@@ -184,6 +185,14 @@ const UNDECIDED: ReadonlySet<HostRouteNoAddressReason> = new Set([
   'parent-not-loaded',
   'where-unresolvable',
 ]);
+
+// Whether a reason means the lookup is waiting for a load: the same input
+// may get an address once the card or value is loaded.
+export function isUndecidedHostRouteReason(
+  reason: HostRouteNoAddressReason,
+): boolean {
+  return UNDECIDED.has(reason);
+}
 
 // A route's chain from the top level down to the route.
 export type HostRouteChain = readonly HostRoute[];

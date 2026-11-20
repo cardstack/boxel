@@ -20806,10 +20806,31 @@ export class Realm {
   // keep addresses worked out without that route, so the answer is a 503 that
   // says when to ask again. The validation's warnings are for the server's
   // log, not for a reader.
+  //
+  // `servedAtHostURL` says whether a host URL serves this realm, which today
+  // is a published realm. Only there does a routed address open, so a
+  // reader that gives links their addresses uses the routes only when it is
+  // true. A render that asks about a realm no host URL serves gets that
+  // answer alone: its links keep card URLs, and reading the routes can wait
+  // on a render.
   private async hostRoutes(
-    _request: Request,
+    request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    let servedAtHostURL = this.#published;
+    let headers = {
+      'content-type': SupportedMimeType.JSON,
+      // The tree changes when the realm is indexed, and carries no
+      // validator a cache could ask with.
+      'cache-control': 'no-store',
+    };
+    if (!servedAtHostURL && isDuringPrerenderRequest(request)) {
+      return createResponse({
+        body: JSON.stringify({ servedAtHostURL }),
+        init: { headers },
+        requestContext,
+      });
+    }
     let { routes, complete } = await this.getHostRoutes();
     if (!complete) {
       return systemError({
@@ -20820,15 +20841,8 @@ export class Realm {
       });
     }
     return createResponse({
-      body: JSON.stringify({ routes }),
-      init: {
-        headers: {
-          'content-type': SupportedMimeType.JSON,
-          // The tree changes when the realm is indexed, and carries no
-          // validator a cache could ask with.
-          'cache-control': 'no-store',
-        },
-      },
+      body: JSON.stringify({ routes, servedAtHostURL }),
+      init: { headers },
       requestContext,
     });
   }
