@@ -97,8 +97,11 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   // The visible title asks "Where to?"; the name says what is published.
+  // With Host Mode v2 nothing is published: the dialog lists the realm's
+  // host URLs.
   private get publishDialogLabel() {
-    return `Publish ${this.realm.info(this.realmURL).name}`;
+    let name = this.realm.info(this.realmURL).name;
+    return this.isHostModeV2 ? `Host URLs for ${name}` : `Publish ${name}`;
   }
 
   // The publish button, which becomes a "Publishing…" button while a publish

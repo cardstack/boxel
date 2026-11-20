@@ -175,6 +175,9 @@ module('Acceptance | host URL manager', function (hooks) {
   test('the publish dialog is the host URL manager, with no progress or "last published" UI', async function (assert) {
     await openManager();
     assert.dom('[data-test-publish-realm-modal]').doesNotExist();
+    assert
+      .dom('[data-test-host-url-manager]')
+      .hasAttribute('aria-label', 'Host URLs for Test Workspace B');
     assert.dom('[data-test-publish-button]').doesNotExist();
     assert.dom('[data-test-last-published-at]').doesNotExist();
     assert.dom('[data-test-publish-progress-status]').doesNotExist();
@@ -269,7 +272,7 @@ module('Acceptance | host URL manager', function (hooks) {
       .doesNotExist();
   });
 
-  test('to unmount the canonical host URL with one other, makes that one canonical and says so', async function (assert) {
+  test('to unmount the canonical host URL with one other, says that one becomes canonical, then makes it so', async function (assert) {
     let shopURL = `https://shop.${siteDomain}/`;
     fake.hostURLs = [
       { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
@@ -277,11 +280,25 @@ module('Acceptance | host URL manager', function (hooks) {
     ];
     await openManager();
     await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
-    await waitFor(`[data-test-host-url="${SPACE_URL}"]`, { count: 0 });
 
     assert
-      .dom('[data-test-replace-canonical]')
+      .dom(`[data-test-confirm-unmount="${SPACE_URL}"]`)
+      .isFocused('focus moves to the confirmation');
+    assert
+      .dom('[data-test-new-canonical]')
       .doesNotExist('there is no choice to ask about');
+    assert
+      .dom('[data-test-new-canonical-note]')
+      .containsText(`shop.${siteDomain}/ becomes the canonical host URL`);
+    assert.deepEqual(
+      fake.calls,
+      [],
+      'nothing changes before the user confirms',
+    );
+
+    await click('[data-test-confirm-unmount-button]');
+    await waitFor(`[data-test-host-url="${SPACE_URL}"]`, { count: 0 });
+
     assert.deepEqual(fake.calls, ['canonical b', 'unmount a']);
     assert
       .dom(`[data-test-host-url="${shopURL}"] [data-test-host-url-canonical]`)
@@ -305,6 +322,10 @@ module('Acceptance | host URL manager', function (hooks) {
     ];
     await openManager();
     await click(`[data-test-unmount-host-url="${shopURL}"]`);
+    assert
+      .dom(`[data-test-confirm-unmount="${shopURL}"]`)
+      .containsText('anyone can claim it');
+    await click('[data-test-confirm-unmount-button]');
     await waitFor(`[data-test-host-url="${shopURL}"]`, { count: 0 });
 
     assert.deepEqual(fake.calls, ['canonical b', 'unmount a']);
@@ -326,36 +347,133 @@ module('Acceptance | host URL manager', function (hooks) {
     await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
 
     assert
-      .dom(`[data-test-host-url="${SPACE_URL}"] [data-test-replace-canonical]`)
+      .dom(`[data-test-host-url="${SPACE_URL}"] [data-test-confirm-unmount]`)
       .exists('the chooser opens in the row being unmounted');
     assert.deepEqual(fake.calls, [], 'nothing is removed yet');
-    assert.dom('[data-test-confirm-replace-canonical]').isDisabled();
+    assert.dom('[data-test-confirm-unmount-button]').isDisabled();
 
     assert
       .dom('[data-test-new-canonical] input[type="radio"]')
       .exists({ count: 2 }, 'only the other host URLs are offered');
     await click('[data-test-new-canonical] input[value="b"]');
-    await click('[data-test-confirm-replace-canonical]');
+    await click('[data-test-confirm-unmount-button]');
     await waitFor(`[data-test-host-url="${SPACE_URL}"]`, { count: 0 });
 
     assert.deepEqual(fake.calls, ['canonical b', 'unmount a']);
     assert
       .dom(`[data-test-host-url="${shopURL}"] [data-test-host-url-canonical]`)
       .exists();
-    assert.dom('[data-test-replace-canonical]').doesNotExist();
+    assert.dom('[data-test-confirm-unmount]').doesNotExist();
     assert
       .dom('[data-test-host-url-toaster] [data-test-pretui-toast-item]')
-      .doesNotExist('no toast when the user chose');
+      .containsText(`shop.${siteDomain}/ is now the canonical host URL`);
   });
 
-  test('unmounts the only host URL at once', async function (assert) {
+  test('unmounts the only host URL once the user confirms it', async function (assert) {
     fake.hostURLs = [
       { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
     ];
     await openManager();
     await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
+    assert
+      .dom(`[data-test-confirm-unmount="${SPACE_URL}"]`)
+      .containsText('stops serving this realm at once');
+    assert.dom('[data-test-new-canonical-note]').doesNotExist();
+    await click('[data-test-confirm-unmount-button]');
     await waitFor('[data-test-no-host-urls]');
     assert.deepEqual(fake.calls, ['unmount a']);
+  });
+
+  test('a cancelled unmount changes nothing', async function (assert) {
+    fake.hostURLs = [
+      { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
+    ];
+    await openManager();
+    await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
+    await click('[data-test-cancel-unmount]');
+    assert.dom('[data-test-confirm-unmount]').doesNotExist();
+    assert.dom(`[data-test-host-url="${SPACE_URL}"]`).exists();
+    assert.deepEqual(fake.calls, []);
+  });
+
+  test('when the unmount is refused after the canonical host URL moved, says both', async function (assert) {
+    let shopURL = `https://shop.${siteDomain}/`;
+    fake.hostURLs = [
+      { id: 'a', url: SPACE_URL, kind: 'boxel-space', isCanonical: true },
+      { id: 'b', url: shopURL, kind: 'site-name', isCanonical: false },
+    ];
+    let realmServer = getService('realm-server') as any;
+    let fakeUnmount = realmServer.unmountHostURL;
+    realmServer.unmountHostURL = async () => {
+      throw new HostURLRequestError(422, 'The host URL could not be unmounted');
+    };
+    try {
+      await openManager();
+      await click(`[data-test-unmount-host-url="${SPACE_URL}"]`);
+      await click('[data-test-confirm-unmount-button]');
+      await waitFor(`[data-test-host-url-error="${SPACE_URL}"]`);
+
+      assert.dom('[data-test-confirm-unmount]').doesNotExist();
+      assert
+        .dom(`[data-test-host-url-error="${SPACE_URL}"]`)
+        .hasText('The host URL could not be unmounted');
+      assert
+        .dom(`[data-test-host-url="${shopURL}"] [data-test-host-url-canonical]`)
+        .exists('the list shows the canonical host URL moved');
+      assert
+        .dom('[data-test-host-url-toaster] [data-test-pretui-toast-item]')
+        .containsText('which was not unmounted');
+    } finally {
+      realmServer.unmountHostURL = fakeUnmount;
+    }
+  });
+
+  test('each opening of the dialog checks the home page again', async function (assert) {
+    fake.homePage = {
+      homeCardId: `${testRealmURL}index`,
+      homeCardReadable: false,
+      homeCardStatus: 401,
+      unloadableModules: [],
+      anonymousCanView: false,
+    };
+    await openManager();
+    assert.dom('[data-test-home-page-not-viewable]').exists();
+
+    fake.homePage = VIEWABLE;
+    await click('[data-test-host-url-manager] [data-test-close-modal]');
+    await click('[data-test-publish-realm-button]');
+    await waitFor('[data-test-home-page-viewable]');
+    assert.dom('[data-test-mount="boxel-space"]').isNotDisabled();
+  });
+
+  test('a failed load offers a retry', async function (assert) {
+    let realmServer = getService('realm-server') as any;
+    let fakeList = realmServer.listHostURLs;
+    realmServer.listHostURLs = async () => {
+      throw new Error('The realm server is unreachable');
+    };
+    try {
+      await visitOperatorMode({
+        submode: 'host',
+        trail: [`${testRealmURL}Person/1.json`],
+      });
+      await click('[data-test-publish-realm-button]');
+      await waitFor('[data-test-host-urls-load-error]');
+      assert
+        .dom('[data-test-host-urls-load-error]')
+        .containsText('The realm server is unreachable');
+      assert
+        .dom('[data-test-no-host-urls]')
+        .doesNotExist('nothing is shown as if the load had worked');
+
+      realmServer.listHostURLs = fakeList;
+      await click('[data-test-host-urls-retry]');
+      await waitFor('[data-test-visibility-note]');
+      assert.dom('[data-test-host-urls-load-error]').doesNotExist();
+      assert.dom('[data-test-no-host-urls]').exists();
+    } finally {
+      realmServer.listHostURLs = fakeList;
+    }
   });
 
   test('when visitors who are not signed in can’t view the home page, says why and blocks mounting until a grant', async function (assert) {
@@ -427,6 +545,12 @@ module('Acceptance | host URL manager', function (hooks) {
         .exists({ count: 1 }, 'the only action is Remove');
 
       await click(`[data-test-remove-v1-site="${v1URL}"]`);
+      assert.deepEqual(
+        fake.calls,
+        [],
+        'nothing is removed before the user confirms',
+      );
+      await click('[data-test-confirm-remove-v1-site-button]');
       await waitFor(`[data-test-v1-site="${v1URL}"]`, { count: 0 });
       assert.deepEqual(fake.calls, [`unpublish ${v1URL}`]);
     } finally {
@@ -452,6 +576,7 @@ module('Acceptance | host URL manager', function (hooks) {
     try {
       await openManager();
       await click(`[data-test-remove-v1-site="${v1URL}"]`);
+      await click('[data-test-confirm-remove-v1-site-button]');
       await waitFor(`[data-test-v1-site-error="${v1URL}"]`);
       assert
         .dom(`[data-test-v1-site-error="${v1URL}"]`)
