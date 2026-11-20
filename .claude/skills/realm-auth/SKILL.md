@@ -1,16 +1,23 @@
 ---
 name: realm-auth
-description: Architecture of realm and realm-server authentication — the token families (matrix access token, realm-server session, per-realm session, delegated, prerender), what each verification path actually enforces, the lifetimes and who else reasons about them, and the operator runbook for revoking a user's sessions (deactivate the matrix device FIRST, then revoke, or the client just re-mints). Use when touching any auth path — minting or verifying a JWT, changing a token lifetime or claim, adding an endpoint behind jwtMiddleware / multiRealmAuthorization, editing the permission-match or revocation checks — and when responding to a suspected leaked or misissued session. Triggers on `createJWT`, `verifyJWT`, `retrieveTokenClaim`, `isSessionRevoked`, `SESSION_TOKEN_TTL`, `_server-session`, `_realm-auth`, `_delegate-session`, "revoke sessions", "token expired", "PermissionMismatch", or a 401 whose cause isn't obvious.
+description: Architecture of realm and realm-server authentication — the token families (matrix access token, realm-server session, per-realm session, delegated, prerender, and the OAuth access token outside apps call with), what each verification path actually enforces, the lifetimes and who else reasons about them, and the operator runbook for revoking a user's sessions (deactivate the matrix device FIRST, then revoke, or the client just re-mints). Use when touching any auth path — minting or verifying a JWT, changing a token lifetime or claim, adding an endpoint behind jwtMiddleware / multiRealmAuthorization, editing the permission-match or revocation checks — and when responding to a suspected leaked or misissued session. Triggers on `createJWT`, `verifyJWT`, `retrieveTokenClaim`, `isSessionRevoked`, `SESSION_TOKEN_TTL`, `_server-session`, `_realm-auth`, `_delegate-session`, "revoke sessions", "token expired", "PermissionMismatch", or a 401 whose cause isn't obvious.
 ---
 
 # Realm auth — token families and their invariants
 
-**The governing fact: every boxel token except the matrix access token is a
-stateless bearer JWT.** Verification is a signature check, an expiry check, and
-a small number of claim comparisons against live database state. There is no
-session table and no token store, so nothing can be looked up, listed, or
+**The governing fact: every boxel token except the matrix access token and the
+OAuth access token is a stateless bearer JWT.** Verification is a signature
+check, an expiry check, and a small number of claim comparisons against live
+database state. No table holds these JWTs, so none can be looked up, listed, or
 counted — only signed and later re-derived. Every design consequence below
-follows from that.
+follows from that. (A secure window session's JWT names a row of
+`secure_sessions`, which its verification checks, but the token itself is
+still signed, not stored.)
+
+The OAuth access token that outside apps call with is the exception: an
+opaque value, stored by its hash in `oauth_provider_tokens` and looked up there
+on every call, so it can be listed and deleted. The paragraph on it below, and
+the `oauth-provider` skill, cover it.
 
 Matrix is the root authority. Minting any boxel token requires proving control
 of a matrix account (an openid token exchange), and Synapse is the only party
@@ -29,6 +36,7 @@ Boxel tokens are derived credentials with their own, weaker retirement story.
 | publish-realm        | `handle-publish-realm` (in-process)                    | per-realm session shape                                                                     | `1h`                                                                       |
 | diagnostic           | `POST /_diagnostic-render-token` (operator token)      | prerender shape, plus `diagnostic: {id, note, card, scope, realm}`, `permissions: ['read']` | `DIAGNOSTIC_SESSION_LIFETIME_SEC` (15m)                                    |
 | run token            | `mintRunToken` (in-process, one per run attempt)       | `{user, realm, run: {id, attempt, readRealms, writesCap}}`, `permissions: []`               | the run's time limit                                                       |
+| OAuth access token   | `POST /_oauth-provider/token` (Boxel's OAuth provider) | none: an opaque value, looked up by its hash                                                | 10m on a renewing grant, 60m otherwise, never past the grant               |
 
 A **diagnostic session** is what an operator renders a live card under to see
 it as the indexer does (`boxel realm-server render-token`; the
@@ -79,7 +87,7 @@ refuses a request without a run token, so nothing else reaches automation mode.
 A realm-server route that serves run tokens verifies one with `verifyRunToken`
 and checks the run's row itself. The `automations` skill has how to trace one.
 
-**Every session token above is signed with `REALM_SECRET_SEED`** — both families,
+**Every session token above is signed with `REALM_SECRET_SEED`** (the OAuth access token is no JWT, and nothing signs it) — both families,
 minted and verified with the same seed — except the diagnostic session, which is
 signed under `diagnosticSessionSecret(seed)`, and the run token, signed under
 `runTokenSecret(seed)`, each the seed with a family suffix.
@@ -94,6 +102,26 @@ auth token and no session token.
 so rotating it needs an atomic rollout across all three or prerender auth starts
 failing mid-deploy. Rotation is the only way to invalidate every token at once,
 and it is almost always disproportionate — see the runbook.
+
+An **OAuth access token** is what an outside app (an MCP client, say) calls
+Boxel with after a user approved it on the authorize page (ADR 021;
+`packages/realm-server/lib/oauth-provider/`, and the `oauth-provider` skill
+for operating it). It is opaque, not a JWT: `oauth_provider_tokens` holds its
+SHA-256, the grant it came from, the one resource it is bound to and its
+scopes. It is checked in one place, `resolveOAuthAccessToken`
+(`lookup.ts`), which reads the token, its grant and the user on every request
+and caches nothing, and only a resource's controller (`resource.ts`) calls
+it: the token must come in the `Authorization` header, be for that resource,
+and carry a scope that maps the route. A token the lookup refuses, or one on
+a route no scope maps, is answered 401 `invalid_token` whatever the reason; a
+scope the grant lacks, 403 `insufficient_scope`; a token sent in the query
+string or a form body, 400; a form body too large to read, 413. No
+production resource mounts the controller yet: tokens are issued for the MCP
+resource, and nothing serves `/mcp`. The caller it yields never
+carries `secureSession` and is never turned into session claims. Nothing else
+accepts one yet: a realm (`Realm.#verifySession`), `jwtMiddleware` and
+`multiRealmAuthorization` refuse it as an invalid JWT (ADR 021's remediation
+file). Its revocation is its grant's: see "Revoking a user's sessions" below.
 
 ## What verification enforces
 
