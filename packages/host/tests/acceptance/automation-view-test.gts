@@ -1743,9 +1743,12 @@ module('Acceptance | automation view', function (hooks) {
       assert
         .dom('[data-test-automation-runs-section]')
         .includesText('2 runs', 'the count shows while the section is closed');
-      assert
-        .dom('[data-test-automation-runs]')
-        .isNotVisible('a closed section keeps its rows out of sight');
+      assert.ok(
+        document
+          .querySelector('[data-test-automation-runs]')
+          ?.closest('[inert][aria-hidden="true"]'),
+        'a closed section keeps its rows in an inert, hidden region',
+      );
     });
 
     test('runs come a page at a time, and the pager shows another page', async function (assert) {
