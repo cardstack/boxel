@@ -174,6 +174,7 @@ module('Acceptance | host URL manager', function (hooks) {
 
   test('the publish dialog is the host URL manager, with no progress or "last published" UI', async function (assert) {
     await openManager();
+    assert.dom('[data-test-publish-realm-button]').hasText('Mount Workspace');
     assert.dom('[data-test-publish-realm-modal]').doesNotExist();
     assert
       .dom('[data-test-host-url-manager]')
