@@ -108,6 +108,16 @@ export async function markGrantExchanged(
   );
 }
 
+// A condition on a grant aliased `g`: true when it connected its app, once its
+// code was exchanged (`exchanged_at`). A grant with a token row counts too: a
+// realm server still on the previous revision stores tokens without marking
+// the exchange. A grant the user approved but whose code was never exchanged
+// connected nothing.
+export const EXCHANGED_GRANT = `(
+  g.exchanged_at IS NOT NULL
+  OR EXISTS (SELECT 1 FROM oauth_provider_tokens AS t WHERE t.grant_id = g.id)
+)`;
+
 // What a grant decides about the tokens issued from it: whether it renews,
 // and when it expires (epoch seconds).
 export interface GrantTerms {
