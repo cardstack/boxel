@@ -375,7 +375,7 @@ module(basename(import.meta.filename), function (hooks) {
       {
         runId: run.id,
         scheduledAt: new Date().toISOString(),
-        dryRun: false,
+        dryRun: run.dryRun,
         // A run started by hand says so; any other run is its trigger's.
         ...(triggerKind
           ? { triggerKind }
