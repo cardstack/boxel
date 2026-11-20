@@ -7,6 +7,14 @@ import {
   parseScopedCSSRequest,
 } from '@cardstack/runtime-common/scoped-css';
 import { indexURLCandidates, pageRowExpressions } from './index-url-utils.ts';
+import { matchedRead, type PageRead } from './index-html-injection.ts';
+
+// A page's scoped CSS, with the card or file whose row it came from (see
+// `RetrievedMarkup`).
+export interface RetrievedScopedCSS {
+  css: string | null;
+  read: PageRead | null;
+}
 
 export async function retrieveScopedCSS({
   cardURL,
@@ -19,11 +27,11 @@ export async function retrieveScopedCSS({
     debug: (...args: unknown[]) => void;
     trace: (...args: unknown[]) => void;
   };
-}): Promise<string | null> {
+}): Promise<RetrievedScopedCSS> {
   let candidates = indexURLCandidates(cardURL);
 
   if (candidates.length === 0) {
-    return null;
+    return { css: null, read: null };
   }
 
   // The scoped-CSS URLs needed to serve a card's HTML ride on the
@@ -35,6 +43,8 @@ export async function retrieveScopedCSS({
     `
       SELECT ph.deps AS deps,
              ph.last_known_good_deps AS last_known_good_deps,
+             i.url AS url,
+             i.type AS type,
              i.generation
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
@@ -68,6 +78,8 @@ export async function retrieveScopedCSS({
     | {
         deps?: string[] | string | null;
         last_known_good_deps?: string[] | string | null;
+        url?: string;
+        type?: string;
         generation?: string | number;
       }
     | undefined;
@@ -83,7 +95,10 @@ export async function retrieveScopedCSS({
     scopedCSS = await resolveScopedCSSFromDeps(lastKnownGoodDeps, lookup);
   }
 
-  return scopedCSS;
+  return {
+    css: scopedCSS,
+    read: scopedCSS ? matchedRead(depsRow) : null,
+  };
 }
 
 // Resolve the stylesheets a deps list references, deduped and joined in dep
