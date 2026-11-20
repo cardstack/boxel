@@ -89,6 +89,12 @@ import handleWorkerRequest from './handlers/handle-worker-request.ts';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
 import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain.ts';
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain.ts';
+import {
+  handleListHostURLs,
+  handleMountHostURL,
+  handleSetCanonicalHostURL,
+  handleUnmountHostURL,
+} from './handlers/handle-host-urls.ts';
 import handleUnlistedRealmPathRequest from './handlers/handle-unlisted-realm-path.ts';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy.ts';
 import handleSearch from './handlers/handle-search.ts';
@@ -125,6 +131,8 @@ import handleRunCommand from './handlers/handle-run-command.ts';
 import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import type { HostURLResolver } from './lib/realm-host-urls.ts';
+import type { HostURLDomains } from './lib/realm-host-urls-domains.ts';
 import {
   KEY_BINDINGS_PATH,
   KEY_LIMIT_NOTICES_PATH,
@@ -311,6 +319,9 @@ export type CreateRoutesArgs = {
     boxelSpace?: string;
     boxelSite?: string;
   };
+  // The domains a host URL can be on, and this process's cache of host URLs.
+  hostURLDomains: HostURLDomains;
+  hostURLResolver: HostURLResolver;
   assetsURL: URL;
   // The host app's origin, where the render route is served.
   hostURL: URL;
@@ -1089,6 +1100,28 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_boxel-claimed-domains/:claimedDomainId',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteBoxelClaimedDomainRequest(args),
+  );
+  // A realm's host URLs: the addresses it is served at besides its own URL
+  // (ADR 033). See `handlers/handle-host-urls.ts`.
+  router.get(
+    '/_host-urls',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListHostURLs(args),
+  );
+  router.post(
+    '/_host-urls',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMountHostURL(args),
+  );
+  router.patch(
+    '/_host-urls/:id',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSetCanonicalHostURL(args),
+  );
+  router.delete(
+    '/_host-urls/:id',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleUnmountHostURL(args),
   );
   router.post(
     '/_unlisted-realm-path',
