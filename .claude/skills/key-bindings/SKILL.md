@@ -238,14 +238,14 @@ grant.
 `fingerprintOf(bindingSnapshot(request, slot))`: SHA-256, as hex, over a
 fixed-order JSON array of what reaches the vendor —
 
-| Field                                     | From the lowered `OperationCallApi`                                    |
-| ----------------------------------------- | ---------------------------------------------------------------------- |
-| `destination`                             | `destination`                                                          |
-| `method`                                  | `method`                                                               |
-| `pathTemplate`                            | `url` with its `{name}` segments, `path` (what fills each) and `query` |
-| `headersTemplate`                         | `headers`                                                              |
-| `placement`, `placementName`, `transform` | the slot's: `header` + `authorization`, `body` + `auth.token`, `basic` |
-| `bodyTemplate`                            | the JSON body, or the GraphQL document and variables                   |
+| Field                                     | From the lowered `OperationCallApi`                                                  |
+| ----------------------------------------- | ------------------------------------------------------------------------------------ |
+| `destination`                             | `destination`                                                                        |
+| `method`                                  | `method`                                                                             |
+| `pathTemplate`                            | `url` with its `{name}` segments, `path` (what fills each) and `query`               |
+| `headersTemplate`                         | `headers`                                                                            |
+| `placement`, `placementName`, `transform` | the slot's: `header` + `authorization`, `body` + `auth.token`, `basic`               |
+| `bodyTemplate`                            | the body with its kind: JSON, the GraphQL document and variables, or the form fields |
 
 Templates keep their typed references as lowering's markers and are encoded
 with members sorted, so how a declaration is written doesn't change the hash.

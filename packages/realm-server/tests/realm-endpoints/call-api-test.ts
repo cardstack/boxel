@@ -54,6 +54,7 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
     'repo.gts': `
       import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
+      import { JsonField } from "@cardstack/base/json-field";
       import { operation, params, instance, actor, bxl } from "@cardstack/base/operations";
 
       export class Repo extends CardDef {
@@ -84,6 +85,19 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
           params: { note: StringField },
           url: '${VENDOR}/echo',
           json: { note: params('note'), by: actor() },
+        };
+
+        @operation static message = {
+          base: 'callApi',
+          params: { to: StringField, lines: JsonField },
+          url: '${VENDOR}/echo',
+          form: {
+            To: params('to'),
+            From: actor(),
+            MediaUrl: ['https://img.example/1.png', 'https://img.example/2.png'],
+            metadata: { order: instance('owner') },
+            line_items: params('lines'),
+          },
         };
 
         @operation static failing = {
@@ -295,6 +309,44 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       by: TESTER,
     });
     assert.strictEqual(received.headers['content-type'], 'application/json');
+  });
+
+  test('a form body is filled from the payload, the caller and the card, and sent form-encoded', async function (assert) {
+    let response = await post(
+      envelope(
+        invoke('message', {
+          href: '/repo',
+          data: {
+            to: '+15551234567',
+            lines: [
+              { price: 'price_A', quantity: 1 },
+              { price: 'price_B', quantity: 3 },
+            ],
+          },
+        }),
+      ),
+    );
+    assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+    let received = vendor.requests[0];
+    assert.strictEqual(received.method, 'POST');
+    assert.strictEqual(
+      received.headers['content-type'],
+      'application/x-www-form-urlencoded',
+    );
+    assert.deepEqual(
+      [...new URLSearchParams(received.body)],
+      [
+        ['From', TESTER],
+        ['MediaUrl', 'https://img.example/1.png'],
+        ['MediaUrl', 'https://img.example/2.png'],
+        ['To', '+15551234567'],
+        ['line_items[0][price]', 'price_A'],
+        ['line_items[0][quantity]', '1'],
+        ['line_items[1][price]', 'price_B'],
+        ['line_items[1][quantity]', '3'],
+        ['metadata[order]', 'cardstack'],
+      ],
+    );
   });
 
   test('an `output` maps the response', async function (assert) {

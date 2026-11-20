@@ -1217,5 +1217,34 @@ module(basename(import.meta.filename), function (hooks) {
       fingerprintOf(bindingSnapshot(request as never, slot)),
       'a query value does',
     );
+
+    let asForm = {
+      ...request,
+      body: {
+        kind: 'form' as const,
+        fields: { title: { $ref: 'params', key: 'title' }, labels: ['bug'] },
+      },
+    };
+    assert.notStrictEqual(
+      fingerprintOf(bindingSnapshot(asForm as never, slot)),
+      fingerprintOf(bindingSnapshot(request as never, slot)),
+      'the same fields sent as a form rather than as JSON do',
+    );
+    assert.notStrictEqual(
+      fingerprintOf(
+        bindingSnapshot(
+          {
+            ...asForm,
+            body: {
+              ...asForm.body,
+              fields: { ...asForm.body.fields, labels: ['bug', 'p1'] },
+            },
+          } as never,
+          slot,
+        ),
+      ),
+      fingerprintOf(bindingSnapshot(asForm as never, slot)),
+      'a form field does',
+    );
   });
 });
