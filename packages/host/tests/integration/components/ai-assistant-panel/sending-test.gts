@@ -386,7 +386,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
 
     assert
       .dom('[data-test-message-field]')
-      .hasValue('This is 1st sentence \n\nThis is 2nd sentence');
+      .hasValue('This is 1st sentence \nThis is 2nd sentence');
   });
 
   test('draft attachments persist across panel reopen without duplicating auto attachments', async function (assert) {
