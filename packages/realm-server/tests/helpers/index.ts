@@ -4166,6 +4166,9 @@ export const testAutomationAdmissionChecks: AutomationAdmissionChecks = {
 
 // A resume's admission that admits every payer, for a test of what resuming
 // does once its payer is admitted.
-export async function admitAnyPayer(): Promise<undefined> {
+export async function admitAnyPayer(
+  _payer: string,
+  _firstRun: { at: number | null },
+): Promise<undefined> {
   return undefined;
 }

@@ -16,6 +16,7 @@ import {
   rri,
   type AutomationRun,
   type Realm,
+  type SpendCharge,
 } from '@cardstack/runtime-common';
 import { getAutomation } from '@cardstack/runtime-common/automations';
 import {
@@ -76,6 +77,13 @@ const NO_MONTHLY_CAP = 'automation/no-monthly-cap';
 const HOOKED = 'automation/hooked';
 const HOOK_PATH = 'whk_routes';
 const OUTSIDER = '@automation-routes-outsider:localhost';
+// Automations whose daily credit cap the tests reach: one whose next run is
+// due within the minute, and one whose next run is next new year's day.
+const CAPPED = 'automation/capped';
+const CAPPED_LATER = 'automation/capped-later';
+const DAILY_CAP = 600;
+// An automation whose script doesn't parse.
+const BROKEN = 'automation/broken';
 // An automation declaring an operation whose request carries the payer's
 // own key, so each payer needs their own binding for it.
 const KEYED = 'automation/keyed';
@@ -173,6 +181,47 @@ module(basename(import.meta.filename), function (hooks) {
         ],
       }),
       [`${KEYED}-script.js`]: `return 'ok';`,
+      ...automationFixture({
+        operations: [],
+        path: CAPPED,
+        caps: { dailyCredits: DAILY_CAP },
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'minutely',
+            expression: '* * * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${CAPPED}-script.js`]: `return 'ok';`,
+      ...automationFixture({
+        operations: [],
+        path: CAPPED_LATER,
+        caps: { dailyCredits: DAILY_CAP },
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'new-year',
+            expression: '0 0 1 1 *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${CAPPED_LATER}-script.js`]: `return 'ok';`,
+      ...automationFixture({
+        operations: [],
+        path: BROKEN,
+        triggers: [
+          {
+            kind: 'cron',
+            label: 'daily',
+            expression: '0 9 * * *',
+            timeZone: 'UTC',
+          },
+        ],
+      }),
+      [`${BROKEN}-script.js`]: 'await realm.fs.writeText(\n',
       ...automationFixture({
         operations: [],
         path: NO_MONTHLY_CAP,
@@ -282,6 +331,28 @@ module(basename(import.meta.filename), function (hooks) {
       creditAmount: credits,
       creditType: 'extra_credit',
       subscriptionCycleId: null,
+    });
+  }
+
+  // Charges `credits` to `user` as the automation at `path`'s storage, now,
+  // which its daily and monthly credit caps count.
+  async function chargeAutomation(user: string, path: string, credits: number) {
+    await ensureTestUser(dbAdapter, user);
+    let { id: userId } = (await getUserByMatrixUserId(dbAdapter, user))!;
+    let charge: SpendCharge = {
+      kind: 'storage',
+      realm: ri(realm.url),
+      automationId: automationId(path),
+      day: new Date().toISOString().slice(0, 10),
+      pricingVersion: currentPricing()!.version,
+    };
+    await addToCreditsLedger(dbAdapter, {
+      userId,
+      creditAmount: -credits,
+      creditType: 'extra_credit_used',
+      subscriptionCycleId: null,
+      charge,
+      chargeId: randomUUID(),
     });
   }
 
@@ -762,6 +833,65 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(refused.status, 422, refused.text);
       assert.strictEqual(refused.body.meta.code, 'account-deactivated');
       await assertStillPaused(assert, DAILY, OWNER);
+    });
+
+    test('a resume whose first run falls on a day the automation has spent its daily cap is refused, and the automation stays paused', async function (assert) {
+      await fund(WRITER);
+      await switchOn(OWNER, CAPPED);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(CAPPED) }))
+          .status,
+        200,
+      );
+      await chargeAutomation(OWNER, CAPPED, DAILY_CAP);
+
+      let refused = await resume(WRITER, CAPPED);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'daily-credit-cap-reached');
+      await assertStillPaused(assert, CAPPED, OWNER);
+    });
+
+    test('a cap spent today doesn’t refuse a resume whose first run falls on a later day', async function (assert) {
+      await fund(WRITER);
+      await switchOn(OWNER, CAPPED_LATER);
+      assert.strictEqual(
+        (
+          await post(
+            AUTOMATION_PAUSE_PATH,
+            OWNER,
+            {},
+            { id: cardURL(CAPPED_LATER) },
+          )
+        ).status,
+        200,
+      );
+      await chargeAutomation(OWNER, CAPPED_LATER, DAILY_CAP);
+
+      let resumed = await resume(WRITER, CAPPED_LATER);
+      assert.strictEqual(resumed.status, 200, resumed.text);
+      assert.strictEqual(
+        (await getAutomation(dbAdapter, automationId(CAPPED_LATER)))?.payer,
+        WRITER,
+      );
+    });
+
+    test('a script that doesn’t parse refuses the resume, and the automation stays paused', async function (assert) {
+      await fund(WRITER);
+      await switchOn(OWNER, BROKEN);
+      assert.strictEqual(
+        (await post(AUTOMATION_PAUSE_PATH, OWNER, {}, { id: cardURL(BROKEN) }))
+          .status,
+        200,
+      );
+
+      let refused = await resume(WRITER, BROKEN);
+      assert.strictEqual(refused.status, 422, refused.text);
+      assert.strictEqual(refused.body.meta.code, 'script-error');
+      assert.true(
+        refused.body.errors[0].includes("doesn't parse"),
+        refused.body.errors[0],
+      );
+      await assertStillPaused(assert, BROKEN, OWNER);
     });
 
     test('an automation that isn’t paused is refused as not paused, whatever its new payer could pay', async function (assert) {

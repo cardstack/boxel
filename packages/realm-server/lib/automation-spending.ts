@@ -108,7 +108,10 @@ export function buildAdmitSpending({
 // automation's payer: their balance against one run's minimum balance at the
 // caps the card sets, which they would agree to, and what the automation was
 // charged this UTC day and month against those caps' daily and monthly
-// credits. Nothing is held, since no run is admitted.
+// credits. A cap is held to only when the automation's first run after the
+// resume (`firstRunAt`, unix seconds, null when nothing would run) falls in
+// the day or month it counts, since a run in a later one starts that cap
+// afresh. Nothing is held, since no run is admitted.
 export function buildAdmitPayerSpending({
   dbAdapter,
   pricing = currentPricing,
@@ -117,8 +120,9 @@ export function buildAdmitPayerSpending({
   payer: string;
   automationId: RealmResourceIdentifier;
   caps: AutomationCaps;
+  firstRunAt: number | null;
 }) => Promise<AdmissionRefusal | undefined> {
-  return async ({ payer, automationId, caps }) =>
+  return async ({ payer, automationId, caps, firstRunAt }) =>
     await spendingRefusal(dbAdapter, {
       prices: pricing(),
       now: now(),
@@ -128,6 +132,7 @@ export function buildAdmitPayerSpending({
         automationId,
         dailyCredits: caps.dailyCredits,
         monthlyCredits: caps.monthlyCredits,
+        firstRunAt,
       },
     });
 }
@@ -154,13 +159,7 @@ async function spendingRefusal(
       AutomationCaps,
       'seconds' | 'responseBytes' | 'aiCredits'
     >;
-    creditCaps:
-      | {
-          automationId: RealmResourceIdentifier;
-          dailyCredits: number | null | undefined;
-          monthlyCredits: number | null | undefined;
-        }
-      | undefined;
+    creditCaps: CreditCaps | undefined;
     run?: AutomationRun;
     hold?: (ceiling: number) => Promise<void>;
   },
@@ -219,17 +218,20 @@ function ceilingCaps(
   };
 }
 
+// An automation's daily and monthly credit caps. `firstRunAt`, when given,
+// limits the check to the day or month the run it admits for falls in (see
+// `buildAdmitPayerSpending`); a run's own check leaves it out and is held to
+// both.
+interface CreditCaps {
+  automationId: RealmResourceIdentifier;
+  dailyCredits: number | null | undefined;
+  monthlyCredits: number | null | undefined;
+  firstRunAt?: number | null;
+}
+
 async function checkCreditCaps(
   querier: Querier,
-  {
-    automationId,
-    dailyCredits,
-    monthlyCredits,
-  }: {
-    automationId: RealmResourceIdentifier;
-    dailyCredits: number | null | undefined;
-    monthlyCredits: number | null | undefined;
-  },
+  { automationId, dailyCredits, monthlyCredits, firstRunAt }: CreditCaps,
   { excludeRunId, now }: { excludeRunId: string | undefined; now: number },
 ): Promise<AdmissionRefusal | undefined> {
   if (typeof dailyCredits !== 'number' && typeof monthlyCredits !== 'number') {
@@ -244,17 +246,31 @@ async function checkCreditCaps(
     string,
     number | null | undefined,
     number,
+    number,
   ][] = [
-    ['daily-credit-cap-reached', 'today (UTC)', dailyCredits, utcDayStart(now)],
+    [
+      'daily-credit-cap-reached',
+      'today (UTC)',
+      dailyCredits,
+      utcDayStart(now),
+      utcDayStart(now) + 24 * 60 * 60,
+    ],
     [
       'monthly-credit-cap-reached',
       'this month (UTC)',
       monthlyCredits,
       utcMonthStart(now),
+      nextUTCMonthStart(now),
     ],
   ];
-  for (let [reason, period, cap, since] of caps) {
+  for (let [reason, period, cap, since, until] of caps) {
     if (typeof cap !== 'number') {
+      continue;
+    }
+    if (
+      firstRunAt !== undefined &&
+      (firstRunAt === null || firstRunAt >= until)
+    ) {
       continue;
     }
     let spent = await automationCreditsSince(querier, automationId, since);
@@ -266,6 +282,12 @@ async function checkCreditCaps(
     }
   }
   return undefined;
+}
+
+// Unix seconds: the start of the UTC month after the one `now` falls in.
+function nextUTCMonthStart(now: number): number {
+  let date = new Date(now * 1000);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) / 1000;
 }
 
 function refuse(

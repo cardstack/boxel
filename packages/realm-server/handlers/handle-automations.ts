@@ -77,6 +77,7 @@ import {
   type AutomationEstimate,
 } from '../lib/automation-estimate.ts';
 import { buildAdmitPayerSpending } from '../lib/automation-spending.ts';
+import { findOrMountRealm } from '../lib/realm-routing.ts';
 import { exactMeteredCredits } from '../lib/metered-charge.ts';
 import { currentPricing } from '../lib/pricing.ts';
 import {
@@ -723,7 +724,6 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
       await automationRequest(ctxt, args);
     let declaration = await declarationOf(args, automationId, realmURL);
     agreedMonthlyCap(attributes, declaration);
-    let realm = args.realms.find((r) => r.url === realmURL.href);
     let admitSpending = buildAdmitPayerSpending({ dbAdapter: args.dbAdapter });
     let change = await resumeAutomation(
       args.dbAdapter,
@@ -731,19 +731,29 @@ export function handleAutomationResume(args: CreateRoutesArgs): Handler {
         automationId,
         user: caller,
         declaration,
-        admit: (payer) =>
+        admit: (payer, firstRun) =>
           admitPayer(
             {
               accountStanding: args.automationAccountStanding,
-              admitInRealm: async (payer) =>
-                realm
+              admitInRealm: async (payer) => {
+                // A realm no request has reached since this process started
+                // isn't mounted yet; mounting it is what serving its first
+                // request would do.
+                let realm = await findOrMountRealm(realmURL, args);
+                return realm?.url === realmURL.href
                   ? await realm.admitAutomationPayer({ declaration, payer })
                   : {
                       reason: 'run-admission-unavailable',
                       message: `${realmURL.href} isn't served here, so its automation's operations can't be checked`,
-                    },
+                    };
+              },
               admitSpending: (payer) =>
-                admitSpending({ payer, automationId, caps: declaration.caps }),
+                admitSpending({
+                  payer,
+                  automationId,
+                  caps: declaration.caps,
+                  firstRunAt: firstRun.at,
+                }),
             },
             payer,
           ),
