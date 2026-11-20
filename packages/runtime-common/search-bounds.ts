@@ -5,8 +5,8 @@ const log = logger('search-bounds');
 
 // ---------------------------------------------------------------------------
 // Hard resource bounds for search, so no single search can exhaust the
-// realm-server's single event loop. Which leg a search asks for decides which
-// bounds hold:
+// realm-server's single event loop. Who sends a search, and which leg it asks
+// for, decide which bounds hold:
 //
 //   - The server-side page bounds hold on every search, on either leg and
 //     whoever sends it. The prerendered-HTML leg is cheap per row, but a row
@@ -128,11 +128,11 @@ export const MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
 
 // The default page a server-side search gets when it asks for no particular
 // one, on either leg, enforced regardless of caller (the trusted host and any
-// card that skips the client cap included). Higher than the card `@context` cap — the
-// host may legitimately page larger — and the reason a non-paginating caller
-// gets a first page rather than every row. It is not the rejection threshold:
-// a caller that names a larger size has opted into that cost, and is held to
-// SERVER_ABSOLUTE_MAX_PAGE_SIZE instead.
+// card that skips the client cap included). Higher than the card `@context`
+// cap — the host may legitimately page larger — and the reason a
+// non-paginating caller gets a first page rather than every row. It is not the
+// rejection threshold: a caller that names a larger size has opted into that
+// cost, and is held to SERVER_ABSOLUTE_MAX_PAGE_SIZE instead.
 export const SERVER_MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
   env.SERVER_MAX_SEARCH_PAGE_SIZE,
   DEFAULT_SERVER_MAX_SEARCH_PAGE_SIZE,
