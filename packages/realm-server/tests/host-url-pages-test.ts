@@ -595,10 +595,12 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   test("a published realm's publish-time ETag never answers a 304 on a host URL", async function (assert) {
+    // A published realm names the realm it was published from.
     await db.execute(
-      `UPDATE realm_registry SET kind = 'published', last_published_at = '1700000000000'
+      `UPDATE realm_registry
+       SET kind = 'published', source_url = $2, last_published_at = '1700000000000'
        WHERE url = $1`,
-      { bind: [OPEN] },
+      { bind: [OPEN, 'http://127.0.0.1:4444/published-from/'] },
     );
     let onRealmURL = await request
       .get(`${new URL(OPEN).pathname}landing`)
