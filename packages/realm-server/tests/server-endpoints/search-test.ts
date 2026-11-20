@@ -728,6 +728,93 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       }
     });
 
+    test('an HTML-leg search naming no page gets a bounded page and the full total', async function (assert) {
+      // Two Persons in each realm and a default page of one: each realm
+      // answers one row, and the total still counts all four.
+      setSearchBoundsForTests({
+        serverMaxPageSize: 1,
+        serverAbsoluteMaxPageSize: 1,
+      });
+      try {
+        // The default fieldset, which prefers prerendered HTML and falls back
+        // to the item only per row.
+        let unpaged = await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url, secondaryRealm.url],
+        });
+        assert.strictEqual(unpaged.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          unpaged.body.data.length,
+          2,
+          'each realm answers no more than the default page',
+        );
+        assert.strictEqual(
+          unpaged.body.meta.page.total,
+          4,
+          'the true match count is reported beside the short page',
+        );
+
+        let htmlOnly = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['html'] },
+          realms: [testRealm.url, secondaryRealm.url],
+          page: { size: 9 },
+        });
+        assert.strictEqual(htmlOnly.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          htmlOnly.body.data.length,
+          2,
+          'an HTML-only page above the maximum is clamped to it',
+        );
+        assert.strictEqual(htmlOnly.body.meta.page.total, 4);
+
+        // The header that marks a render is the caller's to set, so it does
+        // not lift the bound.
+        let duringRender = await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url, secondaryRealm.url],
+        }).set('x-boxel-during-prerender', 'true');
+        assert.strictEqual(duringRender.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          duringRender.body.data.length,
+          2,
+          "a render's search is held to the same page",
+        );
+        assert.strictEqual(duringRender.body.meta.page.total, 4);
+      } finally {
+        resetSearchBoundsForTests();
+      }
+    });
+
+    test('the time budget cuts off an HTML-leg search, but not a render', async function (assert) {
+      setSearchBoundsForTests({ timeBudgetMs: 0 });
+      try {
+        let live = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['html'] },
+          realms: [testRealm.url, secondaryRealm.url],
+        });
+        assert.strictEqual(
+          live.status,
+          408,
+          'an over-budget HTML-leg search is cut off',
+        );
+
+        let duringRender = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['html'] },
+          realms: [testRealm.url, secondaryRealm.url],
+        }).set('x-boxel-during-prerender', 'true');
+        assert.strictEqual(
+          duringRender.status,
+          200,
+          "a render's search runs to completion; the render's own timeout bounds it",
+        );
+      } finally {
+        resetSearchBoundsForTests();
+      }
+    });
+
     test('identical live searches within the TTL share one cached body', async function (assert) {
       let searchBody = {
         filter: personFilter(),

@@ -1,17 +1,27 @@
 import { logger } from './log.ts';
 import type { Query } from './query.ts';
-import type { SearchEntryFieldset } from './search-entry.ts';
 
 const log = logger('search-bounds');
 
 // ---------------------------------------------------------------------------
 // Hard resource bounds for search, so no single search can exhaust the
-// realm-server's single event loop. They apply to the ITEM leg only — the live
-// serialization + `loadLinks` path whose per-request cost they contain. The
-// prerendered-HTML leg is the cheap precomputed path and is left unbounded, as
-// is the realm-server's own during-prerender traffic. When a request trips a
-// ceiling, the error steers the author toward the HTML leg
-// (`@context.searchResultsComponent`), which the ceilings don't apply to.
+// realm-server's single event loop. Which leg a search asks for decides which
+// bounds hold:
+//
+//   - The server-side page bounds hold on every search, on either leg and
+//     whoever sends it. The prerendered-HTML leg is cheap per row, but a row
+//     can carry tens of KB of markup, so an unpaged search of a large public
+//     realm would otherwise assemble a response of tens of MB for an anonymous
+//     caller. A render's own searches are clamped as well: the headers that
+//     mark one are set by the caller, so an exemption keyed on them is an
+//     exemption anyone can claim.
+//   - The time budget holds on every live search, on either leg, and not on a
+//     render's search, which the render's own timeout governs.
+//   - The card `@context` caps (page size, realms fan-out, concurrency) hold on
+//     the ITEM leg only — the live serialization + `loadLinks` path whose cost
+//     card code controls. When a card trips one, the error steers the author
+//     toward the HTML leg (`@context.searchResultsComponent`), which those
+//     caps don't apply to.
 //
 // Where each bound lives follows one rule: the server can't tell a trusted-host
 // request from untrusted card code, so a bound the host must be free to exceed
@@ -116,9 +126,9 @@ export const MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
   MIN_PAGE_SIZE,
 );
 
-// The default page a server-side item-leg request gets when it asks for no
-// particular one, enforced regardless of caller (the trusted host and any card
-// that skips the client cap included). Higher than the card `@context` cap — the
+// The default page a server-side search gets when it asks for no particular
+// one, on either leg, enforced regardless of caller (the trusted host and any
+// card that skips the client cap included). Higher than the card `@context` cap — the
 // host may legitimately page larger — and the reason a non-paginating caller
 // gets a first page rather than every row. It is not the rejection threshold:
 // a caller that names a larger size has opted into that cost, and is held to
@@ -129,7 +139,7 @@ export const SERVER_MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
   MIN_PAGE_SIZE,
 );
 
-// The size no item-leg request may exceed, however deliberately it asks. This
+// The size no search may exceed, however deliberately it asks. This
 // is the bound that keeps the server from assembling and serializing an
 // unbounded page; everything between it and the default above is opt-in
 // territory, reachable only by naming a size. Kept at or above the default, so
@@ -162,8 +172,8 @@ export const MAX_REALMS_PER_SEARCH_REQUEST = parsePositiveInt(
   MIN_REALMS,
 );
 
-// Wall-clock budget for a single item-leg search. Over-budget searches are cut
-// off rather than run to completion.
+// Wall-clock budget for a single live search, on either leg. Over-budget
+// searches are cut off rather than run to completion.
 export const SEARCH_TIME_BUDGET_MS = parsePositiveInt(
   env.SEARCH_TIME_BUDGET_MS,
   DEFAULT_SEARCH_TIME_BUDGET_MS,
@@ -553,14 +563,6 @@ export function assembledLinkResourceBudget(): number {
   return maxAssembledLinkResources;
 }
 
-// The item leg (`fields[entry]` includes "item" / "item.<field>") is the live
-// serialization + `loadLinks` path — the one whose cost the bounds contain. The
-// default/prerendered fieldset resolves to `kind: 'none'` (html-preferred, item
-// only as a per-row fallback) and is exempt.
-export function isItemLegSearch(fieldset: SearchEntryFieldset): boolean {
-  return fieldset.item.kind !== 'none';
-}
-
 // The HTTP statuses a bound violation maps to. 408 for the time budget so a
 // client reads it as "took too long — narrow the query / retry".
 export type SearchBoundStatus = 400 | 408;
@@ -574,10 +576,10 @@ export class SearchBoundError extends Error {
   }
 }
 
-// The bounds cap the item leg only, so a genuinely large or wide result set
-// belongs on the prerendered-HTML leg (rendered lazily, never live-serialized).
-// Every bound error points there so an author can switch rather than fight the
-// cap.
+// The card `@context` caps hold on the item leg only, so a genuinely large or
+// wide result set belongs on the prerendered-HTML leg (rendered lazily, never
+// live-serialized). Each of those caps' errors points there so an author can
+// switch rather than fight the cap.
 const HTML_LEG_HINT =
   'for large or wide result sets, use prerendered HTML search results (@context.searchResultsComponent), which this cap does not apply to';
 
@@ -598,7 +600,7 @@ function warnOncePerClamp(size: number, max: number): void {
   }
   reportedClamps.add(key);
   log.warn(
-    `page.size ${size} exceeds the maximum of ${max}; clamped to ${max} (further identical clamps are not logged). The true match count rides meta.page.total; ${HTML_LEG_HINT}`,
+    `page.size ${size} exceeds the maximum of ${max}; clamped to ${max} (further identical clamps are not logged). The true match count rides meta.page.total; request pages of at most ${max} and step page.number to read the rest`,
   );
 }
 
@@ -614,7 +616,7 @@ export function assertRealmsBound(realms: string[]): void {
   }
 }
 
-// Enforce mandatory pagination on an item-leg query. `dflt` is the size a query
+// Enforce mandatory pagination on a search query. `dflt` is the size a query
 // that names none is clamped to, so a non-paginating caller gets the first page
 // rather than every row. `max` is the ceiling an explicit page may not pass;
 // between the two, a caller that named a size gets it, having asked for that
@@ -691,9 +693,10 @@ export function applySearchPageBound(query: Query): Query {
   return boundPageSize(query, maxPageSize, maxPageSize, 'reject');
 }
 
-// The server-side page bounds. These hold on every item-leg request the server
-// handles regardless of caller, and on the indexer's own in-process query-field
-// expansion, which is server work that no HTTP bound would otherwise reach.
+// The server-side page bounds. These hold on every search the server handles,
+// on either leg and regardless of caller (a render's own searches included),
+// and on the indexer's own in-process query-field expansion, which is server
+// work that no HTTP bound would otherwise reach.
 //
 // A request naming no page is clamped to the default (higher than the card
 // `@context` cap — the host may legitimately page larger). One naming a size is
@@ -719,7 +722,7 @@ export function applyServerSearchPageBound(query: Query): Query {
   );
 }
 
-// Run an item-leg search under the wall-clock budget. The runner receives an
+// Run a live search under the wall-clock budget. The runner receives an
 // AbortSignal it threads into `loadLinks` so the expensive async work stops
 // promptly on timeout; the Promise.race guarantees the 408 return even though
 // the federated fan-out swallows the abort (it treats an aborted realm as a
@@ -739,7 +742,7 @@ export async function runWithSearchTimeBudget<T>(
           408,
           `search exceeded the ${Math.round(
             budgetMs / 1000,
-          )}s request time limit and was cancelled; narrow the query, request a smaller page, or ${HTML_LEG_HINT}`,
+          )}s request time limit and was cancelled; narrow the query or request a smaller page`,
         ),
       );
     }, budgetMs);

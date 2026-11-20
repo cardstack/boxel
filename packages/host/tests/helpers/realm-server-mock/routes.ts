@@ -5,7 +5,6 @@ import {
   DURING_PRERENDER_HEADER,
   emptySearchEntryDocument,
   ensureTrailingSlash,
-  isItemLegSearch,
   markPolicyScoped,
   parseRealmsFromPayload,
   parseSearchEntryQueryFromPayload,
@@ -315,13 +314,11 @@ function registerSearchRoutes() {
         throw e;
       }
 
-      // Mirror the realm-server's `handle-search` page bounds: a live item-leg
-      // search with no page is clamped to the default page, and an explicit
-      // page above the absolute maximum is clamped to it. A render's search
-      // is exempt, as it is there.
-      if (isItemLegSearch(parsed.fieldset) && !duringRender) {
-        parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
-      }
+      // Mirror the realm-server's `handle-search` page bounds: a search with
+      // no page is clamped to the default page, and an explicit page above the
+      // absolute maximum is clamped to it — on either leg, and during a render
+      // too, as it is there.
+      parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
 
       // Mirror the realm-server's `handle-search`: read the client's
       // correlation id off the request and thread it into searchEntryRealms,

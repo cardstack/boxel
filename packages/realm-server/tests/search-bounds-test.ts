@@ -5,7 +5,6 @@ import {
   applySearchPageBound,
   applyServerSearchPageBound,
   assertRealmsBound,
-  isItemLegSearch,
   runWithSearchTimeBudget,
   setSearchBoundsForTests,
   resetSearchBoundsForTests,
@@ -16,24 +15,6 @@ import {
   MAX_REALMS_PER_SEARCH_REQUEST,
   type Query,
 } from '@cardstack/runtime-common';
-import type { SearchEntryFieldset } from '@cardstack/runtime-common';
-
-const htmlLeg: SearchEntryFieldset = {
-  html: true,
-  item: { kind: 'none' },
-  itemAsFallback: true,
-};
-const itemLegFull: SearchEntryFieldset = {
-  html: false,
-  item: { kind: 'full' },
-  itemAsFallback: false,
-};
-const itemLegSparse: SearchEntryFieldset = {
-  html: false,
-  item: { kind: 'sparse', fields: ['title'] },
-  itemAsFallback: false,
-};
-
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -41,17 +22,6 @@ function wait(ms: number): Promise<void> {
 module(basename(import.meta.filename), function (hooks) {
   hooks.afterEach(function () {
     resetSearchBoundsForTests();
-  });
-
-  module('isItemLegSearch', function () {
-    test('the prerendered/default fieldset (kind none) is not the item leg', function (assert) {
-      assert.false(isItemLegSearch(htmlLeg));
-    });
-
-    test('an explicit item / item.<field> fieldset is the item leg', function (assert) {
-      assert.true(isItemLegSearch(itemLegFull));
-      assert.true(isItemLegSearch(itemLegSparse));
-    });
   });
 
   module('applySearchPageBound', function () {

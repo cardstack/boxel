@@ -6,7 +6,6 @@ import {
   emptySearchEntryDocument,
   ifNoneMatchMatches,
   isCodeRef,
-  isItemLegSearch,
   logger,
   markPolicyScoped,
   parseRealmsFromPayload,
@@ -651,25 +650,32 @@ export default function handleSearch(opts: {
     let prerenderJobId = sanitizePrerenderJobId(
       ctxt.get(PRERENDER_JOB_ID_HEADER),
     );
-    // Two bounds are enforced server-side on the live item leg (never during
-    // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
-    // (applied just below) and the wall-clock time budget (further down). Both
-    // hold for every caller — a wall-clock cutoff can't live client-side, and a
-    // page ceiling must bound the result set even when the client card cap was
-    // skipped. The realms fan-out and concurrency caps stay client-side on the
-    // card `@context` surface, since the trusted host must be free to exceed
-    // them.
-    let itemLegBounded =
-      isItemLegSearch(parsed.fieldset) && !cacheOnlyDefinitions;
+    // Two bounds are enforced server-side: a hard page-size ceiling (applied
+    // just below) and the wall-clock time budget (further down). A wall-clock
+    // cutoff can't live client-side, and a page ceiling must bound the result
+    // set even when the client card cap was skipped. The realms fan-out and
+    // concurrency caps stay client-side on the card `@context` surface, since
+    // the trusted host must be free to exceed them.
+    //
+    // The time budget holds on every live search, on either leg. A render's
+    // search is exempt: cutting it off would fail the render, whose own
+    // timeout already bounds it.
+    let timeBudgeted = !cacheOnlyDefinitions;
 
-    // The server page bounds. An absent item-leg page is clamped to the default
-    // so the query carries a LIMIT; an explicit one is honored to the absolute
-    // maximum and clamped to it above, which is logged. Either way the server
-    // never assembles/serializes an unbounded result set, and the true match
-    // count rides `meta.page.total` so a short page is visible to the caller.
-    if (itemLegBounded) {
-      parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
-    }
+    // The server page bounds hold on every search, whichever leg it asks for
+    // and whoever sends it. An absent page is clamped to the default so the
+    // query carries a LIMIT; an explicit one is honored to the absolute maximum
+    // and clamped to it above, which is logged. Either way the server never
+    // assembles/serializes an unbounded result set, and the true match count
+    // rides `meta.page.total` so a short page is visible to the caller.
+    //
+    // The prerendered-HTML leg is bounded too: a row's markup can run to tens
+    // of KB, so an unpaged HTML search of a large public realm is a response
+    // of tens of MB that needs no authentication to request. A render's own
+    // searches are bounded as well, because the headers that mark a render are
+    // set by the caller, so an exemption keyed on them is one anyone can
+    // claim. Clamping never rejects, so a render still draws the first page.
+    parsed.itemQuery = applyServerSearchPageBound(parsed.itemQuery);
 
     // The query each policy-scoped realm runs. Composed here, off the bounded
     // query, so the page the engine fills is a page of rows the policy admits:
@@ -812,8 +818,8 @@ export default function handleSearch(opts: {
       ctxt.get(X_BOXEL_CONSUMING_REALM_HEADER),
     );
 
-    // Built from the query the search will actually run — the item-leg page
-    // ceiling above has already been applied — so the reported page size is
+    // Built from the query the search will actually run — the page ceiling
+    // above has already been applied — so the reported page size is
     // the one the index saw, not the one the caller asked for. The link mode
     // travels with it because the same query costs differently in each, and no
     // header on the request is a reliable stand-in: `x-boxel-during-prerender`
@@ -905,9 +911,9 @@ export default function handleSearch(opts: {
           ? await timings.time('stringify', stringify)
           : stringify();
       };
-      // Cut an over-budget item-leg search off (408) rather than run it to
+      // Cut an over-budget live search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
-      return itemLegBounded ? runWithSearchTimeBudget(doRun) : doRun();
+      return timeBudgeted ? runWithSearchTimeBudget(doRun) : doRun();
     };
 
     // Called once by whichever path answers the request — a fresh compute, any
@@ -973,8 +979,8 @@ export default function handleSearch(opts: {
         },
       });
     } catch (e) {
-      // The per-request time budget fired inside `runSearch`. A bounded search
-      // is never cacheable (cacheable ⟹ during-prerender ⟹ not bounded), so
+      // The per-request time budget fired inside `runSearch`. A time-budgeted
+      // search is never cacheable (cacheable ⟹ during-prerender ⟹ no budget), so
       // this only surfaces on the fresh-compute path and leaves no cache entry.
       if (e instanceof SearchBoundError) {
         await setContextResponse(

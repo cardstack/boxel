@@ -52,6 +52,8 @@ import StringField from './string';
 
 const [_CardView, StripView, GridView] = VIEW_OPTIONS;
 
+const GRID_PAGE_SIZE = 100;
+
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <CardsGridLayout
@@ -70,6 +72,8 @@ class Isolated extends Component<typeof CardsGrid> {
       @onChangeFilter={{this.onChangeFilter}}
       @onChangeView={{this.onChangeView}}
       @onChangeSort={{this.onChangeSort}}
+      @page={{this.currentPage}}
+      @onPageChange={{this.onChangePage}}
     >
       <:content>
         {{#if @canEdit}}
@@ -139,7 +143,52 @@ class Isolated extends Component<typeof CardsGrid> {
     return {
       ...this.activeFilter.query,
       sort: this.activeSort?.sort,
+      // The server pages every search, so the grid asks for its pages
+      // explicitly and offers controls to step through them, rather than
+      // showing a first page with no way past it.
+      page: {
+        size: this.pageSize,
+        number: this.currentPage - 1,
+      },
     };
+  }
+
+  private get pageSize(): number {
+    return (this.args.model.constructor as typeof CardsGrid).gridPageSize;
+  }
+
+  // The page (1-based) belongs to the filter + sort it was chosen under: once
+  // either changes, the grid starts again at page 1, and going back to that
+  // filter later starts at page 1 too. A live re-run keeps the key, so it
+  // stays on the page. It lives only in this component, so a reload also
+  // starts at page 1.
+  @tracked private chosenPage: { key: string; page: number } | undefined;
+  // Pages chosen under a key the grid has since moved away from. Kept out of
+  // tracking so the getter below can record it while rendering; the key change
+  // that fills it already invalidated the getter.
+  #abandonedPages = new WeakSet<{ key: string; page: number }>();
+
+  private get pageKey(): string {
+    return JSON.stringify({
+      filter: this.activeFilter?.query?.filter,
+      sort: this.activeSort?.sort,
+    });
+  }
+
+  private get currentPage(): number {
+    let chosen = this.chosenPage;
+    if (!chosen) {
+      return 1;
+    }
+    if (chosen.key !== this.pageKey) {
+      this.#abandonedPages.add(chosen);
+      return 1;
+    }
+    return this.#abandonedPages.has(chosen) ? 1 : chosen.page;
+  }
+
+  @action private onChangePage(page: number) {
+    this.chosenPage = { key: this.pageKey, page };
   }
 
   private get realms(): string[] {
@@ -498,6 +547,8 @@ export class CardsGrid extends CardDef {
   static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
+  // How many cards one page of the grid shows.
+  static gridPageSize = GRID_PAGE_SIZE;
   @field realmName = contains(StringField, {
     computeVia: function (this: CardsGrid) {
       return this[realmInfo]?.name;

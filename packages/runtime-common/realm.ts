@@ -58,7 +58,6 @@ import { buildSearchErrorBody, SearchRequestError } from './search-utils.ts';
 import {
   applyServerSearchPageBound,
   assembledLinkResourceBudget,
-  isItemLegSearch,
   runWithSearchTimeBudget,
   SearchBoundError,
 } from './search-bounds.ts';
@@ -20121,22 +20120,24 @@ export class Realm {
           return noRows();
         }
       }
-      // Two bounds hold server-side on the live item leg (never during
-      // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
-      // and the wall-clock time budget. Both hold for every caller — a page
-      // ceiling bounds the result set even when the client card cap was
-      // skipped, and a wall-clock cutoff can't live client-side. The realms and
-      // concurrency caps stay on the card `@context` surface.
-      let itemLegBounded =
-        isItemLegSearch(searchEntryQuery.fieldset) && !duringPrerender;
-      // Clamp an absent page to the default so the query carries a LIMIT, and
-      // an over-maximum explicit one to the maximum (logged, so a short page
-      // has an explanation somewhere).
-      if (itemLegBounded) {
-        searchEntryQuery.itemQuery = applyServerSearchPageBound(
-          searchEntryQuery.itemQuery,
-        );
-      }
+      // Two bounds hold server-side: a hard page-size ceiling and the
+      // wall-clock time budget. A page ceiling bounds the result set even when
+      // the client card cap was skipped, and a wall-clock cutoff can't live
+      // client-side. The realms and concurrency caps stay on the card
+      // `@context` surface.
+      //
+      // The time budget holds on every live search, on either leg. A render's
+      // search is exempt: cutting it off would fail the render, whose own
+      // timeout already bounds it.
+      let timeBudgeted = !duringPrerender;
+      // The page ceiling holds on every search, on either leg and whoever
+      // sends it — a render's own searches included, since the header that
+      // marks a render is set by the caller. Clamp an absent page to the
+      // default so the query carries a LIMIT, and an over-maximum explicit one
+      // to the maximum (logged, so a short page has an explanation somewhere).
+      searchEntryQuery.itemQuery = applyServerSearchPageBound(
+        searchEntryQuery.itemQuery,
+      );
       // Classified from the page the query will actually run with — the clamp
       // above has already been applied — because that is the only bound on
       // this read's result count available before it runs, and the link mode
@@ -20170,10 +20171,10 @@ export class Realm {
           ...(duringPrerender ? {} : { unshareableFormats }),
           ...(signal ? { signal } : {}),
         });
-      // Cut an over-budget item-leg search off (408) rather than run it to
+      // Cut an over-budget live search off (408) rather than run it to
       // completion; the signal stops the `loadLinks` fan-out promptly.
       let doc = markPolicyScoped(
-        itemLegBounded
+        timeBudgeted
           ? await runWithSearchTimeBudget(runSearch)
           : await runSearch(),
         scopedRealms,
