@@ -94,6 +94,9 @@ canonical. A grant in the realm's policy MUST NOT admit these changes. A
 Boxel Space host URL MUST be the realm's own name under its owner's Space. A
 site name MUST be one the caller has claimed or one already bound to the
 realm. A custom domain MUST be one the deployment allows for the realm.
+The code that writes a host URL and the code that resolves one MUST read one
+config of the domains a host URL can be on, so that every host URL a writer
+accepts is one the resolver looks up.
 
 ### 1.7. A page on a host URL is server-rendered only where a visitor may read its card
 

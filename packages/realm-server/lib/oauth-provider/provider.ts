@@ -56,6 +56,11 @@ import { revocationHandler } from './revocation.ts';
 import { browserOriginAllowed } from './client-cors.ts';
 import { registrationHandler } from './registration.ts';
 import {
+  DEFAULT_UNCONNECTED_CLIENT_CAP,
+  unconnectedClientCapWarning,
+} from './unconnected-client-cap.ts';
+import { longestOAuthProviderCleanupGapSeconds } from '../oauth-provider-cleanup-config.ts';
+import {
   connectionsDisconnectHandler,
   connectionsListHandler,
 } from './connections.ts';
@@ -197,6 +202,7 @@ export function startOAuthProvider({
   appOrigins = [],
   publishedDomains = [],
   newClientLimit = DEFAULT_NEW_CLIENT_LIMIT,
+  unconnectedClientCap = DEFAULT_UNCONNECTED_CLIENT_CAP,
   authorizationLimit = DEFAULT_AUTHORIZATION_LIMIT,
   tokenLimit = DEFAULT_TOKEN_LIMIT,
   rateLimitStore = new DBRateLimitStore(dbAdapter),
@@ -210,6 +216,7 @@ export function startOAuthProvider({
   appOrigins?: readonly string[];
   publishedDomains?: readonly string[];
   newClientLimit?: NewClientLimit;
+  unconnectedClientCap?: number;
   authorizationLimit?: CallerLimit;
   tokenLimit?: TokenLimit;
   rateLimitStore?: RateLimitStore;
@@ -228,6 +235,14 @@ export function startOAuthProvider({
     throw new OAuthProviderConfigError(
       `the OAuth provider's issuer is the realm server's URL, which must have no path: ${serverURL.href}`,
     );
+  }
+  let capWarning = unconnectedClientCapWarning(
+    unconnectedClientCap,
+    newClientLimit,
+    longestOAuthProviderCleanupGapSeconds(),
+  );
+  if (capWarning) {
+    log.warn(capWarning);
   }
   let issuer = oauthIssuer(serverURL);
   let registry = buildRegistry(issuer, testOnlyResources);
@@ -337,8 +352,10 @@ export function startOAuthProvider({
     handleRegistration: registrationHandler({
       hosts,
       scopes,
+      dbAdapter,
       rateLimitStore,
       newClientLimit,
+      unconnectedClientCap,
     }),
   };
 }

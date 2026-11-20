@@ -217,7 +217,11 @@ module.exports = function (environment) {
         ? `${normalized}/`
         : `${normalized}/test/`;
     })(),
-    featureFlags: {},
+    featureFlags: {
+      // Holds a tab's requests to one origin to a fixed number in flight, and
+      // sends writes and auth ahead of reads (lib/request-limiter.ts).
+      LIMIT_REQUESTS_IN_FLIGHT: process.env.LIMIT_REQUESTS_IN_FLIGHT === 'true',
+    },
   };
 
   // Where each `@cardstack/…` prefix realm is served. This answers a different

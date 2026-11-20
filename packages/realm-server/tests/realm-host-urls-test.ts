@@ -17,10 +17,14 @@ import {
 import {
   HostURLResolver,
   hostKey,
-  hostURLDomainFilter,
   notifyHostURLsChanged,
   toRealmURL,
 } from '../lib/realm-host-urls.ts';
+import {
+  HostURLDomains,
+  hostURLDomainFilter,
+  type HostURLDomainsConfig,
+} from '../lib/realm-host-urls-domains.ts';
 
 module(basename(import.meta.filename), function () {
   module('toRealmURL', function () {
@@ -49,39 +53,53 @@ module(basename(import.meta.filename), function () {
   });
 
   module('hostURLDomainFilter', function () {
+    function filter(config: HostURLDomainsConfig) {
+      return hostURLDomainFilter(new HostURLDomains(config))!;
+    }
+
     test('admits subdomains of the Space and site domains, and listed custom domains', function (assert) {
-      let mayHave = hostURLDomainFilter({
+      let mayHave = filter({
         boxelSpace: 'boxel.space',
         boxelSite: 'boxel.site',
-        customDomains: ['Example.TEST'],
-      })!;
+        customDomains: { 'https://realms.example.test/a/b/': 'Example.TEST' },
+      });
       assert.true(mayHave('someone.boxel.space'));
       assert.true(mayHave('a-site.boxel.site'));
       assert.true(mayHave('example.test'));
       assert.false(mayHave('boxel.space'), 'not the domain itself');
       assert.false(mayHave('notboxel.space'), 'not a lookalike');
+      assert.false(mayHave('a.b.boxel.space'), 'not a deeper subdomain');
       assert.false(mayHave('www.example.test'), 'a custom domain is exact');
       assert.false(mayHave('app.boxel.ai'));
     });
 
     test('admits a custom domain configured as a URL by its host', function (assert) {
-      let mayHave = hostURLDomainFilter({
-        customDomains: ['https://Choreo.Example.TEST/', 'not a domain://'],
-      })!;
+      let mayHave = filter({
+        customDomains: {
+          'https://realms.example.test/a/b/': 'https://Choreo.Example.TEST/',
+          'https://realms.example.test/a/c/': 'not a domain://',
+        },
+      });
       assert.true(mayHave('choreo.example.test'));
       assert.false(mayHave('https://choreo.example.test/'));
     });
 
     test('keeps a port as part of the domain', function (assert) {
-      let mayHave = hostURLDomainFilter({ boxelSpace: 'localhost:4201' })!;
+      let mayHave = filter({ boxelSpace: 'localhost:4201' });
       assert.true(mayHave('someone.localhost:4201'));
       assert.false(mayHave('someone.localhost:4202'));
     });
 
-    test('admits a custom domain configured without a port on any port, as publishing does', function (assert) {
-      let mayHave = hostURLDomainFilter({
-        customDomains: ['choreo.example.test', 'pinned.example.test:4201'],
-      })!;
+    test('admits a domain configured without a port on any port, as publishing does', function (assert) {
+      let mayHave = filter({
+        boxelSpace: 'localhost',
+        customDomains: {
+          'https://realms.example.test/a/b/': 'choreo.example.test',
+          'https://realms.example.test/a/c/': 'pinned.example.test:4201',
+        },
+      });
+      assert.true(mayHave('someone.localhost'));
+      assert.true(mayHave('someone.localhost:4201'));
       assert.true(mayHave('choreo.example.test'));
       assert.true(mayHave('choreo.example.test:4201'));
       assert.true(mayHave('pinned.example.test:4201'));
@@ -99,13 +117,155 @@ module(basename(import.meta.filename), function () {
         'https://boxel.space/',
         'boxel.space.',
       ]) {
-        let mayHave = hostURLDomainFilter({ boxelSpace })!;
+        let mayHave = filter({ boxelSpace });
         assert.true(mayHave('someone.boxel.space'), boxelSpace);
       }
     });
 
     test('is undefined when no domain is configured', function (assert) {
-      assert.strictEqual(hostURLDomainFilter({}), undefined);
+      assert.strictEqual(
+        hostURLDomainFilter(new HostURLDomains({})),
+        undefined,
+      );
+    });
+
+    test('reads the custom domains of the deployment overrides', function (assert) {
+      let mayHave = hostURLDomainFilter(
+        HostURLDomains.fromDeployment(
+          { boxelSpace: 'boxel.space' },
+          JSON.stringify({
+            'https://realms.example.test/a/b/': 'choreo.example.test',
+          }),
+        ),
+      )!;
+      assert.true(mayHave('choreo.example.test'));
+      assert.true(mayHave('someone.boxel.space'));
+    });
+  });
+
+  module('HostURLDomains.check', function () {
+    let realmURL = 'https://realms.example.test/owner/store/';
+    let domains = new HostURLDomains({
+      boxelSpace: 'boxel.space',
+      boxelSite: 'boxel.site',
+      customDomains: { [realmURL]: 'shop.example.test' },
+    });
+
+    function check(hostURL: string, forRealm = realmURL) {
+      return domains.check(new URL(hostURL), forRealm);
+    }
+
+    test('accepts a Boxel Space host URL one path segment under a subdomain', function (assert) {
+      assert.deepEqual(check('https://Owner.Boxel.Space/store'), {
+        accepted: {
+          kind: 'boxel-space',
+          host: 'owner.boxel.space',
+          pathPrefix: '/store/',
+          subdomain: 'owner',
+        },
+      });
+    });
+
+    test('accepts a site name at the root of its subdomain', function (assert) {
+      assert.deepEqual(check('https://my-site.boxel.site/'), {
+        accepted: {
+          kind: 'site-name',
+          host: 'my-site.boxel.site',
+          pathPrefix: '/',
+          subdomain: 'my-site',
+        },
+      });
+    });
+
+    test('accepts a custom domain only for the realm it is allowed for', function (assert) {
+      assert.deepEqual(check('https://shop.example.test/'), {
+        accepted: {
+          kind: 'custom-domain',
+          host: 'shop.example.test',
+          pathPrefix: '/',
+        },
+      });
+      assert.deepEqual(
+        check(
+          'https://shop.example.test',
+          'https://realms.example.test/owner/store',
+        ),
+        {
+          accepted: {
+            kind: 'custom-domain',
+            host: 'shop.example.test',
+            pathPrefix: '/',
+          },
+        },
+        'the realm URL is compared with a trailing slash',
+      );
+      let other = check(
+        'https://shop.example.test/',
+        'https://realms.example.test/owner/other/',
+      );
+      assert.true('refused' in other);
+    });
+
+    test('refuses a host on no allowed domain, naming the domains', function (assert) {
+      let result = check('https://owner.example.org/store/');
+      assert.true('refused' in result);
+      if ('refused' in result) {
+        assert.true(result.refused.includes('boxel.space'));
+        assert.true(result.refused.includes('boxel.site'));
+      }
+      assert.true('refused' in check('https://boxel.space/store/'));
+      assert.true('refused' in check('https://a.b.boxel.site/'));
+    });
+
+    test('refuses a site with a path, a Space host URL at a root or deeper, and a custom domain with a path', function (assert) {
+      assert.true('refused' in check('https://my-site.boxel.site/page/'));
+      assert.true('refused' in check('https://owner.boxel.space/'));
+      assert.true('refused' in check('https://owner.boxel.space/a/b/'));
+      assert.true('refused' in check('https://shop.example.test/page/'));
+    });
+
+    test('refuses a URL with a query, a fragment, credentials or another protocol', function (assert) {
+      assert.true('refused' in check('https://my-site.boxel.site/?x=1'));
+      assert.true('refused' in check('https://my-site.boxel.site/#x'));
+      assert.true('refused' in check('https://u:p@my-site.boxel.site/'));
+      assert.true('refused' in check('ftp://my-site.boxel.site/'));
+    });
+
+    test('tells a Space from a site by the path when both are on one domain', function (assert) {
+      let local = new HostURLDomains({
+        boxelSpace: 'localhost:4201',
+        boxelSite: 'localhost:4201',
+      });
+      let space = local.check(
+        new URL('http://owner.localhost:4201/store/'),
+        realmURL,
+      );
+      let site = local.check(new URL('http://owner.localhost:4201/'), realmURL);
+      assert.strictEqual(
+        'accepted' in space ? space.accepted.kind : undefined,
+        'boxel-space',
+      );
+      assert.strictEqual(
+        'accepted' in site ? site.accepted.kind : undefined,
+        'site-name',
+      );
+      assert.true(
+        'refused' in
+          local.check(new URL('http://owner.localhost:4202/'), realmURL),
+      );
+    });
+
+    test('a host the check accepts is one the resolver looks up', function (assert) {
+      let mayHave = hostURLDomainFilter(domains)!;
+      for (let url of [
+        'https://owner.boxel.space/store/',
+        'https://my-site.boxel.site/',
+        'https://shop.example.test/',
+      ]) {
+        let result = check(url);
+        let host = 'accepted' in result ? result.accepted.host : '';
+        assert.true(mayHave(host), url);
+      }
     });
   });
 

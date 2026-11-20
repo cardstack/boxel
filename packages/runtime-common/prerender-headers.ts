@@ -107,6 +107,11 @@ export function sanitizeJobPriorityHeader(
 export const X_BOXEL_LOGGING_CORRELATION_ID_HEADER =
   'x-boxel-logging-correlation-id';
 
+// The length of a compressed response body before compression. The realm
+// server sends it beside `Content-Encoding`, where `Content-Length` is the
+// compressed length; a client measuring the document it parsed reads this.
+export const X_BOXEL_UNCOMPRESSED_LENGTH_HEADER = 'x-boxel-uncompressed-length';
+
 // Sanitize the inbound request-id header. It's echoed into log lines, so
 // admit only a bounded run of URL-safe id characters (covers a UUID and
 // then some) and reject anything with whitespace or control characters

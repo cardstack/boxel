@@ -1357,11 +1357,14 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // - `_sign-capture-urls` signs the URLs of the capture serve, which the ACL
 //   alone admits a caller to.
 // - `_automation-status` answers an automation's server row, which only the
-//   realm's direct writers see (see `automation-status.ts`). A grant reaches
-//   a card, not the row.
+//   realm's direct writers are shown (see `automation-status.ts`). A grant
+//   reaches a card, not the row.
+// - `_automations` lists every automation in the realm with its row's state,
+//   payer and spend, which only the realm's direct writers see (see
+//   `automation-list.ts`). A grant reaches a card, not the rows.
 // - `_automation-webhooks` lists the incoming webhooks the realm's
-//   automations may name, which only the realm's direct writers see (see
-//   `automation-webhooks.ts`). A grant reaches a card, not the realm's
+//   automations may name, which only the realm's direct writers are listed
+//   (see `automation-webhooks.ts`). A grant reaches a card, not the realm's
 //   webhooks.
 //
 // So they keep the ACL's refusal, which a realm with a policy words
@@ -3999,17 +4002,28 @@ export class Realm {
         ACL_ONLY,
       )
       // An automation card's switched-on state, payer and each trigger's runs
-      // left, for the card's view. Answered on the realm ACL, and then only
-      // to a direct writer (see `automation-status.ts`).
+      // left, for the card's view. Answered on the realm ACL; a caller who
+      // isn't a direct writer is shown nothing (see `automation-status.ts`).
       .get(
         '/_automation-status',
         SupportedMimeType.JSON,
         this.automationStatus.bind(this),
         ACL_ONLY,
       )
+      // Every automation in the realm, with its state, next run, payer, cap,
+      // spend this month and last result, for the realm config's Automations
+      // section, the automations console. Answered on the realm ACL; a caller
+      // who isn't a direct writer is listed nothing (see
+      // `automation-list.ts`).
+      .get(
+        '/_automations',
+        SupportedMimeType.JSON,
+        this.automationList.bind(this),
+        ACL_ONLY,
+      )
       // The incoming webhooks an automation card's webhook trigger may name,
-      // for the card's editor. Answered on the realm ACL, and then only to a
-      // direct writer (see `automation-webhooks.ts`).
+      // for the card's editor. Answered on the realm ACL; a caller who isn't
+      // a direct writer is listed nothing (see `automation-webhooks.ts`).
       .get(
         '/_automation-webhooks',
         SupportedMimeType.JSON,
@@ -21019,18 +21033,6 @@ export class Realm {
       matrixServerName: this.#matrixClient.serverName,
       viewer: await this.#statusViewer(requestContext),
     });
-    if (answer.status !== 200) {
-      return createResponse({
-        body: JSON.stringify({
-          errors: [{ status: String(answer.status), detail: answer.message }],
-        }),
-        init: {
-          status: answer.status,
-          headers: { 'content-type': SupportedMimeType.JSON },
-        },
-        requestContext,
-      });
-    }
     return createResponse({
       body: JSON.stringify(answer.document),
       init: {
@@ -21038,6 +21040,44 @@ export class Realm {
           'content-type': SupportedMimeType.JSON,
           // Webhooks come and go, and permission rows change, without the
           // realm hearing of it.
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
+  }
+
+  private async automationList(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    // Loaded on first use, like `automation-status.ts`: only a realm server
+    // has the automations' rows to list.
+    let [{ answerAutomationList }, { automationRef }] = await Promise.all([
+      import('./automation-list.ts'),
+      import('./automation-status.ts'),
+    ]);
+    let answer = await answerAutomationList({
+      dbAdapter: this.#dbAdapter,
+      realmURL: new URL(this.url),
+      matrixServerName: this.#matrixClient.serverName,
+      virtualNetwork: this.#virtualNetwork,
+      automationTypeKey: internalKeyFor(
+        automationRef,
+        undefined,
+        this.#virtualNetwork,
+      ),
+      viewer: await this.#statusViewer(requestContext),
+      listInstances: (typeKey) =>
+        this.#realmIndexQueryEngine.instanceSourcesOfType(typeKey),
+    });
+    return createResponse({
+      body: JSON.stringify(answer.document),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          // Rows change with every run, pause and resume, and cards come and
+          // go with the index.
           'cache-control': 'no-store',
         },
       },
@@ -21095,8 +21135,8 @@ export class Realm {
     });
   }
 
-  // Who asks for an automation's status, or for the webhooks the realm's
-  // automations may name: the session the realm vouches for
+  // Who asks for an automation's status, for the realm's automations, or for
+  // the webhooks the realm's automations may name: the session the realm vouches for
   // (`#sessionPrincipal`), so a revoked session or one delegated to another
   // realm asks as no one. A realm-authority session is a realm rendering its
   // own cards, and a diagnostic session is an operator reading as a user;

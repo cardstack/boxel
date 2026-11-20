@@ -35,6 +35,7 @@ import {
   proxyAsset,
 } from './middleware/index.ts';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp.ts';
+import { compressResponse } from './middleware/compress-response.ts';
 import {
   clientAddress,
   clientAddressSettingsFromEnv,
@@ -68,13 +69,12 @@ import {
   type SecureOrigin,
 } from './lib/secure-origin.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';
-import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import { HostURLResolver, resolveHostURLs } from './lib/realm-host-urls.ts';
 import {
-  HostURLResolver,
+  HostURLDomains,
   hostURLDomainFilter,
-  resolveHostURLs,
-} from './lib/realm-host-urls.ts';
+} from './lib/realm-host-urls-domains.ts';
 import { translateAtHostURLs } from './lib/realm-host-urls-boundary.ts';
 import { GrafanaIdentityVerifier } from './lib/grafana-identity.ts';
 
@@ -745,6 +745,9 @@ export class RealmServer {
         boxelSite?: string;
       }
     | undefined;
+  // The domains a host URL can be on. The resolver and the code that writes
+  // host URLs both read it.
+  private hostURLDomains: HostURLDomains;
   private prerenderer: Prerenderer | undefined;
   private reportHostShell: (() => Promise<void>) | undefined;
   private reconciler: RealmRegistryReconciler;
@@ -794,6 +797,7 @@ export class RealmServer {
     googleSignIn,
     oauthProvider,
     oauthNewClientLimit,
+    oauthUnconnectedClientCap,
     oauthAuthorizationLimit,
     oauthTokenLimit,
     __testOnlyOAuthResources,
@@ -875,6 +879,10 @@ export class RealmServer {
     // The provider's limit on new clients. Unset, the default
     // (`new-client-limit.ts`).
     oauthNewClientLimit?: NewClientLimit;
+    // How many clients registered by dynamic client registration that never
+    // connected the provider keeps before it refuses registration. Unset, the
+    // default (`unconnected-client-cap.ts`).
+    oauthUnconnectedClientCap?: number;
     // The provider's limit on starting a flow. Unset, the default
     // (`authorization.ts`).
     oauthAuthorizationLimit?: CallerLimit;
@@ -935,6 +943,9 @@ export class RealmServer {
     this.matrixAdminPassword = matrixAdminPassword;
     this.getRegistrationSecret = getRegistrationSecret;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
+    this.hostURLDomains = HostURLDomains.fromDeployment(
+      domainsForPublishedRealms,
+    );
     // Pass-by-reference: handlers and the reconciler both mutate this
     // array. Copying it would create two divergent views of mounted
     // realms — a bug under multi-instance Phase 3 semantics. The legacy
@@ -977,6 +988,7 @@ export class RealmServer {
           domainsForPublishedRealms?.boxelSpace,
         ].filter((domain): domain is string => Boolean(domain)),
         newClientLimit: oauthNewClientLimit,
+        unconnectedClientCap: oauthUnconnectedClientCap,
         authorizationLimit: oauthAuthorizationLimit,
         tokenLimit: oauthTokenLimit,
         testOnlyResources: __testOnlyOAuthResources,
@@ -1024,19 +1036,15 @@ export class RealmServer {
       .use(clientAddress(this.clientAddress))
       .use(httpLogging)
       .use(instanceIdHeader)
+      // Outside the host URL translation and every route, so it compresses
+      // each response body as it is finally sent.
+      .use(compressResponse)
       // A request on a host URL is made to name its realm's URL here, ahead
       // of every route that looks a realm up (ADR 033 §1.2).
       .use(
         resolveHostURLs(
           new HostURLResolver(this.dbAdapter, {
-            mayHaveHostURLs: hostURLDomainFilter({
-              ...this.domainsForPublishedRealms,
-              customDomains: Object.values(
-                getPublishedRealmDomainOverrides(
-                  process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
-                ),
-              ),
-            }),
+            mayHaveHostURLs: hostURLDomainFilter(this.hostURLDomains),
           }),
         ),
       )

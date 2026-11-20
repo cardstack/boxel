@@ -191,6 +191,15 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 - run `pnpm lint` directly in this directory to lint changes made to this package
 - run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
 
+### packages/realm-historian
+
+- The package's tests need no stack, only a Postgres the `PG*` variables reach, with the right to create databases: each test module migrates a database of its own and drops it afterwards. Locally the development `boxel-pg` serves:
+  `PGPORT=5435 pnpm test`
+- The realm server's history tests are `packages/realm-server/tests/realm-history-*-test.ts`. Each test module runs against a database of its own, so they never see the realm-historian that `mise run dev` and `mise run test-services:realm-server` start, which records the stack's own database. Run them from `packages/realm-server`, one file at a time, with the services the realm-server tests need (see above):
+  `TEST_FILES=realm-history-journal-test pnpm test`
+- run `pnpm lint` directly in this directory to lint changes made to this package
+- The package README's "Local development" section covers recording a dev realm and reading its history repo.
+
 ### packages/postgres
 
 - If you need to make a database migration use `pnpm create migration_name` to create a migration file so that the correct date timestamp prefix will be added to the file name. Then implement the migration inside the newly created file.

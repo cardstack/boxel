@@ -3,13 +3,7 @@ import type { DBAdapter } from '@cardstack/runtime-common';
 import { logger, param, query } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { fullRequestURL } from '../middleware/index.ts';
-import {
-  domainHostFromKey,
-  domainHostOf,
-  isOnDomain,
-  parseDomainHost,
-  type DomainHost,
-} from './domain-host.ts';
+import { domainHostOf } from './domain-host.ts';
 
 // Host URLs: the addresses a realm is served at besides its own URL
 // (ADR 033). A host URL is a host and a path prefix stored in
@@ -64,43 +58,6 @@ function canSubscribe(
   return typeof (dbAdapter as Partial<Subscribable>).subscribe === 'function';
 }
 
-// The domains a host URL can be on, as `realm_host_urls` kinds give them out:
-// a Boxel Space or a site name is a subdomain of its configured domain, and a
-// custom domain is one the deployment lists. Domains may carry a port, as they
-// do in local development (`localhost:4201`).
-export interface HostURLDomains {
-  boxelSpace?: string;
-  boxelSite?: string;
-  customDomains?: string[];
-}
-
-// Whether a host could carry a host URL under the given domains. Undefined
-// when no domain is configured, which means every host is looked up. `host`
-// is a request's host as `hostKey` gives it. Every domain is parsed as
-// publishing parses a custom domain (`parseDomainHost`). A custom domain with
-// no port admits its hostname on any port, as publishing does.
-export function hostURLDomainFilter(
-  domains: HostURLDomains,
-): ((host: string) => boolean) | undefined {
-  let parents = [domains.boxelSpace, domains.boxelSite]
-    .map((domain) => (domain ? parseDomainHost(domain) : undefined))
-    .filter((domain): domain is DomainHost => domain !== undefined)
-    .map((domain) => `.${domain.host}`);
-  let custom = (domains.customDomains ?? [])
-    .map(parseDomainHost)
-    .filter((domain): domain is DomainHost => domain !== undefined);
-  if (parents.length === 0 && custom.length === 0) {
-    return undefined;
-  }
-  return (host) => {
-    if (parents.some((parent) => host.endsWith(parent))) {
-      return true;
-    }
-    let requestHost = domainHostFromKey(host);
-    return custom.some((domain) => isOnDomain(requestHost, domain));
-  };
-}
-
 // The key a host is cached and stored under: its lowercased host, without a
 // trailing dot, with the port when it isn't the default one (ADR 033 §1.1).
 export function hostKey(url: URL): string {
@@ -128,7 +85,8 @@ export class HostURLResolver {
       ttlMs?: number;
       maxHosts?: number;
       // Hosts this returns false for are never looked up, so a request naming
-      // an arbitrary host costs no query. See `hostURLDomainFilter`.
+      // an arbitrary host costs no query. See `hostURLDomainFilter`
+      // (`realm-host-urls-domains.ts`).
       mayHaveHostURLs?: (host: string) => boolean;
       now?: () => number;
     } = {},

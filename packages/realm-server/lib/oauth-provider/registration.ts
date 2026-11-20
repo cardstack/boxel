@@ -1,12 +1,15 @@
 // Dynamic client registration (RFC 7591), checked by Boxel before the library
 // sees it (ADR 021 §1.4). Boxel counts the attempt against the new-client
-// limit, reads the request, refuses what its rules don't allow, and hands the
-// library a registration rewritten to hold only what Boxel allows. The library
-// then validates and stores the client as usual.
+// limit, refuses it while the provider holds as many never-connected clients
+// as it keeps (`unconnected-client-cap.ts`), reads the request, refuses what
+// its rules don't allow, and hands the library a registration rewritten to
+// hold only what Boxel allows. The library then validates and stores the
+// client as usual.
 
 import type Koa from 'koa';
 import {
   CLIENT_IP_HEADER,
+  type DBAdapter,
   type RateLimitStore,
 } from '@cardstack/runtime-common';
 import {
@@ -19,6 +22,11 @@ import {
   redirectURIsRefusal,
   type BoxelHosts,
 } from './redirect-uris.ts';
+import {
+  UnconnectedClientAlert,
+  UnconnectedClientCap,
+  UNCONNECTED_CLIENT_RETRY_AFTER_SECONDS,
+} from './unconnected-client-cap.ts';
 
 // A registration is a few hundred bytes. Every stored client counts against
 // the overall new-client limit, which is sized from what storing them costs,
@@ -153,15 +161,21 @@ export function checkRegistration(
 export function registrationHandler({
   hosts,
   scopes,
+  dbAdapter,
   rateLimitStore,
   newClientLimit,
+  unconnectedClientCap,
 }: {
   hosts: BoxelHosts;
   scopes: readonly string[];
+  dbAdapter: DBAdapter;
   rateLimitStore: RateLimitStore;
   newClientLimit: NewClientLimit;
+  unconnectedClientCap: number;
 }) {
   let alert = new NewClientAlert(newClientLimit);
+  let cap = new UnconnectedClientCap(dbAdapter, unconnectedClientCap);
+  let capAlert = new UnconnectedClientAlert(unconnectedClientCap);
   return async function handleRegistration(ctxt: Koa.Context, next: Koa.Next) {
     let address = ctxt.req.headers[CLIENT_IP_HEADER];
     let admitted = await takeNewClient(
@@ -189,6 +203,18 @@ export function registrationHandler({
             error_description: 'registration is refused from this address',
           });
       }
+    }
+
+    let room = await cap.check();
+    capAlert.note(room);
+    if (!room.admitted) {
+      if (room.reason === 'full') {
+        ctxt.set('Retry-After', String(UNCONNECTED_CLIENT_RETRY_AFTER_SECONDS));
+      }
+      return respond(ctxt, 503, {
+        error: 'temporarily_unavailable',
+        error_description: 'registration is unavailable; try again later',
+      });
     }
 
     if (!ctxt.is('application/json')) {

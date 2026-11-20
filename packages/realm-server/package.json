@@ -140,6 +140,7 @@
     "start:worker-development": "mise run services:worker",
     "start:worker-base": "mise run services:worker-base",
     "start:worker-test": "mise run services:worker-test",
+    "start:realm-historian": "mise run services:realm-historian",
     "start:worker-staging": "./scripts/start-worker-staging.sh",
     "start:worker-production": "./scripts/start-worker-production.sh",
     "wait": "sleep 10000000",

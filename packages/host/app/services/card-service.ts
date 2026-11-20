@@ -11,6 +11,7 @@ import {
   policyShareAuditFromErrorBody,
   REALM_EVENTS_HEADER,
   SupportedMimeType,
+  X_BOXEL_UNCOMPRESSED_LENGTH_HEADER,
   type CardDocument,
   type SingleCardDocument,
   type LooseSingleCardDocument,
@@ -228,13 +229,19 @@ export default class CardService extends Service {
         throw err;
       }
       let doc = await response.json();
-      // Stamp the transferred body size (O(1)) so the client-telemetry
-      // deserialize hook can report it without re-serializing the whole
-      // document to measure it. Non-enumerable so it never reaches the wire.
-      let contentLength = Number(response.headers.get('content-length') ?? '');
-      if (Number.isFinite(contentLength) && doc && typeof doc === 'object') {
+      // Stamp the document's size (O(1)) so the client-telemetry deserialize
+      // hook can report it without re-serializing the whole document to
+      // measure it. A compressed response's Content-Length is the compressed
+      // length, so its uncompressed length is read instead. Non-enumerable so
+      // it never reaches the wire.
+      let docBytes = Number(
+        response.headers.get(X_BOXEL_UNCOMPRESSED_LENGTH_HEADER) ??
+          response.headers.get('content-length') ??
+          '',
+      );
+      if (Number.isFinite(docBytes) && doc && typeof doc === 'object') {
         Object.defineProperty(doc, Symbol.for('boxel-doc-response-bytes'), {
-          value: contentLength,
+          value: docBytes,
           enumerable: false,
           configurable: true,
         });

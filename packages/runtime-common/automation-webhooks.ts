@@ -144,24 +144,42 @@ export interface AutomationWebhook {
   createdAt: string;
 }
 
+// The answer to a direct writer of the realm.
 export interface AutomationWebhooksDocument {
   data: {
     type: typeof AUTOMATION_WEBHOOK_TYPE;
     id: string;
     attributes: AutomationWebhook;
   }[];
-  meta: { webhookDeliveriesStartRuns: boolean };
+  meta: { directWriter: true; webhookDeliveriesStartRuns: boolean };
 }
 
-export type AutomationWebhooksAnswer =
-  | { status: 200; document: AutomationWebhooksDocument }
-  | { status: 403; message: string };
+// The answer to any other caller the realm ACL lets read: it says the caller
+// isn't a direct writer, and lists nothing.
+export interface AutomationWebhooksNotDirectWriterDocument {
+  data: [];
+  meta: { directWriter: false };
+}
+
+export interface AutomationWebhooksAnswer {
+  status: 200;
+  document:
+    | AutomationWebhooksDocument
+    | AutomationWebhooksNotDirectWriterDocument;
+}
 
 // Answers `GET <realm>/_automation-webhooks` for `viewer`: every incoming
 // webhook the realm can use, oldest first. Only a direct writer of the realm
-// gets an answer, since only direct writers edit an automation card. A
-// webhook's signing secret is never part of the answer; its path alone lets
-// no one send a delivery that verifies.
+// is listed the webhooks, since direct writers are who switch automations on
+// and own the webhooks a trigger may name. Any other caller the realm ACL
+// lets read, a reader or a writer by the `*` or `users` row, is told it
+// isn't a direct writer and listed nothing, and the card's editor takes a
+// typed path. The answer isn't an HTTP refusal, for the reason
+// `answerAutomationStatus` gives. The route
+// answers on the realm ACL alone, so a caller only a policy grant admits
+// gets the ACL's refusal: a grant reaches a card, not the realm's webhooks.
+// A webhook's signing secret is never part of the answer; its path alone
+// lets no one send a delivery that verifies.
 export async function answerAutomationWebhooks({
   dbAdapter,
   realmURL,
@@ -179,8 +197,8 @@ export async function answerAutomationWebhooks({
     !(await isDirectWriter(dbAdapter, realmURL, viewer, matrixServerName))
   ) {
     return {
-      status: 403,
-      message: `only a direct writer of ${realmURL.href} can list the incoming webhooks its automations may use`,
+      status: 200,
+      document: { data: [], meta: { directWriter: false } },
     };
   }
   let writers = await fetchDirectWriters(dbAdapter, realmURL, matrixServerName);
@@ -211,7 +229,10 @@ export async function answerAutomationWebhooks({
           createdAt: new Date(row.created_at).toISOString(),
         },
       })),
-      meta: { webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS },
+      meta: {
+        directWriter: true,
+        webhookDeliveriesStartRuns: WEBHOOK_DELIVERIES_START_RUNS,
+      },
     },
   };
 }

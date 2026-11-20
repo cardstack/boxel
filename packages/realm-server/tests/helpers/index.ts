@@ -1845,6 +1845,7 @@ export async function runTestRealmServer({
   oauthTestResources,
   oauthTestDocumentOrigins,
   oauthNewClientLimit,
+  oauthUnconnectedClientCap,
   oauthAuthorizationLimit,
   oauthTokenLimit,
   secureOriginAppOrigins,
@@ -1897,6 +1898,9 @@ export async function runTestRealmServer({
   oauthNewClientLimit?: ConstructorParameters<
     typeof RealmServer
   >[0]['oauthNewClientLimit'];
+  // The provider's cap on never-connected clients; omit for the production
+  // default.
+  oauthUnconnectedClientCap?: number;
   // The provider's limit on starting a flow; omit for the production default.
   oauthAuthorizationLimit?: ConstructorParameters<
     typeof RealmServer
@@ -2023,6 +2027,7 @@ export async function runTestRealmServer({
       ? { __testOnlyOAuthDocumentOrigins: oauthTestDocumentOrigins }
       : {}),
     ...(oauthNewClientLimit ? { oauthNewClientLimit } : {}),
+    ...(oauthUnconnectedClientCap ? { oauthUnconnectedClientCap } : {}),
     ...(oauthAuthorizationLimit ? { oauthAuthorizationLimit } : {}),
     ...(oauthTokenLimit ? { oauthTokenLimit } : {}),
     ...(secureOriginAppOrigins ? { secureOriginAppOrigins } : {}),

@@ -301,7 +301,14 @@ export async function sendCallApiRequest(
       url: request.url,
       method: request.method,
       headers: request.headers,
-      ...(request.body !== undefined ? { body: request.body } : {}),
+      ...(request.body !== undefined
+        ? {
+            body: request.body,
+            ...(request.bodyEncoding
+              ? { bodyEncoding: request.bodyEncoding }
+              : {}),
+          }
+        : {}),
       sizePath: 'call-api',
       ...(options.responseByteBudget !== undefined
         ? { responseByteBudget: options.responseByteBudget }

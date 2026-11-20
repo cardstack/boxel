@@ -219,6 +219,7 @@ Here's what is spun up with `mise run dev`:
 | :4211 | Test Worker Manager (spins up 1 worker by default)                                            | ✅             | 🚫                                    |
 | :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker)                     | ✅             | 🚫                                    |
 | :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅             | 🚫                                    |
+| :4214 | realm-historian health check (see `packages/realm-historian/README.md`)                       | ✅             | 🚫                                    |
 | :4221 | Prerender server                                                                              | ✅             | 🚫                                    |
 | :4222 | Prerender manager                                                                             | ✅             | 🚫                                    |
 | :5001 | Mail user interface for viewing emails sent to local SMTP                                     | ✅             | 🚫                                    |

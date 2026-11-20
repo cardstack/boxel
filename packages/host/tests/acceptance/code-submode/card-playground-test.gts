@@ -950,7 +950,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-format-chooser="fitted"]').hasClass('active');
       assert
         .dom('[data-test-playground-panel] [data-test-card-format="fitted"]')
-        .exists({ count: 16 });
+        .exists({ count: 18 });
 
       await selectFormat('markdown');
       assert.dom('[data-test-format-chooser="fitted"]').hasNoClass('active');

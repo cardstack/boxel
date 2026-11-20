@@ -156,35 +156,23 @@ export async function takeFromCallerLimit(
 
 const ALERT_INTERVAL_MS = 60_000;
 
-// Warns while requests arrive faster than the alert mark, at most once a
-// minute per process, so a sustained flood is noticed long before the overall
-// bucket refuses anyone. `describe` words the warning from the limit's
-// numbers only: no address, network or client detail.
-export class CallerLimitAlert {
-  #limit: CallerLimit;
-  #describe: (limit: CallerLimit) => string;
+// A warning to operators, raised at most once a minute per process however
+// often it is asked for, so a flood makes one warning a minute, not one per
+// request.
+export class OperatorAlert {
   #now: () => number;
   #warn: (message: string) => void;
   #lastWarnedAt: number | undefined;
 
-  constructor(
-    limit: CallerLimit,
-    describe: (limit: CallerLimit) => string,
-    {
-      now = Date.now,
-      warn = warnOperators,
-    }: { now?: () => number; warn?: (message: string) => void } = {},
-  ) {
-    this.#limit = limit;
-    this.#describe = describe;
+  constructor({
+    now = Date.now,
+    warn = warnOperators,
+  }: { now?: () => number; warn?: (message: string) => void } = {}) {
     this.#now = now;
     this.#warn = warn;
   }
 
-  note(outcome: CallerLimitOutcome): void {
-    if (!outcome.admitted || !outcome.busy) {
-      return;
-    }
+  raise(message: string): void {
     let now = this.#now();
     if (
       this.#lastWarnedAt !== undefined &&
@@ -193,7 +181,34 @@ export class CallerLimitAlert {
       return;
     }
     this.#lastWarnedAt = now;
-    this.#warn(this.#describe(this.#limit));
+    this.#warn(message);
+  }
+}
+
+// Warns while requests arrive faster than the alert mark, so a sustained
+// flood is noticed long before the overall bucket refuses anyone. `describe`
+// words the warning from the limit's numbers only: no address, network or
+// client detail.
+export class CallerLimitAlert {
+  #limit: CallerLimit;
+  #describe: (limit: CallerLimit) => string;
+  #alert: OperatorAlert;
+
+  constructor(
+    limit: CallerLimit,
+    describe: (limit: CallerLimit) => string,
+    options: { now?: () => number; warn?: (message: string) => void } = {},
+  ) {
+    this.#limit = limit;
+    this.#describe = describe;
+    this.#alert = new OperatorAlert(options);
+  }
+
+  note(outcome: CallerLimitOutcome): void {
+    if (!outcome.admitted || !outcome.busy) {
+      return;
+    }
+    this.#alert.raise(this.#describe(this.#limit));
   }
 }
 

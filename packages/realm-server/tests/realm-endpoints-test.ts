@@ -310,8 +310,8 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
       assert.strictEqual(
         response.headers['vary'],
-        'Accept',
-        'module serving negotiates on Accept and says so',
+        'Accept, Accept-Encoding',
+        'module serving negotiates on Accept and says so, and on the coding it may compress with',
       );
     });
 
