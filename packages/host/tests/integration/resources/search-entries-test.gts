@@ -15,6 +15,8 @@ import {
   CssResourceType,
   HtmlResourceType,
   EntryResourceType,
+  resetSearchBoundsForTests,
+  setSearchBoundsForTests,
   type EntrySingleDocument,
   type Loader,
   type Realm,
@@ -2017,6 +2019,91 @@ module('Integration | search-entries resource', function (hooks) {
     } finally {
       storeService.searchEntries = originalSearchEntries;
     }
+  });
+
+  module('a query naming no page that the server pages', function (hooks) {
+    let fetchedRealms: string[][];
+    let originalSearchEntries: StoreService['searchEntries'];
+
+    hooks.beforeEach(function () {
+      fetchedRealms = [];
+      originalSearchEntries = storeService.searchEntries.bind(storeService);
+      storeService.searchEntries = async (query, realms) => {
+        fetchedRealms.push(realms ?? []);
+        return await originalSearchEntries(query, realms);
+      };
+    });
+
+    hooks.afterEach(function () {
+      storeService.searchEntries = originalSearchEntries;
+      resetSearchBoundsForTests();
+    });
+
+    test('rows short of the total take a full re-run, keeping the server total', async function (assert) {
+      // A default page of one: realm 1 answers one of its two books.
+      setSearchBoundsForTests({ serverMaxPageSize: 1 });
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: {
+            filter: { 'item.on': bookRef },
+            realms: [testRealmURL, testRealm2URL],
+          },
+        },
+      }));
+      await search.loaded;
+      assert.strictEqual(search.entries.length, 2, 'one row per realm');
+      assert.strictEqual(search.meta.page.total, 3, 'the server total');
+
+      await realm.write('books/3.json', bookDoc('Paper'));
+      await waitUntil(() => search.meta.page.total === 4, { timeout: 10_000 });
+
+      assert.deepEqual(
+        fetchedRealms[fetchedRealms.length - 1],
+        [testRealmURL, testRealm2URL],
+        'the refresh re-fetches every realm — no realm-scoped splice',
+      );
+      assert.strictEqual(
+        search.entries.length,
+        2,
+        'each realm still answers one page',
+      );
+    });
+
+    test('a realm-scoped refresh that comes back short re-runs over every realm', async function (assert) {
+      // A default page of two holds every row (two books in realm 1, one in
+      // realm 2) until a third book lands in realm 1.
+      setSearchBoundsForTests({ serverMaxPageSize: 2 });
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: {
+            filter: { 'item.on': bookRef },
+            realms: [testRealmURL, testRealm2URL],
+          },
+        },
+      }));
+      await search.loaded;
+      assert.strictEqual(search.entries.length, 3, 'every row is held');
+      assert.strictEqual(search.meta.page.total, 3);
+
+      await realm.write('books/3.json', bookDoc('Paper'));
+      await waitUntil(() => search.meta.page.total === 4, { timeout: 10_000 });
+
+      assert.deepEqual(
+        fetchedRealms.slice(-2),
+        [[testRealmURL], [testRealmURL, testRealm2URL]],
+        'the realm-scoped fetch came back short, so every realm is re-fetched',
+      );
+      assert.strictEqual(
+        search.entries.length,
+        3,
+        "realm 1's rows stay one page; realm 2's row is kept",
+      );
+      assert.strictEqual(
+        search.meta.page.total,
+        4,
+        'the total stays server-accurate',
+      );
+    });
   });
 
   test('a realm named by a registered prefix is searched, tagged and refreshed by the spelling the caller used', async function (assert) {
