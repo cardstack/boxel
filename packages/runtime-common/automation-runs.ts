@@ -248,6 +248,62 @@ export async function getAutomationRun(
   return row ? runFromRow(row) : undefined;
 }
 
+// One page of an automation's runs, newest first by when they were made:
+// every run a trigger, a Preview or a Run now made, from the moment the run
+// is made, whether it still waits in the queue, runs or has ended. `page`
+// counts from 1, and
+// `total` is how many runs the automation has, so a reader can tell how
+// many pages there are. Both reads walk the runs' `(automation_id,
+// created_at)` index.
+export async function listAutomationRuns(
+  querier: Querier,
+  automationId: RealmResourceIdentifier,
+  { page, limit }: { page: number; limit: number },
+): Promise<{ runs: AutomationRun[]; total: number }> {
+  let [counted] = (await querier([
+    'SELECT count(*) AS total FROM automation_runs WHERE automation_id =',
+    param(automationId),
+  ] as Expression)) as { total: PgPrimitive }[];
+  let rows = (await querier([
+    'SELECT * FROM automation_runs WHERE automation_id =',
+    param(automationId),
+    'ORDER BY created_at DESC, id DESC LIMIT',
+    param(limit),
+    'OFFSET',
+    param((page - 1) * limit),
+  ] as Expression)) as Record<string, PgPrimitive>[];
+  return {
+    runs: rows.map(runFromRow),
+    total: Number(counted?.total ?? 0),
+  };
+}
+
+// An automation's runs waiting for their first attempt or running, oldest
+// first by when they were made: the runs the automation's queue holds, which
+// it runs one at a time.
+export async function listActiveRuns(
+  querier: Querier,
+  automationId: RealmResourceIdentifier,
+): Promise<AutomationRun[]> {
+  let rows = (await querier([
+    'SELECT * FROM automation_runs WHERE automation_id =',
+    param(automationId),
+    "AND state IN ('pending', 'running')",
+    'ORDER BY created_at, id',
+  ] as Expression)) as Record<string, PgPrimitive>[];
+  return rows.map(runFromRow);
+}
+
+// Whether `id` can name a run: a run's id is a UUID, so anything else names
+// no run, and a read can answer so without asking the database, which would
+// refuse to compare it with the column.
+export function isAutomationRunId(id: string): boolean {
+  return RUN_ID.test(id);
+}
+
+const RUN_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Why a run-token call was refused by the run's row: there is no such run,
 // it isn't running (it finished, was canceled or hasn't started), or another
 // attempt owns it.

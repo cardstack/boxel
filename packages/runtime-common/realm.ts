@@ -1371,6 +1371,9 @@ const READINESS_CHECK_PATH = '/_readiness-check';
 // - `_automations` lists every automation in the realm with its row's state,
 //   payer and spend, which only the realm's direct writers see (see
 //   `automation-list.ts`). A grant reaches a card, not the rows.
+// - `_automation-runs` lists an automation's runs, with who canceled each,
+//   which only the realm's direct writers see (see `automation-run-list.ts`).
+//   A grant reaches a card, not its runs.
 // - `_automation-webhooks` lists the incoming webhooks the realm's
 //   automations may name, which only the realm's direct writers are listed
 //   (see `automation-webhooks.ts`). A grant reaches a card, not the realm's
@@ -4028,6 +4031,16 @@ export class Realm {
         '/_automations',
         SupportedMimeType.JSON,
         this.automationList.bind(this),
+        ACL_ONLY,
+      )
+      // An automation's runs, newest first, a page at a time, for the
+      // Automation card's isolated view. Answered on the realm ACL; a caller
+      // who isn't a direct writer is listed nothing (see
+      // `automation-run-list.ts`).
+      .get(
+        '/_automation-runs',
+        SupportedMimeType.JSON,
+        this.automationRunList.bind(this),
         ACL_ONLY,
       )
       // The incoming webhooks an automation card's webhook trigger may name,
@@ -21159,6 +21172,54 @@ export class Realm {
     });
   }
 
+  private async automationRunList(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    // Loaded on first use, like `automation-status.ts`: only a realm server
+    // has the runs to list.
+    let {
+      answerAutomationRunList,
+      AUTOMATION_RUN_LIST_AUTOMATION_PARAM,
+      AUTOMATION_RUN_LIST_PAGE_PARAM,
+      AUTOMATION_RUN_LIST_LIMIT_PARAM,
+    } = await import('./automation-run-list.ts');
+    let params = new URL(request.url).searchParams;
+    let answer = await answerAutomationRunList({
+      dbAdapter: this.#dbAdapter,
+      realmURL: new URL(this.url),
+      matrixServerName: this.#matrixClient.serverName,
+      virtualNetwork: this.#virtualNetwork,
+      viewer: await this.#statusViewer(requestContext),
+      automation: params.get(AUTOMATION_RUN_LIST_AUTOMATION_PARAM),
+      page: params.get(AUTOMATION_RUN_LIST_PAGE_PARAM),
+      limit: params.get(AUTOMATION_RUN_LIST_LIMIT_PARAM),
+    });
+    if (answer.status !== 200) {
+      return createResponse({
+        body: JSON.stringify({
+          errors: [{ status: String(answer.status), detail: answer.message }],
+        }),
+        init: {
+          status: answer.status,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        },
+        requestContext,
+      });
+    }
+    return createResponse({
+      body: JSON.stringify(answer.document),
+      init: {
+        headers: {
+          'content-type': SupportedMimeType.JSON,
+          // Runs start, move and end without the realm hearing of it.
+          'cache-control': 'no-store',
+        },
+      },
+      requestContext,
+    });
+  }
+
   private async automationStatus(
     request: Request,
     requestContext: RequestContext,
@@ -21209,10 +21270,10 @@ export class Realm {
     });
   }
 
-  // Who asks for an automation's status, for the realm's automations, or for
-  // the webhooks the realm's automations may name: the session the realm vouches for
-  // (`#sessionPrincipal`), so a revoked session or one delegated to another
-  // realm asks as no one. A realm-authority session is a realm rendering its
+  // Who asks for an automation's status or runs, for the realm's
+  // automations, or for the webhooks the realm's automations may name: the
+  // session the realm vouches for (`#sessionPrincipal`), so a revoked session
+  // or one delegated to another realm asks as no one. A realm-authority session is a realm rendering its
   // own cards, and a diagnostic session is an operator reading as a user;
   // neither is a person looking at the card, so neither sees the payer.
   async #statusViewer(
